@@ -30,7 +30,7 @@ export type RegisterWorkerRequest = {
 
 export type HeartbeatRequest = {
   machineId: string;
-  runningAgents: string[];
+  runningAgents: Array<{ agentId: string; sessionId: string | null }>;
   cpuPercent: number;
   memoryPercent: number;
 };

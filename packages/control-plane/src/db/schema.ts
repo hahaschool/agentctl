@@ -28,7 +28,7 @@ export const agents = pgTable('agents', {
   machineId: text('machine_id').references(() => machines.id),
   name: text('name').notNull(),
   type: text('type').notNull(),
-  status: text('status').default('idle'),
+  status: text('status').default('registered'),
   schedule: text('schedule'),
   projectPath: text('project_path'),
   worktreeBranch: text('worktree_branch'),

@@ -1,4 +1,4 @@
-export type RunTrigger = 'schedule' | 'manual' | 'signal' | 'adhoc';
+export type RunTrigger = 'schedule' | 'manual' | 'signal' | 'adhoc' | 'heartbeat';
 
 export type RunStatus = 'running' | 'success' | 'failure' | 'timeout' | 'cancelled';
 
