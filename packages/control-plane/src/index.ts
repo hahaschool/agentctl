@@ -1,14 +1,15 @@
 import IORedis from 'ioredis';
 
 import { createServer } from './api/server.js';
-import { createLogger } from './logger.js';
-import { createTaskQueue } from './scheduler/task-queue.js';
-import { createTaskWorker } from './scheduler/task-worker.js';
-import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createDb } from './db/index.js';
-import { DbAgentRegistry } from './registry/db-registry.js';
+import { createLogger } from './logger.js';
 import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
+import { DbAgentRegistry } from './registry/db-registry.js';
+import { LiteLLMClient } from './router/litellm-client.js';
+import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
+import { createTaskQueue } from './scheduler/task-queue.js';
+import { createTaskWorker } from './scheduler/task-worker.js';
 
 const logger = createLogger('control-plane');
 
@@ -17,7 +18,10 @@ const HOST = process.env.HOST || '0.0.0.0';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const MEM0_URL = process.env.MEM0_URL || '';
-const CONTROL_PLANE_URL = process.env.CONTROL_PLANE_URL || `http://${process.env.HOST || '0.0.0.0'}:${Number(process.env.PORT) || 8080}`;
+const LITELLM_URL = process.env.LITELLM_URL || '';
+const CONTROL_PLANE_URL =
+  process.env.CONTROL_PLANE_URL ||
+  `http://${process.env.HOST || '0.0.0.0'}:${Number(process.env.PORT) || 8080}`;
 const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 5;
 
 async function main(): Promise<void> {
@@ -33,20 +37,18 @@ async function main(): Promise<void> {
   if (DATABASE_URL) {
     logger.info('Connecting to PostgreSQL');
     const db = createDb(DATABASE_URL);
-    dbRegistry = new DbAgentRegistry(
-      db,
-      logger.child({ component: 'db-registry' }),
-    );
+    dbRegistry = new DbAgentRegistry(db, logger.child({ component: 'db-registry' }));
     logger.info('Database-backed agent registry initialised');
   } else {
     logger.warn('DATABASE_URL not set — falling back to in-memory registry');
   }
 
   // Optionally initialise Mem0-backed memory injector when MEM0_URL is provided.
+  let mem0Client: Mem0Client | undefined;
   let memoryInjector: MemoryInjector | undefined;
 
   if (MEM0_URL) {
-    const mem0Client = new Mem0Client({
+    mem0Client = new Mem0Client({
       baseUrl: MEM0_URL,
       logger: logger.child({ component: 'mem0-client' }),
     });
@@ -57,6 +59,19 @@ async function main(): Promise<void> {
     logger.info({ mem0Url: MEM0_URL }, 'Memory injector initialised');
   } else {
     logger.info('MEM0_URL not set — memory injection disabled');
+  }
+
+  // Optionally initialise LiteLLM client when LITELLM_URL is provided.
+  let litellmClient: LiteLLMClient | undefined;
+
+  if (LITELLM_URL) {
+    litellmClient = new LiteLLMClient({
+      baseUrl: LITELLM_URL,
+      logger: logger.child({ component: 'litellm-client' }),
+    });
+    logger.info({ litellmUrl: LITELLM_URL }, 'LiteLLM client initialised');
+  } else {
+    logger.info('LITELLM_URL not set — LLM router routes disabled');
   }
 
   const taskQueue = createTaskQueue(redisConnection);
@@ -79,6 +94,8 @@ async function main(): Promise<void> {
     repeatableJobs,
     registry: dbRegistry,
     dbRegistry,
+    litellmClient,
+    mem0Client,
   });
 
   const shutdown = async (): Promise<void> => {

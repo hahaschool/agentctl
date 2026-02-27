@@ -1,10 +1,9 @@
-import type { FastifyPluginAsync } from 'fastify';
-import type { WebSocket } from 'ws';
-import type { Queue } from 'bullmq';
-import type { Logger } from 'pino';
-
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
+import type { Queue } from 'bullmq';
+import type { FastifyPluginAsync } from 'fastify';
+import type { Logger } from 'pino';
+import type { WebSocket } from 'ws';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
@@ -131,7 +130,11 @@ function subscribeSse(
           { agentId, workerBaseUrl, status: response.status },
           'failed to connect to worker SSE stream',
         );
-        sendError(socket, 'WORKER_STREAM_ERROR', `Worker returned HTTP ${String(response.status)} for agent '${agentId}'`);
+        sendError(
+          socket,
+          'WORKER_STREAM_ERROR',
+          `Worker returned HTTP ${String(response.status)} for agent '${agentId}'`,
+        );
         return;
       }
 
@@ -233,7 +236,11 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
       }
 
       if (!isValidIncomingType(msg.type)) {
-        sendError(socket, 'UNKNOWN_MESSAGE_TYPE', `Unknown or missing message type: ${String(msg.type)}`);
+        sendError(
+          socket,
+          'UNKNOWN_MESSAGE_TYPE',
+          `Unknown or missing message type: ${String(msg.type)}`,
+        );
         return;
       }
 
@@ -402,7 +409,10 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
               );
             }
 
-            logger.info({ agentId, graceful: graceful ?? true }, 'agent stop request sent via WebSocket');
+            logger.info(
+              { agentId, graceful: graceful ?? true },
+              'agent stop request sent via WebSocket',
+            );
             sendJson(socket, {
               type: 'agent_event',
               agentId,
