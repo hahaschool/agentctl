@@ -1,0 +1,61 @@
+# ── .dockerignore ────────────────────────────────────────────────
+# Excludes files from the Docker build context to reduce build time
+# and prevent leaking sensitive data into images.
+#
+# This file must be at the build context root (monorepo root) for
+# Docker to apply it. The canonical copy is also at infra/docker/.dockerignore.
+# ─────────────────────────────────────────────────────────────────
+
+# Dependencies (rebuilt inside container)
+node_modules/
+**/node_modules/
+
+# Build artifacts (rebuilt inside container)
+dist/
+**/dist/
+
+# Git
+.git/
+.gitignore
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+credentials.json
+*.pem
+*.key
+
+# Claude / agent state
+.claude/
+.trees/
+.bare/
+
+# Documentation (not needed at runtime)
+docs/
+*.md
+LICENSE
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+*.test.ts
+**/*.test.ts
+vitest.config.*
+
+# PM2 local configs
+ecosystem.*.config.cjs
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Scripts (not needed at runtime)
+scripts/
+
+# Docker files (avoid recursive context)
+.docker/
