@@ -1,0 +1,133 @@
+# LiteLLM Proxy Configuration — AgentCTL
+#
+# Multi-provider LLM routing with automatic failover.
+# This config is mounted into the LiteLLM Docker container.
+#
+# API keys are referenced via os.environ/ — they are resolved at
+# runtime from environment variables. NEVER put actual keys here.
+#
+# Docs: https://docs.litellm.ai/docs/proxy/configs
+#
+# Provider priority (cost-optimized with rate limit multiplication):
+#   1. Anthropic Direct (Org 1) — primary, lowest latency
+#   2. Anthropic Direct (Org 2) — doubles effective rate limits
+#   3. AWS Bedrock             — failover, separate rate limits
+#   4. Google Vertex AI        — failover, separate rate limits
+
+# ── Model List ───────────────────────────────────────────────────
+# Each entry is a deployment. Multiple entries with the same model_name
+# create a pool that LiteLLM routes across based on the routing strategy.
+
+model_list:
+  # ── Claude Sonnet (Primary Tier) ─────────────────────────────────
+  # Used for most agent tasks: code generation, analysis, planning.
+  # Two Anthropic org keys effectively double the rate limits.
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_KEY_ORG1
+      rpm: 4000          # Requests per minute (Anthropic Tier 4)
+      tpm: 400000        # Tokens per minute
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_KEY_ORG2
+      rpm: 4000
+      tpm: 400000
+
+  # ── Claude Sonnet — AWS Bedrock Failover ─────────────────────────
+  # Activated when both Anthropic Direct deployments are rate-limited
+  # or experiencing errors. Uses AWS credential chain.
+  - model_name: claude-sonnet
+    litellm_params:
+      model: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0
+      aws_region_name: us-east-1
+      rpm: 1000
+      tpm: 200000
+
+  # ── Claude Sonnet — Google Vertex AI Failover ────────────────────
+  # Third-tier failover. Requires GCP project and service account.
+  - model_name: claude-sonnet
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-20250514
+      vertex_project: os.environ/GCP_PROJECT
+      vertex_location: us-east5
+      rpm: 1000
+      tpm: 200000
+
+  # ── Claude Haiku (Budget Tier) ───────────────────────────────────
+  # Used for simple tasks: summarization, classification, formatting.
+  # Also serves as the fallback when Sonnet is unavailable.
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_KEY_ORG1
+      rpm: 4000
+      tpm: 400000
+
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_KEY_ORG2
+      rpm: 4000
+      tpm: 400000
+
+  # ── Claude Haiku — AWS Bedrock Failover ──────────────────────────
+  - model_name: claude-haiku
+    litellm_params:
+      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+      aws_region_name: us-east-1
+      rpm: 1000
+      tpm: 200000
+
+# ── Router Settings ──────────────────────────────────────────────
+# Controls how LiteLLM distributes requests across deployments.
+# usage-based-routing sends traffic to the deployment with the most
+# remaining capacity (lowest usage relative to rpm/tpm limits).
+
+router_settings:
+  routing_strategy: usage-based-routing  # Route to least-loaded deployment
+  num_retries: 3                         # Retry failed requests up to 3 times
+  allowed_fails: 3                       # Mark deployment unhealthy after 3 consecutive failures
+  cooldown_time: 60                      # Seconds to cool down an unhealthy deployment
+  retry_after: 15                        # Seconds to wait between retries
+  timeout: 300                           # Request timeout in seconds (agent turns can be long)
+  enable_pre_call_checks: true           # Check deployment health before routing
+
+# ── LiteLLM Settings ────────────────────────────────────────────
+# Global settings for the proxy server.
+
+litellm_settings:
+  # Fallback chain: if all sonnet deployments fail, try haiku.
+  # This prevents total outage — degraded quality is better than no response.
+  fallbacks:
+    - claude-sonnet: [claude-haiku]
+
+  # Response caching via Redis. Identical prompts return cached responses
+  # instantly. Particularly useful for system prompts and repeated queries.
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: os.environ/REDIS_PORT
+
+  # Request/response logging
+  set_verbose: false      # Set to true for debugging (very noisy)
+  json_logs: true         # Structured JSON logs for parsing
+
+  # Token counting
+  count_tokens: true      # Track token usage per request
+
+  # Drop unsupported params rather than erroring
+  drop_params: true
+
+# ── General Settings ─────────────────────────────────────────────
+
+general_settings:
+  # Master key for proxy admin API (set via env var)
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+  # Database for tracking spend, keys, etc. (optional — uses SQLite by default)
+  # database_url: os.environ/LITELLM_DATABASE_URL

@@ -1,0 +1,146 @@
+{
+  // Tailscale ACL Policy — AgentCTL Fleet
+  //
+  // Defines network access rules for the Tailscale mesh connecting
+  // the control plane, worker machines, and iOS mobile clients.
+  //
+  // Apply via: tailscale admin console → Access Controls → paste this file
+  // Or via API: https://tailscale.com/api#tag/policyfile
+  //
+  // Principle: deny by default, allow only specific port ranges
+  // between tagged device groups.
+
+  // ── Tag Owners ──────────────────────────────────────────────────
+  // Tags are applied to machines when they join the tailnet.
+  // Only admins can assign tags.
+  "tagOwners": {
+    "tag:control": ["autogroup:admin"],   // Control plane machine(s)
+    "tag:worker":  ["autogroup:admin"],   // Worker machines (EC2, Mac Mini, laptop)
+    "tag:mobile":  ["autogroup:admin"]    // iOS devices (iPhone, iPad)
+  },
+
+  // ── Access Control Lists ────────────────────────────────────────
+  // Rules are evaluated top-to-bottom. First match wins.
+  // All traffic not explicitly allowed is denied.
+  "acls": [
+    // Control plane can reach worker machines on agent management ports:
+    //   9000 — Worker API (start/stop/message agents)
+    //   9090 — Prometheus metrics endpoint
+    //   9100 — SSE agent output streams
+    {
+      "action": "accept",
+      "src":    ["tag:control"],
+      "dst":    ["tag:worker:9000-9100"]
+    },
+
+    // Workers connect back to control plane services:
+    //   4000 — LiteLLM proxy (LLM API routing)
+    //   5432 — PostgreSQL (agent registry, run history)
+    //   6379 — Redis (BullMQ task queue)
+    //   8000 — Mem0 memory server
+    //   8080 — Control plane API (heartbeat, registration)
+    {
+      "action": "accept",
+      "src":    ["tag:worker"],
+      "dst":    ["tag:control:4000,5432,6379,8000,8080"]
+    },
+
+    // iOS mobile clients connect only to the control plane API.
+    // All agent interaction is proxied through the control plane —
+    // mobile devices never talk directly to workers.
+    {
+      "action": "accept",
+      "src":    ["tag:mobile"],
+      "dst":    ["tag:control:8080"]
+    }
+  ],
+
+  // ── SSH Access ──────────────────────────────────────────────────
+  // Tailscale SSH allows the control plane to SSH into workers
+  // for emergency debugging, log collection, and script execution.
+  // Restricted to non-root users for security.
+  "ssh": [
+    {
+      "action": "accept",
+      "src":    ["tag:control"],
+      "dst":    ["tag:worker"],
+      "users":  ["autogroup:nonroot"]
+    }
+  ],
+
+  // ── Node Attributes ─────────────────────────────────────────────
+  // Enable Tailscale Funnel and HTTPS for the control plane
+  // so the API can be exposed with TLS if needed.
+  "nodeAttrs": [
+    {
+      "target": ["tag:control"],
+      "attr":   ["funnel"]
+    }
+  ],
+
+  // ── Tests ───────────────────────────────────────────────────────
+  // Tailscale ACL tests validate the policy before applying.
+  // These run automatically in the admin console.
+  "tests": [
+    {
+      // Control plane can reach worker agent API
+      "src":    "tag:control",
+      "accept": ["tag:worker:9000"]
+    },
+    {
+      // Control plane can reach worker metrics
+      "src":    "tag:control",
+      "accept": ["tag:worker:9090"]
+    },
+    {
+      // Control plane can reach worker SSE streams
+      "src":    "tag:control",
+      "accept": ["tag:worker:9100"]
+    },
+    {
+      // Worker can reach control plane API
+      "src":    "tag:worker",
+      "accept": ["tag:control:8080"]
+    },
+    {
+      // Worker can reach Redis
+      "src":    "tag:worker",
+      "accept": ["tag:control:6379"]
+    },
+    {
+      // Worker can reach PostgreSQL
+      "src":    "tag:worker",
+      "accept": ["tag:control:5432"]
+    },
+    {
+      // Worker can reach LiteLLM proxy
+      "src":    "tag:worker",
+      "accept": ["tag:control:4000"]
+    },
+    {
+      // Worker can reach Mem0
+      "src":    "tag:worker",
+      "accept": ["tag:control:8000"]
+    },
+    {
+      // Mobile can reach control plane API
+      "src":    "tag:mobile",
+      "accept": ["tag:control:8080"]
+    },
+    {
+      // Mobile CANNOT reach workers directly
+      "src":    "tag:mobile",
+      "deny":   ["tag:worker:9000"]
+    },
+    {
+      // Mobile CANNOT reach Redis
+      "src":    "tag:mobile",
+      "deny":   ["tag:control:6379"]
+    },
+    {
+      // Workers CANNOT reach each other
+      "src":    "tag:worker",
+      "deny":   ["tag:worker:9000"]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+# Docker Compose — Local Development Services
+#
+# Provides Redis, PostgreSQL, and LiteLLM proxy for local development.
+# These are the backing services required by the control plane.
+#
+# Usage:
+#   cd infra/docker
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down
+#   docker compose -f docker-compose.dev.yml logs -f litellm
+#
+# Data persists across restarts via named volumes.
+# To start fresh: docker compose -f docker-compose.dev.yml down -v
+
+services:
+  # ── Redis 7 ──────────────────────────────────────────────────────
+  # Used by BullMQ (task scheduling) and LiteLLM (response caching).
+  # No authentication in dev — production uses Tailscale ACLs for
+  # network-level isolation.
+  redis:
+    image: redis:7-alpine
+    container_name: agentctl-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    # Enable AOF persistence so queued tasks survive restarts
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ── PostgreSQL 16 ────────────────────────────────────────────────
+  # Stores agent registry, run history, audit trail, and machine state.
+  # Dev credentials match the defaults in PM2 ecosystem configs.
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentctl-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: agentctl
+      POSTGRES_PASSWORD: agentctl
+      POSTGRES_DB: agentctl
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentctl -d agentctl"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    # Tuned for local dev — not production settings
+    command: >
+      postgres
+        -c shared_buffers=128MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=64MB
+        -c log_statement=all
+        -c log_min_duration_statement=100
+
+  # ── LiteLLM Proxy ───────────────────────────────────────────────
+  # Multi-provider LLM routing with failover and caching.
+  # Config is mounted from ../litellm/config.yaml.
+  #
+  # API keys must be provided via environment variables — NEVER
+  # hardcode them in config files. Set them in your shell profile
+  # or a machine-local .env file (which is gitignored).
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: agentctl-litellm
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../litellm/config.yaml:/app/config.yaml:ro
+    environment:
+      # LiteLLM reads these from the config via os.environ/ references.
+      # Set actual values in your shell or a .env file next to this compose file.
+      #
+      # Anthropic Direct API keys (two orgs for rate limit multiplication)
+      ANTHROPIC_KEY_ORG1: ${ANTHROPIC_KEY_ORG1:-}
+      ANTHROPIC_KEY_ORG2: ${ANTHROPIC_KEY_ORG2:-}
+      # AWS Bedrock (uses default credential chain if not set)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      # Google Vertex AI
+      GCP_PROJECT: ${GCP_PROJECT:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      # Redis host for LiteLLM response cache
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    command: --config /app/config.yaml --port 4000 --detailed_debug
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+# ── Named Volumes ────────────────────────────────────────────────
+# Data persists across container restarts. Use `docker compose down -v`
+# to destroy volumes and start fresh.
+volumes:
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
