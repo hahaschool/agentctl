@@ -3,7 +3,7 @@ import type { AgentStatus } from '../types/agent.js';
 export type AgentOutputEvent = {
   event: 'output';
   data: {
-    type: 'text' | 'tool_use' | 'tool_result';
+    type: 'text' | 'tool_use' | 'tool_result' | 'tool_blocked';
     content: string;
   };
 };

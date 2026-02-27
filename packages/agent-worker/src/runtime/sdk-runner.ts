@@ -2,6 +2,16 @@ import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
+import type { PostToolUseInput } from '../hooks/post-tool-use.js';
+import type { PreToolUseInput, PreToolUseResult } from '../hooks/pre-tool-use.js';
+import type { StopInput } from '../hooks/stop-hook.js';
+
+export type SdkRunnerHooks = {
+  preToolUse?: (input: PreToolUseInput) => Promise<PreToolUseResult>;
+  postToolUse?: (input: PostToolUseInput) => Promise<void>;
+  stop?: (input: StopInput) => Promise<void>;
+};
+
 export type SdkRunnerOptions = {
   prompt: string;
   agentId: string;
@@ -11,6 +21,7 @@ export type SdkRunnerOptions = {
   logger: Logger;
   onEvent: (event: AgentEvent) => void;
   abortSignal?: AbortSignal;
+  hooks?: SdkRunnerHooks;
 };
 
 export type SdkRunResult = {
@@ -146,7 +157,8 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     return null;
   }
 
-  const { prompt, agentId, sessionId, config, projectPath, logger, onEvent, abortSignal } = options;
+  const { prompt, agentId, sessionId, config, projectPath, logger, onEvent, abortSignal, hooks } =
+    options;
 
   const sdkOptions = buildSdkOptions(config, projectPath);
 
@@ -163,15 +175,76 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
   let resultText = '';
   let finalSessionId = sessionId;
 
+  let totalTurns = 0;
+  let stopReason = 'completed';
+  // Track per-tool timing for postToolUse durationMs
+  let currentToolStart: number | null = null;
+  let currentToolName: string | null = null;
+  let currentToolInput: Record<string, unknown> | null = null;
+
   try {
     for await (const message of sdk.query({ prompt, options: sdkOptions })) {
       // Check for abort between messages
       if (abortSignal?.aborted) {
         logger.info({ agentId }, 'Agent run aborted by signal');
+        stopReason = 'aborted';
         break;
       }
 
       const messageType = message['type'] as string | undefined;
+
+      // ── PreToolUse hook: inspect and optionally block tool invocations ──
+      if (messageType === 'tool_use' && hooks?.preToolUse) {
+        const toolName = (message['tool_name'] as string) ?? 'unknown';
+        const toolInput = (message['tool_input'] as Record<string, unknown>) ?? {};
+
+        const decision = await hooks.preToolUse({
+          sessionId: finalSessionId,
+          agentId,
+          toolName,
+          toolInput,
+        });
+
+        if (decision === 'deny') {
+          // Emit a blocked event so consumers know the tool was denied
+          const blockedEvent: AgentEvent = {
+            event: 'output',
+            data: {
+              type: 'tool_blocked',
+              content: `Tool '${toolName}' was blocked by PreToolUse hook`,
+            },
+          };
+          onEvent(blockedEvent);
+          // Skip further processing of this tool_use message
+          continue;
+        }
+
+        // Track tool start for postToolUse duration measurement
+        currentToolStart = Date.now();
+        currentToolName = toolName;
+        currentToolInput = toolInput;
+        totalTurns++;
+      }
+
+      // ── PostToolUse hook: record completed tool execution ──
+      if (messageType === 'tool_result' && hooks?.postToolUse && currentToolName) {
+        const toolOutput = (message['content'] as string) ?? '';
+        const durationMs = currentToolStart ? Date.now() - currentToolStart : 0;
+
+        await hooks.postToolUse({
+          sessionId: finalSessionId,
+          agentId,
+          toolName: currentToolName,
+          toolInput: currentToolInput ?? {},
+          toolOutput,
+          durationMs,
+        });
+
+        // Reset per-tool tracking
+        currentToolStart = null;
+        currentToolName = null;
+        currentToolInput = null;
+      }
 
       // Handle the final result message
       if (messageType === 'result') {
@@ -190,13 +263,44 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
       handleSdkMessage(message, onEvent, accumulator);
     }
   } catch (err) {
+    stopReason = 'error';
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ agentId, err }, 'Claude Agent SDK run failed');
+
+    // Fire stop hook even on error so we get a session_end audit entry
+    if (hooks?.stop) {
+      await hooks
+        .stop({
+          sessionId: finalSessionId,
+          agentId,
+          reason: `error: ${message}`,
+          totalCostUsd: accumulator.totalCost,
+          totalTurns,
+        })
+        .catch((stopErr: unknown) => {
+          logger.warn({ err: stopErr }, 'Stop hook failed after SDK error');
+        });
+    }
 
     throw new AgentError('SDK_RUN_FAILED', `Agent SDK run failed: ${message}`, {
       agentId,
       sessionId: finalSessionId,
     });
+  }
+
+  // ── Stop hook: record session end ──
+  if (hooks?.stop) {
+    try {
+      await hooks.stop({
+        sessionId: finalSessionId,
+        agentId,
+        reason: stopReason,
+        totalCostUsd: accumulator.totalCost,
+        totalTurns,
+      });
+    } catch (stopErr) {
+      logger.warn({ err: stopErr }, 'Stop hook failed after successful run');
+    }
   }
 
   logger.info(

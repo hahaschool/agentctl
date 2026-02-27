@@ -9,6 +9,7 @@ const DEFAULT_MAX_CONCURRENT = 3;
 
 type AgentPoolOptions = {
   maxConcurrent?: number;
+  auditLogDir?: string;
   logger: Logger;
 };
 
@@ -26,11 +27,13 @@ type AgentSummary = {
 export class AgentPool extends EventEmitter {
   private readonly agents: Map<string, AgentInstance> = new Map();
   private readonly maxConcurrent: number;
+  private readonly auditLogDir: string | undefined;
   private readonly log: Logger;
 
   constructor(options: AgentPoolOptions) {
     super();
     this.maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
+    this.auditLogDir = options.auditLogDir;
     this.log = options.logger.child({ component: 'agent-pool' });
   }
 
@@ -53,7 +56,10 @@ export class AgentPool extends EventEmitter {
       );
     }
 
-    const instance = new AgentInstance(options);
+    const instance = new AgentInstance({
+      ...options,
+      auditLogDir: options.auditLogDir ?? this.auditLogDir,
+    });
 
     // Forward agent events from the instance to the pool level,
     // enriching with the agentId for pool-level consumers.

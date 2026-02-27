@@ -1,11 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+
 import type { AgentConfig, AgentEvent, AgentStatus } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
+import { AuditLogger } from '../hooks/audit-logger.js';
+import { createPostToolUseHook } from '../hooks/post-tool-use.js';
+import { createPreToolUseHook } from '../hooks/pre-tool-use.js';
+import { createStopHook } from '../hooks/stop-hook.js';
 import { OutputBuffer } from './output-buffer.js';
-import { runWithSdk } from './sdk-runner.js';
+import { runWithSdk, type SdkRunnerHooks } from './sdk-runner.js';
+
+const DEFAULT_AUDIT_LOG_DIR = '.agentctl/audit';
 
 export type AgentInstanceOptions = {
   agentId: string;
@@ -13,6 +20,7 @@ export type AgentInstanceOptions = {
   config: AgentConfig;
   projectPath: string;
   logger: Logger;
+  auditLogDir?: string;
 };
 
 type AgentInstanceState = {
@@ -53,6 +61,8 @@ export class AgentInstance extends EventEmitter {
   readonly outputBuffer: OutputBuffer;
 
   private readonly log: Logger;
+  private readonly auditLogger: AuditLogger;
+  private readonly hooks: SdkRunnerHooks;
   private state: AgentInstanceState;
   private simulationTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimer: ReturnType<typeof setInterval> | null = null;
@@ -67,6 +77,27 @@ export class AgentInstance extends EventEmitter {
     this.projectPath = options.projectPath;
     this.log = options.logger.child({ agentId: this.agentId, machineId: this.machineId });
     this.outputBuffer = new OutputBuffer();
+
+    // Initialize audit logger and hook functions
+    this.auditLogger = new AuditLogger({
+      logDir: options.auditLogDir ?? DEFAULT_AUDIT_LOG_DIR,
+      logger: this.log,
+    });
+
+    this.hooks = {
+      preToolUse: createPreToolUseHook({
+        auditLogger: this.auditLogger,
+        logger: this.log,
+      }),
+      postToolUse: createPostToolUseHook({
+        auditLogger: this.auditLogger,
+        logger: this.log,
+      }),
+      stop: createStopHook({
+        auditLogger: this.auditLogger,
+        logger: this.log,
+      }),
+    };
 
     this.state = {
       status: 'registered',
@@ -103,6 +134,7 @@ export class AgentInstance extends EventEmitter {
         logger: this.log,
         onEvent: (event) => this.emitEvent(event),
         abortSignal: this.abortController.signal,
+        hooks: this.hooks,
       });
 
       if (result) {
@@ -137,7 +169,9 @@ export class AgentInstance extends EventEmitter {
 
     this.log.info({ graceful }, 'Stopping agent');
 
-    // Signal the SDK runner (if active) to stop iteration
+    // Signal the SDK runner (if active) to stop iteration.
+    // The SDK runner will fire its own stop hook when it detects the abort.
+    const wasAborted = this.abortController !== null;
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
@@ -151,6 +185,12 @@ export class AgentInstance extends EventEmitter {
     } else {
       // Force stop — kill immediately
       this.finishStop('user');
+    }
+
+    // If the abort controller was not set (stub simulation), fire stop hook
+    // here. For SDK runs, the runner handles it via the abort signal.
+    if (!wasAborted) {
+      await this.fireStopHook('user', 0);
     }
   }
 
@@ -269,6 +309,29 @@ export class AgentInstance extends EventEmitter {
     );
   }
 
+  /**
+   * Fire the stop hook to record a session_end audit entry.
+   * Called explicitly for stub simulation runs where the SDK runner
+   * does not manage the hook lifecycle.
+   */
+  private async fireStopHook(reason: string, totalTurns: number): Promise<void> {
+    if (!this.hooks.stop || !this.state.sessionId) {
+      return;
+    }
+
+    try {
+      await this.hooks.stop({
+        sessionId: this.state.sessionId,
+        agentId: this.agentId,
+        reason,
+        totalCostUsd: this.state.costUsd,
+        totalTurns,
+      });
+    } catch (err) {
+      this.log.warn({ err }, 'Stop hook failed');
+    }
+  }
+
   private clearTimers(): void {
     if (this.simulationTimer) {
       clearTimeout(this.simulationTimer);
@@ -339,6 +402,10 @@ export class AgentInstance extends EventEmitter {
 
         this.emitEvent(finalEvent);
         this.finishStop('completed');
+
+        // Fire the stop hook for audit trail consistency in stub mode.
+        // In SDK mode the runner handles this directly.
+        void this.fireStopHook('completed', STUB_TURNS);
       }
     }, STUB_RUN_DURATION_MS);
   }
