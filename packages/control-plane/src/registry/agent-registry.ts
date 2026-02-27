@@ -8,11 +8,15 @@ export type MachineEntry = {
 /**
  * Minimal shape that any object returned from `getMachine` must have.
  * Both {@link MachineEntry} (in-memory) and the shared `Machine` type
- * (from `@agentctl/shared`) satisfy this — the stream route only reads
- * `hostname`.
+ * (from `@agentctl/shared`) satisfy this.
+ *
+ * Routes use `tailscaleIp` to construct worker URLs for cross-machine
+ * communication via the Tailscale mesh. The `hostname` is kept for
+ * display and logging purposes.
  */
 export type MachineRecord = {
   hostname: string;
+  tailscaleIp?: string;
   [key: string]: unknown;
 };
 

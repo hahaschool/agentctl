@@ -59,10 +59,11 @@ export async function createServer({
   await app.register(streamRoutes, {
     prefix: '/api/agents',
     registry,
+    dbRegistry: dbRegistry ?? null,
   });
   await app.register(wsRoutes, {
     prefix: '/api',
-    registry: registry ?? null,
+    dbRegistry: dbRegistry ?? null,
     taskQueue: taskQueue ?? null,
     logger,
   });

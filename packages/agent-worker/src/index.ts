@@ -12,10 +12,12 @@ const HOST = process.env.WORKER_HOST || '0.0.0.0';
 const CONTROL_PLANE_URL = process.env.CONTROL_URL || 'http://control:8080';
 const MACHINE_ID = process.env.MACHINE_ID || `machine-${os.hostname()}`;
 const MAX_CONCURRENT_AGENTS = Number(process.env.MAX_CONCURRENT_AGENTS) || 3;
+const AUDIT_LOG_DIR = process.env.AUDIT_LOG_DIR || '.agentctl/audit';
 
 async function main(): Promise<void> {
   const pool = new AgentPool({
     maxConcurrent: MAX_CONCURRENT_AGENTS,
+    auditLogDir: AUDIT_LOG_DIR,
     logger,
   });
 
@@ -30,6 +32,7 @@ async function main(): Promise<void> {
     controlPlaneUrl: CONTROL_PLANE_URL,
     intervalMs: 15_000,
     logger,
+    agentPool: pool,
   });
 
   await healthReporter.register();

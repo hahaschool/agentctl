@@ -5,10 +5,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
 import type { WebSocket } from 'ws';
 
-import type { MachineRegistryLike } from '../../registry/agent-registry.js';
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
 
-const DEFAULT_WORKER_URL = 'http://localhost:9000';
+const WORKER_PORT = Number(process.env['WORKER_PORT']) || 9000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ type OutgoingMessage = AgentEventMessage | PongMessage | ErrorMessage;
 // ---------------------------------------------------------------------------
 
 export type WsRouteOptions = {
-  registry: MachineRegistryLike | null;
+  dbRegistry: DbAgentRegistry | null;
   taskQueue: Queue<AgentTaskJobData, void, AgentTaskJobName> | null;
   logger: Logger;
 };
@@ -201,11 +201,67 @@ function subscribeSse(
 }
 
 // ---------------------------------------------------------------------------
+// Worker URL resolution helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the base URL of the agent worker hosting a given agent.
+ *
+ * Looks up the agent in the database registry to find its `machineId`, then
+ * resolves the machine to obtain the `tailscaleIp`. Constructs the URL as
+ * `http://<tailscaleIp>:<WORKER_PORT>`.
+ *
+ * This mirrors the resolution strategy in `task-worker.ts`.
+ */
+async function resolveWorkerUrl(
+  agentId: string,
+  dbRegistry: DbAgentRegistry,
+  logger: Logger,
+): Promise<string> {
+  const agent = await dbRegistry.getAgent(agentId);
+
+  if (!agent) {
+    throw new ControlPlaneError(
+      'AGENT_NOT_FOUND',
+      `Agent '${agentId}' does not exist in the registry`,
+      { agentId },
+    );
+  }
+
+  const machine = await dbRegistry.getMachine(agent.machineId);
+
+  if (!machine) {
+    throw new ControlPlaneError(
+      'MACHINE_NOT_FOUND',
+      `Machine '${agent.machineId}' for agent '${agentId}' is not registered`,
+      { agentId, machineId: agent.machineId },
+    );
+  }
+
+  if (machine.status === 'offline') {
+    throw new ControlPlaneError(
+      'MACHINE_OFFLINE',
+      `Machine '${machine.id}' (${machine.hostname}) is offline`,
+      { agentId, machineId: machine.id, hostname: machine.hostname },
+    );
+  }
+
+  const workerBaseUrl = `http://${machine.tailscaleIp}:${String(WORKER_PORT)}`;
+
+  logger.debug(
+    { agentId, machineId: agent.machineId, tailscaleIp: machine.tailscaleIp, workerBaseUrl },
+    'Resolved worker URL for agent',
+  );
+
+  return workerBaseUrl;
+}
+
+// ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
 
 export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) => {
-  const { registry, taskQueue, logger } = opts;
+  const { dbRegistry, taskQueue, logger } = opts;
 
   app.get('/ws', { websocket: true }, (socket, request) => {
     logger.info({ remoteAddress: request.ip }, 'WebSocket client connected');
@@ -298,15 +354,21 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             return;
           }
 
-          // Resolve the worker URL for this agent. Currently we fall back to
-          // the default local worker URL, but once agent->machine mapping is
-          // in the registry we can resolve dynamically.
-          const workerBaseUrl = DEFAULT_WORKER_URL;
+          if (!dbRegistry) {
+            sendError(
+              socket,
+              'REGISTRY_UNAVAILABLE',
+              'Database registry is not configured — cannot resolve agent worker address',
+            );
+            return;
+          }
+
+          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger);
 
           const sub = subscribeSse(agentId, workerBaseUrl, socket, logger);
           subscriptions.set(agentId, sub);
 
-          logger.info({ agentId }, 'client subscribed to agent events');
+          logger.info({ agentId, workerBaseUrl }, 'client subscribed to agent events');
           return;
         }
 
@@ -380,15 +442,16 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             return;
           }
 
-          if (!registry) {
-            sendError(socket, 'REGISTRY_UNAVAILABLE', 'Machine registry is not configured');
+          if (!dbRegistry) {
+            sendError(
+              socket,
+              'REGISTRY_UNAVAILABLE',
+              'Database registry is not configured — cannot resolve agent worker address',
+            );
             return;
           }
 
-          // Look up the machine hosting this agent and POST a stop request.
-          // For now we try the default worker URL. In the future this will
-          // resolve via the agent->machine mapping in the registry.
-          const workerBaseUrl = DEFAULT_WORKER_URL;
+          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger);
           const stopUrl = `${workerBaseUrl}/api/agents/${encodeURIComponent(agentId)}/stop`;
 
           try {
@@ -410,7 +473,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             }
 
             logger.info(
-              { agentId, graceful: graceful ?? true },
+              { agentId, workerBaseUrl, graceful: graceful ?? true },
               'agent stop request sent via WebSocket',
             );
             sendJson(socket, {
