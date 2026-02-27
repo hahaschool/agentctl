@@ -6,7 +6,7 @@
 -- Tracks physical/virtual machines in the Tailscale fleet
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "machines" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "id" text PRIMARY KEY,
   "hostname" text NOT NULL UNIQUE,
   "tailscale_ip" inet NOT NULL,
   "os" text NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS "machines" (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "agents" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "machine_id" uuid REFERENCES "machines"("id"),
+  "machine_id" text REFERENCES "machines"("id"),
   "name" text NOT NULL,
   "type" text NOT NULL,
   "status" text DEFAULT 'idle',

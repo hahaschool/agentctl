@@ -122,6 +122,8 @@ export function createTaskWorker({
         );
       }
 
+      let runId: string | null = null;
+
       try {
         // -------------------------------------------------------------------
         // 1. Resolve the agent and its host machine from the registry
@@ -155,7 +157,20 @@ export function createTaskWorker({
         }
 
         // -------------------------------------------------------------------
-        // 2. Optionally enrich the prompt with relevant memories
+        // 2. Create a run record before dispatching
+        // -------------------------------------------------------------------
+        runId = await registry.createRun({
+          agentId,
+          trigger,
+          model,
+          provider: null,
+          sessionId: resumeSession,
+        });
+
+        jobLogger.info({ runId }, 'Agent run record created');
+
+        // -------------------------------------------------------------------
+        // 3. Optionally enrich the prompt with relevant memories
         // -------------------------------------------------------------------
         let enrichedPrompt = prompt;
 
@@ -172,7 +187,7 @@ export function createTaskWorker({
         }
 
         // -------------------------------------------------------------------
-        // 3. Dispatch to the agent worker HTTP endpoint
+        // 4. Dispatch to the agent worker HTTP endpoint
         // -------------------------------------------------------------------
         const workerPort = DEFAULT_WORKER_PORT;
         const dispatchUrl = `http://${machine.tailscaleIp}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
@@ -190,25 +205,45 @@ export function createTaskWorker({
         const result = await dispatchToWorker(dispatchUrl, payload, jobLogger);
 
         // -------------------------------------------------------------------
-        // 4. Log the outcome
+        // 5. Complete the run with success
         // -------------------------------------------------------------------
+        await registry.completeRun(runId, {
+          status: 'success',
+          resultSummary: result.message ?? null,
+        });
+
         jobLogger.info(
           {
+            runId,
             dispatchUrl,
             workerPort,
             tailscaleIp: machine.tailscaleIp,
             hostname: machine.hostname,
             resultOk: result.ok,
-            runId: result.runId ?? null,
             promptLength: enrichedPrompt ? enrichedPrompt.length : 0,
             model,
             controlPlaneUrl: controlPlaneUrl ?? null,
           },
-          'Agent task dispatched to worker',
+          'Agent task dispatched and run completed successfully',
         );
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        jobLogger.error({ err }, 'Agent task job failed');
+        jobLogger.error({ err, runId }, 'Agent task job failed');
+
+        // -------------------------------------------------------------------
+        // Mark the run as failed if one was created
+        // -------------------------------------------------------------------
+        if (runId) {
+          try {
+            await registry.completeRun(runId, {
+              status: 'failure',
+              errorMessage: message,
+            });
+            jobLogger.info({ runId }, 'Agent run marked as failed');
+          } catch (completeErr: unknown) {
+            jobLogger.error({ err: completeErr, runId }, 'Failed to mark agent run as failed');
+          }
+        }
 
         // Re-throw ControlPlaneErrors as-is so BullMQ sees a typed error.
         if (err instanceof ControlPlaneError) {

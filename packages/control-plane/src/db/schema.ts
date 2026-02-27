@@ -12,7 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 export const machines = pgTable('machines', {
-  id: uuid('id').primaryKey().defaultRandom(),
+  id: text('id').primaryKey(),
   hostname: text('hostname').unique().notNull(),
   tailscaleIp: inet('tailscale_ip').notNull(),
   os: text('os').notNull(),
@@ -25,7 +25,7 @@ export const machines = pgTable('machines', {
 
 export const agents = pgTable('agents', {
   id: uuid('id').primaryKey().defaultRandom(),
-  machineId: uuid('machine_id').references(() => machines.id),
+  machineId: text('machine_id').references(() => machines.id),
   name: text('name').notNull(),
   type: text('type').notNull(),
   status: text('status').default('idle'),

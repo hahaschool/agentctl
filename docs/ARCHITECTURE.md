@@ -9,7 +9,7 @@ The control plane is the central brain. It runs on the most reliable machine (li
 **Agent Registry** (PostgreSQL)
 ```sql
 CREATE TABLE machines (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,                    -- human-readable (hostname or custom ID)
   hostname TEXT UNIQUE NOT NULL,        -- Tailscale MagicDNS hostname
   tailscale_ip INET NOT NULL,           -- 100.x.x.x address
   os TEXT NOT NULL,                      -- linux/darwin
@@ -22,7 +22,7 @@ CREATE TABLE machines (
 
 CREATE TABLE agents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  machine_id UUID REFERENCES machines(id),
+  machine_id TEXT REFERENCES machines(id),
   name TEXT NOT NULL,
   type TEXT NOT NULL,                    -- heartbeat/cron/manual/adhoc
   status TEXT DEFAULT 'idle',           -- idle/running/paused/error/stopped
