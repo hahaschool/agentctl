@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@agentctl/shared": "workspace:*",
+    "@fastify/websocket": "^11.0.0",
     "drizzle-orm": "^0.38.0",
     "fastify": "^5.2.0",
     "bullmq": "^5.34.0",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
+    "@types/ws": "^8.5.0",
     "drizzle-kit": "^0.30.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"

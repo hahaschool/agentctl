@@ -1,10 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyWebsocket from '@fastify/websocket';
 import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
 
 import { agentRoutes } from './routes/agents.js';
 import { healthRoutes } from './routes/health.js';
 import { streamRoutes } from './routes/stream.js';
+import { wsRoutes } from './routes/ws.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
@@ -36,6 +38,9 @@ export async function createServer({
     logger.debug({ method: request.method, url: request.url }, 'incoming request');
   });
 
+  // Register @fastify/websocket before any WebSocket route plugins.
+  await app.register(fastifyWebsocket);
+
   await app.register(healthRoutes);
   await app.register(agentRoutes, {
     prefix: '/api/agents',
@@ -47,6 +52,12 @@ export async function createServer({
   await app.register(streamRoutes, {
     prefix: '/api/agents',
     registry,
+  });
+  await app.register(wsRoutes, {
+    prefix: '/api',
+    registry: registry ?? null,
+    taskQueue: taskQueue ?? null,
+    logger,
   });
 
   return app;
