@@ -21,6 +21,8 @@ type IngestBody = {
   actions: AuditActionPayload[];
 };
 
+const MAX_BATCH_SIZE = 1000;
+
 export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, opts) => {
   const { dbRegistry } = opts;
 
@@ -37,6 +39,13 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
 
     if (!Array.isArray(actions) || actions.length === 0) {
       return reply.code(400).send({ error: 'A non-empty "actions" array is required' });
+    }
+
+    if (actions.length > MAX_BATCH_SIZE) {
+      return reply.code(400).send({
+        error: `Batch size ${actions.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
+        code: 'BATCH_SIZE_EXCEEDED',
+      });
     }
 
     for (const action of actions) {

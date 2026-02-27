@@ -1,11 +1,12 @@
 import type {
+  AgentStatus,
   HeartbeatRequest,
   RegisterWorkerRequest,
   SignalAgentRequest,
   StartAgentRequest,
   StopAgentRequest,
 } from '@agentctl/shared';
-import { ControlPlaneError } from '@agentctl/shared';
+import { AGENT_STATUSES, ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -30,8 +31,22 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Machine registration & heartbeat
   // ---------------------------------------------------------------------------
 
-  app.post<{ Body: RegisterWorkerRequest }>('/register', async (request) => {
+  app.post<{ Body: RegisterWorkerRequest }>('/register', async (request, reply) => {
     const body = request.body;
+
+    if (!body.machineId || typeof body.machineId !== 'string') {
+      return reply.code(400).send({
+        error: 'A non-empty "machineId" string is required',
+        code: 'INVALID_MACHINE_ID',
+      });
+    }
+
+    if (!body.hostname || typeof body.hostname !== 'string') {
+      return reply.code(400).send({
+        error: 'A non-empty "hostname" string is required',
+        code: 'INVALID_HOSTNAME',
+      });
+    }
 
     if (dbRegistry) {
       await dbRegistry.registerMachine(body);
@@ -119,7 +134,16 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         return reply.code(501).send({ error: 'Database not configured' });
       }
 
-      await dbRegistry.updateAgentStatus(request.params.agentId, request.body.status);
+      const { status } = request.body;
+
+      if (!status || !AGENT_STATUSES.includes(status as AgentStatus)) {
+        return reply.code(400).send({
+          error: `Invalid status. Must be one of: ${AGENT_STATUSES.join(', ')}`,
+          code: 'INVALID_STATUS',
+        });
+      }
+
+      await dbRegistry.updateAgentStatus(request.params.agentId, status);
       return { ok: true };
     },
   );
@@ -135,7 +159,20 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         return reply.code(501).send({ error: 'Database not configured' });
       }
 
-      const limit = request.query.limit ? Number(request.query.limit) : undefined;
+      const DEFAULT_LIMIT = 20;
+      const raw = request.query.limit;
+      let limit = DEFAULT_LIMIT;
+
+      if (raw !== undefined) {
+        const parsed = Number(raw);
+
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          limit = DEFAULT_LIMIT;
+        } else {
+          limit = parsed;
+        }
+      }
+
       return await dbRegistry.getRecentRuns(request.params.agentId, limit);
     },
   );

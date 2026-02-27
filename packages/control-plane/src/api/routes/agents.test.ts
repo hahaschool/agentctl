@@ -138,7 +138,10 @@ describe('Agent routes — /api/agents', () => {
         url: '/api/agents/ec2-us-east-1/heartbeat',
         payload: {
           machineId: 'ec2-us-east-1',
-          runningAgents: ['agent-1', 'agent-2'],
+          runningAgents: [
+            { agentId: 'agent-1', sessionId: 'sess-abc' },
+            { agentId: 'agent-2', sessionId: null },
+          ],
           cpuPercent: 45.2,
           memoryPercent: 62.8,
         },
@@ -175,20 +178,17 @@ describe('Agent routes — /api/agents', () => {
   // -------------------------------------------------------------------------
 
   describe('error cases', () => {
-    it('POST /api/agents/register with empty body returns 200 (no server-side validation)', async () => {
-      // The in-memory registry does not validate body fields — it simply
-      // stores whatever machineId/hostname are provided (even undefined).
-      // This test documents current behavior; stricter validation could be
-      // added later with Fastify JSON Schema.
+    it('POST /api/agents/register with empty body returns 400', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/agents/register',
         payload: {},
       });
 
-      // Without schema validation, Fastify does not reject the request.
-      // The handler calls registry.registerMachine(undefined, undefined).
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_MACHINE_ID');
     });
 
     it('GET on a non-existent route returns 404', async () => {

@@ -1,14 +1,17 @@
 export type AgentType = 'heartbeat' | 'cron' | 'manual' | 'adhoc';
 
-export type AgentStatus =
-  | 'registered'
-  | 'starting'
-  | 'running'
-  | 'stopping'
-  | 'stopped'
-  | 'error'
-  | 'timeout'
-  | 'restarting';
+export const AGENT_STATUSES = [
+  'registered',
+  'starting',
+  'running',
+  'stopping',
+  'stopped',
+  'error',
+  'timeout',
+  'restarting',
+] as const;
+
+export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
 export type AgentConfig = {
   allowedTools?: string[];
