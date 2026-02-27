@@ -14,6 +14,9 @@ import { runWithSdk, type SdkRunnerHooks } from './sdk-runner.js';
 
 const DEFAULT_AUDIT_LOG_DIR = '.agentctl/audit';
 
+/** Default max execution time: 30 minutes */
+const DEFAULT_MAX_EXECUTION_MS = 30 * 60 * 1_000;
+
 export type AgentInstanceOptions = {
   agentId: string;
   machineId: string;
@@ -21,6 +24,8 @@ export type AgentInstanceOptions = {
   projectPath: string;
   logger: Logger;
   auditLogDir?: string;
+  /** Maximum execution time in milliseconds before the agent is forcefully timed out. */
+  maxExecutionMs?: number;
 };
 
 type AgentInstanceState = {
@@ -63,9 +68,11 @@ export class AgentInstance extends EventEmitter {
   private readonly log: Logger;
   private readonly auditLogger: AuditLogger;
   private readonly hooks: SdkRunnerHooks;
+  private readonly maxExecutionMs: number;
   private state: AgentInstanceState;
   private simulationTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimer: ReturnType<typeof setInterval> | null = null;
+  private executionTimer: ReturnType<typeof setTimeout> | null = null;
   private abortController: AbortController | null = null;
 
   constructor(options: AgentInstanceOptions) {
@@ -83,6 +90,8 @@ export class AgentInstance extends EventEmitter {
       logDir: options.auditLogDir ?? DEFAULT_AUDIT_LOG_DIR,
       logger: this.log,
     });
+
+    this.maxExecutionMs = options.maxExecutionMs ?? DEFAULT_MAX_EXECUTION_MS;
 
     this.hooks = {
       preToolUse: createPreToolUseHook({
@@ -123,6 +132,28 @@ export class AgentInstance extends EventEmitter {
     try {
       this.transitionTo('running');
       this.log.info({ sessionId: this.state.sessionId }, 'Agent running');
+
+      // Start execution timeout timer
+      this.executionTimer = setTimeout(() => {
+        if (this.state.status === 'running') {
+          this.log.warn(
+            { agentId: this.agentId, maxExecutionMs: this.maxExecutionMs },
+            'Agent execution timed out',
+          );
+          if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
+          }
+          this.clearTimers();
+          this.state.status = 'timeout';
+          this.state.stoppedAt = new Date();
+          const timeoutEvent: AgentEvent = {
+            event: 'status',
+            data: { status: 'timeout', reason: 'execution_timeout' },
+          };
+          this.emitEvent(timeoutEvent);
+        }
+      }, this.maxExecutionMs);
 
       // Try the real Claude Agent SDK first
       const result = await runWithSdk({
@@ -340,6 +371,10 @@ export class AgentInstance extends EventEmitter {
     if (this.turnTimer) {
       clearInterval(this.turnTimer);
       this.turnTimer = null;
+    }
+    if (this.executionTimer) {
+      clearTimeout(this.executionTimer);
+      this.executionTimer = null;
     }
   }
 
