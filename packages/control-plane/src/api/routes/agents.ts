@@ -1,9 +1,11 @@
 import type {
   HeartbeatRequest,
   RegisterWorkerRequest,
+  SignalAgentRequest,
   StartAgentRequest,
   StopAgentRequest,
 } from '@agentctl/shared';
+import { ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -177,4 +179,65 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
 
     return { ok: true, agentId, reason, graceful };
   });
+
+  // ---------------------------------------------------------------------------
+  // Signal trigger — fire an external signal to trigger an agent run
+  // ---------------------------------------------------------------------------
+
+  app.post<{ Params: { id: string }; Body: SignalAgentRequest }>(
+    '/:id/signal',
+    async (request, reply) => {
+      const agentId = request.params.id;
+      const { prompt, metadata } = request.body;
+
+      if (!prompt || typeof prompt !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_SIGNAL_BODY',
+          message: 'Signal request must include a non-empty "prompt" string',
+        });
+      }
+
+      if (!dbRegistry) {
+        return reply.code(501).send({
+          error: 'DATABASE_NOT_CONFIGURED',
+          message: 'Signal endpoint requires a database registry',
+        });
+      }
+
+      if (!taskQueue) {
+        return reply.code(501).send({
+          error: 'QUEUE_NOT_CONFIGURED',
+          message: 'Signal endpoint requires a task queue',
+        });
+      }
+
+      const agent = await dbRegistry.getAgent(agentId);
+
+      if (!agent) {
+        throw new ControlPlaneError(
+          'AGENT_NOT_FOUND',
+          `Agent '${agentId}' does not exist in the registry`,
+          { agentId },
+        );
+      }
+
+      const jobData: AgentTaskJobData = {
+        agentId,
+        machineId: agent.machineId,
+        prompt,
+        model: agent.config?.model ?? null,
+        trigger: 'signal',
+        tools: agent.config?.allowedTools ?? null,
+        resumeSession: null,
+        createdAt: new Date().toISOString(),
+        signalMetadata: metadata,
+      };
+
+      const job = await taskQueue.add('agent:signal', jobData);
+
+      app.log.info({ agentId, jobId: job.id, trigger: 'signal' }, 'Signal job enqueued');
+
+      return { ok: true, agentId, jobId: job.id };
+    },
+  );
 };

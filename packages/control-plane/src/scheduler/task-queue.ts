@@ -13,9 +13,10 @@ export type AgentTaskJobData = {
   tools: string[] | null;
   resumeSession: string | null;
   createdAt: string;
+  signalMetadata?: Record<string, unknown>;
 };
 
-export type AgentTaskJobName = 'agent:start' | 'agent:heartbeat' | 'agent:cron';
+export type AgentTaskJobName = 'agent:start' | 'agent:heartbeat' | 'agent:cron' | 'agent:signal';
 
 export function createTaskQueue(
   connection: ConnectionOptions,

@@ -2,6 +2,7 @@ export type {
   HeartbeatRequest,
   RegisterWorkerRequest,
   SendMessageRequest,
+  SignalAgentRequest,
   StartAgentRequest,
   StopAgentRequest,
 } from './commands.js';

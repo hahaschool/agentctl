@@ -107,6 +107,13 @@ export function createTaskWorker({
 
       jobLogger.info('Processing agent task job');
 
+      if (job.name === 'agent:signal') {
+        jobLogger.info(
+          { signalMetadata: job.data.signalMetadata ?? null },
+          'Processing signal-triggered job',
+        );
+      }
+
       // -----------------------------------------------------------------------
       // Guard: registry is required to resolve the target machine address.
       // Without it we cannot look up the tailscaleIp, so we fail explicitly.

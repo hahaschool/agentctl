@@ -34,3 +34,8 @@ export type HeartbeatRequest = {
   cpuPercent: number;
   memoryPercent: number;
 };
+
+export type SignalAgentRequest = {
+  prompt: string;
+  metadata?: Record<string, unknown>;
+};
