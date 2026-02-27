@@ -1,16 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-
+import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
-import { WorkerError } from '@agentctl/shared';
-
-import {
-  CMD_EXTENSION,
-  RSP_EXTENSION,
-  type IpcMessage,
-  type IpcResponse,
-} from './ipc-channel.js';
+import { CMD_EXTENSION, type IpcMessage, type IpcResponse, RSP_EXTENSION } from './ipc-channel.js';
 
 const DEFAULT_RESPONSE_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 100;
@@ -130,10 +123,7 @@ export class IpcClient {
       await fs.unlink(filePath);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        this.logger.warn(
-          { filePath, err },
-          'Failed to remove IPC file',
-        );
+        this.logger.warn({ filePath, err }, 'Failed to remove IPC file');
       }
     }
   }

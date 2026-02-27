@@ -1,7 +1,6 @@
-import type { FastifyPluginAsync } from 'fastify';
-
 import type { AgentEvent } from '@agentctl/shared';
 import { WorkerError } from '@agentctl/shared';
+import type { FastifyPluginAsync } from 'fastify';
 
 import type { AgentPool } from '../../runtime/agent-pool.js';
 
@@ -23,67 +22,62 @@ export type StreamRoutesOptions = {
 export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app, opts) => {
   const { agentPool } = opts;
 
-  app.get<{ Params: { id: string } }>(
-    '/:id/stream',
-    async (request, reply) => {
-      const agentId = request.params.id;
-      const agent = agentPool.getAgent(agentId);
+  app.get<{ Params: { id: string } }>('/:id/stream', async (request, reply) => {
+    const agentId = request.params.id;
+    const agent = agentPool.getAgent(agentId);
 
-      if (!agent) {
-        throw new WorkerError(
-          'AGENT_NOT_FOUND',
-          `Agent '${agentId}' not found in the pool`,
-          { agentId },
-        );
-      }
-
-      // Prevent Fastify from automatically serializing/ending the response.
-      // We manage the raw HTTP stream directly for SSE.
-      reply.hijack();
-
-      const raw = reply.raw;
-
-      raw.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
+    if (!agent) {
+      throw new WorkerError('AGENT_NOT_FOUND', `Agent '${agentId}' not found in the pool`, {
+        agentId,
       });
+    }
 
-      // Helper to format and write a single SSE frame.
-      const writeEvent = (event: AgentEvent): void => {
-        raw.write(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`);
-      };
+    // Prevent Fastify from automatically serializing/ending the response.
+    // We manage the raw HTTP stream directly for SSE.
+    reply.hijack();
 
-      // 1. Replay recent buffered events so the client can catch up.
-      const recent = agent.outputBuffer.getRecent(SSE_CATCH_UP_LIMIT);
+    const raw = reply.raw;
 
-      for (const event of recent) {
+    raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    // Helper to format and write a single SSE frame.
+    const writeEvent = (event: AgentEvent): void => {
+      raw.write(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`);
+    };
+
+    // 1. Replay recent buffered events so the client can catch up.
+    const recent = agent.outputBuffer.getRecent(SSE_CATCH_UP_LIMIT);
+
+    for (const event of recent) {
+      writeEvent(event);
+    }
+
+    // 2. Subscribe to live events.
+    const onEvent = (event: AgentEvent): void => {
+      if (!raw.destroyed) {
         writeEvent(event);
       }
+    };
 
-      // 2. Subscribe to live events.
-      const onEvent = (event: AgentEvent): void => {
-        if (!raw.destroyed) {
-          writeEvent(event);
-        }
-      };
+    agent.outputBuffer.subscribe(onEvent);
 
-      agent.outputBuffer.subscribe(onEvent);
+    // 3. Periodic heartbeat comment to keep proxies/load-balancers from
+    //    closing the connection due to inactivity.
+    const heartbeat = setInterval(() => {
+      if (!raw.destroyed) {
+        raw.write(`: heartbeat\n\n`);
+      }
+    }, HEARTBEAT_INTERVAL_MS);
 
-      // 3. Periodic heartbeat comment to keep proxies/load-balancers from
-      //    closing the connection due to inactivity.
-      const heartbeat = setInterval(() => {
-        if (!raw.destroyed) {
-          raw.write(`: heartbeat\n\n`);
-        }
-      }, HEARTBEAT_INTERVAL_MS);
-
-      // 4. Clean up when the client disconnects.
-      request.raw.on('close', () => {
-        clearInterval(heartbeat);
-        agent.outputBuffer.unsubscribe(onEvent);
-      });
-    },
-  );
+    // 4. Clean up when the client disconnects.
+    request.raw.on('close', () => {
+      clearInterval(heartbeat);
+      agent.outputBuffer.unsubscribe(onEvent);
+    });
+  });
 };

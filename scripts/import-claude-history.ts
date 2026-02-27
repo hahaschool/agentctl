@@ -48,7 +48,9 @@ function parseArgs(argv: string[]): { projectsDir: string; mem0Url: string } {
   }
 
   if (!projectsDir) {
-    console.error('Usage: pnpm tsx scripts/import-claude-history.ts <projects-dir> [--mem0-url URL]');
+    console.error(
+      'Usage: pnpm tsx scripts/import-claude-history.ts <projects-dir> [--mem0-url URL]',
+    );
     console.error('');
     console.error('Arguments:');
     console.error('  <projects-dir>  Path to Claude Code projects dir (e.g., ~/.claude/projects/)');
@@ -105,7 +107,12 @@ async function readJsonlMessages(filePath: string): Promise<ExtractedMessage[]> 
       continue;
     }
 
-    const role = parsed.type === 'human' ? 'user' as const : parsed.type === 'assistant' ? 'assistant' as const : null;
+    const role =
+      parsed.type === 'human'
+        ? ('user' as const)
+        : parsed.type === 'assistant'
+          ? ('assistant' as const)
+          : null;
     if (!role || !parsed.message) continue;
 
     let content = '';
@@ -220,7 +227,9 @@ async function main(): Promise<void> {
       signal: AbortSignal.timeout(5_000),
     });
     if (!healthResponse.ok) {
-      console.error(`Warning: Mem0 health check returned ${healthResponse.status}. Proceeding anyway.`);
+      console.error(
+        `Warning: Mem0 health check returned ${healthResponse.status}. Proceeding anyway.`,
+      );
     } else {
       console.log('Mem0 health check: OK');
     }
@@ -303,7 +312,9 @@ async function main(): Promise<void> {
   console.log(`Total files:       ${jsonlFiles.length}`);
 
   if (failed > 0) {
-    console.warn(`\nWarning: ${failed} session(s) failed to import. Check the output above for details.`);
+    console.warn(
+      `\nWarning: ${failed} session(s) failed to import. Check the output above for details.`,
+    );
     process.exit(2);
   }
 }

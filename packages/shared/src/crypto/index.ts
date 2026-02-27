@@ -1,25 +1,23 @@
 export {
-  generateKeyPair,
-  keyPairFromSeed,
+  computeSharedSecret,
+  decryptBox,
+  decryptSecretBox,
+  encryptBox,
+  encryptSecretBox,
+} from './encryption.js';
+export type { KeyPair } from './keypair.js';
+export {
   decodeKey,
   encodeKey,
+  generateKeyPair,
+  keyPairFromSeed,
 } from './keypair.js';
-export type { KeyPair } from './keypair.js';
-
-export {
-  encryptBox,
-  decryptBox,
-  encryptSecretBox,
-  decryptSecretBox,
-  computeSharedSecret,
-} from './encryption.js';
-
-export {
-  encodePairingPayload,
-  decodePairingPayload,
-} from './pairing.js';
 export type {
+  PairedDevice,
   PairingPayload,
   PairingResponse,
-  PairedDevice,
+} from './pairing.js';
+export {
+  decodePairingPayload,
+  encodePairingPayload,
 } from './pairing.js';

@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-
 import type { AgentEvent } from '@agentctl/shared';
+import { describe, expect, it, vi } from 'vitest';
 
 import { OutputBuffer } from './output-buffer.js';
 

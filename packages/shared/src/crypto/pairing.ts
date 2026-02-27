@@ -49,10 +49,14 @@ const MAX_PAIRING_PAYLOAD_AGE_MS = 5 * 60 * 1000; // 5 minutes
  */
 export function encodePairingPayload(payload: PairingPayload): string {
   if (payload.version !== PAIRING_VERSION) {
-    throw new AgentError('INVALID_PAIRING_VERSION', `Unsupported pairing version: ${payload.version}`, {
-      expected: PAIRING_VERSION,
-      actual: payload.version,
-    });
+    throw new AgentError(
+      'INVALID_PAIRING_VERSION',
+      `Unsupported pairing version: ${payload.version}`,
+      {
+        expected: PAIRING_VERSION,
+        actual: payload.version,
+      },
+    );
   }
 
   if (!payload.devicePublicKey || payload.devicePublicKey.length === 0) {
@@ -64,10 +68,14 @@ export function encodePairingPayload(payload: PairingPayload): string {
   }
 
   if (payload.deviceName.length > MAX_DEVICE_NAME_LENGTH) {
-    throw new AgentError('INVALID_PAIRING_PAYLOAD', `Device name exceeds maximum length of ${MAX_DEVICE_NAME_LENGTH} characters`, {
-      maxLength: MAX_DEVICE_NAME_LENGTH,
-      actualLength: payload.deviceName.length,
-    });
+    throw new AgentError(
+      'INVALID_PAIRING_PAYLOAD',
+      `Device name exceeds maximum length of ${MAX_DEVICE_NAME_LENGTH} characters`,
+      {
+        maxLength: MAX_DEVICE_NAME_LENGTH,
+        actualLength: payload.deviceName.length,
+      },
+    );
   }
 
   const json = JSON.stringify(payload);
@@ -105,10 +113,14 @@ export function decodePairingPayload(encoded: string): PairingPayload {
   const payload = parsed as Record<string, unknown>;
 
   if (payload['version'] !== PAIRING_VERSION) {
-    throw new AgentError('INVALID_PAIRING_VERSION', `Unsupported pairing version: ${payload['version']}`, {
-      expected: PAIRING_VERSION,
-      actual: payload['version'],
-    });
+    throw new AgentError(
+      'INVALID_PAIRING_VERSION',
+      `Unsupported pairing version: ${payload['version']}`,
+      {
+        expected: PAIRING_VERSION,
+        actual: payload['version'],
+      },
+    );
   }
 
   if (typeof payload['devicePublicKey'] !== 'string' || payload['devicePublicKey'].length === 0) {
@@ -125,10 +137,14 @@ export function decodePairingPayload(encoded: string): PairingPayload {
 
   const age = Date.now() - (payload['timestamp'] as number);
   if (age > MAX_PAIRING_PAYLOAD_AGE_MS) {
-    throw new AgentError('PAIRING_PAYLOAD_EXPIRED', `Pairing payload is ${Math.round(age / 1000)}s old, maximum is ${MAX_PAIRING_PAYLOAD_AGE_MS / 1000}s`, {
-      ageMs: age,
-      maxAgeMs: MAX_PAIRING_PAYLOAD_AGE_MS,
-    });
+    throw new AgentError(
+      'PAIRING_PAYLOAD_EXPIRED',
+      `Pairing payload is ${Math.round(age / 1000)}s old, maximum is ${MAX_PAIRING_PAYLOAD_AGE_MS / 1000}s`,
+      {
+        ageMs: age,
+        maxAgeMs: MAX_PAIRING_PAYLOAD_AGE_MS,
+      },
+    );
   }
 
   return {

@@ -1,13 +1,13 @@
-export type { Machine, MachineStatus, MachineCapabilities } from './machine.js';
 export type {
   Agent,
-  AgentType,
-  AgentStatus,
   AgentConfig,
+  AgentStatus,
+  AgentType,
 } from './agent.js';
 export type {
   AgentRun,
-  RunTrigger,
   RunStatus,
+  RunTrigger,
 } from './agent-run.js';
-export { AgentError, WorkerError, ControlPlaneError } from './errors.js';
+export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
+export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';

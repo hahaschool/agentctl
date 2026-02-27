@@ -1,16 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-
-import type { Logger } from 'pino';
-
 import { WorkerError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 import {
   CMD_EXTENSION,
-  RSP_EXTENSION,
   createIpcResponse,
   type IpcMessage,
   type IpcResponse,
+  RSP_EXTENSION,
 } from './ipc-channel.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
@@ -67,11 +65,9 @@ export class IpcServer {
    */
   async start(): Promise<void> {
     if (this.timer) {
-      throw new WorkerError(
-        'IPC_ALREADY_STARTED',
-        'IPC server is already running',
-        { agentId: this.agentId },
-      );
+      throw new WorkerError('IPC_ALREADY_STARTED', 'IPC server is already running', {
+        agentId: this.agentId,
+      });
     }
 
     await fs.mkdir(this.ipcDir, { recursive: true });
@@ -96,10 +92,7 @@ export class IpcServer {
       this.timer = null;
     }
 
-    this.logger.info(
-      { agentId: this.agentId },
-      'IPC server stopped',
-    );
+    this.logger.info({ agentId: this.agentId }, 'IPC server stopped');
   }
 
   // ── Private helpers ─────────────────────────────────────────────────
@@ -119,9 +112,7 @@ export class IpcServer {
 
     try {
       const entries = await fs.readdir(this.ipcDir);
-      const cmdFiles = entries
-        .filter((f) => f.endsWith(CMD_EXTENSION))
-        .sort(); // Process in lexicographic order for determinism.
+      const cmdFiles = entries.filter((f) => f.endsWith(CMD_EXTENSION)).sort(); // Process in lexicographic order for determinism.
 
       for (const cmdFile of cmdFiles) {
         await this.processCommandFile(cmdFile);
@@ -129,10 +120,7 @@ export class IpcServer {
     } catch (err) {
       // ENOENT is expected if the directory was removed between polls.
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        this.logger.error(
-          { agentId: this.agentId, err },
-          'Error polling IPC directory',
-        );
+        this.logger.error({ agentId: this.agentId, err }, 'Error polling IPC directory');
       }
     } finally {
       this.processing = false;
@@ -225,10 +213,7 @@ export class IpcServer {
       await fs.unlink(filePath);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        this.logger.warn(
-          { agentId: this.agentId, filePath, err },
-          'Failed to remove IPC file',
-        );
+        this.logger.warn({ agentId: this.agentId, filePath, err }, 'Failed to remove IPC file');
       }
     }
   }

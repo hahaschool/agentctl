@@ -57,7 +57,9 @@ function parseArgs(argv: string[]): { dbPath: string; mem0Url: string } {
   }
 
   if (!dbPath) {
-    console.error('Usage: pnpm tsx scripts/import-claude-mem.ts <path-to-claude-mem.db> [--mem0-url URL]');
+    console.error(
+      'Usage: pnpm tsx scripts/import-claude-mem.ts <path-to-claude-mem.db> [--mem0-url URL]',
+    );
     console.error('');
     console.error('Arguments:');
     console.error('  <path>       Path to the claude-mem SQLite database');
@@ -70,7 +72,7 @@ function parseArgs(argv: string[]): { dbPath: string; mem0Url: string } {
 
 async function loadBetterSqlite3(): Promise<BetterSqlite3Module> {
   try {
-    return await import('better-sqlite3') as unknown as BetterSqlite3Module;
+    return (await import('better-sqlite3')) as unknown as BetterSqlite3Module;
   } catch {
     console.error('Error: better-sqlite3 is not installed.');
     console.error('');
@@ -154,11 +156,7 @@ async function importObservations(
     if (obs.session_id) metadata.sessionId = obs.session_id;
     if (obs.created_at) metadata.originalCreatedAt = obs.created_at;
 
-    const success = await addMemory(
-      mem0Url,
-      [{ role: 'assistant', content }],
-      metadata,
-    );
+    const success = await addMemory(mem0Url, [{ role: 'assistant', content }], metadata);
 
     if (success) {
       imported++;
@@ -168,7 +166,9 @@ async function importObservations(
 
     // Print progress every 50 records
     if ((imported + failed) % 50 === 0 || imported + failed === total) {
-      process.stdout.write(`\r  Progress: ${imported + failed}/${total} (${imported} imported, ${failed} failed)`);
+      process.stdout.write(
+        `\r  Progress: ${imported + failed}/${total} (${imported} imported, ${failed} failed)`,
+      );
     }
   }
 
@@ -224,7 +224,9 @@ async function importSessionSummaries(
     }
 
     if ((imported + failed) % 50 === 0 || imported + failed === total) {
-      process.stdout.write(`\r  Progress: ${imported + failed}/${total} (${imported} imported, ${failed} failed)`);
+      process.stdout.write(
+        `\r  Progress: ${imported + failed}/${total} (${imported} imported, ${failed} failed)`,
+      );
     }
   }
 
@@ -250,7 +252,9 @@ async function main(): Promise<void> {
       signal: AbortSignal.timeout(5_000),
     });
     if (!healthResponse.ok) {
-      console.error(`Warning: Mem0 health check returned ${healthResponse.status}. Proceeding anyway.`);
+      console.error(
+        `Warning: Mem0 health check returned ${healthResponse.status}. Proceeding anyway.`,
+      );
     } else {
       console.log('Mem0 health check: OK');
     }
@@ -275,12 +279,18 @@ async function main(): Promise<void> {
 
     console.log('');
     console.log('=== Import complete ===');
-    console.log(`Observations:      ${obsResult.imported}/${obsResult.total} imported (${obsResult.failed} failed)`);
-    console.log(`Session summaries: ${summaryResult.imported}/${summaryResult.total} imported (${summaryResult.failed} failed)`);
+    console.log(
+      `Observations:      ${obsResult.imported}/${obsResult.total} imported (${obsResult.failed} failed)`,
+    );
+    console.log(
+      `Session summaries: ${summaryResult.imported}/${summaryResult.total} imported (${summaryResult.failed} failed)`,
+    );
 
     const totalFailed = obsResult.failed + summaryResult.failed;
     if (totalFailed > 0) {
-      console.warn(`\nWarning: ${totalFailed} record(s) failed to import. Check the output above for details.`);
+      console.warn(
+        `\nWarning: ${totalFailed} record(s) failed to import. Check the output above for details.`,
+      );
       process.exit(2);
     }
   } finally {

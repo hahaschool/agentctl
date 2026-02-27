@@ -1,7 +1,6 @@
-import type { Logger } from 'pino';
-
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 export type SdkRunnerOptions = {
   prompt: string;
@@ -43,8 +42,11 @@ type ClaudeAgentSdk = {
 async function loadSdk(): Promise<ClaudeAgentSdk | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = await (import('@anthropic-ai/claude-agent-sdk' as string) as Promise<Record<string, unknown>>);
-    const queryFn = mod['query'] ?? (mod['default'] as Record<string, unknown> | undefined)?.['query'];
+    const mod = await (import('@anthropic-ai/claude-agent-sdk' as string) as Promise<
+      Record<string, unknown>
+    >);
+    const queryFn =
+      mod['query'] ?? (mod['default'] as Record<string, unknown> | undefined)?.['query'];
     if (typeof queryFn !== 'function') {
       return null;
     }
@@ -58,10 +60,7 @@ async function loadSdk(): Promise<ClaudeAgentSdk | null> {
  * Map an AgentConfig to the options shape expected by the Claude Agent SDK
  * `query()` function.
  */
-function buildSdkOptions(
-  config: AgentConfig,
-  projectPath: string,
-): Record<string, unknown> {
+function buildSdkOptions(config: AgentConfig, projectPath: string): Record<string, unknown> {
   return {
     model: config.model ?? 'sonnet',
     maxTurns: config.maxTurns ?? 50,
@@ -147,16 +146,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     return null;
   }
 
-  const {
-    prompt,
-    agentId,
-    sessionId,
-    config,
-    projectPath,
-    logger,
-    onEvent,
-    abortSignal,
-  } = options;
+  const { prompt, agentId, sessionId, config, projectPath, logger, onEvent, abortSignal } = options;
 
   const sdkOptions = buildSdkOptions(config, projectPath);
 
@@ -203,11 +193,10 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ agentId, err }, 'Claude Agent SDK run failed');
 
-    throw new AgentError(
-      'SDK_RUN_FAILED',
-      `Agent SDK run failed: ${message}`,
-      { agentId, sessionId: finalSessionId },
-    );
+    throw new AgentError('SDK_RUN_FAILED', `Agent SDK run failed: ${message}`, {
+      agentId,
+      sessionId: finalSessionId,
+    });
   }
 
   logger.info(

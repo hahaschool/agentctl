@@ -1,9 +1,7 @@
 import { EventEmitter } from 'node:events';
-
-import type { Logger } from 'pino';
-
 import type { AgentEvent, AgentStatus } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 import { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 
@@ -78,11 +76,9 @@ export class AgentPool extends EventEmitter {
     const instance = this.agents.get(agentId);
 
     if (!instance) {
-      throw new AgentError(
-        'AGENT_NOT_FOUND',
-        `Agent '${agentId}' not found in the pool`,
-        { agentId },
-      );
+      throw new AgentError('AGENT_NOT_FOUND', `Agent '${agentId}' not found in the pool`, {
+        agentId,
+      });
     }
 
     await instance.stop(graceful);

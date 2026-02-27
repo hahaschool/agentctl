@@ -1,8 +1,7 @@
-import { describe, it, expect } from 'vitest';
 import nacl from 'tweetnacl';
-
-import { generateKeyPair, keyPairFromSeed, decodeKey, encodeKey } from './keypair.js';
+import { describe, expect, it } from 'vitest';
 import { AgentError } from '../types/errors.js';
+import { decodeKey, encodeKey, generateKeyPair, keyPairFromSeed } from './keypair.js';
 
 describe('generateKeyPair', () => {
   it('returns base64 public and secret keys', () => {

@@ -1,14 +1,14 @@
 import {
-  pgTable,
-  uuid,
-  text,
-  timestamp,
-  jsonb,
-  numeric,
   bigint,
   bigserial,
-  integer,
   inet,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
 } from 'drizzle-orm/pg-core';
 
 export const machines = pgTable('machines', {

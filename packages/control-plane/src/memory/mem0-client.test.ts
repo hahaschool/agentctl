@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Logger } from 'pino';
-
 import { ControlPlaneError } from '@agentctl/shared';
+import type { Logger } from 'pino';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Mem0Client } from './mem0-client.js';
 
@@ -43,10 +42,7 @@ function mockFetchError(status: number, body: string): void {
 }
 
 function mockFetchNetworkError(): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
-  );
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
 }
 
 describe('Mem0Client', () => {
@@ -166,10 +162,7 @@ describe('Mem0Client', () => {
 
   describe('health()', () => {
     it('returns true on 200', async () => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockResolvedValue({ ok: true, status: 200 }),
-      );
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
       const client = createClient();
       const result = await client.health();
@@ -182,10 +175,7 @@ describe('Mem0Client', () => {
     });
 
     it('returns false on error', async () => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
-      );
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
 
       const client = createClient();
       const result = await client.health();

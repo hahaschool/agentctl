@@ -28,10 +28,14 @@ export function generateKeyPair(): KeyPair {
  */
 export function keyPairFromSeed(seed: Uint8Array): KeyPair {
   if (seed.length !== nacl.box.secretKeyLength) {
-    throw new AgentError('INVALID_SEED_LENGTH', `Seed must be exactly ${nacl.box.secretKeyLength} bytes, got ${seed.length}`, {
-      expected: nacl.box.secretKeyLength,
-      actual: seed.length,
-    });
+    throw new AgentError(
+      'INVALID_SEED_LENGTH',
+      `Seed must be exactly ${nacl.box.secretKeyLength} bytes, got ${seed.length}`,
+      {
+        expected: nacl.box.secretKeyLength,
+        actual: seed.length,
+      },
+    );
   }
 
   const kp = nacl.box.keyPair.fromSecretKey(seed);

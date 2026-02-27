@@ -1,9 +1,8 @@
-import { Worker, type Job, type ConnectionOptions } from 'bullmq';
-import type { Logger } from 'pino';
 import { ControlPlaneError } from '@agentctl/shared';
-
-import type { DbAgentRegistry } from '../registry/db-registry.js';
+import { type ConnectionOptions, type Job, Worker } from 'bullmq';
+import type { Logger } from 'pino';
 import type { MemoryInjector } from '../memory/memory-injector.js';
+import type { DbAgentRegistry } from '../registry/db-registry.js';
 import { AGENT_TASKS_QUEUE, type AgentTaskJobData, type AgentTaskJobName } from './task-queue.js';
 
 const DEFAULT_WORKER_PORT = 9000;
@@ -176,8 +175,7 @@ export function createTaskWorker({
         // 3. Dispatch to the agent worker HTTP endpoint
         // -------------------------------------------------------------------
         const workerPort = DEFAULT_WORKER_PORT;
-        const dispatchUrl =
-          `http://${machine.tailscaleIp}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
+        const dispatchUrl = `http://${machine.tailscaleIp}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
 
         const payload: DispatchPayload = {
           prompt: enrichedPrompt,
@@ -235,12 +233,12 @@ export function createTaskWorker({
     logger.debug({ jobId: job.id, agentId: job.data.agentId }, 'Job completed');
   });
 
-  worker.on('failed', (job: Job<AgentTaskJobData, void, AgentTaskJobName> | undefined, err: Error) => {
-    logger.error(
-      { jobId: job?.id, agentId: job?.data.agentId, err },
-      'Job failed',
-    );
-  });
+  worker.on(
+    'failed',
+    (job: Job<AgentTaskJobData, void, AgentTaskJobName> | undefined, err: Error) => {
+      logger.error({ jobId: job?.id, agentId: job?.data.agentId, err }, 'Job failed');
+    },
+  );
 
   worker.on('error', (err: Error) => {
     logger.error({ err }, 'Task worker error');

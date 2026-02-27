@@ -1,6 +1,5 @@
-import type { Logger } from 'pino';
-
 import { ControlPlaneError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 import type { LiteLLMClient, ModelDeploymentInfo } from './litellm-client.js';
 
@@ -76,10 +75,7 @@ export class RouterConfig {
       const models = await this.litellmClient.listModels();
       const available = models.includes(modelId);
 
-      this.logger.info(
-        { modelId, available },
-        'Model availability checked',
-      );
+      this.logger.info({ modelId, available }, 'Model availability checked');
 
       return available;
     } catch (error: unknown) {

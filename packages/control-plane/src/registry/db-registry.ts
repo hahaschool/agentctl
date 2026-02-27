@@ -1,15 +1,10 @@
-import { eq, desc } from 'drizzle-orm';
-import type { Logger } from 'pino';
-import type {
-  RegisterWorkerRequest,
-  Machine,
-  Agent,
-  AgentRun,
-} from '@agentctl/shared';
+import type { Agent, AgentRun, Machine, RegisterWorkerRequest } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
+import { desc, eq } from 'drizzle-orm';
+import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
-import { machines, agents, agentRuns } from '../db/index.js';
+import { agentRuns, agents, machines } from '../db/index.js';
 
 type CreateAgentData = {
   machineId: string;
@@ -90,11 +85,9 @@ export class DbAgentRegistry {
       .returning({ id: machines.id });
 
     if (result.length === 0) {
-      throw new ControlPlaneError(
-        'MACHINE_NOT_FOUND',
-        `Machine '${machineId}' is not registered`,
-        { machineId },
-      );
+      throw new ControlPlaneError('MACHINE_NOT_FOUND', `Machine '${machineId}' is not registered`, {
+        machineId,
+      });
     }
   }
 
@@ -105,10 +98,7 @@ export class DbAgentRegistry {
   }
 
   async getMachine(machineId: string): Promise<Machine | undefined> {
-    const rows = await this.db
-      .select()
-      .from(machines)
-      .where(eq(machines.id, machineId));
+    const rows = await this.db.select().from(machines).where(eq(machines.id, machineId));
 
     if (rows.length === 0) {
       return undefined;
@@ -137,11 +127,7 @@ export class DbAgentRegistry {
       .returning({ id: agents.id });
 
     if (rows.length === 0) {
-      throw new ControlPlaneError(
-        'AGENT_CREATE_FAILED',
-        'Failed to insert agent row',
-        { data },
-      );
+      throw new ControlPlaneError('AGENT_CREATE_FAILED', 'Failed to insert agent row', { data });
     }
 
     const agentId = rows[0].id;
@@ -150,10 +136,7 @@ export class DbAgentRegistry {
   }
 
   async getAgent(agentId: string): Promise<Agent | undefined> {
-    const rows = await this.db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, agentId));
+    const rows = await this.db.select().from(agents).where(eq(agents.id, agentId));
 
     if (rows.length === 0) {
       return undefined;
@@ -170,11 +153,9 @@ export class DbAgentRegistry {
       .returning({ id: agents.id });
 
     if (result.length === 0) {
-      throw new ControlPlaneError(
-        'AGENT_NOT_FOUND',
-        `Agent '${agentId}' does not exist`,
-        { agentId },
-      );
+      throw new ControlPlaneError('AGENT_NOT_FOUND', `Agent '${agentId}' does not exist`, {
+        agentId,
+      });
     }
 
     this.logger.info({ agentId, status }, 'Agent status updated');
@@ -208,11 +189,7 @@ export class DbAgentRegistry {
       .returning({ id: agentRuns.id });
 
     if (rows.length === 0) {
-      throw new ControlPlaneError(
-        'RUN_CREATE_FAILED',
-        'Failed to insert agent run row',
-        { data },
-      );
+      throw new ControlPlaneError('RUN_CREATE_FAILED', 'Failed to insert agent run row', { data });
     }
 
     const runId = rows[0].id;
@@ -236,11 +213,7 @@ export class DbAgentRegistry {
       .returning({ id: agentRuns.id });
 
     if (result.length === 0) {
-      throw new ControlPlaneError(
-        'RUN_NOT_FOUND',
-        `Run '${runId}' does not exist`,
-        { runId },
-      );
+      throw new ControlPlaneError('RUN_NOT_FOUND', `Run '${runId}' does not exist`, { runId });
     }
 
     this.logger.info({ runId, status: data.status }, 'Agent run completed');

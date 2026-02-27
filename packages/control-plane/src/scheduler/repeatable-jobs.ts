@@ -1,6 +1,6 @@
+import { ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { ControlPlaneError } from '@agentctl/shared';
 
 import type { AgentTaskJobData, AgentTaskJobName } from './task-queue.js';
 
@@ -13,7 +13,11 @@ function repeatableJobKey(prefix: string, agentId: string): string {
 
 export type RepeatableJobManager = {
   addCronJob: (agentId: string, cronExpression: string, jobData: AgentTaskJobData) => Promise<void>;
-  addHeartbeatJob: (agentId: string, intervalMs: number, jobData: AgentTaskJobData) => Promise<void>;
+  addHeartbeatJob: (
+    agentId: string,
+    intervalMs: number,
+    jobData: AgentTaskJobData,
+  ) => Promise<void>;
   removeJobsByAgentId: (agentId: string) => Promise<number>;
   listRepeatableJobs: () => Promise<RepeatableJobInfo[]>;
 };
@@ -31,7 +35,11 @@ export function createRepeatableJobManager(
   logger: Logger,
 ): RepeatableJobManager {
   return {
-    async addCronJob(agentId: string, cronExpression: string, jobData: AgentTaskJobData): Promise<void> {
+    async addCronJob(
+      agentId: string,
+      cronExpression: string,
+      jobData: AgentTaskJobData,
+    ): Promise<void> {
       const jobKey = repeatableJobKey(CRON_JOB_PREFIX, agentId);
 
       try {
@@ -43,10 +51,7 @@ export function createRepeatableJobManager(
           jobId: jobKey,
         });
 
-        logger.info(
-          { agentId, cronExpression, jobKey },
-          'Added repeatable cron job',
-        );
+        logger.info({ agentId, cronExpression, jobKey }, 'Added repeatable cron job');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         throw new ControlPlaneError(
@@ -57,7 +62,11 @@ export function createRepeatableJobManager(
       }
     },
 
-    async addHeartbeatJob(agentId: string, intervalMs: number, jobData: AgentTaskJobData): Promise<void> {
+    async addHeartbeatJob(
+      agentId: string,
+      intervalMs: number,
+      jobData: AgentTaskJobData,
+    ): Promise<void> {
       const jobKey = repeatableJobKey(HEARTBEAT_JOB_PREFIX, agentId);
 
       try {
@@ -69,10 +78,7 @@ export function createRepeatableJobManager(
           jobId: jobKey,
         });
 
-        logger.info(
-          { agentId, intervalMs, jobKey },
-          'Added repeatable heartbeat job',
-        );
+        logger.info({ agentId, intervalMs, jobKey }, 'Added repeatable heartbeat job');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         throw new ControlPlaneError(
@@ -95,10 +101,7 @@ export function createRepeatableJobManager(
           if (job.key.includes(heartbeatKey) || job.key.includes(cronKey)) {
             await queue.removeRepeatableByKey(job.key);
             removedCount++;
-            logger.info(
-              { agentId, jobKey: job.key },
-              'Removed repeatable job',
-            );
+            logger.info({ agentId, jobKey: job.key }, 'Removed repeatable job');
           }
         }
 

@@ -52,10 +52,14 @@ export function decryptBox(
   const fullMessage = decodeBase64(encryptedMessage);
 
   if (fullMessage.length < nacl.box.nonceLength + nacl.box.overheadLength) {
-    throw new AgentError('DECRYPT_FAILED', 'Encrypted message is too short to contain nonce and ciphertext', {
-      minLength: nacl.box.nonceLength + nacl.box.overheadLength,
-      actualLength: fullMessage.length,
-    });
+    throw new AgentError(
+      'DECRYPT_FAILED',
+      'Encrypted message is too short to contain nonce and ciphertext',
+      {
+        minLength: nacl.box.nonceLength + nacl.box.overheadLength,
+        actualLength: fullMessage.length,
+      },
+    );
   }
 
   const nonce = fullMessage.slice(0, nacl.box.nonceLength);
@@ -66,7 +70,10 @@ export function decryptBox(
   const decrypted = nacl.box.open(ciphertext, nonce, senderPk, receiverSk);
 
   if (decrypted === null) {
-    throw new AgentError('DECRYPT_FAILED', 'Box decryption failed — invalid keys, corrupted data, or tampered message');
+    throw new AgentError(
+      'DECRYPT_FAILED',
+      'Box decryption failed — invalid keys, corrupted data, or tampered message',
+    );
   }
 
   return encodeUTF8(decrypted);
@@ -80,19 +87,20 @@ export function decryptBox(
  * @param sharedSecret - 32-byte shared secret (base64)
  * @returns Base64-encoded string with nonce prepended to ciphertext
  */
-export function encryptSecretBox(
-  message: string,
-  sharedSecret: string,
-): string {
+export function encryptSecretBox(message: string, sharedSecret: string): string {
   const messageBytes = decodeUTF8(message);
   const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
   const key = decodeBase64(sharedSecret);
 
   if (key.length !== nacl.secretbox.keyLength) {
-    throw new AgentError('INVALID_KEY_LENGTH', `Shared secret must be exactly ${nacl.secretbox.keyLength} bytes, got ${key.length}`, {
-      expected: nacl.secretbox.keyLength,
-      actual: key.length,
-    });
+    throw new AgentError(
+      'INVALID_KEY_LENGTH',
+      `Shared secret must be exactly ${nacl.secretbox.keyLength} bytes, got ${key.length}`,
+      {
+        expected: nacl.secretbox.keyLength,
+        actual: key.length,
+      },
+    );
   }
 
   const encrypted = nacl.secretbox(messageBytes, nonce, key);
@@ -114,17 +122,18 @@ export function encryptSecretBox(
  * @returns Decrypted plaintext string
  * @throws AgentError with code DECRYPT_FAILED if decryption fails
  */
-export function decryptSecretBox(
-  encryptedMessage: string,
-  sharedSecret: string,
-): string {
+export function decryptSecretBox(encryptedMessage: string, sharedSecret: string): string {
   const fullMessage = decodeBase64(encryptedMessage);
 
   if (fullMessage.length < nacl.secretbox.nonceLength + nacl.secretbox.overheadLength) {
-    throw new AgentError('DECRYPT_FAILED', 'Encrypted message is too short to contain nonce and ciphertext', {
-      minLength: nacl.secretbox.nonceLength + nacl.secretbox.overheadLength,
-      actualLength: fullMessage.length,
-    });
+    throw new AgentError(
+      'DECRYPT_FAILED',
+      'Encrypted message is too short to contain nonce and ciphertext',
+      {
+        minLength: nacl.secretbox.nonceLength + nacl.secretbox.overheadLength,
+        actualLength: fullMessage.length,
+      },
+    );
   }
 
   const nonce = fullMessage.slice(0, nacl.secretbox.nonceLength);
@@ -132,16 +141,23 @@ export function decryptSecretBox(
   const key = decodeBase64(sharedSecret);
 
   if (key.length !== nacl.secretbox.keyLength) {
-    throw new AgentError('INVALID_KEY_LENGTH', `Shared secret must be exactly ${nacl.secretbox.keyLength} bytes, got ${key.length}`, {
-      expected: nacl.secretbox.keyLength,
-      actual: key.length,
-    });
+    throw new AgentError(
+      'INVALID_KEY_LENGTH',
+      `Shared secret must be exactly ${nacl.secretbox.keyLength} bytes, got ${key.length}`,
+      {
+        expected: nacl.secretbox.keyLength,
+        actual: key.length,
+      },
+    );
   }
 
   const decrypted = nacl.secretbox.open(ciphertext, nonce, key);
 
   if (decrypted === null) {
-    throw new AgentError('DECRYPT_FAILED', 'SecretBox decryption failed — invalid key, corrupted data, or tampered message');
+    throw new AgentError(
+      'DECRYPT_FAILED',
+      'SecretBox decryption failed — invalid key, corrupted data, or tampered message',
+    );
   }
 
   return encodeUTF8(decrypted);
@@ -156,10 +172,7 @@ export function decryptSecretBox(
  * @param mySecretKey - Your secret key (base64)
  * @returns Base64-encoded 32-byte shared secret
  */
-export function computeSharedSecret(
-  theirPublicKey: string,
-  mySecretKey: string,
-): string {
+export function computeSharedSecret(theirPublicKey: string, mySecretKey: string): string {
   const theirPk = decodeBase64(theirPublicKey);
   const mySk = decodeBase64(mySecretKey);
 

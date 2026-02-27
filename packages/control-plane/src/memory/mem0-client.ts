@@ -1,6 +1,5 @@
-import type { Logger } from 'pino';
-
 import { ControlPlaneError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 export type Mem0ClientOptions = {
   baseUrl: string;
@@ -151,10 +150,14 @@ export class Mem0Client {
       response = await fetch(url, init);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new ControlPlaneError('MEM0_CONNECTION_ERROR', `Failed to connect to Mem0: ${message}`, {
-        url,
-        method,
-      });
+      throw new ControlPlaneError(
+        'MEM0_CONNECTION_ERROR',
+        `Failed to connect to Mem0: ${message}`,
+        {
+          url,
+          method,
+        },
+      );
     }
 
     if (!response.ok) {
@@ -185,11 +188,11 @@ export class Mem0Client {
     try {
       return JSON.parse(text) as T;
     } catch {
-      throw new ControlPlaneError(
-        'MEM0_PARSE_ERROR',
-        'Failed to parse Mem0 API response as JSON',
-        { url, method, responseText: text.slice(0, 200) },
-      );
+      throw new ControlPlaneError('MEM0_PARSE_ERROR', 'Failed to parse Mem0 API response as JSON', {
+        url,
+        method,
+        responseText: text.slice(0, 200),
+      });
     }
   }
 }

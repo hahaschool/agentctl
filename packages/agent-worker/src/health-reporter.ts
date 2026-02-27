@@ -1,8 +1,6 @@
 import os from 'node:os';
-
-import type { Logger } from 'pino';
-
 import { WorkerError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 type HealthReporterOptions = {
   machineId: string;
@@ -50,7 +48,10 @@ export class HealthReporter {
 
       this.logger.info({ machineId: this.machineId }, 'Registered with control plane');
     } catch (err) {
-      this.logger.warn({ err, machineId: this.machineId }, 'Failed to register (will retry via heartbeat)');
+      this.logger.warn(
+        { err, machineId: this.machineId },
+        'Failed to register (will retry via heartbeat)',
+      );
     }
   }
 
@@ -78,7 +79,7 @@ export class HealthReporter {
       body: JSON.stringify({
         machineId: this.machineId,
         runningAgents: [], // TODO: populate from agent pool
-        cpuPercent: os.loadavg()[0] * 100 / os.cpus().length,
+        cpuPercent: (os.loadavg()[0] * 100) / os.cpus().length,
         memoryPercent: (1 - os.freemem() / os.totalmem()) * 100,
       }),
     });

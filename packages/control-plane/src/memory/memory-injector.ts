@@ -1,6 +1,5 @@
-import type { Logger } from 'pino';
-
 import { ControlPlaneError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 import type { Mem0Client } from './mem0-client.js';
 
@@ -45,10 +44,7 @@ export class MemoryInjector {
       const memoryLines = results.map((entry) => `- ${entry.memory}`);
       const context = `## Relevant Memories\n${memoryLines.join('\n')}`;
 
-      this.logger.info(
-        { agentId, memoryCount: results.length },
-        'Memory context built',
-      );
+      this.logger.info({ agentId, memoryCount: results.length }, 'Memory context built');
 
       return context;
     } catch (error: unknown) {
@@ -78,9 +74,7 @@ export class MemoryInjector {
 
     try {
       await this.mem0Client.add({
-        messages: [
-          { role: 'assistant', content: sessionSummary },
-        ],
+        messages: [{ role: 'assistant', content: sessionSummary }],
         agentId,
         metadata: {
           source: 'agent-run',

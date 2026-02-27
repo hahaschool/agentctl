@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-
-import type { Logger } from 'pino';
-
 import type { AgentConfig, AgentEvent, AgentStatus } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 import { OutputBuffer } from './output-buffer.js';
 import { runWithSdk } from './sdk-runner.js';
@@ -265,7 +263,10 @@ export class AgentInstance extends EventEmitter {
     };
 
     this.emitEvent(statusEvent);
-    this.log.info({ sessionId: this.state.sessionId, costUsd: this.state.costUsd }, 'Agent stopped');
+    this.log.info(
+      { sessionId: this.state.sessionId, costUsd: this.state.costUsd },
+      'Agent stopped',
+    );
   }
 
   private clearTimers(): void {

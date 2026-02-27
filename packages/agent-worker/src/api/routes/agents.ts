@@ -1,8 +1,7 @@
-import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import type { Logger } from 'pino';
-
 import type { AgentConfig } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
+import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
+import type { Logger } from 'pino';
 
 import type { AgentPool } from '../../runtime/agent-pool.js';
 
@@ -41,7 +40,11 @@ function errorToStatusCode(err: unknown): number {
   return 500;
 }
 
-function errorToResponse(err: unknown): { error: string; code: string; context?: Record<string, unknown> } {
+function errorToResponse(err: unknown): {
+  error: string;
+  code: string;
+  context?: Record<string, unknown>;
+} {
   if (err instanceof AgentError) {
     return {
       error: err.message,
@@ -54,10 +57,7 @@ function errorToResponse(err: unknown): { error: string; code: string; context?:
   return { error: message, code: 'INTERNAL_ERROR' };
 }
 
-export async function agentRoutes(
-  app: FastifyInstance,
-  options: AgentRouteOptions,
-): Promise<void> {
+export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptions): Promise<void> {
   const { pool, machineId, logger } = options;
 
   // GET /api/agents — list all agents in the pool
@@ -129,27 +129,24 @@ export async function agentRoutes(
   );
 
   // POST /api/agents/:id/stop — stop a running agent
-  app.post<{ Params: AgentIdParams; Body: StopAgentBody }>(
-    '/:id/stop',
-    async (request, reply) => {
-      const { id } = request.params;
-      const { graceful = true } = request.body ?? {};
+  app.post<{ Params: AgentIdParams; Body: StopAgentBody }>('/:id/stop', async (request, reply) => {
+    const { id } = request.params;
+    const { graceful = true } = request.body ?? {};
 
-      try {
-        await pool.stopAgent(id, graceful);
+    try {
+      await pool.stopAgent(id, graceful);
 
-        const instance = pool.getAgent(id);
-        return reply.status(200).send({
-          ok: true,
-          agentId: id,
-          status: instance?.getStatus() ?? 'stopped',
-        });
-      } catch (err) {
-        const statusCode = errorToStatusCode(err);
-        return reply.status(statusCode).send(errorToResponse(err));
-      }
-    },
-  );
+      const instance = pool.getAgent(id);
+      return reply.status(200).send({
+        ok: true,
+        agentId: id,
+        status: instance?.getStatus() ?? 'stopped',
+      });
+    } catch (err) {
+      const statusCode = errorToStatusCode(err);
+      return reply.status(statusCode).send(errorToResponse(err));
+    }
+  });
 
   // DELETE /api/agents/:id — remove a stopped agent from the pool
   app.delete<{ Params: AgentIdParams }>('/:id', async (request, reply) => {

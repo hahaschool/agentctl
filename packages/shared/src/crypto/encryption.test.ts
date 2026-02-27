@@ -1,14 +1,13 @@
-import { describe, it, expect } from 'vitest';
-
+import { describe, expect, it } from 'vitest';
+import { AgentError } from '../types/errors.js';
 import {
-  encryptBox,
-  decryptBox,
-  encryptSecretBox,
-  decryptSecretBox,
   computeSharedSecret,
+  decryptBox,
+  decryptSecretBox,
+  encryptBox,
+  encryptSecretBox,
 } from './encryption.js';
 import { generateKeyPair } from './keypair.js';
-import { AgentError } from '../types/errors.js';
 
 describe('encryptBox / decryptBox', () => {
   it('roundtrips a message with generated keypairs', () => {

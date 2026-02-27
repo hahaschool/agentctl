@@ -1,6 +1,5 @@
-import type { Logger } from 'pino';
-
 import { ControlPlaneError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 export type LiteLLMClientOptions = {
   baseUrl: string;
@@ -94,10 +93,7 @@ export class LiteLLMClient {
 
     const response = await this.request<ModelInfoResponse>('GET', '/model/info');
 
-    this.logger.info(
-      { deploymentCount: response.data.length },
-      'Model info retrieved',
-    );
+    this.logger.info({ deploymentCount: response.data.length }, 'Model info retrieved');
     return response.data;
   }
 
@@ -160,10 +156,14 @@ export class LiteLLMClient {
       response = await fetch(url, init);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new ControlPlaneError('LITELLM_CONNECTION_ERROR', `Failed to connect to LiteLLM proxy: ${message}`, {
-        url,
-        method,
-      });
+      throw new ControlPlaneError(
+        'LITELLM_CONNECTION_ERROR',
+        `Failed to connect to LiteLLM proxy: ${message}`,
+        {
+          url,
+          method,
+        },
+      );
     }
 
     if (!response.ok) {

@@ -1,10 +1,8 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
-
-import type { Logger } from 'pino';
-
 import { AgentError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 const execFileAsync = promisify(execFile);
 
@@ -71,19 +69,16 @@ export class WorktreeManager {
 
     const branchExists = await this.branchExists(branchName);
     if (branchExists) {
-      throw new AgentError(
-        'BRANCH_EXISTS',
-        `Branch '${branchName}' already exists`,
-        { agentId, branch: branchName },
-      );
+      throw new AgentError('BRANCH_EXISTS', `Branch '${branchName}' already exists`, {
+        agentId,
+        branch: branchName,
+      });
     }
 
     try {
-      await execFileAsync(
-        'git',
-        ['worktree', 'add', worktreePath, '-b', branchName, baseBranch],
-        { cwd: this.projectPath },
-      );
+      await execFileAsync('git', ['worktree', 'add', worktreePath, '-b', branchName, baseBranch], {
+        cwd: this.projectPath,
+      });
     } catch (err) {
       throw new AgentError(
         'WORKTREE_CREATE_FAILED',
@@ -117,11 +112,10 @@ export class WorktreeManager {
 
     const info = await this.get(agentId);
     if (!info) {
-      throw new AgentError(
-        'WORKTREE_NOT_FOUND',
-        `No worktree found for agent '${agentId}'`,
-        { agentId, path: worktreePath },
-      );
+      throw new AgentError('WORKTREE_NOT_FOUND', `No worktree found for agent '${agentId}'`, {
+        agentId,
+        path: worktreePath,
+      });
     }
 
     // Unlock first if locked, otherwise `git worktree remove` will refuse.
@@ -130,11 +124,9 @@ export class WorktreeManager {
     }
 
     try {
-      await execFileAsync(
-        'git',
-        ['worktree', 'remove', worktreePath, '--force'],
-        { cwd: this.projectPath },
-      );
+      await execFileAsync('git', ['worktree', 'remove', worktreePath, '--force'], {
+        cwd: this.projectPath,
+      });
     } catch (err) {
       throw new AgentError(
         'WORKTREE_REMOVE_FAILED',
@@ -152,11 +144,9 @@ export class WorktreeManager {
   async list(): Promise<WorktreeInfo[]> {
     await this.assertGitRepo(this.projectPath);
 
-    const { stdout } = await execFileAsync(
-      'git',
-      ['worktree', 'list', '--porcelain'],
-      { cwd: this.projectPath },
-    );
+    const { stdout } = await execFileAsync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: this.projectPath,
+    });
 
     return this.parsePorcelainOutput(stdout);
   }
@@ -181,11 +171,10 @@ export class WorktreeManager {
 
     const info = await this.get(agentId);
     if (!info) {
-      throw new AgentError(
-        'WORKTREE_NOT_FOUND',
-        `No worktree found for agent '${agentId}'`,
-        { agentId, path: worktreePath },
-      );
+      throw new AgentError('WORKTREE_NOT_FOUND', `No worktree found for agent '${agentId}'`, {
+        agentId,
+        path: worktreePath,
+      });
     }
 
     const args = ['worktree', 'lock', worktreePath];
@@ -213,11 +202,7 @@ export class WorktreeManager {
     const worktreePath = this.getWorktreePath(agentId);
 
     try {
-      await execFileAsync(
-        'git',
-        ['worktree', 'unlock', worktreePath],
-        { cwd: this.projectPath },
-      );
+      await execFileAsync('git', ['worktree', 'unlock', worktreePath], { cwd: this.projectPath });
     } catch (err) {
       throw new AgentError(
         'WORKTREE_NOT_FOUND',
@@ -260,17 +245,11 @@ export class WorktreeManager {
    */
   private async assertGitRepo(repoPath: string): Promise<void> {
     try {
-      await execFileAsync(
-        'git',
-        ['rev-parse', '--git-dir'],
-        { cwd: repoPath },
-      );
+      await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: repoPath });
     } catch {
-      throw new AgentError(
-        'NOT_A_GIT_REPO',
-        `Path '${repoPath}' is not inside a git repository`,
-        { path: repoPath },
-      );
+      throw new AgentError('NOT_A_GIT_REPO', `Path '${repoPath}' is not inside a git repository`, {
+        path: repoPath,
+      });
     }
   }
 
@@ -279,11 +258,9 @@ export class WorktreeManager {
    */
   private async branchExists(branchName: string): Promise<boolean> {
     try {
-      await execFileAsync(
-        'git',
-        ['rev-parse', '--verify', `refs/heads/${branchName}`],
-        { cwd: this.projectPath },
-      );
+      await execFileAsync('git', ['rev-parse', '--verify', `refs/heads/${branchName}`], {
+        cwd: this.projectPath,
+      });
       return true;
     } catch {
       return false;

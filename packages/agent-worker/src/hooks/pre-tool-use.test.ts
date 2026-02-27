@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
 import type { Logger } from 'pino';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuditLogger } from './audit-logger.js';
 import { createPreToolUseHook, type PreToolUseInput } from './pre-tool-use.js';

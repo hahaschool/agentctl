@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { AgentError } from '@agentctl/shared';
 
 import type { Logger } from 'pino';
-
-import { AgentError } from '@agentctl/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentInstanceOptions } from './agent-instance.js';
 import { AgentPool } from './agent-pool.js';

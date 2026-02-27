@@ -2,10 +2,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
-
-import type { Logger } from 'pino';
-
 import { WorkerError } from '@agentctl/shared';
+import type { Logger } from 'pino';
 
 /**
  * Discriminated union of audit log entry types.
@@ -43,10 +41,7 @@ export type AuditEntrySessionEnd = {
   totalTurns: number;
 };
 
-export type AuditEntry =
-  | AuditEntryPreTool
-  | AuditEntryPostTool
-  | AuditEntrySessionEnd;
+export type AuditEntry = AuditEntryPreTool | AuditEntryPostTool | AuditEntrySessionEnd;
 
 /**
  * Compute a SHA-256 hex digest for an arbitrary value by

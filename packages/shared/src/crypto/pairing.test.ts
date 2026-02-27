@@ -1,10 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import util from 'tweetnacl-util';
-
-import { encodePairingPayload, decodePairingPayload } from './pairing.js';
-import type { PairingPayload } from './pairing.js';
-import { generateKeyPair } from './keypair.js';
+import { describe, expect, it } from 'vitest';
 import { AgentError } from '../types/errors.js';
+import { generateKeyPair } from './keypair.js';
+import type { PairingPayload } from './pairing.js';
+import { decodePairingPayload, encodePairingPayload } from './pairing.js';
 
 const { encodeBase64, decodeUTF8 } = util;
 

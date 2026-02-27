@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Logger } from 'pino';
-
 import { ControlPlaneError } from '@agentctl/shared';
-
-import { MemoryInjector } from './memory-injector.js';
+import type { Logger } from 'pino';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mem0Client, MemoryEntry } from './mem0-client.js';
+import { MemoryInjector } from './memory-injector.js';
 
 const logger = {
   child: () => logger,
@@ -83,9 +81,11 @@ describe('MemoryInjector', () => {
 
     it('returns empty string when Mem0 is down (graceful degradation)', async () => {
       const mem0Client = createMockMem0Client({
-        search: vi.fn().mockRejectedValue(
-          new ControlPlaneError('MEM0_CONNECTION_ERROR', 'Connection refused', {}),
-        ),
+        search: vi
+          .fn()
+          .mockRejectedValue(
+            new ControlPlaneError('MEM0_CONNECTION_ERROR', 'Connection refused', {}),
+          ),
       });
 
       const injector = new MemoryInjector({ mem0Client, logger });
@@ -115,17 +115,17 @@ describe('MemoryInjector', () => {
 
     it('swallows ControlPlaneError (does not throw)', async () => {
       const mem0Client = createMockMem0Client({
-        add: vi.fn().mockRejectedValue(
-          new ControlPlaneError('MEM0_CONNECTION_ERROR', 'Connection refused', {}),
-        ),
+        add: vi
+          .fn()
+          .mockRejectedValue(
+            new ControlPlaneError('MEM0_CONNECTION_ERROR', 'Connection refused', {}),
+          ),
       });
 
       const injector = new MemoryInjector({ mem0Client, logger });
 
       // Should not throw
-      await expect(
-        injector.syncAfterRun('agent-1', 'Summary'),
-      ).resolves.toBeUndefined();
+      await expect(injector.syncAfterRun('agent-1', 'Summary')).resolves.toBeUndefined();
     });
   });
 });
