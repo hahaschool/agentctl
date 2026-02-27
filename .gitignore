@@ -12,8 +12,8 @@ dist/
 # Bare repo pattern
 .bare/
 
-# PM2
-ecosystem.*.config.cjs
+# PM2 (machine-local configs at project root, not infra/pm2/ templates)
+/ecosystem.*.config.cjs
 
 # OS
 .DS_Store
