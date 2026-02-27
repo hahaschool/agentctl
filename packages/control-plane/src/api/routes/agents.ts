@@ -14,10 +14,11 @@ import type { RepeatableJobManager } from '../../scheduler/repeatable-jobs.js';
 export type AgentRoutesOptions = {
   taskQueue?: Queue<AgentTaskJobData, void, AgentTaskJobName>;
   repeatableJobs?: RepeatableJobManager;
+  registry?: AgentRegistry;
 };
 
 export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, opts) => {
-  const registry = new AgentRegistry();
+  const registry = opts.registry ?? new AgentRegistry();
   const { taskQueue, repeatableJobs } = opts;
 
   app.post<{ Body: RegisterWorkerRequest }>('/register', async (request) => {

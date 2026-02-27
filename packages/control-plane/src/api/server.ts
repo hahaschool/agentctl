@@ -4,6 +4,8 @@ import type { Logger } from 'pino';
 
 import { agentRoutes } from './routes/agents.js';
 import { healthRoutes } from './routes/health.js';
+import { streamRoutes } from './routes/stream.js';
+import { AgentRegistry } from '../registry/agent-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 
@@ -18,6 +20,8 @@ export async function createServer({ logger, taskQueue, repeatableJobs }: Create
     logger: false,
   });
 
+  const registry = new AgentRegistry();
+
   app.addHook('onRequest', async (request) => {
     logger.debug({ method: request.method, url: request.url }, 'incoming request');
   });
@@ -27,6 +31,11 @@ export async function createServer({ logger, taskQueue, repeatableJobs }: Create
     prefix: '/api/agents',
     taskQueue,
     repeatableJobs,
+    registry,
+  });
+  await app.register(streamRoutes, {
+    prefix: '/api/agents',
+    registry,
   });
 
   return app;
