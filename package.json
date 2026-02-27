@@ -6,6 +6,8 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "dev:shared": "pnpm --filter @agentctl/shared dev",
+    "dev:cp": "pnpm --filter @agentctl/control-plane dev",
     "dev:control": "pnpm --filter @agentctl/control-plane dev",
     "dev:worker": "pnpm --filter @agentctl/agent-worker dev",
     "build": "pnpm -r build",
