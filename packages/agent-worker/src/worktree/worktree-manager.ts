@@ -1,0 +1,356 @@
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { promisify } from 'node:util';
+
+import type { Logger } from 'pino';
+
+import { AgentError } from '@agentctl/shared';
+
+const execFileAsync = promisify(execFile);
+
+export type WorktreeInfo = {
+  path: string;
+  branch: string;
+  head: string;
+  isLocked: boolean;
+};
+
+export type CreateWorktreeOptions = {
+  agentId: string;
+  baseBranch?: string;
+  description?: string;
+  projectPath: string;
+};
+
+export type WorktreeManagerOptions = {
+  projectPath: string;
+  treesDir?: string;
+  logger: Logger;
+};
+
+/**
+ * Manages git worktrees for agent isolation.
+ *
+ * Each agent gets its own worktree under `.trees/agent-{id}`, with a
+ * branch named `agent-{id}/{description}`. This provides full filesystem
+ * isolation between concurrent agents working on the same repository.
+ */
+export class WorktreeManager {
+  private readonly projectPath: string;
+  private readonly treesDir: string;
+  private readonly logger: Logger;
+
+  constructor(options: WorktreeManagerOptions) {
+    this.projectPath = options.projectPath;
+    this.treesDir = options.treesDir ?? path.join(options.projectPath, '.trees');
+    this.logger = options.logger;
+  }
+
+  /**
+   * Create a new worktree for an agent.
+   *
+   * Creates a worktree at `.trees/agent-{agentId}` on a new branch
+   * `agent-{agentId}/{description}` based off the given base branch.
+   */
+  async create(options: CreateWorktreeOptions): Promise<WorktreeInfo> {
+    const { agentId, description } = options;
+    const baseBranch = options.baseBranch ?? 'main';
+    const worktreePath = this.getWorktreePath(agentId);
+    const branchName = this.buildBranchName(agentId, description);
+
+    await this.assertGitRepo(options.projectPath);
+
+    const alreadyExists = await this.exists(agentId);
+    if (alreadyExists) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Worktree already exists for agent '${agentId}'`,
+        { agentId, path: worktreePath },
+      );
+    }
+
+    const branchExists = await this.branchExists(branchName);
+    if (branchExists) {
+      throw new AgentError(
+        'BRANCH_EXISTS',
+        `Branch '${branchName}' already exists`,
+        { agentId, branch: branchName },
+      );
+    }
+
+    try {
+      await execFileAsync(
+        'git',
+        ['worktree', 'add', worktreePath, '-b', branchName, baseBranch],
+        { cwd: this.projectPath },
+      );
+    } catch (err) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Failed to create worktree for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
+        { agentId, branch: branchName, baseBranch, path: worktreePath },
+      );
+    }
+
+    this.logger.info(
+      { agentId, branch: branchName, baseBranch, path: worktreePath },
+      'Worktree created',
+    );
+
+    const info = await this.get(agentId);
+    if (!info) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Worktree was created but could not be read back for agent '${agentId}'`,
+        { agentId, path: worktreePath },
+      );
+    }
+
+    return info;
+  }
+
+  /**
+   * Remove a worktree for an agent. Unlocks it first if locked.
+   */
+  async remove(agentId: string): Promise<void> {
+    const worktreePath = this.getWorktreePath(agentId);
+
+    const info = await this.get(agentId);
+    if (!info) {
+      throw new AgentError(
+        'WORKTREE_NOT_FOUND',
+        `No worktree found for agent '${agentId}'`,
+        { agentId, path: worktreePath },
+      );
+    }
+
+    // Unlock first if locked, otherwise `git worktree remove` will refuse.
+    if (info.isLocked) {
+      await this.unlock(agentId);
+    }
+
+    try {
+      await execFileAsync(
+        'git',
+        ['worktree', 'remove', worktreePath, '--force'],
+        { cwd: this.projectPath },
+      );
+    } catch (err) {
+      throw new AgentError(
+        'WORKTREE_REMOVE_FAILED',
+        `Failed to remove worktree for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
+        { agentId, path: worktreePath },
+      );
+    }
+
+    this.logger.info({ agentId, path: worktreePath }, 'Worktree removed');
+  }
+
+  /**
+   * List all worktrees for this repository.
+   */
+  async list(): Promise<WorktreeInfo[]> {
+    await this.assertGitRepo(this.projectPath);
+
+    const { stdout } = await execFileAsync(
+      'git',
+      ['worktree', 'list', '--porcelain'],
+      { cwd: this.projectPath },
+    );
+
+    return this.parsePorcelainOutput(stdout);
+  }
+
+  /**
+   * Get worktree info for a specific agent, or `null` if none exists.
+   */
+  async get(agentId: string): Promise<WorktreeInfo | null> {
+    const worktreePath = this.getWorktreePath(agentId);
+    const all = await this.list();
+
+    // Resolve to absolute for comparison so relative `.trees/` paths match.
+    const resolved = path.resolve(worktreePath);
+    return all.find((w) => path.resolve(w.path) === resolved) ?? null;
+  }
+
+  /**
+   * Lock a worktree to prevent accidental removal.
+   */
+  async lock(agentId: string, reason?: string): Promise<void> {
+    const worktreePath = this.getWorktreePath(agentId);
+
+    const info = await this.get(agentId);
+    if (!info) {
+      throw new AgentError(
+        'WORKTREE_NOT_FOUND',
+        `No worktree found for agent '${agentId}'`,
+        { agentId, path: worktreePath },
+      );
+    }
+
+    const args = ['worktree', 'lock', worktreePath];
+    if (reason) {
+      args.push('--reason', reason);
+    }
+
+    try {
+      await execFileAsync('git', args, { cwd: this.projectPath });
+    } catch (err) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Failed to lock worktree for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
+        { agentId, path: worktreePath },
+      );
+    }
+
+    this.logger.info({ agentId, reason }, 'Worktree locked');
+  }
+
+  /**
+   * Unlock a previously locked worktree.
+   */
+  async unlock(agentId: string): Promise<void> {
+    const worktreePath = this.getWorktreePath(agentId);
+
+    try {
+      await execFileAsync(
+        'git',
+        ['worktree', 'unlock', worktreePath],
+        { cwd: this.projectPath },
+      );
+    } catch (err) {
+      throw new AgentError(
+        'WORKTREE_NOT_FOUND',
+        `Failed to unlock worktree for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
+        { agentId, path: worktreePath },
+      );
+    }
+
+    this.logger.info({ agentId }, 'Worktree unlocked');
+  }
+
+  /**
+   * Check whether a worktree exists for the given agent.
+   */
+  async exists(agentId: string): Promise<boolean> {
+    const info = await this.get(agentId);
+    return info !== null;
+  }
+
+  /**
+   * Return the filesystem path where this agent's worktree lives (or would live).
+   */
+  getWorktreePath(agentId: string): string {
+    return path.join(this.treesDir, `agent-${agentId}`);
+  }
+
+  // ── Private helpers ─────────────────────────────────────────────────
+
+  /**
+   * Build the branch name for an agent.
+   * Pattern: `agent-{id}/{description || 'work'}`
+   */
+  private buildBranchName(agentId: string, description?: string): string {
+    const suffix = description ?? 'work';
+    return `agent-${agentId}/${suffix}`;
+  }
+
+  /**
+   * Verify that the given path is inside a git repository.
+   */
+  private async assertGitRepo(repoPath: string): Promise<void> {
+    try {
+      await execFileAsync(
+        'git',
+        ['rev-parse', '--git-dir'],
+        { cwd: repoPath },
+      );
+    } catch {
+      throw new AgentError(
+        'NOT_A_GIT_REPO',
+        `Path '${repoPath}' is not inside a git repository`,
+        { path: repoPath },
+      );
+    }
+  }
+
+  /**
+   * Check whether a branch already exists (local refs).
+   */
+  private async branchExists(branchName: string): Promise<boolean> {
+    try {
+      await execFileAsync(
+        'git',
+        ['rev-parse', '--verify', `refs/heads/${branchName}`],
+        { cwd: this.projectPath },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Parse the porcelain output of `git worktree list --porcelain`.
+   *
+   * The format is blocks separated by blank lines, each block containing:
+   *   worktree <path>
+   *   HEAD <sha>
+   *   branch refs/heads/<name>
+   *   locked                       (optional)
+   *
+   * Bare repositories and detached HEADs are handled gracefully.
+   */
+  private parsePorcelainOutput(output: string): WorktreeInfo[] {
+    const results: WorktreeInfo[] = [];
+
+    // Split into blocks separated by empty lines.
+    const blocks = output.trim().split('\n\n');
+
+    for (const block of blocks) {
+      if (!block.trim()) {
+        continue;
+      }
+
+      const lines = block.split('\n');
+
+      let worktreePath = '';
+      let head = '';
+      let branch = '';
+      let isLocked = false;
+      let isBare = false;
+
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          worktreePath = line.slice('worktree '.length);
+        } else if (line.startsWith('HEAD ')) {
+          head = line.slice('HEAD '.length);
+        } else if (line.startsWith('branch ')) {
+          // Strip the refs/heads/ prefix
+          const ref = line.slice('branch '.length);
+          branch = ref.replace(/^refs\/heads\//, '');
+        } else if (line === 'locked') {
+          isLocked = true;
+        } else if (line === 'bare') {
+          isBare = true;
+        }
+      }
+
+      // Skip the bare repository entry itself — it's not a real worktree.
+      if (isBare) {
+        continue;
+      }
+
+      if (worktreePath) {
+        results.push({
+          path: worktreePath,
+          branch,
+          head,
+          isLocked,
+        });
+      }
+    }
+
+    return results;
+  }
+}
