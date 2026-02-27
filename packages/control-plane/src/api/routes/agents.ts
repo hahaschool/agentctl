@@ -7,37 +7,140 @@ import type {
   StopAgentRequest,
 } from '@agentctl/shared';
 
+import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import { AgentRegistry } from '../../registry/agent-registry.js';
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
 import type { RepeatableJobManager } from '../../scheduler/repeatable-jobs.js';
 
 export type AgentRoutesOptions = {
   taskQueue?: Queue<AgentTaskJobData, void, AgentTaskJobName>;
   repeatableJobs?: RepeatableJobManager;
-  registry?: AgentRegistry;
+  registry?: MachineRegistryLike;
+  dbRegistry?: DbAgentRegistry;
 };
 
 export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, opts) => {
   const registry = opts.registry ?? new AgentRegistry();
-  const { taskQueue, repeatableJobs } = opts;
+  const { taskQueue, repeatableJobs, dbRegistry } = opts;
+
+  // ---------------------------------------------------------------------------
+  // Machine registration & heartbeat
+  // ---------------------------------------------------------------------------
 
   app.post<{ Body: RegisterWorkerRequest }>('/register', async (request) => {
-    const { machineId, hostname } = request.body;
-    registry.registerMachine(machineId, hostname);
-    return { ok: true, machineId };
+    const body = request.body;
+
+    if (dbRegistry) {
+      await dbRegistry.registerMachine(body);
+    } else {
+      await registry.registerMachine(body.machineId, body.hostname);
+    }
+
+    return { ok: true, machineId: body.machineId };
   });
 
   app.post<{ Params: { id: string }; Body: HeartbeatRequest }>(
     '/:id/heartbeat',
     async (request) => {
-      registry.heartbeat(request.params.id);
+      if (dbRegistry) {
+        await dbRegistry.heartbeat(request.params.id);
+      } else {
+        await registry.heartbeat(request.params.id);
+      }
+
       return { ok: true };
     },
   );
 
+  // ---------------------------------------------------------------------------
+  // Machine listing
+  // ---------------------------------------------------------------------------
+
   app.get('/', async () => {
-    return registry.listMachines();
+    if (dbRegistry) {
+      return await dbRegistry.listMachines();
+    }
+
+    return await registry.listMachines();
   });
+
+  // ---------------------------------------------------------------------------
+  // Agent CRUD (only available when dbRegistry is configured)
+  // ---------------------------------------------------------------------------
+
+  app.post<{
+    Body: {
+      machineId: string;
+      name: string;
+      type: string;
+      schedule?: string;
+      projectPath?: string;
+      worktreeBranch?: string;
+      config?: Record<string, unknown>;
+    };
+  }>('/agents', async (request, reply) => {
+    if (!dbRegistry) {
+      return reply.code(501).send({ error: 'Database not configured' });
+    }
+
+    const agentId = await dbRegistry.createAgent(request.body);
+    return { ok: true, agentId };
+  });
+
+  app.get<{ Querystring: { machineId?: string } }>('/agents/list', async (request, reply) => {
+    if (!dbRegistry) {
+      return reply.code(501).send({ error: 'Database not configured' });
+    }
+
+    return await dbRegistry.listAgents(request.query.machineId);
+  });
+
+  app.get<{ Params: { agentId: string } }>('/agents/:agentId', async (request, reply) => {
+    if (!dbRegistry) {
+      return reply.code(501).send({ error: 'Database not configured' });
+    }
+
+    const agent = await dbRegistry.getAgent(request.params.agentId);
+
+    if (!agent) {
+      return reply.code(404).send({ error: 'Agent not found' });
+    }
+
+    return agent;
+  });
+
+  app.patch<{ Params: { agentId: string }; Body: { status: string } }>(
+    '/agents/:agentId/status',
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply.code(501).send({ error: 'Database not configured' });
+      }
+
+      await dbRegistry.updateAgentStatus(request.params.agentId, request.body.status);
+      return { ok: true };
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Run tracking (only available when dbRegistry is configured)
+  // ---------------------------------------------------------------------------
+
+  app.get<{ Params: { agentId: string }; Querystring: { limit?: string } }>(
+    '/agents/:agentId/runs',
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply.code(501).send({ error: 'Database not configured' });
+      }
+
+      const limit = request.query.limit ? Number(request.query.limit) : undefined;
+      return await dbRegistry.getRecentRuns(request.params.agentId, limit);
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Agent start / stop (existing BullMQ-based control)
+  // ---------------------------------------------------------------------------
 
   app.post<{ Params: { id: string }; Body: StartAgentRequest }>(
     '/:id/start',

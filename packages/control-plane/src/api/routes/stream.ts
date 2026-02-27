@@ -2,12 +2,12 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { ControlPlaneError } from '@agentctl/shared';
 
-import type { AgentRegistry } from '../../registry/agent-registry.js';
+import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 
 const DEFAULT_WORKER_URL = 'http://localhost:9000';
 
 export type StreamRoutesOptions = {
-  registry: AgentRegistry;
+  registry: MachineRegistryLike;
 };
 
 /**
@@ -37,7 +37,7 @@ export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app,
       if (explicitUrl) {
         workerBaseUrl = explicitUrl;
       } else if (machineId) {
-        const machine = registry.getMachine(machineId);
+        const machine = await registry.getMachine(machineId);
 
         if (!machine) {
           throw new ControlPlaneError(

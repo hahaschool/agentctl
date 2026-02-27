@@ -6,6 +6,8 @@ import { agentRoutes } from './routes/agents.js';
 import { healthRoutes } from './routes/health.js';
 import { streamRoutes } from './routes/stream.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
+import type { MachineRegistryLike } from '../registry/agent-registry.js';
+import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 
@@ -13,14 +15,22 @@ type CreateServerOptions = {
   logger: Logger;
   taskQueue?: Queue<AgentTaskJobData, void, AgentTaskJobName>;
   repeatableJobs?: RepeatableJobManager;
+  registry?: MachineRegistryLike;
+  dbRegistry?: DbAgentRegistry;
 };
 
-export async function createServer({ logger, taskQueue, repeatableJobs }: CreateServerOptions): Promise<FastifyInstance> {
+export async function createServer({
+  logger,
+  taskQueue,
+  repeatableJobs,
+  registry: externalRegistry,
+  dbRegistry,
+}: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
   });
 
-  const registry = new AgentRegistry();
+  const registry = externalRegistry ?? new AgentRegistry();
 
   app.addHook('onRequest', async (request) => {
     logger.debug({ method: request.method, url: request.url }, 'incoming request');
@@ -32,6 +42,7 @@ export async function createServer({ logger, taskQueue, repeatableJobs }: Create
     taskQueue,
     repeatableJobs,
     registry,
+    dbRegistry,
   });
   await app.register(streamRoutes, {
     prefix: '/api/agents',

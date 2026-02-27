@@ -1,8 +1,33 @@
-type MachineEntry = {
+export type MachineEntry = {
   machineId: string;
   hostname: string;
   lastHeartbeat: Date;
   status: 'online' | 'offline';
+};
+
+/**
+ * Minimal shape that any object returned from `getMachine` must have.
+ * Both {@link MachineEntry} (in-memory) and the shared `Machine` type
+ * (from `@agentctl/shared`) satisfy this — the stream route only reads
+ * `hostname`.
+ */
+export type MachineRecord = {
+  hostname: string;
+  [key: string]: unknown;
+};
+
+/**
+ * Minimal machine-registry interface shared between the in-memory
+ * {@link AgentRegistry} and the database-backed {@link DbAgentRegistry}.
+ *
+ * All methods return `MaybePromise` so callers always `await` them,
+ * keeping route handlers agnostic of the backing store.
+ */
+export type MachineRegistryLike = {
+  registerMachine(...args: unknown[]): void | Promise<void>;
+  heartbeat(machineId: string): void | Promise<void>;
+  listMachines(): MachineRecord[] | Promise<MachineRecord[]>;
+  getMachine(machineId: string): MachineRecord | undefined | Promise<MachineRecord | undefined>;
 };
 
 export class AgentRegistry {

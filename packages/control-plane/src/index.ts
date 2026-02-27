@@ -5,12 +5,15 @@ import { createLogger } from './logger.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
 import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
+import { createDb } from './db/index.js';
+import { DbAgentRegistry } from './registry/db-registry.js';
 
 const logger = createLogger('control-plane');
 
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const DATABASE_URL = process.env.DATABASE_URL || '';
 const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 5;
 
 async function main(): Promise<void> {
@@ -19,6 +22,21 @@ async function main(): Promise<void> {
   });
 
   logger.info({ redisUrl: REDIS_URL }, 'Connecting to Redis');
+
+  // Optionally connect to PostgreSQL when DATABASE_URL is provided.
+  let dbRegistry: DbAgentRegistry | undefined;
+
+  if (DATABASE_URL) {
+    logger.info('Connecting to PostgreSQL');
+    const db = createDb(DATABASE_URL);
+    dbRegistry = new DbAgentRegistry(
+      db,
+      logger.child({ component: 'db-registry' }),
+    );
+    logger.info('Database-backed agent registry initialised');
+  } else {
+    logger.warn('DATABASE_URL not set — falling back to in-memory registry');
+  }
 
   const taskQueue = createTaskQueue(redisConnection);
   const worker = createTaskWorker({
@@ -31,7 +49,13 @@ async function main(): Promise<void> {
     logger.child({ component: 'repeatable-jobs' }),
   );
 
-  const server = await createServer({ logger, taskQueue, repeatableJobs });
+  const server = await createServer({
+    logger,
+    taskQueue,
+    repeatableJobs,
+    registry: dbRegistry,
+    dbRegistry,
+  });
 
   const shutdown = async (): Promise<void> => {
     logger.info('Shutting down control plane');
