@@ -7,6 +7,7 @@ import type { AgentConfig, AgentEvent, AgentStatus } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 
 import { OutputBuffer } from './output-buffer.js';
+import { runWithSdk } from './sdk-runner.js';
 
 export type AgentInstanceOptions = {
   agentId: string;
@@ -57,6 +58,7 @@ export class AgentInstance extends EventEmitter {
   private state: AgentInstanceState;
   private simulationTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimer: ReturnType<typeof setInterval> | null = null;
+  private abortController: AbortController | null = null;
 
   constructor(options: AgentInstanceOptions) {
     super();
@@ -87,15 +89,43 @@ export class AgentInstance extends EventEmitter {
     this.state.stoppedAt = null;
     this.state.costUsd = 0;
     this.state.prompt = prompt;
+    this.abortController = new AbortController();
 
     try {
-      // Transition to running — in the real implementation this is where
-      // the Claude Agent SDK subprocess would be spawned.
       this.transitionTo('running');
       this.log.info({ sessionId: this.state.sessionId }, 'Agent running');
 
-      // --- stub: simulate agent turns ---
-      this.simulateRun();
+      // Try the real Claude Agent SDK first
+      const result = await runWithSdk({
+        prompt,
+        agentId: this.agentId,
+        sessionId: this.state.sessionId,
+        config: this.config,
+        projectPath: this.projectPath,
+        logger: this.log,
+        onEvent: (event) => this.emitEvent(event),
+        abortSignal: this.abortController.signal,
+      });
+
+      if (result) {
+        // SDK run completed successfully
+        this.state.costUsd = result.costUsd;
+        this.state.sessionId = result.sessionId;
+        this.log.info(
+          {
+            sessionId: result.sessionId,
+            costUsd: result.costUsd,
+            tokensIn: result.tokensIn,
+            tokensOut: result.tokensOut,
+          },
+          'SDK run completed',
+        );
+        this.finishStop('completed');
+      } else {
+        // SDK not available — fall back to stub simulation
+        this.log.info('SDK not available, falling back to stub simulation');
+        this.simulateRun();
+      }
     } catch (err) {
       this.handleError(err);
     }
@@ -109,13 +139,16 @@ export class AgentInstance extends EventEmitter {
 
     this.log.info({ graceful }, 'Stopping agent');
 
+    // Signal the SDK runner (if active) to stop iteration
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+
     this.clearTimers();
 
     if (graceful) {
       this.transitionTo('stopping');
-
-      // In a real implementation we would send SIGTERM and wait for
-      // the subprocess to finish. Here we just transition immediately.
       this.finishStop('user');
     } else {
       // Force stop — kill immediately
