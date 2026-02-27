@@ -7,6 +7,8 @@ import { createTaskWorker } from './scheduler/task-worker.js';
 import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createDb } from './db/index.js';
 import { DbAgentRegistry } from './registry/db-registry.js';
+import { Mem0Client } from './memory/mem0-client.js';
+import { MemoryInjector } from './memory/memory-injector.js';
 
 const logger = createLogger('control-plane');
 
@@ -14,6 +16,8 @@ const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const DATABASE_URL = process.env.DATABASE_URL || '';
+const MEM0_URL = process.env.MEM0_URL || '';
+const CONTROL_PLANE_URL = process.env.CONTROL_PLANE_URL || `http://${process.env.HOST || '0.0.0.0'}:${Number(process.env.PORT) || 8080}`;
 const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 5;
 
 async function main(): Promise<void> {
@@ -38,11 +42,31 @@ async function main(): Promise<void> {
     logger.warn('DATABASE_URL not set — falling back to in-memory registry');
   }
 
+  // Optionally initialise Mem0-backed memory injector when MEM0_URL is provided.
+  let memoryInjector: MemoryInjector | undefined;
+
+  if (MEM0_URL) {
+    const mem0Client = new Mem0Client({
+      baseUrl: MEM0_URL,
+      logger: logger.child({ component: 'mem0-client' }),
+    });
+    memoryInjector = new MemoryInjector({
+      mem0Client,
+      logger: logger.child({ component: 'memory-injector' }),
+    });
+    logger.info({ mem0Url: MEM0_URL }, 'Memory injector initialised');
+  } else {
+    logger.info('MEM0_URL not set — memory injection disabled');
+  }
+
   const taskQueue = createTaskQueue(redisConnection);
   const worker = createTaskWorker({
     connection: redisConnection,
     logger: logger.child({ component: 'task-worker' }),
     concurrency: WORKER_CONCURRENCY,
+    registry: dbRegistry ?? null,
+    memoryInjector: memoryInjector ?? null,
+    controlPlaneUrl: CONTROL_PLANE_URL,
   });
   const repeatableJobs = createRepeatableJobManager(
     taskQueue,
