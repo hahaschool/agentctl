@@ -1,7 +1,13 @@
 import os from 'node:os';
+import { join } from 'node:path';
+import type { AgentConfig } from '@agentctl/shared';
+import { AgentError } from '@agentctl/shared';
 
 import { createWorkerServer } from './api/server.js';
 import { HealthReporter } from './health-reporter.js';
+import { AuditReporter } from './hooks/audit-reporter.js';
+import type { IpcMessage, IpcResponse } from './ipc/index.js';
+import { createIpcResponse, IpcServer } from './ipc/index.js';
 import { createLogger } from './logger.js';
 import { AgentPool } from './runtime/index.js';
 
@@ -13,6 +19,120 @@ const CONTROL_PLANE_URL = process.env.CONTROL_URL || 'http://control:8080';
 const MACHINE_ID = process.env.MACHINE_ID || `machine-${os.hostname()}`;
 const MAX_CONCURRENT_AGENTS = Number(process.env.MAX_CONCURRENT_AGENTS) || 3;
 const AUDIT_LOG_DIR = process.env.AUDIT_LOG_DIR || '.agentctl/audit';
+const IPC_DIR = process.env.IPC_DIR || '.agentctl/ipc';
+const RUN_ID = process.env.RUN_ID || '';
+const AUDIT_FLUSH_INTERVAL_MS = Number(process.env.AUDIT_FLUSH_INTERVAL_MS) || 5_000;
+
+/**
+ * Dispatch an incoming IPC message to the correct pool operation based
+ * on `message.type`.
+ *
+ * Supported commands:
+ *   - `start_agent`  — create an agent in the pool and start it
+ *   - `stop_agent`   — stop a running agent
+ *   - `list_agents`  — return summaries of every agent in the pool
+ *   - `agent_status` — return full JSON snapshot of one agent
+ */
+function createIpcHandler(pool: AgentPool): (msg: IpcMessage) => Promise<IpcResponse> {
+  return async (msg: IpcMessage): Promise<IpcResponse> => {
+    switch (msg.type) {
+      case 'start_agent': {
+        const agentId = msg.payload.agentId as string | undefined;
+        const prompt = msg.payload.prompt as string | undefined;
+        const projectPath = msg.payload.projectPath as string | undefined;
+        const config = (msg.payload.config as AgentConfig) ?? {};
+
+        if (!agentId || !prompt || !projectPath) {
+          return createIpcResponse(msg.id, 'error', {
+            code: 'INVALID_PAYLOAD',
+            message: 'start_agent requires "agentId", "prompt", and "projectPath" in the payload',
+          });
+        }
+
+        try {
+          const instance = pool.createAgent({
+            agentId,
+            machineId: MACHINE_ID,
+            config,
+            projectPath,
+            logger,
+          });
+
+          // Start is intentionally not awaited so the IPC response is
+          // returned immediately. The agent runs in the background.
+          void instance.start(prompt);
+
+          return createIpcResponse(msg.id, 'ok', {
+            agentId,
+            status: instance.getStatus(),
+          });
+        } catch (err) {
+          return createIpcResponse(msg.id, 'error', {
+            code: err instanceof AgentError ? err.code : 'START_FAILED',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      case 'stop_agent': {
+        const agentId = msg.payload.agentId as string | undefined;
+        const graceful = (msg.payload.graceful as boolean) ?? true;
+
+        if (!agentId) {
+          return createIpcResponse(msg.id, 'error', {
+            code: 'INVALID_PAYLOAD',
+            message: 'stop_agent requires "agentId" in the payload',
+          });
+        }
+
+        try {
+          await pool.stopAgent(agentId, graceful);
+          return createIpcResponse(msg.id, 'ok', { agentId, stopped: true });
+        } catch (err) {
+          return createIpcResponse(msg.id, 'error', {
+            code: err instanceof AgentError ? err.code : 'STOP_FAILED',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      case 'list_agents': {
+        const agents = pool.listAgents();
+        return createIpcResponse(msg.id, 'ok', {
+          agents: agents as unknown as Record<string, unknown>[],
+        });
+      }
+
+      case 'agent_status': {
+        const agentId = msg.payload.agentId as string | undefined;
+
+        if (!agentId) {
+          return createIpcResponse(msg.id, 'error', {
+            code: 'INVALID_PAYLOAD',
+            message: 'agent_status requires "agentId" in the payload',
+          });
+        }
+
+        const instance = pool.getAgent(agentId);
+
+        if (!instance) {
+          return createIpcResponse(msg.id, 'error', {
+            code: 'AGENT_NOT_FOUND',
+            message: `Agent '${agentId}' not found in the pool`,
+          });
+        }
+
+        return createIpcResponse(msg.id, 'ok', instance.toJSON());
+      }
+
+      default:
+        return createIpcResponse(msg.id, 'error', {
+          code: 'UNKNOWN_COMMAND',
+          message: `Unknown IPC command type: '${msg.type}'`,
+        });
+    }
+  };
+}
 
 async function main(): Promise<void> {
   const pool = new AgentPool({
@@ -20,6 +140,14 @@ async function main(): Promise<void> {
     auditLogDir: AUDIT_LOG_DIR,
     logger,
   });
+
+  const ipcServer = new IpcServer({
+    ipcDir: IPC_DIR,
+    agentId: MACHINE_ID,
+    logger: logger.child({ component: 'ipc-server' }),
+  });
+
+  ipcServer.onMessage(createIpcHandler(pool));
 
   const server = await createWorkerServer({
     logger,
@@ -38,14 +166,44 @@ async function main(): Promise<void> {
   await healthReporter.register();
   healthReporter.start();
 
+  // Start audit reporter only when a RUN_ID is provided (indicates an active run).
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const auditFilePath = join(AUDIT_LOG_DIR, `audit-${todayDate}.ndjson`);
+
+  const auditReporter = RUN_ID
+    ? new AuditReporter({
+        controlPlaneUrl: CONTROL_PLANE_URL,
+        runId: RUN_ID,
+        auditFilePath,
+        logger,
+        flushIntervalMs: AUDIT_FLUSH_INTERVAL_MS,
+      })
+    : null;
+
+  if (auditReporter) {
+    auditReporter.start();
+  }
+
   await server.listen({ port: PORT, host: HOST });
+
+  await ipcServer.start();
+
   logger.info(
-    { port: PORT, machineId: MACHINE_ID, maxConcurrentAgents: MAX_CONCURRENT_AGENTS },
+    {
+      port: PORT,
+      machineId: MACHINE_ID,
+      maxConcurrentAgents: MAX_CONCURRENT_AGENTS,
+      ipcDir: IPC_DIR,
+    },
     'Agent worker started',
   );
 
   const shutdown = async (): Promise<void> => {
     logger.info('Shutting down...');
+    if (auditReporter) {
+      await auditReporter.stop();
+    }
+    ipcServer.stop();
     healthReporter.stop();
     await pool.stopAll();
     await server.close();

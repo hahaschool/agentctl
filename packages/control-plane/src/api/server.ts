@@ -10,6 +10,7 @@ import type { LiteLLMClient } from '../router/litellm-client.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { agentRoutes } from './routes/agents.js';
+import { auditRoutes } from './routes/audit.js';
 import { healthRoutes } from './routes/health.js';
 import { memoryRoutes } from './routes/memory.js';
 import { routerRoutes } from './routes/router.js';
@@ -67,6 +68,14 @@ export async function createServer({
     taskQueue: taskQueue ?? null,
     logger,
   });
+
+  // Register audit ingestion routes only when the database is configured.
+  if (dbRegistry) {
+    await app.register(auditRoutes, {
+      prefix: '/api/audit',
+      dbRegistry,
+    });
+  }
 
   // Register LiteLLM router routes only when the client is provided.
   if (litellmClient) {

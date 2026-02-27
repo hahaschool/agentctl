@@ -4,7 +4,7 @@ import { desc, eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
-import { agentRuns, agents, machines } from '../db/index.js';
+import { agentActions, agentRuns, agents, machines } from '../db/index.js';
 
 type CreateAgentData = {
   machineId: string;
@@ -31,6 +31,15 @@ type CompleteRunData = {
   tokensOut?: number | null;
   errorMessage?: string | null;
   resultSummary?: string | null;
+};
+
+type InsertActionData = {
+  actionType: string;
+  toolName?: string | null;
+  toolInput?: Record<string, unknown> | null;
+  toolOutputHash?: string | null;
+  durationMs?: number | null;
+  approvedBy?: string | null;
 };
 
 export class DbAgentRegistry {
@@ -228,6 +237,47 @@ export class DbAgentRegistry {
       .limit(limit);
 
     return rows.map((row) => this.toRun(row));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audit action ingestion
+  // ---------------------------------------------------------------------------
+
+  async insertActions(runId: string, actions: InsertActionData[]): Promise<number> {
+    if (actions.length === 0) {
+      return 0;
+    }
+
+    const rows = actions.map((action) => ({
+      runId,
+      actionType: action.actionType,
+      toolName: action.toolName ?? null,
+      toolInput: action.toolInput ?? null,
+      toolOutputHash: action.toolOutputHash ?? null,
+      durationMs: action.durationMs ?? null,
+      approvedBy: action.approvedBy ?? null,
+    }));
+
+    try {
+      const result = await this.db
+        .insert(agentActions)
+        .values(rows)
+        .returning({ id: agentActions.id });
+
+      this.logger.info({ runId, insertedCount: result.length }, 'Audit actions inserted');
+
+      return result.length;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ControlPlaneError(
+        'AUDIT_INSERT_FAILED',
+        `Failed to insert audit actions: ${message}`,
+        {
+          runId,
+          actionCount: actions.length,
+        },
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
