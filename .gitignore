@@ -1,15 +1,19 @@
 node_modules/
 dist/
 .env
-.env.local
+.env.*
+!.env.example
 *.log
 
 # Agent worktrees
 .trees/
 .claude/worktrees/
 
+# Bare repo pattern
+.bare/
+
 # PM2
-ecosystem.config.cjs
+ecosystem.*.config.cjs
 
 # OS
 .DS_Store
@@ -21,3 +25,11 @@ Thumbs.db
 
 # Build artifacts
 *.tsbuildinfo
+
+# Docker
+.docker/
+
+# Secrets
+credentials.json
+*.pem
+*.key
