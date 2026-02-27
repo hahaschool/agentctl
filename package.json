@@ -1,0 +1,17 @@
+{
+  "name": "agentctl",
+  "private": true,
+  "packageManager": "pnpm@8.15.4",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev:control": "pnpm --filter @agentctl/control-plane dev",
+    "dev:worker": "pnpm --filter @agentctl/agent-worker dev",
+    "build": "pnpm -r build",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r exec rm -rf dist"
+  }
+}
