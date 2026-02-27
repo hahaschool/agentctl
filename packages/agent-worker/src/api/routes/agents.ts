@@ -104,7 +104,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
         let instance = pool.getAgent(id);
 
         if (!instance) {
-          instance = pool.createAgent({
+          instance = await pool.createAgent({
             agentId: id,
             machineId,
             config: config ?? {},
@@ -153,7 +153,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
     const { id } = request.params;
 
     try {
-      const removed = pool.removeAgent(id);
+      const removed = await pool.removeAgent(id);
 
       if (!removed) {
         return reply.status(404).send({

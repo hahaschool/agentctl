@@ -40,10 +40,10 @@ describe('AgentPool', () => {
     vi.useRealTimers();
   });
 
-  it('createAgent adds agent to pool', () => {
+  it('createAgent adds agent to pool', async () => {
     const pool = new AgentPool({ logger: mockLogger });
 
-    const agent = pool.createAgent(makeAgentOptions('agent-1'));
+    const agent = await pool.createAgent(makeAgentOptions('agent-1'));
 
     expect(agent).toBeDefined();
     expect(pool.size).toBe(1);
@@ -54,17 +54,17 @@ describe('AgentPool', () => {
     const pool = new AgentPool({ maxConcurrent: 1, logger: mockLogger });
 
     // Create and start an agent so it counts as running
-    const agent = pool.createAgent(makeAgentOptions('agent-1'));
+    const agent = await pool.createAgent(makeAgentOptions('agent-1'));
     const startPromise = agent.start('test');
     await vi.advanceTimersByTimeAsync(0);
 
     expect(pool.getRunningCount()).toBe(1);
 
     // Creating a second agent should throw POOL_FULL
-    expect(() => pool.createAgent(makeAgentOptions('agent-2'))).toThrow(AgentError);
+    await expect(pool.createAgent(makeAgentOptions('agent-2'))).rejects.toThrow(AgentError);
 
     try {
-      pool.createAgent(makeAgentOptions('agent-3'));
+      await pool.createAgent(makeAgentOptions('agent-3'));
     } catch (err) {
       expect((err as AgentError).code).toBe('POOL_FULL');
     }
@@ -75,20 +75,20 @@ describe('AgentPool', () => {
     await startPromise;
   });
 
-  it('getAgent returns agent by id', () => {
+  it('getAgent returns agent by id', async () => {
     const pool = new AgentPool({ logger: mockLogger });
 
-    pool.createAgent(makeAgentOptions('agent-1'));
+    await pool.createAgent(makeAgentOptions('agent-1'));
 
     expect(pool.getAgent('agent-1')).toBeDefined();
     expect(pool.getAgent('nonexistent')).toBeUndefined();
   });
 
-  it('listAgents returns all agents as JSON', () => {
+  it('listAgents returns all agents as JSON', async () => {
     const pool = new AgentPool({ logger: mockLogger });
 
-    pool.createAgent(makeAgentOptions('agent-1'));
-    pool.createAgent(makeAgentOptions('agent-2'));
+    await pool.createAgent(makeAgentOptions('agent-1'));
+    await pool.createAgent(makeAgentOptions('agent-2'));
 
     const list = pool.listAgents();
 
@@ -102,10 +102,10 @@ describe('AgentPool', () => {
 
   it('removeAgent removes stopped agent', async () => {
     const pool = new AgentPool({ logger: mockLogger });
-    pool.createAgent(makeAgentOptions('agent-1'));
+    await pool.createAgent(makeAgentOptions('agent-1'));
 
     // Agent is in 'registered' state (not running), so it can be removed
-    const removed = pool.removeAgent('agent-1');
+    const removed = await pool.removeAgent('agent-1');
 
     expect(removed).toBe(true);
     expect(pool.size).toBe(0);
@@ -114,7 +114,7 @@ describe('AgentPool', () => {
 
   it('removeAgent throws AGENT_STILL_RUNNING for running agents', async () => {
     const pool = new AgentPool({ logger: mockLogger });
-    const agent = pool.createAgent(makeAgentOptions('agent-1'));
+    const agent = await pool.createAgent(makeAgentOptions('agent-1'));
 
     // Start the agent so it transitions to running
     const startPromise = agent.start('test');
@@ -122,10 +122,10 @@ describe('AgentPool', () => {
 
     expect(agent.getStatus()).toBe('running');
 
-    expect(() => pool.removeAgent('agent-1')).toThrow(AgentError);
+    await expect(pool.removeAgent('agent-1')).rejects.toThrow(AgentError);
 
     try {
-      pool.removeAgent('agent-1');
+      await pool.removeAgent('agent-1');
     } catch (err) {
       expect((err as AgentError).code).toBe('AGENT_STILL_RUNNING');
     }
@@ -139,9 +139,9 @@ describe('AgentPool', () => {
   it('getRunningCount returns correct count', async () => {
     const pool = new AgentPool({ maxConcurrent: 5, logger: mockLogger });
 
-    const agent1 = pool.createAgent(makeAgentOptions('agent-1'));
-    const agent2 = pool.createAgent(makeAgentOptions('agent-2'));
-    pool.createAgent(makeAgentOptions('agent-3'));
+    const agent1 = await pool.createAgent(makeAgentOptions('agent-1'));
+    const agent2 = await pool.createAgent(makeAgentOptions('agent-2'));
+    await pool.createAgent(makeAgentOptions('agent-3'));
 
     expect(pool.getRunningCount()).toBe(0);
 

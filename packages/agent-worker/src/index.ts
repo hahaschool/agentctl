@@ -1,5 +1,6 @@
 import os from 'node:os';
 import { join } from 'node:path';
+
 import type { AgentConfig } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 
@@ -10,6 +11,7 @@ import type { IpcMessage, IpcResponse } from './ipc/index.js';
 import { createIpcResponse, IpcServer } from './ipc/index.js';
 import { createLogger } from './logger.js';
 import { AgentPool } from './runtime/index.js';
+import { WorktreeManager } from './worktree/index.js';
 
 const logger = createLogger('agent-worker');
 
@@ -22,6 +24,7 @@ const AUDIT_LOG_DIR = process.env.AUDIT_LOG_DIR || '.agentctl/audit';
 const IPC_DIR = process.env.IPC_DIR || '.agentctl/ipc';
 const RUN_ID = process.env.RUN_ID || '';
 const AUDIT_FLUSH_INTERVAL_MS = Number(process.env.AUDIT_FLUSH_INTERVAL_MS) || 5_000;
+const PROJECT_PATH = process.env.PROJECT_PATH || '';
 
 /**
  * Dispatch an incoming IPC message to the correct pool operation based
@@ -50,7 +53,7 @@ function createIpcHandler(pool: AgentPool): (msg: IpcMessage) => Promise<IpcResp
         }
 
         try {
-          const instance = pool.createAgent({
+          const instance = await pool.createAgent({
             agentId,
             machineId: MACHINE_ID,
             config,
@@ -135,10 +138,26 @@ function createIpcHandler(pool: AgentPool): (msg: IpcMessage) => Promise<IpcResp
 }
 
 async function main(): Promise<void> {
+  // Create a WorktreeManager if a project path is configured.
+  // When PROJECT_PATH is empty or unset, agents will run without worktree isolation.
+  const worktreeManager = PROJECT_PATH
+    ? new WorktreeManager({
+        projectPath: PROJECT_PATH,
+        logger: logger.child({ component: 'worktree-manager' }),
+      })
+    : undefined;
+
+  if (worktreeManager) {
+    logger.info({ projectPath: PROJECT_PATH }, 'WorktreeManager enabled for agent isolation');
+  } else {
+    logger.info('No PROJECT_PATH set, agents will run without worktree isolation');
+  }
+
   const pool = new AgentPool({
     maxConcurrent: MAX_CONCURRENT_AGENTS,
     auditLogDir: AUDIT_LOG_DIR,
     logger,
+    worktreeManager,
   });
 
   const ipcServer = new IpcServer({

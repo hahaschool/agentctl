@@ -1,8 +1,10 @@
 import { EventEmitter } from 'node:events';
+
 import type { AgentEvent, AgentStatus } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
+import type { WorktreeManager } from '../worktree/index.js';
 import { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 
 const DEFAULT_MAX_CONCURRENT = 3;
@@ -11,6 +13,8 @@ type AgentPoolOptions = {
   maxConcurrent?: number;
   auditLogDir?: string;
   logger: Logger;
+  /** Optional WorktreeManager for creating per-agent git worktree isolation. */
+  worktreeManager?: WorktreeManager;
 };
 
 type AgentSummary = {
@@ -29,15 +33,19 @@ export class AgentPool extends EventEmitter {
   private readonly maxConcurrent: number;
   private readonly auditLogDir: string | undefined;
   private readonly log: Logger;
+  private readonly worktreeManager: WorktreeManager | undefined;
+  /** Tracks which agents have an active worktree so we can clean up on removal. */
+  private readonly agentWorktrees: Set<string> = new Set();
 
   constructor(options: AgentPoolOptions) {
     super();
     this.maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
     this.auditLogDir = options.auditLogDir;
     this.log = options.logger.child({ component: 'agent-pool' });
+    this.worktreeManager = options.worktreeManager;
   }
 
-  createAgent(options: AgentInstanceOptions): AgentInstance {
+  async createAgent(options: AgentInstanceOptions): Promise<AgentInstance> {
     if (this.agents.has(options.agentId)) {
       throw new AgentError(
         'AGENT_EXISTS',
@@ -56,8 +64,38 @@ export class AgentPool extends EventEmitter {
       );
     }
 
+    // Attempt to create a worktree for filesystem isolation.
+    // If it fails (not a git repo, disk full, etc.), fall back to the original projectPath.
+    let effectiveProjectPath = options.projectPath;
+
+    if (this.worktreeManager) {
+      try {
+        const worktreeInfo = await this.worktreeManager.create({
+          agentId: options.agentId,
+          projectPath: options.projectPath,
+          description: 'work',
+        });
+        effectiveProjectPath = worktreeInfo.path;
+        this.agentWorktrees.add(options.agentId);
+        this.log.info(
+          {
+            agentId: options.agentId,
+            worktreePath: worktreeInfo.path,
+            branch: worktreeInfo.branch,
+          },
+          'Agent worktree created',
+        );
+      } catch (err) {
+        this.log.warn(
+          { agentId: options.agentId, err },
+          'Failed to create worktree for agent, falling back to original projectPath',
+        );
+      }
+    }
+
     const instance = new AgentInstance({
       ...options,
+      projectPath: effectiveProjectPath,
       auditLogDir: options.auditLogDir ?? this.auditLogDir,
     });
 
@@ -69,7 +107,10 @@ export class AgentPool extends EventEmitter {
 
     this.agents.set(options.agentId, instance);
 
-    this.log.info({ agentId: options.agentId }, 'Agent added to pool');
+    this.log.info(
+      { agentId: options.agentId, projectPath: effectiveProjectPath },
+      'Agent added to pool',
+    );
 
     return instance;
   }
@@ -90,7 +131,7 @@ export class AgentPool extends EventEmitter {
     await instance.stop(graceful);
   }
 
-  removeAgent(agentId: string): boolean {
+  async removeAgent(agentId: string): Promise<boolean> {
     const instance = this.agents.get(agentId);
 
     if (!instance) {
@@ -105,6 +146,17 @@ export class AgentPool extends EventEmitter {
         `Cannot remove agent '${agentId}' while it is ${status}. Stop it first.`,
         { agentId, status },
       );
+    }
+
+    // Clean up worktree if one was created for this agent.
+    if (this.worktreeManager && this.agentWorktrees.has(agentId)) {
+      try {
+        await this.worktreeManager.remove(agentId);
+        this.agentWorktrees.delete(agentId);
+        this.log.info({ agentId }, 'Agent worktree removed');
+      } catch (err) {
+        this.log.warn({ agentId, err }, 'Failed to remove worktree for agent');
+      }
     }
 
     instance.removeAllListeners();
