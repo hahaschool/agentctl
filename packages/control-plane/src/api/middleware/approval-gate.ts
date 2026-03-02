@@ -382,9 +382,14 @@ function createApprovalGateHook(gate: ApprovalGate): preHandlerHookHandler {
     }
 
     const agentId = extractAgentId(request.url);
-    const estimatedCostUsd = (request.body as Record<string, unknown> | null)?.estimatedCostUsd as
-      | number
-      | undefined;
+    const body = request.body;
+    const estimatedCostUsd =
+      body != null &&
+      typeof body === 'object' &&
+      'estimatedCostUsd' in body &&
+      typeof (body as Record<string, unknown>).estimatedCostUsd === 'number'
+        ? ((body as Record<string, unknown>).estimatedCostUsd as number)
+        : undefined;
 
     if (!gate.requiresApproval(action, { agentId, estimatedCostUsd })) {
       return;

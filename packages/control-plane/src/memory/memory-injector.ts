@@ -57,7 +57,11 @@ export class MemoryInjector {
         );
         return '';
       }
-      throw error;
+      this.logger.warn(
+        { agentId, err: error },
+        'Unexpected error fetching memories — continuing without memory context',
+      );
+      return '';
     }
   }
 

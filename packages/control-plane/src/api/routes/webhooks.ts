@@ -4,7 +4,7 @@ import { ControlPlaneError, WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from '@agen
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
-import type { Database } from '../../db/index.js';
+import { type Database, extractRows } from '../../db/index.js';
 
 // NOTE: This module uses the existing WebhookProvider and WebhookEventType
 // types from @agentctl/shared (packages/shared/src/types/webhook.ts).
@@ -221,9 +221,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
           sql`SELECT * FROM webhook_subscriptions ORDER BY created_at DESC`,
         );
 
-        const subscriptions = (result.rows as unknown as WebhookSubscriptionRow[]).map(
-          formatSubscription,
-        );
+        const subscriptions = extractRows<WebhookSubscriptionRow>(result).map(formatSubscription);
 
         return { subscriptions };
       } catch (error: unknown) {
@@ -261,7 +259,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
           );
         }
 
-        const row = result.rows[0] as unknown as WebhookSubscriptionRow;
+        const row = extractRows<WebhookSubscriptionRow>(result)[0];
         return { subscription: formatSubscription(row) };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
@@ -384,7 +382,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
 
         const updated = await db.execute(sql`SELECT * FROM webhook_subscriptions WHERE id = ${id}`);
 
-        const row = updated.rows[0] as unknown as WebhookSubscriptionRow;
+        const row = extractRows<WebhookSubscriptionRow>(updated)[0];
         return { ok: true, subscription: formatSubscription(row) };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
@@ -477,7 +475,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
             LIMIT 50`,
         );
 
-        const deliveries = (result.rows as unknown as WebhookDeliveryRow[]).map(formatDelivery);
+        const deliveries = extractRows<WebhookDeliveryRow>(result).map(formatDelivery);
 
         return { deliveries };
       } catch (error: unknown) {
@@ -520,7 +518,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
           );
         }
 
-        const subscription = existing.rows[0] as unknown as WebhookSubscriptionRow;
+        const subscription = extractRows<WebhookSubscriptionRow>(existing)[0];
 
         const deliveryId = crypto.randomUUID();
         const now = new Date();

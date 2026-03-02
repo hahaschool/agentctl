@@ -2,7 +2,7 @@ import { ControlPlaneError } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
-import type { Database } from '../../db/index.js';
+import { type Database, extractRows } from '../../db/index.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -317,8 +317,8 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
           db.execute(sql`SELECT COUNT(*)::int AS count FROM security_findings ${whereClause}`),
         ]);
 
-        const rows = findingsResult.rows as unknown as SecurityFindingRow[];
-        const total = (countResult.rows as unknown as CountRow[])[0]?.count ?? 0;
+        const rows = extractRows<SecurityFindingRow>(findingsResult);
+        const total = extractRows<CountRow>(countResult)[0]?.count ?? 0;
 
         return {
           findings: rows.map(formatFinding),
@@ -355,9 +355,9 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
           ),
         ]);
 
-        const total = (totalResult.rows as unknown as CountRow[])[0]?.count ?? 0;
-        const severityCounts = severityResult.rows as unknown as SeverityCountRow[];
-        const categoryCounts = categoryResult.rows as unknown as CategoryCountRow[];
+        const total = extractRows<CountRow>(totalResult)[0]?.count ?? 0;
+        const severityCounts = extractRows<SeverityCountRow>(severityResult);
+        const categoryCounts = extractRows<CategoryCountRow>(categoryResult);
 
         const severityMap: Record<string, number> = {
           critical: 0,
@@ -478,7 +478,7 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
           sql`SELECT * FROM security_findings WHERE acknowledged = ${false} AND issue_created = ${false} AND severity IN ('critical', 'high') ORDER BY created_at ASC`,
         );
 
-        const rows = result.rows as unknown as SecurityFindingRow[];
+        const rows = extractRows<SecurityFindingRow>(result);
 
         if (rows.length === 0) {
           return { ok: true, issuesCreated: 0 };

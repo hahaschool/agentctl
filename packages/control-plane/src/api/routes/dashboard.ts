@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
-import type { Database } from '../../db/index.js';
+import { type Database, extractRows } from '../../db/index.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 
 // ---------------------------------------------------------------------------
@@ -135,14 +135,14 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           ),
         ]);
 
-        const agentCounts = agentCountsResult.rows as unknown as AgentCountRow[];
-        const runTotal = (runTotalResult.rows as unknown as RunTotalRow[])[0]?.total ?? 0;
-        const runCounts = runCountsResult.rows as unknown as RunCountRow[];
-        const webhook = (webhookResult.rows as unknown as WebhookCountRow[])[0] ?? {
+        const agentCounts = extractRows<AgentCountRow>(agentCountsResult);
+        const runTotal = extractRows<RunTotalRow>(runTotalResult)[0]?.total ?? 0;
+        const runCounts = extractRows<RunCountRow>(runCountsResult);
+        const webhook = extractRows<WebhookCountRow>(webhookResult)[0] ?? {
           total: 0,
           active: 0,
         };
-        const recentErrors = recentErrorsResult.rows as unknown as RecentErrorRow[];
+        const recentErrors = extractRows<RecentErrorRow>(recentErrorsResult);
 
         let totalAgents = 0;
         let onlineAgents = 0;
@@ -228,7 +228,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           ORDER BY total_runs DESC`,
         );
 
-        const rows = result.rows as unknown as AgentStatRow[];
+        const rows = extractRows<AgentStatRow>(result);
 
         const stats = rows.map((row) => {
           const totalRuns = row.total_runs;
@@ -290,13 +290,13 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           ),
         ]);
 
-        const tools = (toolResult.rows as unknown as ToolUsageRow[]).map((row) => ({
+        const tools = extractRows<ToolUsageRow>(toolResult).map((row) => ({
           tool: row.tool_name,
           count: row.count,
           avgDurationMs: row.avg_duration_ms ?? 0,
         }));
 
-        const topAgentsByToolUse = (topAgentsResult.rows as unknown as TopAgentByToolUseRow[]).map(
+        const topAgentsByToolUse = extractRows<TopAgentByToolUseRow>(topAgentsResult).map(
           (row) => ({
             agentId: row.agent_id,
             totalToolCalls: row.total_tool_calls,
@@ -364,15 +364,15 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           ),
         ]);
 
-        const totalRow = (totalResult.rows as unknown as TotalCostRow[])[0];
+        const totalRow = extractRows<TotalCostRow>(totalResult)[0];
         const totalCostUsd = totalRow ? Number(totalRow.total_cost_usd) : 0;
 
-        const byAgent = (byAgentResult.rows as unknown as CostByAgentRow[]).map((row) => ({
+        const byAgent = extractRows<CostByAgentRow>(byAgentResult).map((row) => ({
           agentId: row.agent_id,
           costUsd: Number(row.cost_usd),
         }));
 
-        const byProvider = (byProviderResult.rows as unknown as CostByProviderRow[]).map((row) => ({
+        const byProvider = extractRows<CostByProviderRow>(byProviderResult).map((row) => ({
           provider: row.provider,
           costUsd: Number(row.cost_usd),
         }));
