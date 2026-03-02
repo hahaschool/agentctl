@@ -13,9 +13,15 @@
     "build": "pnpm -r build",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "test": "pnpm -r test",
+    "test": "pnpm -r test && cd scripts && npx vitest run",
+    "test:packages": "pnpm -r test",
+    "test:scripts": "cd scripts && npx vitest run",
     "test:coverage": "pnpm -r test:coverage",
-    "clean": "pnpm -r exec rm -rf dist"
+    "lint": "biome check packages/ scripts/",
+    "lint:fix": "biome check --write packages/ scripts/",
+    "typecheck": "pnpm -r build",
+    "clean": "pnpm -r exec rm -rf dist",
+    "agentctl": "tsx scripts/agentctl.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4"
