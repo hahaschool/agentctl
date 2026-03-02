@@ -1,7 +1,7 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AgentRegistry } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -540,5 +540,254 @@ describe('Agent routes — with dbRegistry', () => {
       // ControlPlaneError thrown → Fastify default handler returns 500
       expect(response.statusCode).toBe(500);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests for agent auto-creation on start
+// ---------------------------------------------------------------------------
+
+describe('Agent routes — start with auto-creation', () => {
+  let app: FastifyInstance;
+
+  const mockDbRegistry = {
+    registerMachine: vi.fn(),
+    heartbeat: vi.fn(),
+    listMachines: vi.fn().mockResolvedValue([
+      {
+        id: 'machine-1',
+        hostname: 'test-host',
+        tailscaleIp: '100.64.0.1',
+        os: 'linux',
+        arch: 'x64',
+        status: 'online',
+        lastHeartbeat: new Date(),
+        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+        createdAt: new Date(),
+      },
+    ]),
+    createAgent: vi.fn().mockResolvedValue('new-agent-uuid'),
+    getAgent: vi.fn(),
+    updateAgentStatus: vi.fn(),
+    listAgents: vi.fn().mockResolvedValue([]),
+    getRecentRuns: vi.fn().mockResolvedValue([]),
+    completeRun: vi.fn(),
+    createRun: vi.fn(),
+    insertActions: vi.fn(),
+    getMachine: vi.fn(),
+  } as unknown as DbAgentRegistry;
+
+  const mockTaskQueue = {
+    add: vi.fn().mockResolvedValue({ id: 'job-auto-1' }),
+  };
+
+  beforeAll(async () => {
+    app = await createServer({
+      logger,
+      dbRegistry: mockDbRegistry,
+      taskQueue: mockTaskQueue as never,
+    });
+    await app.ready();
+  });
+
+  afterEach(() => {
+    vi.mocked(mockDbRegistry.getAgent).mockReset();
+    vi.mocked(mockDbRegistry.createAgent).mockReset().mockResolvedValue('new-agent-uuid');
+    vi.mocked(mockDbRegistry.listMachines).mockReset().mockResolvedValue([
+      {
+        id: 'machine-1',
+        hostname: 'test-host',
+        tailscaleIp: '100.64.0.1',
+        os: 'linux',
+        arch: 'x64',
+        status: 'online',
+        lastHeartbeat: new Date(),
+        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+        createdAt: new Date(),
+      },
+    ] as never);
+    vi.mocked(mockTaskQueue.add).mockReset().mockResolvedValue({ id: 'job-auto-1' });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('auto-creates an adhoc agent and enqueues start job when agent does not exist', async () => {
+    // First call returns undefined (not found), second call returns the newly created agent
+    vi.mocked(mockDbRegistry.getAgent)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        id: 'new-agent-uuid',
+        machineId: 'machine-1',
+        name: 'unknown-agent',
+        type: 'adhoc',
+        status: 'registered',
+        schedule: null,
+        projectPath: null,
+        worktreeBranch: null,
+        currentSessionId: null,
+        config: {},
+        lastRunAt: null,
+        lastCostUsd: null,
+        totalCostUsd: 0,
+        createdAt: new Date(),
+      } as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/unknown-agent/start',
+      payload: { prompt: 'Fix the login bug' },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body.ok).toBe(true);
+    expect(body.jobId).toBe('job-auto-1');
+
+    // Agent should have been auto-created with the first online machine
+    expect(mockDbRegistry.createAgent).toHaveBeenCalledWith({
+      machineId: 'machine-1',
+      name: 'unknown-agent',
+      type: 'adhoc',
+    });
+
+    // Task queue should have been called with the correct machineId
+    expect(mockTaskQueue.add).toHaveBeenCalledWith(
+      'agent:start',
+      expect.objectContaining({
+        agentId: 'unknown-agent',
+        machineId: 'machine-1',
+        prompt: 'Fix the login bug',
+      }),
+    );
+  });
+
+  it('uses explicitly provided machineId for auto-creation', async () => {
+    vi.mocked(mockDbRegistry.getAgent)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        id: 'new-agent-uuid',
+        machineId: 'specific-machine',
+        name: 'targeted-agent',
+        type: 'adhoc',
+        status: 'registered',
+        schedule: null,
+        projectPath: null,
+        worktreeBranch: null,
+        currentSessionId: null,
+        config: {},
+        lastRunAt: null,
+        lastCostUsd: null,
+        totalCostUsd: 0,
+        createdAt: new Date(),
+      } as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/targeted-agent/start',
+      payload: {
+        prompt: 'Deploy to staging',
+        machineId: 'specific-machine',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Should use the explicitly provided machineId, not query listMachines
+    expect(mockDbRegistry.createAgent).toHaveBeenCalledWith({
+      machineId: 'specific-machine',
+      name: 'targeted-agent',
+      type: 'adhoc',
+    });
+
+    expect(mockDbRegistry.listMachines).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when no online machines are available for auto-creation', async () => {
+    vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce(undefined);
+    vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/orphan-agent/start',
+      payload: { prompt: 'Do something' },
+    });
+
+    expect(response.statusCode).toBe(503);
+
+    const body = response.json();
+    expect(body.error).toBe('NO_MACHINES_AVAILABLE');
+
+    // createAgent should NOT have been called
+    expect(mockDbRegistry.createAgent).not.toHaveBeenCalled();
+  });
+
+  it('skips auto-creation when agent already exists in registry', async () => {
+    vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce({
+      id: 'existing-agent',
+      machineId: 'machine-1',
+      name: 'Existing Agent',
+      type: 'manual',
+      status: 'registered',
+      schedule: null,
+      projectPath: null,
+      worktreeBranch: null,
+      currentSessionId: null,
+      config: {},
+      lastRunAt: null,
+      lastCostUsd: null,
+      totalCostUsd: 0,
+      createdAt: new Date(),
+    } as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/existing-agent/start',
+      payload: { prompt: 'Run tests' },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // createAgent should NOT have been called for existing agents
+    expect(mockDbRegistry.createAgent).not.toHaveBeenCalled();
+
+    // Job should be enqueued with the existing agent's machineId
+    expect(mockTaskQueue.add).toHaveBeenCalledWith(
+      'agent:start',
+      expect.objectContaining({
+        agentId: 'existing-agent',
+        machineId: 'machine-1',
+      }),
+    );
+  });
+
+  it('returns 503 when only offline machines exist', async () => {
+    vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce(undefined);
+    vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([
+      {
+        id: 'offline-machine',
+        hostname: 'dead-host',
+        tailscaleIp: '100.64.0.99',
+        os: 'linux',
+        arch: 'x64',
+        status: 'offline',
+        lastHeartbeat: new Date(),
+        capabilities: { gpu: false, docker: false, maxConcurrentAgents: 1 },
+        createdAt: new Date(),
+      },
+    ] as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/new-agent/start',
+      payload: { prompt: 'Something' },
+    });
+
+    expect(response.statusCode).toBe(503);
+
+    const body = response.json();
+    expect(body.error).toBe('NO_MACHINES_AVAILABLE');
   });
 });

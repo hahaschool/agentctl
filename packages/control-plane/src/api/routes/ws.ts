@@ -29,6 +29,7 @@ type StartAgentMessage = {
   type: 'start_agent';
   agentId: string;
   prompt: string;
+  machineId?: string;
   config?: AgentConfig;
 };
 
@@ -392,7 +393,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
         }
 
         case 'start_agent': {
-          const { agentId, prompt, config } = msg;
+          const { agentId, prompt, config, machineId: requestedMachineId } = msg;
 
           if (!agentId || typeof agentId !== 'string') {
             sendError(socket, 'INVALID_PARAMS', 'start_agent requires a string agentId');
@@ -412,15 +413,50 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
           let machineId = agentId;
 
           if (dbRegistry) {
-            const agent = await dbRegistry.getAgent(agentId);
+            let agent = await dbRegistry.getAgent(agentId);
 
             if (!agent) {
-              sendError(
-                socket,
-                'AGENT_NOT_FOUND',
-                `Agent '${agentId}' does not exist in the registry`,
+              // Auto-create the agent on first use so iOS clients can start
+              // agents without a separate registration step.
+              let targetMachineId = requestedMachineId;
+
+              if (!targetMachineId) {
+                const allMachines = await dbRegistry.listMachines();
+                const onlineMachine = allMachines.find((m) => m.status === 'online');
+
+                if (!onlineMachine) {
+                  sendError(
+                    socket,
+                    'NO_MACHINES_AVAILABLE',
+                    'Cannot auto-create agent: no online machines are registered',
+                  );
+                  return;
+                }
+
+                targetMachineId = onlineMachine.id;
+              }
+
+              const newAgentId = await dbRegistry.createAgent({
+                machineId: targetMachineId,
+                name: agentId,
+                type: 'adhoc',
+              });
+
+              agent = await dbRegistry.getAgent(newAgentId);
+
+              if (!agent) {
+                sendError(
+                  socket,
+                  'AGENT_CREATE_FAILED',
+                  `Failed to auto-create agent for '${agentId}'`,
+                );
+                return;
+              }
+
+              logger.info(
+                { agentId: newAgentId, machineId: targetMachineId, originalId: agentId },
+                'Auto-created adhoc agent on first use via WebSocket',
               );
-              return;
             }
 
             machineId = agent.machineId;
@@ -432,7 +468,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             prompt,
             model: config?.model ?? null,
             trigger: 'manual',
-            tools: config?.allowedTools ?? null,
+            allowedTools: config?.allowedTools ?? null,
             resumeSession: null,
             createdAt: new Date().toISOString(),
           };

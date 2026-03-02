@@ -183,23 +183,56 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Agent start / stop (existing BullMQ-based control)
   // ---------------------------------------------------------------------------
 
-  app.post<{ Params: { id: string }; Body: StartAgentRequest }>(
+  app.post<{ Params: { id: string }; Body: StartAgentRequest & { machineId?: string } }>(
     '/:id/start',
     async (request, reply) => {
-      const { prompt, model, tools, resumeSession } = request.body;
+      const { prompt, model, allowedTools, resumeSession, machineId: requestedMachineId } = request.body;
       const agentId = request.params.id;
 
       if (taskQueue) {
         let machineId = agentId;
 
         if (dbRegistry) {
-          const agent = await dbRegistry.getAgent(agentId);
+          let agent = await dbRegistry.getAgent(agentId);
 
           if (!agent) {
-            return reply.code(404).send({
-              error: 'AGENT_NOT_FOUND',
-              message: `Agent '${agentId}' does not exist in the registry`,
+            // Auto-create the agent on first use so iOS clients can start
+            // agents without a separate registration step.
+            let targetMachineId = requestedMachineId;
+
+            if (!targetMachineId) {
+              const allMachines = await dbRegistry.listMachines();
+              const onlineMachine = allMachines.find((m) => m.status === 'online');
+
+              if (!onlineMachine) {
+                return reply.code(503).send({
+                  error: 'NO_MACHINES_AVAILABLE',
+                  message: 'Cannot auto-create agent: no online machines are registered',
+                });
+              }
+
+              targetMachineId = onlineMachine.id;
+            }
+
+            const newAgentId = await dbRegistry.createAgent({
+              machineId: targetMachineId,
+              name: agentId,
+              type: 'adhoc',
             });
+
+            agent = await dbRegistry.getAgent(newAgentId);
+
+            if (!agent) {
+              return reply.code(500).send({
+                error: 'AGENT_CREATE_FAILED',
+                message: `Failed to auto-create agent for '${agentId}'`,
+              });
+            }
+
+            app.log.info(
+              { agentId: newAgentId, machineId: targetMachineId, originalId: agentId },
+              'Auto-created adhoc agent on first use via HTTP',
+            );
           }
 
           machineId = agent.machineId;
@@ -211,7 +244,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           prompt: prompt ?? null,
           model: model ?? null,
           trigger: 'manual',
-          tools: tools ?? null,
+          allowedTools: allowedTools ?? null,
           resumeSession: resumeSession ?? null,
           createdAt: new Date().toISOString(),
         };
@@ -384,7 +417,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         prompt,
         model: agent.config?.model ?? null,
         trigger: 'signal',
-        tools: agent.config?.allowedTools ?? null,
+        allowedTools: agent.config?.allowedTools ?? null,
         resumeSession: null,
         createdAt: new Date().toISOString(),
         signalMetadata: metadata,
