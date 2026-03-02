@@ -8,6 +8,11 @@
 #   - rolling:      Deploy one machine at a time in deploy_order sequence
 #   - all-at-once:  Deploy to every target machine in parallel
 #
+# Optional bootstrap phase:
+#   When `bootstrap` is true, runs scripts/fleet-bootstrap.ts before deployment
+#   to provision machines with scripts/setup-machine.sh (installs system deps,
+#   Claude Code, Tailscale, PM2, and project setup).
+#
 # Required secrets:
 #   TS_OAUTH_CLIENT_ID  - Tailscale OAuth client ID (ephemeral)
 #   TS_OAUTH_SECRET     - Tailscale OAuth client secret
@@ -54,6 +59,16 @@ on:
         required: false
         type: boolean
         default: false
+      bootstrap:
+        description: "Run fleet-bootstrap.ts to provision machines with setup-machine.sh before deploy"
+        required: false
+        type: boolean
+        default: false
+      bootstrap_concurrency:
+        description: "Max machines to bootstrap in parallel (only used when bootstrap=true)"
+        required: false
+        type: number
+        default: 3
 
 concurrency:
   group: deploy-fleet
@@ -72,11 +87,118 @@ permissions:
   id-token: write  # Required for Tailscale OIDC
 
 # =============================================================================
-# Job 1: Validate inventory and image availability
+# Job 0: Bootstrap machines (optional — only when bootstrap=true)
 # =============================================================================
 jobs:
+  bootstrap:
+    name: Bootstrap fleet machines
+    if: inputs.bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Install Node.js and dependencies ──────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm@8
+
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Connect to Tailscale mesh ────────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Configure SSH ────────────────────────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host *
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      # ── Run fleet-bootstrap.ts ───────────────────────────────────────
+      - name: Bootstrap machines
+        id: bootstrap
+        run: |
+          set -euo pipefail
+
+          ROLE_FLAG=""
+          TARGET_ROLE="${{ inputs.target_role }}"
+          if [ "$TARGET_ROLE" != "all" ]; then
+            ROLE_FLAG="--role $TARGET_ROLE"
+          fi
+
+          DRY_RUN_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+
+          CONCURRENCY="${{ inputs.bootstrap_concurrency }}"
+
+          echo "Running fleet-bootstrap.ts..."
+          pnpm tsx scripts/fleet-bootstrap.ts \
+            --inventory infra/machines.yml \
+            --concurrency "$CONCURRENCY" \
+            $ROLE_FLAG \
+            $DRY_RUN_FLAG \
+            | tee /tmp/bootstrap-result.json
+
+          # Parse result for summary
+          SUCCESS=$(jq -r '.success' /tmp/bootstrap-result.json)
+          TOTAL=$(jq '.machines | length' /tmp/bootstrap-result.json)
+          SUCCEEDED=$(jq '[.machines[] | select(.status == "success")] | length' /tmp/bootstrap-result.json)
+          FAILED=$(jq '[.machines[] | select(.status == "failed")] | length' /tmp/bootstrap-result.json)
+          SKIPPED=$(jq '[.machines[] | select(.status == "skipped")] | length' /tmp/bootstrap-result.json)
+
+          echo "## Bootstrap Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total machines | $TOTAL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Succeeded | $SUCCEEDED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Failed | $FAILED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Skipped | $SKIPPED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry run | \`${{ inputs.dry_run }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Per-machine details
+          echo "### Machine Details" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Machine | Status | Duration |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|--------|----------|" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.machines[] | "| \(.host) | \(.status) | \(.durationMs)ms |"' /tmp/bootstrap-result.json >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$SUCCESS" != "true" ]; then
+            echo "::error::Fleet bootstrap failed — $FAILED machine(s) failed"
+            exit 1
+          fi
+
+      # ── Cleanup ──────────────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key
+
+  # =============================================================================
+  # Job 1: Validate inventory and image availability
+  # =============================================================================
   validate:
     name: Validate inventory & image
+    needs: [bootstrap]
+    if: always() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
