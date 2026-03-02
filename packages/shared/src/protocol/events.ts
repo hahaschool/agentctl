@@ -40,9 +40,29 @@ export type AgentHeartbeatEvent = {
   };
 };
 
+export type LoopIterationEvent = {
+  event: 'loop_iteration';
+  data: {
+    iteration: number;
+    costUsd: number;
+    durationMs: number;
+  };
+};
+
+export type LoopCompleteEvent = {
+  event: 'loop_complete';
+  data: {
+    totalIterations: number;
+    totalCostUsd: number;
+    reason: string;
+  };
+};
+
 export type AgentEvent =
   | AgentOutputEvent
   | AgentStatusEvent
   | AgentCostEvent
   | AgentApprovalEvent
-  | AgentHeartbeatEvent;
+  | AgentHeartbeatEvent
+  | LoopIterationEvent
+  | LoopCompleteEvent;

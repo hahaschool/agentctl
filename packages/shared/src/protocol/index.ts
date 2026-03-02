@@ -13,4 +13,6 @@ export type {
   AgentHeartbeatEvent,
   AgentOutputEvent,
   AgentStatusEvent,
+  LoopCompleteEvent,
+  LoopIterationEvent,
 } from './events.js';

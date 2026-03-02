@@ -1,4 +1,28 @@
-export type AgentType = 'heartbeat' | 'cron' | 'manual' | 'adhoc';
+export type AgentType = 'heartbeat' | 'cron' | 'manual' | 'adhoc' | 'loop';
+
+export type SessionMode = 'fresh' | 'resume';
+
+export type ScheduleConfig = {
+  /** Session mode: 'fresh' starts a new session, 'resume' continues the last. */
+  sessionMode: SessionMode;
+  /** Prompt template supporting {{date}}, {{iteration}}, {{lastResult}}, {{agentId}} variables. */
+  promptTemplate: string;
+  /** Cron expression or interval pattern. */
+  pattern: string;
+  /** IANA timezone for cron evaluation (e.g. "America/New_York"). */
+  timezone?: string;
+};
+
+export type PromptTemplateVars = {
+  /** ISO date string for the current run. */
+  date: string;
+  /** Zero-based iteration counter for scheduled runs. */
+  iteration: number;
+  /** Summary of the last run result, if available. */
+  lastResult?: string;
+  /** The agent's unique identifier. */
+  agentId: string;
+};
 
 export const AGENT_STATUSES = [
   'registered',

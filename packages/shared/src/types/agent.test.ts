@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Agent, AgentConfig, AgentType } from './agent.js';
+import type { Agent, AgentConfig, AgentType, PromptTemplateVars, ScheduleConfig, SessionMode } from './agent.js';
 import { AGENT_STATUSES } from './agent.js';
 import type { AgentRun, RunStatus, RunTrigger } from './agent-run.js';
 import { AgentError, ControlPlaneError, WorkerError } from './errors.js';
@@ -51,15 +51,15 @@ describe('AGENT_STATUSES', () => {
 // ── AgentType union ─────────────────────────────────────────────────
 
 describe('AgentType', () => {
-  it('covers all four agent types', () => {
-    const types: AgentType[] = ['heartbeat', 'cron', 'manual', 'adhoc'];
-    expect(types).toHaveLength(4);
+  it('covers all five agent types', () => {
+    const types: AgentType[] = ['heartbeat', 'cron', 'manual', 'adhoc', 'loop'];
+    expect(types).toHaveLength(5);
   });
 
   it('each type is a distinct string', () => {
-    const types: AgentType[] = ['heartbeat', 'cron', 'manual', 'adhoc'];
+    const types: AgentType[] = ['heartbeat', 'cron', 'manual', 'adhoc', 'loop'];
     const unique = new Set(types);
-    expect(unique.size).toBe(4);
+    expect(unique.size).toBe(5);
   });
 });
 
@@ -438,6 +438,76 @@ describe('MachineCapabilities', () => {
     };
 
     expect(caps.maxConcurrentAgents).toBe(0);
+  });
+});
+
+// ── SessionMode type ────────────────────────────────────────────
+
+describe('SessionMode', () => {
+  it('covers both session modes', () => {
+    const modes: SessionMode[] = ['fresh', 'resume'];
+    expect(modes).toHaveLength(2);
+
+    const unique = new Set(modes);
+    expect(unique.size).toBe(2);
+  });
+});
+
+// ── ScheduleConfig shape ────────────────────────────────────────
+
+describe('ScheduleConfig', () => {
+  it('has the correct shape with required fields', () => {
+    const config: ScheduleConfig = {
+      sessionMode: 'fresh',
+      promptTemplate: 'Run tests for {{date}}',
+      pattern: '0 6 * * *',
+    };
+
+    expect(config.sessionMode).toBe('fresh');
+    expect(config.promptTemplate).toBe('Run tests for {{date}}');
+    expect(config.pattern).toBe('0 6 * * *');
+    expect(config.timezone).toBeUndefined();
+  });
+
+  it('accepts optional timezone', () => {
+    const config: ScheduleConfig = {
+      sessionMode: 'resume',
+      promptTemplate: 'Continue work on {{agentId}}',
+      pattern: '*/30 * * * *',
+      timezone: 'America/New_York',
+    };
+
+    expect(config.timezone).toBe('America/New_York');
+    expect(config.sessionMode).toBe('resume');
+  });
+});
+
+// ── PromptTemplateVars shape ────────────────────────────────────
+
+describe('PromptTemplateVars', () => {
+  it('has the correct shape with required fields', () => {
+    const vars: PromptTemplateVars = {
+      date: '2026-03-02',
+      iteration: 0,
+      agentId: 'agent-001',
+    };
+
+    expect(vars.date).toBe('2026-03-02');
+    expect(vars.iteration).toBe(0);
+    expect(vars.agentId).toBe('agent-001');
+    expect(vars.lastResult).toBeUndefined();
+  });
+
+  it('accepts optional lastResult', () => {
+    const vars: PromptTemplateVars = {
+      date: '2026-03-02',
+      iteration: 5,
+      lastResult: 'All tests passed',
+      agentId: 'agent-002',
+    };
+
+    expect(vars.lastResult).toBe('All tests passed');
+    expect(vars.iteration).toBe(5);
   });
 });
 
