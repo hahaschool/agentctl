@@ -45,6 +45,33 @@ const AGENT_WORKER_ENV: EnvVar[] = [
     validate: isValidLogLevel,
     description: 'Log level (fatal, error, warn, info, debug, trace, silent)',
   },
+  {
+    name: 'MAX_CONCURRENT_AGENTS',
+    default: '3',
+    validate: isNumericString,
+    description: 'Maximum number of agents that can run concurrently in the pool',
+  },
+  {
+    name: 'AUDIT_LOG_DIR',
+    default: '.agentctl/audit',
+    description: 'Directory for NDJSON audit log files',
+  },
+  {
+    name: 'IPC_DIR',
+    default: '.agentctl/ipc',
+    description: 'Directory for filesystem-based IPC message exchange',
+  },
+  {
+    name: 'RUN_ID',
+    default: '',
+    description: 'Worker-level run ID for audit reporting (empty disables audit reporter)',
+  },
+  {
+    name: 'AUDIT_FLUSH_INTERVAL_MS',
+    default: '5000',
+    validate: isNumericString,
+    description: 'Interval in milliseconds between audit log flushes to the control plane',
+  },
 ];
 
 const logger = createLogger('agent-worker');
@@ -54,11 +81,11 @@ const PORT = Number(env.WORKER_PORT);
 const HOST = env.WORKER_HOST as string;
 const CONTROL_PLANE_URL = env.CONTROL_URL || 'http://control:8080';
 const MACHINE_ID = env.MACHINE_ID as string;
-const MAX_CONCURRENT_AGENTS = Number(process.env.MAX_CONCURRENT_AGENTS) || 3;
-const AUDIT_LOG_DIR = process.env.AUDIT_LOG_DIR || '.agentctl/audit';
-const IPC_DIR = process.env.IPC_DIR || '.agentctl/ipc';
-const RUN_ID = process.env.RUN_ID || '';
-const AUDIT_FLUSH_INTERVAL_MS = Number(process.env.AUDIT_FLUSH_INTERVAL_MS) || 5_000;
+const MAX_CONCURRENT_AGENTS = Number(env.MAX_CONCURRENT_AGENTS) || 3;
+const AUDIT_LOG_DIR = env.AUDIT_LOG_DIR || '.agentctl/audit';
+const IPC_DIR = env.IPC_DIR || '.agentctl/ipc';
+const RUN_ID = env.RUN_ID || '';
+const AUDIT_FLUSH_INTERVAL_MS = Number(env.AUDIT_FLUSH_INTERVAL_MS) || 5_000;
 const PROJECT_PATH = env.PROJECT_PATH || '';
 
 /**
