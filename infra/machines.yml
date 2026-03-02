@@ -1,0 +1,42 @@
+# Machine inventory for AgentCTL fleet
+# Used by deploy-fleet.yml and agentctl CLI
+#
+# Tailscale IPs use the CGNAT range 100.64.0.0/10 (100.64.0.0 – 100.127.255.255).
+# Replace placeholder IPs with actual Tailscale-assigned addresses after setup.
+
+defaults:
+  docker_compose_file: docker-compose.prod.yml
+  deploy_user: deploy
+  health_check_path: /health
+  health_check_timeout: 30
+
+machines:
+  - id: control-plane-1
+    role: control-plane
+    tailscale_ip: 100.64.0.1
+    hostname: cp-primary
+    services: [control-plane]
+    deploy_order: 1
+    capabilities:
+      gpu: false
+      max_agents: 0
+
+  - id: worker-ec2-1
+    role: agent-worker
+    tailscale_ip: 100.64.0.2
+    hostname: ec2-us-east
+    services: [agent-worker]
+    deploy_order: 2
+    capabilities:
+      gpu: false
+      max_agents: 4
+
+  - id: worker-mac-mini-1
+    role: agent-worker
+    tailscale_ip: 100.64.0.3
+    hostname: mac-mini-home
+    services: [agent-worker]
+    deploy_order: 2
+    capabilities:
+      gpu: true
+      max_agents: 2
