@@ -1,0 +1,211 @@
+name: Cleanup Old Docker Images
+
+on:
+  schedule:
+    # Every Sunday at 04:00 UTC
+    - cron: "0 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+env:
+  # Number of recent sha-* tagged versions to keep per package
+  KEEP_COUNT: 5
+
+jobs:
+  cleanup:
+    name: Prune ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - agentctl-control-plane
+          - agentctl-agent-worker
+
+    steps:
+      - name: Delete old package versions
+        uses: actions/github-script@v7
+        id: cleanup
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const packageName = "${{ matrix.package }}";
+            const keepCount = parseInt("${{ env.KEEP_COUNT }}", 10);
+
+            // ── Fetch all versions of the container package ──────────────
+            core.info(`Fetching versions for package: ${packageName}`);
+            let allVersions = [];
+            let page = 1;
+            const perPage = 100;
+
+            while (true) {
+              const { data: versions } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                package_type: "container",
+                package_name: packageName,
+                org: owner,
+                page,
+                per_page: perPage,
+              }).catch(async () => {
+                // Fall back to user-owned package if org call fails
+                return github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
+                  package_type: "container",
+                  package_name: packageName,
+                  username: owner,
+                  page,
+                  per_page: perPage,
+                });
+              });
+
+              if (versions.length === 0) break;
+              allVersions = allVersions.concat(versions);
+              if (versions.length < perPage) break;
+              page++;
+            }
+
+            core.info(`Found ${allVersions.length} total versions for ${packageName}`);
+
+            // ── Categorize versions ─────────────────────────────────────
+            // Protected tag patterns: main-latest, dev-latest, semver v*.*.*
+            const protectedPatterns = [
+              /^main-latest$/,
+              /^dev-latest$/,
+              /^v?\d+\.\d+\.\d+$/,   // v1.2.3 or 1.2.3
+              /^\d+\.\d+$/,           // 1.2 (major.minor)
+              /^\d+$/,                // 1 (major only)
+            ];
+
+            function isProtectedTag(tag) {
+              return protectedPatterns.some((re) => re.test(tag));
+            }
+
+            const shaVersions = [];
+            const untagged = [];
+            const protectedVersions = [];
+
+            for (const v of allVersions) {
+              const tags = v.metadata?.container?.tags || [];
+
+              if (tags.length === 0) {
+                untagged.push(v);
+                continue;
+              }
+
+              const hasProtectedTag = tags.some(isProtectedTag);
+              const hasShaTag = tags.some((t) => t.startsWith("sha-"));
+
+              if (hasProtectedTag) {
+                protectedVersions.push(v);
+              } else if (hasShaTag) {
+                shaVersions.push(v);
+              } else {
+                // Other tags that are neither protected nor sha- — treat as sha
+                shaVersions.push(v);
+              }
+            }
+
+            core.info(`Protected versions (kept): ${protectedVersions.length}`);
+            core.info(`SHA-tagged versions: ${shaVersions.length}`);
+            core.info(`Untagged versions: ${untagged.length}`);
+
+            // ── Sort sha versions by creation date (newest first) ───────
+            shaVersions.sort(
+              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+
+            const shaToKeep = shaVersions.slice(0, keepCount);
+            const shaToDelete = shaVersions.slice(keepCount);
+
+            core.info(`Keeping ${shaToKeep.length} most recent SHA versions`);
+            core.info(`Deleting ${shaToDelete.length} older SHA versions`);
+            core.info(`Deleting ${untagged.length} untagged versions`);
+
+            // ── Delete untagged + old SHA versions ──────────────────────
+            const toDelete = [...untagged, ...shaToDelete];
+            const deleted = [];
+            const failed = [];
+
+            for (const v of toDelete) {
+              const tags = v.metadata?.container?.tags || [];
+              const label = tags.length > 0 ? tags.join(", ") : "<untagged>";
+
+              try {
+                await github.rest.packages.deletePackageVersionForOrg({
+                  package_type: "container",
+                  package_name: packageName,
+                  org: owner,
+                  package_version_id: v.id,
+                }).catch(async () => {
+                  return github.rest.packages.deletePackageVersionForUser({
+                    package_type: "container",
+                    package_name: packageName,
+                    username: owner,
+                    package_version_id: v.id,
+                  });
+                });
+
+                deleted.push({ id: v.id, tags: label, created: v.created_at });
+                core.info(`Deleted version ${v.id} (${label})`);
+              } catch (err) {
+                failed.push({ id: v.id, tags: label, error: err.message });
+                core.warning(`Failed to delete version ${v.id} (${label}): ${err.message}`);
+              }
+            }
+
+            // ── Build summary ───────────────────────────────────────────
+            const summary = [
+              `## ${packageName}`,
+              "",
+              `| Metric | Count |`,
+              `|--------|-------|`,
+              `| Total versions found | ${allVersions.length} |`,
+              `| Protected (kept) | ${protectedVersions.length} |`,
+              `| Recent SHA (kept, last ${keepCount}) | ${shaToKeep.length} |`,
+              `| Deleted (old SHA) | ${shaToDelete.length} |`,
+              `| Deleted (untagged) | ${untagged.length} |`,
+              `| Delete failures | ${failed.length} |`,
+              "",
+            ];
+
+            if (deleted.length > 0) {
+              summary.push("### Deleted Versions");
+              summary.push("");
+              summary.push("| Version ID | Tags | Created |");
+              summary.push("|------------|------|---------|");
+              for (const d of deleted) {
+                summary.push(`| ${d.id} | ${d.tags} | ${d.created} |`);
+              }
+              summary.push("");
+            }
+
+            if (failed.length > 0) {
+              summary.push("### Failed Deletions");
+              summary.push("");
+              summary.push("| Version ID | Tags | Error |");
+              summary.push("|------------|------|-------|");
+              for (const f of failed) {
+                summary.push(`| ${f.id} | ${f.tags} | ${f.error} |`);
+              }
+              summary.push("");
+            }
+
+            if (protectedVersions.length > 0) {
+              summary.push("### Protected Versions (kept)");
+              summary.push("");
+              summary.push("| Version ID | Tags | Created |");
+              summary.push("|------------|------|---------|");
+              for (const p of protectedVersions) {
+                const pTags = (p.metadata?.container?.tags || []).join(", ");
+                summary.push(`| ${p.id} | ${pTags} | ${p.created_at} |`);
+              }
+              summary.push("");
+            }
+
+            await core.summary.addRaw(summary.join("\n")).write();
+
+            core.info(`Cleanup complete: ${deleted.length} deleted, ${failed.length} failed`);
+            return { deleted: deleted.length, failed: failed.length };
