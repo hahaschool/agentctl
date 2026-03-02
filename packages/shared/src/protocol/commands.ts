@@ -2,7 +2,7 @@ export type StartAgentRequest = {
   prompt?: string;
   resumeSession?: string;
   model?: string;
-  tools?: string[];
+  allowedTools?: string[];
 };
 
 export type StopAgentRequest = {

@@ -24,7 +24,7 @@ function makeJobData(overrides: Partial<AgentTaskJobData> = {}): AgentTaskJobDat
     prompt: null,
     model: null,
     trigger: 'heartbeat',
-    tools: null,
+    allowedTools: null,
     resumeSession: null,
     createdAt: new Date().toISOString(),
     ...overrides,

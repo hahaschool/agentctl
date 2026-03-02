@@ -10,7 +10,7 @@ export type AgentTaskJobData = {
   prompt: string | null;
   model: string | null;
   trigger: RunTrigger;
-  tools: string[] | null;
+  allowedTools: string[] | null;
   resumeSession: string | null;
   createdAt: string;
   signalMetadata?: Record<string, unknown>;

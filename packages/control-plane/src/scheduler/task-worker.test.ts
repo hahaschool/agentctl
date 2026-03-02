@@ -65,7 +65,7 @@ function makeJob(
     prompt: 'Implement the feature',
     model: 'claude-opus-4-6',
     trigger: 'manual',
-    tools: null,
+    allowedTools: null,
     resumeSession: null,
     createdAt: '2026-03-02T00:00:00Z',
     ...overrides,

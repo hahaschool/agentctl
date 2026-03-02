@@ -77,7 +77,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         prompt: null,
         model: null,
         trigger: 'heartbeat',
-        tools: null,
+        allowedTools: null,
         resumeSession: null,
         createdAt: new Date().toISOString(),
       });
@@ -128,7 +128,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         prompt: null,
         model: model ?? null,
         trigger: 'schedule',
-        tools: null,
+        allowedTools: null,
         resumeSession: null,
         createdAt: new Date().toISOString(),
       });

@@ -27,9 +27,9 @@ type DispatchPayload = {
   prompt: string | null;
   config: {
     model: string | null;
-    tools: string[] | null;
-    resumeSession: string | null;
+    allowedTools: string[] | null;
   };
+  resumeSession: string | null;
   projectPath: string | null;
   /** URL of the control plane, so the worker can POST completion callbacks. */
   controlPlaneUrl: string | null;
@@ -105,7 +105,7 @@ export function createTaskWorker({
   const worker = new Worker<AgentTaskJobData, void, AgentTaskJobName>(
     AGENT_TASKS_QUEUE,
     async (job: Job<AgentTaskJobData, void, AgentTaskJobName>) => {
-      const { agentId, machineId, trigger, prompt, model, tools, resumeSession } = job.data;
+      const { agentId, machineId, trigger, prompt, model, allowedTools, resumeSession } = job.data;
 
       const jobLogger = logger.child({
         jobId: job.id,
@@ -254,9 +254,9 @@ export function createTaskWorker({
           prompt: enrichedPrompt,
           config: {
             model,
-            tools,
-            resumeSession,
+            allowedTools,
           },
+          resumeSession,
           projectPath: agent.projectPath,
           controlPlaneUrl: controlPlaneUrl ?? null,
         };

@@ -171,7 +171,7 @@ describe('task-queue', () => {
         prompt: 'Build the feature',
         model: 'claude-opus-4-6',
         trigger: 'manual',
-        tools: ['Read', 'Write', 'Bash'],
+        allowedTools: ['Read', 'Write', 'Bash'],
         resumeSession: 'session-abc',
         createdAt: '2026-03-02T00:00:00Z',
         signalMetadata: { source: 'webhook' },
@@ -182,7 +182,7 @@ describe('task-queue', () => {
       expect(jobData.prompt).toBe('Build the feature');
       expect(jobData.model).toBe('claude-opus-4-6');
       expect(jobData.trigger).toBe('manual');
-      expect(jobData.tools).toEqual(['Read', 'Write', 'Bash']);
+      expect(jobData.allowedTools).toEqual(['Read', 'Write', 'Bash']);
       expect(jobData.resumeSession).toBe('session-abc');
       expect(jobData.createdAt).toBe('2026-03-02T00:00:00Z');
       expect(jobData.signalMetadata).toEqual({ source: 'webhook' });
@@ -195,14 +195,14 @@ describe('task-queue', () => {
         prompt: null,
         model: null,
         trigger: 'heartbeat',
-        tools: null,
+        allowedTools: null,
         resumeSession: null,
         createdAt: '2026-03-02T12:00:00Z',
       };
 
       expect(jobData.prompt).toBeNull();
       expect(jobData.model).toBeNull();
-      expect(jobData.tools).toBeNull();
+      expect(jobData.allowedTools).toBeNull();
       expect(jobData.resumeSession).toBeNull();
     });
 
@@ -213,7 +213,7 @@ describe('task-queue', () => {
         prompt: 'Run task',
         model: null,
         trigger: 'signal',
-        tools: null,
+        allowedTools: null,
         resumeSession: null,
         createdAt: '2026-03-02T06:00:00Z',
       };
