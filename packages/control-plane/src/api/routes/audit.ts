@@ -21,7 +21,24 @@ type IngestBody = {
   actions: AuditActionPayload[];
 };
 
+type AuditQuerystring = {
+  agentId?: string;
+  from?: string;
+  to?: string;
+  tool?: string;
+  limit?: string;
+  offset?: string;
+};
+
+type AuditSummaryQuerystring = {
+  agentId?: string;
+  from?: string;
+  to?: string;
+};
+
 const MAX_BATCH_SIZE = 1000;
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 1000;
 
 export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, opts) => {
   const { dbRegistry } = opts;
@@ -65,6 +82,87 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
         return reply.code(502).send({ error: error.message, code: error.code });
       }
       return reply.code(500).send({ error: 'Failed to ingest audit actions' });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/audit — query audit actions with filters and pagination
+  // ---------------------------------------------------------------------------
+
+  app.get<{ Querystring: AuditQuerystring }>('/', async (request, reply) => {
+    const { agentId, from, to, tool, limit: limitStr, offset: offsetStr } = request.query;
+
+    // Validate limit
+    let limit = DEFAULT_LIMIT;
+    if (limitStr !== undefined) {
+      const parsed = Number(limitStr);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        return reply.code(400).send({ error: '"limit" must be a positive integer' });
+      }
+      limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+    }
+
+    // Validate offset
+    let offset = 0;
+    if (offsetStr !== undefined) {
+      const parsed = Number(offsetStr);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return reply.code(400).send({ error: '"offset" must be a non-negative integer' });
+      }
+      offset = Math.floor(parsed);
+    }
+
+    // Validate ISO date strings
+    if (from !== undefined && Number.isNaN(Date.parse(from))) {
+      return reply.code(400).send({ error: '"from" must be a valid ISO date string' });
+    }
+    if (to !== undefined && Number.isNaN(Date.parse(to))) {
+      return reply.code(400).send({ error: '"to" must be a valid ISO date string' });
+    }
+
+    try {
+      const result = await dbRegistry.queryActions({
+        agentId,
+        from,
+        to,
+        tool,
+        limit,
+        offset,
+      });
+
+      return result;
+    } catch (error: unknown) {
+      if (error instanceof ControlPlaneError) {
+        return reply.code(502).send({ error: error.message, code: error.code });
+      }
+      return reply.code(500).send({ error: 'Failed to query audit actions' });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/audit/summary — aggregated audit statistics
+  // ---------------------------------------------------------------------------
+
+  app.get<{ Querystring: AuditSummaryQuerystring }>('/summary', async (request, reply) => {
+    const { agentId, from, to } = request.query;
+
+    // Validate ISO date strings
+    if (from !== undefined && Number.isNaN(Date.parse(from))) {
+      return reply.code(400).send({ error: '"from" must be a valid ISO date string' });
+    }
+    if (to !== undefined && Number.isNaN(Date.parse(to))) {
+      return reply.code(400).send({ error: '"to" must be a valid ISO date string' });
+    }
+
+    try {
+      const summary = await dbRegistry.getAuditSummary({ agentId, from, to });
+
+      return summary;
+    } catch (error: unknown) {
+      if (error instanceof ControlPlaneError) {
+        return reply.code(502).send({ error: error.message, code: error.code });
+      }
+      return reply.code(500).send({ error: 'Failed to get audit summary' });
     }
   });
 };

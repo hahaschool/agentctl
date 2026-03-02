@@ -1,6 +1,6 @@
 import type { Agent, AgentRun, Machine, RegisterWorkerRequest } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
-import { desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
@@ -40,6 +40,47 @@ type InsertActionData = {
   toolOutputHash?: string | null;
   durationMs?: number | null;
   approvedBy?: string | null;
+};
+
+export type AuditQueryFilters = {
+  agentId?: string;
+  from?: string;
+  to?: string;
+  tool?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type AuditAction = {
+  id: number;
+  runId: string | null;
+  timestamp: Date | null;
+  actionType: string;
+  toolName: string | null;
+  toolInput: unknown;
+  toolOutputHash: string | null;
+  durationMs: number | null;
+  approvedBy: string | null;
+  agentId: string | null;
+};
+
+export type AuditQueryResult = {
+  actions: AuditAction[];
+  total: number;
+  hasMore: boolean;
+};
+
+export type AuditSummaryFilters = {
+  agentId?: string;
+  from?: string;
+  to?: string;
+};
+
+export type AuditSummary = {
+  totalActions: number;
+  topTools: { tool: string; count: number }[];
+  topAgents: { agentId: string; count: number }[];
+  errorCount: number;
 };
 
 export class DbAgentRegistry {
@@ -278,6 +319,210 @@ export class DbAgentRegistry {
         },
       );
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audit query
+  // ---------------------------------------------------------------------------
+
+  async queryActions(filters: AuditQueryFilters): Promise<AuditQueryResult> {
+    const queryLimit = Math.min(Math.max(filters.limit ?? 100, 1), 1000);
+    const queryOffset = Math.max(filters.offset ?? 0, 0);
+
+    try {
+      const conditions = this.buildAuditConditions(filters);
+
+      // Count total matching rows
+      const countQuery = this.db
+        .select({ value: count() })
+        .from(agentActions)
+        .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
+
+      if (conditions.length > 0) {
+        countQuery.where(and(...conditions));
+      }
+
+      const countResult = await countQuery;
+      const total = countResult[0]?.value ?? 0;
+
+      // Fetch the page of results
+      const dataQuery = this.db
+        .select({
+          id: agentActions.id,
+          runId: agentActions.runId,
+          timestamp: agentActions.timestamp,
+          actionType: agentActions.actionType,
+          toolName: agentActions.toolName,
+          toolInput: agentActions.toolInput,
+          toolOutputHash: agentActions.toolOutputHash,
+          durationMs: agentActions.durationMs,
+          approvedBy: agentActions.approvedBy,
+          agentId: agentRuns.agentId,
+        })
+        .from(agentActions)
+        .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
+
+      if (conditions.length > 0) {
+        dataQuery.where(and(...conditions));
+      }
+
+      const rows = await dataQuery
+        .orderBy(desc(agentActions.timestamp))
+        .limit(queryLimit)
+        .offset(queryOffset);
+
+      const actions: AuditAction[] = rows.map((row) => ({
+        id: row.id,
+        runId: row.runId,
+        timestamp: row.timestamp,
+        actionType: row.actionType,
+        toolName: row.toolName,
+        toolInput: row.toolInput,
+        toolOutputHash: row.toolOutputHash,
+        durationMs: row.durationMs,
+        approvedBy: row.approvedBy,
+        agentId: row.agentId,
+      }));
+
+      return {
+        actions,
+        total,
+        hasMore: queryOffset + queryLimit < total,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ControlPlaneError(
+        'AUDIT_QUERY_FAILED',
+        `Failed to query audit actions: ${message}`,
+        { filters },
+      );
+    }
+  }
+
+  async getAuditSummary(filters: AuditSummaryFilters): Promise<AuditSummary> {
+    try {
+      const conditions = this.buildAuditConditions(filters);
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Total actions count
+      const totalQuery = this.db
+        .select({ value: count() })
+        .from(agentActions)
+        .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
+
+      if (whereClause) {
+        totalQuery.where(whereClause);
+      }
+
+      const totalResult = await totalQuery;
+      const totalActions = totalResult[0]?.value ?? 0;
+
+      // Top tools (group by tool_name, order by count desc, limit 10)
+      const toolsQuery = this.db
+        .select({
+          tool: agentActions.toolName,
+          count: count(),
+        })
+        .from(agentActions)
+        .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
+
+      if (whereClause) {
+        toolsQuery.where(and(sql`${agentActions.toolName} IS NOT NULL`, whereClause));
+      } else {
+        toolsQuery.where(sql`${agentActions.toolName} IS NOT NULL`);
+      }
+
+      const toolRows = await toolsQuery
+        .groupBy(agentActions.toolName)
+        .orderBy(desc(count()))
+        .limit(10);
+
+      const topTools = toolRows.map((row) => ({
+        tool: row.tool ?? '',
+        count: row.count,
+      }));
+
+      // Top agents (group by agent_id via join, order by count desc, limit 10)
+      const agentsQuery = this.db
+        .select({
+          agentId: agentRuns.agentId,
+          count: count(),
+        })
+        .from(agentActions)
+        .innerJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
+
+      if (whereClause) {
+        agentsQuery.where(whereClause);
+      }
+
+      const agentRows = await agentsQuery
+        .groupBy(agentRuns.agentId)
+        .orderBy(desc(count()))
+        .limit(10);
+
+      const topAgents = agentRows.map((row) => ({
+        agentId: row.agentId ?? '',
+        count: row.count,
+      }));
+
+      // Error count (actions where action_type contains 'error' or 'deny')
+      const errorQuery = this.db
+        .select({ value: count() })
+        .from(agentActions)
+        .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
+
+      const errorCondition = sql`(${agentActions.actionType} = 'error' OR ${agentActions.approvedBy} IS NULL AND ${agentActions.actionType} = 'pre_tool_use')`;
+      if (whereClause) {
+        errorQuery.where(and(errorCondition, whereClause));
+      } else {
+        errorQuery.where(errorCondition);
+      }
+
+      const errorResult = await errorQuery;
+      const errorCount = errorResult[0]?.value ?? 0;
+
+      return {
+        totalActions,
+        topTools,
+        topAgents,
+        errorCount,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ControlPlaneError(
+        'AUDIT_SUMMARY_FAILED',
+        `Failed to get audit summary: ${message}`,
+        { filters },
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audit filter helpers
+  // ---------------------------------------------------------------------------
+
+  private buildAuditConditions(
+    filters: AuditQueryFilters | AuditSummaryFilters,
+  ): ReturnType<typeof eq>[] {
+    const conditions: ReturnType<typeof eq>[] = [];
+
+    if (filters.agentId) {
+      conditions.push(eq(agentRuns.agentId, filters.agentId));
+    }
+
+    if (filters.from) {
+      conditions.push(gte(agentActions.timestamp, new Date(filters.from)));
+    }
+
+    if (filters.to) {
+      conditions.push(lte(agentActions.timestamp, new Date(filters.to)));
+    }
+
+    if ('tool' in filters && filters.tool) {
+      conditions.push(eq(agentActions.toolName, filters.tool));
+    }
+
+    return conditions;
   }
 
   // ---------------------------------------------------------------------------

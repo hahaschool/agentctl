@@ -9,6 +9,8 @@ import {
   type AuditEntryPreTool,
   type AuditEntrySessionEnd,
   AuditLogger,
+  computeEntryHash,
+  GENESIS_HASH,
   sha256,
 } from './audit-logger.js';
 
@@ -21,14 +23,16 @@ vi.mock('node:fs', () => ({
 
 vi.mock('node:fs/promises', () => ({
   appendFile: vi.fn(),
+  readFile: vi.fn(),
 }));
 
 import { existsSync, mkdirSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockAppendFile = vi.mocked(appendFile);
+const mockReadFile = vi.mocked(readFile);
 
 // ── Mock logger ─────────────────────────────────────────────────────
 
@@ -258,7 +262,7 @@ describe('AuditLogger', () => {
   // ── write() ───────────────────────────────────────────────────────
 
   describe('write()', () => {
-    it('appends an NDJSON line for a pre_tool_use entry', async () => {
+    it('appends an NDJSON line for a pre_tool_use entry with hash chain fields', async () => {
       const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
       const entry = makePreToolEntry();
 
@@ -281,6 +285,11 @@ describe('AuditLogger', () => {
       expect(parsed.agentId).toBe('agent-1');
       expect(parsed.tool).toBe('Bash');
       expect(parsed.decision).toBe('allow');
+
+      // Hash chain fields
+      expect(parsed.previousHash).toBe(GENESIS_HASH);
+      expect(parsed.hash).toMatch(/^[0-9a-f]{64}$/);
+      expect(parsed.hash).toBe(computeEntryHash(entry, GENESIS_HASH));
     });
 
     it('appends an NDJSON line for a post_tool_use entry', async () => {
@@ -496,5 +505,306 @@ describe('AuditLogger', () => {
         vi.useRealTimers();
       }
     });
+
+    it('resets hash chain to genesis on daily rotation', async () => {
+      vi.useFakeTimers();
+
+      try {
+        vi.setSystemTime(new Date('2026-03-02T23:59:59.000Z'));
+
+        const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+
+        // Write on day 1
+        await logger.write(makePreToolEntry());
+
+        // Advance to day 2
+        vi.setSystemTime(new Date('2026-03-03T00:00:01.000Z'));
+
+        await logger.write(makePostToolEntry());
+
+        // The second entry (new day) should use genesis as previousHash
+        const content2 = mockAppendFile.mock.calls[1][1] as string;
+        const parsed2 = JSON.parse(content2.trim());
+        expect(parsed2.previousHash).toBe(GENESIS_HASH);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // ── Hash chain ───────────────────────────────────────────────────
+
+  describe('hash chain', () => {
+    it('first entry uses genesis as previousHash', async () => {
+      const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+
+      await logger.write(makePreToolEntry());
+
+      const content = mockAppendFile.mock.calls[0][1] as string;
+      const parsed = JSON.parse(content.trim());
+
+      expect(parsed.previousHash).toBe(GENESIS_HASH);
+    });
+
+    it('second entry uses first entry hash as previousHash', async () => {
+      const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+
+      await logger.write(makePreToolEntry());
+      await logger.write(makePostToolEntry());
+
+      const content1 = mockAppendFile.mock.calls[0][1] as string;
+      const parsed1 = JSON.parse(content1.trim());
+
+      const content2 = mockAppendFile.mock.calls[1][1] as string;
+      const parsed2 = JSON.parse(content2.trim());
+
+      expect(parsed2.previousHash).toBe(parsed1.hash);
+    });
+
+    it('builds a three-entry chain with correct linkage', async () => {
+      const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+
+      await logger.write(makePreToolEntry());
+      await logger.write(makePostToolEntry());
+      await logger.write(makeSessionEndEntry());
+
+      const entries = mockAppendFile.mock.calls.map((call) =>
+        JSON.parse((call[1] as string).trim()),
+      );
+
+      // Entry 0: genesis -> hash0
+      expect(entries[0].previousHash).toBe(GENESIS_HASH);
+
+      // Entry 1: hash0 -> hash1
+      expect(entries[1].previousHash).toBe(entries[0].hash);
+
+      // Entry 2: hash1 -> hash2
+      expect(entries[2].previousHash).toBe(entries[1].hash);
+
+      // All hashes are unique
+      const hashes = entries.map((e: { hash: string }) => e.hash);
+      expect(new Set(hashes).size).toBe(3);
+    });
+
+    it('computes hash as SHA-256(JSON.stringify(entry) + previousHash)', async () => {
+      const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+      const entry = makePreToolEntry();
+
+      await logger.write(entry);
+
+      const content = mockAppendFile.mock.calls[0][1] as string;
+      const parsed = JSON.parse(content.trim());
+
+      // Manually compute expected hash
+      const expectedHash = sha256(JSON.stringify(entry) + GENESIS_HASH);
+
+      expect(parsed.hash).toBe(expectedHash);
+    });
+
+    it('does not advance previousHash when write fails', async () => {
+      mockAppendFile.mockRejectedValueOnce(new Error('disk error'));
+      mockAppendFile.mockResolvedValue(undefined);
+
+      const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+
+      // First write fails
+      await expect(logger.write(makePreToolEntry())).rejects.toThrow();
+
+      // Second write should still use genesis (chain not advanced)
+      await logger.write(makePostToolEntry());
+
+      const content = mockAppendFile.mock.calls[1][1] as string;
+      const parsed = JSON.parse(content.trim());
+
+      expect(parsed.previousHash).toBe(GENESIS_HASH);
+    });
+  });
+});
+
+// ── computeEntryHash ───────────────────────────────────────────────
+
+describe('computeEntryHash', () => {
+  it('returns SHA-256 of JSON.stringify(entry) + previousHash', () => {
+    const entry = makePreToolEntry();
+    const hash = computeEntryHash(entry, GENESIS_HASH);
+
+    const expected = sha256(JSON.stringify(entry) + GENESIS_HASH);
+    expect(hash).toBe(expected);
+  });
+
+  it('produces different hashes for different previousHash values', () => {
+    const entry = makePreToolEntry();
+
+    const hash1 = computeEntryHash(entry, GENESIS_HASH);
+    const hash2 = computeEntryHash(entry, 'different-previous');
+
+    expect(hash1).not.toBe(hash2);
+  });
+
+  it('produces different hashes for different entries', () => {
+    const entry1 = makePreToolEntry({ tool: 'Bash' });
+    const entry2 = makePreToolEntry({ tool: 'Read' });
+
+    const hash1 = computeEntryHash(entry1, GENESIS_HASH);
+    const hash2 = computeEntryHash(entry2, GENESIS_HASH);
+
+    expect(hash1).not.toBe(hash2);
+  });
+});
+
+// ── verifyIntegrity ────────────────────────────────────────────────
+
+describe('AuditLogger.verifyIntegrity', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Helper: build a valid NDJSON string from a series of entries
+   * with a correct hash chain.
+   */
+  function buildValidNdjson(
+    entries: (AuditEntryPreTool | AuditEntryPostTool | AuditEntrySessionEnd)[],
+  ): string {
+    const lines: string[] = [];
+    let prevHash = GENESIS_HASH;
+
+    for (const entry of entries) {
+      const hash = computeEntryHash(entry, prevHash);
+      const hashed = { ...entry, previousHash: prevHash, hash };
+      lines.push(JSON.stringify(hashed));
+      prevHash = hash;
+    }
+
+    return `${lines.join('\n')}\n`;
+  }
+
+  it('returns valid=true for a correctly chained file', async () => {
+    const ndjson = buildValidNdjson([
+      makePreToolEntry(),
+      makePostToolEntry(),
+      makeSessionEndEntry(),
+    ]);
+
+    mockReadFile.mockResolvedValueOnce(ndjson);
+
+    const result = await AuditLogger.verifyIntegrity('/logs/audit-2026-03-02.ndjson');
+
+    expect(result.valid).toBe(true);
+    expect(result.entriesChecked).toBe(3);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('returns valid=true for an empty file', async () => {
+    mockReadFile.mockResolvedValueOnce('');
+
+    const result = await AuditLogger.verifyIntegrity('/logs/empty.ndjson');
+
+    expect(result.valid).toBe(true);
+    expect(result.entriesChecked).toBe(0);
+  });
+
+  it('returns valid=true for a single-entry file', async () => {
+    const ndjson = buildValidNdjson([makePreToolEntry()]);
+
+    mockReadFile.mockResolvedValueOnce(ndjson);
+
+    const result = await AuditLogger.verifyIntegrity('/logs/single.ndjson');
+
+    expect(result.valid).toBe(true);
+    expect(result.entriesChecked).toBe(1);
+  });
+
+  it('detects tampered entry content (hash mismatch)', async () => {
+    const entry1 = makePreToolEntry();
+    const entry2 = makePostToolEntry();
+
+    const hash1 = computeEntryHash(entry1, GENESIS_HASH);
+    const hash2 = computeEntryHash(entry2, hash1);
+
+    // Tamper with entry2's tool field but keep original hash
+    const tampered = {
+      ...entry2,
+      tool: 'TAMPERED',
+      previousHash: hash1,
+      hash: hash2,
+    };
+
+    const lines =
+      [
+        JSON.stringify({ ...entry1, previousHash: GENESIS_HASH, hash: hash1 }),
+        JSON.stringify(tampered),
+      ].join('\n') + '\n';
+
+    mockReadFile.mockResolvedValueOnce(lines);
+
+    const result = await AuditLogger.verifyIntegrity('/logs/tampered.ndjson');
+
+    expect(result.valid).toBe(false);
+    expect(result.brokenAtLine).toBe(1);
+    expect(result.error).toMatch(/[Hh]ash mismatch/);
+  });
+
+  it('detects broken chain (previousHash mismatch)', async () => {
+    const entry1 = makePreToolEntry();
+    const entry2 = makePostToolEntry();
+
+    const hash1 = computeEntryHash(entry1, GENESIS_HASH);
+
+    // Entry2 has wrong previousHash (genesis instead of hash1)
+    const wrongPrevHash = GENESIS_HASH;
+    const hash2 = computeEntryHash(entry2, wrongPrevHash);
+
+    const lines =
+      [
+        JSON.stringify({ ...entry1, previousHash: GENESIS_HASH, hash: hash1 }),
+        JSON.stringify({ ...entry2, previousHash: wrongPrevHash, hash: hash2 }),
+      ].join('\n') + '\n';
+
+    mockReadFile.mockResolvedValueOnce(lines);
+
+    const result = await AuditLogger.verifyIntegrity('/logs/broken-chain.ndjson');
+
+    expect(result.valid).toBe(false);
+    expect(result.brokenAtLine).toBe(1);
+    expect(result.error).toMatch(/[Pp]revious hash mismatch/);
+  });
+
+  it('detects malformed JSON lines', async () => {
+    mockReadFile.mockResolvedValueOnce('not valid json\n');
+
+    const result = await AuditLogger.verifyIntegrity('/logs/malformed.ndjson');
+
+    expect(result.valid).toBe(false);
+    expect(result.brokenAtLine).toBe(0);
+    expect(result.error).toMatch(/[Mm]alformed JSON/);
+  });
+
+  it('returns error when file cannot be read', async () => {
+    mockReadFile.mockRejectedValueOnce(new Error('ENOENT: no such file or directory'));
+
+    const result = await AuditLogger.verifyIntegrity('/logs/nonexistent.ndjson');
+
+    expect(result.valid).toBe(false);
+    expect(result.entriesChecked).toBe(0);
+    expect(result.error).toMatch(/[Ff]ailed to read file/);
+  });
+
+  it('validates a chain with all three entry types', async () => {
+    const entries = [
+      makePreToolEntry(),
+      makePostToolEntry(),
+      makeSessionEndEntry(),
+      makePreToolEntry({ tool: 'Read', timestamp: '2026-03-02T12:02:00.000Z' }),
+      makePostToolEntry({ tool: 'Read', timestamp: '2026-03-02T12:02:01.000Z' }),
+    ];
+
+    const ndjson = buildValidNdjson(entries);
+    mockReadFile.mockResolvedValueOnce(ndjson);
+
+    const result = await AuditLogger.verifyIntegrity('/logs/mixed.ndjson');
+
+    expect(result.valid).toBe(true);
+    expect(result.entriesChecked).toBe(5);
   });
 });
