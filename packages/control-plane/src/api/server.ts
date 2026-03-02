@@ -3,6 +3,7 @@ import type { Queue } from 'bullmq';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import type { Mem0Client } from '../memory/mem0-client.js';
+import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
@@ -14,6 +15,7 @@ import { auditRoutes } from './routes/audit.js';
 import { healthRoutes } from './routes/health.js';
 import { memoryRoutes } from './routes/memory.js';
 import { routerRoutes } from './routes/router.js';
+import { schedulerRoutes } from './routes/scheduler.js';
 import { streamRoutes } from './routes/stream.js';
 import { wsRoutes } from './routes/ws.js';
 
@@ -25,6 +27,7 @@ type CreateServerOptions = {
   dbRegistry?: DbAgentRegistry;
   litellmClient?: LiteLLMClient;
   mem0Client?: Mem0Client;
+  memoryInjector?: MemoryInjector | null;
 };
 
 export async function createServer({
@@ -35,6 +38,7 @@ export async function createServer({
   dbRegistry,
   litellmClient,
   mem0Client,
+  memoryInjector = null,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -56,6 +60,7 @@ export async function createServer({
     repeatableJobs,
     registry,
     dbRegistry,
+    memoryInjector,
   });
   await app.register(streamRoutes, {
     prefix: '/api/agents',
@@ -92,6 +97,12 @@ export async function createServer({
       mem0Client,
     });
   }
+
+  // Register scheduler routes for managing repeatable jobs.
+  await app.register(schedulerRoutes, {
+    prefix: '/api/scheduler',
+    repeatableJobManager: repeatableJobs ?? null,
+  });
 
   return app;
 }

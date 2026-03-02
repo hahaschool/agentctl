@@ -98,6 +98,7 @@ async function main(): Promise<void> {
     concurrency: WORKER_CONCURRENCY,
     registry: dbRegistry ?? null,
     memoryInjector: memoryInjector ?? null,
+    litellmClient: litellmClient ?? null,
     controlPlaneUrl: CONTROL_PLANE_URL,
   });
   const repeatableJobs = createRepeatableJobManager(
@@ -113,6 +114,7 @@ async function main(): Promise<void> {
     dbRegistry,
     litellmClient,
     mem0Client,
+    memoryInjector: memoryInjector ?? null,
   });
 
   const shutdown = async (): Promise<void> => {

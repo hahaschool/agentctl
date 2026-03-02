@@ -3,6 +3,7 @@ import { type ConnectionOptions, type Job, Worker } from 'bullmq';
 import type { Logger } from 'pino';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
+import type { LiteLLMClient } from '../router/litellm-client.js';
 import { AGENT_TASKS_QUEUE, type AgentTaskJobData, type AgentTaskJobName } from './task-queue.js';
 
 const DEFAULT_WORKER_PORT = 9000;
@@ -14,6 +15,7 @@ export type TaskWorkerOptions = {
   concurrency?: number;
   registry?: DbAgentRegistry | null;
   memoryInjector?: MemoryInjector | null;
+  litellmClient?: LiteLLMClient | null;
   controlPlaneUrl?: string;
 };
 
@@ -26,6 +28,8 @@ type DispatchPayload = {
     resumeSession: string | null;
   };
   projectPath: string | null;
+  /** URL of the control plane, so the worker can POST completion callbacks. */
+  controlPlaneUrl: string | null;
 };
 
 type DispatchResult = {
@@ -91,6 +95,7 @@ export function createTaskWorker({
   concurrency = 5,
   registry = null,
   memoryInjector = null,
+  litellmClient = null,
   controlPlaneUrl,
 }: TaskWorkerOptions): Worker<AgentTaskJobData, void, AgentTaskJobName> {
   const worker = new Worker<AgentTaskJobData, void, AgentTaskJobName>(
@@ -165,6 +170,38 @@ export function createTaskWorker({
         }
 
         // -------------------------------------------------------------------
+        // 1b. Validate the requested model against LiteLLM (soft check)
+        // -------------------------------------------------------------------
+        if (litellmClient && model) {
+          try {
+            const availableModels = await litellmClient.listModels();
+            const modelFound = availableModels.includes(model);
+
+            if (modelFound) {
+              jobLogger.info(
+                { model, availableModelCount: availableModels.length },
+                'Model validated against LiteLLM — model is available',
+              );
+            } else {
+              jobLogger.warn(
+                { model, availableModelCount: availableModels.length },
+                'Model not found in LiteLLM model list — proceeding anyway (proxy may still accept it)',
+              );
+            }
+          } catch (err: unknown) {
+            jobLogger.warn(
+              { err, model },
+              'Failed to validate model against LiteLLM — proceeding without validation',
+            );
+          }
+        } else if (!litellmClient && model) {
+          jobLogger.debug(
+            { model },
+            'LiteLLM client not configured — skipping model validation',
+          );
+        }
+
+        // -------------------------------------------------------------------
         // 2. Create a run record before dispatching
         // -------------------------------------------------------------------
         runId = await registry.createRun({
@@ -209,6 +246,7 @@ export function createTaskWorker({
             resumeSession,
           },
           projectPath: agent.projectPath,
+          controlPlaneUrl: controlPlaneUrl ?? null,
         };
 
         const result = await dispatchToWorker(dispatchUrl, payload, jobLogger);
