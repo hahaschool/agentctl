@@ -28,6 +28,8 @@ export type AgentInstanceOptions = {
   maxExecutionMs?: number;
   /** Run ID assigned by the control plane. Used to correlate audit events with their run record. */
   runId?: string;
+  /** URL of the control plane. When set, the agent will POST a completion callback when the run finishes. */
+  controlPlaneUrl?: string;
 };
 
 type AgentInstanceState = {
@@ -68,6 +70,8 @@ export class AgentInstance extends EventEmitter {
   readonly outputBuffer: OutputBuffer;
   /** Run ID from the control plane. Populated when the agent is dispatched via the task worker. */
   readonly runId: string | null;
+  /** Control plane URL for posting completion callbacks. */
+  private readonly controlPlaneUrl: string | null;
 
   private readonly log: Logger;
   private readonly auditLogger: AuditLogger;
@@ -87,6 +91,7 @@ export class AgentInstance extends EventEmitter {
     this.config = options.config;
     this.projectPath = options.projectPath;
     this.runId = options.runId ?? null;
+    this.controlPlaneUrl = options.controlPlaneUrl ?? null;
     this.log = options.logger.child({ agentId: this.agentId, machineId: this.machineId });
     this.outputBuffer = new OutputBuffer();
 
@@ -157,6 +162,9 @@ export class AgentInstance extends EventEmitter {
             data: { status: 'timeout', reason: 'execution_timeout' },
           };
           this.emitEvent(timeoutEvent);
+
+          // Fire-and-forget: notify the control plane that this run timed out.
+          void this.notifyRunCompletion('failure', 'Agent execution timed out');
         }
       }, this.maxExecutionMs);
 
@@ -327,6 +335,9 @@ export class AgentInstance extends EventEmitter {
       };
 
       this.emitEvent(statusEvent);
+
+      // Fire-and-forget: notify the control plane that this run failed.
+      void this.notifyRunCompletion('failure', message);
     }
   }
 
@@ -344,6 +355,9 @@ export class AgentInstance extends EventEmitter {
       { sessionId: this.state.sessionId, costUsd: this.state.costUsd },
       'Agent stopped',
     );
+
+    // Fire-and-forget: notify the control plane that this run completed.
+    void this.notifyRunCompletion('success');
   }
 
   /**
@@ -366,6 +380,63 @@ export class AgentInstance extends EventEmitter {
       });
     } catch (err) {
       this.log.warn({ err }, 'Stop hook failed');
+    }
+  }
+
+  /**
+   * POST a completion callback to the control plane so it can mark the run as
+   * finished. This is fire-and-forget — failure to notify does not block agent
+   * cleanup.
+   */
+  private async notifyRunCompletion(
+    status: 'success' | 'failure',
+    errorMessage?: string,
+  ): Promise<void> {
+    if (!this.controlPlaneUrl || !this.runId) {
+      return;
+    }
+
+    const callbackUrl = `${this.controlPlaneUrl}/api/agents/${encodeURIComponent(this.agentId)}/complete`;
+    const durationMs =
+      this.state.startedAt && this.state.stoppedAt
+        ? this.state.stoppedAt.getTime() - this.state.startedAt.getTime()
+        : undefined;
+
+    const body = {
+      runId: this.runId,
+      status,
+      costUsd: this.state.costUsd,
+      durationMs,
+      sessionId: this.state.sessionId ?? undefined,
+      errorMessage,
+    };
+
+    const CALLBACK_TIMEOUT_MS = 10_000;
+
+    try {
+      const response = await fetch(callbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(CALLBACK_TIMEOUT_MS),
+      });
+
+      if (response.ok) {
+        this.log.info(
+          { runId: this.runId, status, callbackUrl },
+          'Run completion callback sent to control plane',
+        );
+      } else {
+        this.log.warn(
+          { runId: this.runId, callbackUrl, httpStatus: response.status },
+          'Control plane returned non-OK response for completion callback',
+        );
+      }
+    } catch (err) {
+      this.log.warn(
+        { err, runId: this.runId, callbackUrl },
+        'Failed to send run completion callback to control plane',
+      );
     }
   }
 

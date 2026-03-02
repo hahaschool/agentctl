@@ -10,6 +10,7 @@ import { AGENT_STATUSES, ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { MemoryInjector } from '../../memory/memory-injector.js';
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import { AgentRegistry } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -21,11 +22,12 @@ export type AgentRoutesOptions = {
   repeatableJobs?: RepeatableJobManager;
   registry?: MachineRegistryLike;
   dbRegistry?: DbAgentRegistry;
+  memoryInjector?: MemoryInjector | null;
 };
 
 export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, opts) => {
   const registry = opts.registry ?? new AgentRegistry();
-  const { taskQueue, repeatableJobs, dbRegistry } = opts;
+  const { taskQueue, repeatableJobs, dbRegistry, memoryInjector = null } = opts;
 
   // ---------------------------------------------------------------------------
   // Machine registration & heartbeat
@@ -233,6 +235,106 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     }
 
     return { ok: true, agentId, reason, graceful };
+  });
+
+  // ---------------------------------------------------------------------------
+  // Run completion callback — called by the agent worker when a run finishes
+  // ---------------------------------------------------------------------------
+
+  app.post<{
+    Params: { id: string };
+    Body: {
+      runId: string;
+      status: 'success' | 'failure';
+      errorMessage?: string;
+      costUsd?: number;
+      durationMs?: number;
+      sessionId?: string;
+    };
+  }>('/:id/complete', async (request, reply) => {
+    if (!dbRegistry) {
+      return reply.code(501).send({
+        error: 'DATABASE_NOT_CONFIGURED',
+        message: 'Completion endpoint requires a database registry',
+      });
+    }
+
+    const { runId, status, errorMessage, costUsd, durationMs, sessionId } = request.body;
+
+    if (!runId || typeof runId !== 'string') {
+      return reply.code(400).send({
+        error: 'INVALID_RUN_ID',
+        message: 'A non-empty "runId" string is required',
+      });
+    }
+
+    if (!status || (status !== 'success' && status !== 'failure')) {
+      return reply.code(400).send({
+        error: 'INVALID_STATUS',
+        message: 'Status must be "success" or "failure"',
+      });
+    }
+
+    try {
+      await dbRegistry.completeRun(runId, {
+        status,
+        errorMessage: errorMessage ?? null,
+        costUsd: costUsd != null ? String(costUsd) : null,
+      });
+
+      app.log.info(
+        {
+          agentId: request.params.id,
+          runId,
+          status,
+          costUsd: costUsd ?? null,
+          durationMs: durationMs ?? null,
+          sessionId: sessionId ?? null,
+        },
+        'Agent run completion reported by worker',
+      );
+
+      // -----------------------------------------------------------------
+      // Fire-and-forget: sync run metadata into memory on success
+      // -----------------------------------------------------------------
+      if (memoryInjector && status === 'success') {
+        const agentId = request.params.id;
+        const summary = `Agent run ${runId} completed successfully.`;
+
+        memoryInjector
+          .syncAfterRun(agentId, summary, {
+            runId,
+            status,
+            costUsd: costUsd ?? null,
+          })
+          .catch((syncErr: unknown) => {
+            app.log.warn(
+              { err: syncErr, agentId, runId },
+              'Memory sync after run completion failed — ignoring',
+            );
+          });
+      }
+
+      return reply.code(200).send({ ok: true, runId, status });
+    } catch (err) {
+      if (err instanceof ControlPlaneError && err.code === 'RUN_NOT_FOUND') {
+        return reply.code(404).send({
+          error: err.code,
+          message: err.message,
+        });
+      }
+
+      app.log.error(
+        { err, runId, agentId: request.params.id },
+        'Failed to process run completion callback',
+      );
+
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({
+        error: 'COMPLETION_FAILED',
+        message: `Failed to complete run: ${message}`,
+      });
+    }
   });
 
   // ---------------------------------------------------------------------------
