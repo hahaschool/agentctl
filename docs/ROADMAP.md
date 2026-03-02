@@ -16,7 +16,7 @@ Full CI/CD pipeline with 9 workflow files:
 - **Migration Check** (`migration-check.yml`): PR validation with throwaway PostgreSQL
 - **Build Images** (`build-images.yml`): multi-stage Docker with Trivy + SBOM
 
-**1984 tests** across 77 files. All packages build cleanly.
+**2182 tests** across 80 files. All packages build cleanly.
 
 ---
 
@@ -244,16 +244,16 @@ Map every OWASP ASI risk to concrete mitigations in AgentCTL:
 
 | OWASP Risk | AgentCTL Mitigation | Status |
 |------------|---------------------|--------|
-| **ASI01 — Agent Goal Hijack** | PreToolUse hook validates tool calls against task scope; prompt injection detection on external inputs | [ ] |
-| **ASI02 — Tool Misuse** | `allowedTools`/`disallowedTools` allowlist; PreToolUse denies undeclared tools; no wildcard permissions | [ ] |
-| **ASI03 — Identity & Privilege Abuse** | Per-agent identity (agentId + machineId); short-lived session tokens; no shared credentials; Tailscale ACLs per role | [ ] |
-| **ASI04 — Supply Chain** | `pnpm audit` in CI; Trivy + Grype scanning; SBOM; pinned deps; MCP server verification | [ ] |
-| **ASI05 — Code Execution** | Claude Code sandbox (bubblewrap/Seatbelt); `--cap-drop=ALL`; `--network=none`; gVisor option | [ ] |
-| **ASI06 — Memory Poisoning** | Validate data before Mem0 storage; per-agent memory isolation; TTL + size limits; integrity checks | [ ] |
-| **ASI07 — Inter-Agent Comms** | TweetNaCl E2E encryption; signed payloads; Tailscale WireGuard transport | [ ] |
-| **ASI08 — Cascading Failures** | Per-agent timeout; circuit breaker on dispatch; BullMQ retry with backoff; loop checkpoints | [ ] |
+| **ASI01 — Agent Goal Hijack** | PreToolUse hook validates tool calls against task scope; prompt injection detection on external inputs | [x] |
+| **ASI02 — Tool Misuse** | `allowedTools`/`disallowedTools` allowlist; PreToolUse denies undeclared tools; no wildcard permissions | [x] |
+| **ASI03 — Identity & Privilege Abuse** | Per-agent identity (agentId + machineId); short-lived session tokens; no shared credentials; Tailscale ACLs per role | [x] |
+| **ASI04 — Supply Chain** | `pnpm audit` in CI; Trivy + Grype scanning; SBOM; pinned deps; MCP server verification | [x] |
+| **ASI05 — Code Execution** | Claude Code sandbox (bubblewrap/Seatbelt); `--cap-drop=ALL`; `--network=none`; gVisor option | [x] |
+| **ASI06 — Memory Poisoning** | Validate data before Mem0 storage; per-agent memory isolation; TTL + size limits; integrity checks | [x] |
+| **ASI07 — Inter-Agent Comms** | TweetNaCl E2E encryption; signed payloads; Tailscale WireGuard transport | [x] |
+| **ASI08 — Cascading Failures** | Per-agent timeout; circuit breaker on dispatch; BullMQ retry with backoff; loop checkpoints | [x] |
 | **ASI09 — Trust Exploitation** | Approval gates for destructive ops; cost alerts at 80%; mandatory human review for prod; dead-loop detection | [ ] |
-| **ASI10 — Rogue Agents** | Audit logging with SHA-256; anomaly detection on tool patterns; kill switch; valid status transitions | [ ] |
+| **ASI10 — Rogue Agents** | Audit logging with SHA-256; anomaly detection on tool patterns; kill switch; valid status transitions | [x] |
 
 ### 9.2 Automated Security Pipeline (SAST + DAST + SCA)
 
