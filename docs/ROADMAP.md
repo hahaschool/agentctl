@@ -13,7 +13,7 @@ Full CI/CD pipeline with 6 workflow files:
 - **Deploy Prod** (`deploy-prod.yml`): approval gate, blue-green, pg_dump backup
 - **Rollback** (`rollback.yml`): manual rollback to any previous image tag
 
-**1658 tests** across 71 files. All packages build cleanly.
+**1756 tests** across 73 files. All packages build cleanly.
 
 ---
 
@@ -172,7 +172,7 @@ Full CI/CD pipeline with 6 workflow files:
 
 - [x] Slack/Discord webhook on deploy success/failure
 - [x] Deploy audit trail (table or append-only log)
-- [ ] Vector -> ClickHouse pipeline for structured logs
+- [x] Vector -> ClickHouse pipeline for structured logs
 - [x] Prometheus-compatible `/metrics` endpoint
 - [x] Track: request latency, active agents, queue depth, error rate
 
@@ -184,7 +184,7 @@ Full CI/CD pipeline with 6 workflow files:
 
 > Goal: Deploy agent-worker to all machines in the Tailscale mesh.
 
-- [ ] Machine inventory file (`infra/machines.yml`)
+- [x] Machine inventory file (`infra/machines.yml`)
 - [ ] Matrix deploy with canary strategy
 - [ ] Per-machine health verification
 - [ ] Staggered rollout: canary -> verify -> remaining
