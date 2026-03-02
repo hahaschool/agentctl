@@ -1,4 +1,26 @@
 export type {
+  AgentDetailPresenterConfig,
+  AgentDetailState,
+  OutputLine,
+} from './screens/agent-detail-presenter.js';
+export { AgentDetailPresenter } from './screens/agent-detail-presenter.js';
+export type {
+  DashboardPresenterConfig,
+  DashboardState,
+  DashboardStats,
+} from './screens/dashboard-presenter.js';
+export { DashboardPresenter } from './screens/dashboard-presenter.js';
+export type {
+  CreateCronJobRequest,
+  CreateCronJobResponse,
+  CreateHeartbeatJobRequest,
+  CreateHeartbeatJobResponse,
+  RemoveJobResponse,
+  SchedulerPresenterConfig,
+  SchedulerState,
+} from './screens/scheduler-presenter.js';
+export { SchedulerPresenter } from './screens/scheduler-presenter.js';
+export type {
   ApiClientConfig,
   AuditAction,
   AuditQueryParams,

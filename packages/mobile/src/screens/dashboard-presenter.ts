@@ -1,0 +1,208 @@
+// ---------------------------------------------------------------------------
+// Dashboard screen presenter — framework-agnostic business logic for the
+// fleet overview screen. Fetches health, machines, and agents, computes
+// aggregate stats, and supports auto-refresh polling.
+// ---------------------------------------------------------------------------
+
+import type { Agent, AgentStatus, Machine } from '@agentctl/shared';
+
+import type { ApiClient, HealthResponse } from '../services/api-client.js';
+import { MobileClientError } from '../services/api-client.js';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type DashboardStats = {
+  totalAgents: number;
+  running: number;
+  idle: number;
+  error: number;
+  totalMachines: number;
+  onlineMachines: number;
+};
+
+export type DashboardState = {
+  health: HealthResponse | null;
+  machines: Machine[];
+  agents: Agent[];
+  stats: DashboardStats;
+  isLoading: boolean;
+  error: MobileClientError | null;
+  lastUpdated: Date | null;
+};
+
+export type DashboardPresenterConfig = {
+  /** The API client instance to use for requests. */
+  apiClient: ApiClient;
+  /** Polling interval in milliseconds (default: 15 000). */
+  pollIntervalMs?: number;
+  /** Callback invoked whenever state changes. */
+  onChange?: (state: DashboardState) => void;
+};
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const DEFAULT_POLL_INTERVAL_MS = 15_000;
+
+const RUNNING_STATUSES: ReadonlySet<AgentStatus> = new Set<AgentStatus>([
+  'running',
+  'starting',
+  'restarting',
+]);
+
+const ERROR_STATUSES: ReadonlySet<AgentStatus> = new Set<AgentStatus>(['error', 'timeout']);
+
+const EMPTY_STATS: DashboardStats = {
+  totalAgents: 0,
+  running: 0,
+  idle: 0,
+  error: 0,
+  totalMachines: 0,
+  onlineMachines: 0,
+};
+
+// ---------------------------------------------------------------------------
+// Presenter
+// ---------------------------------------------------------------------------
+
+export class DashboardPresenter {
+  private readonly apiClient: ApiClient;
+  private readonly pollIntervalMs: number;
+  private onChange: ((state: DashboardState) => void) | undefined;
+
+  private state: DashboardState = {
+    health: null,
+    machines: [],
+    agents: [],
+    stats: { ...EMPTY_STATS },
+    isLoading: false,
+    error: null,
+    lastUpdated: null,
+  };
+
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(config: DashboardPresenterConfig) {
+    this.apiClient = config.apiClient;
+    this.pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this.onChange = config.onChange;
+  }
+
+  // -----------------------------------------------------------------------
+  // Public API
+  // -----------------------------------------------------------------------
+
+  /** Start auto-refresh polling. Also triggers an immediate refresh. */
+  start(): void {
+    this.stop();
+    void this.refresh();
+    this.pollTimer = setInterval(() => {
+      void this.refresh();
+    }, this.pollIntervalMs);
+  }
+
+  /** Stop auto-refresh polling. */
+  stop(): void {
+    if (this.pollTimer !== null) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  /** Manually trigger a refresh of all dashboard data. */
+  async refresh(): Promise<void> {
+    this.setState({ isLoading: true, error: null });
+
+    try {
+      const [health, machines, agents] = await Promise.all([
+        this.apiClient.health(true),
+        this.apiClient.listMachines(),
+        this.apiClient.listAgents(),
+      ]);
+
+      const stats = DashboardPresenter.computeStats(agents, machines);
+
+      this.setState({
+        health,
+        machines,
+        agents,
+        stats,
+        isLoading: false,
+        error: null,
+        lastUpdated: new Date(),
+      });
+    } catch (err: unknown) {
+      const error =
+        err instanceof MobileClientError
+          ? err
+          : new MobileClientError(
+              'DASHBOARD_REFRESH_FAILED',
+              err instanceof Error ? err.message : String(err),
+            );
+
+      this.setState({ isLoading: false, error });
+    }
+  }
+
+  /** Returns a shallow copy of the current state (immutable access). */
+  getState(): DashboardState {
+    return {
+      ...this.state,
+      agents: [...this.state.agents],
+      machines: [...this.state.machines],
+      stats: { ...this.state.stats },
+    };
+  }
+
+  /** Whether the presenter is currently auto-refreshing. */
+  get isPolling(): boolean {
+    return this.pollTimer !== null;
+  }
+
+  // -----------------------------------------------------------------------
+  // Static helpers
+  // -----------------------------------------------------------------------
+
+  /** Compute aggregate stats from agents and machines lists. */
+  static computeStats(agents: Agent[], machines: Machine[]): DashboardStats {
+    let running = 0;
+    let error = 0;
+
+    for (const agent of agents) {
+      if (RUNNING_STATUSES.has(agent.status)) {
+        running++;
+      } else if (ERROR_STATUSES.has(agent.status)) {
+        error++;
+      }
+    }
+
+    const idle = agents.length - running - error;
+    const onlineMachines = machines.filter((m) => m.status === 'online').length;
+
+    return {
+      totalAgents: agents.length,
+      running,
+      idle,
+      error,
+      totalMachines: machines.length,
+      onlineMachines,
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // Internal
+  // -----------------------------------------------------------------------
+
+  private setState(partial: Partial<DashboardState>): void {
+    this.state = { ...this.state, ...partial };
+
+    if (partial.stats) {
+      this.state.stats = { ...partial.stats };
+    }
+
+    this.onChange?.(this.getState());
+  }
+}
