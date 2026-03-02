@@ -4,6 +4,8 @@ import type { Logger } from 'pino';
 
 import type { AgentPool } from '../runtime/agent-pool.js';
 import { agentRoutes } from './routes/agents.js';
+import { loopRoutes } from './routes/loop.js';
+import { workerMetricsRoutes } from './routes/metrics.js';
 import { streamRoutes } from './routes/stream.js';
 
 const HEALTH_CHECK_TIMEOUT_MS = 2_000;
@@ -143,8 +145,19 @@ export async function createWorkerServer({
     logger,
   });
 
+  await app.register(loopRoutes, {
+    prefix: '/api/agents',
+    pool: agentPool,
+    machineId,
+    logger,
+  });
+
   await app.register(streamRoutes, {
     prefix: '/api/agents',
+    agentPool,
+  });
+
+  await app.register(workerMetricsRoutes, {
     agentPool,
   });
 

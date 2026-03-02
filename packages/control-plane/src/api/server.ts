@@ -20,7 +20,9 @@ import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue
 import { agentRoutes } from './routes/agents.js';
 import { auditRoutes } from './routes/audit.js';
 import { healthRoutes } from './routes/health.js';
+import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
+import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { streamRoutes } from './routes/stream.js';
@@ -57,6 +59,18 @@ export async function createServer({
   });
 
   const registry = externalRegistry ?? new AgentRegistry();
+  const requestTracker = createRequestTracker();
+
+  // --- Metrics request tracking ---
+  // Registered at the root level so it captures requests to all routes.
+  app.addHook('onResponse', async (request, reply) => {
+    // Exclude the /metrics endpoint itself to avoid self-referential noise
+    if (request.url === '/metrics') {
+      return;
+    }
+    const durationSeconds = (reply.elapsedTime ?? 0) / 1000;
+    recordRequest(requestTracker, request.method, request.url, reply.statusCode, durationSeconds);
+  });
 
   // --- Request ID ---
   // Expose the generated request ID as a response header for traceability.
@@ -91,7 +105,7 @@ export async function createServer({
     max: 100,
     timeWindow: '1 minute',
     allowList: (request) => {
-      return request.url === '/health';
+      return request.url === '/health' || request.url === '/metrics';
     },
     errorResponseBuilder: () => {
       return { error: 'RATE_LIMITED', message: 'Too many requests' };
@@ -107,6 +121,15 @@ export async function createServer({
     mem0Client,
     litellmClient,
   });
+  await app.register(metricsRoutes, {
+    registry,
+    dbRegistry,
+    db,
+    redis,
+    mem0Client,
+    litellmClient,
+    requestTracker,
+  });
   await app.register(agentRoutes, {
     prefix: '/api/agents',
     taskQueue,
@@ -116,6 +139,11 @@ export async function createServer({
     memoryInjector,
   });
   await app.register(streamRoutes, {
+    prefix: '/api/agents',
+    registry,
+    dbRegistry: dbRegistry ?? null,
+  });
+  await app.register(loopProxyRoutes, {
     prefix: '/api/agents',
     registry,
     dbRegistry: dbRegistry ?? null,
