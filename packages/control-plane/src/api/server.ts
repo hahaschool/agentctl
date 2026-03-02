@@ -1,4 +1,8 @@
+import * as crypto from 'node:crypto';
+
 import { ControlPlaneError } from '@agentctl/shared';
+import fastifyCors from '@fastify/cors';
+import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyWebsocket from '@fastify/websocket';
 import type { Queue } from 'bullmq';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
@@ -44,12 +48,49 @@ export async function createServer({
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
+    genReqId: () => crypto.randomUUID(),
   });
 
   const registry = externalRegistry ?? new AgentRegistry();
 
+  // --- Request ID ---
+  // Expose the generated request ID as a response header for traceability.
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('X-Request-Id', request.id);
+  });
+
   app.addHook('onRequest', async (request) => {
-    logger.debug({ method: request.method, url: request.url }, 'incoming request');
+    logger.debug(
+      { method: request.method, url: request.url, requestId: request.id },
+      'incoming request',
+    );
+  });
+
+  // --- CORS ---
+  const isProduction = process.env.NODE_ENV === 'production';
+  const corsOrigins = process.env.CORS_ORIGINS;
+
+  await app.register(fastifyCors, {
+    origin: isProduction
+      ? corsOrigins
+        ? corsOrigins.split(',').map((o) => o.trim())
+        : false
+      : true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposedHeaders: ['X-Request-Id'],
+  });
+
+  // --- Rate Limiting ---
+  await app.register(fastifyRateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+    allowList: (request) => {
+      return request.url === '/health';
+    },
+    errorResponseBuilder: () => {
+      return { error: 'RATE_LIMITED', message: 'Too many requests' };
+    },
   });
 
   // Register @fastify/websocket before any WebSocket route plugins.
@@ -136,6 +177,7 @@ export async function createServer({
       url: request.url,
       statusCode: reply.statusCode,
       responseTime: reply.elapsedTime,
+      requestId: request.id,
     };
 
     if (reply.statusCode >= 500) {
