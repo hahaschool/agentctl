@@ -36,19 +36,13 @@ describe('renderPromptTemplate', () => {
   // ── Multiple variables ────────────────────────────────────────────
 
   it('replaces all known variables in a single template', () => {
-    const template =
-      'Run #{{iteration}} for {{agentId}} on {{date}}. Last: {{lastResult}}';
+    const template = 'Run #{{iteration}} for {{agentId}} on {{date}}. Last: {{lastResult}}';
     const result = renderPromptTemplate(template, baseVars);
-    expect(result).toBe(
-      'Run #5 for agent-001 on 2026-03-02. Last: All tests passed',
-    );
+    expect(result).toBe('Run #5 for agent-001 on 2026-03-02. Last: All tests passed');
   });
 
   it('handles the same variable appearing multiple times', () => {
-    const result = renderPromptTemplate(
-      '{{agentId}} is {{agentId}}',
-      baseVars,
-    );
+    const result = renderPromptTemplate('{{agentId}} is {{agentId}}', baseVars);
     expect(result).toBe('agent-001 is agent-001');
   });
 
@@ -67,10 +61,7 @@ describe('renderPromptTemplate', () => {
   // ── Unknown variables ─────────────────────────────────────────────
 
   it('leaves unknown variables as-is', () => {
-    const result = renderPromptTemplate(
-      'Hello {{unknown}} and {{date}}',
-      baseVars,
-    );
+    const result = renderPromptTemplate('Hello {{unknown}} and {{date}}', baseVars);
     expect(result).toBe('Hello {{unknown}} and 2026-03-02');
   });
 
@@ -87,10 +78,7 @@ describe('renderPromptTemplate', () => {
   });
 
   it('returns the template unchanged when no variables are present', () => {
-    const result = renderPromptTemplate(
-      'No variables here.',
-      baseVars,
-    );
+    const result = renderPromptTemplate('No variables here.', baseVars);
     expect(result).toBe('No variables here.');
   });
 

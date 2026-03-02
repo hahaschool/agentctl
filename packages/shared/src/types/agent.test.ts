@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Agent, AgentConfig, AgentType, PromptTemplateVars, ScheduleConfig, SessionMode } from './agent.js';
+import type {
+  Agent,
+  AgentConfig,
+  AgentType,
+  PromptTemplateVars,
+  ScheduleConfig,
+  SessionMode,
+} from './agent.js';
 import { AGENT_STATUSES } from './agent.js';
 import type { AgentRun, RunStatus, RunTrigger } from './agent-run.js';
 import { AgentError, ControlPlaneError, WorkerError } from './errors.js';

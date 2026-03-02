@@ -142,14 +142,9 @@ describe('LoopController', () => {
   it('throws LOOP_NO_LIMITS when no limits are configured', () => {
     const agent = createMockAgent();
 
-    expect(
-      () =>
-        new LoopController(
-          agent,
-          { mode: 'result-feedback' },
-          mockLogger,
-        ),
-    ).toThrow(AgentError);
+    expect(() => new LoopController(agent, { mode: 'result-feedback' }, mockLogger)).toThrow(
+      AgentError,
+    );
 
     try {
       new LoopController(agent, { mode: 'result-feedback' }, mockLogger);
@@ -185,12 +180,7 @@ describe('LoopController', () => {
     const agent = createMockAgent();
 
     expect(
-      () =>
-        new LoopController(
-          agent,
-          { mode: 'fixed-prompt', maxIterations: 5 },
-          mockLogger,
-        ),
+      () => new LoopController(agent, { mode: 'fixed-prompt', maxIterations: 5 }, mockLogger),
     ).toThrow(AgentError);
 
     try {
@@ -394,9 +384,9 @@ describe('LoopController', () => {
 
     // Run iterations — each takes ~0ms for mock + 500ms delay
     // After 800ms total, should stop
-    await vi.advanceTimersByTimeAsync(0);   // iteration 1
+    await vi.advanceTimersByTimeAsync(0); // iteration 1
     await vi.advanceTimersByTimeAsync(500); // delay
-    await vi.advanceTimersByTimeAsync(0);   // iteration 2 — now at ~500ms
+    await vi.advanceTimersByTimeAsync(0); // iteration 2 — now at ~500ms
     await vi.advanceTimersByTimeAsync(500); // delay — now at ~1000ms, should exceed 800ms limit
     await vi.advanceTimersByTimeAsync(0);
 
@@ -415,22 +405,18 @@ describe('LoopController', () => {
 
   it('detects dead loop (3 identical results) and stops', async () => {
     const agent = createMockAgent({ results: ['same', 'same', 'same', 'same'] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 10 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 10 }), mockLogger);
 
     const events: AgentEvent[] = [];
     controller.on('loop-event', (event: AgentEvent) => events.push(event));
 
     const loopPromise = controller.start('go');
 
-    await vi.advanceTimersByTimeAsync(0);   // iteration 1
+    await vi.advanceTimersByTimeAsync(0); // iteration 1
     await vi.advanceTimersByTimeAsync(500); // delay
-    await vi.advanceTimersByTimeAsync(0);   // iteration 2
+    await vi.advanceTimersByTimeAsync(0); // iteration 2
     await vi.advanceTimersByTimeAsync(500); // delay
-    await vi.advanceTimersByTimeAsync(0);   // iteration 3 — dead loop detected
+    await vi.advanceTimersByTimeAsync(0); // iteration 3 — dead loop detected
     await vi.advanceTimersByTimeAsync(0);
 
     await loopPromise;
@@ -447,11 +433,7 @@ describe('LoopController', () => {
 
   it('does not trigger dead-loop when results differ', async () => {
     const agent = createMockAgent({ results: ['aaa', 'bbb', 'aaa', 'bbb'] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 4 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 4 }), mockLogger);
 
     const events: AgentEvent[] = [];
     controller.on('loop-event', (event: AgentEvent) => events.push(event));
@@ -519,11 +501,7 @@ describe('LoopController', () => {
 
   it('pause() sets status to paused', async () => {
     const agent = createMockAgent({ results: ['a', 'b', 'c', 'd', 'e'] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 5 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 5 }), mockLogger);
 
     const loopPromise = controller.start('go');
 
@@ -580,11 +558,7 @@ describe('LoopController', () => {
 
   it('stop() gracefully stops after current iteration', async () => {
     const agent = createMockAgent({ results: ['a', 'b', 'c', 'd', 'e'] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 10 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 10 }), mockLogger);
 
     const events: AgentEvent[] = [];
     controller.on('loop-event', (event: AgentEvent) => events.push(event));
@@ -623,11 +597,7 @@ describe('LoopController', () => {
 
   it('stop() while paused resumes and then stops', async () => {
     const agent = createMockAgent({ results: ['a', 'b', 'c', 'd', 'e'] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 10 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 10 }), mockLogger);
 
     const loopPromise = controller.start('go');
 
@@ -663,11 +633,7 @@ describe('LoopController', () => {
 
   it('getState() reflects running state mid-loop', async () => {
     const agent = createMockAgent({ results: ['a', 'b', 'c'] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 3 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 3 }), mockLogger);
 
     const loopPromise = controller.start('go');
 
@@ -690,11 +656,7 @@ describe('LoopController', () => {
 
   it('getState() accumulates totalCostUsd across iterations', async () => {
     const agent = createMockAgent({ results: ['a', 'b'], costs: [0.05, 0.03] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 2 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 2 }), mockLogger);
 
     const loopPromise = controller.start('go');
 
@@ -761,20 +723,16 @@ describe('LoopController', () => {
 
   it('transitions to error status when agent iteration fails', async () => {
     const agent = createMockAgent({ results: ['ok'], failOnIteration: 2 });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 5 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 5 }), mockLogger);
 
     const events: AgentEvent[] = [];
     controller.on('loop-event', (event: AgentEvent) => events.push(event));
 
     const loopPromise = controller.start('go');
 
-    await vi.advanceTimersByTimeAsync(0);   // iteration 1 succeeds
+    await vi.advanceTimersByTimeAsync(0); // iteration 1 succeeds
     await vi.advanceTimersByTimeAsync(500); // delay
-    await vi.advanceTimersByTimeAsync(0);   // iteration 2 fails
+    await vi.advanceTimersByTimeAsync(0); // iteration 2 fails
     await vi.advanceTimersByTimeAsync(0);
 
     await loopPromise;
@@ -792,11 +750,7 @@ describe('LoopController', () => {
 
   it('throws LOOP_ALREADY_RUNNING when start() called while running', async () => {
     const agent = createMockAgent({ results: ['a', 'b', 'c', 'd', 'e'] });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 10 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 10 }), mockLogger);
 
     const loopPromise = controller.start('go');
     await vi.advanceTimersByTimeAsync(0);
@@ -812,7 +766,10 @@ describe('LoopController', () => {
   // ── Cost warning ───────────────────────────────────────────────
 
   it('emits cost warning at 80% of costLimitUsd', async () => {
-    const agent = createMockAgent({ results: ['a', 'b', 'c', 'd', 'e'], costs: [0.4, 0.4, 0.4, 0.4, 0.4] });
+    const agent = createMockAgent({
+      results: ['a', 'b', 'c', 'd', 'e'],
+      costs: [0.4, 0.4, 0.4, 0.4, 0.4],
+    });
     const controller = new LoopController(
       agent,
       makeConfig({ maxIterations: undefined, costLimitUsd: 1.0 }),
@@ -842,17 +799,13 @@ describe('LoopController', () => {
 
   it('handles agent timeout during iteration', async () => {
     const agent = createMockAgent({ results: ['ok'], timeoutOnIteration: 2 });
-    const controller = new LoopController(
-      agent,
-      makeConfig({ maxIterations: 5 }),
-      mockLogger,
-    );
+    const controller = new LoopController(agent, makeConfig({ maxIterations: 5 }), mockLogger);
 
     const loopPromise = controller.start('go');
 
-    await vi.advanceTimersByTimeAsync(0);   // iteration 1 succeeds
+    await vi.advanceTimersByTimeAsync(0); // iteration 1 succeeds
     await vi.advanceTimersByTimeAsync(500); // delay
-    await vi.advanceTimersByTimeAsync(0);   // iteration 2 times out
+    await vi.advanceTimersByTimeAsync(0); // iteration 2 times out
     await vi.advanceTimersByTimeAsync(0);
 
     await loopPromise;

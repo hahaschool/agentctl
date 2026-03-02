@@ -137,7 +137,10 @@ export class LoopController extends EventEmitter {
         this.iteration++;
         const iterationStart = Date.now();
 
-        this.log.info({ iteration: this.iteration, prompt: nextPrompt.slice(0, 100) }, 'Loop iteration starting');
+        this.log.info(
+          { iteration: this.iteration, prompt: nextPrompt.slice(0, 100) },
+          'Loop iteration starting',
+        );
 
         const result = await this.runIteration(nextPrompt);
 
@@ -236,7 +239,10 @@ export class LoopController extends EventEmitter {
             reason: 'stopped',
           },
         });
-        this.log.info({ totalIterations: this.iteration, totalCostUsd: this.totalCostUsd }, 'Loop stopped by request');
+        this.log.info(
+          { totalIterations: this.iteration, totalCostUsd: this.totalCostUsd },
+          'Loop stopped by request',
+        );
       }
     } catch (err) {
       this.status = 'error';
@@ -420,18 +426,30 @@ export class LoopController extends EventEmitter {
         }
 
         if (event.event === 'status') {
-          if (event.data.status === 'stopped' || event.data.status === 'error' || event.data.status === 'timeout') {
+          if (
+            event.data.status === 'stopped' ||
+            event.data.status === 'error' ||
+            event.data.status === 'timeout'
+          ) {
             this.agent.offEvent(onEvent);
 
             if (event.data.status === 'error') {
-              reject(new AgentError('LOOP_ITERATION_ERROR', `Iteration ${this.iteration} failed: ${event.data.reason ?? 'unknown'}`, {
-                iteration: this.iteration,
-                reason: event.data.reason,
-              }));
+              reject(
+                new AgentError(
+                  'LOOP_ITERATION_ERROR',
+                  `Iteration ${this.iteration} failed: ${event.data.reason ?? 'unknown'}`,
+                  {
+                    iteration: this.iteration,
+                    reason: event.data.reason,
+                  },
+                ),
+              );
             } else if (event.data.status === 'timeout') {
-              reject(new AgentError('LOOP_ITERATION_TIMEOUT', `Iteration ${this.iteration} timed out`, {
-                iteration: this.iteration,
-              }));
+              reject(
+                new AgentError('LOOP_ITERATION_TIMEOUT', `Iteration ${this.iteration} timed out`, {
+                  iteration: this.iteration,
+                }),
+              );
             } else {
               resolve(result);
             }
@@ -463,9 +481,13 @@ export class LoopController extends EventEmitter {
         return this.waitForCallback();
 
       default:
-        throw new AgentError('LOOP_INVALID_MODE', `Unknown loop mode: ${String(this.config.mode)}`, {
-          mode: this.config.mode,
-        });
+        throw new AgentError(
+          'LOOP_INVALID_MODE',
+          `Unknown loop mode: ${String(this.config.mode)}`,
+          {
+            mode: this.config.mode,
+          },
+        );
     }
   }
 
