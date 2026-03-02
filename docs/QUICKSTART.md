@@ -204,7 +204,7 @@ cd infra/docker
 export POSTGRES_PASSWORD=your-secure-password
 
 # Validate configuration
-bash ../../scripts/docker-preflight.sh
+bash docker-preflight.sh
 
 # Start all services
 docker compose -f docker-compose.prod.yml up -d --build
@@ -250,16 +250,35 @@ curl http://localhost:8080/health?detail=true | jq .
 | POST | `/api/agents/:id/stop` | Stop agent on this worker |
 | GET | `/api/agents/:id/stream` | SSE output stream |
 
+## Fleet Provisioning (Optional)
+
+For automated machine setup across your fleet:
+
+```bash
+# Provision a single target machine (installs Docker, Compose, Tailscale)
+pnpm tsx scripts/provision-target.ts --dry-run  # Preview what would happen
+pnpm tsx scripts/provision-target.ts             # Execute provisioning
+
+# Bootstrap all machines in the fleet inventory
+pnpm tsx scripts/fleet-bootstrap.ts --dry-run    # Preview
+pnpm tsx scripts/fleet-bootstrap.ts              # Execute
+
+# Run database migrations before deployment
+pnpm tsx scripts/migrate-deploy.ts --dry-run     # Preview SQL
+pnpm tsx scripts/migrate-deploy.ts               # Execute migrations
+```
+
 ## Running Tests
 
 ```bash
-# All tests (968 tests across 48 files)
+# All tests (3252+ tests across 93+ files)
 pnpm test
 
 # Specific package
 pnpm --filter @agentctl/shared test
 pnpm --filter @agentctl/control-plane test
 pnpm --filter @agentctl/agent-worker test
+pnpm --filter @agentctl/mobile test
 
 # With coverage
 pnpm test:coverage
