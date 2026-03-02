@@ -4,11 +4,16 @@
 
 ## Current State
 
-A basic CI pipeline exists at `.github/workflows/ci.yml`:
+Full CI/CD pipeline with 6 workflow files:
 
-- **Trigger**: push to `main`/`dev`, PR to `main`
-- **Steps**: install -> build -> lint -> test
-- **Missing**: Docker build, deployment, security scanning, scheduled sessions, continuous loop, security audit
+- **CI** (`ci.yml`): paths-filter, matrix build/test, security scanning, coverage
+- **Docker Build** (`build-images.yml`): multi-stage, Trivy, SBOM, GHCR
+- **Security Audit** (`security-audit.yml`): CodeQL, Semgrep, gitleaks, license check
+- **Deploy Dev** (`deploy-dev.yml`): Tailscale SSH, auto-deploy on push to dev
+- **Deploy Prod** (`deploy-prod.yml`): approval gate, blue-green, pg_dump backup
+- **Rollback** (`rollback.yml`): manual rollback to any previous image tag
+
+**1658 tests** across 71 files. All packages build cleanly.
 
 ---
 
@@ -18,23 +23,24 @@ A basic CI pipeline exists at `.github/workflows/ci.yml`:
 
 ### 1.1 Monorepo-Aware Conditional Builds
 
-- [ ] Add `dorny/paths-filter` to detect which packages changed
-- [ ] Only run build/test for affected packages on PRs
-- [ ] Full build on `main` merges for safety
+- [x] Add `dorny/paths-filter` to detect which packages changed
+- [x] Only run build/test for affected packages on PRs
+- [x] Full build on `main` merges for safety
 
 ### 1.2 Dependency Caching
 
-- [ ] Verify pnpm store caching via `setup-node`
-- [ ] Add TypeScript build cache (`tsconfig.tsBuildInfoFile`)
+- [x] Verify pnpm store caching via `setup-node`
+- [x] Add TypeScript build cache (`tsconfig.tsBuildInfoFile`)
+- [x] Add TypeScript build output cache (`packages/*/dist`)
 - [ ] Target: CI < 2 minutes for unchanged packages
 
 ### 1.3 Security Scanning in CI
 
-- [ ] Add `pnpm audit` step for dependency vulnerabilities
-- [ ] Add `gitleaks` for secret scanning
-- [ ] Add Biome security lint rules
+- [x] Add `pnpm audit` step for dependency vulnerabilities
+- [x] Add `gitleaks` for secret scanning
+- [x] Add Biome security lint rules
 
-**Deliverable**: Updated `.github/workflows/ci.yml`
+**Deliverable**: Updated `.github/workflows/ci.yml` ✅
 
 ---
 
@@ -44,28 +50,28 @@ A basic CI pipeline exists at `.github/workflows/ci.yml`:
 
 ### 2.1 Multi-Stage Docker Build
 
-- [ ] Use `docker/build-push-action` with Buildx
-- [ ] Build `control-plane` and `agent-worker` in parallel (matrix)
-- [ ] Multi-stage: `node:22-alpine` build -> `node:22-alpine` prod (non-root uid 1001)
+- [x] Use `docker/build-push-action` with Buildx
+- [x] Build `control-plane` and `agent-worker` in parallel (matrix)
+- [x] Multi-stage: `node:22-alpine` build -> `node:22-alpine` prod (non-root uid 1001)
 
 ### 2.2 Image Tagging
 
-- [ ] `sha-<commit>` on every build
-- [ ] `main-latest` / `dev-latest` for environment tracking
-- [ ] Semver `v*.*.*` on GitHub Release
+- [x] `sha-<commit>` on every build
+- [x] `main-latest` / `dev-latest` for environment tracking
+- [x] Semver `v*.*.*` on GitHub Release
 
 ### 2.3 Container Security Scanning
 
-- [ ] `aquasecurity/trivy-action` — fail on CRITICAL/HIGH, SARIF to GitHub Security tab
+- [x] `aquasecurity/trivy-action` — fail on CRITICAL/HIGH, SARIF to GitHub Security tab
 - [ ] `anchore/scan-action` (Grype) as second scanner
-- [ ] Generate SBOM with Trivy, upload as build artifact
+- [x] Generate SBOM with Trivy, upload as build artifact
 
 ### 2.4 Image Layer Caching
 
-- [ ] GHA cache backend (`cache-from: type=gha`)
+- [x] GHA cache backend (`cache-from: type=gha`)
 - [ ] Target: Docker build < 3 minutes with warm cache
 
-**Deliverable**: `.github/workflows/build-images.yml`
+**Deliverable**: `.github/workflows/build-images.yml` ✅
 
 ---
 
@@ -75,17 +81,17 @@ A basic CI pipeline exists at `.github/workflows/ci.yml`:
 
 ### 3.1 Tailscale-Based Deployment
 
-- [ ] `tailscale/github-action` with ephemeral OAuth client
-- [ ] SSH into target via Tailscale IP (zero public ports)
+- [x] `tailscale/github-action` with ephemeral OAuth client
+- [x] SSH into target via Tailscale IP (zero public ports)
 - [ ] Tailscale ACL: allow `tag:ci` to SSH into `tag:server`
 
 ### 3.2 Deploy Steps
 
-- [ ] Pull images from ghcr.io
-- [ ] Run Drizzle migrations before container restart
-- [ ] `docker compose up -d --remove-orphans`
-- [ ] Post-deploy health check (`/api/health` returns 200)
-- [ ] On failure: alert, keep old containers
+- [x] Pull images from ghcr.io
+- [x] Run Drizzle migrations before container restart
+- [x] `docker compose up -d --remove-orphans`
+- [x] Post-deploy health check (`/api/health` returns 200)
+- [x] On failure: alert, keep old containers
 
 ### 3.3 Target Machine Setup
 
@@ -138,23 +144,23 @@ A basic CI pipeline exists at `.github/workflows/ci.yml`:
 
 ### 5.1 Release-Based Trigger
 
-- [ ] GitHub Release or `workflow_dispatch` with image tag input
-- [ ] GitHub Environment protection rule: `production` with required reviewers
+- [x] GitHub Release or `workflow_dispatch` with image tag input
+- [x] GitHub Environment protection rule: `production` with required reviewers
 
 ### 5.2 Blue-Green Deployment
 
-- [ ] Scale up new container -> health check -> scale down old
-- [ ] Health check retry loop (5 attempts, 10s interval)
+- [x] Scale up new container -> health check -> scale down old
+- [x] Health check retry loop (5 attempts, 10s interval)
 
 ### 5.3 Rollback
 
 - [ ] Keep last 5 image tags in ghcr.io
-- [ ] `workflow_dispatch` rollback workflow (select previous tag)
-- [ ] Post-rollback health check
+- [x] `workflow_dispatch` rollback workflow (select previous tag)
+- [x] Post-rollback health check
 
 ### 5.4 Smoke Tests
 
-- [ ] API health, PostgreSQL, Redis, WebSocket upgrade, cross-service registration
+- [x] API health, PostgreSQL, Redis, WebSocket upgrade, cross-service registration
 
 **Deliverable**: `.github/workflows/deploy-prod.yml`, `.github/workflows/rollback.yml`
 
@@ -164,11 +170,11 @@ A basic CI pipeline exists at `.github/workflows/ci.yml`:
 
 > Goal: Know immediately when deploys succeed, fail, or degrade.
 
-- [ ] Slack/Discord webhook on deploy success/failure
-- [ ] Deploy audit trail (table or append-only log)
+- [x] Slack/Discord webhook on deploy success/failure
+- [x] Deploy audit trail (table or append-only log)
 - [ ] Vector -> ClickHouse pipeline for structured logs
-- [ ] Prometheus-compatible `/metrics` endpoint
-- [ ] Track: request latency, active agents, queue depth, error rate
+- [x] Prometheus-compatible `/metrics` endpoint
+- [x] Track: request latency, active agents, queue depth, error rate
 
 **Deliverable**: Notification integration, `/metrics` endpoint, Vector config
 
@@ -195,31 +201,31 @@ A basic CI pipeline exists at `.github/workflows/ci.yml`:
 
 ### 8.1 Scheduled Sessions (Cron-like)
 
-- [ ] Add `ScheduleConfig` type (`sessionMode`, `promptTemplate`, `pattern`)
-- [ ] Extend `AgentTaskJobData` with `sessionMode: 'fresh' | 'resume'`
-- [ ] Session resume: look up `currentSessionId`, pass as `resumeSession`
-- [ ] Prompt template variables: `{{date}}`, `{{iteration}}`, `{{lastResult}}`
-- [ ] Add `schedule_config` jsonb column, API endpoints
+- [x] Add `ScheduleConfig` type (`sessionMode`, `promptTemplate`, `pattern`)
+- [x] Extend `AgentTaskJobData` with `sessionMode: 'fresh' | 'resume'`
+- [x] Session resume: look up `currentSessionId`, pass as `resumeSession`
+- [x] Prompt template variables: `{{date}}`, `{{iteration}}`, `{{lastResult}}`
+- [x] Add `schedule_config` jsonb column, API endpoints
 
 ### 8.2 Continuous Loop (Ralph Loop)
 
-- [ ] Add `LoopConfig` type and `AgentType: 'loop'`
-- [ ] Implement `LoopController` in agent-worker
+- [x] Add `LoopConfig` type and `AgentType: 'loop'`
+- [x] Implement `LoopController` in agent-worker
   - Three modes: `result-feedback`, `fixed-prompt`, `callback`
   - Limits: `maxIterations`, `costLimitUsd`, `maxDurationMs`
   - Checkpoint to control plane every N iterations
-- [ ] DB columns: `loop_config`, `loop_iteration`, `parent_run_id`
-- [ ] API: `PUT/DEL /loop`, `POST /loop/stop`, `GET /loop/status`
-- [ ] SSE events: `loop_iteration`, `loop_checkpoint`, `loop_complete`
+- [x] DB columns: `loop_config`, `loop_iteration`, `parent_run_id`
+- [x] API: `PUT/DEL /loop`, `POST /loop/stop`, `GET /loop/status`
+- [x] SSE events: `loop_iteration`, `loop_checkpoint`, `loop_complete`
 
 ### 8.3 Safety & Limits
 
-- [ ] At least one limit required (iterations/cost/duration)
-- [ ] `iterationDelayMs >= 500` enforced server-side
-- [ ] Cost alert at 80% of limit
-- [ ] Dead-loop detection (3 identical results -> warn/stop)
-- [ ] Network partition: auto-pause if checkpoint fails 3x
-- [ ] Emergency stop via API + abort signal
+- [x] At least one limit required (iterations/cost/duration)
+- [x] `iterationDelayMs >= 500` enforced server-side
+- [x] Cost alert at 80% of limit
+- [x] Dead-loop detection (3 identical results -> warn/stop)
+- [x] Network partition: auto-pause if checkpoint fails 3x
+- [x] Emergency stop via API + abort signal
 
 **Deliverable**: `loop-controller.ts`, updated types, API routes, DB migration
 
@@ -250,12 +256,12 @@ Map every OWASP ASI risk to concrete mitigations in AgentCTL:
 
 Dedicated security workflow on every PR and nightly:
 
-- [ ] **SAST — CodeQL**: GitHub native with `security-extended` queries for JS/TS
-- [ ] **SAST — Semgrep**: `semgrep/semgrep-action` with `p/security-audit` + `p/secrets`
-- [ ] **SCA — Dependency Audit**: `pnpm audit --audit-level=high` as blocking CI step
-- [ ] **SCA — License Check**: no GPL/AGPL dependencies
-- [ ] **Secret Scanning**: `gitleaks` on every PR; GitHub push protection
-- [ ] **Container Scanning**: Trivy + Grype with SARIF to Security tab
+- [x] **SAST — CodeQL**: GitHub native with `security-extended` queries for JS/TS
+- [x] **SAST — Semgrep**: `semgrep/semgrep-action` with `p/security-audit` + `p/secrets`
+- [x] **SCA — Dependency Audit**: `pnpm audit --audit-level=high` as blocking CI step
+- [x] **SCA — License Check**: no GPL/AGPL dependencies
+- [x] **Secret Scanning**: `gitleaks` on every PR; GitHub push protection
+- [x] **Container Scanning**: Trivy + Grype with SARIF to Security tab
 - [ ] **DAST — OWASP ZAP**: baseline scan on `/api/*` + WebSocket fuzzing on `/ws` (post-deploy to staging)
 
 **Deliverable**: `.github/workflows/security-audit.yml`
@@ -283,22 +289,22 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 - [ ] **Network egress**: `--network=none` default; allowlist specific domains per agent
 - [ ] **FS isolation**: worktrees read-only except output dirs; block `.ssh`, `.gnupg`, `.aws`, `.env`
 - [ ] **Memory security**: encrypt sensitive Mem0 fields at rest; TTL auto-expiry; per-agent isolation
-- [ ] **Tool rate limiting**: cap tool calls/minute/agent to detect runaway loops
-- [ ] **Prompt injection defense**:
+- [x] **Tool rate limiting**: cap tool calls/minute/agent to detect runaway loops
+- [x] **Prompt injection defense**:
   - Sanitize external content before agent context injection
   - Flag patterns: `ignore previous instructions`, `system:`, encoded payloads
   - Guardian agent: lightweight validator reviews high-risk tool calls pre-execution
-- [ ] **Kill switch**: `POST /api/agents/:id/emergency-stop` — abort + revoke token
-- [ ] **Anomaly detection**: baseline tool-call patterns; alert on deviations (e.g., agent using Bash after only Read/Write)
+- [x] **Kill switch**: `POST /api/agents/:id/emergency-stop` — abort + revoke token
+- [x] **Anomaly detection**: baseline tool-call patterns; alert on deviations (e.g., agent using Bash after only Read/Write)
 
 ### 9.5 Audit Logging & Forensics
 
-- [ ] Structured NDJSON with SHA-256 integrity hashes (extends existing `AuditLogger`)
+- [x] Structured NDJSON with SHA-256 integrity hashes (extends existing `AuditLogger`)
 - [ ] Log retention: 90 days ClickHouse, 7 days local
-- [ ] Tamper detection: hash chain (each entry includes previous hash)
-- [ ] Queryable API: `GET /api/audit?agentId=X&from=T1&to=T2&tool=Bash`
+- [x] Tamper detection: hash chain (each entry includes previous hash)
+- [x] Queryable API: `GET /api/audit?agentId=X&from=T1&to=T2&tool=Bash`
 - [ ] Dashboard: top tools, cost by agent, error rates, blocked calls
-- [ ] Incident response: full session replay from audit logs
+- [x] Incident response: full session replay from audit logs
 
 ### 9.6 Threat Model & Compliance
 
