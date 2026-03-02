@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-import IORedis from 'ioredis';
 import { sql } from 'drizzle-orm';
+import IORedis from 'ioredis';
 
 import { createServer } from './api/server.js';
+import type { Database } from './db/index.js';
 import { createDb } from './db/index.js';
 import { createLogger } from './logger.js';
 import { Mem0Client } from './memory/mem0-client.js';
@@ -29,6 +29,64 @@ const CONTROL_PLANE_URL =
   `http://${process.env.HOST || '0.0.0.0'}:${Number(process.env.PORT) || 8080}`;
 const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 5;
 
+type DependencyHealthDeps = {
+  db?: Database;
+  redisConnection?: InstanceType<typeof IORedis.default>;
+  mem0Client?: Mem0Client;
+  litellmClient?: LiteLLMClient;
+};
+
+async function checkDependencyHealth(deps: DependencyHealthDeps): Promise<void> {
+  const healthLogger = logger.child({ component: 'health-check' });
+
+  // PostgreSQL
+  if (deps.db) {
+    try {
+      await deps.db.execute(sql`SELECT 1`);
+      healthLogger.info('PostgreSQL connection verified');
+    } catch (err: unknown) {
+      healthLogger.warn({ err }, 'PostgreSQL connection failed');
+    }
+  }
+
+  // Redis
+  if (deps.redisConnection) {
+    try {
+      await deps.redisConnection.ping();
+      healthLogger.info('Redis connection verified');
+    } catch (err: unknown) {
+      healthLogger.warn({ err }, 'Redis connection failed');
+    }
+  }
+
+  // Mem0
+  if (deps.mem0Client) {
+    try {
+      const healthy = await deps.mem0Client.health();
+      if (healthy) {
+        healthLogger.info('Mem0 connection verified');
+      } else {
+        healthLogger.warn('Mem0 connection unreachable: health endpoint returned non-OK');
+      }
+    } catch (err: unknown) {
+      healthLogger.warn({ err }, 'Mem0 connection unreachable');
+    }
+  }
+
+  // LiteLLM
+  if (deps.litellmClient) {
+    try {
+      const models = await deps.litellmClient.listModels();
+      healthLogger.info(
+        { modelCount: models.length },
+        `LiteLLM proxy verified (${models.length} models available)`,
+      );
+    } catch (err: unknown) {
+      healthLogger.warn({ err }, 'LiteLLM proxy unreachable');
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const redisConnection = new IORedis.default(REDIS_URL, {
     maxRetriesPerRequest: null,
@@ -37,11 +95,12 @@ async function main(): Promise<void> {
   logger.info({ redisUrl: REDIS_URL }, 'Connecting to Redis');
 
   // Optionally connect to PostgreSQL when DATABASE_URL is provided.
+  let db: Database | undefined;
   let dbRegistry: DbAgentRegistry | undefined;
 
   if (DATABASE_URL) {
     logger.info('Connecting to PostgreSQL');
-    const db = createDb(DATABASE_URL);
+    db = createDb(DATABASE_URL);
 
     // Run the initial schema migration on every startup.
     // All DDL statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS,
@@ -115,6 +174,15 @@ async function main(): Promise<void> {
     litellmClient,
     mem0Client,
     memoryInjector: memoryInjector ?? null,
+  });
+
+  // Run dependency health checks before starting the server.
+  // Failures are logged as warnings — they do not prevent startup.
+  await checkDependencyHealth({
+    db,
+    redisConnection,
+    mem0Client,
+    litellmClient,
   });
 
   let shuttingDown = false;
