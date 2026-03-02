@@ -2,7 +2,12 @@ import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { AuditEntry } from '../../audit/session-replay.js';
-import { SessionReplayBuilder } from '../../audit/session-replay.js';
+import {
+  buildTimeline,
+  filterEvents,
+  findSuspiciousPatterns,
+  generateSummary,
+} from '../../audit/session-replay.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 
 export type ReplayRoutesOptions = {
@@ -70,7 +75,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
         const resolvedAgentId = agentId ?? inferAgentId(entries, sessionId);
 
-        const timeline = SessionReplayBuilder.buildTimeline(entries, sessionId, resolvedAgentId);
+        const timeline = buildTimeline(entries, sessionId, resolvedAgentId);
 
         if (timeline.totalEvents === 0) {
           return reply.code(404).send({
@@ -82,7 +87,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
         // Apply optional event filters
         const filter = parseQueryFilter(request.query);
         if (hasActiveFilter(filter)) {
-          const filtered = SessionReplayBuilder.filterEvents(timeline, filter);
+          const filtered = filterEvents(timeline, filter);
           return { ...timeline, events: filtered, totalEvents: filtered.length };
         }
 
@@ -137,7 +142,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
         const resolvedAgentId = agentId ?? inferAgentId(entries, sessionId);
 
-        const timeline = SessionReplayBuilder.buildTimeline(entries, sessionId, resolvedAgentId);
+        const timeline = buildTimeline(entries, sessionId, resolvedAgentId);
 
         if (timeline.totalEvents === 0) {
           return reply.code(404).send({
@@ -146,7 +151,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
           });
         }
 
-        return SessionReplayBuilder.generateSummary(timeline);
+        return generateSummary(timeline);
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           return reply.code(502).send({ error: error.message, code: error.code });
@@ -197,7 +202,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
         const resolvedAgentId = agentId ?? inferAgentId(entries, sessionId);
 
-        const timeline = SessionReplayBuilder.buildTimeline(entries, sessionId, resolvedAgentId);
+        const timeline = buildTimeline(entries, sessionId, resolvedAgentId);
 
         if (timeline.totalEvents === 0) {
           return reply.code(404).send({
@@ -206,7 +211,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
           });
         }
 
-        return SessionReplayBuilder.findSuspiciousPatterns(timeline);
+        return findSuspiciousPatterns(timeline);
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           return reply.code(502).send({ error: error.message, code: error.code });

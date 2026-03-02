@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AuditEntry } from './session-replay.js';
-import { SessionReplayBuilder } from './session-replay.js';
+import {
+  buildTimeline,
+  filterEvents,
+  findSuspiciousPatterns,
+  generateSummary,
+} from './session-replay.js';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -31,7 +36,7 @@ function makeEntries(count: number, overrides: Partial<AuditEntry> = {}): AuditE
 // buildTimeline
 // =============================================================================
 
-describe('SessionReplayBuilder.buildTimeline', () => {
+describe('buildTimeline', () => {
   it('builds a timeline from audit entries for a given session and agent', () => {
     const entries: AuditEntry[] = [
       makeEntry({ timestamp: '2026-03-01T10:00:00.000Z', tool: 'Read' }),
@@ -47,7 +52,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.sessionId).toBe('session-1');
     expect(timeline.agentId).toBe('agent-1');
@@ -64,7 +69,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
       makeEntry({ timestamp: '2026-03-01T10:00:01.000Z', tool: 'Write' }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.events[0].tool).toBe('Read');
     expect(timeline.events[1].tool).toBe('Write');
@@ -88,7 +93,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.totalEvents).toBe(2);
     expect(timeline.events.map((e) => e.tool)).toEqual(['Read', 'Glob']);
@@ -97,7 +102,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
   it('returns an empty timeline when no entries match', () => {
     const entries: AuditEntry[] = [makeEntry({ sessionId: 'session-2', agentId: 'agent-2' })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.totalEvents).toBe(0);
     expect(timeline.events).toEqual([]);
@@ -106,7 +111,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
   it('handles a single event (no endedAt)', () => {
     const entries: AuditEntry[] = [makeEntry({ timestamp: '2026-03-01T10:00:00.000Z' })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.totalEvents).toBe(1);
     expect(timeline.startedAt).toBe('2026-03-01T10:00:00.000Z');
@@ -121,7 +126,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
       makeEntry({ tool: 'Write', timestamp: '2026-03-01T10:00:03.000Z' }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.toolsUsed).toEqual(expect.arrayContaining(['Read', 'Bash', 'Write']));
     expect(timeline.toolsUsed).toHaveLength(3);
@@ -145,7 +150,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.deniedCalls).toBe(2);
   });
@@ -163,7 +168,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
       makeEntry({ timestamp: '2026-03-01T10:00:02.000Z' }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.totalCostUsd).toBeCloseTo(0.15);
   });
@@ -171,7 +176,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
   it('maps pre_tool_use kind to tool_call eventType', () => {
     const entries: AuditEntry[] = [makeEntry({ kind: 'pre_tool_use' })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.events[0].eventType).toBe('tool_call');
   });
@@ -179,7 +184,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
   it('maps post_tool_use kind to tool_result eventType', () => {
     const entries: AuditEntry[] = [makeEntry({ kind: 'post_tool_use' })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.events[0].eventType).toBe('tool_result');
   });
@@ -187,7 +192,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
   it('maps error kind to error eventType', () => {
     const entries: AuditEntry[] = [makeEntry({ kind: 'error' })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.events[0].eventType).toBe('error');
   });
@@ -200,7 +205,7 @@ describe('SessionReplayBuilder.buildTimeline', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
 
     expect(timeline.events[0].decision).toBe('deny');
     expect(timeline.events[0].denyReason).toBe('rate_limit_exceeded');
@@ -211,8 +216,8 @@ describe('SessionReplayBuilder.buildTimeline', () => {
 // filterEvents
 // =============================================================================
 
-describe('SessionReplayBuilder.filterEvents', () => {
-  const timeline = SessionReplayBuilder.buildTimeline(
+describe('filterEvents', () => {
+  const timeline = buildTimeline(
     [
       makeEntry({
         tool: 'Read',
@@ -245,7 +250,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   );
 
   it('filters by tool name', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       toolName: 'Bash',
     });
 
@@ -254,7 +259,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('filters by event type', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       eventType: 'tool_result',
     });
 
@@ -263,7 +268,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('filters by time range (fromTimestamp)', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       fromTimestamp: '2026-03-01T10:00:02.000Z',
     });
 
@@ -271,7 +276,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('filters by time range (toTimestamp)', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       toTimestamp: '2026-03-01T10:00:01.000Z',
     });
 
@@ -279,7 +284,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('filters by combined from and to timestamps', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       fromTimestamp: '2026-03-01T10:00:01.000Z',
       toTimestamp: '2026-03-01T10:00:03.000Z',
     });
@@ -288,7 +293,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('applies pagination with limit', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       limit: 2,
     });
 
@@ -296,7 +301,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('applies pagination with offset', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       offset: 3,
     });
 
@@ -304,7 +309,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('applies pagination with limit and offset', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       offset: 1,
       limit: 2,
     });
@@ -315,7 +320,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('returns empty array when no events match filter', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {
+    const result = filterEvents(timeline, {
       toolName: 'Grep',
     });
 
@@ -323,7 +328,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
   });
 
   it('returns all events when no filter criteria are set', () => {
-    const result = SessionReplayBuilder.filterEvents(timeline, {});
+    const result = filterEvents(timeline, {});
 
     expect(result).toHaveLength(5);
   });
@@ -333,7 +338,7 @@ describe('SessionReplayBuilder.filterEvents', () => {
 // generateSummary
 // =============================================================================
 
-describe('SessionReplayBuilder.generateSummary', () => {
+describe('generateSummary', () => {
   it('computes summary statistics from a timeline', () => {
     const entries: AuditEntry[] = [
       makeEntry({
@@ -361,8 +366,8 @@ describe('SessionReplayBuilder.generateSummary', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const summary = SessionReplayBuilder.generateSummary(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const summary = generateSummary(timeline);
 
     expect(summary.sessionId).toBe('session-1');
     expect(summary.agentId).toBe('agent-1');
@@ -379,8 +384,8 @@ describe('SessionReplayBuilder.generateSummary', () => {
   it('returns zero duration for single-event timeline', () => {
     const entries: AuditEntry[] = [makeEntry({ kind: 'tool_call', durationMs: 100 })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const summary = SessionReplayBuilder.generateSummary(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const summary = generateSummary(timeline);
 
     expect(summary.duration).toBe(0);
   });
@@ -388,8 +393,8 @@ describe('SessionReplayBuilder.generateSummary', () => {
   it('returns zero denial rate when no tool calls exist', () => {
     const entries: AuditEntry[] = [makeEntry({ kind: 'status_change', status: 'running' })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const summary = SessionReplayBuilder.generateSummary(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const summary = generateSummary(timeline);
 
     expect(summary.denialRate).toBe(0);
     expect(summary.totalToolCalls).toBe(0);
@@ -413,8 +418,8 @@ describe('SessionReplayBuilder.generateSummary', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const summary = SessionReplayBuilder.generateSummary(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const summary = generateSummary(timeline);
 
     expect(summary.averageDurationMs).toBeCloseTo(150);
   });
@@ -424,7 +429,7 @@ describe('SessionReplayBuilder.generateSummary', () => {
 // findSuspiciousPatterns
 // =============================================================================
 
-describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
+describe('findSuspiciousPatterns', () => {
   it('detects rapid_fire when >10 tool calls within 5 seconds', () => {
     // 12 tool calls in 3 seconds
     const entries = Array.from({ length: 12 }, (_, i) =>
@@ -435,8 +440,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     );
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     const rapidFire = patterns.find((p) => p.type === 'rapid_fire');
     expect(rapidFire).toBeDefined();
@@ -454,8 +459,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     );
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns.find((p) => p.type === 'rapid_fire')).toBeUndefined();
   });
@@ -463,8 +468,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
   it('does not detect rapid_fire when there are <=10 tool calls', () => {
     const entries = makeEntries(10, { kind: 'tool_call' });
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns.find((p) => p.type === 'rapid_fire')).toBeUndefined();
   });
@@ -485,8 +490,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     const highDenial = patterns.find((p) => p.type === 'high_denial_rate');
     expect(highDenial).toBeDefined();
@@ -509,8 +514,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns.find((p) => p.type === 'high_denial_rate')).toBeUndefined();
   });
@@ -518,8 +523,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
   it('does not detect high_denial_rate when there are no tool calls', () => {
     const entries: AuditEntry[] = [makeEntry({ kind: 'status_change', status: 'running' })];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns.find((p) => p.type === 'high_denial_rate')).toBeUndefined();
   });
@@ -547,12 +552,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(
-      [...readEntries, ...bashEntries],
-      'session-1',
-      'agent-1',
-    );
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline([...readEntries, ...bashEntries], 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     const unusual = patterns.find((p) => p.type === 'unusual_tool_sequence');
     expect(unusual).toBeDefined();
@@ -588,8 +589,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns.find((p) => p.type === 'unusual_tool_sequence')).toBeUndefined();
   });
@@ -613,8 +614,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns.find((p) => p.type === 'unusual_tool_sequence')).toBeUndefined();
   });
@@ -635,8 +636,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     const costSpike = patterns.filter((p) => p.type === 'cost_spike');
     expect(costSpike).toHaveLength(1);
@@ -660,8 +661,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     const costSpikes = patterns.filter((p) => p.type === 'cost_spike');
     expect(costSpikes).toHaveLength(2);
@@ -683,8 +684,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     ];
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns.filter((p) => p.type === 'cost_spike')).toHaveLength(0);
   });
@@ -697,15 +698,15 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       costUsd: 0.01,
     });
 
-    const timeline = SessionReplayBuilder.buildTimeline(entries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(entries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns).toEqual([]);
   });
 
   it('returns empty array for empty timeline', () => {
-    const timeline = SessionReplayBuilder.buildTimeline([], 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline([], 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     expect(patterns).toEqual([]);
   });
@@ -721,8 +722,8 @@ describe('SessionReplayBuilder.findSuspiciousPatterns', () => {
       }),
     );
 
-    const timeline = SessionReplayBuilder.buildTimeline(rapidEntries, 'session-1', 'agent-1');
-    const patterns = SessionReplayBuilder.findSuspiciousPatterns(timeline);
+    const timeline = buildTimeline(rapidEntries, 'session-1', 'agent-1');
+    const patterns = findSuspiciousPatterns(timeline);
 
     const types = patterns.map((p) => p.type);
     expect(types).toContain('rapid_fire');
