@@ -160,6 +160,14 @@ async function main(): Promise<void> {
     worktreeManager,
   });
 
+  // Clean up orphaned worktrees from a previous crash or ungraceful shutdown
+  // before we start accepting new work.
+  try {
+    await pool.cleanOrphanedWorktrees();
+  } catch (err: unknown) {
+    logger.warn({ err }, 'Failed to clean orphaned worktrees at startup');
+  }
+
   const ipcServer = new IpcServer({
     ipcDir: IPC_DIR,
     agentId: MACHINE_ID,

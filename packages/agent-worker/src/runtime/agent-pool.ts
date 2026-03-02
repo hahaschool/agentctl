@@ -4,7 +4,7 @@ import type { AgentEvent, AgentStatus } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
-import type { WorktreeManager } from '../worktree/index.js';
+import type { WorktreeInfo, WorktreeManager } from '../worktree/index.js';
 import { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 
 const DEFAULT_MAX_CONCURRENT = 3;
@@ -190,6 +190,85 @@ export class AgentPool extends EventEmitter {
 
     await Promise.all(promises);
     this.log.info('All agents stopped');
+
+    // Clean up any worktrees that remain after stopping all agents.
+    // This catches worktrees left behind when agents crash or are not
+    // individually removed before the pool shuts down.
+    if (this.worktreeManager && this.agentWorktrees.size > 0) {
+      this.log.info({ count: this.agentWorktrees.size }, 'Cleaning up remaining agent worktrees');
+
+      for (const agentId of this.agentWorktrees) {
+        try {
+          await this.worktreeManager.remove(agentId);
+          this.log.info({ agentId }, 'Worktree cleaned up during stopAll');
+        } catch (err) {
+          this.log.warn({ agentId, err }, 'Failed to clean up worktree during stopAll');
+        }
+      }
+
+      this.agentWorktrees.clear();
+    }
+  }
+
+  /**
+   * Remove worktrees that are not associated with any currently tracked agent.
+   *
+   * This is intended to be called at startup to clean up worktrees that were
+   * left behind after a crash or ungraceful shutdown. It lists all worktrees
+   * via the WorktreeManager, identifies those whose branch names follow the
+   * `agent-{id}/...` convention, and removes any whose agent ID is not present
+   * in the current pool.
+   */
+  async cleanOrphanedWorktrees(): Promise<void> {
+    if (!this.worktreeManager) {
+      return;
+    }
+
+    let allWorktrees: WorktreeInfo[];
+
+    try {
+      allWorktrees = await this.worktreeManager.list();
+    } catch (err) {
+      this.log.warn({ err }, 'Failed to list worktrees for orphan cleanup');
+      return;
+    }
+
+    const AGENT_BRANCH_PREFIX = 'agent-';
+
+    for (const worktree of allWorktrees) {
+      // Only consider worktrees whose branch follows the agent naming convention:
+      //   agent-{agentId}/{description}
+      if (!worktree.branch.startsWith(AGENT_BRANCH_PREFIX)) {
+        continue;
+      }
+
+      const slashIndex = worktree.branch.indexOf('/');
+      const agentId =
+        slashIndex === -1
+          ? worktree.branch.slice(AGENT_BRANCH_PREFIX.length)
+          : worktree.branch.slice(AGENT_BRANCH_PREFIX.length, slashIndex);
+
+      if (!agentId) {
+        continue;
+      }
+
+      // Skip worktrees that belong to an agent currently tracked by the pool.
+      if (this.agents.has(agentId) || this.agentWorktrees.has(agentId)) {
+        continue;
+      }
+
+      this.log.info(
+        { agentId, branch: worktree.branch, worktreePath: worktree.path },
+        'Removing orphaned agent worktree',
+      );
+
+      try {
+        await this.worktreeManager.remove(agentId);
+        this.log.info({ agentId }, 'Orphaned worktree removed');
+      } catch (err) {
+        this.log.warn({ agentId, err }, 'Failed to remove orphaned worktree');
+      }
+    }
   }
 
   get size(): number {
