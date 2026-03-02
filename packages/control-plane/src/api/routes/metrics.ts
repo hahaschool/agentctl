@@ -253,11 +253,9 @@ export const metricsRoutes: FastifyPluginAsync<MetricsRoutesOptions> = async (ap
           ? isHealthy('litellm', async () => {
               const healthy = await litellmClient.health();
               if (!healthy)
-                throw new ControlPlaneError(
-                  'HEALTH_CHECK_FAILED',
-                  'LiteLLM health check failed',
-                  { component: 'litellm' },
-                );
+                throw new ControlPlaneError('HEALTH_CHECK_FAILED', 'LiteLLM health check failed', {
+                  component: 'litellm',
+                });
             })
           : true,
       ]);

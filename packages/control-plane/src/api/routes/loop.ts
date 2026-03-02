@@ -158,7 +158,13 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
+      const resolved = await resolveWorkerUrl(
+        agentId,
+        request.query,
+        registry,
+        dbRegistry,
+        workerPort,
+      );
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
@@ -185,7 +191,13 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
+      const resolved = await resolveWorkerUrl(
+        agentId,
+        request.query,
+        registry,
+        dbRegistry,
+        workerPort,
+      );
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
@@ -211,7 +223,13 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
+      const resolved = await resolveWorkerUrl(
+        agentId,
+        request.query,
+        registry,
+        dbRegistry,
+        workerPort,
+      );
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
@@ -237,7 +255,13 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
+      const resolved = await resolveWorkerUrl(
+        agentId,
+        request.query,
+        registry,
+        dbRegistry,
+        workerPort,
+      );
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
