@@ -117,28 +117,46 @@ async function main(): Promise<void> {
     memoryInjector: memoryInjector ?? null,
   });
 
+  let shuttingDown = false;
+
   const shutdown = async (): Promise<void> => {
-    logger.info('Shutting down control plane');
-    await worker.close();
-    await taskQueue.close();
-    await server.close();
-    await redisConnection.quit();
-    logger.info('Shutdown complete');
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+
+    logger.info('Shutting down control plane...');
+
+    try {
+      await server.close();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing Fastify server');
+    }
+
+    try {
+      await worker.close();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing task worker');
+    }
+
+    try {
+      await taskQueue.close();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing task queue');
+    }
+
+    try {
+      await redisConnection.quit();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing Redis connection');
+    }
+
+    logger.info('Control plane shut down cleanly');
+    process.exit(0);
   };
 
-  process.on('SIGINT', () => {
-    shutdown().catch((err: unknown) => {
-      logger.fatal({ err }, 'Error during shutdown');
-      process.exit(1);
-    });
-  });
-
-  process.on('SIGTERM', () => {
-    shutdown().catch((err: unknown) => {
-      logger.fatal({ err }, 'Error during shutdown');
-      process.exit(1);
-    });
-  });
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 
   await server.listen({ port: PORT, host: HOST });
   logger.info({ port: PORT, host: HOST }, 'Control plane started');

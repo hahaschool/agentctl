@@ -221,20 +221,54 @@ async function main(): Promise<void> {
     'Agent worker started',
   );
 
+  let shuttingDown = false;
+
   const shutdown = async (): Promise<void> => {
-    logger.info('Shutting down...');
-    if (auditReporter) {
-      await auditReporter.stop();
+    if (shuttingDown) {
+      return;
     }
-    ipcServer.stop();
-    healthReporter.stop();
-    await pool.stopAll();
-    await server.close();
+    shuttingDown = true;
+
+    logger.info('Shutting down agent worker...');
+
+    try {
+      await pool.stopAll();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error stopping agent pool');
+    }
+
+    try {
+      if (auditReporter) {
+        await auditReporter.stop();
+      }
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error stopping audit reporter');
+    }
+
+    try {
+      healthReporter.stop();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error stopping health reporter');
+    }
+
+    try {
+      ipcServer.stop();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error stopping IPC server');
+    }
+
+    try {
+      await server.close();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing Fastify server');
+    }
+
+    logger.info('Agent worker shut down cleanly');
     process.exit(0);
   };
 
-  process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 main().catch((err: unknown) => {
