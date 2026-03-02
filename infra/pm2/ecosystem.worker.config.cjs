@@ -38,12 +38,10 @@ module.exports = {
         MACHINE_ID: 'SET_THIS_PER_MACHINE',
 
         // ── Networking ────────────────────────────────────────────
-        // Worker API port (task execution, agent management)
+        // All endpoints (health, REST API, SSE agent output streams)
+        // are served on this single port. There are no separate ports
+        // for metrics or SSE — everything runs on WORKER_PORT.
         WORKER_PORT: '9000',
-        // Prometheus metrics endpoint
-        METRICS_PORT: '9090',
-        // SSE stream endpoint for agent output
-        SSE_PORT: '9100',
 
         // ── Control Plane Connection ──────────────────────────────
         // URL of the control plane API. Use Tailscale MagicDNS hostname
@@ -87,8 +85,6 @@ module.exports = {
         LOG_LEVEL: 'debug',
         MACHINE_ID: 'dev-laptop',
         WORKER_PORT: '9000',
-        METRICS_PORT: '9090',
-        SSE_PORT: '9100',
         CONTROL_URL: 'http://localhost:8080',
         REDIS_URL: 'redis://localhost:6379',
         ANTHROPIC_API_KEY: '',

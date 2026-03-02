@@ -37,7 +37,8 @@ module.exports = {
         DATABASE_URL: 'postgresql://agentctl:agentctl@localhost:5432/agentctl',
 
         // LiteLLM proxy URL (Docker container on same machine)
-        LITELLM_PROXY_URL: 'http://localhost:4000',
+        // NOTE: The control plane code reads LITELLM_URL, not LITELLM_PROXY_URL.
+        LITELLM_URL: 'http://localhost:4000',
 
         // Mem0 memory server URL
         MEM0_URL: 'http://localhost:8000',
@@ -50,7 +51,7 @@ module.exports = {
         LOG_LEVEL: 'debug',
         REDIS_URL: 'redis://localhost:6379',
         DATABASE_URL: 'postgresql://agentctl:agentctl@localhost:5432/agentctl',
-        LITELLM_PROXY_URL: 'http://localhost:4000',
+        LITELLM_URL: 'http://localhost:4000',
         MEM0_URL: 'http://localhost:8000',
       },
 
