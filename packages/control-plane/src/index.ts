@@ -1,4 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import IORedis from 'ioredis';
+import { sql } from 'drizzle-orm';
 
 import { createServer } from './api/server.js';
 import { createDb } from './db/index.js';
@@ -37,6 +42,18 @@ async function main(): Promise<void> {
   if (DATABASE_URL) {
     logger.info('Connecting to PostgreSQL');
     const db = createDb(DATABASE_URL);
+
+    // Run the initial schema migration on every startup.
+    // All DDL statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS,
+    // so this is idempotent and safe to execute against an already-migrated database.
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const migrationSql = readFileSync(
+      join(__dirname, '../../drizzle/0000_initial_schema.sql'),
+      'utf-8',
+    );
+    await db.execute(sql.raw(migrationSql));
+    logger.info('Database migrations applied');
+
     dbRegistry = new DbAgentRegistry(db, logger.child({ component: 'db-registry' }));
     logger.info('Database-backed agent registry initialised');
   } else {

@@ -186,6 +186,10 @@ async function main(): Promise<void> {
   healthReporter.start();
 
   // Start audit reporter only when a RUN_ID is provided (indicates an active run).
+  // RUN_ID is a worker-level singleton env var — it applies to the whole worker process.
+  // For per-agent run IDs (dispatched by the control plane via task-worker), the runId
+  // is passed per-request in the StartAgentBody and stored on each AgentInstance.
+  // A future enhancement can start per-agent AuditReporters using instance.runId instead.
   const todayDate = new Date().toISOString().slice(0, 10);
   const auditFilePath = join(AUDIT_LOG_DIR, `audit-${todayDate}.ndjson`);
 
