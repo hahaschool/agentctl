@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -22,7 +27,13 @@ jobs:
       shared: ${{ steps.filter.outputs.shared }}
       control-plane: ${{ steps.filter.outputs.control-plane }}
       agent-worker: ${{ steps.filter.outputs.agent-worker }}
-      any-package: ${{ steps.filter.outputs.shared == 'true' || steps.filter.outputs.control-plane == 'true' || steps.filter.outputs.agent-worker == 'true' }}
+      infra: ${{ steps.filter.outputs.infra }}
+      any-package: >-
+        ${{
+          steps.filter.outputs.shared == 'true'
+          || steps.filter.outputs.control-plane == 'true'
+          || steps.filter.outputs.agent-worker == 'true'
+        }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +55,9 @@ jobs:
               - 'packages/shared/**'
               - 'tsconfig.base.json'
               - 'pnpm-lock.yaml'
+            infra:
+              - 'infra/**'
+              - 'docker-compose*.yml'
 
   # ---------------------------------------------------------------------------
   # Lint — always runs (Biome is fast, catches cross-package issues)
@@ -70,6 +84,9 @@ jobs:
 
       - name: Biome lint check
         run: npx @biomejs/biome check packages/
+
+      - name: Biome security lint
+        run: npx @biomejs/biome lint --rule-categories=suspicious packages/
 
   # ---------------------------------------------------------------------------
   # Build — skip unchanged packages on PRs, full build on main
@@ -110,6 +127,17 @@ jobs:
           restore-keys: |
             tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-
 
+      - name: Cache TypeScript build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/shared/dist
+            packages/control-plane/dist
+            packages/agent-worker/dist
+          key: tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json', 'pnpm-lock.yaml') }}
+          restore-keys: |
+            tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -132,7 +160,7 @@ jobs:
         run: pnpm --filter @agentctl/agent-worker... build
 
   # ---------------------------------------------------------------------------
-  # Test — per-package with path-filter optimization on PRs
+  # Test — per-package matrix with path-filter optimization on PRs
   # ---------------------------------------------------------------------------
   test:
     name: Test ${{ matrix.package }} (Node ${{ matrix.node-version }})
@@ -174,6 +202,17 @@ jobs:
           restore-keys: |
             tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-
 
+      - name: Cache TypeScript build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/shared/dist
+            packages/control-plane/dist
+            packages/agent-worker/dist
+          key: tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json', 'pnpm-lock.yaml') }}
+          restore-keys: |
+            tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -192,7 +231,7 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # Security — pnpm audit + gitleaks (Node 22 only)
+  # Security — pnpm audit + Biome security rules + gitleaks
   # ---------------------------------------------------------------------------
   security:
     name: Security scan
@@ -220,6 +259,11 @@ jobs:
       - name: Dependency audit
         continue-on-error: true
         run: pnpm audit --audit-level=high
+
+      # Non-blocking: surface Biome security-related lint warnings
+      - name: Biome security lint
+        continue-on-error: true
+        run: npx @biomejs/biome lint --rule-categories=suspicious,security packages/
 
       # Secret scanning on PRs (full history on push to main)
       - name: Gitleaks secret scan
