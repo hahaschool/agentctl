@@ -1,146 +1,199 @@
 {
-  // Tailscale ACL Policy — AgentCTL Fleet
+  // Tailscale ACL Policy -- AgentCTL Fleet
   //
-  // Defines network access rules for the Tailscale mesh connecting
-  // the control plane, worker machines, and iOS mobile clients.
-  //
-  // Apply via: tailscale admin console → Access Controls → paste this file
-  // Or via API: https://tailscale.com/api#tag/policyfile
+  // Governs network access across the Tailscale mesh connecting the
+  // control plane, agent workers, iOS mobile clients, CI/CD runners,
+  // and development machines.
   //
   // Principle: deny by default, allow only specific port ranges
-  // between tagged device groups.
+  // between tagged device groups. Workers are isolated from each
+  // other; mobile devices must route through the control plane.
+  //
+  // Apply via:  Tailscale admin console -> Access Controls -> paste
+  //   or API:   https://tailscale.com/api#tag/policyfile
 
-  // ── Tag Owners ──────────────────────────────────────────────────
+  // -- Tag Owners --------------------------------------------------------
   // Tags are applied to machines when they join the tailnet.
-  // Only admins can assign tags.
+  // Only members of the admin group can assign these tags.
   "tagOwners": {
-    "tag:control": ["autogroup:admin"],   // Control plane machine(s)
-    "tag:worker":  ["autogroup:admin"],   // Worker machines (EC2, Mac Mini, laptop)
-    "tag:mobile":  ["autogroup:admin"]    // iOS devices (iPhone, iPad)
+    "tag:control": ["autogroup:admin"],
+    "tag:worker":  ["autogroup:admin"],
+    "tag:mobile":  ["autogroup:admin"],
+    "tag:ci":      ["autogroup:admin"],
+    "tag:dev":     ["autogroup:admin"]
   },
 
-  // ── Access Control Lists ────────────────────────────────────────
+  // -- Access Control Lists -----------------------------------------------
   // Rules are evaluated top-to-bottom. First match wins.
   // All traffic not explicitly allowed is denied.
   "acls": [
-    // Control plane can reach worker machines on agent management ports:
-    //   9000 — Worker API (start/stop/message agents)
-    //   9090 — Prometheus metrics endpoint
-    //   9100 — SSE agent output streams
+    // 1. Control plane -> workers on agent API port
     {
       "action": "accept",
       "src":    ["tag:control"],
-      "dst":    ["tag:worker:9000-9100"]
+      "dst":    ["tag:worker:9000"]
     },
 
-    // Workers connect back to control plane services:
-    //   4000 — LiteLLM proxy (LLM API routing)
-    //   5432 — PostgreSQL (agent registry, run history)
-    //   6379 — Redis (BullMQ task queue)
-    //   8000 — Mem0 memory server
-    //   8080 — Control plane API (heartbeat, registration)
+    // 2. Workers -> control plane for registration, heartbeat, and audit
     {
       "action": "accept",
       "src":    ["tag:worker"],
-      "dst":    ["tag:control:4000,5432,6379,8000,8080"]
+      "dst":    ["tag:control:8080"]
     },
 
-    // iOS mobile clients connect only to the control plane API.
-    // All agent interaction is proxied through the control plane —
-    // mobile devices never talk directly to workers.
+    // 3. Mobile -> control plane API (all agent interaction is proxied)
     {
       "action": "accept",
       "src":    ["tag:mobile"],
       "dst":    ["tag:control:8080"]
-    }
-  ],
+    },
 
-  // ── SSH Access ──────────────────────────────────────────────────
-  // Tailscale SSH allows the control plane to SSH into workers
-  // for emergency debugging, log collection, and script execution.
-  // Restricted to non-root users for security.
-  "ssh": [
+    // 4. CI -> control plane and workers on SSH for deployment
+    {
+      "action": "accept",
+      "src":    ["tag:ci"],
+      "dst":    ["tag:control:22", "tag:worker:22"]
+    },
+
+    // 5. Dev machines -> everything (development convenience)
+    //    Includes all service ports across control and worker nodes.
+    {
+      "action": "accept",
+      "src":    ["tag:dev"],
+      "dst":    ["tag:control:*", "tag:worker:*", "tag:mobile:*", "tag:ci:*"]
+    },
+
+    // 6. Control plane -> local database services (PostgreSQL + Redis)
+    //    These typically run on the same host or a dedicated DB node
+    //    also tagged tag:control.
     {
       "action": "accept",
       "src":    ["tag:control"],
-      "dst":    ["tag:worker"],
+      "dst":    ["tag:control:5432", "tag:control:6379"]
+    },
+
+    // Workers -> control plane infrastructure services
+    // (LiteLLM proxy, PostgreSQL, Redis, Mem0) needed for agent operation.
+    {
+      "action": "accept",
+      "src":    ["tag:worker"],
+      "dst":    ["tag:control:4000", "tag:control:5432", "tag:control:6379", "tag:control:8000"]
+    }
+
+    // NOTE: The following are implicitly denied (no rule exists):
+    //  - Workers cannot reach other workers (isolation)
+    //  - Mobile cannot reach workers directly (must go through control plane)
+    //  - Mobile cannot reach database ports
+    //  - CI cannot reach non-SSH ports
+  ],
+
+  // -- SSH Rules -----------------------------------------------------------
+  // Tailscale SSH provides authenticated, logged SSH access without
+  // managing keys manually.
+  "ssh": [
+    // CI can SSH as the "deploy" user to control plane and workers
+    {
+      "action": "accept",
+      "src":    ["tag:ci"],
+      "dst":    ["tag:control", "tag:worker"],
+      "users":  ["deploy"]
+    },
+
+    // Dev machines can SSH as any user to any tagged machine
+    {
+      "action": "accept",
+      "src":    ["tag:dev"],
+      "dst":    ["tag:control", "tag:worker", "tag:ci"],
       "users":  ["autogroup:nonroot"]
     }
+
+    // NOTE: The following are implicitly denied (no rule exists):
+    //  - tag:control and tag:worker cannot SSH to each other
+    //  - tag:mobile cannot SSH anywhere
   ],
 
-  // ── Node Attributes ─────────────────────────────────────────────
-  // Enable Tailscale Funnel and HTTPS for the control plane
-  // so the API can be exposed with TLS if needed.
+  // -- Node Attributes -----------------------------------------------------
   "nodeAttrs": [
+    // Enable MagicDNS for all nodes in the tailnet so machines
+    // can be reached by hostname (e.g., control.tailnet.ts.net).
     {
-      "target": ["tag:control"],
-      "attr":   ["funnel"]
+      "target": ["*"],
+      "attr":   ["funnel: false"]
     }
   ],
 
-  // ── Tests ───────────────────────────────────────────────────────
-  // Tailscale ACL tests validate the policy before applying.
-  // These run automatically in the admin console.
+  // -- Auto Approvers ------------------------------------------------------
+  // Allow tagged nodes to automatically approve certain route
+  // advertisements without admin intervention.
+  "autoApprovers": {
+    "routes": {
+      "10.0.0.0/8": ["tag:control"]
+    }
+  },
+
+  // -- ACL Tests -----------------------------------------------------------
+  // Tailscale validates these assertions before applying the policy.
+  // Each test verifies that a source can (accept) or cannot (deny)
+  // reach a specific destination:port.
   "tests": [
+    // 1. Control plane can reach worker agent API
     {
-      // Control plane can reach worker agent API
       "src":    "tag:control",
       "accept": ["tag:worker:9000"]
     },
+
+    // 2. Worker can reach control plane API
     {
-      // Control plane can reach worker metrics
-      "src":    "tag:control",
-      "accept": ["tag:worker:9090"]
-    },
-    {
-      // Control plane can reach worker SSE streams
-      "src":    "tag:control",
-      "accept": ["tag:worker:9100"]
-    },
-    {
-      // Worker can reach control plane API
       "src":    "tag:worker",
       "accept": ["tag:control:8080"]
     },
+
+    // 3. Mobile can reach control plane API
     {
-      // Worker can reach Redis
-      "src":    "tag:worker",
-      "accept": ["tag:control:6379"]
-    },
-    {
-      // Worker can reach PostgreSQL
-      "src":    "tag:worker",
-      "accept": ["tag:control:5432"]
-    },
-    {
-      // Worker can reach LiteLLM proxy
-      "src":    "tag:worker",
-      "accept": ["tag:control:4000"]
-    },
-    {
-      // Worker can reach Mem0
-      "src":    "tag:worker",
-      "accept": ["tag:control:8000"]
-    },
-    {
-      // Mobile can reach control plane API
       "src":    "tag:mobile",
       "accept": ["tag:control:8080"]
     },
+
+    // 4. Worker CANNOT reach another worker (isolation)
     {
-      // Mobile CANNOT reach workers directly
-      "src":    "tag:mobile",
-      "deny":   ["tag:worker:9000"]
+      "src":  "tag:worker",
+      "deny": ["tag:worker:9000"]
     },
+
+    // 5. Mobile CANNOT reach workers directly
     {
-      // Mobile CANNOT reach Redis
-      "src":    "tag:mobile",
-      "deny":   ["tag:control:6379"]
+      "src":  "tag:mobile",
+      "deny": ["tag:worker:9000"]
     },
+
+    // 6. CI can SSH to workers
     {
-      // Workers CANNOT reach each other
-      "src":    "tag:worker",
-      "deny":   ["tag:worker:9000"]
+      "src":    "tag:ci",
+      "accept": ["tag:worker:22"]
+    },
+
+    // 7. CI can SSH to control plane
+    {
+      "src":    "tag:ci",
+      "accept": ["tag:control:22"]
+    },
+
+    // 8. Mobile CANNOT SSH anywhere
+    {
+      "src":  "tag:mobile",
+      "deny": ["tag:control:22"]
+    },
+
+    // 9. Mobile CANNOT reach database ports
+    {
+      "src":  "tag:mobile",
+      "deny": ["tag:control:5432"]
+    },
+
+    // 10. Dev machines can reach worker agent API
+    {
+      "src":    "tag:dev",
+      "accept": ["tag:worker:9000"]
     }
   ]
 }
