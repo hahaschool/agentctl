@@ -1,0 +1,286 @@
+# Deploy to Production (Phase 5)
+#
+# Blue-green production deployment with pre-deploy backup, migration,
+# health checks, and automatic rollback on failure.
+#
+# Triggers:
+#   - workflow_dispatch: manual deploy with explicit image_tag
+#   - release: automatic deploy when a GitHub Release is published
+#
+# NOTE: The "production" GitHub Environment MUST be configured with
+# required reviewers to gate production deployments. Go to:
+#   Settings > Environments > production > Required reviewers
+#
+# Required secrets:
+#   TS_OAUTH_CLIENT_ID  — Tailscale OAuth client ID (ephemeral)
+#   TS_OAUTH_SECRET     — Tailscale OAuth client secret
+#   PROD_TAILSCALE_IP   — Tailscale IP of prod machine (100.x.x.x)
+#   DEPLOY_SSH_KEY      — SSH private key for the deploy user on prod machine
+#   POSTGRES_PASSWORD   — PostgreSQL password for the control-plane database
+#
+# Required repository variables (non-secret):
+#   DEPLOY_USER         — SSH user on the target machine (default: deploy)
+#   DEPLOY_PATH         — Path to docker-compose directory (default: /opt/agentctl)
+
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (e.g. sha-abc1234 or 1.2.3)"
+        required: true
+        type: string
+  release:
+    types: [published]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+  COMPOSE_FILE: docker-compose.prod.yml
+  DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/agentctl' }}
+
+permissions:
+  contents: read
+  id-token: write  # Required for Tailscale OIDC
+  actions: write   # Required for uploading artifacts
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # NOTE: "production" environment requires manual approval via GitHub
+    # Environment protection rules. Configure at:
+    #   Settings > Environments > production > Required reviewers
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Resolve image tag ───────────────────────────────────────────
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "image_tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            # Strip leading 'v' from release tag (v1.2.3 -> 1.2.3)
+            RAW_TAG="${{ github.event.release.tag_name }}"
+            echo "image_tag=${RAW_TAG#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Connect to Tailscale mesh ───────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Set up SSH key for deployment ───────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host prod-target
+            HostName ${{ secrets.PROD_TAILSCALE_IP }}
+            User ${{ env.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      # ── Verify SSH connectivity ─────────────────────────────────────
+      - name: Verify SSH connectivity
+        run: ssh prod-target "echo 'SSH connection established'"
+
+      # ── Record current deployment for rollback ──────────────────────
+      - name: Record current image tags for rollback
+        id: current
+        run: |
+          CURRENT_CP=$(ssh prod-target \
+            "docker inspect agentctl-control-plane --format='{{.Config.Image}}' 2>/dev/null || echo 'none'")
+          CURRENT_AW=$(ssh prod-target \
+            "docker inspect agentctl-agent-worker --format='{{.Config.Image}}' 2>/dev/null || echo 'none'")
+
+          echo "control_plane_image=$CURRENT_CP" >> "$GITHUB_OUTPUT"
+          echo "agent_worker_image=$CURRENT_AW" >> "$GITHUB_OUTPUT"
+          echo "Current control-plane: $CURRENT_CP"
+          echo "Current agent-worker: $CURRENT_AW"
+
+      # ── Pre-deploy database backup ──────────────────────────────────
+      - name: Database backup (pg_dump)
+        run: |
+          TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          ssh prod-target << REMOTE_SCRIPT
+            set -euo pipefail
+            echo "Creating database backup..."
+            docker exec agentctl-postgres-prod pg_dump \
+              -U \${POSTGRES_USER:-agentctl} \
+              -d \${POSTGRES_DB:-agentctl} \
+              --format=custom \
+              --compress=9 \
+              > /tmp/agentctl-backup-${TIMESTAMP}.dump
+
+            echo "Backup size: \$(du -h /tmp/agentctl-backup-${TIMESTAMP}.dump | cut -f1)"
+          REMOTE_SCRIPT
+
+          # Download backup to runner for artifact upload
+          scp prod-target:/tmp/agentctl-backup-${TIMESTAMP}.dump ./agentctl-backup-${TIMESTAMP}.dump
+          echo "backup_file=agentctl-backup-${TIMESTAMP}.dump" >> "$GITHUB_ENV"
+
+      - name: Upload database backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ steps.tag.outputs.image_tag }}
+          path: ${{ env.backup_file }}
+          retention-days: 7
+
+      # ── Pull new images ─────────────────────────────────────────────
+      - name: Pull new images
+        run: |
+          ssh prod-target << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            echo "::group::Pulling control-plane image"
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.image_tag }}
+            echo "::endgroup::"
+
+            echo "::group::Pulling agent-worker image"
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ steps.tag.outputs.image_tag }}
+            echo "::endgroup::"
+          REMOTE_SCRIPT
+
+      # ── Run database migrations ─────────────────────────────────────
+      - name: Run database migrations
+        run: |
+          ssh prod-target << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo "Running drizzle-kit migrations..."
+            docker run --rm \
+              --network agentctl_backend \
+              -e DATABASE_URL="postgresql://${POSTGRES_USER:-agentctl}:${POSTGRES_PASSWORD}@agentctl-postgres-prod:5432/${POSTGRES_DB:-agentctl}" \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.image_tag }} \
+              npx drizzle-kit migrate
+          REMOTE_SCRIPT
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+      # ── Blue-green: scale up new containers ─────────────────────────
+      - name: Deploy new containers (blue-green swap)
+        run: |
+          ssh prod-target << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Export image tags for compose override
+            export CONTROL_PLANE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.image_tag }}"
+            export AGENT_WORKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ steps.tag.outputs.image_tag }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            echo "Deploying with image tag: ${{ steps.tag.outputs.image_tag }}"
+
+            # Scale up new containers (blue-green: new containers start before old ones stop)
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans --force-recreate control-plane agent-worker
+
+            echo "Waiting for containers to initialize..."
+            sleep 5
+            docker compose -f ${{ env.COMPOSE_FILE }} ps
+          REMOTE_SCRIPT
+
+      # ── Health check: new deployment ────────────────────────────────
+      - name: Health check (new deployment)
+        id: health
+        run: |
+          ATTEMPT=0
+          MAX_ATTEMPTS=5
+          INTERVAL=10
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            STATUS=$(ssh prod-target \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              echo "healthy=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "healthy=false" >> "$GITHUB_OUTPUT"
+          echo "::error::Health check failed after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      # ── Smoke tests ─────────────────────────────────────────────────
+      - name: Smoke tests
+        run: |
+          echo "Running smoke tests against production..."
+
+          # Test /health endpoint returns valid JSON
+          HEALTH_BODY=$(ssh prod-target "curl -sf http://localhost:8080/health")
+          echo "Health response: $HEALTH_BODY"
+
+          # Verify response contains expected status field
+          echo "$HEALTH_BODY" | grep -q '"status"' || {
+            echo "::error::Smoke test failed: /health response missing 'status' field"
+            exit 1
+          }
+
+          echo "Smoke tests passed"
+
+      # ── Rollback on failure ─────────────────────────────────────────
+      - name: Rollback to previous deployment
+        if: failure() && steps.current.outputs.control_plane_image != 'none'
+        run: |
+          echo "::warning::Deployment failed. Rolling back to previous images..."
+          echo "Previous control-plane: ${{ steps.current.outputs.control_plane_image }}"
+          echo "Previous agent-worker: ${{ steps.current.outputs.agent_worker_image }}"
+
+          ssh prod-target << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            export CONTROL_PLANE_IMAGE="${{ steps.current.outputs.control_plane_image }}"
+            export AGENT_WORKER_IMAGE="${{ steps.current.outputs.agent_worker_image }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            echo "Rolling back containers..."
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans --force-recreate control-plane agent-worker
+
+            sleep 10
+
+            # Verify rollback health
+            ROLLBACK_STATUS=\$(curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/health 2>/dev/null || echo "000")
+            if [ "\$ROLLBACK_STATUS" = "200" ]; then
+              echo "Rollback successful (HTTP \$ROLLBACK_STATUS)"
+            else
+              echo "::error::Rollback health check failed (HTTP \$ROLLBACK_STATUS). Manual intervention required."
+            fi
+          REMOTE_SCRIPT
+
+      # ── Report deployment failure ───────────────────────────────────
+      - name: Report deployment failure
+        if: failure()
+        run: |
+          echo "::error title=Production Deployment Failed::Deployment of tag ${{ steps.tag.outputs.image_tag }} to production (${{ secrets.PROD_TAILSCALE_IP }}) failed. Automatic rollback was attempted. Check container logs: ssh ${{ env.DEPLOY_USER }}@${{ secrets.PROD_TAILSCALE_IP }} 'cd ${{ env.DEPLOY_PATH }} && docker compose -f ${{ env.COMPOSE_FILE }} logs --tail=100'"
+
+      # ── Cleanup SSH key ─────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key

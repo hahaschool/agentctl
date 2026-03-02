@@ -1,0 +1,184 @@
+# Rollback Deployment
+#
+# Rolls back a dev or production environment to a specified image tag.
+# This is a manual workflow for emergency use when automatic rollback
+# in deploy-prod.yml is insufficient or when rolling back dev.
+#
+# Usage:
+#   1. Go to Actions > Rollback Deployment > Run workflow
+#   2. Select the target environment (dev or production)
+#   3. Enter the image tag to roll back to (e.g. sha-abc1234 or 1.2.3)
+#   4. Click "Run workflow"
+#
+# Required secrets:
+#   TS_OAUTH_CLIENT_ID  — Tailscale OAuth client ID (ephemeral)
+#   TS_OAUTH_SECRET     — Tailscale OAuth client secret
+#   DEV_TAILSCALE_IP    — Tailscale IP of dev machine (100.x.x.x)
+#   PROD_TAILSCALE_IP   — Tailscale IP of prod machine (100.x.x.x)
+#   DEPLOY_SSH_KEY      — SSH private key for the deploy user
+#   POSTGRES_PASSWORD   — PostgreSQL password for the control-plane database
+#
+# Required repository variables (non-secret):
+#   DEPLOY_USER         — SSH user on the target machine (default: deploy)
+#   DEPLOY_PATH         — Path to docker-compose directory (default: /opt/agentctl)
+
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - production
+      image_tag:
+        description: "Image tag to roll back to (e.g. sha-abc1234 or 1.2.3)"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+  COMPOSE_FILE: docker-compose.prod.yml
+  DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/agentctl' }}
+
+permissions:
+  contents: read
+  id-token: write  # Required for Tailscale OIDC
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.environment }} to ${{ inputs.image_tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Use the appropriate GitHub Environment for protection rules.
+    # Production rollbacks still require reviewer approval.
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Resolve target IP based on environment ──────────────────────
+      - name: Resolve target machine
+        id: target
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "ip=${{ secrets.PROD_TAILSCALE_IP }}" >> "$GITHUB_OUTPUT"
+            echo "host=prod-target" >> "$GITHUB_OUTPUT"
+          else
+            echo "ip=${{ secrets.DEV_TAILSCALE_IP }}" >> "$GITHUB_OUTPUT"
+            echo "host=dev-target" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Connect to Tailscale mesh ───────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Set up SSH key for deployment ───────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host ${{ steps.target.outputs.host }}
+            HostName ${{ steps.target.outputs.ip }}
+            User ${{ env.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      # ── Verify SSH connectivity ─────────────────────────────────────
+      - name: Verify SSH connectivity
+        run: ssh ${{ steps.target.outputs.host }} "echo 'SSH connection established'"
+
+      # ── Record current state before rollback ────────────────────────
+      - name: Record current deployment state
+        run: |
+          echo "::group::Current container state"
+          ssh ${{ steps.target.outputs.host }} \
+            "docker ps --filter 'name=agentctl-' --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'" || true
+          echo "::endgroup::"
+
+      # ── Pull rollback images ────────────────────────────────────────
+      - name: Pull rollback images
+        run: |
+          ssh ${{ steps.target.outputs.host }} << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            echo "Pulling control-plane:${{ inputs.image_tag }}..."
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ inputs.image_tag }}
+
+            echo "Pulling agent-worker:${{ inputs.image_tag }}..."
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ inputs.image_tag }}
+          REMOTE_SCRIPT
+
+      # ── Deploy rollback containers ──────────────────────────────────
+      - name: Deploy rollback containers
+        run: |
+          ssh ${{ steps.target.outputs.host }} << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            export CONTROL_PLANE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ inputs.image_tag }}"
+            export AGENT_WORKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ inputs.image_tag }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            echo "Rolling back to image tag: ${{ inputs.image_tag }}"
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans --force-recreate control-plane agent-worker
+
+            echo "Waiting for containers to start..."
+            sleep 5
+            docker compose -f ${{ env.COMPOSE_FILE }} ps
+          REMOTE_SCRIPT
+
+      # ── Post-rollback health check ──────────────────────────────────
+      - name: Health check
+        run: |
+          ATTEMPT=0
+          MAX_ATTEMPTS=5
+          INTERVAL=10
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            STATUS=$(ssh ${{ steps.target.outputs.host }} \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              echo "Rollback to ${{ inputs.image_tag }} on ${{ inputs.environment }} successful"
+              exit 0
+            fi
+
+            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "::error title=Rollback Health Check Failed::Rollback to ${{ inputs.image_tag }} on ${{ inputs.environment }} completed but health check failed after $MAX_ATTEMPTS attempts. Manual intervention required."
+          exit 1
+
+      # ── Report outcome ──────────────────────────────────────────────
+      - name: Report rollback failure
+        if: failure()
+        run: |
+          echo "::error title=Rollback Failed::Rollback of ${{ inputs.environment }} to tag ${{ inputs.image_tag }} failed. Manual intervention required. SSH: ${{ env.DEPLOY_USER }}@${{ steps.target.outputs.ip }}"
+
+      # ── Cleanup SSH key ─────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key

@@ -1,0 +1,172 @@
+# Deploy to Dev Environment (Phase 3)
+#
+# Deploys the latest images from the dev branch to the development machine
+# via Tailscale SSH. Triggered automatically after CI passes on dev pushes.
+#
+# Required secrets:
+#   TS_OAUTH_CLIENT_ID  — Tailscale OAuth client ID (ephemeral)
+#   TS_OAUTH_SECRET     — Tailscale OAuth client secret
+#   DEV_TAILSCALE_IP    — Tailscale IP of dev machine (100.x.x.x)
+#   DEPLOY_SSH_KEY      — SSH private key for the deploy user on dev machine
+#   POSTGRES_PASSWORD   — PostgreSQL password for the control-plane database
+#
+# Required repository variables (non-secret):
+#   DEPLOY_USER         — SSH user on the target machine (default: deploy)
+#   DEPLOY_PATH         — Path to docker-compose directory (default: /opt/agentctl)
+
+name: Deploy to Dev
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+  COMPOSE_FILE: docker-compose.prod.yml
+  DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/agentctl' }}
+
+permissions:
+  contents: read
+  id-token: write  # Required for Tailscale OIDC
+
+jobs:
+  deploy:
+    name: Deploy to dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Connect to Tailscale mesh ───────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Set up SSH key for deployment ───────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host dev-target
+            HostName ${{ secrets.DEV_TAILSCALE_IP }}
+            User ${{ env.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      # ── Verify SSH connectivity ─────────────────────────────────────
+      - name: Verify SSH connectivity
+        run: ssh dev-target "echo 'SSH connection established'"
+
+      # ── Compute image tag from short SHA ────────────────────────────
+      - name: Compute image tag
+        id: tag
+        run: echo "sha=sha-$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      # ── Pull latest images on dev machine ───────────────────────────
+      - name: Pull images
+        run: |
+          ssh dev-target << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            echo "::group::Pulling control-plane image"
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.sha }}
+            echo "::endgroup::"
+
+            echo "::group::Pulling agent-worker image"
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ steps.tag.outputs.sha }}
+            echo "::endgroup::"
+          REMOTE_SCRIPT
+
+      # ── Run database migrations ─────────────────────────────────────
+      - name: Run database migrations
+        run: |
+          ssh dev-target << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo "Running drizzle-kit migrations..."
+            docker run --rm \
+              --network agentctl_backend \
+              -e DATABASE_URL="postgresql://${POSTGRES_USER:-agentctl}:${POSTGRES_PASSWORD}@agentctl-postgres-prod:5432/${POSTGRES_DB:-agentctl}" \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.sha }} \
+              npx drizzle-kit migrate
+          REMOTE_SCRIPT
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+      # ── Deploy with docker compose ──────────────────────────────────
+      - name: Deploy containers
+        run: |
+          ssh dev-target << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Export image tags for compose override
+            export CONTROL_PLANE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.sha }}"
+            export AGENT_WORKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ steps.tag.outputs.sha }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            echo "Deploying with image tag: ${{ steps.tag.outputs.sha }}"
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans
+
+            echo "Waiting for containers to start..."
+            sleep 5
+            docker compose -f ${{ env.COMPOSE_FILE }} ps
+          REMOTE_SCRIPT
+
+      # ── Post-deploy health check ────────────────────────────────────
+      - name: Health check
+        id: health
+        run: |
+          ATTEMPT=0
+          MAX_ATTEMPTS=5
+          INTERVAL=10
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            STATUS=$(ssh dev-target \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              echo "healthy=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "healthy=false" >> "$GITHUB_OUTPUT"
+          echo "::error::Health check failed after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      # ── On failure: annotate and report ─────────────────────────────
+      - name: Report deployment failure
+        if: failure()
+        run: |
+          echo "::error title=Dev Deployment Failed::Deployment to dev (${{ secrets.DEV_TAILSCALE_IP }}) failed. Old containers remain running. Check logs with: ssh ${{ env.DEPLOY_USER }}@${{ secrets.DEV_TAILSCALE_IP }} 'cd ${{ env.DEPLOY_PATH }} && docker compose -f ${{ env.COMPOSE_FILE }} logs --tail=100'"
+
+          # Capture container logs for debugging
+          ssh dev-target "cd ${{ env.DEPLOY_PATH }} && docker compose -f ${{ env.COMPOSE_FILE }} logs --tail=50 control-plane" || true
+
+      # ── Cleanup SSH key ─────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key
