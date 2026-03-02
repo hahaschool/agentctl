@@ -11,6 +11,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Detect which packages changed (PRs only — main merges always run all)
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      shared: ${{ steps.filter.outputs.shared }}
+      control-plane: ${{ steps.filter.outputs.control-plane }}
+      agent-worker: ${{ steps.filter.outputs.agent-worker }}
+      any-package: ${{ steps.filter.outputs.shared == 'true' || steps.filter.outputs.control-plane == 'true' || steps.filter.outputs.agent-worker == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'packages/shared/**'
+              - 'tsconfig.base.json'
+              - 'pnpm-lock.yaml'
+            control-plane:
+              - 'packages/control-plane/**'
+              - 'packages/shared/**'
+              - 'tsconfig.base.json'
+              - 'pnpm-lock.yaml'
+            agent-worker:
+              - 'packages/agent-worker/**'
+              - 'packages/shared/**'
+              - 'tsconfig.base.json'
+              - 'pnpm-lock.yaml'
+
+  # ---------------------------------------------------------------------------
+  # Lint — always runs (Biome is fast, catches cross-package issues)
+  # ---------------------------------------------------------------------------
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -26,18 +63,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-store-${{ runner.os }}-
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -45,10 +71,17 @@ jobs:
       - name: Biome lint check
         run: npx @biomejs/biome check packages/
 
+  # ---------------------------------------------------------------------------
+  # Build — skip unchanged packages on PRs, full build on main
+  # ---------------------------------------------------------------------------
   build:
     name: Build (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: changes
+    if: >-
+      github.event_name == 'push'
+      || needs.changes.outputs.any-package == 'true'
 
     strategy:
       matrix:
@@ -64,37 +97,59 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: pnpm
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
-
-      - name: Cache pnpm store
+      - name: Cache TypeScript build info
         uses: actions/cache@v4
         with:
-          path: ${{ env.STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: |
+            packages/shared/.tsbuildinfo
+            packages/control-plane/.tsbuildinfo
+            packages/agent-worker/.tsbuildinfo
+          key: tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
           restore-keys: |
-            pnpm-store-${{ runner.os }}-node${{ matrix.node-version }}-
-            pnpm-store-${{ runner.os }}-
+            tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
+      # On main pushes: full build for safety
+      - name: Build all packages
+        if: github.event_name == 'push'
         run: pnpm build
 
+      # On PRs: build only affected packages (shared always first if changed)
+      - name: Build shared
+        if: github.event_name == 'pull_request' && needs.changes.outputs.shared == 'true'
+        run: pnpm --filter @agentctl/shared build
+
+      - name: Build control-plane
+        if: github.event_name == 'pull_request' && needs.changes.outputs.control-plane == 'true'
+        run: pnpm --filter @agentctl/control-plane... build
+
+      - name: Build agent-worker
+        if: github.event_name == 'pull_request' && needs.changes.outputs.agent-worker == 'true'
+        run: pnpm --filter @agentctl/agent-worker... build
+
+  # ---------------------------------------------------------------------------
+  # Test — per-package with path-filter optimization on PRs
+  # ---------------------------------------------------------------------------
   test:
     name: Test ${{ matrix.package }} (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: build
+    needs: [changes, build]
 
     strategy:
       fail-fast: false
       matrix:
         node-version: [20, 22]
         package: [shared, control-plane, agent-worker]
+        exclude:
+          # On PRs, exclude packages that did not change
+          - package: ${{ needs.changes.outputs.shared != 'true' && github.event_name == 'pull_request' && 'shared' || 'SKIP_NONE' }}
+          - package: ${{ needs.changes.outputs.control-plane != 'true' && github.event_name == 'pull_request' && 'control-plane' || 'SKIP_NONE' }}
+          - package: ${{ needs.changes.outputs.agent-worker != 'true' && github.event_name == 'pull_request' && 'agent-worker' || 'SKIP_NONE' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -106,24 +161,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: pnpm
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
-
-      - name: Cache pnpm store
+      - name: Cache TypeScript build info
         uses: actions/cache@v4
         with:
-          path: ${{ env.STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: |
+            packages/shared/.tsbuildinfo
+            packages/control-plane/.tsbuildinfo
+            packages/agent-worker/.tsbuildinfo
+          key: tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
           restore-keys: |
-            pnpm-store-${{ runner.os }}-node${{ matrix.node-version }}-
-            pnpm-store-${{ runner.os }}-
+            tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
+      - name: Build (required for tests)
         run: pnpm build
 
       - name: Run tests with coverage
@@ -136,3 +190,39 @@ jobs:
           name: coverage-${{ matrix.package }}-node${{ matrix.node-version }}
           path: packages/${{ matrix.package }}/coverage/
           retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Security — pnpm audit + gitleaks (Node 22 only)
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Non-blocking: audit results appear as annotations, not failures
+      - name: Dependency audit
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+
+      # Secret scanning on PRs (full history on push to main)
+      - name: Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
