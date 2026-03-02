@@ -108,6 +108,31 @@ jobs:
           sarif_file: trivy-${{ matrix.package }}.sarif
           category: trivy-${{ matrix.package }}
 
+      # ── Grype vulnerability scan ─────────────────────────────────
+      - name: Run Grype vulnerability scanner
+        id: grype-scan
+        uses: anchore/scan-action@v4
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}:sha-${{ steps.short-sha.outputs.sha }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+
+      - name: Upload Grype SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.grype-scan.outputs.sarif }}
+          category: grype-${{ matrix.package }}
+
+      - name: Upload Grype report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grype-sarif-${{ matrix.package }}
+          path: ${{ steps.grype-scan.outputs.sarif }}
+          retention-days: 90
+
       # ── Generate and upload SBOM ─────────────────────────────────
       - name: Generate SBOM with Trivy
         uses: aquasecurity/trivy-action@0.28.0
