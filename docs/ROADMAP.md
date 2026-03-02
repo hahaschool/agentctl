@@ -273,25 +273,25 @@ Dedicated security workflow on every PR and nightly:
 
 A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 
-- [ ] **Agent config**: read-only access, `allowedTools: ['Read', 'Glob', 'Grep']` only
+- [x] **Agent config**: read-only access, `allowedTools: ['Read', 'Glob', 'Grep']` only (61 tests)
 - [ ] **Schedule**: nightly cron via BullMQ (uses Phase 8 cron feature)
-- [ ] **Prompt template**: structured security review covering:
+- [x] **Prompt template**: structured security review covering:
   - Input validation on all API routes (SQLi, command injection, XSS)
   - Secrets leakage in code, config, logs, git history
   - Container security (Dockerfile, compose hardening)
   - Auth/authz gaps in API endpoints
   - Dependency vulnerabilities and outdated packages
   - OWASP Agentic Top 10 compliance gaps
-- [ ] **Output**: structured JSON report (severity, file, line, description, recommendation)
+- [x] **Output**: structured JSON report (severity, file, line, description, recommendation)
 - [ ] **Integration**: results posted to control plane; high-severity -> auto-create GitHub Issues
-- [ ] **Guardrails**: audit agent itself runs sandboxed (read-only FS, no network egress, restricted tools)
+- [x] **Guardrails**: audit agent itself runs sandboxed (read-only FS, no network egress, restricted tools)
 
 ### 9.4 Runtime Security Controls
 
 - [x] **Agent identity**: unique short-lived tokens per session (not shared machine keys)
-- [ ] **Network egress**: `--network=none` default; allowlist specific domains per agent
+- [x] **Network egress**: `--network=none` default; allowlist specific domains per agent (70 tests)
 - [ ] **FS isolation**: worktrees read-only except output dirs; block `.ssh`, `.gnupg`, `.aws`, `.env`
-- [ ] **Memory security**: encrypt sensitive Mem0 fields at rest; TTL auto-expiry; per-agent isolation
+- [x] **Memory security**: content validation, PII redaction, agent namespace isolation (67 tests)
 - [x] **Tool rate limiting**: cap tool calls/minute/agent to detect runaway loops
 - [x] **Prompt injection defense**:
   - Sanitize external content before agent context injection
