@@ -593,19 +593,21 @@ describe('Agent routes — start with auto-creation', () => {
   afterEach(() => {
     vi.mocked(mockDbRegistry.getAgent).mockReset();
     vi.mocked(mockDbRegistry.createAgent).mockReset().mockResolvedValue('new-agent-uuid');
-    vi.mocked(mockDbRegistry.listMachines).mockReset().mockResolvedValue([
-      {
-        id: 'machine-1',
-        hostname: 'test-host',
-        tailscaleIp: '100.64.0.1',
-        os: 'linux',
-        arch: 'x64',
-        status: 'online',
-        lastHeartbeat: new Date(),
-        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
-        createdAt: new Date(),
-      },
-    ] as never);
+    vi.mocked(mockDbRegistry.listMachines)
+      .mockReset()
+      .mockResolvedValue([
+        {
+          id: 'machine-1',
+          hostname: 'test-host',
+          tailscaleIp: '100.64.0.1',
+          os: 'linux',
+          arch: 'x64',
+          status: 'online',
+          lastHeartbeat: new Date(),
+          capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+          createdAt: new Date(),
+        },
+      ] as never);
     vi.mocked(mockTaskQueue.add).mockReset().mockResolvedValue({ id: 'job-auto-1' });
   });
 

@@ -35,17 +35,18 @@ type HealthResponse = {
  * Execute a health check with a timeout. Returns a DependencyStatus indicating
  * success or failure along with the measured latency.
  */
-async function checkWithTimeout(
-  name: string,
-  fn: () => Promise<void>,
-): Promise<DependencyStatus> {
+async function checkWithTimeout(name: string, fn: () => Promise<void>): Promise<DependencyStatus> {
   const start = performance.now();
 
   try {
     await Promise.race([
       fn(),
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)), HEALTH_CHECK_TIMEOUT_MS);
+        setTimeout(
+          () =>
+            reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
+          HEALTH_CHECK_TIMEOUT_MS,
+        );
       }),
     ]);
 
@@ -73,10 +74,14 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
       // so that callers can distinguish between healthy and degraded.
       const [pgResult, redisResult, mem0Result, litellmResult] = await Promise.allSettled([
         db
-          ? checkWithTimeout('postgres', async () => { await db.execute(sql`SELECT 1`); })
+          ? checkWithTimeout('postgres', async () => {
+              await db.execute(sql`SELECT 1`);
+            })
           : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
         redis
-          ? checkWithTimeout('redis', async () => { await redis.ping(); })
+          ? checkWithTimeout('redis', async () => {
+              await redis.ping();
+            })
           : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
         mem0Client
           ? checkWithTimeout('mem0', async () => {
@@ -103,10 +108,14 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
     // Detailed path — run all checks in parallel and return per-dependency results.
     const [pgResult, redisResult, mem0Result, litellmResult] = await Promise.allSettled([
       db
-        ? checkWithTimeout('postgres', async () => { await db.execute(sql`SELECT 1`); })
+        ? checkWithTimeout('postgres', async () => {
+            await db.execute(sql`SELECT 1`);
+          })
         : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
       redis
-        ? checkWithTimeout('redis', async () => { await redis.ping(); })
+        ? checkWithTimeout('redis', async () => {
+            await redis.ping();
+          })
         : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
       mem0Client
         ? checkWithTimeout('mem0', async () => {
@@ -124,7 +133,8 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
 
     const toDepStatus = (result: PromiseSettledResult<DependencyStatus>): DependencyStatus => {
       if (result.status === 'fulfilled') return result.value;
-      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      const message =
+        result.reason instanceof Error ? result.reason.message : String(result.reason);
       return { status: 'error', latencyMs: 0, error: message };
     };
 

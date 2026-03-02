@@ -25,17 +25,18 @@ type DependencyStatus = {
  * Execute a health check with a timeout. Returns a DependencyStatus indicating
  * success or failure along with the measured latency.
  */
-async function checkWithTimeout(
-  name: string,
-  fn: () => Promise<void>,
-): Promise<DependencyStatus> {
+async function checkWithTimeout(name: string, fn: () => Promise<void>): Promise<DependencyStatus> {
   const start = performance.now();
 
   try {
     await Promise.race([
       fn(),
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)), HEALTH_CHECK_TIMEOUT_MS);
+        setTimeout(
+          () =>
+            reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
+          HEALTH_CHECK_TIMEOUT_MS,
+        );
       }),
     ]);
 

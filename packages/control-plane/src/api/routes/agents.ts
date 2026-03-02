@@ -186,7 +186,13 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   app.post<{ Params: { id: string }; Body: StartAgentRequest & { machineId?: string } }>(
     '/:id/start',
     async (request, reply) => {
-      const { prompt, model, allowedTools, resumeSession, machineId: requestedMachineId } = request.body;
+      const {
+        prompt,
+        model,
+        allowedTools,
+        resumeSession,
+        machineId: requestedMachineId,
+      } = request.body;
       const agentId = request.params.id;
 
       if (taskQueue) {

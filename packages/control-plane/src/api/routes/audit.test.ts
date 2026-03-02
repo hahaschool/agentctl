@@ -18,9 +18,7 @@ const logger = {
   level: 'silent',
 } as unknown as Logger;
 
-function createMockDbRegistry(
-  overrides: Partial<DbAgentRegistry> = {},
-): DbAgentRegistry {
+function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}): DbAgentRegistry {
   return {
     registerMachine: vi.fn(),
     heartbeat: vi.fn(),
@@ -380,10 +378,14 @@ describe('Audit routes — /api/audit (configured)', () => {
   describe('POST /api/audit/actions — error handling', () => {
     it('returns 502 when dbRegistry throws ControlPlaneError', async () => {
       vi.mocked(mockDbRegistry.insertActions).mockRejectedValueOnce(
-        new ControlPlaneError('AUDIT_INSERT_FAILED', 'Failed to insert audit actions: connection refused', {
-          runId: 'run-001',
-          actionCount: 1,
-        }),
+        new ControlPlaneError(
+          'AUDIT_INSERT_FAILED',
+          'Failed to insert audit actions: connection refused',
+          {
+            runId: 'run-001',
+            actionCount: 1,
+          },
+        ),
       );
 
       const response = await app.inject({
@@ -403,9 +405,7 @@ describe('Audit routes — /api/audit (configured)', () => {
     });
 
     it('returns 500 when dbRegistry throws an unexpected error', async () => {
-      vi.mocked(mockDbRegistry.insertActions).mockRejectedValueOnce(
-        new Error('connection reset'),
-      );
+      vi.mocked(mockDbRegistry.insertActions).mockRejectedValueOnce(new Error('connection reset'));
 
       const response = await app.inject({
         method: 'POST',

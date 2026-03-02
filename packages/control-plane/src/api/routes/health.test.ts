@@ -355,9 +355,9 @@ describe('GET /health (timeout)', () => {
 
   it('reports error when a dependency check hangs beyond 2 seconds', async () => {
     const hangingDb = {
-      execute: vi.fn().mockImplementation(
-        () => new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
-      ),
+      execute: vi
+        .fn()
+        .mockImplementation(() => new Promise<void>((resolve) => setTimeout(resolve, 10_000))),
     };
 
     app = await createServer({

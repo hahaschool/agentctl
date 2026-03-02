@@ -1,6 +1,6 @@
-import type { FastifyInstance } from 'fastify';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { FastifyInstance } from 'fastify';
 import pino from 'pino';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 

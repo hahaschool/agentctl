@@ -33,3 +33,4 @@ Thumbs.db
 credentials.json
 *.pem
 *.key
+packages/agent-worker/.agentctl/

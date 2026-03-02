@@ -29,9 +29,7 @@ const SAMPLE_DEPLOYMENTS: ModelDeploymentInfo[] = [
 
 const SAMPLE_MODEL_IDS = ['claude-3-opus', 'claude-3-sonnet', 'gpt-4'];
 
-function createMockLiteLLMClient(
-  overrides: Partial<LiteLLMClient> = {},
-): LiteLLMClient {
+function createMockLiteLLMClient(overrides: Partial<LiteLLMClient> = {}): LiteLLMClient {
   return {
     health: vi.fn().mockResolvedValue(true),
     listModels: vi.fn().mockResolvedValue(SAMPLE_MODEL_IDS),
@@ -273,7 +271,10 @@ describe('RouterConfig', () => {
 
       await config.isModelAvailable('gpt-4');
 
-      expect(logger.debug).toHaveBeenCalledWith({ modelId: 'gpt-4' }, 'Checking model availability');
+      expect(logger.debug).toHaveBeenCalledWith(
+        { modelId: 'gpt-4' },
+        'Checking model availability',
+      );
       expect(logger.info).toHaveBeenCalledWith(
         { modelId: 'gpt-4', available: true },
         'Model availability checked',

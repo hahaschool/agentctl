@@ -145,7 +145,9 @@ async function main(): Promise<void> {
     const skipMigrations = process.env.SKIP_MIGRATIONS === 'true';
 
     if (skipMigrations) {
-      logger.info('SKIP_MIGRATIONS=true — skipping auto-migration (assuming migrations are run separately)');
+      logger.info(
+        'SKIP_MIGRATIONS=true — skipping auto-migration (assuming migrations are run separately)',
+      );
     } else {
       // Run the initial schema migration on every startup.
       // All DDL statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS,
@@ -199,7 +201,8 @@ async function main(): Promise<void> {
       }
 
       // Count the number of DDL statements applied (CREATE TABLE + CREATE INDEX)
-      const ddlStatements = migrationSql.match(/CREATE\s+(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS/gi) ?? [];
+      const ddlStatements =
+        migrationSql.match(/CREATE\s+(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS/gi) ?? [];
       logger.info(
         { migrationPath, ddlStatements: ddlStatements.length },
         `Database migration applied successfully (${ddlStatements.length} DDL statements, all idempotent)`,

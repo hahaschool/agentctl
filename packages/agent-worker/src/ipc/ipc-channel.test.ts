@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CMD_EXTENSION,
-  RSP_EXTENSION,
   createIpcMessage,
   createIpcResponse,
   type IpcMessage,
   type IpcResponse,
+  RSP_EXTENSION,
 } from './ipc-channel.js';
 
 // ---------------------------------------------------------------------------

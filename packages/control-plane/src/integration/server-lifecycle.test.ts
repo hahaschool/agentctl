@@ -109,9 +109,7 @@ describe('Integration: server lifecycle', () => {
       expect(typeof requestId).toBe('string');
 
       // The server uses crypto.randomUUID() — verify it looks like a UUID
-      expect(requestId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     });
 
     it('returns X-Request-Id header on 404 responses', async () => {
@@ -123,9 +121,7 @@ describe('Integration: server lifecycle', () => {
       const requestId = response.headers['x-request-id'];
       expect(requestId).toBeDefined();
       expect(typeof requestId).toBe('string');
-      expect(requestId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     });
 
     it('generates a unique request ID for each request', async () => {

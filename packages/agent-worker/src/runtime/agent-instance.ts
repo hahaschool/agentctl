@@ -154,10 +154,7 @@ export class AgentInstance extends EventEmitter {
     this.abortController = new AbortController();
 
     if (resumeSessionId) {
-      this.log.info(
-        { resumeSessionId },
-        'Will attempt to resume previous session',
-      );
+      this.log.info({ resumeSessionId }, 'Will attempt to resume previous session');
     }
 
     try {
@@ -211,10 +208,7 @@ export class AgentInstance extends EventEmitter {
       // If resume was requested but the SDK run failed, fall back to a fresh session.
       // This handles cases where the session no longer exists or is corrupted.
       if (result === 'resume_failed') {
-        this.log.warn(
-          { resumeSessionId },
-          'Session resume failed, falling back to fresh session',
-        );
+        this.log.warn({ resumeSessionId }, 'Session resume failed, falling back to fresh session');
         this.state.isResumed = false;
         result = await this.attemptSdkRun(prompt, undefined);
       }
@@ -253,7 +247,7 @@ export class AgentInstance extends EventEmitter {
       const result = await runWithSdk({
         prompt,
         agentId: this.agentId,
-        sessionId: this.state.sessionId!,
+        sessionId: this.state.sessionId ?? '',
         config: this.config,
         projectPath: this.projectPath,
         logger: this.log,

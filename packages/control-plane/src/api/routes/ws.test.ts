@@ -2,9 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-
-import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { AgentRegistry } from '../../registry/agent-registry.js';
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
 
 const logger = {
@@ -122,19 +121,21 @@ describe('WebSocket start_agent — auto-creation', () => {
   afterEach(() => {
     vi.mocked(mockDbRegistry.getAgent).mockReset();
     vi.mocked(mockDbRegistry.createAgent).mockReset().mockResolvedValue('new-agent-uuid');
-    vi.mocked(mockDbRegistry.listMachines).mockReset().mockResolvedValue([
-      {
-        id: 'machine-1',
-        hostname: 'test-host',
-        tailscaleIp: '100.64.0.1',
-        os: 'linux',
-        arch: 'x64',
-        status: 'online',
-        lastHeartbeat: new Date(),
-        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
-        createdAt: new Date(),
-      },
-    ] as never);
+    vi.mocked(mockDbRegistry.listMachines)
+      .mockReset()
+      .mockResolvedValue([
+        {
+          id: 'machine-1',
+          hostname: 'test-host',
+          tailscaleIp: '100.64.0.1',
+          os: 'linux',
+          arch: 'x64',
+          status: 'online',
+          lastHeartbeat: new Date(),
+          capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+          createdAt: new Date(),
+        },
+      ] as never);
     vi.mocked(mockTaskQueue.add).mockReset().mockResolvedValue({ id: 'job-1' });
     vi.mocked(logger.info).mockClear();
   });
@@ -217,16 +218,17 @@ describe('WebSocket start_agent — auto-creation', () => {
     });
 
     // A job should have been enqueued
-    expect(mockTaskQueue.add).toHaveBeenCalledWith('agent:start', expect.objectContaining({
-      agentId: 'my-new-agent',
-      machineId: 'machine-1',
-      prompt: 'Fix the bug',
-    }));
+    expect(mockTaskQueue.add).toHaveBeenCalledWith(
+      'agent:start',
+      expect.objectContaining({
+        agentId: 'my-new-agent',
+        machineId: 'machine-1',
+        prompt: 'Fix the bug',
+      }),
+    );
 
     // Should receive a status event
-    const statusMsg = messages.find(
-      (m) => m.type === 'agent_event',
-    );
+    const statusMsg = messages.find((m) => m.type === 'agent_event');
     expect(statusMsg).toBeDefined();
   });
 
