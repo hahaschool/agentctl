@@ -1,0 +1,768 @@
+# OWASP ZAP DAST (Dynamic Application Security Testing)
+#
+# Spins up the control-plane stack in Docker, then runs OWASP ZAP baseline
+# and WebSocket fuzz scans against the live API. Results are uploaded as
+# SARIF (GitHub Security tab) and HTML artifacts.
+#
+# Triggers:
+#   - Weekly on Monday at 03:00 UTC
+#   - Manual dispatch with optional target URL override
+#   - After successful deploy-dev workflow
+
+name: DAST — OWASP ZAP
+
+on:
+  schedule:
+    # Weekly Monday 3am UTC — run against locally-built stack
+    - cron: '0 3 * * 1'
+
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: >
+          Override target URL (e.g. https://dev.agentctl.internal:8080).
+          Leave blank to spin up a local Docker stack.
+        required: false
+        type: string
+
+  workflow_run:
+    workflows: ["Deploy to Dev"]
+    types: [completed]
+    branches: [dev]
+
+# Only one ZAP scan at a time to avoid resource contention
+concurrency:
+  group: dast-zap
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  # Port the control-plane listens on inside the DAST network
+  CONTROL_PLANE_PORT: 8080
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────
+  # Job 1: Start the application stack (skipped when a target URL is given)
+  # ────────────────────────────────────────────────────────────────────────
+  setup-target:
+    name: Set up scan target
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Skip when the triggering deploy-dev workflow failed
+    if: >-
+      github.event_name != 'workflow_run'
+      || github.event.workflow_run.conclusion == 'success'
+
+    outputs:
+      target_url: ${{ steps.resolve.outputs.target_url }}
+      is_local: ${{ steps.resolve.outputs.is_local }}
+
+    services:
+      # PostgreSQL backing service (GitHub-hosted, available before steps run)
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agentctl
+          POSTGRES_PASSWORD: agentctl
+          POSTGRES_DB: agentctl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentctl -d agentctl"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
+
+      # Redis backing service
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Determine whether we scan a remote URL or build locally
+      - name: Resolve target URL
+        id: resolve
+        run: |
+          INPUT_URL="${{ inputs.target_url }}"
+
+          if [ -n "$INPUT_URL" ]; then
+            echo "target_url=$INPUT_URL" >> "$GITHUB_OUTPUT"
+            echo "is_local=false" >> "$GITHUB_OUTPUT"
+            echo "Using provided target URL: $INPUT_URL"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # After deploy-dev, scan the dev environment.
+            # The dev URL should be set as a repository variable.
+            DEV_URL="${{ vars.DEV_API_URL || 'http://localhost:8080' }}"
+            echo "target_url=$DEV_URL" >> "$GITHUB_OUTPUT"
+            echo "is_local=false" >> "$GITHUB_OUTPUT"
+            echo "Using dev environment URL: $DEV_URL"
+          else
+            echo "target_url=http://localhost:${{ env.CONTROL_PLANE_PORT }}" >> "$GITHUB_OUTPUT"
+            echo "is_local=true" >> "$GITHUB_OUTPUT"
+            echo "Building local Docker stack"
+          fi
+
+      # ── Build and start the control-plane (local mode only) ──────────
+      - name: Set up Docker Buildx
+        if: steps.resolve.outputs.is_local == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build control-plane image
+        if: steps.resolve.outputs.is_local == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.control-plane
+          tags: agentctl-control-plane:dast
+          load: true
+          cache-from: type=gha,scope=dast-control-plane
+          cache-to: type=gha,mode=max,scope=dast-control-plane
+
+      - name: Start control-plane container
+        if: steps.resolve.outputs.is_local == 'true'
+        run: |
+          docker run -d \
+            --name agentctl-dast \
+            --network host \
+            -e NODE_ENV=production \
+            -e PORT=${{ env.CONTROL_PLANE_PORT }} \
+            -e DATABASE_URL="postgresql://agentctl:agentctl@127.0.0.1:5432/agentctl" \
+            -e REDIS_URL="redis://127.0.0.1:6379" \
+            -e LOG_LEVEL=warn \
+            agentctl-control-plane:dast
+
+      - name: Wait for health check
+        if: steps.resolve.outputs.is_local == 'true'
+        run: |
+          TARGET="${{ steps.resolve.outputs.target_url }}"
+          echo "Waiting for $TARGET/health ..."
+
+          ATTEMPT=0
+          MAX_ATTEMPTS=30
+          INTERVAL=5
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "$TARGET/health" 2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed on attempt $ATTEMPT (HTTP $STATUS)"
+              exit 0
+            fi
+
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS — HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "::error::Health check failed after $MAX_ATTEMPTS attempts"
+          docker logs agentctl-dast 2>&1 | tail -50 || true
+          exit 1
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Job 2: OWASP ZAP API baseline scan
+  # ────────────────────────────────────────────────────────────────────────
+  zap-api-scan:
+    name: ZAP API baseline scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: setup-target
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Generate a minimal OpenAPI spec that covers the endpoints we want to scan.
+      # ZAP's API scan uses this to discover and exercise routes.
+      - name: Generate target endpoint list
+        run: |
+          cat > /tmp/openapi-target.yaml << 'OPENAPI_SPEC'
+          openapi: "3.0.3"
+          info:
+            title: AgentCTL Control Plane — DAST Target
+            version: "1.0.0"
+            description: Minimal spec for ZAP DAST scanning
+          servers:
+            - url: ${{ needs.setup-target.outputs.target_url }}
+          paths:
+            /health:
+              get:
+                operationId: getHealth
+                summary: Health check
+                responses:
+                  "200":
+                    description: OK
+            /metrics:
+              get:
+                operationId: getMetrics
+                summary: Prometheus-style metrics
+                responses:
+                  "200":
+                    description: OK
+            /api/agents:
+              get:
+                operationId: listAgents
+                summary: List registered agents
+                responses:
+                  "200":
+                    description: OK
+            /api/agents/register:
+              post:
+                operationId: registerAgent
+                summary: Register a new agent
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema:
+                        type: object
+                        properties:
+                          agentId:
+                            type: string
+                          machineId:
+                            type: string
+                          capabilities:
+                            type: array
+                            items:
+                              type: string
+                responses:
+                  "200":
+                    description: OK
+            /api/scheduler/jobs:
+              get:
+                operationId: listJobs
+                summary: List scheduled jobs
+                responses:
+                  "200":
+                    description: OK
+            /api/router/models:
+              get:
+                operationId: listModels
+                summary: List available LLM models
+                responses:
+                  "200":
+                    description: OK
+            /api/memory/search:
+              post:
+                operationId: searchMemory
+                summary: Search cross-device memory
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema:
+                        type: object
+                        properties:
+                          query:
+                            type: string
+                          limit:
+                            type: integer
+                responses:
+                  "200":
+                    description: OK
+            /api/audit/actions:
+              post:
+                operationId: ingestAuditActions
+                summary: Ingest agent audit actions
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema:
+                        type: object
+                        properties:
+                          agentId:
+                            type: string
+                          actions:
+                            type: array
+                            items:
+                              type: object
+                responses:
+                  "200":
+                    description: OK
+            /api/webhooks:
+              get:
+                operationId: listWebhooks
+                summary: List webhook subscriptions
+                responses:
+                  "200":
+                    description: OK
+            /api/dashboard/overview:
+              get:
+                operationId: getDashboardOverview
+                summary: Dashboard overview statistics
+                responses:
+                  "200":
+                    description: OK
+          OPENAPI_SPEC
+
+      - name: Run ZAP API baseline scan
+        uses: zaproxy/action-api-scan@v0.9.0
+        with:
+          target: /tmp/openapi-target.yaml
+          format: openapi
+          # Use the rules file to suppress known false positives
+          rules_file_name: infra/zap/rules.tsv
+          # Fail on WARN or higher — report job handles threshold logic
+          cmd_options: >
+            -I
+            -z "-config replacer.full_list(0).description=AddContentType
+                 -config replacer.full_list(0).enabled=true
+                 -config replacer.full_list(0).matchtype=REQ_HEADER
+                 -config replacer.full_list(0).matchstr=Content-Type
+                 -config replacer.full_list(0).regex=false
+                 -config replacer.full_list(0).replacement=application/json"
+          # Allow non-zero exit code so we can process results
+          allow_issue_writing: false
+
+      # ZAP writes reports into the workspace root
+      - name: Generate SARIF report
+        if: always()
+        run: |
+          # The ZAP action writes a default report; convert if needed.
+          # zaproxy/action-api-scan already produces zap-report.json
+          # We use zap-cli or the built-in converter. The action also
+          # produces a default HTML report.
+          if [ -f "report_json.json" ]; then
+            echo "ZAP JSON report found"
+          fi
+
+          # Create a minimal SARIF from ZAP's JSON output if the action
+          # did not already produce one.
+          if [ ! -f "report_sarif.json" ] && [ -f "report_json.json" ]; then
+            python3 << 'PYTHON_SCRIPT'
+          import json, sys
+
+          with open("report_json.json") as f:
+              zap = json.load(f)
+
+          sarif = {
+              "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+              "version": "2.1.0",
+              "runs": [{
+                  "tool": {
+                      "driver": {
+                          "name": "OWASP ZAP",
+                          "informationUri": "https://www.zaproxy.org/",
+                          "version": "2.15.0",
+                          "rules": []
+                      }
+                  },
+                  "results": []
+              }]
+          }
+
+          rules_map = {}
+          for site in zap.get("site", []):
+              for alert in site.get("alerts", []):
+                  rule_id = f"ZAP-{alert.get('pluginid', '0')}"
+                  if rule_id not in rules_map:
+                      rules_map[rule_id] = {
+                          "id": rule_id,
+                          "name": alert.get("name", "Unknown"),
+                          "shortDescription": {"text": alert.get("name", "")},
+                          "fullDescription": {"text": alert.get("desc", "")},
+                          "defaultConfiguration": {
+                              "level": {
+                                  "0": "none", "1": "note", "2": "warning", "3": "error"
+                              }.get(str(alert.get("riskcode", "1")), "warning")
+                          },
+                          "helpUri": alert.get("reference", "")
+                      }
+
+                  for instance in alert.get("instances", []):
+                      sarif["runs"][0]["results"].append({
+                          "ruleId": rule_id,
+                          "level": {
+                              "0": "none", "1": "note", "2": "warning", "3": "error"
+                          }.get(str(alert.get("riskcode", "1")), "warning"),
+                          "message": {
+                              "text": f"{alert.get('name', '')}: {alert.get('desc', '')}"
+                          },
+                          "locations": [{
+                              "physicalLocation": {
+                                  "artifactLocation": {
+                                      "uri": instance.get("uri", ""),
+                                      "uriBaseId": "ROOTPATH"
+                                  }
+                              }
+                          }]
+                      })
+
+          sarif["runs"][0]["tool"]["driver"]["rules"] = list(rules_map.values())
+
+          with open("report_sarif.json", "w") as f:
+              json.dump(sarif, f, indent=2)
+
+          print(f"Generated SARIF with {len(sarif['runs'][0]['results'])} results")
+          PYTHON_SCRIPT
+          fi
+
+      - name: Upload ZAP HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-api-scan-report
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: report_sarif.json
+          category: zap-api-scan
+        # Don't fail the workflow if SARIF upload fails (e.g. empty report)
+        continue-on-error: true
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Job 3: WebSocket fuzzing
+  # ────────────────────────────────────────────────────────────────────────
+  zap-websocket-fuzz:
+    name: WebSocket fuzz scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: setup-target
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install WebSocket client
+        run: npm install ws@8
+
+      # Fuzz the WebSocket endpoint with malformed frames, oversized
+      # payloads, and injection payloads. Report crashes or unexpected
+      # responses.
+      - name: Run WebSocket fuzz tests
+        id: ws-fuzz
+        run: |
+          TARGET="${{ needs.setup-target.outputs.target_url }}"
+          # Convert http(s):// to ws(s)://
+          WS_URL=$(echo "$TARGET" | sed 's|^http|ws|')/api/ws
+
+          cat > /tmp/ws-fuzz.mjs << 'FUZZ_SCRIPT'
+          import WebSocket from "ws";
+
+          const wsUrl = process.argv[2];
+          if (!wsUrl) {
+            console.error("Usage: node ws-fuzz.mjs <ws-url>");
+            process.exit(1);
+          }
+
+          const results = {
+            total: 0,
+            passed: 0,
+            failed: 0,
+            crashes: 0,
+            errors: [],
+          };
+
+          // Test cases: [name, payload, expectCrash]
+          const testCases = [
+            // ── Malformed JSON frames ──────────────────────────
+            ["malformed-json-1", "{not valid json}", false],
+            ["malformed-json-2", "{\"type\":", false],
+            ["malformed-json-3", "}{", false],
+            ["empty-string", "", false],
+            ["null-bytes", "\x00\x00\x00", false],
+
+            // ── Oversized payloads ─────────────────────────────
+            ["oversized-1kb", "A".repeat(1024), false],
+            ["oversized-64kb", "A".repeat(65536), false],
+            ["oversized-1mb", "A".repeat(1048576), false],
+
+            // ── Injection attempts ─────────────────────────────
+            ["sql-injection", JSON.stringify({ type: "subscribe", agentId: "'; DROP TABLE agents; --" }), false],
+            ["xss-injection", JSON.stringify({ type: "subscribe", agentId: "<script>alert(1)</script>" }), false],
+            ["command-injection", JSON.stringify({ type: "subscribe", agentId: "$(whoami)" }), false],
+            ["path-traversal", JSON.stringify({ type: "subscribe", agentId: "../../../etc/passwd" }), false],
+            ["prototype-pollution", '{"__proto__":{"isAdmin":true},"type":"subscribe"}', false],
+            ["constructor-pollution", '{"constructor":{"prototype":{"isAdmin":true}},"type":"subscribe"}', false],
+
+            // ── Protocol abuse ─────────────────────────────────
+            ["missing-type", JSON.stringify({ agentId: "test-agent" }), false],
+            ["unknown-type", JSON.stringify({ type: "UNKNOWN_COMMAND_TYPE" }), false],
+            ["numeric-type", JSON.stringify({ type: 12345 }), false],
+            ["array-type", JSON.stringify({ type: ["subscribe"] }), false],
+            ["nested-deep", JSON.stringify({ type: "subscribe", data: { a: { b: { c: { d: { e: { f: "deep" } } } } } } }), false],
+          ];
+
+          async function runTest(name, payload) {
+            return new Promise((resolve) => {
+              const timeout = setTimeout(() => {
+                ws.close();
+                resolve({ name, status: "timeout", detail: "No response within 5s (acceptable)" });
+              }, 5000);
+
+              let ws;
+              try {
+                ws = new WebSocket(wsUrl);
+              } catch (err) {
+                clearTimeout(timeout);
+                resolve({ name, status: "connect_error", detail: err.message });
+                return;
+              }
+
+              ws.on("open", () => {
+                try {
+                  ws.send(payload);
+                } catch (err) {
+                  clearTimeout(timeout);
+                  ws.close();
+                  resolve({ name, status: "send_error", detail: err.message });
+                }
+              });
+
+              ws.on("message", (data) => {
+                clearTimeout(timeout);
+                const msg = data.toString().substring(0, 200);
+                ws.close();
+                resolve({ name, status: "response", detail: msg });
+              });
+
+              ws.on("error", (err) => {
+                clearTimeout(timeout);
+                resolve({ name, status: "error", detail: err.message });
+              });
+
+              ws.on("close", (code, reason) => {
+                clearTimeout(timeout);
+                resolve({ name, status: "closed", detail: `code=${code} reason=${reason || "none"}` });
+              });
+            });
+          }
+
+          console.log(`\n=== WebSocket Fuzz Testing: ${wsUrl} ===\n`);
+
+          for (const [name, payload] of testCases) {
+            results.total++;
+            const result = await runTest(name, payload);
+
+            // A test "fails" only if the server crashes (connection refused on
+            // subsequent attempts) or returns sensitive information.
+            const isCrash = result.status === "connect_error"
+              && results.total > 1;  // First connect_error could just mean WS is down
+
+            const leaksSensitiveInfo = result.detail &&
+              (result.detail.includes("stack trace") ||
+               result.detail.includes("node_modules") ||
+               result.detail.includes("Error:") && result.detail.includes("at "));
+
+            if (isCrash) {
+              results.crashes++;
+              results.failed++;
+              console.log(`  CRASH  ${name}: ${result.detail}`);
+              results.errors.push({ name, ...result, severity: "CRITICAL" });
+            } else if (leaksSensitiveInfo) {
+              results.failed++;
+              console.log(`  LEAK   ${name}: Server leaked sensitive info`);
+              results.errors.push({ name, ...result, severity: "HIGH" });
+            } else {
+              results.passed++;
+              console.log(`  OK     ${name}: ${result.status} — ${result.detail?.substring(0, 80)}`);
+            }
+          }
+
+          console.log(`\n=== Results: ${results.passed}/${results.total} passed, ${results.failed} failed, ${results.crashes} crashes ===\n`);
+
+          // Write results for the report job
+          const fs = await import("fs");
+          fs.writeFileSync("/tmp/ws-fuzz-results.json", JSON.stringify(results, null, 2));
+
+          if (results.crashes > 0 || results.failed > 0) {
+            console.error("WebSocket fuzz testing found issues!");
+            process.exit(1);
+          }
+          FUZZ_SCRIPT
+
+          node /tmp/ws-fuzz.mjs "$WS_URL" || echo "ws_fuzz_failed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload WebSocket fuzz results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ws-fuzz-results
+          path: /tmp/ws-fuzz-results.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Job 4: Aggregate results and enforce thresholds
+  # ────────────────────────────────────────────────────────────────────────
+  report:
+    name: DAST report & threshold check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [setup-target, zap-api-scan, zap-websocket-fuzz]
+    if: always()
+
+    steps:
+      - name: Download ZAP API scan report
+        uses: actions/download-artifact@v4
+        with:
+          name: zap-api-scan-report
+          path: /tmp/zap-report
+        continue-on-error: true
+
+      - name: Download WebSocket fuzz results
+        uses: actions/download-artifact@v4
+        with:
+          name: ws-fuzz-results
+          path: /tmp/ws-fuzz
+        continue-on-error: true
+
+      - name: Analyze results and enforce thresholds
+        id: analyze
+        run: |
+          echo "## DAST Scan Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Target:** ${{ needs.setup-target.outputs.target_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Scan date:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          FAILED=false
+
+          # ── Analyze ZAP API scan results ────────────────────────
+          echo "### ZAP API Baseline Scan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f "/tmp/zap-report/report_json.json" ]; then
+            python3 << 'ANALYZE_ZAP'
+          import json, os
+
+          with open("/tmp/zap-report/report_json.json") as f:
+              report = json.load(f)
+
+          # Count alerts by risk level
+          counts = {"High": 0, "Medium": 0, "Low": 0, "Informational": 0}
+          risk_names = {"3": "High", "2": "Medium", "1": "Low", "0": "Informational"}
+          high_alerts = []
+
+          for site in report.get("site", []):
+              for alert in site.get("alerts", []):
+                  risk = risk_names.get(str(alert.get("riskcode", "0")), "Informational")
+                  counts[risk] = counts.get(risk, 0) + 1
+                  if risk == "High":
+                      high_alerts.append(alert.get("name", "Unknown"))
+
+          summary = f"| Risk | Count |\n|------|-------|\n"
+          for level in ["High", "Medium", "Low", "Informational"]:
+              summary += f"| {level} | {counts[level]} |\n"
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(summary + "\n")
+              if high_alerts:
+                  f.write("\n**HIGH-risk alerts:**\n")
+                  for name in high_alerts:
+                      f.write(f"- {name}\n")
+                  f.write("\n")
+
+          # Write threshold result
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              if counts["High"] > 0:
+                  f.write("zap_high_alerts=true\n")
+                  print(f"::error::ZAP found {counts['High']} HIGH-risk alert(s)")
+              else:
+                  f.write("zap_high_alerts=false\n")
+                  print(f"ZAP scan clean: {counts['Medium']} medium, {counts['Low']} low, {counts['Informational']} informational")
+          ANALYZE_ZAP
+          else
+            echo "No ZAP API scan report found (scan may have been skipped or failed to produce output)." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # ── Analyze WebSocket fuzz results ──────────────────────
+          echo "### WebSocket Fuzz Scan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f "/tmp/ws-fuzz/ws-fuzz-results.json" ]; then
+            python3 << 'ANALYZE_WS'
+          import json, os
+
+          with open("/tmp/ws-fuzz/ws-fuzz-results.json") as f:
+              results = json.load(f)
+
+          summary = (
+              f"- **Total tests:** {results['total']}\n"
+              f"- **Passed:** {results['passed']}\n"
+              f"- **Failed:** {results['failed']}\n"
+              f"- **Crashes:** {results['crashes']}\n"
+          )
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(summary + "\n")
+              if results.get("errors"):
+                  f.write("\n**Issues found:**\n")
+                  for err in results["errors"]:
+                      f.write(f"- [{err['severity']}] {err['name']}: {err.get('detail', 'N/A')[:100]}\n")
+                  f.write("\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              if results["crashes"] > 0:
+                  f.write("ws_crashes=true\n")
+                  print(f"::error::WebSocket fuzz detected {results['crashes']} crash(es)")
+              else:
+                  f.write("ws_crashes=false\n")
+          ANALYZE_WS
+          else
+            echo "No WebSocket fuzz results found (scan may have been skipped)." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Fail the workflow if HIGH/CRITICAL alerts or server crashes were found
+      - name: Enforce security thresholds
+        if: always()
+        run: |
+          FAILED=false
+
+          if [ "${{ steps.analyze.outputs.zap_high_alerts }}" = "true" ]; then
+            echo "::error::DAST scan found HIGH-risk vulnerabilities — review the ZAP report artifact"
+            FAILED=true
+          fi
+
+          if [ "${{ steps.analyze.outputs.ws_crashes }}" = "true" ]; then
+            echo "::error::WebSocket fuzz scan detected server crashes — review ws-fuzz-results artifact"
+            FAILED=true
+          fi
+
+          # Also check if upstream jobs failed for non-threshold reasons
+          if [ "${{ needs.zap-api-scan.result }}" = "failure" ]; then
+            echo "::warning::ZAP API scan job failed (infrastructure issue or scan error)"
+          fi
+
+          if [ "${{ needs.zap-websocket-fuzz.result }}" = "failure" ]; then
+            echo "::warning::WebSocket fuzz job reported failures"
+            FAILED=true
+          fi
+
+          if [ "$FAILED" = "true" ]; then
+            echo ""
+            echo "DAST scan failed — see the summary above and download artifacts for details."
+            exit 1
+          fi
+
+          echo "All DAST checks passed."

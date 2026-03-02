@@ -1,0 +1,40 @@
+# OWASP ZAP Rules Configuration — False Positive Suppressions
+#
+# Format: <rule_id>\t<action>\t<parameter>\t<description>
+# Actions: IGNORE (suppress entirely), WARN (downgrade to warning), FAIL (force failure)
+#
+# Docs: https://www.zaproxy.org/docs/docker/baseline-scan/#rules-file-format
+#
+# These rules are suppressed because they are expected behavior for an
+# API-only service that does not serve browser-rendered HTML.
+
+# Rate-limiting: 429 responses are intentional (fastify-rate-limit protects all endpoints)
+10049	IGNORE	(Too Many Requests)	Rate-limit 429 responses are by design
+
+# CORS: Permissive CORS in dev/test is intentional; production restricts origins via CORS_ORIGINS env
+10098	IGNORE	(Cross-Domain Misconfiguration)	CORS is configured intentionally per environment
+
+# Anti-CSRF tokens: This is a REST API; it does not serve HTML forms.
+# Authentication is via Authorization header (Bearer token), not cookies.
+10202	IGNORE	(Absence of Anti-CSRF Tokens)	API-only service — no browser form submissions
+
+# Content-Type header missing on error responses: Some error responses may
+# omit Content-Type. This is informational, not a security issue.
+10019	IGNORE	(Content-Type Header Missing)	Some error paths omit Content-Type — informational only
+
+# X-Content-Type-Options missing: API responses are JSON, not rendered by browsers.
+10021	IGNORE	(X-Content-Type-Options Header Missing)	API-only — no browser content-sniffing risk
+
+# X-Frame-Options missing: API does not serve frameable content.
+10020	IGNORE	(X-Frame-Options Header Not Set)	API-only — no clickjacking risk
+
+# Cookie-related rules: The API uses stateless Bearer tokens, not session cookies.
+10010	IGNORE	(Cookie No HttpOnly Flag)	API uses Bearer tokens, not session cookies
+10011	IGNORE	(Cookie Without Secure Flag)	API uses Bearer tokens, not session cookies
+10054	IGNORE	(Cookie without SameSite Attribute)	API uses Bearer tokens, not session cookies
+
+# CSP header missing: API-only, no inline scripts or content to protect.
+10038	IGNORE	(Content Security Policy (CSP) Header Not Set)	API-only — CSP not applicable
+
+# Strict-Transport-Security: Handled at the Tailscale/reverse-proxy layer, not the app.
+10035	IGNORE	(Strict-Transport-Security Header Not Set)	TLS termination at Tailscale/proxy layer
