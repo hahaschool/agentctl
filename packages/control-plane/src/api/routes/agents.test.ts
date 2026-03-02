@@ -1,8 +1,10 @@
+import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AgentRegistry } from '../../registry/agent-registry.js';
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
 
 const logger = {
@@ -252,6 +254,57 @@ describe('Agent routes — /api/agents', () => {
   });
 
   // -------------------------------------------------------------------------
+  // POST /api/agents/:id/complete — run completion (no dbRegistry)
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/agents/:id/complete (no dbRegistry)', () => {
+    it('returns 501 when dbRegistry is not configured', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: { runId: 'run-001', status: 'success' },
+      });
+
+      expect(response.statusCode).toBe(501);
+
+      const body = response.json();
+      expect(body.error).toBe('DATABASE_NOT_CONFIGURED');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agents/:id/signal — signal (no dbRegistry/taskQueue)
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/agents/:id/signal (no dbRegistry)', () => {
+    it('returns 400 when prompt is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/signal',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_SIGNAL_BODY');
+    });
+
+    it('returns 501 when dbRegistry is not configured', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/signal',
+        payload: { prompt: 'Update the tests' },
+      });
+
+      expect(response.statusCode).toBe(501);
+
+      const body = response.json();
+      expect(body.error).toBe('DATABASE_NOT_CONFIGURED');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // DB-only routes return 501 when dbRegistry is not configured
   // -------------------------------------------------------------------------
 
@@ -308,6 +361,188 @@ describe('Agent routes — /api/agents', () => {
       });
 
       expect(response.statusCode).toBe(501);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests with a mock dbRegistry — completion + signal routes
+// ---------------------------------------------------------------------------
+
+describe('Agent routes — with dbRegistry', () => {
+  let app: FastifyInstance;
+
+  const mockDbRegistry = {
+    registerMachine: vi.fn(),
+    heartbeat: vi.fn(),
+    listMachines: vi.fn().mockResolvedValue([]),
+    createAgent: vi.fn().mockResolvedValue('agent-new'),
+    getAgent: vi.fn().mockResolvedValue({
+      id: 'agent-1',
+      machineId: 'machine-1',
+      name: 'Test Agent',
+      config: { model: 'claude-sonnet-4-20250514', allowedTools: null },
+    }),
+    updateAgentStatus: vi.fn(),
+    listAgents: vi.fn().mockResolvedValue([]),
+    getRecentRuns: vi.fn().mockResolvedValue([]),
+    completeRun: vi.fn().mockResolvedValue(undefined),
+    createRun: vi.fn().mockResolvedValue('run-001'),
+    insertActions: vi.fn(),
+    getMachine: vi.fn(),
+  } as unknown as DbAgentRegistry;
+
+  const mockTaskQueue = {
+    add: vi.fn().mockResolvedValue({ id: 'job-signal-1' }),
+  };
+
+  beforeAll(async () => {
+    app = await createServer({
+      logger,
+      dbRegistry: mockDbRegistry,
+      taskQueue: mockTaskQueue as never,
+    });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agents/:id/complete
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/agents/:id/complete', () => {
+    it('completes a run successfully', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: {
+          runId: 'run-001',
+          status: 'success',
+          costUsd: 0.42,
+          durationMs: 12000,
+          sessionId: 'sess-abc',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.runId).toBe('run-001');
+      expect(body.status).toBe('success');
+    });
+
+    it('returns 400 when runId is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: { status: 'success' },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_RUN_ID');
+    });
+
+    it('returns 400 when status is invalid', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: { runId: 'run-001', status: 'pending' },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_STATUS');
+    });
+
+    it('returns 404 when run does not exist', async () => {
+      vi.mocked(mockDbRegistry.completeRun).mockRejectedValueOnce(
+        new ControlPlaneError('RUN_NOT_FOUND', 'Run not found', {}),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: { runId: 'run-ghost', status: 'failure', errorMessage: 'crashed' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('RUN_NOT_FOUND');
+    });
+
+    it('returns 500 on unexpected database error', async () => {
+      vi.mocked(mockDbRegistry.completeRun).mockRejectedValueOnce(
+        new Error('connection lost'),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: { runId: 'run-001', status: 'failure' },
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      const body = response.json();
+      expect(body.error).toBe('COMPLETION_FAILED');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agents/:id/signal
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/agents/:id/signal', () => {
+    it('enqueues a signal job successfully', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/signal',
+        payload: {
+          prompt: 'Also update the tests',
+          metadata: { source: 'webhook', eventType: 'pr_merged' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.agentId).toBe('agent-1');
+      expect(body.jobId).toBe('job-signal-1');
+    });
+
+    it('returns 400 when prompt is empty', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/signal',
+        payload: { prompt: '' },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_SIGNAL_BODY');
+    });
+
+    it('returns 500 when agent is not found in registry', async () => {
+      vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce(undefined as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/ghost-agent/signal',
+        payload: { prompt: 'Do something' },
+      });
+
+      // ControlPlaneError thrown → Fastify default handler returns 500
+      expect(response.statusCode).toBe(500);
     });
   });
 });
