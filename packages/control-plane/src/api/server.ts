@@ -19,6 +19,7 @@ import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { agentRoutes } from './routes/agents.js';
 import { auditRoutes } from './routes/audit.js';
+import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -144,6 +145,11 @@ export async function createServer({
     dbRegistry: dbRegistry ?? null,
   });
   await app.register(loopProxyRoutes, {
+    prefix: '/api/agents',
+    registry,
+    dbRegistry: dbRegistry ?? null,
+  });
+  await app.register(emergencyStopProxyRoutes, {
     prefix: '/api/agents',
     registry,
     dbRegistry: dbRegistry ?? null,

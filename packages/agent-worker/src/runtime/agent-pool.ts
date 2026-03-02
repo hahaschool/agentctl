@@ -186,6 +186,92 @@ export class AgentPool extends EventEmitter {
     return result;
   }
 
+  /**
+   * Emergency stop a single agent: force-kill immediately and clean up its worktree.
+   *
+   * Unlike {@link stopAgent}, this always uses force mode and also removes
+   * the worktree. Returns the timestamp of the stop.
+   *
+   * @throws {AgentError} AGENT_NOT_FOUND if the agent doesn't exist in the pool.
+   */
+  async emergencyStop(agentId: string): Promise<{ stoppedAt: Date }> {
+    const instance = this.agents.get(agentId);
+
+    if (!instance) {
+      throw new AgentError('AGENT_NOT_FOUND', `Agent '${agentId}' not found in the pool`, {
+        agentId,
+      });
+    }
+
+    this.log.error({ agentId }, 'Emergency stop triggered for agent');
+
+    // Force-kill the agent (graceful=false)
+    await instance.stop(false);
+
+    const stoppedAt = instance.getStoppedAt() ?? new Date();
+
+    // Clean up worktree if one was created for this agent.
+    if (this.worktreeManager && this.agentWorktrees.has(agentId)) {
+      try {
+        await this.worktreeManager.remove(agentId);
+        this.agentWorktrees.delete(agentId);
+        this.log.info({ agentId }, 'Agent worktree removed during emergency stop');
+      } catch (err) {
+        this.log.warn({ agentId, err }, 'Failed to remove worktree during emergency stop');
+      }
+    }
+
+    return { stoppedAt };
+  }
+
+  /**
+   * Emergency stop ALL running agents in the pool.
+   *
+   * Force-kills every active agent, cleans up all worktrees, and returns
+   * the count of agents that were stopped.
+   */
+  async emergencyStopAll(): Promise<{ stoppedCount: number }> {
+    this.log.error('Emergency stop ALL triggered');
+
+    let stoppedCount = 0;
+    const promises: Promise<void>[] = [];
+
+    for (const [agentId, instance] of this.agents) {
+      const status = instance.getStatus();
+
+      if (status === 'running' || status === 'starting' || status === 'stopping') {
+        stoppedCount++;
+        this.log.error({ agentId }, 'Emergency stopping agent');
+        promises.push(instance.stop(false));
+      }
+    }
+
+    await Promise.all(promises);
+
+    // Clean up all worktrees
+    if (this.worktreeManager && this.agentWorktrees.size > 0) {
+      this.log.info(
+        { count: this.agentWorktrees.size },
+        'Cleaning up worktrees during emergency stop all',
+      );
+
+      for (const agentId of this.agentWorktrees) {
+        try {
+          await this.worktreeManager.remove(agentId);
+          this.log.info({ agentId }, 'Worktree cleaned up during emergency stop all');
+        } catch (err) {
+          this.log.warn({ agentId, err }, 'Failed to clean up worktree during emergency stop all');
+        }
+      }
+
+      this.agentWorktrees.clear();
+    }
+
+    this.log.error({ stoppedCount }, 'Emergency stop ALL completed');
+
+    return { stoppedCount };
+  }
+
   async stopAll(graceful: boolean = true): Promise<void> {
     const promises: Promise<void>[] = [];
 

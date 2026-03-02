@@ -4,7 +4,8 @@ import type { Logger } from 'pino';
 
 import type { AgentPool } from '../runtime/agent-pool.js';
 import { agentRoutes } from './routes/agents.js';
-import { loopRoutes } from './routes/loop.js';
+import { emergencyStopRoutes } from './routes/emergency-stop.js';
+import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { streamRoutes } from './routes/stream.js';
 
@@ -150,6 +151,14 @@ export async function createWorkerServer({
     pool: agentPool,
     machineId,
     logger,
+  });
+
+  await app.register(emergencyStopRoutes, {
+    prefix: '/api/agents',
+    pool: agentPool,
+    machineId,
+    logger,
+    getActiveLoops,
   });
 
   await app.register(streamRoutes, {
