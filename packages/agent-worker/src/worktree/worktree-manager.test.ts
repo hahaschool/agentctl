@@ -1147,9 +1147,9 @@ describe('WorktreeManager', () => {
     it('rejects agentId with spaces', async () => {
       const manager = new WorktreeManager(makeOptions());
 
-      await expect(
-        manager.create({ agentId: 'agent id', projectPath: '/repo' }),
-      ).rejects.toThrow('invalid characters');
+      await expect(manager.create({ agentId: 'agent id', projectPath: '/repo' })).rejects.toThrow(
+        'invalid characters',
+      );
     });
 
     it('accepts valid agentId patterns', () => {

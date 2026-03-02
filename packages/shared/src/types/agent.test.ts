@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type {
-  Agent,
-  AgentConfig,
-  AgentType,
-} from './agent.js';
+import type { Agent, AgentConfig, AgentType } from './agent.js';
 import { AGENT_STATUSES } from './agent.js';
 import type { AgentRun, RunStatus, RunTrigger } from './agent-run.js';
 import { AgentError, ControlPlaneError, WorkerError } from './errors.js';
@@ -181,7 +177,7 @@ describe('Agent', () => {
       config: {},
       lastRunAt: new Date('2026-03-01T06:00:00Z'),
       lastCostUsd: 0.15,
-      totalCostUsd: 3.50,
+      totalCostUsd: 3.5,
       createdAt: new Date('2026-01-15T10:00:00Z'),
     };
 
@@ -189,7 +185,7 @@ describe('Agent', () => {
     expect(agent.schedule).toBe('0 6 * * *');
     expect(agent.lastRunAt).toBeInstanceOf(Date);
     expect(agent.lastCostUsd).toBe(0.15);
-    expect(agent.totalCostUsd).toBe(3.50);
+    expect(agent.totalCostUsd).toBe(3.5);
   });
 
   it('nullable fields accept both null and non-null values', () => {

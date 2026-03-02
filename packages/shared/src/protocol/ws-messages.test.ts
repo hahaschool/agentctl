@@ -152,7 +152,7 @@ describe('AgentCostEvent', () => {
   it('is identified by the discriminant through a type guard', () => {
     const event: AgentEvent = {
       event: 'cost',
-      data: { turnCost: 0.01, totalCost: 0.50 },
+      data: { turnCost: 0.01, totalCost: 0.5 },
     };
 
     expect(isCostEvent(event)).toBe(true);
@@ -245,19 +245,13 @@ describe('AgentEvent discriminated union', () => {
     const events: AgentEvent[] = [
       { event: 'output', data: { type: 'text', content: 'hi' } },
       { event: 'status', data: { status: 'running' } },
-      { event: 'cost', data: { turnCost: 0.01, totalCost: 0.10 } },
+      { event: 'cost', data: { turnCost: 0.01, totalCost: 0.1 } },
       { event: 'approval_needed', data: { tool: 'Bash', input: {}, timeoutSeconds: 60 } },
       { event: 'heartbeat', data: { timestamp: Date.now() } },
     ];
 
     const discriminants = events.map((e) => e.event);
-    expect(discriminants).toEqual([
-      'output',
-      'status',
-      'cost',
-      'approval_needed',
-      'heartbeat',
-    ]);
+    expect(discriminants).toEqual(['output', 'status', 'cost', 'approval_needed', 'heartbeat']);
   });
 
   it('narrows correctly in a switch statement', () => {
@@ -281,13 +275,7 @@ describe('AgentEvent discriminated union', () => {
   });
 
   it('each event type has a unique discriminant', () => {
-    const discriminants = new Set([
-      'output',
-      'status',
-      'cost',
-      'approval_needed',
-      'heartbeat',
-    ]);
+    const discriminants = new Set(['output', 'status', 'cost', 'approval_needed', 'heartbeat']);
     expect(discriminants.size).toBe(5);
   });
 
@@ -296,7 +284,10 @@ describe('AgentEvent discriminated union', () => {
       { event: 'output', data: { type: 'text', content: 'hello' } },
       { event: 'status', data: { status: 'running', reason: 'started' } },
       { event: 'cost', data: { turnCost: 0.05, totalCost: 2.0 } },
-      { event: 'approval_needed', data: { tool: 'Bash', input: { cmd: 'ls' }, timeoutSeconds: 30 } },
+      {
+        event: 'approval_needed',
+        data: { tool: 'Bash', input: { cmd: 'ls' }, timeoutSeconds: 30 },
+      },
       { event: 'heartbeat', data: { timestamp: 1709000000000 } },
     ];
 

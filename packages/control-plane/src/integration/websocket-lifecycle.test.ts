@@ -968,10 +968,7 @@ describe('Integration: WebSocket lifecycle (iOS-to-agent flow)', () => {
       sendMessage(ws1, { type: 'ping' });
       sendMessage(ws2, { type: 'ping' });
 
-      const [msgs1, msgs2] = await Promise.all([
-        waitForMessages(ws1, 1),
-        waitForMessages(ws2, 1),
-      ]);
+      const [msgs1, msgs2] = await Promise.all([waitForMessages(ws1, 1), waitForMessages(ws2, 1)]);
 
       expect(msgs1.length).toBe(1);
       expect(msgs1[0].type).toBe('pong');

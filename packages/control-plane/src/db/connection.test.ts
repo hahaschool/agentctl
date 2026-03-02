@@ -23,11 +23,11 @@ vi.mock('drizzle-orm/node-postgres', () => ({
   drizzle: vi.fn(() => mockDrizzleReturn),
 }));
 
+import { drizzle } from 'drizzle-orm/node-postgres';
 // Import after mocks are in place
 import pg from 'pg';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { createDb } from './connection.js';
 import type { Database } from './connection.js';
+import { createDb } from './connection.js';
 
 describe('connection', () => {
   beforeEach(() => {

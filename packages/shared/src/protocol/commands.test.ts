@@ -222,11 +222,7 @@ describe('RegisterWorkerRequest', () => {
     };
 
     expect(Object.keys(capabilities)).toHaveLength(3);
-    expect(Object.keys(capabilities).sort()).toEqual([
-      'docker',
-      'gpu',
-      'maxConcurrentAgents',
-    ]);
+    expect(Object.keys(capabilities).sort()).toEqual(['docker', 'gpu', 'maxConcurrentAgents']);
   });
 
   it('serializes and deserializes correctly as JSON', () => {

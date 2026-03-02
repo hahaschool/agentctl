@@ -1,9 +1,8 @@
-import { getTableConfig } from 'drizzle-orm/pg-core';
-import { getTableColumns, getTableName } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
-
 import type { AgentStatus, AgentType, RunStatus, RunTrigger } from '@agentctl/shared';
 import { AGENT_STATUSES } from '@agentctl/shared';
+import { getTableColumns, getTableName } from 'drizzle-orm';
+import { getTableConfig } from 'drizzle-orm/pg-core';
+import { describe, expect, it } from 'vitest';
 
 import { agentActions, agentRuns, agents, machines } from './schema.js';
 
@@ -436,7 +435,13 @@ describe('agentRuns table columns', () => {
   });
 
   it('model, provider, sessionId, errorMessage, resultSummary are nullable text', () => {
-    for (const key of ['model', 'provider', 'sessionId', 'errorMessage', 'resultSummary'] as const) {
+    for (const key of [
+      'model',
+      'provider',
+      'sessionId',
+      'errorMessage',
+      'resultSummary',
+    ] as const) {
       expect(meta[key].columnType).toBe('PgText');
       expect(meta[key].notNull).toBe(false);
       expect(meta[key].hasDefault).toBe(false);
