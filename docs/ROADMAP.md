@@ -127,15 +127,15 @@ Full CI/CD pipeline with 9 workflow files:
 
 ### 4.2 Migration in CD (Deploy-Time)
 
-- [ ] Run migration in transaction before starting new containers
-- [ ] If migration fails: abort deploy, keep old containers, alert
-- [ ] Limited-privilege PostgreSQL user for migrations
+- [x] Run migration in transaction before starting new containers (109 tests)
+- [x] If migration fails: abort deploy, keep old containers, alert
+- [x] Limited-privilege PostgreSQL user for migrations
 
 ### 4.3 Backup Before Migration
 
-- [ ] `pg_dump` before applying (timestamped artifact)
-- [ ] Retain last 7 backups
-- [ ] Destructive migrations (DROP) require manual approval
+- [x] `pg_dump` before applying (timestamped artifact) (99 tests)
+- [x] Retain last 7 backups
+- [x] Destructive migrations (DROP) require manual approval
 
 **Deliverable**: Migration scripts integrated into deploy workflows
 
@@ -274,7 +274,7 @@ Dedicated security workflow on every PR and nightly:
 A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 
 - [x] **Agent config**: read-only access, `allowedTools: ['Read', 'Glob', 'Grep']` only (61 tests)
-- [ ] **Schedule**: nightly cron via BullMQ (uses Phase 8 cron feature)
+- [x] **Schedule**: nightly cron via BullMQ (uses Phase 8 cron feature) (106 tests)
 - [x] **Prompt template**: structured security review covering:
   - Input validation on all API routes (SQLi, command injection, XSS)
   - Secrets leakage in code, config, logs, git history
