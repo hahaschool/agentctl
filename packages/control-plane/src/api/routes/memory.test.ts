@@ -1,3 +1,4 @@
+import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -84,6 +85,24 @@ describe('Memory routes — /api/memory', () => {
       });
     });
 
+    it('returns search results with only query (no optional params)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/search',
+        payload: { query: 'just a query' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.results).toBeDefined();
+      expect(mockClient.search).toHaveBeenCalledWith({
+        query: 'just a query',
+        agentId: undefined,
+        limit: undefined,
+      });
+    });
+
     it('returns 400 when query is missing', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -122,6 +141,54 @@ describe('Memory routes — /api/memory', () => {
       const body = response.json();
       expect(body.error).toContain('query');
     });
+
+    it('returns 400 when query is an array', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/search',
+        payload: { query: ['not', 'a', 'string'] },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toContain('query');
+    });
+
+    it('returns 502 when mem0Client.search throws ControlPlaneError', async () => {
+      vi.mocked(mockClient.search).mockRejectedValueOnce(
+        new ControlPlaneError('MEM0_CONNECTION_ERROR', 'Mem0 service unreachable', {
+          url: 'http://mem0:8080',
+        }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/search',
+        payload: { query: 'test query' },
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = response.json();
+      expect(body.error).toBe('Mem0 service unreachable');
+      expect(body.code).toBe('MEM0_CONNECTION_ERROR');
+    });
+
+    it('returns 500 for unknown errors during search', async () => {
+      vi.mocked(mockClient.search).mockRejectedValueOnce(new Error('something unexpected'));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/search',
+        payload: { query: 'test query' },
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      const body = response.json();
+      expect(body.error).toBe('Failed to search memories');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -156,6 +223,27 @@ describe('Memory routes — /api/memory', () => {
         ],
         agentId: 'agent-1',
         metadata: { source: 'test' },
+      });
+    });
+
+    it('adds a memory with only messages (no optional params)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/add',
+        payload: {
+          messages: [{ role: 'user', content: 'Remember this fact' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.results).toBeDefined();
+      expect(mockClient.add).toHaveBeenCalledWith({
+        messages: [{ role: 'user', content: 'Remember this fact' }],
+        agentId: undefined,
+        metadata: undefined,
       });
     });
 
@@ -197,6 +285,43 @@ describe('Memory routes — /api/memory', () => {
       const body = response.json();
       expect(body.error).toContain('messages');
     });
+
+    it('returns 502 when mem0Client.add throws ControlPlaneError', async () => {
+      vi.mocked(mockClient.add).mockRejectedValueOnce(
+        new ControlPlaneError('MEM0_API_ERROR', 'Mem0 returned 500', { status: 500 }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/add',
+        payload: {
+          messages: [{ role: 'user', content: 'test' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = response.json();
+      expect(body.error).toBe('Mem0 returned 500');
+      expect(body.code).toBe('MEM0_API_ERROR');
+    });
+
+    it('returns 500 for unknown errors during add', async () => {
+      vi.mocked(mockClient.add).mockRejectedValueOnce(new TypeError('Cannot read properties'));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/add',
+        payload: {
+          messages: [{ role: 'user', content: 'test' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      const body = response.json();
+      expect(body.error).toBe('Failed to add memory');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -220,6 +345,16 @@ describe('Memory routes — /api/memory', () => {
       expect(mockClient.getAll).toHaveBeenCalled();
     });
 
+    it('calls getAll without filters when no query params provided', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/memory/',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockClient.getAll).toHaveBeenCalledWith(undefined, undefined);
+    });
+
     it('passes userId and agentId query params to client', async () => {
       const response = await app.inject({
         method: 'GET',
@@ -228,6 +363,57 @@ describe('Memory routes — /api/memory', () => {
 
       expect(response.statusCode).toBe(200);
       expect(mockClient.getAll).toHaveBeenCalledWith('user-1', 'agent-1');
+    });
+
+    it('passes only userId when agentId is not provided', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/memory/?userId=user-42',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockClient.getAll).toHaveBeenCalledWith('user-42', undefined);
+    });
+
+    it('passes only agentId when userId is not provided', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/memory/?agentId=agent-99',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockClient.getAll).toHaveBeenCalledWith(undefined, 'agent-99');
+    });
+
+    it('returns 502 when mem0Client.getAll throws ControlPlaneError', async () => {
+      vi.mocked(mockClient.getAll).mockRejectedValueOnce(
+        new ControlPlaneError('MEM0_CONNECTION_ERROR', 'Mem0 connection timeout'),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/memory/',
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = response.json();
+      expect(body.error).toBe('Mem0 connection timeout');
+      expect(body.code).toBe('MEM0_CONNECTION_ERROR');
+    });
+
+    it('returns 500 for unknown errors during getAll', async () => {
+      vi.mocked(mockClient.getAll).mockRejectedValueOnce(new Error('unexpected failure'));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/memory/',
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      const body = response.json();
+      expect(body.error).toBe('Failed to list memories');
     });
   });
 
@@ -262,6 +448,39 @@ describe('Memory routes — /api/memory', () => {
       expect(body.ok).toBe(true);
       expect(body.memoryId).toBe('mem/002');
       expect(mockClient.delete).toHaveBeenCalledWith('mem/002');
+    });
+
+    it('returns 502 when mem0Client.delete throws ControlPlaneError', async () => {
+      vi.mocked(mockClient.delete).mockRejectedValueOnce(
+        new ControlPlaneError('MEM0_API_ERROR', 'Mem0 delete failed', { memoryId: 'mem-999' }),
+      );
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/memory/mem-999',
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = response.json();
+      expect(body.error).toBe('Mem0 delete failed');
+      expect(body.code).toBe('MEM0_API_ERROR');
+      expect(body.memoryId).toBe('mem-999');
+    });
+
+    it('returns 500 for unknown errors during delete', async () => {
+      vi.mocked(mockClient.delete).mockRejectedValueOnce(new Error('disk full'));
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/memory/mem-500',
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      const body = response.json();
+      expect(body.error).toBe('Failed to delete memory');
+      expect(body.memoryId).toBe('mem-500');
     });
   });
 });
