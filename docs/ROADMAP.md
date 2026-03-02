@@ -16,7 +16,7 @@ Full CI/CD pipeline with 9 workflow files:
 - **Migration Check** (`migration-check.yml`): PR validation with throwaway PostgreSQL
 - **Build Images** (`build-images.yml`): multi-stage Docker with Trivy + SBOM
 
-**3133 tests** across 90 files. All packages build cleanly.
+**3252 tests** across 93 files. All packages build cleanly.
 
 ---
 
