@@ -103,7 +103,7 @@ beforeEach(() => {
   // Re-establish default pool.connect (clearAllMocks does not reset mockImplementation)
   mockPool.connect.mockImplementation(() => Promise.resolve(mockPoolClient));
   // Default: advisory lock succeeds
-  mockPoolClient.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+  mockPoolClient.query.mockImplementation(async (sql: string, _params?: unknown[]) => {
     if (typeof sql === 'string' && sql.includes('pg_try_advisory_lock')) {
       return { rows: [{ locked: true }] };
     }
@@ -468,7 +468,7 @@ describe('tryAcquireAdvisoryLock', () => {
   });
 
   it('uses the correct advisory lock key', async () => {
-    mockPoolClient.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+    mockPoolClient.query.mockImplementation(async (sql: string, _params?: unknown[]) => {
       if (sql.includes('pg_try_advisory_lock')) {
         return { rows: [{ locked: true }] };
       }
@@ -1016,14 +1016,14 @@ describe('runMigrations', () => {
       vi.mocked(discoverMigrations).mockResolvedValue(pending);
       vi.mocked(getPendingMigrations).mockReturnValue(pending);
 
-      let migrationCount = 0;
+      let _migrationCount = 0;
       const migrationClient = {
         query: vi.fn().mockImplementation(async (sql: string) => {
           if (sql === '-- bad sql') {
             throw new Error('column "x" does not exist');
           }
           if (sql === '-- good sql' || sql.includes('INSERT INTO')) {
-            migrationCount++;
+            _migrationCount++;
           }
           return { rows: [] };
         }),
@@ -1401,7 +1401,7 @@ describe('main', () => {
   });
 
   it('outputs structured JSON to stdout', async () => {
-    const result = await main(['node', 'migrate-deploy.ts']);
+    const _result = await main(['node', 'migrate-deploy.ts']);
 
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"success"'));
   });

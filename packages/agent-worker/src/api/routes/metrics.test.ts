@@ -104,7 +104,7 @@ describe('GET /metrics (agent-worker)', () => {
     // RSS should be a positive number (in bytes, typically > 1MB)
     const match = body.match(/agentctl_worker_memory_bytes (\d+)/);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBeGreaterThan(0);
+    expect(Number(match?.[1])).toBeGreaterThan(0);
   });
 
   it('contains agentctl_worker_uptime_seconds gauge', async () => {
@@ -118,7 +118,7 @@ describe('GET /metrics (agent-worker)', () => {
     expect(body).toContain('# TYPE agentctl_worker_uptime_seconds gauge');
     const match = body.match(/agentctl_worker_uptime_seconds (\d+)/);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBeGreaterThanOrEqual(0);
+    expect(Number(match?.[1])).toBeGreaterThanOrEqual(0);
   });
 
   it('outputs valid Prometheus text format with HELP and TYPE for every metric', async () => {

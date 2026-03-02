@@ -60,8 +60,8 @@ describe('recordRequest', () => {
 
     const hist = tracker.durations.get('GET|/health');
     expect(hist).toBeDefined();
-    expect(hist!.count).toBe(2);
-    expect(hist!.sum).toBeCloseTo(0.155);
+    expect(hist?.count).toBe(2);
+    expect(hist?.sum).toBeCloseTo(0.155);
   });
 });
 

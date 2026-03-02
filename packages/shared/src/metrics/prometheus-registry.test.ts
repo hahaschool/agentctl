@@ -266,7 +266,7 @@ describe('PrometheusRegistry', () => {
 
   it('renders floating-point values correctly', () => {
     registry.register('float_gauge', 'Float value', 'gauge');
-    registry.set('float_gauge', 3.14159);
+    registry.set('float_gauge', Math.PI);
 
     const output = registry.render();
     expect(output).toContain('float_gauge 3.14159');

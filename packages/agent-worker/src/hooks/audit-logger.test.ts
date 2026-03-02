@@ -730,11 +730,10 @@ describe('AuditLogger.verifyIntegrity', () => {
       hash: hash2,
     };
 
-    const lines =
-      [
-        JSON.stringify({ ...entry1, previousHash: GENESIS_HASH, hash: hash1 }),
-        JSON.stringify(tampered),
-      ].join('\n') + '\n';
+    const lines = `${[
+      JSON.stringify({ ...entry1, previousHash: GENESIS_HASH, hash: hash1 }),
+      JSON.stringify(tampered),
+    ].join('\n')}\n`;
 
     mockReadFile.mockResolvedValueOnce(lines);
 
@@ -755,11 +754,10 @@ describe('AuditLogger.verifyIntegrity', () => {
     const wrongPrevHash = GENESIS_HASH;
     const hash2 = computeEntryHash(entry2, wrongPrevHash);
 
-    const lines =
-      [
-        JSON.stringify({ ...entry1, previousHash: GENESIS_HASH, hash: hash1 }),
-        JSON.stringify({ ...entry2, previousHash: wrongPrevHash, hash: hash2 }),
-      ].join('\n') + '\n';
+    const lines = `${[
+      JSON.stringify({ ...entry1, previousHash: GENESIS_HASH, hash: hash1 }),
+      JSON.stringify({ ...entry2, previousHash: wrongPrevHash, hash: hash2 }),
+    ].join('\n')}\n`;
 
     mockReadFile.mockResolvedValueOnce(lines);
 
