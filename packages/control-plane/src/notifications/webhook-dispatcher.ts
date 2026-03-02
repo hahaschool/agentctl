@@ -101,7 +101,7 @@ export class WebhookDispatcher {
       case 'discord':
         return this.formatDiscordPayload(payload);
       case 'generic':
-        return payload as unknown as Record<string, unknown>;
+        return { ...payload };
     }
   }
 
