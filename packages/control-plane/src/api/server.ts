@@ -20,6 +20,7 @@ import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue
 import { agentRoutes } from './routes/agents.js';
 import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
+import { dashboardRoutes } from './routes/dashboard.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
@@ -213,6 +214,15 @@ export async function createServer({
     await app.register(webhookRoutes, {
       prefix: '/api/webhooks',
       db,
+    });
+  }
+
+  // Register dashboard analytics routes when both db and dbRegistry are available.
+  if (db && dbRegistry) {
+    await app.register(dashboardRoutes, {
+      prefix: '/api/dashboard',
+      db,
+      dbRegistry,
     });
   }
 
