@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-02
+> Last updated: 2026-03-03
 
 ## Current State
 
@@ -16,7 +16,7 @@ Full CI/CD pipeline with 9 workflow files:
 - **Migration Check** (`migration-check.yml`): PR validation with throwaway PostgreSQL
 - **Build Images** (`build-images.yml`): multi-stage Docker with Trivy + SBOM
 
-**2536 tests** across 84 files. All packages build cleanly.
+**3133 tests** across 90 files. All packages build cleanly.
 
 ---
 
@@ -98,9 +98,9 @@ Full CI/CD pipeline with 9 workflow files:
 
 ### 3.3 Target Machine Setup
 
-- [ ] `deploy` user with limited permissions
-- [ ] Pre-install Docker, Compose, Tailscale
-- [ ] Store `docker-compose.prod.yml` + `.env` on target
+- [x] `deploy` user with limited permissions
+- [x] Pre-install Docker, Compose, Tailscale
+- [x] Store `docker-compose.prod.yml` + `.env` on target
 
 ### 3.4 GitHub Secrets
 
@@ -191,7 +191,7 @@ Full CI/CD pipeline with 9 workflow files:
 - [x] Matrix deploy with canary strategy
 - [x] Per-machine health verification
 - [x] Staggered rollout: canary -> verify -> remaining
-- [ ] Integrate `scripts/setup-machine.sh` for new machine bootstrap
+- [x] Integrate `scripts/setup-machine.sh` for new machine bootstrap
 
 **Deliverable**: `.github/workflows/deploy-fleet.yml`, `infra/machines.yml` ✅
 
