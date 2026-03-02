@@ -1,0 +1,752 @@
+# Deploy to Fleet (Multi-Machine)
+#
+# Deploys agent-worker and/or control-plane images to all machines in the
+# Tailscale mesh fleet, using the inventory defined in infra/machines.yml.
+#
+# Supports three deployment strategies:
+#   - canary:       Deploy to a subset first, require manual approval, then roll out
+#   - rolling:      Deploy one machine at a time in deploy_order sequence
+#   - all-at-once:  Deploy to every target machine in parallel
+#
+# Required secrets:
+#   TS_OAUTH_CLIENT_ID  - Tailscale OAuth client ID (ephemeral)
+#   TS_OAUTH_SECRET     - Tailscale OAuth client secret
+#   DEPLOY_SSH_KEY      - SSH private key for the deploy user on all fleet machines
+#   POSTGRES_PASSWORD   - PostgreSQL password for drizzle migrations (control-plane only)
+#
+# Required repository variables (non-secret):
+#   DEPLOY_USER         - SSH user on target machines (default: deploy)
+#   DEPLOY_PATH         - Path to docker-compose directory (default: /opt/agentctl)
+
+name: Deploy to Fleet
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy (e.g. sha-abc1234 or 1.2.3)"
+        required: true
+        type: string
+      target_role:
+        description: "Which machines to target"
+        required: true
+        type: choice
+        options:
+          - worker
+          - control-plane
+          - all
+      strategy:
+        description: "Deployment strategy"
+        required: true
+        type: choice
+        options:
+          - canary
+          - rolling
+          - all-at-once
+        default: canary
+      canary_percentage:
+        description: "Percentage of fleet for canary (ignored for non-canary strategies)"
+        required: false
+        type: number
+        default: 20
+      dry_run:
+        description: "Validate inventory and image without deploying"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-fleet
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+  COMPOSE_FILE: docker-compose.prod.yml
+  DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/agentctl' }}
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write  # Required for Tailscale OIDC
+
+# =============================================================================
+# Job 1: Validate inventory and image availability
+# =============================================================================
+jobs:
+  validate:
+    name: Validate inventory & image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      canary_machines: ${{ steps.plan.outputs.canary_machines }}
+      remaining_machines: ${{ steps.plan.outputs.remaining_machines }}
+      all_machines: ${{ steps.plan.outputs.all_machines }}
+      canary_count: ${{ steps.plan.outputs.canary_count }}
+      remaining_count: ${{ steps.plan.outputs.remaining_count }}
+      total_count: ${{ steps.plan.outputs.total_count }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Parse and validate infra/machines.yml ────────────────────────
+      - name: Parse fleet inventory
+        id: plan
+        run: |
+          set -euo pipefail
+
+          if [ ! -f infra/machines.yml ]; then
+            echo "::error::infra/machines.yml not found"
+            exit 1
+          fi
+
+          # Install yq for YAML parsing
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          # Extract machines matching the target role
+          TARGET_ROLE="${{ inputs.target_role }}"
+          if [ "$TARGET_ROLE" = "all" ]; then
+            MACHINES=$(yq -o=json '.machines' infra/machines.yml)
+          elif [ "$TARGET_ROLE" = "worker" ]; then
+            MACHINES=$(yq -o=json '.machines | map(select(.role == "agent-worker"))' infra/machines.yml)
+          else
+            MACHINES=$(yq -o=json '.machines | map(select(.role == "control-plane"))' infra/machines.yml)
+          fi
+
+          TOTAL=$(echo "$MACHINES" | jq 'length')
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::error::No machines found matching role '$TARGET_ROLE'"
+            exit 1
+          fi
+          echo "Found $TOTAL machine(s) matching role '$TARGET_ROLE'"
+
+          # Validate all Tailscale IPs are in CGNAT range (100.64.0.0 - 100.127.255.255)
+          INVALID_IPS=$(echo "$MACHINES" | jq -r '.[].tailscale_ip' | while read -r ip; do
+            IFS='.' read -r a b c d <<< "$ip"
+            if [ "$a" != "100" ] || [ "$b" -lt 64 ] || [ "$b" -gt 127 ]; then
+              echo "$ip"
+            fi
+          done || true)
+
+          if [ -n "$INVALID_IPS" ]; then
+            echo "::error::Invalid Tailscale IPs found (must be in 100.64.0.0/10): $INVALID_IPS"
+            exit 1
+          fi
+
+          # Validate no duplicate IDs or IPs
+          DUPLICATE_IDS=$(echo "$MACHINES" | jq -r '.[].id' | sort | uniq -d)
+          if [ -n "$DUPLICATE_IDS" ]; then
+            echo "::error::Duplicate machine IDs: $DUPLICATE_IDS"
+            exit 1
+          fi
+
+          DUPLICATE_IPS=$(echo "$MACHINES" | jq -r '.[].tailscale_ip' | sort | uniq -d)
+          if [ -n "$DUPLICATE_IPS" ]; then
+            echo "::error::Duplicate Tailscale IPs: $DUPLICATE_IPS"
+            exit 1
+          fi
+
+          # Sort machines by deploy_order
+          SORTED=$(echo "$MACHINES" | jq 'sort_by(.deploy_order)')
+
+          # Compute canary vs remaining split
+          STRATEGY="${{ inputs.strategy }}"
+          CANARY_PCT="${{ inputs.canary_percentage }}"
+
+          if [ "$STRATEGY" = "canary" ]; then
+            CANARY_COUNT=$(( (TOTAL * CANARY_PCT + 99) / 100 ))
+            # Ensure at least 1 canary and at most TOTAL-1 (so there are remaining machines)
+            if [ "$CANARY_COUNT" -lt 1 ]; then
+              CANARY_COUNT=1
+            fi
+            if [ "$CANARY_COUNT" -ge "$TOTAL" ]; then
+              CANARY_COUNT=$((TOTAL - 1))
+              # If only one machine, canary gets it and remaining is empty
+              if [ "$TOTAL" -eq 1 ]; then
+                CANARY_COUNT=1
+              fi
+            fi
+
+            CANARY_MACHINES=$(echo "$SORTED" | jq --argjson n "$CANARY_COUNT" '.[:$n]')
+            REMAINING_MACHINES=$(echo "$SORTED" | jq --argjson n "$CANARY_COUNT" '.[$n:]')
+          else
+            # rolling and all-at-once: no canary split, all go to "remaining"
+            CANARY_MACHINES="[]"
+            REMAINING_MACHINES="$SORTED"
+            CANARY_COUNT=0
+          fi
+
+          REMAINING_COUNT=$(echo "$REMAINING_MACHINES" | jq 'length')
+
+          # Output as JSON arrays for matrix consumption
+          echo "canary_machines=$(echo "$CANARY_MACHINES" | jq -c '.')" >> "$GITHUB_OUTPUT"
+          echo "remaining_machines=$(echo "$REMAINING_MACHINES" | jq -c '.')" >> "$GITHUB_OUTPUT"
+          echo "all_machines=$(echo "$SORTED" | jq -c '.')" >> "$GITHUB_OUTPUT"
+          echo "canary_count=$CANARY_COUNT" >> "$GITHUB_OUTPUT"
+          echo "remaining_count=$REMAINING_COUNT" >> "$GITHUB_OUTPUT"
+          echo "total_count=$TOTAL" >> "$GITHUB_OUTPUT"
+
+          # Print deployment plan summary
+          echo "## Deployment Plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Target role | \`${{ inputs.target_role }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Strategy | \`$STRATEGY\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total machines | $TOTAL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Canary machines | $CANARY_COUNT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Remaining machines | $REMAINING_COUNT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry run | \`${{ inputs.dry_run }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### Machines" >> "$GITHUB_STEP_SUMMARY"
+          echo "$SORTED" | jq -r '.[] | "- **\(.id)** (\(.role)) — \(.tailscale_ip) [\(.hostname)]"' >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Verify images exist in ghcr.io ─────────────────────────────
+      - name: Verify image exists in registry
+        run: |
+          set -euo pipefail
+
+          # Log in to verify image manifests
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+          TARGET_ROLE="${{ inputs.target_role }}"
+          TAG="${{ inputs.image_tag }}"
+          FAILED=0
+
+          # Check control-plane image if deploying to control-plane or all
+          if [ "$TARGET_ROLE" = "control-plane" ] || [ "$TARGET_ROLE" = "all" ]; then
+            echo "Checking ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:$TAG..."
+            if docker manifest inspect "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:$TAG" > /dev/null 2>&1; then
+              echo "control-plane:$TAG exists"
+            else
+              echo "::error::Image not found: control-plane:$TAG"
+              FAILED=1
+            fi
+          fi
+
+          # Check agent-worker image if deploying to worker or all
+          if [ "$TARGET_ROLE" = "worker" ] || [ "$TARGET_ROLE" = "all" ]; then
+            echo "Checking ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:$TAG..."
+            if docker manifest inspect "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:$TAG" > /dev/null 2>&1; then
+              echo "agent-worker:$TAG exists"
+            else
+              echo "::error::Image not found: agent-worker:$TAG"
+              FAILED=1
+            fi
+          fi
+
+          if [ "$FAILED" -ne 0 ]; then
+            exit 1
+          fi
+
+      # ── Dry run: stop here ─────────────────────────────────────────
+      - name: Dry run summary
+        if: inputs.dry_run
+        run: |
+          echo "::notice::Dry run complete. Inventory is valid, images exist. No deployment performed."
+          echo "## Dry Run Result: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+  # =============================================================================
+  # Job 2: Canary deploy (only for strategy=canary, skipped if dry_run)
+  # =============================================================================
+  canary-deploy:
+    name: "Canary: ${{ matrix.machine.id }}"
+    needs: validate
+    if: inputs.strategy == 'canary' && !inputs.dry_run && needs.validate.outputs.canary_count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        machine: ${{ fromJson(needs.validate.outputs.canary_machines) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Connect to Tailscale mesh ────────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Configure SSH ────────────────────────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host target
+            HostName ${{ matrix.machine.tailscale_ip }}
+            User ${{ env.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      - name: Verify SSH connectivity
+        run: ssh target "echo 'SSH OK to ${{ matrix.machine.id }} (${{ matrix.machine.tailscale_ip }})'"
+
+      # ── Record current state for rollback ────────────────────────────
+      - name: Record current image for rollback
+        id: current
+        run: |
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          for SVC in $SERVICES; do
+            CURRENT=$(ssh target \
+              "docker inspect agentctl-${SVC} --format='{{.Config.Image}}' 2>/dev/null || echo 'none'")
+            echo "${SVC}_image=$CURRENT" >> "$GITHUB_OUTPUT"
+          done
+
+      # ── Pull image ───────────────────────────────────────────────────
+      - name: Pull image
+        run: |
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          for SVC in $SERVICES; do
+            echo "Pulling $SVC:${{ inputs.image_tag }} on ${{ matrix.machine.id }}..."
+            ssh target "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${SVC}:${{ inputs.image_tag }}"
+          done
+
+      # ── Run drizzle migrations (control-plane only) ──────────────────
+      - name: Run database migrations
+        if: contains(matrix.machine.services, 'control-plane')
+        run: |
+          ssh target << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo "Running drizzle-kit migrations..."
+            docker run --rm \
+              --network agentctl_backend \
+              -e DATABASE_URL="postgresql://${POSTGRES_USER:-agentctl}:${POSTGRES_PASSWORD}@agentctl-postgres-prod:5432/${POSTGRES_DB:-agentctl}" \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ inputs.image_tag }} \
+              npx drizzle-kit migrate
+          REMOTE_SCRIPT
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+      # ── Deploy containers ────────────────────────────────────────────
+      - name: Deploy containers
+        run: |
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          ssh target << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            export CONTROL_PLANE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ inputs.image_tag }}"
+            export AGENT_WORKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ inputs.image_tag }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            echo "Deploying ${{ inputs.image_tag }} on ${{ matrix.machine.id }}..."
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans --force-recreate ${SERVICES}
+
+            echo "Waiting for containers to initialize..."
+            sleep 5
+            docker compose -f ${{ env.COMPOSE_FILE }} ps
+          REMOTE_SCRIPT
+
+      # ── Health check with retry loop ─────────────────────────────────
+      - name: Health check
+        id: health
+        run: |
+          ATTEMPT=0
+          MAX_ATTEMPTS=5
+          INTERVAL=10
+
+          # Determine port based on services
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          if echo "$SERVICES" | grep -q "control-plane"; then
+            PORT=8080
+          else
+            PORT=9000
+          fi
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS on ${{ matrix.machine.id }} (port $PORT)..."
+
+            STATUS=$(ssh target \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:${PORT}/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              echo "healthy=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "healthy=false" >> "$GITHUB_OUTPUT"
+          echo "::error::Health check failed on ${{ matrix.machine.id }} after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      # ── Rollback on failure ──────────────────────────────────────────
+      - name: Rollback on failure
+        if: failure() && steps.health.outputs.healthy == 'false'
+        run: |
+          echo "::warning::Rolling back canary ${{ matrix.machine.id }}..."
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+
+          ssh target << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            export CONTROL_PLANE_IMAGE="${{ steps.current.outputs.control-plane_image || 'none' }}"
+            export AGENT_WORKER_IMAGE="${{ steps.current.outputs.agent-worker_image || 'none' }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            if [ "\$CONTROL_PLANE_IMAGE" != "none" ] || [ "\$AGENT_WORKER_IMAGE" != "none" ]; then
+              docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans --force-recreate ${SERVICES}
+              sleep 5
+              echo "Rollback containers started"
+            else
+              echo "No previous image to roll back to"
+            fi
+          REMOTE_SCRIPT
+
+      # ── Cleanup ──────────────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key
+
+  # =============================================================================
+  # Job 3: Canary approval gate (manual approval before full rollout)
+  # =============================================================================
+  canary-approval:
+    name: Approve full rollout
+    needs: [validate, canary-deploy]
+    if: inputs.strategy == 'canary' && !inputs.dry_run && needs.validate.outputs.remaining_count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: fleet-canary-approval
+
+    steps:
+      - name: Canary approval granted
+        run: |
+          echo "Canary deployment verified. Proceeding with full fleet rollout."
+          echo "Canary machines: ${{ needs.validate.outputs.canary_count }}"
+          echo "Remaining machines: ${{ needs.validate.outputs.remaining_count }}"
+
+  # =============================================================================
+  # Job 4: Fleet deploy (remaining machines after canary, or all for non-canary)
+  # =============================================================================
+  fleet-deploy:
+    name: "Deploy: ${{ matrix.machine.id }}"
+    needs: [validate, canary-approval]
+    # Run if:
+    #   - Not a dry run, AND
+    #   - canary-approval succeeded (canary strategy), OR
+    #   - canary-approval was skipped (rolling / all-at-once strategy)
+    if: |
+      always() && !inputs.dry_run &&
+      (needs.canary-approval.result == 'success' || needs.canary-approval.result == 'skipped') &&
+      needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      # rolling = 1 at a time, all-at-once / canary-remaining = all in parallel
+      max-parallel: ${{ inputs.strategy == 'rolling' && 1 || 256 }}
+      matrix:
+        machine: ${{ fromJson(needs.validate.outputs.remaining_machines) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Connect to Tailscale mesh ────────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Configure SSH ────────────────────────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host target
+            HostName ${{ matrix.machine.tailscale_ip }}
+            User ${{ env.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      - name: Verify SSH connectivity
+        run: ssh target "echo 'SSH OK to ${{ matrix.machine.id }} (${{ matrix.machine.tailscale_ip }})'"
+
+      # ── Record current state for rollback ────────────────────────────
+      - name: Record current image for rollback
+        id: current
+        run: |
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          for SVC in $SERVICES; do
+            CURRENT=$(ssh target \
+              "docker inspect agentctl-${SVC} --format='{{.Config.Image}}' 2>/dev/null || echo 'none'")
+            echo "${SVC}_image=$CURRENT" >> "$GITHUB_OUTPUT"
+          done
+
+      # ── Pull image ───────────────────────────────────────────────────
+      - name: Pull image
+        run: |
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          for SVC in $SERVICES; do
+            echo "Pulling $SVC:${{ inputs.image_tag }} on ${{ matrix.machine.id }}..."
+            ssh target "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${SVC}:${{ inputs.image_tag }}"
+          done
+
+      # ── Run drizzle migrations (control-plane only) ──────────────────
+      - name: Run database migrations
+        if: contains(matrix.machine.services, 'control-plane')
+        run: |
+          ssh target << 'REMOTE_SCRIPT'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo "Running drizzle-kit migrations..."
+            docker run --rm \
+              --network agentctl_backend \
+              -e DATABASE_URL="postgresql://${POSTGRES_USER:-agentctl}:${POSTGRES_PASSWORD}@agentctl-postgres-prod:5432/${POSTGRES_DB:-agentctl}" \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ inputs.image_tag }} \
+              npx drizzle-kit migrate
+          REMOTE_SCRIPT
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+      # ── Deploy containers ────────────────────────────────────────────
+      - name: Deploy containers
+        run: |
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          ssh target << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            export CONTROL_PLANE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ inputs.image_tag }}"
+            export AGENT_WORKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker:${{ inputs.image_tag }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            echo "Deploying ${{ inputs.image_tag }} on ${{ matrix.machine.id }}..."
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans --force-recreate ${SERVICES}
+
+            echo "Waiting for containers to initialize..."
+            sleep 5
+            docker compose -f ${{ env.COMPOSE_FILE }} ps
+          REMOTE_SCRIPT
+
+      # ── Health check with retry loop ─────────────────────────────────
+      - name: Health check
+        id: health
+        run: |
+          ATTEMPT=0
+          MAX_ATTEMPTS=5
+          INTERVAL=10
+
+          # Determine port based on services
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+          if echo "$SERVICES" | grep -q "control-plane"; then
+            PORT=8080
+          else
+            PORT=9000
+          fi
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS on ${{ matrix.machine.id }} (port $PORT)..."
+
+            STATUS=$(ssh target \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:${PORT}/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              echo "healthy=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "healthy=false" >> "$GITHUB_OUTPUT"
+          echo "::error::Health check failed on ${{ matrix.machine.id }} after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      # ── Rollback on failure ──────────────────────────────────────────
+      - name: Rollback on failure
+        if: failure() && steps.health.outputs.healthy == 'false'
+        run: |
+          echo "::warning::Rolling back ${{ matrix.machine.id }}..."
+          SERVICES='${{ join(matrix.machine.services, ' ') }}'
+
+          ssh target << REMOTE_SCRIPT
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}
+
+            export CONTROL_PLANE_IMAGE="${{ steps.current.outputs.control-plane_image || 'none' }}"
+            export AGENT_WORKER_IMAGE="${{ steps.current.outputs.agent-worker_image || 'none' }}"
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+
+            if [ "\$CONTROL_PLANE_IMAGE" != "none" ] || [ "\$AGENT_WORKER_IMAGE" != "none" ]; then
+              docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans --force-recreate ${SERVICES}
+              sleep 5
+              echo "Rollback containers started"
+            else
+              echo "No previous image to roll back to"
+            fi
+          REMOTE_SCRIPT
+
+      # ── Cleanup ──────────────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key
+
+  # =============================================================================
+  # Job 5: Post-deploy verification and summary
+  # =============================================================================
+  verify:
+    name: Verify fleet deployment
+    needs: [validate, canary-deploy, fleet-deploy]
+    if: always() && !inputs.dry_run && needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Connect to Tailscale mesh ────────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Configure SSH ────────────────────────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Add all machines to SSH config
+          ALL_MACHINES='${{ needs.validate.outputs.all_machines }}'
+          echo "$ALL_MACHINES" | jq -r '.[] | "Host \(.id)\n  HostName \(.tailscale_ip)\n  User ${{ env.DEPLOY_USER }}\n  IdentityFile ~/.ssh/deploy_key\n  StrictHostKeyChecking no\n  ConnectTimeout 15\n"' >> ~/.ssh/config
+
+      # ── Verify every machine ─────────────────────────────────────────
+      - name: Verify all machines
+        id: verify
+        run: |
+          set -uo pipefail
+
+          ALL_MACHINES='${{ needs.validate.outputs.all_machines }}'
+          SUCCEEDED=""
+          FAILED=""
+          SKIPPED=""
+          TOTAL=0
+
+          echo "$ALL_MACHINES" | jq -c '.[]' | while read -r MACHINE; do
+            TOTAL=$((TOTAL + 1))
+            ID=$(echo "$MACHINE" | jq -r '.id')
+            IP=$(echo "$MACHINE" | jq -r '.tailscale_ip')
+            SERVICES=$(echo "$MACHINE" | jq -r '.services[]')
+
+            # Determine health check port
+            if echo "$SERVICES" | grep -q "control-plane"; then
+              PORT=8080
+            else
+              PORT=9000
+            fi
+
+            echo "Verifying $ID ($IP) on port $PORT..."
+
+            STATUS=$(ssh "$ID" \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:${PORT}/health" \
+              2>/dev/null || echo "000")
+
+            # Also verify the deployed image tag matches
+            IMAGE_TAG=""
+            for SVC in $SERVICES; do
+              RUNNING_IMAGE=$(ssh "$ID" \
+                "docker inspect agentctl-${SVC} --format='{{.Config.Image}}' 2>/dev/null || echo 'unknown'")
+              IMAGE_TAG="$RUNNING_IMAGE"
+            done
+
+            if [ "$STATUS" = "200" ]; then
+              echo "  $ID: HEALTHY (HTTP $STATUS) — $IMAGE_TAG"
+              SUCCEEDED="$SUCCEEDED $ID"
+            else
+              echo "  $ID: UNHEALTHY (HTTP $STATUS) — $IMAGE_TAG"
+              FAILED="$FAILED $ID"
+            fi
+          done
+
+          # Write summary to step summary
+          echo "## Fleet Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Strategy | \`${{ inputs.strategy }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Target role | \`${{ inputs.target_role }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Machine-by-machine table
+          echo "### Machine Status" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Machine | Role | IP | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|------|----|--------|" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "$ALL_MACHINES" | jq -c '.[]' | while read -r MACHINE; do
+            ID=$(echo "$MACHINE" | jq -r '.id')
+            ROLE=$(echo "$MACHINE" | jq -r '.role')
+            IP=$(echo "$MACHINE" | jq -r '.tailscale_ip')
+            SERVICES=$(echo "$MACHINE" | jq -r '.services[]')
+
+            if echo "$SERVICES" | grep -q "control-plane"; then
+              PORT=8080
+            else
+              PORT=9000
+            fi
+
+            STATUS=$(ssh "$ID" \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:${PORT}/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "| $ID | $ROLE | \`$IP\` | HEALTHY |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| $ID | $ROLE | \`$IP\` | **FAILED** (HTTP $STATUS) |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          # Report overall result from deploy job statuses
+          CANARY_RESULT="${{ needs.canary-deploy.result }}"
+          FLEET_RESULT="${{ needs.fleet-deploy.result }}"
+
+          if [ "$CANARY_RESULT" = "failure" ] || [ "$FLEET_RESULT" = "failure" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **Warning**: Some machines failed during deployment. Review individual job logs above." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Fleet deployment completed with failures. Check summary for details."
+          else
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> Fleet deployment completed successfully." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ── Cleanup ──────────────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key
