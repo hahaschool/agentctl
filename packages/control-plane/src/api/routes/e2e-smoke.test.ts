@@ -1,0 +1,810 @@
+import { ControlPlaneError } from '@agentctl/shared';
+import type { FastifyInstance } from 'fastify';
+import type { Logger } from 'pino';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { createServer } from '../server.js';
+
+// ---------------------------------------------------------------------------
+// Mock logger — silent for tests
+// ---------------------------------------------------------------------------
+
+const logger = {
+  child: () => logger,
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+  fatal: vi.fn(),
+  trace: vi.fn(),
+  silent: vi.fn(),
+  level: 'silent',
+} as unknown as Logger;
+
+// ---------------------------------------------------------------------------
+// Mock dependencies
+// ---------------------------------------------------------------------------
+
+const mockDbRegistry = {
+  registerMachine: vi.fn(),
+  heartbeat: vi.fn(),
+  listMachines: vi.fn().mockResolvedValue([
+    {
+      id: 'smoke-test-machine',
+      hostname: 'smoke-host',
+      tailscaleIp: '100.64.0.99',
+      os: 'linux',
+      arch: 'x64',
+      status: 'online',
+      lastHeartbeat: new Date(),
+      capabilities: { gpu: false, docker: true, maxConcurrentAgents: 2 },
+      createdAt: new Date(),
+    },
+  ]),
+  getMachine: vi.fn().mockResolvedValue(undefined),
+  createAgent: vi.fn().mockResolvedValue('agent-new'),
+  getAgent: vi.fn().mockResolvedValue({
+    id: 'smoke-test-machine',
+    machineId: 'smoke-test-machine',
+    name: 'Smoke Test Agent',
+    type: 'adhoc',
+    status: 'registered',
+    schedule: null,
+    projectPath: null,
+    worktreeBranch: null,
+    currentSessionId: null,
+    config: {},
+    lastRunAt: null,
+    lastCostUsd: null,
+    totalCostUsd: 0,
+    createdAt: new Date(),
+  }),
+  updateAgentStatus: vi.fn(),
+  listAgents: vi.fn().mockResolvedValue([]),
+  getRecentRuns: vi.fn().mockResolvedValue([]),
+  completeRun: vi.fn().mockResolvedValue(undefined),
+  createRun: vi.fn().mockResolvedValue('run-001'),
+  insertActions: vi.fn().mockResolvedValue(1),
+  queryActions: vi.fn().mockResolvedValue({ actions: [], total: 0 }),
+  getAuditSummary: vi.fn().mockResolvedValue({ totalActions: 0 }),
+  getRunTimeline: vi.fn().mockResolvedValue([]),
+} as unknown as DbAgentRegistry;
+
+const mockDb = {
+  execute: vi.fn().mockResolvedValue({ rows: [] }),
+};
+
+const mockRedis = { ping: vi.fn().mockResolvedValue('PONG') };
+
+const mockTaskQueue = {
+  add: vi.fn().mockResolvedValue({ id: 'job-1' }),
+};
+
+const mockLitellmClient = {
+  health: vi.fn().mockResolvedValue(true),
+  listModels: vi.fn().mockResolvedValue(['claude-sonnet-4-20250514', 'gpt-4']),
+  getModelInfo: vi.fn().mockResolvedValue([]),
+  getSpend: vi.fn().mockResolvedValue([]),
+  testModel: vi.fn().mockResolvedValue({ model: 'claude-sonnet-4-20250514', usage: {} }),
+};
+
+const mockMem0Client = {
+  health: vi.fn().mockResolvedValue(true),
+  search: vi.fn().mockResolvedValue({ results: [] }),
+  add: vi.fn().mockResolvedValue({ results: [] }),
+  getAll: vi.fn().mockResolvedValue({ results: [] }),
+  delete: vi.fn().mockResolvedValue(undefined),
+};
+
+// ===========================================================================
+// E2E Smoke Tests — Full server with all dependencies
+// ===========================================================================
+
+describe('E2E smoke tests — full control-plane server', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await createServer({
+      logger,
+      taskQueue: mockTaskQueue as never,
+      dbRegistry: mockDbRegistry,
+      db: mockDb as never,
+      redis: mockRedis,
+      litellmClient: mockLitellmClient as never,
+      mem0Client: mockMem0Client as never,
+    });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  // -------------------------------------------------------------------------
+  // Infrastructure
+  // -------------------------------------------------------------------------
+
+  describe('Infrastructure', () => {
+    it('GET /health returns 200 with ok status', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.status).toBe('ok');
+      expect(body.timestamp).toBeDefined();
+    });
+
+    it('GET /health?detail=true includes dependency statuses', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health?detail=true',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.dependencies).toBeDefined();
+      expect(body.dependencies.postgres).toBeDefined();
+      expect(body.dependencies.redis).toBeDefined();
+      expect(body.dependencies.mem0).toBeDefined();
+      expect(body.dependencies.litellm).toBeDefined();
+    });
+
+    it('GET /metrics returns 200 with text/plain content type', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/metrics',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const contentType = response.headers['content-type'];
+      expect(String(contentType)).toContain('text/plain');
+
+      const body = response.body;
+      expect(body).toContain('agentctl_control_plane_up');
+      expect(body).toContain('agentctl_agents_total');
+      expect(body).toContain('agentctl_dependency_healthy');
+    });
+
+    it('returns X-Request-Id header on every response', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      const requestId = response.headers['x-request-id'];
+      expect(requestId).toBeDefined();
+      expect(typeof requestId).toBe('string');
+      expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    });
+
+    it('returns unique X-Request-Id per request', async () => {
+      const r1 = await app.inject({ method: 'GET', url: '/health' });
+      const r2 = await app.inject({ method: 'GET', url: '/health' });
+
+      expect(r1.headers['x-request-id']).not.toBe(r2.headers['x-request-id']);
+    });
+
+    it('returns 404 for unknown GET routes', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/does-not-exist',
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body).toHaveProperty('message');
+      expect(body).toHaveProperty('statusCode', 404);
+    });
+
+    it('returns 404 for unknown POST routes', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/nonexistent',
+        payload: { foo: 'bar' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body).toHaveProperty('statusCode', 404);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // CORS
+  // -------------------------------------------------------------------------
+
+  describe('CORS', () => {
+    it('returns Access-Control-Allow-Origin in non-production mode', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+        headers: {
+          origin: 'http://localhost:3000',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['access-control-allow-origin']).toBeDefined();
+    });
+
+    it('returns correct headers on preflight OPTIONS request', async () => {
+      const response = await app.inject({
+        method: 'OPTIONS',
+        url: '/api/agents',
+        headers: {
+          origin: 'http://localhost:3000',
+          'access-control-request-method': 'POST',
+        },
+      });
+
+      expect(response.statusCode).toBeLessThanOrEqual(204);
+      expect(response.headers['access-control-allow-origin']).toBeDefined();
+      expect(response.headers['access-control-allow-methods']).toBeDefined();
+    });
+
+    it('exposes X-Request-Id via CORS exposed headers', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+        headers: {
+          origin: 'http://localhost:3000',
+        },
+      });
+
+      const exposed = response.headers['access-control-expose-headers'];
+      expect(exposed).toBeDefined();
+      expect(String(exposed)).toContain('X-Request-Id');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Rate Limiting
+  // -------------------------------------------------------------------------
+
+  describe('Rate limiting', () => {
+    it('includes X-RateLimit headers on rate-limited endpoints', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents',
+      });
+
+      // Rate limit headers should be present on non-allowlisted routes
+      const headers = response.headers;
+      expect(headers['x-ratelimit-limit']).toBeDefined();
+      expect(headers['x-ratelimit-remaining']).toBeDefined();
+    });
+
+    it('does not include X-RateLimit headers on /health', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      // /health is in the rate-limit allowList
+      expect(response.headers['x-ratelimit-limit']).toBeUndefined();
+    });
+
+    it('does not include X-RateLimit headers on /metrics', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/metrics',
+      });
+
+      // /metrics is in the rate-limit allowList
+      expect(response.headers['x-ratelimit-limit']).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Agent routes
+  // -------------------------------------------------------------------------
+
+  describe('Agents', () => {
+    it('POST /api/agents/register with empty body returns 400', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/register',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_MACHINE_ID');
+    });
+
+    it('GET /api/agents returns an array', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(Array.isArray(body)).toBe(true);
+    });
+
+    it('POST /api/agents/register with valid payload returns 200', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/register',
+        payload: {
+          machineId: 'smoke-test-machine',
+          hostname: 'smoke-host',
+          tailscaleIp: '100.64.0.99',
+          os: 'linux',
+          arch: 'x64',
+          capabilities: {
+            gpu: false,
+            docker: true,
+            maxConcurrentAgents: 2,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.machineId).toBe('smoke-test-machine');
+    });
+
+    it('POST /api/agents/:id/start returns 200', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/smoke-test-machine/start',
+        payload: {
+          prompt: 'Smoke test prompt',
+          model: 'claude-sonnet-4-20250514',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Webhook routes
+  // -------------------------------------------------------------------------
+
+  describe('Webhooks', () => {
+    it('POST /api/webhooks returns 400 when url is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: {
+          eventTypes: ['agent.started'],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_URL');
+    });
+
+    it('POST /api/webhooks returns 400 when eventTypes is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: {
+          url: 'https://example.com/webhook',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_EVENT_TYPES');
+    });
+
+    it('GET /api/webhooks returns subscriptions array', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/webhooks',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('subscriptions');
+      expect(Array.isArray(body.subscriptions)).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Scheduler routes
+  // -------------------------------------------------------------------------
+
+  describe('Scheduler', () => {
+    it('GET /api/scheduler/jobs returns 501 when repeatableJobManager not configured', async () => {
+      // Our full server was created without repeatableJobs, so the scheduler
+      // guard returns 501
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/scheduler/jobs',
+      });
+
+      expect(response.statusCode).toBe(501);
+
+      const body = response.json();
+      expect(body.error).toBe('SCHEDULER_NOT_CONFIGURED');
+    });
+
+    it('POST /api/scheduler/jobs/heartbeat returns 501 without repeatableJobManager', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/scheduler/jobs/heartbeat',
+        payload: {
+          agentId: 'test-agent',
+          machineId: 'test-machine',
+          intervalMs: 60000,
+        },
+      });
+
+      expect(response.statusCode).toBe(501);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Router routes (LiteLLM)
+  // -------------------------------------------------------------------------
+
+  describe('Router', () => {
+    it('GET /api/router/models returns model list', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/router/models',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('models');
+      expect(Array.isArray(body.models)).toBe(true);
+      expect(body.models).toContain('claude-sonnet-4-20250514');
+    });
+
+    it('GET /api/router/health returns ok status', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/router/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.status).toBe('ok');
+    });
+
+    it('GET /api/router/models/info returns deployments', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/router/models/info',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('deployments');
+    });
+
+    it('GET /api/router/spend returns spend entries', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/router/spend',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('entries');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Memory routes (Mem0)
+  // -------------------------------------------------------------------------
+
+  describe('Memory', () => {
+    it('POST /api/memory/search returns results', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/search',
+        payload: {
+          query: 'test query',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('results');
+      expect(Array.isArray(body.results)).toBe(true);
+    });
+
+    it('POST /api/memory/search returns 400 when query is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/search',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toContain('query');
+    });
+
+    it('POST /api/memory/add returns 400 when messages is empty', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/memory/add',
+        payload: { messages: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toContain('messages');
+    });
+
+    it('GET /api/memory returns memory list', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/memory',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('results');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Audit routes
+  // -------------------------------------------------------------------------
+
+  describe('Audit', () => {
+    it('GET /api/audit returns paginated actions', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/audit',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('actions');
+    });
+
+    it('GET /api/audit/summary returns summary', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/audit/summary',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('totalActions');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Error handling — global error handler
+  // -------------------------------------------------------------------------
+
+  describe('Error handling', () => {
+    it('maps ControlPlaneError with _NOT_FOUND suffix to 404', async () => {
+      const errApp = await createServer({ logger });
+
+      errApp.get('/test-not-found', async () => {
+        throw new ControlPlaneError('AGENT_NOT_FOUND', 'Agent does not exist', {});
+      });
+
+      await errApp.ready();
+
+      try {
+        const response = await errApp.inject({
+          method: 'GET',
+          url: '/test-not-found',
+        });
+
+        expect(response.statusCode).toBe(404);
+
+        const body = response.json();
+        expect(body.error).toBe('AGENT_NOT_FOUND');
+        expect(body.message).toBe('Agent does not exist');
+      } finally {
+        await errApp.close();
+      }
+    });
+
+    it('maps ControlPlaneError with INVALID_ prefix to 400', async () => {
+      const errApp = await createServer({ logger });
+
+      errApp.get('/test-invalid', async () => {
+        throw new ControlPlaneError('INVALID_CONFIG', 'Configuration is invalid', {});
+      });
+
+      await errApp.ready();
+
+      try {
+        const response = await errApp.inject({
+          method: 'GET',
+          url: '/test-invalid',
+        });
+
+        expect(response.statusCode).toBe(400);
+
+        const body = response.json();
+        expect(body.error).toBe('INVALID_CONFIG');
+        expect(body.message).toBe('Configuration is invalid');
+      } finally {
+        await errApp.close();
+      }
+    });
+
+    it('maps ControlPlaneError with _UNAVAILABLE suffix to 503', async () => {
+      const errApp = await createServer({ logger });
+
+      errApp.get('/test-unavailable', async () => {
+        throw new ControlPlaneError('SERVICE_UNAVAILABLE', 'Service is down', {});
+      });
+
+      await errApp.ready();
+
+      try {
+        const response = await errApp.inject({
+          method: 'GET',
+          url: '/test-unavailable',
+        });
+
+        expect(response.statusCode).toBe(503);
+
+        const body = response.json();
+        expect(body.error).toBe('SERVICE_UNAVAILABLE');
+        expect(body.message).toBe('Service is down');
+      } finally {
+        await errApp.close();
+      }
+    });
+
+    it('maps ControlPlaneError with _OFFLINE suffix to 503', async () => {
+      const errApp = await createServer({ logger });
+
+      errApp.get('/test-offline', async () => {
+        throw new ControlPlaneError('MACHINE_OFFLINE', 'Machine is unreachable', {});
+      });
+
+      await errApp.ready();
+
+      try {
+        const response = await errApp.inject({
+          method: 'GET',
+          url: '/test-offline',
+        });
+
+        expect(response.statusCode).toBe(503);
+
+        const body = response.json();
+        expect(body.error).toBe('MACHINE_OFFLINE');
+        expect(body.message).toBe('Machine is unreachable');
+      } finally {
+        await errApp.close();
+      }
+    });
+
+    it('maps unknown errors to 500 with INTERNAL_ERROR', async () => {
+      const errApp = await createServer({ logger });
+
+      errApp.get('/test-unexpected', async () => {
+        throw new Error('something broke');
+      });
+
+      await errApp.ready();
+
+      try {
+        const response = await errApp.inject({
+          method: 'GET',
+          url: '/test-unexpected',
+        });
+
+        expect(response.statusCode).toBe(500);
+
+        const body = response.json();
+        expect(body.error).toBe('INTERNAL_ERROR');
+        expect(body.message).toBe('An unexpected error occurred');
+      } finally {
+        await errApp.close();
+      }
+    });
+  });
+});
+
+// ===========================================================================
+// E2E smoke — server with scheduler configured
+// ===========================================================================
+
+describe('E2E smoke — scheduler with repeatableJobManager', () => {
+  let app: FastifyInstance;
+
+  const mockRepeatableJobs = {
+    listRepeatableJobs: vi.fn().mockResolvedValue([]),
+    addHeartbeatJob: vi.fn().mockResolvedValue(undefined),
+    addCronJob: vi.fn().mockResolvedValue(undefined),
+    removeJobsByAgentId: vi.fn().mockResolvedValue(1),
+  };
+
+  beforeAll(async () => {
+    app = await createServer({
+      logger,
+      repeatableJobs: mockRepeatableJobs as never,
+    });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('GET /api/scheduler/jobs returns job list when manager is configured', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/scheduler/jobs',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body).toHaveProperty('jobs');
+    expect(Array.isArray(body.jobs)).toBe(true);
+  });
+
+  it('POST /api/scheduler/jobs/heartbeat validates agentId', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/scheduler/jobs/heartbeat',
+      payload: {
+        machineId: 'machine-1',
+        intervalMs: 60000,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    const body = response.json();
+    expect(body.error).toBe('INVALID_AGENT_ID');
+  });
+
+  it('POST /api/scheduler/jobs/cron validates pattern', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/scheduler/jobs/cron',
+      payload: {
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    const body = response.json();
+    expect(body.error).toBe('INVALID_CRON_PATTERN');
+  });
+});
