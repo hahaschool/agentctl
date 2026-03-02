@@ -1,0 +1,130 @@
+name: Build & Publish Docker Images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build, scan, and push Docker images for each package (parallel via matrix)
+  # ---------------------------------------------------------------------------
+  build-image:
+    name: Build ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [control-plane, agent-worker]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Docker Buildx setup ──────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Registry login ───────────────────────────────────────────
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Image metadata (tags + labels) ───────────────────────────
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}
+          tags: |
+            # sha-<short> on every build
+            type=sha,prefix=sha-,format=short
+            # main-latest for pushes to main
+            type=raw,value=main-latest,enable={{is_default_branch}}
+            # semver tags from git tags (v1.2.3 → 1.2.3, 1.2, 1)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+
+      # ── Compute short SHA for image references ──────────────────
+      - name: Compute short SHA
+        id: short-sha
+        run: echo "sha=$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      # ── Build and push ───────────────────────────────────────────
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.${{ matrix.package }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.package }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.package }}
+          # Provenance attestation for supply chain security
+          provenance: true
+          sbom: true
+
+      # ── Trivy vulnerability scan ─────────────────────────────────
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}:sha-${{ steps.short-sha.outputs.sha }}
+          format: sarif
+          output: trivy-${{ matrix.package }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          # Fail on CRITICAL only — HIGH is reported but non-blocking
+          ignore-unfixed: true
+          vuln-type: os,library
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Upload SARIF to GitHub Security tab ──────────────────────
+      - name: Upload Trivy SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.package }}.sarif
+          category: trivy-${{ matrix.package }}
+
+      # ── Generate and upload SBOM ─────────────────────────────────
+      - name: Generate SBOM with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        if: always()
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}:sha-${{ steps.short-sha.outputs.sha }}
+          format: cyclonedx
+          output: sbom-${{ matrix.package }}.json
+          vuln-type: os,library
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-${{ matrix.package }}
+          path: sbom-${{ matrix.package }}.json
+          retention-days: 90
