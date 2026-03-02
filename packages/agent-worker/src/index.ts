@@ -215,6 +215,7 @@ async function main(): Promise<void> {
     logger,
     agentPool: pool,
     machineId: MACHINE_ID,
+    controlPlaneUrl: CONTROL_PLANE_URL,
   });
 
   const healthReporter = new HealthReporter({

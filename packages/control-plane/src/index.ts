@@ -142,23 +142,36 @@ async function main(): Promise<void> {
     logger.info('Connecting to PostgreSQL');
     db = createDb(DATABASE_URL);
 
-    // Run the initial schema migration on every startup.
-    // All DDL statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS,
-    // so this is idempotent and safe to execute against an already-migrated database.
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const MIGRATION_FILE = '0000_initial_schema.sql';
+    const skipMigrations = process.env.SKIP_MIGRATIONS === 'true';
 
-    // Candidate paths in priority order:
-    //   1. dist/drizzle/ — production builds (postbuild copies drizzle/ into dist/)
-    //   2. ../drizzle/   — dev mode (tsx runs from src/, package root is one level up)
-    const candidatePaths = [
-      join(__dirname, 'drizzle', MIGRATION_FILE),
-      join(__dirname, '..', 'drizzle', MIGRATION_FILE),
-    ];
+    if (skipMigrations) {
+      logger.info('SKIP_MIGRATIONS=true — skipping auto-migration (assuming migrations are run separately)');
+    } else {
+      // Run the initial schema migration on every startup.
+      // All DDL statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS,
+      // so this is idempotent and safe to execute against an already-migrated database.
+      const __dirname = dirname(fileURLToPath(import.meta.url));
+      const MIGRATION_FILE = '0000_initial_schema.sql';
 
-    const migrationPath = candidatePaths.find((p) => existsSync(p));
+      // Candidate paths in priority order:
+      //   1. dist/drizzle/ — production builds (postbuild copies drizzle/ into dist/)
+      //   2. ../drizzle/   — dev mode (tsx runs from src/, package root is one level up)
+      const candidatePaths = [
+        join(__dirname, 'drizzle', MIGRATION_FILE),
+        join(__dirname, '..', 'drizzle', MIGRATION_FILE),
+      ];
 
-    if (migrationPath) {
+      const migrationPath = candidatePaths.find((p) => existsSync(p));
+
+      if (!migrationPath) {
+        logger.fatal(
+          { candidatePaths },
+          'Migration file not found — cannot start with DATABASE_URL set and no migration files. ' +
+            'Either provide migration files or set SKIP_MIGRATIONS=true if migrations are applied separately.',
+        );
+        process.exit(1);
+      }
+
       const migrationSql = readFileSync(migrationPath, 'utf-8');
 
       // Schema version check: verify the migration file contains the expected tables
@@ -166,18 +179,30 @@ async function main(): Promise<void> {
       const missingTables = expectedTables.filter((table) => !migrationSql.includes(`"${table}"`));
 
       if (missingTables.length > 0) {
-        logger.warn(
+        logger.fatal(
           { migrationPath, missingTables },
-          'Migration file may be incomplete — expected tables not found in SQL',
+          'Migration file is incomplete — expected tables not found in SQL. ' +
+            'This likely means the migration file is corrupt or outdated.',
         );
+        process.exit(1);
       }
 
-      await db.execute(sql.raw(migrationSql));
-      logger.info({ migrationPath }, 'Database migrations applied');
-    } else {
-      logger.warn(
-        { candidatePaths },
-        'Migration file not found — skipping auto-migration. Database schema must be applied manually.',
+      try {
+        await db.execute(sql.raw(migrationSql));
+      } catch (err: unknown) {
+        logger.fatal(
+          { err, migrationPath },
+          'Database migration failed — cannot continue with an incomplete schema. ' +
+            'Fix the migration error or set SKIP_MIGRATIONS=true if migrations are applied separately.',
+        );
+        process.exit(1);
+      }
+
+      // Count the number of DDL statements applied (CREATE TABLE + CREATE INDEX)
+      const ddlStatements = migrationSql.match(/CREATE\s+(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS/gi) ?? [];
+      logger.info(
+        { migrationPath, ddlStatements: ddlStatements.length },
+        `Database migration applied successfully (${ddlStatements.length} DDL statements, all idempotent)`,
       );
     }
 
@@ -244,6 +269,8 @@ async function main(): Promise<void> {
     repeatableJobs,
     registry: dbRegistry,
     dbRegistry,
+    db,
+    redis: redisConnection,
     litellmClient,
     mem0Client,
     memoryInjector: memoryInjector ?? null,

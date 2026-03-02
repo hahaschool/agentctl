@@ -348,6 +348,30 @@ describe('Agent CRUD routes', () => {
       expect(body.memoryUsage).toBeGreaterThan(0);
     });
 
+    it('should not include dependencies in simple response', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      const body = response.json();
+      expect(body.dependencies).toBeUndefined();
+    });
+
+    it('should include dependencies when detail=true', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health?detail=true',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.dependencies).toBeDefined();
+      expect(body.dependencies.controlPlane).toBeDefined();
+      expect(body.dependencies.controlPlane.status).toBe('ok');
+    });
+
     it('should reflect correct activeAgents count after starting agents', async () => {
       await app.inject({
         method: 'POST',

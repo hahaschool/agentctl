@@ -8,6 +8,7 @@ import type { Queue } from 'bullmq';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 
+import type { Database } from '../db/index.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
@@ -31,6 +32,8 @@ type CreateServerOptions = {
   repeatableJobs?: RepeatableJobManager;
   registry?: MachineRegistryLike;
   dbRegistry?: DbAgentRegistry;
+  db?: Database;
+  redis?: { ping: () => Promise<string> };
   litellmClient?: LiteLLMClient;
   mem0Client?: Mem0Client;
   memoryInjector?: MemoryInjector | null;
@@ -42,6 +45,8 @@ export async function createServer({
   repeatableJobs,
   registry: externalRegistry,
   dbRegistry,
+  db,
+  redis,
   litellmClient,
   mem0Client,
   memoryInjector = null,
@@ -96,7 +101,12 @@ export async function createServer({
   // Register @fastify/websocket before any WebSocket route plugins.
   await app.register(fastifyWebsocket);
 
-  await app.register(healthRoutes);
+  await app.register(healthRoutes, {
+    db,
+    redis,
+    mem0Client,
+    litellmClient,
+  });
   await app.register(agentRoutes, {
     prefix: '/api/agents',
     taskQueue,
