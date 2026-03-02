@@ -1,4 +1,4 @@
-import type { RunTrigger } from '@agentctl/shared';
+import type { RunTrigger, SessionMode } from '@agentctl/shared';
 import type { ConnectionOptions } from 'bullmq';
 import { Queue, type QueueOptions } from 'bullmq';
 
@@ -14,6 +14,10 @@ export type AgentTaskJobData = {
   resumeSession: string | null;
   createdAt: string;
   signalMetadata?: Record<string, unknown>;
+  /** Whether to start a fresh session or resume the previous one. */
+  sessionMode?: SessionMode;
+  /** Zero-based iteration counter for scheduled/repeating runs. */
+  iteration?: number;
 };
 
 export type AgentTaskJobName = 'agent:start' | 'agent:heartbeat' | 'agent:cron' | 'agent:signal';

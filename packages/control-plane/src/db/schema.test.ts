@@ -184,8 +184,8 @@ describe('machines table columns', () => {
 describe('agents table columns', () => {
   const meta = getColumnMeta(agents);
 
-  it('has exactly 14 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(14);
+  it('has exactly 15 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(15);
   });
 
   it('has all expected column keys', () => {
@@ -200,6 +200,7 @@ describe('agents table columns', () => {
       'worktreeBranch',
       'currentSessionId',
       'config',
+      'scheduleConfig',
       'lastRunAt',
       'lastCostUsd',
       'totalCostUsd',
@@ -318,6 +319,7 @@ describe('agents table columns', () => {
       'worktree_branch',
       'current_session_id',
       'config',
+      'schedule_config',
       'last_run_at',
       'last_cost_usd',
       'total_cost_usd',
@@ -626,6 +628,7 @@ describe('Required (NOT NULL) vs nullable columns', () => {
       'worktreeBranch',
       'currentSessionId',
       'config',
+      'scheduleConfig',
       'lastRunAt',
       'lastCostUsd',
       'totalCostUsd',

@@ -34,6 +34,8 @@ export const agents = pgTable('agents', {
   worktreeBranch: text('worktree_branch'),
   currentSessionId: text('current_session_id'),
   config: jsonb('config').default({}),
+  /** Scheduled session configuration (sessionMode, promptTemplate, pattern, timezone). */
+  scheduleConfig: jsonb('schedule_config'),
   lastRunAt: timestamp('last_run_at', { withTimezone: true }),
   lastCostUsd: numeric('last_cost_usd', { precision: 10, scale: 6 }),
   totalCostUsd: numeric('total_cost_usd', { precision: 12, scale: 6 }).default('0'),

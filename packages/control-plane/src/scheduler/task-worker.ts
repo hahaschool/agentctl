@@ -105,7 +105,17 @@ export function createTaskWorker({
   const worker = new Worker<AgentTaskJobData, void, AgentTaskJobName>(
     AGENT_TASKS_QUEUE,
     async (job: Job<AgentTaskJobData, void, AgentTaskJobName>) => {
-      const { agentId, machineId, trigger, prompt, model, allowedTools, resumeSession } = job.data;
+      const {
+        agentId,
+        machineId,
+        trigger,
+        prompt,
+        model,
+        allowedTools,
+        resumeSession,
+        sessionMode,
+        iteration,
+      } = job.data;
 
       const jobLogger = logger.child({
         jobId: job.id,
@@ -113,6 +123,8 @@ export function createTaskWorker({
         agentId,
         machineId,
         trigger,
+        sessionMode: sessionMode ?? null,
+        iteration: iteration ?? null,
       });
 
       jobLogger.info('Processing agent task job');
@@ -185,6 +197,26 @@ export function createTaskWorker({
         }
 
         // -------------------------------------------------------------------
+        // 1c. Session resume: resolve currentSessionId when resuming
+        // -------------------------------------------------------------------
+        let effectiveResumeSession = resumeSession;
+
+        if (sessionMode === 'resume' && !effectiveResumeSession) {
+          if (agent.currentSessionId) {
+            effectiveResumeSession = agent.currentSessionId;
+            jobLogger.info(
+              { currentSessionId: agent.currentSessionId, iteration: iteration ?? 0 },
+              'Resuming previous session (sessionMode=resume)',
+            );
+          } else {
+            jobLogger.warn(
+              { iteration: iteration ?? 0 },
+              'sessionMode=resume but agent has no currentSessionId — starting fresh session',
+            );
+          }
+        }
+
+        // -------------------------------------------------------------------
         // 1b. Validate the requested model against LiteLLM (soft check)
         // -------------------------------------------------------------------
         if (litellmClient && model) {
@@ -221,7 +253,7 @@ export function createTaskWorker({
           trigger,
           model,
           provider: null,
-          sessionId: resumeSession,
+          sessionId: effectiveResumeSession,
         });
 
         jobLogger.info({ runId }, 'Agent run record created');
@@ -256,7 +288,7 @@ export function createTaskWorker({
             model,
             allowedTools,
           },
-          resumeSession,
+          resumeSession: effectiveResumeSession,
           projectPath: agent.projectPath,
           controlPlaneUrl: controlPlaneUrl ?? null,
         };
@@ -285,6 +317,9 @@ export function createTaskWorker({
             promptLength: enrichedPrompt ? enrichedPrompt.length : 0,
             model,
             controlPlaneUrl: controlPlaneUrl ?? null,
+            sessionMode: sessionMode ?? null,
+            iteration: iteration ?? null,
+            resumedSession: effectiveResumeSession ?? null,
           },
           'Agent task dispatched; run is now executing on the worker',
         );
