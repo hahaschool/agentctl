@@ -16,7 +16,7 @@ Full CI/CD pipeline with 9 workflow files:
 - **Migration Check** (`migration-check.yml`): PR validation with throwaway PostgreSQL
 - **Build Images** (`build-images.yml`): multi-stage Docker with Trivy + SBOM
 
-**2182 tests** across 80 files. All packages build cleanly.
+**2476 tests** across 83 files. All packages build cleanly.
 
 ---
 
@@ -252,7 +252,7 @@ Map every OWASP ASI risk to concrete mitigations in AgentCTL:
 | **ASI06 — Memory Poisoning** | Validate data before Mem0 storage; per-agent memory isolation; TTL + size limits; integrity checks | [x] |
 | **ASI07 — Inter-Agent Comms** | TweetNaCl E2E encryption; signed payloads; Tailscale WireGuard transport | [x] |
 | **ASI08 — Cascading Failures** | Per-agent timeout; circuit breaker on dispatch; BullMQ retry with backoff; loop checkpoints | [x] |
-| **ASI09 — Trust Exploitation** | Approval gates for destructive ops; cost alerts at 80%; mandatory human review for prod; dead-loop detection | [ ] |
+| **ASI09 — Trust Exploitation** | Approval gates for destructive ops; cost alerts at 80%; mandatory human review for prod; dead-loop detection | [x] |
 | **ASI10 — Rogue Agents** | Audit logging with SHA-256; anomaly detection on tool patterns; kill switch; valid status transitions | [x] |
 
 ### 9.2 Automated Security Pipeline (SAST + DAST + SCA)
@@ -265,7 +265,7 @@ Dedicated security workflow on every PR and nightly:
 - [x] **SCA — License Check**: no GPL/AGPL dependencies
 - [x] **Secret Scanning**: `gitleaks` on every PR; GitHub push protection
 - [x] **Container Scanning**: Trivy + Grype with SARIF to Security tab
-- [ ] **DAST — OWASP ZAP**: baseline scan on `/api/*` + WebSocket fuzzing on `/ws` (post-deploy to staging)
+- [x] **DAST — OWASP ZAP**: baseline scan on `/api/*` + WebSocket fuzzing on `/ws` (post-deploy to staging)
 
 **Deliverable**: `.github/workflows/security-audit.yml`
 
@@ -290,7 +290,7 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 
 - [x] **Agent identity**: unique short-lived tokens per session (not shared machine keys)
 - [x] **Network egress**: `--network=none` default; allowlist specific domains per agent (70 tests)
-- [ ] **FS isolation**: worktrees read-only except output dirs; block `.ssh`, `.gnupg`, `.aws`, `.env`
+- [x] **FS isolation**: worktrees read-only except output dirs; block `.ssh`, `.gnupg`, `.aws`, `.env` (111 tests)
 - [x] **Memory security**: content validation, PII redaction, agent namespace isolation (67 tests)
 - [x] **Tool rate limiting**: cap tool calls/minute/agent to detect runaway loops
 - [x] **Prompt injection defense**:
@@ -303,7 +303,7 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 ### 9.5 Audit Logging & Forensics
 
 - [x] Structured NDJSON with SHA-256 integrity hashes (extends existing `AuditLogger`)
-- [ ] Log retention: 90 days ClickHouse, 7 days local
+- [x] Log retention: configurable per-table retention with batch cleanup (78 tests)
 - [x] Tamper detection: hash chain (each entry includes previous hash)
 - [x] Queryable API: `GET /api/audit?agentId=X&from=T1&to=T2&tool=Bash`
 - [x] Dashboard: top tools, cost by agent, error rates, blocked calls
