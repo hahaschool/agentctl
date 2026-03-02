@@ -146,8 +146,13 @@ docker compose -f docker-compose.prod.yml up -d --build
 | POST | `/api/agents/:id/start` | Start an agent task |
 | POST | `/api/agents/:id/stop` | Stop an agent |
 | POST | `/api/agents/:id/signal` | Signal a running agent |
+| POST | `/api/agents/:id/complete` | Run completion callback |
 | GET | `/api/agents/:id/stream` | SSE output stream |
 | WS | `/api/ws` | WebSocket bidirectional control |
+| GET | `/api/scheduler/jobs` | List repeatable jobs |
+| POST | `/api/scheduler/jobs/heartbeat` | Create heartbeat schedule |
+| POST | `/api/scheduler/jobs/cron` | Create cron schedule |
+| DELETE | `/api/scheduler/jobs/:key` | Remove a scheduled job |
 | GET | `/api/router/models` | List LLM models |
 | POST | `/api/memory/search` | Search agent memory |
 | POST | `/api/audit/actions` | Ingest audit events |
@@ -166,7 +171,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 ## Testing
 
 ```bash
-# Run all tests (192 tests across 21 files)
+# Run all tests (233 tests across 22 files)
 pnpm test
 
 # Run specific package tests
