@@ -15,6 +15,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # Pin versions centrally so every job stays in sync
+  PNPM_VERSION: "8.15.4"
+  PRIMARY_NODE: "22"
+
 jobs:
   # ---------------------------------------------------------------------------
   # Detect which packages changed (PRs only — main merges always run all)
@@ -60,86 +65,121 @@ jobs:
               - 'docker-compose*.yml'
 
   # ---------------------------------------------------------------------------
-  # Lint — always runs (Biome is fast, catches cross-package issues)
+  # Install — single job that caches the full node_modules + pnpm store
+  # for all downstream jobs to restore, eliminating repeated installs.
   # ---------------------------------------------------------------------------
-  lint:
-    name: Lint
+  install:
+    name: Install
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 8.15.4
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Biome lint check
-        run: npx @biomejs/biome check packages/
-
-      - name: Biome security lint
-        run: npx @biomejs/biome lint --rule-categories=suspicious packages/
+      # Persist node_modules across jobs so downstream jobs skip `pnpm install`
+      - name: Cache node_modules
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            packages/shared/node_modules
+            packages/control-plane/node_modules
+            packages/agent-worker/node_modules
+          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
   # ---------------------------------------------------------------------------
-  # Build — skip unchanged packages on PRs, full build on main
+  # Lint — runs in parallel with build. Biome is fast; no build needed.
   # ---------------------------------------------------------------------------
-  build:
-    name: Build (Node ${{ matrix.node-version }})
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: changes
-    if: >-
-      github.event_name == 'push'
-      || needs.changes.outputs.any-package == 'true'
-
-    strategy:
-      matrix:
-        node-version: [20, 22]
+    timeout-minutes: 3
+    needs: install
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 8.15.4
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
 
-      - name: Cache TypeScript build info
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            packages/shared/node_modules
+            packages/control-plane/node_modules
+            packages/agent-worker/node_modules
+          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # Single Biome invocation covers all categories — no need for separate
+      # "biome check" + "biome lint --rule-categories" steps.
+      - name: Biome check (lint + format + suspicious rules)
+        run: npx @biomejs/biome check packages/
+
+  # ---------------------------------------------------------------------------
+  # Build — compile TypeScript once; upload dist/ for the test job.
+  # On PRs only changed packages are built. On main, all packages build.
+  # Single Node version — the compat matrix runs separately below.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, install]
+    if: >-
+      github.event_name == 'push'
+      || needs.changes.outputs.any-package == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.PRIMARY_NODE }}
+          cache: pnpm
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            packages/shared/node_modules
+            packages/control-plane/node_modules
+            packages/agent-worker/node_modules
+          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore TypeScript build cache
         uses: actions/cache@v4
         with:
           path: |
             packages/shared/.tsbuildinfo
             packages/control-plane/.tsbuildinfo
             packages/agent-worker/.tsbuildinfo
-          key: tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
+          key: tsbuildinfo-${{ runner.os }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
           restore-keys: |
-            tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-
-
-      - name: Cache TypeScript build output
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/shared/dist
-            packages/control-plane/dist
-            packages/agent-worker/dist
-          key: tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json', 'pnpm-lock.yaml') }}
-          restore-keys: |
-            tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            tsbuildinfo-${{ runner.os }}-
 
       # On main pushes: full build for safety
       - name: Build all packages
@@ -159,19 +199,32 @@ jobs:
         if: github.event_name == 'pull_request' && needs.changes.outputs.agent-worker == 'true'
         run: pnpm --filter @agentctl/agent-worker... build
 
+      # Upload dist/ artifacts so the test job does not need to rebuild
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path: |
+            packages/shared/dist
+            packages/control-plane/dist
+            packages/agent-worker/dist
+            packages/shared/.tsbuildinfo
+            packages/control-plane/.tsbuildinfo
+            packages/agent-worker/.tsbuildinfo
+          retention-days: 1
+
   # ---------------------------------------------------------------------------
-  # Test — per-package matrix with path-filter optimization on PRs
+  # Test — per-package matrix. Downloads build artifacts instead of rebuilding.
   # ---------------------------------------------------------------------------
   test:
-    name: Test ${{ matrix.package }} (Node ${{ matrix.node-version }})
+    name: Test ${{ matrix.package }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     needs: [changes, build]
 
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20, 22]
         package: [shared, control-plane, agent-worker]
         exclude:
           # On PRs, exclude packages that did not change
@@ -184,40 +237,38 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 8.15.4
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
 
-      - name: Cache TypeScript build info
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            packages/shared/node_modules
+            packages/control-plane/node_modules
+            packages/agent-worker/node_modules
+          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # Reuse build output from the build job — no second `pnpm build`
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: .
+
+      - name: Restore Vitest cache
         uses: actions/cache@v4
         with:
           path: |
-            packages/shared/.tsbuildinfo
-            packages/control-plane/.tsbuildinfo
-            packages/agent-worker/.tsbuildinfo
-          key: tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
+            packages/${{ matrix.package }}/node_modules/.vitest
+          key: vitest-${{ runner.os }}-${{ matrix.package }}-${{ hashFiles(format('packages/{0}/src/**/*.ts', matrix.package), format('packages/{0}/vitest.config.*', matrix.package)) }}
           restore-keys: |
-            tsbuildinfo-${{ runner.os }}-node${{ matrix.node-version }}-
-
-      - name: Cache TypeScript build output
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/shared/dist
-            packages/control-plane/dist
-            packages/agent-worker/dist
-          key: tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json', 'pnpm-lock.yaml') }}
-          restore-keys: |
-            tsbuild-dist-${{ runner.os }}-node${{ matrix.node-version }}-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build (required for tests)
-        run: pnpm build
+            vitest-${{ runner.os }}-${{ matrix.package }}-
 
       - name: Run tests with coverage
         run: pnpm --filter @agentctl/${{ matrix.package }} test:coverage
@@ -226,12 +277,44 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.package }}-node${{ matrix.node-version }}
+          name: coverage-${{ matrix.package }}
           path: packages/${{ matrix.package }}/coverage/
           retention-days: 14
 
   # ---------------------------------------------------------------------------
+  # Node compat — lightweight build check on Node 20 (no tests, no coverage).
+  # Runs in parallel with everything else so it does not block the pipeline.
+  # ---------------------------------------------------------------------------
+  node-compat:
+    name: Node 20 compat
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: changes
+    if: >-
+      github.event_name == 'push'
+      || needs.changes.outputs.any-package == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+  # ---------------------------------------------------------------------------
   # Security — pnpm audit + Biome security rules + gitleaks
+  # Runs fully in parallel with lint/build/test.
   # ---------------------------------------------------------------------------
   security:
     name: Security scan
@@ -245,11 +328,11 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 8.15.4
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
 
       - name: Install dependencies

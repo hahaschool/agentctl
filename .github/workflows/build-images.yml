@@ -16,11 +16,17 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   # Build, scan, and push Docker images for each package (parallel via matrix)
+  #
+  # Optimisations applied:
+  #   1. GHA layer cache with mode=max (exports all intermediate layers)
+  #   2. BuildKit pnpm store mount cache inside Dockerfiles
+  #   3. Inline cache metadata for faster remote pulls
+  #   4. Reduced timeout to match < 3 min warm-cache target
   # ---------------------------------------------------------------------------
   build-image:
     name: Build ${{ matrix.package }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     permissions:
       contents: read
@@ -78,8 +84,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # GHA cache: mode=max exports all intermediate build layers so
+          # subsequent runs can skip even mid-stage RUN steps.
           cache-from: type=gha,scope=${{ matrix.package }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package }}
+          # Build args allow the Dockerfile to use the same pnpm version
+          build-args: |
+            PNPM_VERSION=8.15.4
           # Provenance attestation for supply chain security
           provenance: true
           sbom: true

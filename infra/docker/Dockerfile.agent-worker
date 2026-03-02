@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ── Dockerfile.agent-worker ──────────────────────────────────────
 # Multi-stage production build for @agentctl/agent-worker.
 #
@@ -14,30 +15,49 @@
 # ── Stage 1: Build ──────────────────────────────────────────────
 FROM node:22-alpine AS build
 
+ARG PNPM_VERSION=8.15.4
+
 # Install pnpm at the version pinned in the monorepo root package.json
-RUN corepack enable && corepack prepare pnpm@8.15.4 --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 WORKDIR /app
 
-# Copy dependency manifests first for layer caching
+# ── Layer 1: dependency manifests (changes rarely) ──────────────
+# Copying manifests first means Docker can cache the install step
+# whenever only source code changes.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
-
-# Copy only the packages needed for the agent-worker build
 COPY packages/shared/package.json packages/shared/tsconfig.json packages/shared/
 COPY packages/agent-worker/package.json packages/agent-worker/tsconfig.json packages/agent-worker/
 
-# Install all dependencies (including devDependencies for build)
-RUN pnpm install --frozen-lockfile
+# ── Layer 2: install with BuildKit cache mount ──────────────────
+# --mount=type=cache persists the pnpm content-addressable store across
+# builds so unchanged packages are never re-downloaded.
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
-# Copy source code
+# ── Layer 3: source code (changes most often) ──────────────────
 COPY packages/shared/src/ packages/shared/src/
 COPY packages/agent-worker/src/ packages/agent-worker/src/
 
 # Build shared first, then agent-worker (pnpm -r respects dependency order)
 RUN pnpm -r build
 
-# Prune devDependencies for a leaner production image
-RUN pnpm install --frozen-lockfile --prod
+# ── Stage 1b: Production dependencies only ─────────────────────
+# A separate stage so the prod install is also cache-mountable and
+# does not invalidate when source code changes.
+FROM node:22-alpine AS deps
+
+ARG PNPM_VERSION=8.15.4
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/agent-worker/package.json packages/agent-worker/
+
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prod
 
 # ── Stage 2: Production ────────────────────────────────────────
 FROM node:22-alpine AS production
@@ -59,19 +79,19 @@ RUN addgroup -g 1001 -S agentctl && \
 
 WORKDIR /app
 
-# Copy built artifacts and production dependencies from build stage
+# Copy built artifacts from the build stage
 COPY --from=build --chown=agentctl:agentctl /app/packages/shared/dist/ packages/shared/dist/
 COPY --from=build --chown=agentctl:agentctl /app/packages/shared/package.json packages/shared/
 COPY --from=build --chown=agentctl:agentctl /app/packages/agent-worker/dist/ packages/agent-worker/dist/
 COPY --from=build --chown=agentctl:agentctl /app/packages/agent-worker/package.json packages/agent-worker/
 
-# Copy node_modules (production-only after prune)
-COPY --from=build --chown=agentctl:agentctl /app/node_modules/ node_modules/
-COPY --from=build --chown=agentctl:agentctl /app/packages/shared/node_modules/ packages/shared/node_modules/
-COPY --from=build --chown=agentctl:agentctl /app/packages/agent-worker/node_modules/ packages/agent-worker/node_modules/
+# Copy production-only node_modules from the deps stage
+COPY --from=deps --chown=agentctl:agentctl /app/node_modules/ node_modules/
+COPY --from=deps --chown=agentctl:agentctl /app/packages/shared/node_modules/ packages/shared/node_modules/
+COPY --from=deps --chown=agentctl:agentctl /app/packages/agent-worker/node_modules/ packages/agent-worker/node_modules/
 
 # Copy root package.json and workspace config (needed for pnpm workspace resolution)
-COPY --from=build --chown=agentctl:agentctl /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=deps --chown=agentctl:agentctl /app/package.json /app/pnpm-workspace.yaml ./
 
 # Create workspace directory for git worktrees (owned by agentctl)
 RUN mkdir -p /workspace && chown agentctl:agentctl /workspace
