@@ -148,6 +148,30 @@ npx tsx scripts/agentctl.ts schedule remove agent-1
 
 # Show recent runs for an agent
 npx tsx scripts/agentctl.ts runs agent-1 10
+
+# Stream live output from a running agent
+npx tsx scripts/agentctl.ts stream agent-1
+
+# Emergency stop an agent (abort + revoke token)
+npx tsx scripts/agentctl.ts emergency-stop agent-1
+
+# View system dashboard (agents, runs, errors)
+npx tsx scripts/agentctl.ts dashboard
+
+# View cost breakdown for the last 7 days
+npx tsx scripts/agentctl.ts dashboard costs 7d
+
+# View tool usage analytics
+npx tsx scripts/agentctl.ts dashboard tools
+
+# Check continuous loop status
+npx tsx scripts/agentctl.ts loop status agent-1
+
+# Stop a continuous loop
+npx tsx scripts/agentctl.ts loop stop agent-1
+
+# View worker pool statistics
+npx tsx scripts/agentctl.ts pool-stats
 ```
 
 ### Docker Production Deployment
@@ -204,7 +228,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 ## Testing
 
 ```bash
-# Run all tests (3810 tests across 100 files)
+# Run all tests (3897 tests across 101 files)
 pnpm test
 
 # Run specific package tests
