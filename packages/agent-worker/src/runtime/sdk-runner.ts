@@ -22,6 +22,8 @@ export type SdkRunnerOptions = {
   onEvent: (event: AgentEvent) => void;
   abortSignal?: AbortSignal;
   hooks?: SdkRunnerHooks;
+  /** When set, instructs the SDK to resume a previous session instead of starting a fresh one. */
+  resumeSessionId?: string;
 };
 
 export type SdkRunResult = {
@@ -69,8 +71,15 @@ async function loadSdk(): Promise<ClaudeAgentSdk | null> {
 /**
  * Map an AgentConfig to the options shape expected by the Claude Agent SDK
  * `query()` function.
+ *
+ * When {@link resumeSessionId} is provided the SDK will attempt to continue
+ * the identified session rather than starting a new conversation.
  */
-function buildSdkOptions(config: AgentConfig, projectPath: string): Record<string, unknown> {
+function buildSdkOptions(
+  config: AgentConfig,
+  projectPath: string,
+  resumeSessionId?: string,
+): Record<string, unknown> {
   return {
     model: config.model ?? 'sonnet',
     maxTurns: config.maxTurns ?? 50,
@@ -78,6 +87,7 @@ function buildSdkOptions(config: AgentConfig, projectPath: string): Record<strin
     ...(config.allowedTools ? { allowedTools: config.allowedTools } : {}),
     ...(config.disallowedTools ? { disallowedTools: config.disallowedTools } : {}),
     ...(config.systemPrompt ? { systemPrompt: config.systemPrompt } : {}),
+    ...(resumeSessionId ? { resume: resumeSessionId } : {}),
     cwd: projectPath,
   };
 }
@@ -156,14 +166,29 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     return null;
   }
 
-  const { prompt, agentId, sessionId, config, projectPath, logger, onEvent, abortSignal, hooks } =
-    options;
+  const {
+    prompt,
+    agentId,
+    sessionId,
+    config,
+    projectPath,
+    logger,
+    onEvent,
+    abortSignal,
+    hooks,
+    resumeSessionId,
+  } = options;
 
-  const sdkOptions = buildSdkOptions(config, projectPath);
+  const sdkOptions = buildSdkOptions(config, projectPath, resumeSessionId);
 
   logger.info(
-    { agentId, model: sdkOptions.model, maxTurns: sdkOptions.maxTurns },
-    'Starting Claude Agent SDK run',
+    {
+      agentId,
+      model: sdkOptions.model,
+      maxTurns: sdkOptions.maxTurns,
+      ...(resumeSessionId ? { resumeSessionId } : {}),
+    },
+    resumeSessionId ? 'Resuming Claude Agent SDK session' : 'Starting Claude Agent SDK run',
   );
 
   const accumulator = {

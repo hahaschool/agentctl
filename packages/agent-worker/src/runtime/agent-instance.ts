@@ -32,6 +32,8 @@ export type AgentInstanceOptions = {
   runId?: string;
   /** URL of the control plane. When set, the agent will POST a completion callback when the run finishes. */
   controlPlaneUrl?: string;
+  /** Session ID to resume a previous agent session instead of starting fresh. */
+  resumeSession?: string;
 };
 
 type AgentInstanceState = {
@@ -41,6 +43,8 @@ type AgentInstanceState = {
   stoppedAt: Date | null;
   costUsd: number;
   prompt: string | null;
+  /** Whether this run is a resumed session (vs. a fresh start). */
+  isResumed: boolean;
 };
 
 /**
@@ -74,6 +78,8 @@ export class AgentInstance extends EventEmitter {
   readonly runId: string | null;
   /** Control plane URL for posting completion callbacks. */
   private readonly controlPlaneUrl: string | null;
+  /** Session ID to resume instead of starting a fresh session. */
+  private readonly resumeSession: string | null;
 
   private readonly log: Logger;
   private readonly auditLogger: AuditLogger;
@@ -95,6 +101,7 @@ export class AgentInstance extends EventEmitter {
     this.projectPath = options.projectPath;
     this.runId = options.runId ?? null;
     this.controlPlaneUrl = options.controlPlaneUrl ?? null;
+    this.resumeSession = options.resumeSession ?? null;
     this.log = options.logger.child({ agentId: this.agentId, machineId: this.machineId });
     this.outputBuffer = new OutputBuffer();
 
@@ -128,6 +135,7 @@ export class AgentInstance extends EventEmitter {
       stoppedAt: null,
       costUsd: 0,
       prompt: null,
+      isResumed: false,
     };
   }
 
@@ -135,12 +143,22 @@ export class AgentInstance extends EventEmitter {
     this.transitionTo('starting');
     this.log.info({ prompt: prompt.slice(0, 100) }, 'Agent starting');
 
+    const resumeSessionId = this.resumeSession ?? undefined;
+
     this.state.sessionId = randomUUID();
     this.state.startedAt = new Date();
     this.state.stoppedAt = null;
     this.state.costUsd = 0;
     this.state.prompt = prompt;
+    this.state.isResumed = false;
     this.abortController = new AbortController();
+
+    if (resumeSessionId) {
+      this.log.info(
+        { resumeSessionId },
+        'Will attempt to resume previous session',
+      );
+    }
 
     try {
       this.transitionTo('running');
@@ -187,40 +205,94 @@ export class AgentInstance extends EventEmitter {
         }
       }, this.maxExecutionMs);
 
-      // Try the real Claude Agent SDK first
+      // Try the real Claude Agent SDK first — with optional session resume
+      let result = await this.attemptSdkRun(prompt, resumeSessionId);
+
+      // If resume was requested but the SDK run failed, fall back to a fresh session.
+      // This handles cases where the session no longer exists or is corrupted.
+      if (result === 'resume_failed') {
+        this.log.warn(
+          { resumeSessionId },
+          'Session resume failed, falling back to fresh session',
+        );
+        this.state.isResumed = false;
+        result = await this.attemptSdkRun(prompt, undefined);
+      }
+
+      if (result === true) {
+        // SDK run completed (handled inside attemptSdkRun)
+        return;
+      }
+
+      // SDK not available — fall back to stub simulation
+      if (resumeSessionId) {
+        this.log.info('Session resume is not supported in stub simulation mode');
+      }
+      this.log.info('SDK not available, falling back to stub simulation');
+      this.simulateRun();
+    } catch (err) {
+      this.handleError(err);
+    }
+  }
+
+  /**
+   * Attempt a single SDK run, optionally resuming a previous session.
+   *
+   * Returns:
+   *  - `true` if the SDK ran successfully (the instance is already transitioned to stopped)
+   *  - `null` if the SDK is not installed (caller should fall back to stub)
+   *  - `'resume_failed'` if a resume was attempted but failed (caller should retry without resume)
+   *
+   * Throws for non-resume SDK errors so they bubble up to {@link handleError}.
+   */
+  private async attemptSdkRun(
+    prompt: string,
+    resumeSessionId: string | undefined,
+  ): Promise<true | null | 'resume_failed'> {
+    try {
       const result = await runWithSdk({
         prompt,
         agentId: this.agentId,
-        sessionId: this.state.sessionId,
+        sessionId: this.state.sessionId!,
         config: this.config,
         projectPath: this.projectPath,
         logger: this.log,
         onEvent: (event) => this.emitEvent(event),
-        abortSignal: this.abortController.signal,
+        abortSignal: this.abortController?.signal,
         hooks: this.hooks,
+        resumeSessionId,
       });
 
       if (result) {
         // SDK run completed successfully
         this.state.costUsd = result.costUsd;
         this.state.sessionId = result.sessionId;
+        if (resumeSessionId) {
+          this.state.isResumed = true;
+        }
         this.log.info(
           {
             sessionId: result.sessionId,
             costUsd: result.costUsd,
             tokensIn: result.tokensIn,
             tokensOut: result.tokensOut,
+            isResumed: this.state.isResumed,
           },
           'SDK run completed',
         );
         this.finishStop('completed');
-      } else {
-        // SDK not available — fall back to stub simulation
-        this.log.info('SDK not available, falling back to stub simulation');
-        this.simulateRun();
+        return true;
       }
+
+      // SDK not installed
+      return null;
     } catch (err) {
-      this.handleError(err);
+      // If we were trying to resume and the error looks session-related, signal
+      // the caller to retry without resume. Otherwise, re-throw.
+      if (resumeSessionId && err instanceof AgentError) {
+        return 'resume_failed';
+      }
+      throw err;
     }
   }
 
@@ -316,6 +388,7 @@ export class AgentInstance extends EventEmitter {
       stoppedAt: this.state.stoppedAt?.toISOString() ?? null,
       costUsd: this.state.costUsd,
       projectPath: this.projectPath,
+      isResumed: this.state.isResumed,
     };
   }
 

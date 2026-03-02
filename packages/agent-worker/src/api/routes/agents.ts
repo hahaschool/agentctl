@@ -19,6 +19,8 @@ type StartAgentBody = {
   runId?: string;
   /** URL of the control plane. Used by the agent to POST completion callbacks when a run finishes. */
   controlPlaneUrl?: string;
+  /** Session ID to resume a previous agent session instead of starting fresh. */
+  resumeSession?: string;
 };
 
 type StopAgentBody = {
@@ -100,7 +102,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
     '/:id/start',
     async (request, reply) => {
       const { id } = request.params;
-      const { prompt, config, projectPath, runId, controlPlaneUrl } = request.body;
+      const { prompt, config, projectPath, runId, controlPlaneUrl, resumeSession } = request.body;
 
       if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return reply.status(400).send({
@@ -122,6 +124,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
             logger,
             runId,
             controlPlaneUrl,
+            resumeSession,
           });
         }
 

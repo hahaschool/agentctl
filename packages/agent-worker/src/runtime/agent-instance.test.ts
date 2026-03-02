@@ -166,6 +166,7 @@ describe('AgentInstance', () => {
       stoppedAt: null,
       costUsd: 0,
       projectPath: '/my/project',
+      isResumed: false,
     });
   });
 
@@ -617,5 +618,95 @@ describe('AgentInstance', () => {
     await agent.stop(false);
 
     expect(agent.getStatus()).toBe('stopped');
+  });
+
+  // ── Session resume tests ──────────────────────────────────────────
+
+  it('isResumed is false by default in toJSON()', () => {
+    const agent = new AgentInstance(makeOptions());
+    const json = agent.toJSON();
+
+    expect(json.isResumed).toBe(false);
+  });
+
+  it('isResumed is false during stub simulation even when resumeSession is set', async () => {
+    const agent = new AgentInstance(
+      makeOptions({
+        resumeSession: 'old-session-id',
+      }),
+    );
+
+    const startPromise = agent.start('test with resume');
+    await vi.advanceTimersByTimeAsync(0);
+
+    // In stub mode, resume is not supported so isResumed stays false
+    const json = agent.toJSON();
+    expect(json.isResumed).toBe(false);
+
+    await agent.stop(false);
+    vi.runAllTimers();
+    await startPromise;
+  });
+
+  it('logs a message when resumeSession is set but SDK is not available', async () => {
+    const agent = new AgentInstance(
+      makeOptions({
+        resumeSession: 'session-to-resume',
+      }),
+    );
+
+    const startPromise = agent.start('test');
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Should log that resume is not supported in stub mode
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'Session resume is not supported in stub simulation mode',
+    );
+
+    await agent.stop(false);
+    vi.runAllTimers();
+    await startPromise;
+  });
+
+  it('passes resumeSessionId to runWithSdk when resumeSession is provided', async () => {
+    const { runWithSdk } = await import('./sdk-runner.js');
+
+    const agent = new AgentInstance(
+      makeOptions({
+        resumeSession: 'resume-from-options',
+      }),
+    );
+
+    const startPromise = agent.start('test');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runWithSdk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeSessionId: 'resume-from-options',
+      }),
+    );
+
+    await agent.stop(false);
+    vi.runAllTimers();
+    await startPromise;
+  });
+
+  it('does not pass resumeSessionId when no resumeSession is provided', async () => {
+    const { runWithSdk } = await import('./sdk-runner.js');
+
+    const agent = new AgentInstance(makeOptions());
+
+    const startPromise = agent.start('test');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runWithSdk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeSessionId: undefined,
+      }),
+    );
+
+    await agent.stop(false);
+    vi.runAllTimers();
+    await startPromise;
   });
 });
