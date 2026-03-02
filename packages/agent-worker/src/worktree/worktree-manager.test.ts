@@ -1125,4 +1125,45 @@ describe('WorktreeManager', () => {
       expect(p.startsWith(customDir)).toBe(true);
     });
   });
+
+  describe('agentId validation', () => {
+    it('rejects agentId with shell metacharacters', async () => {
+      mockExecFileSuccess('');
+      const manager = new WorktreeManager(makeOptions());
+
+      await expect(
+        manager.create({ agentId: 'agent;rm -rf /', projectPath: '/repo' }),
+      ).rejects.toThrow('invalid characters');
+    });
+
+    it('rejects agentId with path traversal', async () => {
+      const manager = new WorktreeManager(makeOptions());
+
+      await expect(
+        manager.create({ agentId: '../../../etc/passwd', projectPath: '/repo' }),
+      ).rejects.toThrow('invalid characters');
+    });
+
+    it('rejects agentId with spaces', async () => {
+      const manager = new WorktreeManager(makeOptions());
+
+      await expect(
+        manager.create({ agentId: 'agent id', projectPath: '/repo' }),
+      ).rejects.toThrow('invalid characters');
+    });
+
+    it('accepts valid agentId patterns', () => {
+      const manager = new WorktreeManager(makeOptions());
+      // These should not throw (getWorktreePath doesn't validate, but create/remove do)
+      expect(manager.getWorktreePath('agent-1')).toContain('agent-agent-1');
+      expect(manager.getWorktreePath('my_agent_123')).toContain('agent-my_agent_123');
+      expect(manager.getWorktreePath('ABC-def-789')).toContain('agent-ABC-def-789');
+    });
+
+    it('rejects invalid agentId on remove', async () => {
+      const manager = new WorktreeManager(makeOptions());
+
+      await expect(manager.remove('agent;evil')).rejects.toThrow('invalid characters');
+    });
+  });
 });

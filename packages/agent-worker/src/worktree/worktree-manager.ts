@@ -33,6 +33,18 @@ export type WorktreeManagerOptions = {
  * branch named `agent-{id}/{description}`. This provides full filesystem
  * isolation between concurrent agents working on the same repository.
  */
+/** Validates that an agentId contains only safe characters for use in branch names and paths. */
+const SAFE_AGENT_ID = /^[a-zA-Z0-9_-]+$/;
+
+function assertSafeAgentId(agentId: string): void {
+  if (!SAFE_AGENT_ID.test(agentId)) {
+    throw new AgentError('INVALID_AGENT_ID', `Agent ID '${agentId}' contains invalid characters`, {
+      agentId,
+      pattern: SAFE_AGENT_ID.source,
+    });
+  }
+}
+
 export class WorktreeManager {
   private readonly projectPath: string;
   private readonly treesDir: string;
@@ -52,6 +64,7 @@ export class WorktreeManager {
    */
   async create(options: CreateWorktreeOptions): Promise<WorktreeInfo> {
     const { agentId, description } = options;
+    assertSafeAgentId(agentId);
     const baseBranch = options.baseBranch ?? 'main';
     const worktreePath = this.getWorktreePath(agentId);
     const branchName = this.buildBranchName(agentId, description);
@@ -108,6 +121,7 @@ export class WorktreeManager {
    * Remove a worktree for an agent. Unlocks it first if locked.
    */
   async remove(agentId: string): Promise<void> {
+    assertSafeAgentId(agentId);
     const worktreePath = this.getWorktreePath(agentId);
 
     const info = await this.get(agentId);
