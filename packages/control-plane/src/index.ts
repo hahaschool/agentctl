@@ -55,6 +55,21 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
     validate: isValidLogLevel,
     description: 'Log level (fatal, error, warn, info, debug, trace, silent)',
   },
+  {
+    name: 'CONTROL_PLANE_URL',
+    description: 'Public URL of the control plane (used by workers for callbacks)',
+  },
+  {
+    name: 'WORKER_CONCURRENCY',
+    default: '5',
+    validate: isNumericString,
+    description: 'Number of concurrent BullMQ task worker jobs',
+  },
+  {
+    name: 'SKIP_MIGRATIONS',
+    default: 'false',
+    description: 'Set to "true" to skip auto-migration on startup',
+  },
 ];
 
 const logger = createLogger('control-plane');
@@ -66,8 +81,8 @@ const REDIS_URL = env.REDIS_URL as string;
 const DATABASE_URL = env.DATABASE_URL || '';
 const MEM0_URL = env.MEM0_URL || '';
 const LITELLM_URL = env.LITELLM_URL || '';
-const CONTROL_PLANE_URL = process.env.CONTROL_PLANE_URL || `http://${HOST}:${PORT}`;
-const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 5;
+const CONTROL_PLANE_URL = env.CONTROL_PLANE_URL || `http://${HOST}:${PORT}`;
+const WORKER_CONCURRENCY = Number(env.WORKER_CONCURRENCY) || 5;
 
 type DependencyHealthDeps = {
   db?: Database;
@@ -148,7 +163,7 @@ async function main(): Promise<void> {
     logger.info('Connecting to PostgreSQL');
     db = createDb(DATABASE_URL);
 
-    const skipMigrations = process.env.SKIP_MIGRATIONS === 'true';
+    const skipMigrations = env.SKIP_MIGRATIONS === 'true';
 
     if (skipMigrations) {
       logger.info(
