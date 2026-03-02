@@ -30,7 +30,7 @@ function createControlledStream(chunks: Uint8Array[]): {
   const stream = new ReadableStream<Uint8Array>({
     pull(controller) {
       if (index < chunks.length) {
-        controller.enqueue(chunks[index]!);
+        controller.enqueue(chunks[index] as Uint8Array);
         index++;
       } else {
         controller.close();

@@ -86,7 +86,7 @@ vi.stubGlobal('WebSocket', MockWebSocket);
 
 function latestSocket(): MockWebSocket {
   const instances = MockWebSocket.instances;
-  return instances[instances.length - 1]!;
+  return instances[instances.length - 1] as MockWebSocket;
 }
 
 function serverMsg(msg: WsServerMessage): string {

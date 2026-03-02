@@ -932,7 +932,7 @@ describe('FsIsolation', () => {
       // Safe path
       const safePath = iso.resolveSecurePath('/home/agent/project', 'src/util.ts');
       expect(safePath).not.toBeNull();
-      expect(iso.validatePath(safePath!, 'write').allowed).toBe(true);
+      expect(iso.validatePath(safePath as string, 'write').allowed).toBe(true);
 
       // Dangerous path
       const dangerousPath = iso.resolveSecurePath('/home/agent/project', '../../../etc/passwd');
