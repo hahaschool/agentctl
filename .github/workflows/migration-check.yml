@@ -1,0 +1,448 @@
+name: Migration Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/control-plane/drizzle/**'
+      - 'packages/control-plane/src/db/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Validate migration files and apply them against a live PostgreSQL instance
+  # ---------------------------------------------------------------------------
+  validate-migrations:
+    name: Validate migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: agentctl_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/agentctl_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build control-plane (and dependencies)
+        run: pnpm --filter @agentctl/control-plane... build
+
+      # ------------------------------------------------------------------
+      # Step 1: Validate migration file naming and ordering
+      # ------------------------------------------------------------------
+      - name: Validate migration file naming
+        run: |
+          echo "::group::Checking migration file naming conventions"
+          MIGRATION_DIR="packages/control-plane/drizzle"
+          errors=0
+
+          # Collect .sql files (skip meta/ directory)
+          files=$(find "$MIGRATION_DIR" -maxdepth 1 -name '*.sql' | sort)
+
+          if [ -z "$files" ]; then
+            echo "::error::No migration files found in $MIGRATION_DIR"
+            exit 1
+          fi
+
+          prev_version=""
+          for file in $files; do
+            basename=$(basename "$file")
+            echo "Checking: $basename"
+
+            # Verify NNNN_description.sql pattern
+            if ! echo "$basename" | grep -qE '^[0-9]{4,}_.+\.sql$'; then
+              echo "::error file=$file::Invalid migration filename: $basename (expected NNNN_description.sql)"
+              errors=$((errors + 1))
+              continue
+            fi
+
+            # Extract version number
+            version=$(echo "$basename" | grep -oE '^[0-9]{4,}')
+
+            # Check sequential ordering (no gaps, no duplicates)
+            if [ -n "$prev_version" ]; then
+              expected=$((10#$prev_version + 1))
+              expected_padded=$(printf "%04d" "$expected")
+              if [ "$version" != "$expected_padded" ]; then
+                echo "::warning file=$file::Migration version gap: expected $expected_padded, got $version"
+              fi
+            fi
+
+            # Check file is not empty
+            if [ ! -s "$file" ]; then
+              echo "::error file=$file::Migration file is empty: $basename"
+              errors=$((errors + 1))
+            fi
+
+            prev_version="$version"
+          done
+
+          echo "::endgroup::"
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors migration file naming error(s) found"
+            exit 1
+          fi
+
+          echo "All migration files pass naming validation"
+
+      # ------------------------------------------------------------------
+      # Step 2: Run the migration validator (static SQL analysis)
+      # ------------------------------------------------------------------
+      - name: Run migration validator
+        run: |
+          node -e "
+          import { readdir, readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+
+          const dir = 'packages/control-plane/drizzle';
+          const entries = (await readdir(dir)).filter(f => f.match(/^\d{4,}_.+\.sql$/)).sort();
+
+          let hasErrors = false;
+
+          for (const entry of entries) {
+            const content = await readFile(join(dir, entry), 'utf-8');
+            const lines = content.split('\n');
+            const errors = [];
+
+            for (let i = 0; i < lines.length; i++) {
+              const trimmed = lines[i].trim();
+              if (trimmed === '' || trimmed.startsWith('--')) continue;
+
+              // DROP TABLE without IF EXISTS
+              if (/^\s*DROP\s+TABLE\s+(?!IF\s+EXISTS\b)/i.test(trimmed)) {
+                errors.push({ line: i + 1, msg: 'DROP TABLE without IF EXISTS' });
+              }
+              // TRUNCATE TABLE
+              if (/^\s*TRUNCATE\s+TABLE\b/i.test(trimmed)) {
+                errors.push({ line: i + 1, msg: 'TRUNCATE TABLE is destructive' });
+              }
+              // DELETE FROM without WHERE (basic check)
+              if (/^\s*DELETE\s+FROM\b/i.test(trimmed) && !/\bWHERE\b/i.test(trimmed)) {
+                errors.push({ line: i + 1, msg: 'DELETE FROM without WHERE clause' });
+              }
+            }
+
+            if (errors.length > 0) {
+              hasErrors = true;
+              for (const err of errors) {
+                console.log('::error file=' + join(dir, entry) + ',line=' + err.line + '::' + err.msg);
+              }
+            } else {
+              console.log('PASS: ' + entry);
+            }
+          }
+
+          if (hasErrors) {
+            process.exit(1);
+          }
+          console.log('All migrations pass static validation');
+          "
+
+      # ------------------------------------------------------------------
+      # Step 3: Apply all migrations to the throwaway PostgreSQL
+      # ------------------------------------------------------------------
+      - name: Apply migrations to test database
+        run: |
+          node -e "
+          import pg from 'pg';
+          import { readdir, readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+
+          const client = new pg.Client({
+            connectionString: process.env.DATABASE_URL,
+          });
+          await client.connect();
+
+          const dir = 'packages/control-plane/drizzle';
+          const entries = (await readdir(dir))
+            .filter(f => f.match(/^\d{4,}_.+\.sql$/))
+            .sort();
+
+          console.log('Found ' + entries.length + ' migration files to apply');
+
+          let applied = 0;
+          for (const entry of entries) {
+            const sql = await readFile(join(dir, entry), 'utf-8');
+            console.log('Applying: ' + entry + ' (' + sql.length + ' bytes)');
+            try {
+              await client.query(sql);
+              applied++;
+              console.log('  OK');
+            } catch (err) {
+              console.error('::error file=' + join(dir, entry) + '::Migration failed: ' + err.message);
+              await client.end();
+              process.exit(1);
+            }
+          }
+
+          await client.end();
+          console.log('Successfully applied ' + applied + '/' + entries.length + ' migrations');
+          "
+
+      # ------------------------------------------------------------------
+      # Step 4: Verify expected tables exist after all migrations
+      # ------------------------------------------------------------------
+      - name: Verify final schema
+        run: |
+          node -e "
+          import pg from 'pg';
+
+          const client = new pg.Client({
+            connectionString: process.env.DATABASE_URL,
+          });
+          await client.connect();
+
+          const expectedTables = [
+            'machines',
+            'agents',
+            'agent_runs',
+            'agent_actions',
+            'webhook_subscriptions',
+            'webhook_deliveries',
+          ];
+
+          const result = await client.query(
+            \"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name\"
+          );
+          const actualTables = result.rows.map(r => r.table_name);
+
+          console.log('Tables in database: ' + actualTables.join(', '));
+
+          let missing = 0;
+          for (const table of expectedTables) {
+            if (actualTables.includes(table)) {
+              console.log('  FOUND: ' + table);
+            } else {
+              console.log('::error::Expected table missing: ' + table);
+              missing++;
+            }
+          }
+
+          // Also verify some key columns exist on agents table (from later migrations)
+          const colResult = await client.query(
+            \"SELECT column_name FROM information_schema.columns WHERE table_name = 'agents' ORDER BY ordinal_position\"
+          );
+          const agentCols = colResult.rows.map(r => r.column_name);
+          console.log('');
+          console.log('Columns on agents table: ' + agentCols.join(', '));
+
+          const expectedCols = ['schedule_config', 'loop_config'];
+          for (const col of expectedCols) {
+            if (agentCols.includes(col)) {
+              console.log('  FOUND column: ' + col);
+            } else {
+              console.log('::error::Expected column missing on agents: ' + col);
+              missing++;
+            }
+          }
+
+          // Verify key indexes exist
+          const idxResult = await client.query(
+            \"SELECT indexname FROM pg_indexes WHERE schemaname = 'public' ORDER BY indexname\"
+          );
+          const indexes = idxResult.rows.map(r => r.indexname);
+          console.log('');
+          console.log('Indexes: ' + indexes.join(', '));
+
+          await client.end();
+
+          if (missing > 0) {
+            console.error(missing + ' expected schema element(s) missing');
+            process.exit(1);
+          }
+
+          console.log('');
+          console.log('Schema verification passed');
+          "
+
+      # ------------------------------------------------------------------
+      # Step 5: Check for pending schema drift (non-blocking)
+      # ------------------------------------------------------------------
+      - name: Check for pending schema changes (drizzle-kit)
+        continue-on-error: true
+        working-directory: packages/control-plane
+        run: |
+          echo "::group::drizzle-kit generate (dry run)"
+          npx drizzle-kit generate 2>&1 || true
+          echo "::endgroup::"
+
+          # Check if any new migration files were generated
+          new_files=$(git diff --name-only -- drizzle/)
+          if [ -n "$new_files" ]; then
+            echo "::warning::Schema drift detected — drizzle-kit generated new migration files:"
+            echo "$new_files"
+            echo "This may indicate the schema.ts is ahead of the migration files."
+          else
+            echo "No schema drift detected"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Check for destructive operations and warn on the PR
+  # ---------------------------------------------------------------------------
+  destructive-check:
+    name: Destructive operation check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect destructive operations in changed migrations
+        id: destructive
+        run: |
+          MIGRATION_DIR="packages/control-plane/drizzle"
+          destructive_ops=""
+
+          # Get migration files changed in this PR
+          changed_files=$(git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD -- "$MIGRATION_DIR/*.sql" 2>/dev/null || \
+                          find "$MIGRATION_DIR" -maxdepth 1 -name '*.sql' -type f)
+
+          if [ -z "$changed_files" ]; then
+            echo "No changed migration files found"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Scanning changed migration files for destructive operations..."
+
+          for file in $changed_files; do
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+
+            basename=$(basename "$file")
+
+            # Check for destructive patterns (case-insensitive)
+            while IFS= read -r line; do
+              trimmed=$(echo "$line" | sed 's/^[[:space:]]*//')
+
+              # Skip comments and blank lines
+              if echo "$trimmed" | grep -qE '^(--|$)'; then
+                continue
+              fi
+
+              if echo "$trimmed" | grep -iqE '^\s*DROP\s+TABLE\b'; then
+                destructive_ops="${destructive_ops}\n- \`${basename}\`: \`DROP TABLE\` — ${trimmed}"
+              fi
+
+              if echo "$trimmed" | grep -iqE '^\s*ALTER\s+TABLE\s+.+\bDROP\s+COLUMN\b'; then
+                destructive_ops="${destructive_ops}\n- \`${basename}\`: \`DROP COLUMN\` — ${trimmed}"
+              fi
+
+              if echo "$trimmed" | grep -iqE '^\s*TRUNCATE\s+TABLE\b'; then
+                destructive_ops="${destructive_ops}\n- \`${basename}\`: \`TRUNCATE TABLE\` — ${trimmed}"
+              fi
+
+              if echo "$trimmed" | grep -iqE '^\s*ALTER\s+TABLE\s+.+\bDROP\s+CONSTRAINT\b'; then
+                destructive_ops="${destructive_ops}\n- \`${basename}\`: \`DROP CONSTRAINT\` — ${trimmed}"
+              fi
+
+              if echo "$trimmed" | grep -iqE '^\s*ALTER\s+TABLE\s+.+\bALTER\s+COLUMN\s+.+\bTYPE\b'; then
+                destructive_ops="${destructive_ops}\n- \`${basename}\`: \`ALTER COLUMN TYPE\` — ${trimmed}"
+              fi
+
+            done < "$file"
+          done
+
+          if [ -n "$destructive_ops" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            # Write multi-line output using a delimiter
+            {
+              echo "operations<<DESTRUCTIVE_EOF"
+              echo -e "$destructive_ops"
+              echo "DESTRUCTIVE_EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "::warning::Destructive migration operations detected"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No destructive operations found"
+          fi
+
+      - name: Comment on PR with destructive migration warning
+        if: steps.destructive.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const operations = `${{ steps.destructive.outputs.operations }}`;
+
+            const body = [
+              '## :warning: Destructive Migration Detected',
+              '',
+              'This PR contains database migration(s) with **destructive operations** that may cause data loss:',
+              '',
+              operations.trim(),
+              '',
+              '### Required actions',
+              '',
+              '- [ ] Confirm data loss is acceptable or data has been migrated',
+              '- [ ] Verify a rollback migration exists or is not needed',
+              '- [ ] Ensure backups are taken before deploying to production',
+              '- [ ] Get explicit approval from a database owner',
+              '',
+              '---',
+              '*Posted by the migration-check workflow*',
+            ].join('\n');
+
+            // Check for an existing comment to update (avoid duplicates)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const marker = 'Destructive Migration Detected';
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              console.log('Updated existing destructive migration comment');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              console.log('Created destructive migration warning comment');
+            }
