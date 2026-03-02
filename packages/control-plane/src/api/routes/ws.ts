@@ -8,7 +8,7 @@ import type { WebSocket } from 'ws';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
 
-const WORKER_PORT = Number(process.env.WORKER_PORT) || 9000;
+const DEFAULT_WORKER_PORT = 9000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // ---------------------------------------------------------------------------
@@ -81,6 +81,7 @@ export type WsRouteOptions = {
   dbRegistry: DbAgentRegistry | null;
   taskQueue: Queue<AgentTaskJobData, void, AgentTaskJobName> | null;
   logger: Logger;
+  workerPort?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -218,6 +219,7 @@ async function resolveWorkerUrl(
   agentId: string,
   dbRegistry: DbAgentRegistry,
   logger: Logger,
+  workerPort: number,
 ): Promise<string> {
   const agent = await dbRegistry.getAgent(agentId);
 
@@ -247,7 +249,7 @@ async function resolveWorkerUrl(
     );
   }
 
-  const workerBaseUrl = `http://${machine.tailscaleIp}:${String(WORKER_PORT)}`;
+  const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
 
   logger.debug(
     { agentId, machineId: agent.machineId, tailscaleIp: machine.tailscaleIp, workerBaseUrl },
@@ -262,7 +264,7 @@ async function resolveWorkerUrl(
 // ---------------------------------------------------------------------------
 
 export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) => {
-  const { dbRegistry, taskQueue, logger } = opts;
+  const { dbRegistry, taskQueue, logger, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   app.get('/ws', { websocket: true }, (socket, request) => {
     logger.info({ remoteAddress: request.ip }, 'WebSocket client connected');
@@ -364,7 +366,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             return;
           }
 
-          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger);
+          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger, workerPort);
 
           const sub = subscribeSse(agentId, workerBaseUrl, socket, logger);
           subscriptions.set(agentId, sub);
@@ -504,7 +506,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             return;
           }
 
-          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger);
+          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger, workerPort);
           const stopUrl = `${workerBaseUrl}/api/agents/${encodeURIComponent(agentId)}/stop`;
 
           try {

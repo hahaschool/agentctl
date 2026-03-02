@@ -46,6 +46,9 @@ type CreateServerOptions = {
   litellmClient?: LiteLLMClient;
   mem0Client?: Mem0Client;
   memoryInjector?: MemoryInjector | null;
+  workerPort?: number;
+  isProduction?: boolean;
+  corsOrigins?: string;
 };
 
 export async function createServer({
@@ -59,6 +62,9 @@ export async function createServer({
   litellmClient,
   mem0Client,
   memoryInjector = null,
+  workerPort = 9000,
+  isProduction: isProductionOverride,
+  corsOrigins: corsOriginsOverride,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -93,8 +99,8 @@ export async function createServer({
   });
 
   // --- CORS ---
-  const isProduction = process.env.NODE_ENV === 'production';
-  const corsOrigins = process.env.CORS_ORIGINS;
+  const isProduction = isProductionOverride ?? process.env.NODE_ENV === 'production';
+  const corsOrigins = corsOriginsOverride ?? process.env.CORS_ORIGINS;
 
   await app.register(fastifyCors, {
     origin: isProduction
@@ -196,22 +202,26 @@ export async function createServer({
     prefix: '/api/agents',
     registry,
     dbRegistry: dbRegistry ?? null,
+    workerPort,
   });
   await app.register(loopProxyRoutes, {
     prefix: '/api/agents',
     registry,
     dbRegistry: dbRegistry ?? null,
+    workerPort,
   });
   await app.register(emergencyStopProxyRoutes, {
     prefix: '/api/agents',
     registry,
     dbRegistry: dbRegistry ?? null,
+    workerPort,
   });
   await app.register(wsRoutes, {
     prefix: '/api',
     dbRegistry: dbRegistry ?? null,
     taskQueue: taskQueue ?? null,
     logger,
+    workerPort,
   });
 
   // Register audit ingestion routes only when the database is configured.

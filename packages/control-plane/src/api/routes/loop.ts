@@ -3,12 +3,13 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 
-const WORKER_PORT = Number(process.env.WORKER_PORT) || 9000;
+const DEFAULT_WORKER_PORT = 9000;
 const PROXY_TIMEOUT_MS = 30_000;
 
 export type LoopRoutesOptions = {
   registry: MachineRegistryLike;
   dbRegistry?: DbAgentRegistry | null;
+  workerPort?: number;
 };
 
 type ResolvedWorkerUrl =
@@ -28,6 +29,7 @@ async function resolveWorkerUrl(
   query: { workerUrl?: string; machineId?: string },
   registry: MachineRegistryLike,
   dbRegistry: DbAgentRegistry | null | undefined,
+  workerPort: number,
 ): Promise<ResolvedWorkerUrl> {
   const { workerUrl: explicitUrl, machineId } = query;
 
@@ -48,7 +50,7 @@ async function resolveWorkerUrl(
     }
 
     const address = machine.tailscaleIp ?? machine.hostname;
-    return { ok: true, url: `http://${address}:${String(WORKER_PORT)}` };
+    return { ok: true, url: `http://${address}:${String(workerPort)}` };
   }
 
   if (dbRegistry) {
@@ -83,7 +85,7 @@ async function resolveWorkerUrl(
       };
     }
 
-    return { ok: true, url: `http://${machine.tailscaleIp}:${String(WORKER_PORT)}` };
+    return { ok: true, url: `http://${machine.tailscaleIp}:${String(workerPort)}` };
   }
 
   return {
@@ -143,7 +145,7 @@ async function proxyToWorker(
  * All requests are proxied to the worker machine running the agent.
  */
 export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app, opts) => {
-  const { registry, dbRegistry } = opts;
+  const { registry, dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   // POST /api/agents/:id/loop — Start a loop (proxy to worker)
   app.post<{
@@ -156,7 +158,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
@@ -183,7 +185,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
@@ -209,7 +211,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
@@ -235,7 +237,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     async (request, reply) => {
       const agentId = request.params.id;
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry, workerPort);
       if (!resolved.ok) {
         return reply
           .status(resolved.status)

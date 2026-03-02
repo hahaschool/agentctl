@@ -70,6 +70,21 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
     default: 'false',
     description: 'Set to "true" to skip auto-migration on startup',
   },
+  {
+    name: 'WORKER_PORT',
+    default: '9000',
+    validate: isNumericString,
+    description: 'Port that agent-worker instances listen on (used for request proxying)',
+  },
+  {
+    name: 'NODE_ENV',
+    default: 'development',
+    description: 'Runtime environment (production, development, test)',
+  },
+  {
+    name: 'CORS_ORIGINS',
+    description: 'Comma-separated list of allowed CORS origins (production only)',
+  },
 ];
 
 const logger = createLogger('control-plane');
@@ -83,6 +98,9 @@ const MEM0_URL = env.MEM0_URL || '';
 const LITELLM_URL = env.LITELLM_URL || '';
 const CONTROL_PLANE_URL = env.CONTROL_PLANE_URL || `http://${HOST}:${PORT}`;
 const WORKER_CONCURRENCY = Number(env.WORKER_CONCURRENCY) || 5;
+const REMOTE_WORKER_PORT = Number(env.WORKER_PORT) || 9000;
+const IS_PRODUCTION = env.NODE_ENV === 'production';
+const CORS_ORIGINS = env.CORS_ORIGINS || '';
 
 type DependencyHealthDeps = {
   db?: Database;
@@ -298,6 +316,9 @@ async function main(): Promise<void> {
     litellmClient,
     mem0Client,
     memoryInjector: memoryInjector ?? null,
+    workerPort: REMOTE_WORKER_PORT,
+    isProduction: IS_PRODUCTION,
+    corsOrigins: CORS_ORIGINS || undefined,
   });
 
   // Run dependency health checks before starting the server.

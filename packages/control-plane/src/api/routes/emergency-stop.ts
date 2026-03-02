@@ -3,12 +3,13 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 
-const WORKER_PORT = Number(process.env.WORKER_PORT) || 9000;
+const DEFAULT_WORKER_PORT = 9000;
 const PROXY_TIMEOUT_MS = 15_000;
 
 export type EmergencyStopRoutesOptions = {
   registry: MachineRegistryLike;
   dbRegistry?: DbAgentRegistry | null;
+  workerPort?: number;
 };
 
 type ResolvedWorkerUrl =
@@ -28,6 +29,7 @@ async function resolveWorkerUrl(
   query: { workerUrl?: string; machineId?: string },
   registry: MachineRegistryLike,
   dbRegistry: DbAgentRegistry | null | undefined,
+  workerPort: number,
 ): Promise<ResolvedWorkerUrl> {
   const { workerUrl: explicitUrl, machineId } = query;
 
@@ -48,7 +50,7 @@ async function resolveWorkerUrl(
     }
 
     const address = machine.tailscaleIp ?? machine.hostname;
-    return { ok: true, url: `http://${address}:${String(WORKER_PORT)}` };
+    return { ok: true, url: `http://${address}:${String(workerPort)}` };
   }
 
   if (dbRegistry) {
@@ -83,7 +85,7 @@ async function resolveWorkerUrl(
       };
     }
 
-    return { ok: true, url: `http://${machine.tailscaleIp}:${String(WORKER_PORT)}` };
+    return { ok: true, url: `http://${machine.tailscaleIp}:${String(workerPort)}` };
   }
 
   return {
@@ -172,7 +174,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
   app,
   opts,
 ) => {
-  const { registry, dbRegistry } = opts;
+  const { registry, dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   // POST /api/agents/:id/emergency-stop — Emergency stop a single agent (proxy to worker)
   app.post<{
@@ -186,7 +188,13 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
 
       app.log.error({ agentId }, 'Emergency stop requested via control plane');
 
-      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      const resolved = await resolveWorkerUrl(
+        agentId,
+        request.query,
+        registry,
+        dbRegistry,
+        workerPort,
+      );
       if (!resolved.ok) {
         return reply
           .status(resolved.status)
@@ -248,7 +256,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
         }
 
         const address = machine.tailscaleIp ?? machine.hostname;
-        const workerUrl = `http://${address}:${String(WORKER_PORT)}`;
+        const workerUrl = `http://${address}:${String(workerPort)}`;
 
         const result = await proxyEmergencyStopAll(workerUrl);
 
