@@ -32,6 +32,9 @@ RUN pnpm install --frozen-lockfile
 COPY packages/shared/src/ packages/shared/src/
 COPY packages/control-plane/src/ packages/control-plane/src/
 
+# Copy drizzle migration files (needed by postbuild script to bundle into dist/)
+COPY packages/control-plane/drizzle/ packages/control-plane/drizzle/
+
 # Build shared first, then control-plane (pnpm -r respects dependency order)
 RUN pnpm -r build
 

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
@@ -106,12 +106,40 @@ async function main(): Promise<void> {
     // All DDL statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS,
     // so this is idempotent and safe to execute against an already-migrated database.
     const __dirname = dirname(fileURLToPath(import.meta.url));
-    const migrationSql = readFileSync(
-      join(__dirname, '../../drizzle/0000_initial_schema.sql'),
-      'utf-8',
-    );
-    await db.execute(sql.raw(migrationSql));
-    logger.info('Database migrations applied');
+    const MIGRATION_FILE = '0000_initial_schema.sql';
+
+    // Candidate paths in priority order:
+    //   1. dist/drizzle/ — production builds (postbuild copies drizzle/ into dist/)
+    //   2. ../drizzle/   — dev mode (tsx runs from src/, package root is one level up)
+    const candidatePaths = [
+      join(__dirname, 'drizzle', MIGRATION_FILE),
+      join(__dirname, '..', 'drizzle', MIGRATION_FILE),
+    ];
+
+    const migrationPath = candidatePaths.find((p) => existsSync(p));
+
+    if (migrationPath) {
+      const migrationSql = readFileSync(migrationPath, 'utf-8');
+
+      // Schema version check: verify the migration file contains the expected tables
+      const expectedTables = ['machines', 'agents', 'agent_runs', 'agent_actions'];
+      const missingTables = expectedTables.filter((table) => !migrationSql.includes(`"${table}"`));
+
+      if (missingTables.length > 0) {
+        logger.warn(
+          { migrationPath, missingTables },
+          'Migration file may be incomplete — expected tables not found in SQL',
+        );
+      }
+
+      await db.execute(sql.raw(migrationSql));
+      logger.info({ migrationPath }, 'Database migrations applied');
+    } else {
+      logger.warn(
+        { candidatePaths },
+        'Migration file not found — skipping auto-migration. Database schema must be applied manually.',
+      );
+    }
 
     dbRegistry = new DbAgentRegistry(db, logger.child({ component: 'db-registry' }));
     logger.info('Database-backed agent registry initialised');
