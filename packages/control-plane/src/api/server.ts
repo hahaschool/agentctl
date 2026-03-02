@@ -29,6 +29,7 @@ import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { streamRoutes } from './routes/stream.js';
+import { webhookRoutes } from './routes/webhooks.js';
 import { wsRoutes } from './routes/ws.js';
 
 type CreateServerOptions = {
@@ -203,6 +204,14 @@ export async function createServer({
     await app.register(checkpointRoutes, {
       prefix: '/api/agents',
       dbRegistry,
+      db,
+    });
+  }
+
+  // Register webhook subscription management routes when db is available.
+  if (db) {
+    await app.register(webhookRoutes, {
+      prefix: '/api/webhooks',
       db,
     });
   }
