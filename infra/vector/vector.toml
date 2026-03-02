@@ -1,0 +1,183 @@
+# =============================================================================
+# AgentCTL — Vector Logging Pipeline Configuration
+# Ships structured NDJSON audit logs and Docker container logs to ClickHouse.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Global settings
+# -----------------------------------------------------------------------------
+
+data_dir = "/var/lib/vector"
+
+# =============================================================================
+# SOURCES
+# =============================================================================
+
+# NDJSON audit logs written by agent workers and the control plane.
+# Each line is a JSON object with fields: agentId, machineId, taskId, tool,
+# action, timestamp, hash, previousHash, etc.
+[sources.audit_logs]
+type = "file"
+include = ["/var/log/agentctl/*.ndjson"]
+read_from = "beginning"
+fingerprint.strategy = "device_and_inode"
+line_delimiter = "\n"
+
+  [sources.audit_logs.decoding]
+  codec = "json"
+
+# Docker container logs from services labeled app=agentctl.
+[sources.docker_logs]
+type = "docker_logs"
+
+  [sources.docker_logs.include_labels]
+  app = "agentctl"
+
+# =============================================================================
+# TRANSFORMS
+# =============================================================================
+
+# Parse and normalise audit log fields coming from the NDJSON source.
+[transforms.parse_audit]
+type = "remap"
+inputs = ["audit_logs"]
+source = '''
+  # Coerce timestamp — accept ISO-8601 string or fall back to ingestion time.
+  .timestamp = to_timestamp(.timestamp) ?? now()
+
+  # Normalise field names from camelCase to snake_case for ClickHouse.
+  .agent_id   = del(.agentId)   ?? ""
+  .machine_id = del(.machineId) ?? ""
+  .task_id    = del(.taskId)    ?? ""
+  .tool       = .tool           ?? ""
+  .action     = .action         ?? ""
+  .status     = .status         ?? ""
+  .duration_ms = to_float(.duration_ms) ?? to_float(.durationMs) ?? 0.0
+  del(.durationMs)
+  .hash           = .hash           ?? ""
+  .previous_hash  = del(.previousHash) ?? ""
+
+  # Collect any remaining fields into a metadata JSON string.
+  known_keys = ["timestamp", "agent_id", "machine_id", "task_id", "tool",
+                "action", "status", "duration_ms", "hash", "previous_hash"]
+  meta = {}
+  for_each(keys(.)) -> |_i, k| {
+    if !includes(known_keys, k) {
+      meta = set!(meta, [k], get!(., [k]))
+    }
+  }
+  .metadata = encode_json(meta)
+'''
+
+# Parse Docker / application logs, add hostname and environment metadata.
+[transforms.parse_app]
+type = "remap"
+inputs = ["docker_logs"]
+source = '''
+  # Attempt to parse the message field as JSON (pino structured logs).
+  parsed, err = parse_json(.message)
+  if err == null {
+    . = merge(., parsed)
+  }
+
+  .timestamp   = to_timestamp(.timestamp) ?? now()
+  .level       = .level   ?? .log_level ?? "info"
+  .service     = .service ?? .container_name ?? "unknown"
+  .message     = .msg     ?? .message ?? ""
+
+  # Strip parsed helper fields.
+  del(.msg)
+  del(.log_level)
+  del(.container_name)
+'''
+
+# Enrich every app log event with host-level metadata.
+[transforms.add_metadata]
+type = "remap"
+inputs = ["parse_app"]
+source = '''
+  .hostname    = get_hostname()
+  .environment = get_env_var("AGENTCTL_ENV") ?? "development"
+
+  # Collect extra fields into a metadata JSON string.
+  known_keys = ["timestamp", "level", "service", "hostname",
+                "environment", "message"]
+  meta = {}
+  for_each(keys(.)) -> |_i, k| {
+    if !includes(known_keys, k) {
+      meta = set!(meta, [k], get!(., [k]))
+    }
+  }
+  .metadata = encode_json(meta)
+'''
+
+# Route events to the correct sink based on their origin.
+[transforms.route]
+type = "route"
+inputs = ["parse_audit", "add_metadata"]
+
+  [transforms.route.route]
+  audit = '.agent_id != null && .agent_id != ""'
+  app   = '.service != null'
+
+# =============================================================================
+# SINKS
+# =============================================================================
+
+# Audit logs → ClickHouse agentctl.audit_logs table.
+[sinks.clickhouse_audit]
+type = "clickhouse"
+inputs = ["transforms.route.audit"]
+endpoint = "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+database = "agentctl"
+table = "audit_logs"
+skip_unknown_fields = true
+compression = "gzip"
+
+  [sinks.clickhouse_audit.auth]
+  strategy = "basic"
+  user = "${CLICKHOUSE_USER:-default}"
+  password = "${CLICKHOUSE_PASSWORD:-}"
+
+  [sinks.clickhouse_audit.batch]
+  max_bytes = 10_485_760   # 10 MB
+  timeout_secs = 5
+
+  [sinks.clickhouse_audit.healthcheck]
+  enabled = true
+
+# Application logs → ClickHouse agentctl.app_logs table.
+[sinks.clickhouse_app]
+type = "clickhouse"
+inputs = ["transforms.route.app"]
+endpoint = "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+database = "agentctl"
+table = "app_logs"
+skip_unknown_fields = true
+compression = "gzip"
+
+  [sinks.clickhouse_app.auth]
+  strategy = "basic"
+  user = "${CLICKHOUSE_USER:-default}"
+  password = "${CLICKHOUSE_PASSWORD:-}"
+
+  [sinks.clickhouse_app.batch]
+  max_bytes = 10_485_760   # 10 MB
+  timeout_secs = 5
+
+  [sinks.clickhouse_app.healthcheck]
+  enabled = true
+
+# Console debug sink — activated by setting VECTOR_DEBUG=true.
+[sinks.console_debug]
+type = "console"
+inputs = ["parse_audit", "add_metadata"]
+target = "stdout"
+
+  [sinks.console_debug.encoding]
+  codec = "json"
+
+  # Only emit when VECTOR_DEBUG is set to "true".
+  [sinks.console_debug.condition]
+  type = "vrl"
+  source = 'get_env_var("VECTOR_DEBUG") ?? "false" == "true"'

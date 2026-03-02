@@ -1,0 +1,97 @@
+# =============================================================================
+# AgentCTL — Docker Compose: Vector + ClickHouse Logging Stack
+# Usage:
+#   docker compose -f infra/vector/docker-compose.vector.yml up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Vector — log collector, transformer, and shipper
+  # ---------------------------------------------------------------------------
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: agentctl-vector
+    restart: unless-stopped
+    hostname: agentctl-vector
+    volumes:
+      - ./vector.toml:/etc/vector/vector.toml:ro
+      - /var/log/agentctl:/var/log/agentctl:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - vector-data:/var/lib/vector
+    environment:
+      - CLICKHOUSE_ENDPOINT=http://clickhouse:8123
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - AGENTCTL_ENV=${AGENTCTL_ENV:-development}
+      - VECTOR_DEBUG=${VECTOR_DEBUG:-false}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "vector", "top", "--interval", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    networks:
+      - agentctl_backend
+
+  # ---------------------------------------------------------------------------
+  # ClickHouse — columnar OLAP store for logs and audit trail
+  # ---------------------------------------------------------------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: agentctl-clickhouse
+    restart: unless-stopped
+    hostname: agentctl-clickhouse
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"   # HTTP interface
+      - "${CLICKHOUSE_TCP_PORT:-9000}:9000"    # Native TCP interface
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./clickhouse-schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    networks:
+      - agentctl_backend
+
+volumes:
+  vector-data:
+    driver: local
+  clickhouse-data:
+    driver: local
+  clickhouse-logs:
+    driver: local
+
+networks:
+  agentctl_backend:
+    external: true
