@@ -1811,3 +1811,372 @@ describe('status colorization', () => {
     expect(allText).toContain('\x1b[31mERROR\x1b[0m');
   });
 });
+
+// ---------------------------------------------------------------------------
+// stream command
+// ---------------------------------------------------------------------------
+
+describe('stream command', () => {
+  it('prints usage error when no agentId is given', async () => {
+    const output = await execCli(['stream']);
+    expect(output.errors.some((e) => e.includes('Usage'))).toBe(true);
+    expect(mocks.mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('streams SSE events and prints text output', async () => {
+    const ssePayload = 'event: output\ndata: {"text":"Hello from agent"}\n\n';
+    const encoder = new TextEncoder();
+    const chunk = encoder.encode(ssePayload);
+
+    const mockReader = {
+      read: vi
+        .fn()
+        .mockResolvedValueOnce({ done: false, value: chunk })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+      releaseLock: vi.fn(),
+    };
+
+    const mockBody = { getReader: () => mockReader };
+
+    mocks.mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: mockBody,
+      headers: { get: () => 'text/event-stream' },
+    } as unknown as Response);
+
+    // Also mock process.stdout.write to capture output
+    const stdoutWrites: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((data: unknown) => {
+      stdoutWrites.push(String(data));
+      return true;
+    });
+
+    const output = await execCli(['stream', 'agent-1']);
+
+    // Should print the streaming header
+    expect(output.logs.some((l) => l.includes('agent-1'))).toBe(true);
+
+    // Should have written the SSE text to stdout
+    expect(stdoutWrites.some((w) => w.includes('Hello from agent'))).toBe(true);
+
+    stdoutSpy.mockRestore();
+  });
+
+  it('throws on HTTP error from stream endpoint', async () => {
+    mocks.mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      body: null,
+      headers: { get: () => 'text/plain' },
+    } as unknown as Response);
+
+    const output = await execCli(['stream', 'agent-1']);
+    expect(output.errors.some((e) => e.includes('STREAM_HTTP_ERROR') || e.includes('404'))).toBe(
+      true,
+    );
+  });
+
+  it('outputs JSON for SSE events in --json mode', async () => {
+    const ssePayload = 'event: output\ndata: {"text":"json test"}\n\n';
+    const encoder = new TextEncoder();
+    const chunk = encoder.encode(ssePayload);
+
+    const mockReader = {
+      read: vi
+        .fn()
+        .mockResolvedValueOnce({ done: false, value: chunk })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+      releaseLock: vi.fn(),
+    };
+
+    mocks.mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: { getReader: () => mockReader },
+      headers: { get: () => 'text/event-stream' },
+    } as unknown as Response);
+
+    const output = await execCli(['--json', 'stream', 'agent-1']);
+
+    // In JSON mode, events are printed as JSON
+    expect(output.logs.some((l) => l.includes('"event"') && l.includes('"data"'))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// emergency-stop command
+// ---------------------------------------------------------------------------
+
+describe('emergency-stop command', () => {
+  it('prints usage error when no agentId is given', async () => {
+    const output = await execCli(['emergency-stop']);
+    expect(output.errors.some((e) => e.includes('Usage'))).toBe(true);
+    expect(mocks.mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('sends emergency-stop request and prints result', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({
+        stopped: true,
+        tokenRevoked: true,
+        message: 'Agent emergency-stopped',
+      }),
+    );
+
+    const output = await execCli(['emergency-stop', 'agent-1']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('agent-1');
+    expect(allText).toContain('stopped');
+    expect(allText).toContain('tokenRevoked');
+  });
+
+  it('outputs JSON in --json mode', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(fakeResponse({ stopped: true, tokenRevoked: true }));
+
+    const output = await execCli(['--json', 'emergency-stop', 'agent-1']);
+    const parsed = JSON.parse(output.logs[0]) as Record<string, unknown>;
+    expect(parsed.stopped).toBe(true);
+    expect(parsed.tokenRevoked).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dashboard command
+// ---------------------------------------------------------------------------
+
+describe('dashboard command', () => {
+  it('displays system overview', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({
+        agents: { total: 5, online: 3, offline: 2 },
+        runs: { total: 100, active: 2, completed: 90, failed: 8 },
+        webhooks: { total: 3, active: 2 },
+        recentErrors: [{ agentId: 'agent-1', error: 'timeout', timestamp: '2026-03-03T00:00:00Z' }],
+      }),
+    );
+
+    const output = await execCli(['dashboard']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('Dashboard Overview');
+    expect(allText).toContain('5');
+    expect(allText).toContain('100');
+    expect(allText).toContain('timeout');
+  });
+
+  it('outputs JSON in --json mode', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({
+        agents: { total: 1, online: 1, offline: 0 },
+        runs: { total: 10, active: 0, completed: 10, failed: 0 },
+        webhooks: { total: 0, active: 0 },
+        recentErrors: [],
+      }),
+    );
+
+    const output = await execCli(['--json', 'dashboard']);
+    const parsed = JSON.parse(output.logs[0]) as Record<string, unknown>;
+    expect(parsed).toHaveProperty('agents');
+    expect(parsed).toHaveProperty('runs');
+  });
+
+  it('displays cost summary with period', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({
+        period: '7d',
+        totalCostUsd: 12.5,
+        byAgent: [
+          { agentId: 'agent-1', costUsd: 10 },
+          { agentId: 'agent-2', costUsd: 2.5 },
+        ],
+        byProvider: [{ provider: 'anthropic', costUsd: 12.5 }],
+      }),
+    );
+
+    const output = await execCli(['dashboard', 'costs', '7d']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('Cost Summary');
+    expect(allText).toContain('12.5000');
+    expect(allText).toContain('agent-1');
+    expect(allText).toContain('anthropic');
+  });
+
+  it('uses 7d as default period for costs', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({ period: '7d', totalCostUsd: 0, byAgent: [], byProvider: [] }),
+    );
+
+    await execCli(['dashboard', 'costs']);
+
+    const url = String(mocks.mockFetch.mock.calls[0]?.[0]);
+    expect(url).toContain('period=7d');
+  });
+
+  it('displays tool usage analytics', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({
+        tools: [
+          { tool: 'Read', count: 500, avgDurationMs: 10 },
+          { tool: 'Bash', count: 200, avgDurationMs: 50 },
+        ],
+        topAgentsByToolUse: [{ agentId: 'agent-1', totalToolCalls: 700 }],
+      }),
+    );
+
+    const output = await execCli(['dashboard', 'tools']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('Tool Usage');
+    expect(allText).toContain('Read');
+    expect(allText).toContain('500');
+    expect(allText).toContain('agent-1');
+  });
+
+  it('prints error for unknown dashboard subcommand', async () => {
+    const output = await execCli(['dashboard', 'unknown']);
+    expect(output.errors.some((e) => e.includes('Unknown dashboard subcommand'))).toBe(true);
+    expect(mocks.mockExit).toHaveBeenCalledWith(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loop command
+// ---------------------------------------------------------------------------
+
+describe('loop command', () => {
+  it('displays loop status', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({
+        running: true,
+        iteration: 5,
+        maxIterations: 100,
+        costUsd: 0.5,
+        costLimitUsd: 10,
+        mode: 'result-feedback',
+        lastResult: 'Completed iteration 5 successfully',
+      }),
+    );
+
+    const output = await execCli(['loop', 'status', 'agent-1']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('Loop Status');
+    expect(allText).toContain('agent-1');
+    expect(allText).toContain('yes');
+    expect(allText).toContain('5');
+    expect(allText).toContain('result-feedback');
+  });
+
+  it('prints usage error for loop status without agentId', async () => {
+    const output = await execCli(['loop', 'status']);
+    expect(output.errors.some((e) => e.includes('Usage'))).toBe(true);
+    expect(mocks.mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('stops a loop', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({ ok: true, message: 'Loop stop requested' }),
+    );
+
+    const output = await execCli(['loop', 'stop', 'agent-1']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('Loop stop requested');
+    expect(allText).toContain('agent-1');
+  });
+
+  it('prints usage error for loop stop without agentId', async () => {
+    const output = await execCli(['loop', 'stop']);
+    expect(output.errors.some((e) => e.includes('Usage'))).toBe(true);
+    expect(mocks.mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('prints error for unknown loop subcommand', async () => {
+    const output = await execCli(['loop', 'unknown']);
+    expect(output.errors.some((e) => e.includes('Unknown loop subcommand'))).toBe(true);
+    expect(mocks.mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('prints error when no loop subcommand is given', async () => {
+    const output = await execCli(['loop']);
+    expect(output.errors.some((e) => e.includes('Unknown loop subcommand'))).toBe(true);
+    expect(mocks.mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('outputs JSON for loop status in --json mode', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(fakeResponse({ running: true, iteration: 3 }));
+
+    const output = await execCli(['--json', 'loop', 'status', 'agent-1']);
+    const parsed = JSON.parse(output.logs[0]) as Record<string, unknown>;
+    expect(parsed.running).toBe(true);
+    expect(parsed.iteration).toBe(3);
+  });
+
+  it('outputs JSON for loop stop in --json mode', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(fakeResponse({ ok: true }));
+
+    const output = await execCli(['--json', 'loop', 'stop', 'agent-1']);
+    const parsed = JSON.parse(output.logs[0]) as Record<string, unknown>;
+    expect(parsed.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pool-stats command
+// ---------------------------------------------------------------------------
+
+describe('pool-stats command', () => {
+  it('displays pool statistics', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({
+        running: 2,
+        totalStarted: 15,
+        maxConcurrent: 5,
+        worktreesActive: 2,
+        agents: [
+          { id: 'agent-1', status: 'running', uptimeMs: 120000, iteration: 3 },
+          { id: 'agent-2', status: 'running', uptimeMs: 60000 },
+        ],
+      }),
+    );
+
+    const output = await execCli(['pool-stats']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('Worker Pool Statistics');
+    expect(allText).toContain('2');
+    expect(allText).toContain('15');
+    expect(allText).toContain('agent-1');
+    expect(allText).toContain('agent-2');
+  });
+
+  it('sends request to WORKER_URL not CONTROL_URL', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({ running: 0, totalStarted: 0, maxConcurrent: 3 }),
+    );
+
+    await execCli(['pool-stats']);
+
+    const url = String(mocks.mockFetch.mock.calls[0]?.[0]);
+    expect(url).toContain('localhost:9000');
+    expect(url).toContain('/api/agents/stats');
+  });
+
+  it('outputs JSON in --json mode', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({ running: 1, totalStarted: 5, maxConcurrent: 3 }),
+    );
+
+    const output = await execCli(['--json', 'pool-stats']);
+    const parsed = JSON.parse(output.logs[0]) as Record<string, unknown>;
+    expect(parsed.running).toBe(1);
+    expect(parsed.maxConcurrent).toBe(3);
+  });
+
+  it('handles pool with no agents array', async () => {
+    mocks.mockFetch.mockResolvedValueOnce(
+      fakeResponse({ running: 0, totalStarted: 0, maxConcurrent: 5 }),
+    );
+
+    const output = await execCli(['pool-stats']);
+    const allText = output.logs.join('\n');
+    expect(allText).toContain('Worker Pool Statistics');
+    expect(allText).toContain('0');
+  });
+});

@@ -28,6 +28,14 @@
 //   schedule add-cron         Add a cron job
 //   schedule remove <key>     Remove a scheduled job by key
 //   runs <agentId> [limit]    Show recent runs for an agent
+//   stream <agentId>          Stream live SSE output from a running agent
+//   emergency-stop <agentId>  Emergency kill switch for a running agent
+//   dashboard                 System overview with agent counts, costs, errors
+//   dashboard costs [period]  Cost breakdown by agent/provider (1d,7d,30d,90d)
+//   dashboard tools           Tool usage analytics
+//   loop status <agentId>     Check continuous loop status
+//   loop stop <agentId>       Stop a continuous loop
+//   pool-stats                Worker pool statistics
 //   help                      Show this help message
 // =============================================================================
 
@@ -739,6 +747,354 @@ async function cmdRuns(agentId: string, limit: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Stream subcommand
+// ---------------------------------------------------------------------------
+
+async function cmdStream(agentId: string): Promise<void> {
+  const url = `${CONTROL_URL}/api/agents/${encodeURIComponent(agentId)}/stream`;
+
+  console.log(`${bold('Streaming output for')} ${cyan(agentId)} ${dim(`(${url})`)}`);
+  console.log(dim('Press Ctrl+C to stop.\n'));
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { Accept: 'text/event-stream' },
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CliError('STREAM_CONNECTION_FAILED', `Failed to connect to stream: ${message}`, {
+      url,
+      suggestions: suggestFix(url, message),
+    });
+  }
+
+  if (!response.ok) {
+    throw new CliError('STREAM_HTTP_ERROR', `Stream returned HTTP ${response.status}`, {
+      status: response.status,
+      url,
+    });
+  }
+
+  if (!response.body) {
+    throw new CliError('STREAM_NO_BODY', 'Stream response has no body', { url });
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE events from the buffer
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      let eventType = '';
+      let data = '';
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          data = line.slice(6);
+        } else if (line === '' && data) {
+          // End of an SSE event
+          printSseEvent(eventType, data);
+          eventType = '';
+          data = '';
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  console.log(dim('\n--- stream ended ---'));
+}
+
+function printSseEvent(eventType: string, data: string): void {
+  if (jsonOutput) {
+    console.log(JSON.stringify({ event: eventType, data }));
+    return;
+  }
+
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(data) as Record<string, unknown>;
+  } catch {
+    // Not JSON — print as plain text
+  }
+
+  const typeLabel = eventType ? dim(`[${eventType}] `) : '';
+
+  if (parsed) {
+    if (parsed.text !== undefined) {
+      process.stdout.write(`${typeLabel}${String(parsed.text)}`);
+    } else if (parsed.output !== undefined) {
+      process.stdout.write(`${typeLabel}${String(parsed.output)}`);
+    } else if (parsed.message !== undefined) {
+      console.log(`${typeLabel}${String(parsed.message)}`);
+    } else {
+      console.log(`${typeLabel}${JSON.stringify(parsed)}`);
+    }
+  } else {
+    console.log(`${typeLabel}${data}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Emergency stop subcommand
+// ---------------------------------------------------------------------------
+
+async function cmdEmergencyStop(agentId: string): Promise<void> {
+  const data = (await request(
+    'POST',
+    `/api/agents/${encodeURIComponent(agentId)}/emergency-stop`,
+  )) as Record<string, unknown>;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(`${red('!')} Emergency stop issued for ${cyan(agentId)}`);
+  if (data.stopped !== undefined) {
+    console.log(`  stopped:       ${String(data.stopped)}`);
+  }
+  if (data.tokenRevoked !== undefined) {
+    console.log(`  tokenRevoked:  ${String(data.tokenRevoked)}`);
+  }
+  if (data.message) {
+    console.log(`  ${dim(String(data.message))}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard subcommands
+// ---------------------------------------------------------------------------
+
+async function cmdDashboard(): Promise<void> {
+  const data = (await request('GET', '/api/dashboard/overview')) as Record<string, unknown>;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(bold('=== Dashboard Overview ===\n'));
+
+  const agents = data.agents as Record<string, number> | undefined;
+  if (agents) {
+    console.log(bold('Agents'));
+    console.log(`  Total:   ${agents.total ?? 0}`);
+    console.log(`  Online:  ${green(String(agents.online ?? 0))}`);
+    console.log(`  Offline: ${dim(String(agents.offline ?? 0))}`);
+    console.log('');
+  }
+
+  const runs = data.runs as Record<string, number> | undefined;
+  if (runs) {
+    console.log(bold('Runs'));
+    console.log(`  Total:     ${runs.total ?? 0}`);
+    console.log(`  Active:    ${cyan(String(runs.active ?? 0))}`);
+    console.log(`  Completed: ${green(String(runs.completed ?? 0))}`);
+    console.log(`  Failed:    ${runs.failed ? red(String(runs.failed)) : '0'}`);
+    console.log('');
+  }
+
+  const webhooks = data.webhooks as Record<string, number> | undefined;
+  if (webhooks) {
+    console.log(bold('Webhooks'));
+    console.log(`  Total:  ${webhooks.total ?? 0}`);
+    console.log(`  Active: ${webhooks.active ?? 0}`);
+    console.log('');
+  }
+
+  const recentErrors = data.recentErrors as Array<Record<string, string>> | undefined;
+  if (recentErrors && recentErrors.length > 0) {
+    console.log(bold('Recent Errors'));
+    for (const err of recentErrors.slice(0, 5)) {
+      const ts = err.timestamp ? new Date(err.timestamp).toLocaleString() : '';
+      console.log(`  ${red('x')} ${cyan(err.agentId ?? '')} ${dim(ts)}`);
+      console.log(`    ${err.error ?? ''}`);
+    }
+    console.log('');
+  }
+}
+
+async function cmdDashboardCosts(period: string): Promise<void> {
+  const data = (await request(
+    'GET',
+    `/api/dashboard/cost-summary?period=${encodeURIComponent(period)}`,
+  )) as Record<string, unknown>;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(bold(`=== Cost Summary (${period}) ===\n`));
+
+  const total = Number(data.totalCostUsd ?? 0);
+  console.log(`  Total: ${bold(`$${total.toFixed(4)}`)}\n`);
+
+  const byAgent = data.byAgent as Array<Record<string, unknown>> | undefined;
+  if (byAgent && byAgent.length > 0) {
+    console.log(bold('  By Agent'));
+    const headers = ['AGENT ID', 'COST (USD)'];
+    const rows = byAgent.map((a) => [
+      String(a.agentId ?? ''),
+      `$${Number(a.costUsd ?? 0).toFixed(4)}`,
+    ]);
+    printTable(headers, rows);
+    console.log('');
+  }
+
+  const byProvider = data.byProvider as Array<Record<string, unknown>> | undefined;
+  if (byProvider && byProvider.length > 0) {
+    console.log(bold('  By Provider'));
+    const headers = ['PROVIDER', 'COST (USD)'];
+    const rows = byProvider.map((p) => [
+      String(p.provider ?? ''),
+      `$${Number(p.costUsd ?? 0).toFixed(4)}`,
+    ]);
+    printTable(headers, rows);
+    console.log('');
+  }
+}
+
+async function cmdDashboardTools(): Promise<void> {
+  const data = (await request('GET', '/api/dashboard/tool-usage')) as Record<string, unknown>;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(bold('=== Tool Usage ===\n'));
+
+  const tools = data.tools as Array<Record<string, unknown>> | undefined;
+  if (tools && tools.length > 0) {
+    const headers = ['TOOL', 'COUNT', 'AVG DURATION'];
+    const rows = tools.map((t) => [
+      String(t.tool ?? ''),
+      String(t.count ?? 0),
+      `${String(t.avgDurationMs ?? 0)}ms`,
+    ]);
+    printTable(headers, rows);
+    console.log('');
+  }
+
+  const topAgents = data.topAgentsByToolUse as Array<Record<string, unknown>> | undefined;
+  if (topAgents && topAgents.length > 0) {
+    console.log(bold('Top Agents by Tool Usage'));
+    const headers = ['AGENT ID', 'TOOL CALLS'];
+    const rows = topAgents.map((a) => [String(a.agentId ?? ''), String(a.totalToolCalls ?? 0)]);
+    printTable(headers, rows);
+    console.log('');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Loop subcommands
+// ---------------------------------------------------------------------------
+
+async function cmdLoopStatus(agentId: string): Promise<void> {
+  const data = (await request('GET', `/api/loop/${encodeURIComponent(agentId)}/status`)) as Record<
+    string,
+    unknown
+  >;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(bold(`Loop Status: ${cyan(agentId)}\n`));
+
+  console.log(`  Running:    ${data.running ? green('yes') : dim('no')}`);
+  console.log(`  Iteration:  ${String(data.iteration ?? 0)}`);
+
+  if (data.maxIterations) {
+    console.log(`  Max:        ${String(data.maxIterations)}`);
+  }
+  if (data.costUsd != null) {
+    console.log(`  Cost:       $${Number(data.costUsd).toFixed(4)}`);
+  }
+  if (data.costLimitUsd != null) {
+    console.log(`  Cost Limit: $${Number(data.costLimitUsd).toFixed(4)}`);
+  }
+  if (data.mode) {
+    console.log(`  Mode:       ${String(data.mode)}`);
+  }
+  if (data.lastResult) {
+    console.log(`  Last:       ${dim(String(data.lastResult).slice(0, 120))}`);
+  }
+  console.log('');
+}
+
+async function cmdLoopStop(agentId: string): Promise<void> {
+  const data = (await request('POST', `/api/loop/${encodeURIComponent(agentId)}/stop`)) as Record<
+    string,
+    unknown
+  >;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(`${green('✓')} Loop stop requested for ${cyan(agentId)}`);
+  if (data.message) {
+    console.log(`  ${dim(String(data.message))}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pool stats subcommand
+// ---------------------------------------------------------------------------
+
+async function cmdPoolStats(): Promise<void> {
+  const data = (await request('GET', '/api/agents/stats', undefined, WORKER_URL)) as Record<
+    string,
+    unknown
+  >;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(bold('=== Worker Pool Statistics ===\n'));
+
+  console.log(`  Running:       ${String(data.running ?? 0)}`);
+  console.log(`  Total Started: ${String(data.totalStarted ?? 0)}`);
+  console.log(`  Max Concurrent: ${String(data.maxConcurrent ?? 0)}`);
+  console.log(`  Worktrees:     ${String(data.worktreesActive ?? 0)}`);
+
+  if (data.agents && Array.isArray(data.agents)) {
+    console.log('');
+    console.log(bold('Active Agents'));
+    const headers = ['AGENT ID', 'STATUS', 'UPTIME', 'ITERATION'];
+    const rows = (data.agents as Array<Record<string, unknown>>).map((a) => [
+      String(a.id ?? ''),
+      String(a.status ?? ''),
+      a.uptimeMs ? formatUptime(Number(a.uptimeMs) / 1000) : '-',
+      String(a.iteration ?? '-'),
+    ]);
+    printTable(headers, rows);
+  }
+
+  console.log('');
+}
+
+// ---------------------------------------------------------------------------
 // Help
 // ---------------------------------------------------------------------------
 
@@ -774,6 +1130,14 @@ ${bold('COMMANDS')}
                                Add a cron job
   ${cyan('schedule remove')} <key>      Remove a scheduled job by key
   ${cyan('runs')} <agentId> [limit]     Show recent runs for an agent
+  ${cyan('stream')} <agentId>           Stream live SSE output from a running agent
+  ${cyan('emergency-stop')} <agentId>   Emergency kill switch (abort + revoke token)
+  ${cyan('dashboard')}                  System overview: agents, runs, errors
+  ${cyan('dashboard costs')} [period]   Cost breakdown by agent/provider (${dim('1d|7d|30d|90d')})
+  ${cyan('dashboard tools')}            Tool usage analytics
+  ${cyan('loop status')} <agentId>      Check continuous loop status
+  ${cyan('loop stop')} <agentId>        Stop a continuous loop
+  ${cyan('pool-stats')}                 Worker pool statistics
   ${cyan('help')}                       Show this help message
 
 ${bold('EXAMPLES')}
@@ -818,6 +1182,30 @@ ${bold('EXAMPLES')}
 
   ${dim('# Use a different control plane URL')}
   CONTROL_URL=http://ec2-host:8080 npx tsx scripts/agentctl.ts machines
+
+  ${dim('# Stream live output from a running agent')}
+  npx tsx scripts/agentctl.ts stream agent-1
+
+  ${dim('# Emergency stop an agent')}
+  npx tsx scripts/agentctl.ts emergency-stop agent-1
+
+  ${dim('# View system dashboard')}
+  npx tsx scripts/agentctl.ts dashboard
+
+  ${dim('# View cost breakdown for the last 7 days')}
+  npx tsx scripts/agentctl.ts dashboard costs 7d
+
+  ${dim('# View tool usage analytics')}
+  npx tsx scripts/agentctl.ts dashboard tools
+
+  ${dim('# Check loop status for an agent')}
+  npx tsx scripts/agentctl.ts loop status agent-1
+
+  ${dim('# Stop a continuous loop')}
+  npx tsx scripts/agentctl.ts loop stop agent-1
+
+  ${dim('# View worker pool statistics')}
+  npx tsx scripts/agentctl.ts pool-stats
 
   ${dim('# Check worker on a different host')}
   WORKER_URL=http://mac-mini:9000 npx tsx scripts/agentctl.ts health-worker
@@ -998,6 +1386,76 @@ async function main(): Promise<void> {
       await cmdRuns(agentId, limit);
       break;
     }
+
+    case 'stream': {
+      const agentId = args[1];
+
+      if (!agentId) {
+        console.error(`${red('Error: ')}Usage: agentctl stream <agentId>`);
+        process.exit(1);
+      }
+
+      await cmdStream(agentId);
+      break;
+    }
+
+    case 'emergency-stop': {
+      const agentId = args[1];
+
+      if (!agentId) {
+        console.error(`${red('Error: ')}Usage: agentctl emergency-stop <agentId>`);
+        process.exit(1);
+      }
+
+      await cmdEmergencyStop(agentId);
+      break;
+    }
+
+    case 'dashboard': {
+      const subcommand = args[1];
+
+      if (!subcommand) {
+        await cmdDashboard();
+      } else if (subcommand === 'costs') {
+        const period = args[2] ?? '7d';
+        await cmdDashboardCosts(period);
+      } else if (subcommand === 'tools') {
+        await cmdDashboardTools();
+      } else {
+        console.error(`${red('Error: ')}Unknown dashboard subcommand: ${subcommand}`);
+        console.error('Available: dashboard | dashboard costs [period] | dashboard tools');
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'loop': {
+      const subcommand = args[1];
+      const agentId = args[2];
+
+      if (subcommand === 'status') {
+        if (!agentId) {
+          console.error(`${red('Error: ')}Usage: agentctl loop status <agentId>`);
+          process.exit(1);
+        }
+        await cmdLoopStatus(agentId);
+      } else if (subcommand === 'stop') {
+        if (!agentId) {
+          console.error(`${red('Error: ')}Usage: agentctl loop stop <agentId>`);
+          process.exit(1);
+        }
+        await cmdLoopStop(agentId);
+      } else {
+        console.error(`${red('Error: ')}Unknown loop subcommand: ${subcommand ?? '(none)'}`);
+        console.error('Available: loop status <agentId> | loop stop <agentId>');
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'pool-stats':
+      await cmdPoolStats();
+      break;
 
     default:
       console.error(`${red('Error: ')}Unknown command: ${command}`);
