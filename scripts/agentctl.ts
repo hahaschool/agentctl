@@ -158,7 +158,7 @@ function printTable(headers: string[], rows: string[][]): void {
   const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)));
 
   // Header
-  const headerLine = headers.map((h, i) => h.padEnd(widths[i]!)).join('  ');
+  const headerLine = headers.map((h, i) => h.padEnd(widths[i] ?? 0)).join('  ');
   console.log(bold(headerLine));
 
   // Separator
@@ -167,7 +167,7 @@ function printTable(headers: string[], rows: string[][]): void {
 
   // Rows
   for (const row of rows) {
-    const line = row.map((cell, i) => (cell ?? '').padEnd(widths[i]!)).join('  ');
+    const line = row.map((cell, i) => (cell ?? '').padEnd(widths[i] ?? 0)).join('  ');
     console.log(line);
   }
 }
@@ -180,9 +180,9 @@ async function cmdHealth(): Promise<void> {
   const data = (await request('GET', '/health')) as { status: string; timestamp: string };
 
   if (data.status === 'ok') {
-    console.log(green('✓') + ' Control plane is ' + green('healthy'));
+    console.log(`${green('✓')} Control plane is ${green('healthy')}`);
   } else {
-    console.log(red('✗') + ' Control plane status: ' + red(data.status));
+    console.log(`${red('✗')} Control plane status: ${red(data.status)}`);
   }
   console.log(dim(`  timestamp: ${data.timestamp}`));
   console.log(dim(`  endpoint:  ${CONTROL_URL}`));
@@ -243,7 +243,7 @@ async function cmdStart(agentId: string, prompt: string): Promise<void> {
     prompt,
   })) as Record<string, unknown>;
 
-  console.log(green('✓') + ' Agent start request sent');
+  console.log(`${green('✓')} Agent start request sent`);
   console.log(`  agentId: ${cyan(agentId)}`);
   if (data.jobId) {
     console.log(`  jobId:   ${String(data.jobId)}`);
@@ -257,7 +257,7 @@ async function cmdStop(agentId: string): Promise<void> {
     graceful: true,
   })) as Record<string, unknown>;
 
-  console.log(green('✓') + ' Agent stop request sent');
+  console.log(`${green('✓')} Agent stop request sent`);
   console.log(`  agentId: ${cyan(agentId)}`);
   if (data.removedRepeatableJobs !== undefined) {
     console.log(`  removedRepeatableJobs: ${String(data.removedRepeatableJobs)}`);
@@ -269,7 +269,7 @@ async function cmdSignal(agentId: string, prompt: string): Promise<void> {
     prompt,
   })) as Record<string, unknown>;
 
-  console.log(green('✓') + ' Signal sent to agent');
+  console.log(`${green('✓')} Signal sent to agent`);
   console.log(`  agentId: ${cyan(agentId)}`);
   if (data.jobId) {
     console.log(`  jobId:   ${String(data.jobId)}`);
@@ -376,7 +376,7 @@ async function cmdScheduleAddHeartbeat(
     intervalMs,
   })) as Record<string, unknown>;
 
-  console.log(green('✓') + ' Heartbeat job added');
+  console.log(`${green('✓')} Heartbeat job added`);
   console.log(`  agentId:    ${cyan(agentId)}`);
   console.log(`  machineId:  ${machineId}`);
   console.log(`  intervalMs: ${String(intervalMs)}`);
@@ -398,7 +398,7 @@ async function cmdScheduleAddCron(
 
   const data = (await request('POST', '/api/scheduler/jobs/cron', body)) as Record<string, unknown>;
 
-  console.log(green('✓') + ' Cron job added');
+  console.log(`${green('✓')} Cron job added`);
   console.log(`  agentId:   ${cyan(agentId)}`);
   console.log(`  machineId: ${machineId}`);
   console.log(`  pattern:   ${pattern}`);
@@ -416,7 +416,7 @@ async function cmdScheduleRemove(key: string): Promise<void> {
     `/api/scheduler/jobs/${encodeURIComponent(key)}`,
   )) as Record<string, unknown>;
 
-  console.log(green('✓') + ' Scheduled job removed');
+  console.log(`${green('✓')} Scheduled job removed`);
   console.log(`  key:          ${cyan(key)}`);
   if (data.removedCount !== undefined) {
     console.log(`  removedCount: ${String(data.removedCount)}`);
@@ -428,9 +428,7 @@ async function cmdScheduleRemove(key: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function cmdRuns(agentId: string, limit: number): Promise<void> {
-  const path =
-    `/api/agents/agents/${encodeURIComponent(agentId)}/runs` +
-    (limit ? `?limit=${limit}` : '');
+  const path = `/api/agents/agents/${encodeURIComponent(agentId)}/runs${limit ? `?limit=${limit}` : ''}`;
 
   const data = await request('GET', path);
 
@@ -580,7 +578,7 @@ async function main(): Promise<void> {
       const prompt = args.slice(2).join(' ');
 
       if (!agentId || !prompt) {
-        console.error(red('Error: ') + 'Usage: agentctl start <agentId> <prompt>');
+        console.error(`${red('Error: ')}Usage: agentctl start <agentId> <prompt>`);
         process.exit(1);
       }
 
@@ -592,7 +590,7 @@ async function main(): Promise<void> {
       const agentId = args[1];
 
       if (!agentId) {
-        console.error(red('Error: ') + 'Usage: agentctl stop <agentId>');
+        console.error(`${red('Error: ')}Usage: agentctl stop <agentId>`);
         process.exit(1);
       }
 
@@ -605,7 +603,7 @@ async function main(): Promise<void> {
       const prompt = args.slice(2).join(' ');
 
       if (!agentId || !prompt) {
-        console.error(red('Error: ') + 'Usage: agentctl signal <agentId> <prompt>');
+        console.error(`${red('Error: ')}Usage: agentctl signal <agentId> <prompt>`);
         process.exit(1);
       }
 
@@ -624,13 +622,13 @@ async function main(): Promise<void> {
         const query = args.slice(2).join(' ');
 
         if (!query) {
-          console.error(red('Error: ') + 'Usage: agentctl memory search <query>');
+          console.error(`${red('Error: ')}Usage: agentctl memory search <query>`);
           process.exit(1);
         }
 
         await cmdMemorySearch(query);
       } else {
-        console.error(red('Error: ') + `Unknown memory subcommand: ${subcommand ?? '(none)'}`);
+        console.error(`${red('Error: ')}Unknown memory subcommand: ${subcommand ?? '(none)'}`);
         console.error('Available: memory search <query>');
         process.exit(1);
       }
@@ -675,15 +673,13 @@ async function main(): Promise<void> {
         const key = args[2];
 
         if (!key) {
-          console.error(red('Error: ') + 'Usage: agentctl schedule remove <key>');
+          console.error(`${red('Error: ')}Usage: agentctl schedule remove <key>`);
           process.exit(1);
         }
 
         await cmdScheduleRemove(key);
       } else {
-        console.error(
-          red('Error: ') + `Unknown schedule subcommand: ${subcommand ?? '(none)'}`,
-        );
+        console.error(`${red('Error: ')}Unknown schedule subcommand: ${subcommand ?? '(none)'}`);
         console.error('Available: schedule list | add-heartbeat | add-cron | remove');
         process.exit(1);
       }
@@ -695,12 +691,12 @@ async function main(): Promise<void> {
       const limit = args[2] ? Number(args[2]) : 20;
 
       if (!agentId) {
-        console.error(red('Error: ') + 'Usage: agentctl runs <agentId> [limit]');
+        console.error(`${red('Error: ')}Usage: agentctl runs <agentId> [limit]`);
         process.exit(1);
       }
 
       if (args[2] && (!Number.isFinite(limit) || limit < 1)) {
-        console.error(red('Error: ') + 'Limit must be a positive integer');
+        console.error(`${red('Error: ')}Limit must be a positive integer`);
         process.exit(1);
       }
 
@@ -709,7 +705,7 @@ async function main(): Promise<void> {
     }
 
     default:
-      console.error(red('Error: ') + `Unknown command: ${command}`);
+      console.error(`${red('Error: ')}Unknown command: ${command}`);
       console.error('Run "agentctl help" for usage information.');
       process.exit(1);
   }
@@ -717,7 +713,7 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   if (error instanceof CliError) {
-    console.error(red('Error') + ` [${error.code}]: ${error.message}`);
+    console.error(`${red('Error')} [${error.code}]: ${error.message}`);
     if (error.context?.status) {
       console.error(dim(`  HTTP status: ${String(error.context.status)}`));
     }
