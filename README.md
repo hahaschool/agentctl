@@ -204,7 +204,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 ## Testing
 
 ```bash
-# Run all tests (1658 tests across 71 files)
+# Run all tests (1756 tests across 73 files)
 pnpm test
 
 # Run specific package tests
