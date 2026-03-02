@@ -129,11 +129,15 @@ services:
       - "${AGENT_WORKER_PORT:-9000}:9000"
     environment:
       NODE_ENV: production
-      PORT: "9000"
-      CONTROL_PLANE_URL: ${CONTROL_PLANE_URL:-http://control-plane:8080}
+      WORKER_PORT: "9000"
+      WORKER_HOST: "0.0.0.0"
+      CONTROL_URL: ${CONTROL_URL:-http://control-plane:8080}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       MACHINE_ID: ${MACHINE_ID:-docker-worker-1}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      AUDIT_LOG_DIR: ${AUDIT_LOG_DIR:-/workspace/audit}
+      IPC_DIR: ${IPC_DIR:-/workspace/ipc}
+      PROJECT_PATH: ${PROJECT_PATH:-/workspace/project}
     volumes:
       # Workspace volume for git worktrees — writable by agentctl user
       - worker-workspace:/workspace

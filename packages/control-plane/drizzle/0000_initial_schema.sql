@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS "agents" (
   "machine_id" text REFERENCES "machines"("id"),
   "name" text NOT NULL,
   "type" text NOT NULL,
-  "status" text DEFAULT 'idle',
+  "status" text DEFAULT 'registered',
   "schedule" text,
   "project_path" text,
   "worktree_branch" text,
