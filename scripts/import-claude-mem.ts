@@ -16,16 +16,16 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-type Database = {
+export type Database = {
   prepare(sql: string): { all(): Record<string, unknown>[] };
   close(): void;
 };
 
-type BetterSqlite3Module = {
+export type BetterSqlite3Module = {
   default: new (path: string, options?: { readonly?: boolean }) => Database;
 };
 
-type Observation = {
+export type Observation = {
   id: number;
   content: string;
   obs_type: string;
@@ -35,14 +35,14 @@ type Observation = {
   session_id: string | null;
 };
 
-type SessionSummary = {
+export type SessionSummary = {
   id: number;
   session_id: string;
   summary: string;
   created_at: string;
 };
 
-function parseArgs(argv: string[]): { dbPath: string; mem0Url: string } {
+export function parseArgs(argv: string[]): { dbPath: string; mem0Url: string } {
   const args = argv.slice(2);
   let dbPath = '';
   let mem0Url = 'http://localhost:8000';
@@ -70,7 +70,7 @@ function parseArgs(argv: string[]): { dbPath: string; mem0Url: string } {
   return { dbPath: path.resolve(dbPath), mem0Url };
 }
 
-async function loadBetterSqlite3(): Promise<BetterSqlite3Module> {
+export async function loadBetterSqlite3(): Promise<BetterSqlite3Module> {
   try {
     return (await import('better-sqlite3')) as unknown as BetterSqlite3Module;
   } catch {
@@ -85,7 +85,7 @@ async function loadBetterSqlite3(): Promise<BetterSqlite3Module> {
   }
 }
 
-async function addMemory(
+export async function addMemory(
   mem0Url: string,
   messages: Array<{ role: string; content: string }>,
   metadata: Record<string, unknown>,
@@ -118,7 +118,7 @@ async function addMemory(
   }
 }
 
-async function importObservations(
+export async function importObservations(
   db: Database,
   mem0Url: string,
 ): Promise<{ imported: number; total: number; failed: number }> {
@@ -176,7 +176,7 @@ async function importObservations(
   return { imported, total, failed };
 }
 
-async function importSessionSummaries(
+export async function importSessionSummaries(
   db: Database,
   mem0Url: string,
 ): Promise<{ imported: number; total: number; failed: number }> {
@@ -234,7 +234,7 @@ async function importSessionSummaries(
   return { imported, total, failed };
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const { dbPath, mem0Url } = parseArgs(process.argv);
 
   if (!fs.existsSync(dbPath)) {
@@ -298,7 +298,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: unknown) => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+const isDirectExecution =
+  process.argv[1]?.endsWith('import-claude-mem.ts') ||
+  process.argv[1]?.endsWith('import-claude-mem.js');
+
+if (isDirectExecution) {
+  main().catch((err: unknown) => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
+}

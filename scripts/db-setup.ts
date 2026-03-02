@@ -24,7 +24,7 @@ import pg from 'pg';
 // Error types
 // ---------------------------------------------------------------------------
 
-class DbSetupError extends Error {
+export class DbSetupError extends Error {
   constructor(
     public code: string,
     message: string,
@@ -39,7 +39,7 @@ class DbSetupError extends Error {
 // Types
 // ---------------------------------------------------------------------------
 
-type JournalEntry = {
+export type JournalEntry = {
   idx: number;
   version: string;
   when: number;
@@ -47,7 +47,7 @@ type JournalEntry = {
   breakpoints: boolean;
 };
 
-type Journal = {
+export type Journal = {
   version: string;
   dialect: string;
   entries: JournalEntry[];
@@ -60,17 +60,17 @@ type Journal = {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const MIGRATIONS_DIR = path.resolve(__dirname, '..', 'packages', 'control-plane', 'drizzle');
+export const MIGRATIONS_DIR = path.resolve(__dirname, '..', 'packages', 'control-plane', 'drizzle');
 
-const JOURNAL_PATH = path.join(MIGRATIONS_DIR, 'meta', '_journal.json');
+export const JOURNAL_PATH = path.join(MIGRATIONS_DIR, 'meta', '_journal.json');
 
-const MIGRATIONS_TABLE = '_drizzle_migrations';
+export const MIGRATIONS_TABLE = '_drizzle_migrations';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function loadJournal(): Journal {
+export function loadJournal(): Journal {
   if (!fs.existsSync(JOURNAL_PATH)) {
     throw new DbSetupError('JOURNAL_NOT_FOUND', `Migration journal not found at ${JOURNAL_PATH}`, {
       path: JOURNAL_PATH,
@@ -88,7 +88,7 @@ function loadJournal(): Journal {
   }
 }
 
-function loadMigrationSql(tag: string): string {
+export function loadMigrationSql(tag: string): string {
   const sqlPath = path.join(MIGRATIONS_DIR, `${tag}.sql`);
 
   if (!fs.existsSync(sqlPath)) {
@@ -105,7 +105,7 @@ function loadMigrationSql(tag: string): string {
 // Database operations
 // ---------------------------------------------------------------------------
 
-async function ensureMigrationsTable(pool: pg.Pool): Promise<void> {
+export async function ensureMigrationsTable(pool: pg.Pool): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "${MIGRATIONS_TABLE}" (
       id serial PRIMARY KEY,
@@ -115,14 +115,18 @@ async function ensureMigrationsTable(pool: pg.Pool): Promise<void> {
   `);
 }
 
-async function getAppliedMigrations(pool: pg.Pool): Promise<Set<string>> {
+export async function getAppliedMigrations(pool: pg.Pool): Promise<Set<string>> {
   const result = await pool.query<{ tag: string }>(
     `SELECT tag FROM "${MIGRATIONS_TABLE}" ORDER BY id`,
   );
   return new Set(result.rows.map((row) => row.tag));
 }
 
-async function applyMigration(pool: pg.Pool, entry: JournalEntry, sql: string): Promise<void> {
+export async function applyMigration(
+  pool: pg.Pool,
+  entry: JournalEntry,
+  sql: string,
+): Promise<void> {
   const client = await pool.connect();
 
   try {
@@ -146,7 +150,7 @@ async function applyMigration(pool: pg.Pool, entry: JournalEntry, sql: string): 
 // Main
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
@@ -204,14 +208,19 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  if (error instanceof DbSetupError) {
-    console.error(`Error [${error.code}]: ${error.message}`);
-    if (error.context) {
-      console.error('Context:', JSON.stringify(error.context, null, 2));
+const isDirectExecution =
+  process.argv[1]?.endsWith('db-setup.ts') || process.argv[1]?.endsWith('db-setup.js');
+
+if (isDirectExecution) {
+  main().catch((error: unknown) => {
+    if (error instanceof DbSetupError) {
+      console.error(`Error [${error.code}]: ${error.message}`);
+      if (error.context) {
+        console.error('Context:', JSON.stringify(error.context, null, 2));
+      }
+    } else {
+      console.error('Fatal error:', error);
     }
-  } else {
-    console.error('Fatal error:', error);
-  }
-  process.exit(1);
-});
+    process.exit(1);
+  });
+}

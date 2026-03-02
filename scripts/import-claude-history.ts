@@ -18,7 +18,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 
-type JsonlMessage = {
+export type JsonlMessage = {
   type: string;
   message?: {
     role?: string;
@@ -28,12 +28,12 @@ type JsonlMessage = {
   sessionId?: string;
 };
 
-type ExtractedMessage = {
+export type ExtractedMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
 
-function parseArgs(argv: string[]): { projectsDir: string; mem0Url: string } {
+export function parseArgs(argv: string[]): { projectsDir: string; mem0Url: string } {
   const args = argv.slice(2);
   let projectsDir = '';
   let mem0Url = 'http://localhost:8000';
@@ -61,7 +61,7 @@ function parseArgs(argv: string[]): { projectsDir: string; mem0Url: string } {
   return { projectsDir: path.resolve(projectsDir), mem0Url };
 }
 
-function findJsonlFiles(dir: string): string[] {
+export function findJsonlFiles(dir: string): string[] {
   const files: string[] = [];
 
   function walk(current: string): void {
@@ -86,7 +86,7 @@ function findJsonlFiles(dir: string): string[] {
   return files.sort();
 }
 
-async function readJsonlMessages(filePath: string): Promise<ExtractedMessage[]> {
+export async function readJsonlMessages(filePath: string): Promise<ExtractedMessage[]> {
   const messages: ExtractedMessage[] = [];
 
   const fileStream = fs.createReadStream(filePath, { encoding: 'utf-8' });
@@ -134,7 +134,7 @@ async function readJsonlMessages(filePath: string): Promise<ExtractedMessage[]> 
   return messages;
 }
 
-function buildSessionSummary(messages: ExtractedMessage[]): string {
+export function buildSessionSummary(messages: ExtractedMessage[]): string {
   if (messages.length === 0) return '';
 
   const parts: string[] = [];
@@ -158,7 +158,7 @@ function buildSessionSummary(messages: ExtractedMessage[]): string {
   return parts.join('\n\n');
 }
 
-function extractProjectPath(filePath: string, projectsDir: string): string {
+export function extractProjectPath(filePath: string, projectsDir: string): string {
   // JSONL files are at <projectsDir>/<url-encoded-path>/<session-uuid>.jsonl
   const relative = path.relative(projectsDir, filePath);
   const parentDir = path.dirname(relative);
@@ -171,12 +171,12 @@ function extractProjectPath(filePath: string, projectsDir: string): string {
   }
 }
 
-function extractSessionId(filePath: string): string {
+export function extractSessionId(filePath: string): string {
   // The filename (without extension) is the session UUID
   return path.basename(filePath, '.jsonl');
 }
 
-async function addMemory(
+export async function addMemory(
   mem0Url: string,
   messages: Array<{ role: string; content: string }>,
   metadata: Record<string, unknown>,
@@ -209,7 +209,7 @@ async function addMemory(
   }
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const { projectsDir, mem0Url } = parseArgs(process.argv);
 
   if (!fs.existsSync(projectsDir)) {
@@ -319,7 +319,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: unknown) => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+const isDirectExecution =
+  process.argv[1]?.endsWith('import-claude-history.ts') ||
+  process.argv[1]?.endsWith('import-claude-history.js');
+
+if (isDirectExecution) {
+  main().catch((err: unknown) => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
+}
