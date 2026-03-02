@@ -1,326 +1,283 @@
-# Quickstart: From Zero to First Agent
+# Quickstart Guide
 
-This guide gets you from nothing to a working 2-machine agent fleet in about 2 hours.
+Get AgentCTL running on your machine in ~15 minutes.
 
 ---
 
 ## Prerequisites
 
-- 2+ machines (any combo of: Mac, Linux, EC2)
-- Node.js 20+ on all machines
-- Claude Code installed: `npm install -g @anthropic-ai/claude-code`
-- An Anthropic API key (any tier)
-- A GitHub/GitLab account for code sync
+- **Node.js 20+** (22 recommended)
+- **pnpm 8+**: `npm install -g pnpm`
+- **PostgreSQL 14+**: for the agent registry and run history
+- **Redis 7+**: for the BullMQ task queue
+- **Git**: for worktree management
 
-## Step 1: Install Tailscale on All Machines (10 min)
+Optional:
+- **Tailscale**: for multi-machine mesh networking
+- **Docker & Docker Compose**: for containerized deployment
+- **Claude Code CLI**: `npm install -g @anthropic-ai/claude-code` (needed on worker machines)
 
-```bash
-# On every machine (Mac, Linux, EC2)
-curl -fsSL https://tailscale.com/install.sh | sh
-
-# Machine 1 (will be control plane): 
-sudo tailscale up --hostname=control --advertise-tags=tag:control --ssh
-
-# Machine 2 (will be worker):
-sudo tailscale up --hostname=worker-1 --advertise-tags=tag:worker --ssh
-
-# Verify connectivity
-ping control    # from worker-1
-ping worker-1   # from control
-```
-
-Install Tailscale on your iPhone/iPad too (App Store → Tailscale). Same account.
-
-## Step 2: Set Up the Monorepo (15 min)
+## 1. Clone and Install
 
 ```bash
-# On your dev machine
-mkdir agentctl && cd agentctl
-git init
-
-# Initialize pnpm workspace
-cat > pnpm-workspace.yaml << 'EOF'
-packages:
-  - 'packages/*'
-EOF
-
-cat > package.json << 'EOF'
-{
-  "name": "agentctl",
-  "private": true,
-  "scripts": {
-    "dev:control": "pnpm --filter control-plane dev",
-    "dev:worker": "pnpm --filter agent-worker dev",
-    "build": "pnpm -r build"
-  },
-  "devDependencies": {
-    "typescript": "^5.7.0",
-    "@biomejs/biome": "^1.9.0"
-  }
-}
-EOF
-
-# Create shared types package
-mkdir -p packages/shared/src
-cat > packages/shared/package.json << 'EOF'
-{
-  "name": "@agentctl/shared",
-  "version": "0.1.0",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc" }
-}
-EOF
-
-# Create control plane package
-mkdir -p packages/control-plane/src
-cat > packages/control-plane/package.json << 'EOF'
-{
-  "name": "@agentctl/control-plane",
-  "version": "0.1.0",
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc"
-  },
-  "dependencies": {
-    "@agentctl/shared": "workspace:*",
-    "fastify": "^5.0.0",
-    "bullmq": "^5.0.0",
-    "drizzle-orm": "^0.38.0",
-    "pg": "^8.13.0",
-    "ioredis": "^5.4.0",
-    "pino": "^9.0.0"
-  }
-}
-EOF
-
-# Create agent worker package
-mkdir -p packages/agent-worker/src
-cat > packages/agent-worker/package.json << 'EOF'
-{
-  "name": "@agentctl/agent-worker",
-  "version": "0.1.0",
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc"
-  },
-  "dependencies": {
-    "@agentctl/shared": "workspace:*",
-    "@anthropic-ai/claude-agent-sdk": "^0.2.51",
-    "fastify": "^5.0.0",
-    "pino": "^9.0.0"
-  }
-}
-EOF
-
+git clone https://github.com/hahaschool/agentctl.git
+cd agentctl
 pnpm install
+pnpm build
 ```
 
-## Step 3: Minimal Control Plane (30 min)
+## 2. Set Up Backing Services
+
+### macOS (Homebrew)
 
 ```bash
-# On the control machine, install Redis + PostgreSQL
-# EC2 Ubuntu:
-sudo apt update && sudo apt install -y redis-server postgresql
-sudo systemctl start redis postgresql
-
-# Mac:
 brew install redis postgresql@16
 brew services start redis postgresql@16
-
-# Create database
 createdb agentctl
 ```
 
-Create the minimal control plane server:
+### Ubuntu/Debian
 
-```typescript
-// packages/control-plane/src/index.ts
-import Fastify from 'fastify';
-import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
-
-const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
-const agentQueue = new Queue('agent-tasks', { connection: redis });
-
-const app = Fastify({ logger: true });
-
-// Agent registration
-const agents = new Map<string, { hostname: string; lastHeartbeat: Date; status: string }>();
-
-app.post('/api/agents/register', async (req) => {
-  const { agentId, hostname } = req.body as any;
-  agents.set(agentId, { hostname, lastHeartbeat: new Date(), status: 'online' });
-  return { ok: true, agentId };
-});
-
-app.post('/api/agents/:id/heartbeat', async (req) => {
-  const agent = agents.get(req.params.id);
-  if (agent) agent.lastHeartbeat = new Date();
-  return { ok: true };
-});
-
-// List all agents
-app.get('/api/agents', async () => {
-  return Object.fromEntries(agents);
-});
-
-// Dispatch a task to an agent
-app.post('/api/agents/:id/task', async (req) => {
-  const { prompt, model } = req.body as any;
-  const job = await agentQueue.add('run-agent', {
-    agentId: req.params.id,
-    prompt,
-    model: model || 'sonnet',
-  });
-  return { ok: true, jobId: job.id };
-});
-
-app.listen({ port: 8080, host: '0.0.0.0' }).then(() => {
-  console.log('Control plane running on :8080');
-});
+```bash
+sudo apt update && sudo apt install -y redis-server postgresql
+sudo systemctl start redis postgresql
+sudo -u postgres createdb agentctl
 ```
 
-## Step 4: Minimal Agent Worker (30 min)
+### Docker (alternative)
 
-```typescript
-// packages/agent-worker/src/index.ts
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import { Worker } from 'bullmq';
-import IORedis from 'ioredis';
-import os from 'os';
-
-const CONTROL_PLANE = process.env.CONTROL_URL || 'http://control:8080';
-const AGENT_ID = process.env.AGENT_ID || `agent-${os.hostname()}`;
-const redis = new IORedis(process.env.REDIS_URL || 'redis://control:6379');
-
-// Register with control plane
-async function register() {
-  await fetch(`${CONTROL_PLANE}/api/agents/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agentId: AGENT_ID, hostname: os.hostname() }),
-  });
-}
-
-// Heartbeat every 15s
-setInterval(async () => {
-  try {
-    await fetch(`${CONTROL_PLANE}/api/agents/${AGENT_ID}/heartbeat`, {
-      method: 'POST',
-    });
-  } catch (e) {
-    console.error('Heartbeat failed:', e);
-  }
-}, 15_000);
-
-// Process tasks from the queue
-const worker = new Worker('agent-tasks', async (job) => {
-  if (job.data.agentId !== AGENT_ID) return; // Only process our tasks
-
-  console.log(`Running task: ${job.data.prompt}`);
-
-  for await (const message of query({
-    prompt: job.data.prompt,
-    options: {
-      model: job.data.model,
-      maxTurns: 50,
-      permissionMode: 'acceptEdits',
-    },
-  })) {
-    if (message.type === 'result') {
-      console.log(`Task complete. Cost: $${message.total_cost_usd}`);
-      return {
-        result: message.result,
-        cost: message.total_cost_usd,
-        session_id: message.session_id,
-      };
-    }
-  }
-}, { connection: redis });
-
-register().then(() => console.log(`Worker ${AGENT_ID} started`));
+```bash
+docker run -d --name redis -p 6379:6379 redis:7-alpine
+docker run -d --name postgres -p 5432:5432 \
+  -e POSTGRES_USER=agentctl \
+  -e POSTGRES_PASSWORD=agentctl \
+  -e POSTGRES_DB=agentctl \
+  postgres:16-alpine
 ```
 
-## Step 5: PM2 for Process Persistence (10 min)
+## 3. Configure Environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` — at minimum set these:
+
+```bash
+DATABASE_URL=postgresql://agentctl:agentctl@localhost:5432/agentctl
+REDIS_URL=redis://localhost:6379
+```
+
+All other variables have sensible defaults or enable optional features. See `.env.example` for the full list.
+
+## 4. Start the Control Plane
+
+```bash
+pnpm dev:control
+```
+
+This starts the control plane on `http://localhost:8080`. It will:
+- Auto-run Drizzle database migrations
+- Check PostgreSQL, Redis, Mem0, and LiteLLM connectivity
+- Start the BullMQ task processor
+- Listen for HTTP + WebSocket connections
+
+Verify it's running:
+
+```bash
+curl http://localhost:8080/health | jq .
+# → { "status": "ok", "timestamp": "..." }
+
+# Detailed dependency health:
+curl 'http://localhost:8080/health?detail=true' | jq .
+```
+
+## 5. Start an Agent Worker
+
+On the same machine (or any machine with Redis/Tailscale access):
+
+```bash
+# Set the worker-specific env vars
+export CONTROL_PLANE_URL=http://localhost:8080
+export MACHINE_ID=my-laptop
+export WORKER_PORT=9000
+
+pnpm dev:worker
+```
+
+Verify:
+
+```bash
+curl http://localhost:9000/health | jq .
+```
+
+## 6. Dispatch Your First Task
+
+### Via CLI
+
+```bash
+# Health check
+pnpm tsx scripts/agentctl.ts health
+
+# System status (control plane + worker)
+pnpm tsx scripts/agentctl.ts status
+
+# List agents
+pnpm tsx scripts/agentctl.ts agents
+
+# Start an agent with a prompt
+pnpm tsx scripts/agentctl.ts start my-agent "List the files in the current directory"
+
+# JSON output for scripting
+pnpm tsx scripts/agentctl.ts health --json
+```
+
+### Via HTTP API
+
+```bash
+# Start an agent (auto-creates if it doesn't exist)
+curl -X POST http://localhost:8080/api/agents/my-agent/start \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt": "List files in the current directory", "model": "sonnet"}'
+
+# Check agent status
+curl http://localhost:8080/api/agents | jq .
+
+# Stream agent output (SSE)
+curl -N http://localhost:8080/api/agents/my-agent/stream
+```
+
+### Via WebSocket
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/api/ws');
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: 'start_agent',
+    agentId: 'my-agent',
+    prompt: 'Describe the project structure',
+  }));
+};
+ws.onmessage = (event) => console.log(JSON.parse(event.data));
+```
+
+## 7. Multi-Machine Setup (Optional)
+
+### Install Tailscale on All Machines
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --hostname=control --ssh    # Control machine
+sudo tailscale up --hostname=worker-1 --ssh   # Worker machine
+```
+
+### Start Worker on Remote Machine
+
+```bash
+# On the worker machine (after cloning + pnpm install):
+export CONTROL_PLANE_URL=http://control:8080
+export REDIS_URL=redis://control:6379
+export MACHINE_ID=worker-1
+pnpm dev:worker
+```
+
+### PM2 for Process Persistence
 
 ```bash
 npm install -g pm2
 
-# On control machine
-cat > ecosystem.control.config.cjs << 'EOF'
-module.exports = {
-  apps: [{
-    name: 'control-plane',
-    script: 'pnpm',
-    args: 'dev:control',
-    cwd: '/path/to/agentctl',
-    env: {
-      REDIS_URL: 'redis://localhost:6379',
-      DATABASE_URL: 'postgresql://localhost:5432/agentctl',
-    },
-  }],
-};
-EOF
-pm2 start ecosystem.control.config.cjs
-pm2 save
-pm2 startup  # follow the output instructions
+# On control machine:
+pm2 start infra/pm2/ecosystem.control.config.cjs
+pm2 save && pm2 startup
 
-# On worker machine
-cat > ecosystem.worker.config.cjs << 'EOF'
-module.exports = {
-  apps: [{
-    name: 'agent-worker',
-    script: 'pnpm',
-    args: 'dev:worker',
-    cwd: '/path/to/agentctl',
-    env: {
-      CONTROL_URL: 'http://control:8080',
-      REDIS_URL: 'redis://control:6379',
-      ANTHROPIC_API_KEY: 'sk-ant-...',
-      AGENT_ID: 'worker-mac-mini',
-    },
-  }],
-};
-EOF
-pm2 start ecosystem.worker.config.cjs
-pm2 save
-pm2 startup
+# On worker machine:
+pm2 start infra/pm2/ecosystem.worker.config.cjs
+pm2 save && pm2 startup
 ```
 
-## Step 6: Verify It Works (10 min)
+## 8. Docker Production Deployment
 
 ```bash
-# From any machine on the Tailscale network:
+cd infra/docker
 
-# Check registered agents
-curl http://control:8080/api/agents | jq .
+# Set required env vars
+export POSTGRES_PASSWORD=your-secure-password
 
-# Dispatch a task
-curl -X POST http://control:8080/api/agents/worker-mac-mini/task \
-  -H 'Content-Type: application/json' \
-  -d '{"prompt": "List the files in the current directory and describe what you see"}'
+# Validate configuration
+bash ../../scripts/docker-preflight.sh
 
-# Monitor worker logs
-ssh worker-1 pm2 logs agent-worker --lines 50
+# Start all services
+docker compose -f docker-compose.prod.yml up -d --build
 
-# From your iPhone (in Safari, while connected to Tailscale):
-# Open http://control:8080/api/agents
+# Check health
+docker compose -f docker-compose.prod.yml ps
+curl http://localhost:8080/health?detail=true | jq .
 ```
 
-## What You Now Have
+## Available API Endpoints
 
-- ✅ 2 machines connected via Tailscale mesh
-- ✅ Control plane with agent registry + task queue
-- ✅ Agent worker executing Claude Code tasks
-- ✅ PM2 keeping everything alive through reboots
-- ✅ Basic iOS access via mobile Safari + Tailscale
+### Control Plane (port 8080)
 
-## Next Steps
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check (add `?detail=true` for deps) |
+| GET | `/api/agents` | List all agents |
+| GET | `/api/agents/:id` | Get agent details |
+| POST | `/api/agents/:id/start` | Start/dispatch an agent |
+| POST | `/api/agents/:id/stop` | Stop a running agent |
+| POST | `/api/agents/:id/complete` | Run completion callback |
+| POST | `/api/agents/:id/signal` | Trigger via signal |
+| GET | `/api/agents/:id/stream` | SSE output stream |
+| GET | `/api/agents/:id/runs` | Recent run history |
+| GET | `/api/agents/stats` | Pool statistics |
+| POST | `/api/agents/audit` | Ingest audit actions |
+| GET | `/api/scheduler/jobs` | List scheduled jobs |
+| POST | `/api/scheduler/jobs/heartbeat` | Create heartbeat job |
+| POST | `/api/scheduler/jobs/cron` | Create cron job |
+| DELETE | `/api/scheduler/jobs/:key` | Remove a job |
+| GET | `/api/router/models` | List available models |
+| POST | `/api/memory/inject` | Inject memory context |
+| WS | `/api/ws` | WebSocket control channel |
 
-1. **Add SSE streaming** — Stream agent output to a monitoring endpoint
-2. **Add LiteLLM proxy** — Multi-provider routing for failover
-3. **Add cron scheduling** — BullMQ `repeat` option for periodic agents
-4. **Add git worktree** — Isolate agent work in separate branches
-5. **Add Mem0** — Persistent cross-device memory
-6. **Build React Native app** — Replace Safari with a proper iOS client
+### Agent Worker (port 9000)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check (add `?detail=true`) |
+| GET | `/api/agents` | List running agents |
+| GET | `/api/agents/stats` | Worker pool statistics |
+| POST | `/api/agents/:id/start` | Start agent on this worker |
+| POST | `/api/agents/:id/stop` | Stop agent on this worker |
+| GET | `/api/agents/:id/stream` | SSE output stream |
+
+## Running Tests
+
+```bash
+# All tests (968 tests across 48 files)
+pnpm test
+
+# Specific package
+pnpm --filter @agentctl/shared test
+pnpm --filter @agentctl/control-plane test
+pnpm --filter @agentctl/agent-worker test
+
+# With coverage
+pnpm test:coverage
+```
+
+## Troubleshooting
+
+**Control plane won't start:**
+- Check PostgreSQL is running: `pg_isready`
+- Check Redis is running: `redis-cli ping`
+- Check DATABASE_URL format: `postgresql://user:pass@host:5432/dbname`
+
+**Agent worker can't connect:**
+- Verify control plane URL: `curl http://control:8080/health`
+- Check Redis connectivity: `redis-cli -u redis://control:6379 ping`
+- If using Tailscale: `tailscale status`
+
+**Tasks not being processed:**
+- Check BullMQ queue: `curl http://localhost:8080/api/scheduler/jobs | jq .`
+- Check worker logs: `pm2 logs agent-worker`
+- Verify MACHINE_ID matches what's in the agent registry
