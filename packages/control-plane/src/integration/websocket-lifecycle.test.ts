@@ -891,6 +891,147 @@ describe('Integration: WebSocket lifecycle (iOS-to-agent flow)', () => {
   });
 
   // =========================================================================
+  // 6b. subscribe_agent — SSE subscription error paths
+  // =========================================================================
+
+  describe('subscribe_agent — error paths', () => {
+    it('returns MACHINE_NOT_FOUND when the agent machine is not registered', async () => {
+      vi.mocked(dbRegistry.getAgent).mockResolvedValue(makeAgent());
+      vi.mocked(dbRegistry.getMachine).mockResolvedValue(undefined);
+
+      const messages = await connectAndSend({
+        type: 'subscribe_agent',
+        agentId: 'agent-abc',
+      });
+
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      const errorMsg = messages.find((m) => m.type === 'error');
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg?.code).toBe('MACHINE_NOT_FOUND');
+    });
+
+    it('returns MACHINE_OFFLINE when agent machine is offline during subscribe', async () => {
+      vi.mocked(dbRegistry.getAgent).mockResolvedValue(makeAgent());
+      vi.mocked(dbRegistry.getMachine).mockResolvedValue(makeMachine({ status: 'offline' }));
+
+      const messages = await connectAndSend({
+        type: 'subscribe_agent',
+        agentId: 'agent-abc',
+      });
+
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      const errorMsg = messages.find((m) => m.type === 'error');
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg?.code).toBe('MACHINE_OFFLINE');
+    });
+
+    it('returns INVALID_PARAMS when agentId is missing for subscribe_agent', async () => {
+      const messages = await connectAndSend({
+        type: 'subscribe_agent',
+      });
+
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      const errorMsg = messages.find((m) => m.type === 'error');
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg?.code).toBe('INVALID_PARAMS');
+    });
+
+    it('sends SSE_ERROR when the SSE stream fetch throws a network error', async () => {
+      vi.mocked(dbRegistry.getAgent).mockResolvedValue(makeAgent());
+      vi.mocked(dbRegistry.getMachine).mockResolvedValue(makeMachine());
+
+      // Mock fetch to throw a network error (simulating connection refused)
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+
+      const ws = await openWs();
+
+      sendMessage(ws, { type: 'subscribe_agent', agentId: 'agent-abc' });
+
+      // Wait for the SSE pump to encounter the error and relay it
+      const messages = await waitForMessages(ws, 1, 2000);
+
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      const errorMsg = messages.find((m) => m.type === 'error');
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg?.code).toBe('SSE_ERROR');
+
+      await closeWs(ws);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('sends WORKER_STREAM_ERROR when the SSE stream returns non-ok response', async () => {
+      vi.mocked(dbRegistry.getAgent).mockResolvedValue(makeAgent());
+      vi.mocked(dbRegistry.getMachine).mockResolvedValue(makeMachine());
+
+      // Mock fetch to return a non-ok response (e.g., 503)
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 503,
+          body: null,
+        }),
+      );
+
+      const ws = await openWs();
+
+      sendMessage(ws, { type: 'subscribe_agent', agentId: 'agent-abc' });
+
+      // Wait for the SSE pump to encounter the error and relay it
+      const messages = await waitForMessages(ws, 1, 2000);
+
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      const errorMsg = messages.find((m) => m.type === 'error');
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg?.code).toBe('WORKER_STREAM_ERROR');
+
+      await closeWs(ws);
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  // =========================================================================
+  // 6c. stop_agent — additional error paths
+  // =========================================================================
+
+  describe('stop_agent — additional error paths', () => {
+    it('returns INVALID_PARAMS when agentId is missing for stop_agent', async () => {
+      const messages = await connectAndSend({
+        type: 'stop_agent',
+      });
+
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      const errorMsg = messages.find((m) => m.type === 'error');
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg?.code).toBe('INVALID_PARAMS');
+    });
+
+    it('returns MACHINE_NOT_FOUND when agent machine does not exist during stop', async () => {
+      vi.mocked(dbRegistry.getAgent).mockResolvedValue(makeAgent());
+      vi.mocked(dbRegistry.getMachine).mockResolvedValue(undefined);
+
+      const messages = await connectAndSend({
+        type: 'stop_agent',
+        agentId: 'agent-abc',
+      });
+
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+
+      const errorMsg = messages.find((m) => m.type === 'error');
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg?.code).toBe('MACHINE_NOT_FOUND');
+    });
+  });
+
+  // =========================================================================
   // 7. Send invalid message -> receive error response
   // =========================================================================
 

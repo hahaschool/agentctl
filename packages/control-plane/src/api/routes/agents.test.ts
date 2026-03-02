@@ -408,6 +408,194 @@ describe('Agent routes — with dbRegistry', () => {
   });
 
   // -------------------------------------------------------------------------
+  // POST /api/agents/agents — create agent with dbRegistry
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/agents/agents (with dbRegistry)', () => {
+    it('creates an agent and returns the new agentId', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agents',
+        payload: {
+          machineId: 'machine-1',
+          name: 'my-new-agent',
+          type: 'autonomous',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.agentId).toBe('agent-new');
+      expect(mockDbRegistry.createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          machineId: 'machine-1',
+          name: 'my-new-agent',
+          type: 'autonomous',
+        }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/agents/agents/:agentId/status — validation
+  // -------------------------------------------------------------------------
+
+  describe('PATCH /api/agents/agents/:agentId/status (with dbRegistry)', () => {
+    it('updates agent status with a valid status', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/agents/agent-1/status',
+        payload: { status: 'running' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(mockDbRegistry.updateAgentStatus).toHaveBeenCalledWith('agent-1', 'running');
+    });
+
+    it('returns 400 for an invalid status value', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/agents/agent-1/status',
+        payload: { status: 'bogus_status' },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_STATUS');
+    });
+
+    it('returns 400 when status is empty string', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/agents/agent-1/status',
+        payload: { status: '' },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_STATUS');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/agents/agents/:agentId/runs — with limit parameter
+  // -------------------------------------------------------------------------
+
+  describe('GET /api/agents/agents/:agentId/runs (with dbRegistry)', () => {
+    it('returns runs with default limit when no limit is specified', async () => {
+      vi.mocked(mockDbRegistry.getRecentRuns).mockResolvedValueOnce([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/agent-1/runs',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.getRecentRuns).toHaveBeenCalledWith('agent-1', 20);
+    });
+
+    it('passes a valid limit parameter to getRecentRuns', async () => {
+      vi.mocked(mockDbRegistry.getRecentRuns).mockResolvedValueOnce([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/agent-1/runs?limit=5',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.getRecentRuns).toHaveBeenCalledWith('agent-1', 5);
+    });
+
+    it('falls back to default limit for invalid limit parameter (non-integer)', async () => {
+      vi.mocked(mockDbRegistry.getRecentRuns).mockResolvedValueOnce([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/agent-1/runs?limit=abc',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.getRecentRuns).toHaveBeenCalledWith('agent-1', 20);
+    });
+
+    it('falls back to default limit for limit < 1', async () => {
+      vi.mocked(mockDbRegistry.getRecentRuns).mockResolvedValueOnce([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/agent-1/runs?limit=0',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.getRecentRuns).toHaveBeenCalledWith('agent-1', 20);
+    });
+
+    it('falls back to default limit for negative limit', async () => {
+      vi.mocked(mockDbRegistry.getRecentRuns).mockResolvedValueOnce([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/agent-1/runs?limit=-5',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.getRecentRuns).toHaveBeenCalledWith('agent-1', 20);
+    });
+
+    it('falls back to default limit for fractional limit', async () => {
+      vi.mocked(mockDbRegistry.getRecentRuns).mockResolvedValueOnce([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/agent-1/runs?limit=3.7',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.getRecentRuns).toHaveBeenCalledWith('agent-1', 20);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/agents/agents/:agentId — agent retrieval
+  // -------------------------------------------------------------------------
+
+  describe('GET /api/agents/agents/:agentId (with dbRegistry)', () => {
+    it('returns agent details when agent exists', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/agent-1',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.id).toBe('agent-1');
+      expect(body.machineId).toBe('machine-1');
+    });
+
+    it('returns 404 when agent does not exist', async () => {
+      vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce(undefined as never);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/agents/nonexistent-agent',
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('Agent not found');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // POST /api/agents/:id/complete
   // -------------------------------------------------------------------------
 

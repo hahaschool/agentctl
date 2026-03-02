@@ -462,6 +462,120 @@ describe('createTaskWorker()', () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Worker event handlers (completed, failed, error)
+  // -------------------------------------------------------------------------
+
+  describe('worker event handlers', () => {
+    it('completed event handler logs the job details', () => {
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+      });
+
+      // Find the 'completed' event handler registered via worker.on()
+      const completedCall = mockWorkerInstance.on.mock.calls.find(
+        (c: unknown[]) => c[0] === 'completed',
+      );
+      expect(completedCall).toBeDefined();
+
+      const completedHandler = completedCall[1] as (
+        job: Job<AgentTaskJobData, void, AgentTaskJobName>,
+      ) => void;
+
+      const job = makeJob({ agentId: 'agent-completed-test' });
+      completedHandler(job);
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: 'job-1',
+          agentId: 'agent-completed-test',
+        }),
+        'Job completed',
+      );
+    });
+
+    it('failed event handler logs the job details and error', () => {
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+      });
+
+      // Find the 'failed' event handler registered via worker.on()
+      const failedCall = mockWorkerInstance.on.mock.calls.find((c: unknown[]) => c[0] === 'failed');
+      expect(failedCall).toBeDefined();
+
+      const failedHandler = failedCall[1] as (
+        job: Job<AgentTaskJobData, void, AgentTaskJobName> | undefined,
+        err: Error,
+      ) => void;
+
+      const job = makeJob({ agentId: 'agent-failed-test' });
+      const error = new Error('Processing exploded');
+
+      failedHandler(job, error);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: 'job-1',
+          agentId: 'agent-failed-test',
+          err: error,
+        }),
+        'Job failed',
+      );
+    });
+
+    it('failed event handler handles undefined job gracefully', () => {
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+      });
+
+      const failedCall = mockWorkerInstance.on.mock.calls.find((c: unknown[]) => c[0] === 'failed');
+      expect(failedCall).toBeDefined();
+
+      const failedHandler = failedCall[1] as (
+        job: Job<AgentTaskJobData, void, AgentTaskJobName> | undefined,
+        err: Error,
+      ) => void;
+
+      const error = new Error('Unknown failure');
+
+      // Call with undefined job — should not throw
+      failedHandler(undefined, error);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: undefined,
+          agentId: undefined,
+          err: error,
+        }),
+        'Job failed',
+      );
+    });
+
+    it('error event handler logs the worker-level error', () => {
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+      });
+
+      // Find the 'error' event handler registered via worker.on()
+      const errorCall = mockWorkerInstance.on.mock.calls.find((c: unknown[]) => c[0] === 'error');
+      expect(errorCall).toBeDefined();
+
+      const errorHandler = errorCall[1] as (err: Error) => void;
+      const error = new Error('Redis connection lost');
+
+      errorHandler(error);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ err: error }),
+        'Task worker error',
+      );
+    });
+  });
+
   describe('processor — signal jobs', () => {
     it('logs signalMetadata for agent:signal jobs', async () => {
       const registry = createMockRegistry();
