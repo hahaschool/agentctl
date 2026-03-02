@@ -3,11 +3,10 @@ import type { Job } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { createServer } from '../api/server.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { createTaskWorker } from '../scheduler/task-worker.js';
-import { createServer } from '../api/server.js';
 
 // ---------------------------------------------------------------------------
 // Mock bullmq — capture the processor function passed to Worker constructor
@@ -440,7 +439,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
         url: '/api/agents/agent-abc/complete',
         payload: {
           status: 'success',
-          costUsd: 0.10,
+          costUsd: 0.1,
         },
       });
 

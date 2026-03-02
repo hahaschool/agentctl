@@ -59,7 +59,7 @@ describe('AgentRegistry', () => {
 
       const after = registry.getMachine('machine-1')?.lastHeartbeat;
       expect(after).toBeDefined();
-      expect(after!.getTime()).toBeGreaterThanOrEqual(before!.getTime());
+      expect(after?.getTime()).toBeGreaterThanOrEqual(before?.getTime() ?? 0);
     });
 
     it('does nothing for unknown machine', () => {

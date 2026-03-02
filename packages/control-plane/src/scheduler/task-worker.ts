@@ -195,10 +195,7 @@ export function createTaskWorker({
             );
           }
         } else if (!litellmClient && model) {
-          jobLogger.debug(
-            { model },
-            'LiteLLM client not configured — skipping model validation',
-          );
+          jobLogger.debug({ model }, 'LiteLLM client not configured — skipping model validation');
         }
 
         // -------------------------------------------------------------------

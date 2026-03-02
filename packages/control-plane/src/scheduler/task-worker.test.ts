@@ -23,12 +23,16 @@ const mockWorkerInstance = {
 };
 
 vi.mock('bullmq', () => ({
-  Worker: vi.fn().mockImplementation((queueName: string, processor: ProcessorFn, options: Record<string, unknown>) => {
-    capturedQueueName = queueName;
-    capturedProcessor = processor;
-    capturedOptions = options;
-    return mockWorkerInstance;
-  }),
+  Worker: vi
+    .fn()
+    .mockImplementation(
+      (queueName: string, processor: ProcessorFn, options: Record<string, unknown>) => {
+        capturedQueueName = queueName;
+        capturedProcessor = processor;
+        capturedOptions = options;
+        return mockWorkerInstance;
+      },
+    ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -215,7 +219,9 @@ describe('createTaskWorker()', () => {
       logger,
     });
 
-    const onCalls: string[] = mockWorkerInstance.on.mock.calls.map((c: unknown[]) => c[0] as string);
+    const onCalls: string[] = mockWorkerInstance.on.mock.calls.map(
+      (c: unknown[]) => c[0] as string,
+    );
     expect(onCalls).toContain('completed');
     expect(onCalls).toContain('failed');
     expect(onCalls).toContain('error');
@@ -379,9 +385,9 @@ describe('createTaskWorker()', () => {
 
     it('does not attempt to complete a run when createRun itself fails', async () => {
       const registry = createMockRegistry({
-        createRun: vi.fn().mockRejectedValue(
-          new ControlPlaneError('RUN_CREATE_FAILED', 'DB error', {}),
-        ),
+        createRun: vi
+          .fn()
+          .mockRejectedValue(new ControlPlaneError('RUN_CREATE_FAILED', 'DB error', {})),
       });
       mockFetchSuccess();
 
@@ -404,7 +410,9 @@ describe('createTaskWorker()', () => {
   describe('processor — memory injection', () => {
     it('prepends memory context to the prompt when memoryInjector returns context', async () => {
       const registry = createMockRegistry();
-      const memoryInjector = createMockMemoryInjector('## Relevant Memories\n- User prefers TypeScript');
+      const memoryInjector = createMockMemoryInjector(
+        '## Relevant Memories\n- User prefers TypeScript',
+      );
       mockFetchSuccess();
 
       createTaskWorker({
@@ -485,7 +493,7 @@ describe('createTaskWorker()', () => {
       );
 
       expect(signalLog).toBeDefined();
-      expect((signalLog![0] as Record<string, unknown>).signalMetadata).toEqual({
+      expect((signalLog?.[0] as Record<string, unknown>).signalMetadata).toEqual({
         source: 'webhook',
         eventType: 'pr_merged',
       });

@@ -54,7 +54,7 @@ export function decodeKey(base64Key: string): Uint8Array {
     return decodeBase64(base64Key);
   } catch {
     throw new AgentError('INVALID_KEY_ENCODING', 'Failed to decode base64 key', {
-      keyPreview: base64Key.slice(0, 8) + '...',
+      keyPreview: `${base64Key.slice(0, 8)}...`,
     });
   }
 }

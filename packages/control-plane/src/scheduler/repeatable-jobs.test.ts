@@ -1,10 +1,9 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import type { ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { AgentTaskJobData, AgentTaskJobName } from './task-queue.js';
 import { createRepeatableJobManager, type RepeatableJobManager } from './repeatable-jobs.js';
+import type { AgentTaskJobData, AgentTaskJobName } from './task-queue.js';
 
 const logger = {
   child: () => logger,
@@ -38,7 +37,9 @@ type MockQueue = {
   removeRepeatableByKey: ReturnType<typeof vi.fn>;
 };
 
-function makeMockQueue(overrides: Partial<MockQueue> = {}): Queue<AgentTaskJobData, void, AgentTaskJobName> {
+function makeMockQueue(
+  overrides: Partial<MockQueue> = {},
+): Queue<AgentTaskJobData, void, AgentTaskJobName> {
   return {
     add: vi.fn().mockResolvedValue(undefined),
     getRepeatableJobs: vi.fn().mockResolvedValue([]),
@@ -112,7 +113,9 @@ describe('createRepeatableJobManager()', () => {
     });
 
     it('throws ControlPlaneError with code HEARTBEAT_JOB_ADD_FAILED when queue.add rejects', async () => {
-      (queue.add as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Redis connection refused'));
+      (queue.add as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Redis connection refused'),
+      );
 
       await expect(manager.addHeartbeatJob('agent-1', 30000, makeJobData())).rejects.toMatchObject({
         name: 'ControlPlaneError',
@@ -188,10 +191,12 @@ describe('createRepeatableJobManager()', () => {
     it('throws ControlPlaneError with code CRON_JOB_ADD_FAILED when queue.add rejects', async () => {
       (queue.add as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('queue full'));
 
-      await expect(manager.addCronJob('agent-1', '* * * * *', makeJobData())).rejects.toMatchObject({
-        name: 'ControlPlaneError',
-        code: 'CRON_JOB_ADD_FAILED',
-      });
+      await expect(manager.addCronJob('agent-1', '* * * * *', makeJobData())).rejects.toMatchObject(
+        {
+          name: 'ControlPlaneError',
+          code: 'CRON_JOB_ADD_FAILED',
+        },
+      );
     });
 
     it('includes agentId and cronExpression in the ControlPlaneError context on failure', async () => {
@@ -293,7 +298,9 @@ describe('createRepeatableJobManager()', () => {
     });
 
     it('throws ControlPlaneError with code REPEATABLE_JOB_LIST_FAILED when getRepeatableJobs rejects', async () => {
-      (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Redis error'));
+      (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Redis error'),
+      );
 
       await expect(manager.listRepeatableJobs()).rejects.toMatchObject({
         name: 'ControlPlaneError',
@@ -316,7 +323,13 @@ describe('createRepeatableJobManager()', () => {
 
     it('removes the heartbeat job for the given agentId', async () => {
       (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-        { key: 'heartbeat:agent-1::30000', name: 'agent:heartbeat', pattern: null, every: 30000, next: null },
+        {
+          key: 'heartbeat:agent-1::30000',
+          name: 'agent:heartbeat',
+          pattern: null,
+          every: 30000,
+          next: null,
+        },
       ]);
 
       const count = await manager.removeJobsByAgentId('agent-1');
@@ -328,7 +341,13 @@ describe('createRepeatableJobManager()', () => {
 
     it('removes the cron job for the given agentId', async () => {
       (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-        { key: 'cron:agent-2::0 * * * *', name: 'agent:cron', pattern: '0 * * * *', every: null, next: null },
+        {
+          key: 'cron:agent-2::0 * * * *',
+          name: 'agent:cron',
+          pattern: '0 * * * *',
+          every: null,
+          next: null,
+        },
       ]);
 
       const count = await manager.removeJobsByAgentId('agent-2');
@@ -340,8 +359,20 @@ describe('createRepeatableJobManager()', () => {
 
     it('removes both heartbeat and cron jobs when both exist for the same agentId', async () => {
       (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-        { key: 'heartbeat:agent-3::60000', name: 'agent:heartbeat', pattern: null, every: 60000, next: null },
-        { key: 'cron:agent-3::0 0 * * *', name: 'agent:cron', pattern: '0 0 * * *', every: null, next: null },
+        {
+          key: 'heartbeat:agent-3::60000',
+          name: 'agent:heartbeat',
+          pattern: null,
+          every: 60000,
+          next: null,
+        },
+        {
+          key: 'cron:agent-3::0 0 * * *',
+          name: 'agent:cron',
+          pattern: '0 0 * * *',
+          every: null,
+          next: null,
+        },
       ]);
 
       const count = await manager.removeJobsByAgentId('agent-3');
@@ -352,8 +383,20 @@ describe('createRepeatableJobManager()', () => {
 
     it('does not remove jobs belonging to a different agentId', async () => {
       (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-        { key: 'heartbeat:agent-99::30000', name: 'agent:heartbeat', pattern: null, every: 30000, next: null },
-        { key: 'cron:agent-99::0 * * * *', name: 'agent:cron', pattern: '0 * * * *', every: null, next: null },
+        {
+          key: 'heartbeat:agent-99::30000',
+          name: 'agent:heartbeat',
+          pattern: null,
+          every: 30000,
+          next: null,
+        },
+        {
+          key: 'cron:agent-99::0 * * * *',
+          name: 'agent:cron',
+          pattern: '0 * * * *',
+          every: null,
+          next: null,
+        },
       ]);
 
       const count = await manager.removeJobsByAgentId('agent-1');
@@ -364,9 +407,27 @@ describe('createRepeatableJobManager()', () => {
 
     it('only removes jobs matching the target agentId when multiple agents have jobs', async () => {
       (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-        { key: 'heartbeat:agent-1::30000', name: 'agent:heartbeat', pattern: null, every: 30000, next: null },
-        { key: 'heartbeat:agent-2::30000', name: 'agent:heartbeat', pattern: null, every: 30000, next: null },
-        { key: 'cron:agent-1::0 * * * *', name: 'agent:cron', pattern: '0 * * * *', every: null, next: null },
+        {
+          key: 'heartbeat:agent-1::30000',
+          name: 'agent:heartbeat',
+          pattern: null,
+          every: 30000,
+          next: null,
+        },
+        {
+          key: 'heartbeat:agent-2::30000',
+          name: 'agent:heartbeat',
+          pattern: null,
+          every: 30000,
+          next: null,
+        },
+        {
+          key: 'cron:agent-1::0 * * * *',
+          name: 'agent:cron',
+          pattern: '0 * * * *',
+          every: null,
+          next: null,
+        },
       ]);
 
       const count = await manager.removeJobsByAgentId('agent-1');
@@ -386,8 +447,20 @@ describe('createRepeatableJobManager()', () => {
       const infoSpy = vi.spyOn(logger, 'info');
 
       (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-        { key: 'heartbeat:agent-1::30000', name: 'agent:heartbeat', pattern: null, every: 30000, next: null },
-        { key: 'cron:agent-1::0 * * * *', name: 'agent:cron', pattern: '0 * * * *', every: null, next: null },
+        {
+          key: 'heartbeat:agent-1::30000',
+          name: 'agent:heartbeat',
+          pattern: null,
+          every: 30000,
+          next: null,
+        },
+        {
+          key: 'cron:agent-1::0 * * * *',
+          name: 'agent:cron',
+          pattern: '0 * * * *',
+          every: null,
+          next: null,
+        },
       ]);
 
       await manager.removeJobsByAgentId('agent-1');
@@ -396,7 +469,9 @@ describe('createRepeatableJobManager()', () => {
     });
 
     it('throws ControlPlaneError with code REPEATABLE_JOB_REMOVE_FAILED when getRepeatableJobs rejects', async () => {
-      (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Redis gone'));
+      (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Redis gone'),
+      );
 
       await expect(manager.removeJobsByAgentId('agent-1')).rejects.toMatchObject({
         name: 'ControlPlaneError',
@@ -406,9 +481,17 @@ describe('createRepeatableJobManager()', () => {
 
     it('throws ControlPlaneError with code REPEATABLE_JOB_REMOVE_FAILED when removeRepeatableByKey rejects', async () => {
       (queue.getRepeatableJobs as ReturnType<typeof vi.fn>).mockResolvedValue([
-        { key: 'heartbeat:agent-1::30000', name: 'agent:heartbeat', pattern: null, every: 30000, next: null },
+        {
+          key: 'heartbeat:agent-1::30000',
+          name: 'agent:heartbeat',
+          pattern: null,
+          every: 30000,
+          next: null,
+        },
       ]);
-      (queue.removeRepeatableByKey as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('remove failed'));
+      (queue.removeRepeatableByKey as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('remove failed'),
+      );
 
       await expect(manager.removeJobsByAgentId('agent-1')).rejects.toMatchObject({
         name: 'ControlPlaneError',

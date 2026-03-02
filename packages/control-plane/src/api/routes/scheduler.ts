@@ -29,7 +29,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
 
   app.get('/jobs', async (_request, reply) => {
     try {
-      const jobs = await repeatableJobManager!.listRepeatableJobs();
+      const jobs = await repeatableJobManager?.listRepeatableJobs();
 
       return { jobs };
     } catch (error: unknown) {
@@ -71,7 +71,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
     }
 
     try {
-      await repeatableJobManager!.addHeartbeatJob(agentId, intervalMs, {
+      await repeatableJobManager?.addHeartbeatJob(agentId, intervalMs, {
         agentId,
         machineId,
         prompt: null,
@@ -122,7 +122,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
     }
 
     try {
-      await repeatableJobManager!.addCronJob(agentId, pattern, {
+      await repeatableJobManager?.addCronJob(agentId, pattern, {
         agentId,
         machineId,
         prompt: null,
@@ -150,7 +150,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
     const { key } = request.params;
 
     try {
-      const removedCount = await repeatableJobManager!.removeJobsByAgentId(key);
+      const removedCount = await repeatableJobManager?.removeJobsByAgentId(key);
 
       return { ok: true, key, removedCount };
     } catch (error: unknown) {
@@ -176,7 +176,9 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
     }
 
     try {
-      const jobs = await repeatableJobManager!.listRepeatableJobs();
+      // The preHandler guarantees repeatableJobManager is non-null here.
+      const manager = repeatableJobManager as NonNullable<typeof repeatableJobManager>;
+      const jobs = await manager.listRepeatableJobs();
 
       // Remove jobs one by one using removeJobsByAgentId for each unique agent
       // by extracting the agentId from each job key
@@ -190,7 +192,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
 
         if (!seenAgents.has(agentId)) {
           seenAgents.add(agentId);
-          const removed = await repeatableJobManager!.removeJobsByAgentId(agentId);
+          const removed = await manager.removeJobsByAgentId(agentId);
           totalRemoved += removed;
         }
       }

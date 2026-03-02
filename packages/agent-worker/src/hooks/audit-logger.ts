@@ -92,7 +92,7 @@ export class AuditLogger {
   async write(entry: AuditEntry): Promise<void> {
     this.rotateIfNeeded();
 
-    const line = JSON.stringify(entry) + '\n';
+    const line = `${JSON.stringify(entry)}\n`;
 
     try {
       await appendFile(this.currentPath, line, 'utf-8');

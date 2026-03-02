@@ -49,10 +49,10 @@ function parseArgs(argv: string[]): { dbPath: string; mem0Url: string } {
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--mem0-url' && i + 1 < args.length) {
-      mem0Url = args[i + 1]!;
+      mem0Url = args[i + 1] ?? mem0Url;
       i++;
-    } else if (!args[i]!.startsWith('--')) {
-      dbPath = args[i]!;
+    } else if (!args[i]?.startsWith('--')) {
+      dbPath = args[i] ?? '';
     }
   }
 

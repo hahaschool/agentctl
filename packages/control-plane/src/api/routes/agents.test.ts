@@ -118,9 +118,7 @@ describe('Agent routes — /api/agents', () => {
       });
 
       const body = response.json();
-      const machine = body.find(
-        (m: { machineId: string }) => m.machineId === 'ec2-us-east-1',
-      );
+      const machine = body.find((m: { machineId: string }) => m.machineId === 'ec2-us-east-1');
 
       expect(machine).toBeDefined();
       expect(machine.hostname).toBe('ip-10-0-0-42');
@@ -479,9 +477,7 @@ describe('Agent routes — with dbRegistry', () => {
     });
 
     it('returns 500 on unexpected database error', async () => {
-      vi.mocked(mockDbRegistry.completeRun).mockRejectedValueOnce(
-        new Error('connection lost'),
-      );
+      vi.mocked(mockDbRegistry.completeRun).mockRejectedValueOnce(new Error('connection lost'));
 
       const response = await app.inject({
         method: 'POST',

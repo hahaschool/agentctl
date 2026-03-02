@@ -15,5 +15,8 @@
     "check:fix": "biome check --write .",
     "test": "pnpm -r test",
     "clean": "pnpm -r exec rm -rf dist"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4"
   }
 }

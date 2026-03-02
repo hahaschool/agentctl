@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 
-const WORKER_PORT = Number(process.env['WORKER_PORT']) || 9000;
+const WORKER_PORT = Number(process.env.WORKER_PORT) || 9000;
 
 export type StreamRoutesOptions = {
   registry: MachineRegistryLike;

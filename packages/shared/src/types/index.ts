@@ -1,10 +1,10 @@
-export { AGENT_STATUSES } from './agent.js';
 export type {
   Agent,
   AgentConfig,
   AgentStatus,
   AgentType,
 } from './agent.js';
+export { AGENT_STATUSES } from './agent.js';
 export type {
   AgentRun,
   RunStatus,

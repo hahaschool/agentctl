@@ -112,30 +112,30 @@ export function decodePairingPayload(encoded: string): PairingPayload {
 
   const payload = parsed as Record<string, unknown>;
 
-  if (payload['version'] !== PAIRING_VERSION) {
+  if (payload.version !== PAIRING_VERSION) {
     throw new AgentError(
       'INVALID_PAIRING_VERSION',
-      `Unsupported pairing version: ${payload['version']}`,
+      `Unsupported pairing version: ${payload.version}`,
       {
         expected: PAIRING_VERSION,
-        actual: payload['version'],
+        actual: payload.version,
       },
     );
   }
 
-  if (typeof payload['devicePublicKey'] !== 'string' || payload['devicePublicKey'].length === 0) {
+  if (typeof payload.devicePublicKey !== 'string' || payload.devicePublicKey.length === 0) {
     throw new AgentError('INVALID_PAIRING_PAYLOAD', 'Missing or invalid devicePublicKey');
   }
 
-  if (typeof payload['deviceName'] !== 'string' || payload['deviceName'].length === 0) {
+  if (typeof payload.deviceName !== 'string' || payload.deviceName.length === 0) {
     throw new AgentError('INVALID_PAIRING_PAYLOAD', 'Missing or invalid deviceName');
   }
 
-  if (typeof payload['timestamp'] !== 'number' || !Number.isFinite(payload['timestamp'])) {
+  if (typeof payload.timestamp !== 'number' || !Number.isFinite(payload.timestamp)) {
     throw new AgentError('INVALID_PAIRING_PAYLOAD', 'Missing or invalid timestamp');
   }
 
-  const age = Date.now() - (payload['timestamp'] as number);
+  const age = Date.now() - (payload.timestamp as number);
   if (age > MAX_PAIRING_PAYLOAD_AGE_MS) {
     throw new AgentError(
       'PAIRING_PAYLOAD_EXPIRED',
@@ -149,9 +149,9 @@ export function decodePairingPayload(encoded: string): PairingPayload {
 
   return {
     version: PAIRING_VERSION,
-    devicePublicKey: payload['devicePublicKey'] as string,
-    deviceName: payload['deviceName'] as string,
-    timestamp: payload['timestamp'] as number,
+    devicePublicKey: payload.devicePublicKey as string,
+    deviceName: payload.deviceName as string,
+    timestamp: payload.timestamp as number,
   };
 }
 

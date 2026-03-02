@@ -8,7 +8,7 @@ import type { WebSocket } from 'ws';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
 
-const WORKER_PORT = Number(process.env['WORKER_PORT']) || 9000;
+const WORKER_PORT = Number(process.env.WORKER_PORT) || 9000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // ---------------------------------------------------------------------------

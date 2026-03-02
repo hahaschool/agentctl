@@ -97,8 +97,9 @@ describe('SSE streaming routes', () => {
         const response = await fetch(`${address}/api/agents/catchup-agent/stream`, {
           signal: controller.signal,
         });
-        const reader = response.body!.getReader();
+        const reader = response.body?.getReader();
         const decoder = new TextDecoder();
+        if (!reader) throw new Error('No reader available');
 
         while (true) {
           const { done, value } = await reader.read();

@@ -56,8 +56,7 @@ async function loadSdk(): Promise<ClaudeAgentSdk | null> {
     const mod = await (import('@anthropic-ai/claude-agent-sdk' as string) as Promise<
       Record<string, unknown>
     >);
-    const queryFn =
-      mod['query'] ?? (mod['default'] as Record<string, unknown> | undefined)?.['query'];
+    const queryFn = mod.query ?? (mod.default as Record<string, unknown> | undefined)?.query;
     if (typeof queryFn !== 'function') {
       return null;
     }
@@ -95,18 +94,18 @@ function handleSdkMessage(
   onEvent: (event: AgentEvent) => void,
   accumulator: { totalCost: number; tokensIn: number; tokensOut: number },
 ): void {
-  const messageType = message['type'] as string | undefined;
+  const messageType = message.type as string | undefined;
 
   if (messageType === 'assistant') {
-    const content = (message['content'] as string) ?? '';
+    const content = (message.content as string) ?? '';
     const outputEvent: AgentEvent = {
       event: 'output',
       data: { type: 'text', content },
     };
     onEvent(outputEvent);
   } else if (messageType === 'tool_use') {
-    const toolName = (message['tool_name'] as string) ?? 'unknown';
-    const toolInput = message['tool_input'] ?? {};
+    const toolName = (message.tool_name as string) ?? 'unknown';
+    const toolInput = message.tool_input ?? {};
     const outputEvent: AgentEvent = {
       event: 'output',
       data: {
@@ -116,7 +115,7 @@ function handleSdkMessage(
     };
     onEvent(outputEvent);
   } else if (messageType === 'tool_result') {
-    const content = (message['content'] as string) ?? '';
+    const content = (message.content as string) ?? '';
     const outputEvent: AgentEvent = {
       event: 'output',
       data: { type: 'tool_result', content },
@@ -125,14 +124,14 @@ function handleSdkMessage(
   }
 
   // Emit cost updates whenever usage information is present
-  const usage = message['usage'] as Record<string, number> | undefined;
+  const usage = message.usage as Record<string, number> | undefined;
   if (usage) {
-    const turnCost = (message['turn_cost_usd'] as number) ?? 0;
-    const totalCost = (message['total_cost_usd'] as number) ?? accumulator.totalCost;
+    const turnCost = (message.turn_cost_usd as number) ?? 0;
+    const totalCost = (message.total_cost_usd as number) ?? accumulator.totalCost;
 
     accumulator.totalCost = totalCost;
-    accumulator.tokensIn = usage['input_tokens'] ?? accumulator.tokensIn;
-    accumulator.tokensOut = usage['output_tokens'] ?? accumulator.tokensOut;
+    accumulator.tokensIn = usage.input_tokens ?? accumulator.tokensIn;
+    accumulator.tokensOut = usage.output_tokens ?? accumulator.tokensOut;
 
     const costEvent: AgentEvent = {
       event: 'cost',
@@ -163,7 +162,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
   const sdkOptions = buildSdkOptions(config, projectPath);
 
   logger.info(
-    { agentId, model: sdkOptions['model'], maxTurns: sdkOptions['maxTurns'] },
+    { agentId, model: sdkOptions.model, maxTurns: sdkOptions.maxTurns },
     'Starting Claude Agent SDK run',
   );
 
@@ -191,12 +190,12 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
         break;
       }
 
-      const messageType = message['type'] as string | undefined;
+      const messageType = message.type as string | undefined;
 
       // ── PreToolUse hook: inspect and optionally block tool invocations ──
       if (messageType === 'tool_use' && hooks?.preToolUse) {
-        const toolName = (message['tool_name'] as string) ?? 'unknown';
-        const toolInput = (message['tool_input'] as Record<string, unknown>) ?? {};
+        const toolName = (message.tool_name as string) ?? 'unknown';
+        const toolInput = (message.tool_input as Record<string, unknown>) ?? {};
 
         const decision = await hooks.preToolUse({
           sessionId: finalSessionId,
@@ -228,7 +227,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
 
       // ── PostToolUse hook: record completed tool execution ──
       if (messageType === 'tool_result' && hooks?.postToolUse && currentToolName) {
-        const toolOutput = (message['content'] as string) ?? '';
+        const toolOutput = (message.content as string) ?? '';
         const durationMs = currentToolStart ? Date.now() - currentToolStart : 0;
 
         await hooks.postToolUse({
@@ -248,14 +247,14 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
 
       // Handle the final result message
       if (messageType === 'result') {
-        accumulator.totalCost = (message['total_cost_usd'] as number) ?? accumulator.totalCost;
-        resultText = (message['result'] as string) ?? '';
-        finalSessionId = (message['session_id'] as string) ?? finalSessionId;
+        accumulator.totalCost = (message.total_cost_usd as number) ?? accumulator.totalCost;
+        resultText = (message.result as string) ?? '';
+        finalSessionId = (message.session_id as string) ?? finalSessionId;
 
-        const usage = message['usage'] as Record<string, number> | undefined;
+        const usage = message.usage as Record<string, number> | undefined;
         if (usage) {
-          accumulator.tokensIn = usage['input_tokens'] ?? accumulator.tokensIn;
-          accumulator.tokensOut = usage['output_tokens'] ?? accumulator.tokensOut;
+          accumulator.tokensIn = usage.input_tokens ?? accumulator.tokensIn;
+          accumulator.tokensOut = usage.output_tokens ?? accumulator.tokensOut;
         }
       }
 

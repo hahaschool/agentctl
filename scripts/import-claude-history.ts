@@ -40,10 +40,10 @@ function parseArgs(argv: string[]): { projectsDir: string; mem0Url: string } {
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--mem0-url' && i + 1 < args.length) {
-      mem0Url = args[i + 1]!;
+      mem0Url = args[i + 1] ?? mem0Url;
       i++;
-    } else if (!args[i]!.startsWith('--')) {
-      projectsDir = args[i]!;
+    } else if (!args[i]?.startsWith('--')) {
+      projectsDir = args[i] ?? '';
     }
   }
 
@@ -122,7 +122,7 @@ async function readJsonlMessages(filePath: string): Promise<ExtractedMessage[]> 
       // Claude messages can have content blocks; extract text blocks
       content = parsed.message.content
         .filter((block) => block.type === 'text' && block.text)
-        .map((block) => block.text!)
+        .map((block) => block.text ?? '')
         .join('\n');
     }
 

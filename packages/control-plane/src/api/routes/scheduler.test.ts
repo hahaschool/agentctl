@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { RepeatableJobManager, RepeatableJobInfo } from '../../scheduler/repeatable-jobs.js';
+import type { RepeatableJobInfo, RepeatableJobManager } from '../../scheduler/repeatable-jobs.js';
 import { createServer } from '../server.js';
 
 const logger = {
@@ -116,9 +116,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
     });
 
     it('returns 500 when listRepeatableJobs throws unexpected error', async () => {
-      vi.mocked(mockManager.listRepeatableJobs).mockRejectedValueOnce(
-        new Error('unexpected'),
-      );
+      vi.mocked(mockManager.listRepeatableJobs).mockRejectedValueOnce(new Error('unexpected'));
 
       const response = await app.inject({
         method: 'GET',
@@ -271,9 +269,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
     });
 
     it('returns 500 when addHeartbeatJob throws unexpected error', async () => {
-      vi.mocked(mockManager.addHeartbeatJob).mockRejectedValueOnce(
-        new Error('unexpected'),
-      );
+      vi.mocked(mockManager.addHeartbeatJob).mockRejectedValueOnce(new Error('unexpected'));
 
       const response = await app.inject({
         method: 'POST',
@@ -478,9 +474,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
     });
 
     it('returns 500 when removeJobsByAgentId throws unexpected error', async () => {
-      vi.mocked(mockManager.removeJobsByAgentId).mockRejectedValueOnce(
-        new Error('unexpected'),
-      );
+      vi.mocked(mockManager.removeJobsByAgentId).mockRejectedValueOnce(new Error('unexpected'));
 
       const response = await app.inject({
         method: 'DELETE',
