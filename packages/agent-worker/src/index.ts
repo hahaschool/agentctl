@@ -164,7 +164,7 @@ function createIpcHandler(pool: AgentPool): (msg: IpcMessage) => Promise<IpcResp
       case 'list_agents': {
         const agents = pool.listAgents();
         return createIpcResponse(msg.id, 'ok', {
-          agents: agents as unknown as Record<string, unknown>[],
+          agents: agents.map((a) => ({ ...a })),
         });
       }
 
