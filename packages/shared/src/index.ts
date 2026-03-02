@@ -1,3 +1,4 @@
+export * from './alerts/index.js';
 export * from './config/index.js';
 export * from './crypto/index.js';
 export * from './metrics/index.js';
