@@ -4,7 +4,7 @@
 
 ## Current State
 
-Full CI/CD pipeline with 6 workflow files:
+Full CI/CD pipeline with 9 workflow files:
 
 - **CI** (`ci.yml`): paths-filter, matrix build/test, security scanning, coverage
 - **Docker Build** (`build-images.yml`): multi-stage, Trivy, SBOM, GHCR
@@ -12,8 +12,11 @@ Full CI/CD pipeline with 6 workflow files:
 - **Deploy Dev** (`deploy-dev.yml`): Tailscale SSH, auto-deploy on push to dev
 - **Deploy Prod** (`deploy-prod.yml`): approval gate, blue-green, pg_dump backup
 - **Rollback** (`rollback.yml`): manual rollback to any previous image tag
+- **Fleet Deploy** (`deploy-fleet.yml`): canary/rolling/all-at-once fleet deployment
+- **Migration Check** (`migration-check.yml`): PR validation with throwaway PostgreSQL
+- **Build Images** (`build-images.yml`): multi-stage Docker with Trivy + SBOM
 
-**1756 tests** across 73 files. All packages build cleanly.
+**1984 tests** across 77 files. All packages build cleanly.
 
 ---
 
@@ -83,7 +86,7 @@ Full CI/CD pipeline with 6 workflow files:
 
 - [x] `tailscale/github-action` with ephemeral OAuth client
 - [x] SSH into target via Tailscale IP (zero public ports)
-- [ ] Tailscale ACL: allow `tag:ci` to SSH into `tag:server`
+- [x] Tailscale ACL: allow `tag:ci` to SSH into `tag:server`
 
 ### 3.2 Deploy Steps
 
@@ -185,12 +188,12 @@ Full CI/CD pipeline with 6 workflow files:
 > Goal: Deploy agent-worker to all machines in the Tailscale mesh.
 
 - [x] Machine inventory file (`infra/machines.yml`)
-- [ ] Matrix deploy with canary strategy
-- [ ] Per-machine health verification
-- [ ] Staggered rollout: canary -> verify -> remaining
+- [x] Matrix deploy with canary strategy
+- [x] Per-machine health verification
+- [x] Staggered rollout: canary -> verify -> remaining
 - [ ] Integrate `scripts/setup-machine.sh` for new machine bootstrap
 
-**Deliverable**: `.github/workflows/deploy-fleet.yml`, `infra/machines.yml`
+**Deliverable**: `.github/workflows/deploy-fleet.yml`, `infra/machines.yml` ✅
 
 ---
 
@@ -285,7 +288,7 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 
 ### 9.4 Runtime Security Controls
 
-- [ ] **Agent identity**: unique short-lived tokens per session (not shared machine keys)
+- [x] **Agent identity**: unique short-lived tokens per session (not shared machine keys)
 - [ ] **Network egress**: `--network=none` default; allowlist specific domains per agent
 - [ ] **FS isolation**: worktrees read-only except output dirs; block `.ssh`, `.gnupg`, `.aws`, `.env`
 - [ ] **Memory security**: encrypt sensitive Mem0 fields at rest; TTL auto-expiry; per-agent isolation
@@ -303,14 +306,14 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 - [ ] Log retention: 90 days ClickHouse, 7 days local
 - [x] Tamper detection: hash chain (each entry includes previous hash)
 - [x] Queryable API: `GET /api/audit?agentId=X&from=T1&to=T2&tool=Bash`
-- [ ] Dashboard: top tools, cost by agent, error rates, blocked calls
+- [x] Dashboard: top tools, cost by agent, error rates, blocked calls
 - [x] Incident response: full session replay from audit logs
 
 ### 9.6 Threat Model & Compliance
 
-- [ ] Document AgentCTL-specific threat model (multi-machine, multi-agent, mobile control surface)
-- [ ] Map controls to OWASP Agentic Top 10, NIST AI RMF, Anthropic safety guidelines
-- [ ] Security runbook: incident procedures for rogue agent, credential leak, prompt injection
+- [x] Document AgentCTL-specific threat model (multi-machine, multi-agent, mobile control surface)
+- [x] Map controls to OWASP Agentic Top 10, NIST AI RMF, Anthropic safety guidelines
+- [x] Security runbook: incident procedures for rogue agent, credential leak, prompt injection
 - [ ] Quarterly review cadence for security controls
 
 **Deliverable**: Security audit workflow, audit agent config, runtime hardening, threat model document
