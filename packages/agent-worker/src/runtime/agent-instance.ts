@@ -5,7 +5,9 @@ import type { AgentConfig, AgentEvent, AgentStatus } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
+import type { AuditEntry } from '../hooks/audit-logger.js';
 import { AuditLogger } from '../hooks/audit-logger.js';
+import { AuditReporter } from '../hooks/audit-reporter.js';
 import { createPostToolUseHook } from '../hooks/post-tool-use.js';
 import { createPreToolUseHook } from '../hooks/pre-tool-use.js';
 import { createStopHook } from '../hooks/stop-hook.js';
@@ -78,6 +80,7 @@ export class AgentInstance extends EventEmitter {
   private readonly hooks: SdkRunnerHooks;
   private readonly maxExecutionMs: number;
   private state: AgentInstanceState;
+  private auditReporter: AuditReporter | null = null;
   private simulationTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimer: ReturnType<typeof setInterval> | null = null;
   private executionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -143,6 +146,19 @@ export class AgentInstance extends EventEmitter {
       this.transitionTo('running');
       this.log.info({ sessionId: this.state.sessionId }, 'Agent running');
 
+      // Start per-instance audit reporter if this run is tied to a control plane run.
+      // The reporter tails the same NDJSON file the AuditLogger writes to and
+      // periodically POSTs new entries to the control plane.
+      if (this.controlPlaneUrl && this.runId) {
+        this.auditReporter = new AuditReporter({
+          controlPlaneUrl: this.controlPlaneUrl,
+          runId: this.runId,
+          auditFilePath: this.auditLogger.getLogFilePath(),
+          logger: this.log,
+        });
+        this.auditReporter.start();
+      }
+
       // Start execution timeout timer
       this.executionTimer = setTimeout(() => {
         if (this.state.status === 'running') {
@@ -162,6 +178,9 @@ export class AgentInstance extends EventEmitter {
             data: { status: 'timeout', reason: 'execution_timeout' },
           };
           this.emitEvent(timeoutEvent);
+
+          // Flush remaining audit events before notifying the control plane.
+          void this.stopAuditReporter();
 
           // Fire-and-forget: notify the control plane that this run timed out.
           void this.notifyRunCompletion('failure', 'Agent execution timed out');
@@ -274,6 +293,18 @@ export class AgentInstance extends EventEmitter {
     this.off('agent-event', callback);
   }
 
+  /**
+   * Write an audit entry to the local NDJSON log. When an AuditReporter is
+   * active for this run, the entry will automatically be picked up from the
+   * file and forwarded to the control plane on the next flush cycle.
+   *
+   * This is the public API for future SDK event hooking — callers construct
+   * an {@link AuditEntry} and hand it off here.
+   */
+  async reportAction(entry: AuditEntry): Promise<void> {
+    await this.auditLogger.write(entry);
+  }
+
   toJSON(): Record<string, unknown> {
     return {
       agentId: this.agentId,
@@ -336,6 +367,9 @@ export class AgentInstance extends EventEmitter {
 
       this.emitEvent(statusEvent);
 
+      // Flush remaining audit events before notifying the control plane.
+      void this.stopAuditReporter();
+
       // Fire-and-forget: notify the control plane that this run failed.
       void this.notifyRunCompletion('failure', message);
     }
@@ -355,6 +389,9 @@ export class AgentInstance extends EventEmitter {
       { sessionId: this.state.sessionId, costUsd: this.state.costUsd },
       'Agent stopped',
     );
+
+    // Flush remaining audit events to the control plane before notifying completion.
+    void this.stopAuditReporter();
 
     // Fire-and-forget: notify the control plane that this run completed.
     void this.notifyRunCompletion('success');
@@ -380,6 +417,25 @@ export class AgentInstance extends EventEmitter {
       });
     } catch (err) {
       this.log.warn({ err }, 'Stop hook failed');
+    }
+  }
+
+  /**
+   * Stop the per-instance audit reporter (if one was created) so that any
+   * buffered entries are flushed to the control plane. This is fire-and-forget
+   * — a flush failure should not block agent shutdown.
+   */
+  private async stopAuditReporter(): Promise<void> {
+    if (!this.auditReporter) {
+      return;
+    }
+
+    try {
+      await this.auditReporter.stop();
+    } catch (err) {
+      this.log.warn({ err }, 'Failed to stop per-instance audit reporter');
+    } finally {
+      this.auditReporter = null;
     }
   }
 
