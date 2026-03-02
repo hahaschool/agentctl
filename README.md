@@ -35,10 +35,16 @@ AgentCTL is a unified control plane for orchestrating AI coding agents across mu
 - **Multiple Agent Types** -- autonomous (long-running) + ad-hoc (one-shot) sessions
 - **Trigger Modes** -- heartbeat, cron, manual, signal, ad-hoc
 - **Unified Memory** -- Mem0 cross-device memory with prompt injection
-- **Workspace Isolation** -- git worktree per agent, bare-repo for cross-machine sync
+- **Workspace Isolation** -- git worktree per agent, bare-repo for cross-machine sync; worktree cleanup on shutdown
 - **Multi-Provider Failover** -- LiteLLM routing across Anthropic Direct + Bedrock + Vertex AI
-- **Audit Trail** -- NDJSON action logs with SHA-256 hashes
+- **Audit Trail** -- NDJSON action logs with SHA-256 hashes, batch ingestion API
 - **E2E Encryption** -- TweetNaCl for iOS-to-control-plane communication
+- **Rate Limiting** -- 100 requests/min per IP (health endpoint exempt)
+- **CORS Support** -- configurable per-origin allowlist in production, permissive in development
+- **Request ID Tracing** -- every response includes an `X-Request-Id` header for end-to-end tracing
+- **Environment Validation** -- startup checks for required services (Redis, PostgreSQL)
+- **Graceful Shutdown** -- drains connections and cleans up worktrees on SIGTERM/SIGINT
+- **Global Error Handling** -- typed error codes in responses, no stack traces exposed to clients
 
 ## Tech Stack
 
@@ -116,6 +122,9 @@ npx tsx scripts/agentctl.ts health
 # List registered machines
 npx tsx scripts/agentctl.ts machines
 
+# List registered agents (requires database)
+npx tsx scripts/agentctl.ts agents
+
 # Start an agent with a task
 npx tsx scripts/agentctl.ts start agent-1 "Fix the login bug in auth.ts"
 
@@ -124,6 +133,21 @@ npx tsx scripts/agentctl.ts signal agent-1 "Also update the tests"
 
 # Search agent memory
 npx tsx scripts/agentctl.ts memory search "authentication flow"
+
+# List all scheduled jobs
+npx tsx scripts/agentctl.ts schedule list
+
+# Add a heartbeat job (every 30 seconds)
+npx tsx scripts/agentctl.ts schedule add-heartbeat agent-1 ec2-us-east-1 30000
+
+# Add a cron job (every 5 minutes)
+npx tsx scripts/agentctl.ts schedule add-cron agent-2 mac-mini "*/5 * * * *"
+
+# Remove a scheduled job
+npx tsx scripts/agentctl.ts schedule remove agent-1
+
+# Show recent runs for an agent
+npx tsx scripts/agentctl.ts runs agent-1 10
 ```
 
 ### Docker Production Deployment
@@ -138,40 +162,49 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ### Control Plane (port 8080)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/agents/register` | Register a machine |
-| POST | `/api/agents/:id/heartbeat` | Machine heartbeat |
-| POST | `/api/agents/:id/start` | Start an agent task |
-| POST | `/api/agents/:id/stop` | Stop an agent |
-| POST | `/api/agents/:id/signal` | Signal a running agent |
-| POST | `/api/agents/:id/complete` | Run completion callback |
-| GET | `/api/agents/:id/stream` | SSE output stream |
-| WS | `/api/ws` | WebSocket bidirectional control |
-| GET | `/api/scheduler/jobs` | List repeatable jobs |
-| POST | `/api/scheduler/jobs/heartbeat` | Create heartbeat schedule |
-| POST | `/api/scheduler/jobs/cron` | Create cron schedule |
-| DELETE | `/api/scheduler/jobs/:key` | Remove a scheduled job |
-| GET | `/api/router/models` | List LLM models |
-| POST | `/api/memory/search` | Search agent memory |
-| POST | `/api/audit/actions` | Ingest audit events |
+| Method | Endpoint                         | Description                         |
+|--------|----------------------------------|-------------------------------------|
+| GET    | `/health`                        | Health check                        |
+| POST   | `/api/agents/register`           | Register a machine                  |
+| POST   | `/api/agents/:id/heartbeat`      | Machine heartbeat                   |
+| GET    | `/api/agents`                    | List registered machines            |
+| POST   | `/api/agents/agents`             | Create an agent (DB required)       |
+| GET    | `/api/agents/agents/list`        | List agents (DB required)           |
+| GET    | `/api/agents/agents/:agentId`    | Get agent by ID (DB required)       |
+| PATCH  | `/api/agents/agents/:agentId/status` | Update agent status (DB required) |
+| GET    | `/api/agents/agents/:agentId/runs`   | Recent runs for agent (DB required) |
+| POST   | `/api/agents/:id/start`          | Start an agent task                 |
+| POST   | `/api/agents/:id/stop`           | Stop an agent                       |
+| POST   | `/api/agents/:id/signal`         | Signal a running agent              |
+| POST   | `/api/agents/:id/complete`       | Run completion callback             |
+| GET    | `/api/agents/:id/stream`         | SSE output stream (proxied)         |
+| WS     | `/api/ws`                        | WebSocket bidirectional control     |
+| GET    | `/api/scheduler/jobs`            | List repeatable jobs                |
+| POST   | `/api/scheduler/jobs/heartbeat`  | Create heartbeat schedule           |
+| POST   | `/api/scheduler/jobs/cron`       | Create cron schedule                |
+| DELETE | `/api/scheduler/jobs/:key`       | Remove a scheduled job by key       |
+| DELETE | `/api/scheduler/jobs`            | Remove all jobs (?confirm=true)     |
+| GET    | `/api/router/models`             | List LLM models                     |
+| POST   | `/api/memory/search`             | Search agent memory                 |
+| POST   | `/api/audit/actions`             | Batch-ingest audit events           |
 
 ### Agent Worker (port 9000)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Worker health |
-| GET | `/api/agents` | List pool agents |
-| POST | `/api/agents/:id/start` | Start agent in pool |
-| POST | `/api/agents/:id/stop` | Stop agent |
-| DELETE | `/api/agents/:id` | Remove agent from pool |
-| GET | `/api/agents/:id/stream` | SSE output stream |
+| Method | Endpoint                    | Description                  |
+|--------|-----------------------------|------------------------------|
+| GET    | `/health`                   | Worker health + pool stats   |
+| GET    | `/api/agents`               | List pool agents             |
+| GET    | `/api/agents/stats`         | Aggregate pool statistics    |
+| GET    | `/api/agents/:id`           | Get single agent details     |
+| POST   | `/api/agents/:id/start`     | Start agent in pool          |
+| POST   | `/api/agents/:id/stop`      | Stop agent                   |
+| DELETE | `/api/agents/:id`           | Remove agent from pool       |
+| GET    | `/api/agents/:id/stream`    | SSE output stream            |
 
 ## Testing
 
 ```bash
-# Run all tests (233 tests across 22 files)
+# Run all tests (272 tests across 24 files)
 pnpm test
 
 # Run specific package tests
