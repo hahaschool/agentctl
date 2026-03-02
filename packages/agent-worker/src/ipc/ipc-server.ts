@@ -12,12 +12,14 @@ import {
 } from './ipc-channel.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
+const DEFAULT_HANDLER_TIMEOUT_MS = 30_000;
 
 export type IpcServerOptions = {
   ipcDir: string;
   agentId: string;
   logger: Logger;
   pollIntervalMs?: number;
+  handlerTimeoutMs?: number;
 };
 
 export type IpcMessageHandler = (msg: IpcMessage) => Promise<IpcResponse>;
@@ -36,6 +38,7 @@ export class IpcServer {
   private readonly agentId: string;
   private readonly logger: Logger;
   private readonly pollIntervalMs: number;
+  private readonly handlerTimeoutMs: number;
 
   private handler: IpcMessageHandler | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -46,6 +49,7 @@ export class IpcServer {
     this.agentId = options.agentId;
     this.logger = options.logger;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this.handlerTimeoutMs = options.handlerTimeoutMs ?? DEFAULT_HANDLER_TIMEOUT_MS;
   }
 
   /**
@@ -111,6 +115,17 @@ export class IpcServer {
     this.processing = true;
 
     try {
+      // Verify IPC directory is still accessible before reading.
+      try {
+        await fs.access(this.ipcDir);
+      } catch {
+        this.logger.warn(
+          { agentId: this.agentId, ipcDir: this.ipcDir },
+          'IPC directory is not accessible, skipping poll cycle',
+        );
+        return;
+      }
+
       const entries = await fs.readdir(this.ipcDir);
       const cmdFiles = entries.filter((f) => f.endsWith(CMD_EXTENSION)).sort(); // Process in lexicographic order for determinism.
 
@@ -175,7 +190,7 @@ export class IpcServer {
       });
     } else {
       try {
-        response = await this.handler(message);
+        response = await this.runHandlerWithTimeout(this.handler, message);
       } catch (err) {
         this.logger.error(
           { agentId: this.agentId, messageId: message.id, err },
@@ -203,6 +218,57 @@ export class IpcServer {
     // Remove the command file to signal that the message has been
     // processed (and prevent re-processing on the next poll).
     await this.safeUnlink(cmdPath);
+  }
+
+  /**
+   * Run a handler with a timeout. If the handler does not resolve within
+   * `handlerTimeoutMs`, a HANDLER_TIMEOUT error response is returned
+   * instead of waiting indefinitely.
+   */
+  private async runHandlerWithTimeout(
+    handler: IpcMessageHandler,
+    message: IpcMessage,
+  ): Promise<IpcResponse> {
+    return new Promise<IpcResponse>((resolve, reject) => {
+      let settled = false;
+
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          this.logger.warn(
+            {
+              agentId: this.agentId,
+              messageId: message.id,
+              timeoutMs: this.handlerTimeoutMs,
+            },
+            'IPC handler timed out',
+          );
+          resolve(
+            createIpcResponse(message.id, 'error', {
+              code: 'HANDLER_TIMEOUT',
+              message: `Command handler timed out after ${this.handlerTimeoutMs}ms`,
+            }),
+          );
+        }
+      }, this.handlerTimeoutMs);
+
+      handler(message).then(
+        (result) => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(result);
+          }
+        },
+        (err: unknown) => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            reject(err);
+          }
+        },
+      );
+    });
   }
 
   /**

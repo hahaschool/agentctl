@@ -3,9 +3,15 @@ import path from 'node:path';
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
-import { CMD_EXTENSION, type IpcMessage, type IpcResponse, RSP_EXTENSION } from './ipc-channel.js';
+import {
+  CMD_EXTENSION,
+  createIpcResponse,
+  type IpcMessage,
+  type IpcResponse,
+  RSP_EXTENSION,
+} from './ipc-channel.js';
 
-const DEFAULT_RESPONSE_TIMEOUT_MS = 30_000;
+const DEFAULT_RESPONSE_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 100;
 
 export type IpcClientOptions = {
@@ -38,7 +44,12 @@ export class IpcClient {
    * Writes `{id}.cmd.json`, then polls for `{id}.rsp.json` until the
    * response appears or the timeout is exceeded.
    *
-   * @throws {WorkerError} with code `IPC_TIMEOUT` if no response within timeout.
+   * Returns an error response with code `RESPONSE_TIMEOUT` if no response
+   * file appears within the configured timeout. This guarantees callers
+   * always receive an `IpcResponse` without needing to handle exceptions
+   * for the timeout case.
+   *
+   * @throws {WorkerError} with code `IPC_READ_ERROR` only for unexpected I/O errors.
    */
   async send(message: IpcMessage): Promise<IpcResponse> {
     await this.writeCommandFile(message);
@@ -79,11 +90,19 @@ export class IpcClient {
       await this.sleep(POLL_INTERVAL_MS);
     }
 
-    throw new WorkerError(
-      'IPC_TIMEOUT',
-      `No response received for message '${message.id}' within ${this.responseTimeoutMs}ms`,
+    this.logger.warn(
       { messageId: message.id, timeoutMs: this.responseTimeoutMs, ipcDir: this.ipcDir },
+      'IPC response timed out',
     );
+
+    // Clean up the command file that was never picked up.
+    const cmdPath = path.join(this.ipcDir, message.id + CMD_EXTENSION);
+    await this.safeUnlink(cmdPath);
+
+    return createIpcResponse(message.id, 'error', {
+      code: 'RESPONSE_TIMEOUT',
+      message: `No response received within ${this.responseTimeoutMs}ms`,
+    });
   }
 
   /**
