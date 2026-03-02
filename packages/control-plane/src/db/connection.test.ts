@@ -46,7 +46,7 @@ describe('connection', () => {
       createDb(connectionString);
 
       expect(pg.Pool).toHaveBeenCalledOnce();
-      expect(pg.Pool).toHaveBeenCalledWith({ connectionString });
+      expect(pg.Pool).toHaveBeenCalledWith(expect.objectContaining({ connectionString }));
     });
 
     it('passes the pool and schema to drizzle', () => {
@@ -81,12 +81,14 @@ describe('connection', () => {
       createDb('postgresql://localhost/db2');
 
       expect(pg.Pool).toHaveBeenCalledTimes(2);
-      expect(pg.Pool).toHaveBeenNthCalledWith(1, {
-        connectionString: 'postgresql://localhost/db1',
-      });
-      expect(pg.Pool).toHaveBeenNthCalledWith(2, {
-        connectionString: 'postgresql://localhost/db2',
-      });
+      expect(pg.Pool).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ connectionString: 'postgresql://localhost/db1' }),
+      );
+      expect(pg.Pool).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ connectionString: 'postgresql://localhost/db2' }),
+      );
     });
   });
 

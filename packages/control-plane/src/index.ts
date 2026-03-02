@@ -130,6 +130,12 @@ async function checkDependencyHealth(deps: DependencyHealthDeps): Promise<void> 
 async function main(): Promise<void> {
   const redisConnection = new IORedis.default(REDIS_URL, {
     maxRetriesPerRequest: null,
+    connectTimeout: 10_000,
+    retryStrategy(times) {
+      const delay = Math.min(times * 200, 5_000);
+      return delay;
+    },
+    lazyConnect: false,
   });
 
   logger.info({ redisUrl: REDIS_URL }, 'Connecting to Redis');
