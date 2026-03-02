@@ -122,8 +122,8 @@ Full CI/CD pipeline with 9 workflow files:
 
 ### 4.1 Migration in CI (PR Validation)
 
-- [ ] On PRs touching `drizzle/**`: run `drizzle-kit generate`, validate SQL
-- [ ] Spin up throwaway PostgreSQL (`services:`) and apply migration
+- [x] On PRs touching `drizzle/**`: run `drizzle-kit generate`, validate SQL
+- [x] Spin up throwaway PostgreSQL (`services:`) and apply migration
 
 ### 4.2 Migration in CD (Deploy-Time)
 
