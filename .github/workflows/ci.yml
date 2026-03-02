@@ -32,12 +32,14 @@ jobs:
       shared: ${{ steps.filter.outputs.shared }}
       control-plane: ${{ steps.filter.outputs.control-plane }}
       agent-worker: ${{ steps.filter.outputs.agent-worker }}
+      mobile: ${{ steps.filter.outputs.mobile }}
       infra: ${{ steps.filter.outputs.infra }}
       any-package: >-
         ${{
           steps.filter.outputs.shared == 'true'
           || steps.filter.outputs.control-plane == 'true'
           || steps.filter.outputs.agent-worker == 'true'
+          || steps.filter.outputs.mobile == 'true'
         }}
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +59,11 @@ jobs:
               - 'pnpm-lock.yaml'
             agent-worker:
               - 'packages/agent-worker/**'
+              - 'packages/shared/**'
+              - 'tsconfig.base.json'
+              - 'pnpm-lock.yaml'
+            mobile:
+              - 'packages/mobile/**'
               - 'packages/shared/**'
               - 'tsconfig.base.json'
               - 'pnpm-lock.yaml'
@@ -96,6 +103,7 @@ jobs:
             packages/shared/node_modules
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
+            packages/mobile/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
   # ---------------------------------------------------------------------------
@@ -127,6 +135,7 @@ jobs:
             packages/shared/node_modules
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
+            packages/mobile/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Single Biome invocation covers all categories — no need for separate
@@ -168,6 +177,7 @@ jobs:
             packages/shared/node_modules
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
+            packages/mobile/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Restore TypeScript build cache
@@ -177,6 +187,7 @@ jobs:
             packages/shared/.tsbuildinfo
             packages/control-plane/.tsbuildinfo
             packages/agent-worker/.tsbuildinfo
+            packages/mobile/.tsbuildinfo
           key: tsbuildinfo-${{ runner.os }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
           restore-keys: |
             tsbuildinfo-${{ runner.os }}-
@@ -199,6 +210,10 @@ jobs:
         if: github.event_name == 'pull_request' && needs.changes.outputs.agent-worker == 'true'
         run: pnpm --filter @agentctl/agent-worker... build
 
+      - name: Build mobile
+        if: github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true'
+        run: pnpm --filter @agentctl/mobile... build
+
       # Upload dist/ artifacts so the test job does not need to rebuild
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -208,9 +223,11 @@ jobs:
             packages/shared/dist
             packages/control-plane/dist
             packages/agent-worker/dist
+            packages/mobile/dist
             packages/shared/.tsbuildinfo
             packages/control-plane/.tsbuildinfo
             packages/agent-worker/.tsbuildinfo
+            packages/mobile/.tsbuildinfo
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -225,12 +242,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [shared, control-plane, agent-worker]
+        package: [shared, control-plane, agent-worker, mobile]
         exclude:
           # On PRs, exclude packages that did not change
           - package: ${{ needs.changes.outputs.shared != 'true' && github.event_name == 'pull_request' && 'shared' || 'SKIP_NONE' }}
           - package: ${{ needs.changes.outputs.control-plane != 'true' && github.event_name == 'pull_request' && 'control-plane' || 'SKIP_NONE' }}
           - package: ${{ needs.changes.outputs.agent-worker != 'true' && github.event_name == 'pull_request' && 'agent-worker' || 'SKIP_NONE' }}
+          - package: ${{ needs.changes.outputs.mobile != 'true' && github.event_name == 'pull_request' && 'mobile' || 'SKIP_NONE' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -252,6 +270,7 @@ jobs:
             packages/shared/node_modules
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
+            packages/mobile/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Reuse build output from the build job — no second `pnpm build`

@@ -111,6 +111,9 @@ importers:
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^3.2.4
+        version: 3.2.4(vitest@3.2.4)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
