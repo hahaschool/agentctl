@@ -36,6 +36,8 @@ export const agents = pgTable('agents', {
   config: jsonb('config').default({}),
   /** Scheduled session configuration (sessionMode, promptTemplate, pattern, timezone). */
   scheduleConfig: jsonb('schedule_config'),
+  /** Loop configuration (mode, limits, delay). Stores LoopConfig from @agentctl/shared. */
+  loopConfig: jsonb('loop_config'),
   lastRunAt: timestamp('last_run_at', { withTimezone: true }),
   lastCostUsd: numeric('last_cost_usd', { precision: 10, scale: 6 }),
   totalCostUsd: numeric('total_cost_usd', { precision: 12, scale: 6 }).default('0'),
@@ -57,6 +59,10 @@ export const agentRuns = pgTable('agent_runs', {
   sessionId: text('session_id'),
   errorMessage: text('error_message'),
   resultSummary: text('result_summary'),
+  /** Which iteration of a loop this run represents (null for non-loop runs). */
+  loopIteration: integer('loop_iteration'),
+  /** Links sub-runs to their parent loop run (null for top-level runs). */
+  parentRunId: text('parent_run_id'),
 });
 
 export const agentActions = pgTable('agent_actions', {

@@ -19,6 +19,7 @@ import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { agentRoutes } from './routes/agents.js';
 import { auditRoutes } from './routes/audit.js';
+import { checkpointRoutes } from './routes/checkpoint.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
@@ -190,6 +191,15 @@ export async function createServer({
     prefix: '/api/scheduler',
     repeatableJobManager: repeatableJobs ?? null,
   });
+
+  // Register checkpoint routes when both dbRegistry and db are available.
+  if (dbRegistry && db) {
+    await app.register(checkpointRoutes, {
+      prefix: '/api/agents',
+      dbRegistry,
+      db,
+    });
+  }
 
   // --- Global error handler ---
   app.setErrorHandler<FastifyError>((err, request, reply) => {

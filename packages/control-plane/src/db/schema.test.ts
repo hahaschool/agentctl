@@ -184,8 +184,8 @@ describe('machines table columns', () => {
 describe('agents table columns', () => {
   const meta = getColumnMeta(agents);
 
-  it('has exactly 15 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(15);
+  it('has exactly 16 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(16);
   });
 
   it('has all expected column keys', () => {
@@ -201,6 +201,7 @@ describe('agents table columns', () => {
       'currentSessionId',
       'config',
       'scheduleConfig',
+      'loopConfig',
       'lastRunAt',
       'lastCostUsd',
       'totalCostUsd',
@@ -320,6 +321,7 @@ describe('agents table columns', () => {
       'current_session_id',
       'config',
       'schedule_config',
+      'loop_config',
       'last_run_at',
       'last_cost_usd',
       'total_cost_usd',
@@ -331,8 +333,8 @@ describe('agents table columns', () => {
 describe('agentRuns table columns', () => {
   const meta = getColumnMeta(agentRuns);
 
-  it('has exactly 14 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(14);
+  it('has exactly 16 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(16);
   });
 
   it('has all expected column keys', () => {
@@ -351,6 +353,8 @@ describe('agentRuns table columns', () => {
       'sessionId',
       'errorMessage',
       'resultSummary',
+      'loopIteration',
+      'parentRunId',
     ];
     expect(Object.keys(meta)).toEqual(expectedKeys);
   });
@@ -467,6 +471,8 @@ describe('agentRuns table columns', () => {
       'session_id',
       'error_message',
       'result_summary',
+      'loop_iteration',
+      'parent_run_id',
     ]);
   });
 });
@@ -629,6 +635,7 @@ describe('Required (NOT NULL) vs nullable columns', () => {
       'currentSessionId',
       'config',
       'scheduleConfig',
+      'loopConfig',
       'lastRunAt',
       'lastCostUsd',
       'totalCostUsd',
@@ -662,6 +669,8 @@ describe('Required (NOT NULL) vs nullable columns', () => {
       'sessionId',
       'errorMessage',
       'resultSummary',
+      'loopIteration',
+      'parentRunId',
     ]);
   });
 
@@ -714,8 +723,8 @@ describe('Enum compatibility with shared package types', () => {
   });
 
   it('AgentType values are valid strings for agents.type text column', () => {
-    const types: AgentType[] = ['heartbeat', 'cron', 'manual', 'adhoc'];
-    expect(types).toHaveLength(4);
+    const types: AgentType[] = ['heartbeat', 'cron', 'manual', 'adhoc', 'loop'];
+    expect(types).toHaveLength(5);
 
     const meta = getColumnMeta(agents);
     expect(meta.type.columnType).toBe('PgText');
@@ -886,6 +895,8 @@ describe('Default values', () => {
     expect(runCols.startedAt.hasDefault).toBe(false);
     expect(runCols.finishedAt.hasDefault).toBe(false);
     expect(runCols.costUsd.hasDefault).toBe(false);
+    expect(runCols.loopIteration.hasDefault).toBe(false);
+    expect(runCols.parentRunId.hasDefault).toBe(false);
 
     const actionCols = getTableColumns(agentActions);
     expect(actionCols.actionType.hasDefault).toBe(false);

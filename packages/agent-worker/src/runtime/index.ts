@@ -1,5 +1,10 @@
 export { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 export { AgentPool } from './agent-pool.js';
+export {
+  type CheckpointConfig,
+  type CheckpointData,
+  LoopCheckpoint,
+} from './loop-checkpoint.js';
 export { OutputBuffer } from './output-buffer.js';
 export {
   runWithSdk,
