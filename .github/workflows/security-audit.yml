@@ -1,0 +1,199 @@
+# Phase 9.2 — Automated Security Pipeline
+# Runs CodeQL, Semgrep, dependency audit, secret scanning, and container scanning
+# on every PR to main/dev and nightly at 03:00 UTC.
+
+name: Security Audit
+
+on:
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    # Nightly at 03:00 UTC
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # ── CodeQL static analysis ──────────────────────────────────────
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
+
+  # ── Semgrep SAST ────────────────────────────────────────────────
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    container:
+      image: semgrep/semgrep
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: semgrep scan --config p/security-audit --config p/secrets --sarif --output semgrep-results.sarif .
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: Upload Semgrep SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep
+
+  # ── Dependency audit + license check ────────────────────────────
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies (fail on high/critical)
+        run: pnpm audit --audit-level=high
+
+      - name: Check licenses for GPL/AGPL
+        run: |
+          pnpm licenses list --json > licenses.json
+
+          # Scan for GPL or AGPL licenses (excluding LGPL which is permissive)
+          VIOLATIONS=$(cat licenses.json | \
+            node -e "
+              const data = require('fs').readFileSync('/dev/stdin', 'utf8');
+              const parsed = JSON.parse(data);
+              const violations = [];
+              for (const [license, packages] of Object.entries(parsed)) {
+                const upper = license.toUpperCase();
+                if ((upper.includes('GPL') || upper.includes('AGPL')) && !upper.includes('LGPL')) {
+                  for (const pkg of packages) {
+                    violations.push(pkg.name + '@' + pkg.version + ' (' + license + ')');
+                  }
+                }
+              }
+              if (violations.length > 0) {
+                console.error('GPL/AGPL license violations found:');
+                violations.forEach(v => console.error('  - ' + v));
+                process.exit(1);
+              }
+              console.log('No GPL/AGPL license violations found.');
+            ")
+
+  # ── Secret scanning ─────────────────────────────────────────────
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Container image scanning ────────────────────────────────────
+  container-scan:
+    name: Container Scan (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: agentctl-control-plane
+            dockerfile: infra/docker/Dockerfile.control-plane
+          - image: agentctl-agent-worker
+            dockerfile: infra/docker/Dockerfile.agent-worker
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: ${{ matrix.image }}:audit
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy vulnerability scan (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.image }}:audit
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}
+
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.image }}:audit
+          format: cyclonedx
+          output: sbom-${{ matrix.image }}.cdx.json
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image }}
+          path: sbom-${{ matrix.image }}.cdx.json
+          retention-days: 90
