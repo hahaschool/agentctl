@@ -21,3 +21,24 @@ export type {
   LoopStatus,
 } from './loop.js';
 export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
+export type {
+  ReplayEvent,
+  ReplayFilter,
+  SessionTimeline,
+} from './session-replay.js';
+export type { StatusTransition } from './status-machine.js';
+export {
+  getStatusDescription,
+  getValidNextStatuses,
+  isTerminalStatus,
+  isValidTransition,
+  VALID_TRANSITIONS,
+  validateTransition,
+} from './status-machine.js';
+export type {
+  WebhookConfig,
+  WebhookEventType,
+  WebhookPayload,
+  WebhookProvider,
+} from './webhook.js';
+export { WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from './webhook.js';

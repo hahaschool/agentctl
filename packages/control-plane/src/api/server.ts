@@ -25,6 +25,7 @@ import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
+import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { streamRoutes } from './routes/stream.js';
@@ -166,6 +167,11 @@ export async function createServer({
   if (dbRegistry) {
     await app.register(auditRoutes, {
       prefix: '/api/audit',
+      dbRegistry,
+    });
+
+    await app.register(replayRoutes, {
+      prefix: '/api/audit/replay',
       dbRegistry,
     });
   }
