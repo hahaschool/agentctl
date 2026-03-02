@@ -1,8 +1,8 @@
 import os from 'node:os';
 import { join } from 'node:path';
 
-import type { AgentConfig } from '@agentctl/shared';
-import { AgentError } from '@agentctl/shared';
+import type { AgentConfig, EnvVar } from '@agentctl/shared';
+import { AgentError, isNumericString, isValidLogLevel, validateEnv } from '@agentctl/shared';
 
 import { createWorkerServer } from './api/server.js';
 import { HealthReporter } from './health-reporter.js';
@@ -13,18 +13,53 @@ import { createLogger } from './logger.js';
 import { AgentPool } from './runtime/index.js';
 import { WorktreeManager } from './worktree/index.js';
 
-const logger = createLogger('agent-worker');
+// ── Environment validation ────────────────────────────────────────────
+const AGENT_WORKER_ENV: EnvVar[] = [
+  {
+    name: 'WORKER_PORT',
+    default: '9000',
+    validate: isNumericString,
+    description: 'Worker API port for agent management HTTP endpoints',
+  },
+  {
+    name: 'WORKER_HOST',
+    default: '0.0.0.0',
+    description: 'Bind address for the worker server',
+  },
+  {
+    name: 'CONTROL_URL',
+    description: 'Control plane URL for health and audit reporting',
+  },
+  {
+    name: 'MACHINE_ID',
+    default: `machine-${os.hostname()}`,
+    description: 'Unique machine identifier (must be different on each machine)',
+  },
+  {
+    name: 'PROJECT_PATH',
+    description: 'Root project path for git worktree isolation',
+  },
+  {
+    name: 'LOG_LEVEL',
+    default: 'info',
+    validate: isValidLogLevel,
+    description: 'Log level (fatal, error, warn, info, debug, trace, silent)',
+  },
+];
 
-const PORT = Number(process.env.WORKER_PORT) || 9000;
-const HOST = process.env.WORKER_HOST || '0.0.0.0';
-const CONTROL_PLANE_URL = process.env.CONTROL_URL || 'http://control:8080';
-const MACHINE_ID = process.env.MACHINE_ID || `machine-${os.hostname()}`;
+const logger = createLogger('agent-worker');
+const env = validateEnv(AGENT_WORKER_ENV, logger);
+
+const PORT = Number(env.WORKER_PORT);
+const HOST = env.WORKER_HOST as string;
+const CONTROL_PLANE_URL = env.CONTROL_URL || 'http://control:8080';
+const MACHINE_ID = env.MACHINE_ID as string;
 const MAX_CONCURRENT_AGENTS = Number(process.env.MAX_CONCURRENT_AGENTS) || 3;
 const AUDIT_LOG_DIR = process.env.AUDIT_LOG_DIR || '.agentctl/audit';
 const IPC_DIR = process.env.IPC_DIR || '.agentctl/ipc';
 const RUN_ID = process.env.RUN_ID || '';
 const AUDIT_FLUSH_INTERVAL_MS = Number(process.env.AUDIT_FLUSH_INTERVAL_MS) || 5_000;
-const PROJECT_PATH = process.env.PROJECT_PATH || '';
+const PROJECT_PATH = env.PROJECT_PATH || '';
 
 /**
  * Dispatch an incoming IPC message to the correct pool operation based

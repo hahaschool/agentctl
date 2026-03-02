@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { EnvVar } from '@agentctl/shared';
+import { isNumericString, isValidLogLevel, validateEnv } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import IORedis from 'ioredis';
 
@@ -16,17 +18,54 @@ import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
 
-const logger = createLogger('control-plane');
+// ── Environment validation ────────────────────────────────────────────
+const CONTROL_PLANE_ENV: EnvVar[] = [
+  {
+    name: 'PORT',
+    default: '8080',
+    validate: isNumericString,
+    description: 'Server port for the control plane API',
+  },
+  {
+    name: 'HOST',
+    default: '0.0.0.0',
+    description: 'Bind address for the control plane server',
+  },
+  {
+    name: 'REDIS_URL',
+    required: true,
+    description: 'Redis connection URL (required by BullMQ task queue)',
+  },
+  {
+    name: 'DATABASE_URL',
+    description: 'PostgreSQL connection string (omit to use in-memory registry)',
+  },
+  {
+    name: 'MEM0_URL',
+    description: 'Mem0 server URL for cross-device memory',
+  },
+  {
+    name: 'LITELLM_URL',
+    description: 'LiteLLM proxy URL for multi-provider LLM routing',
+  },
+  {
+    name: 'LOG_LEVEL',
+    default: 'info',
+    validate: isValidLogLevel,
+    description: 'Log level (fatal, error, warn, info, debug, trace, silent)',
+  },
+];
 
-const PORT = Number(process.env.PORT) || 8080;
-const HOST = process.env.HOST || '0.0.0.0';
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-const DATABASE_URL = process.env.DATABASE_URL || '';
-const MEM0_URL = process.env.MEM0_URL || '';
-const LITELLM_URL = process.env.LITELLM_URL || '';
-const CONTROL_PLANE_URL =
-  process.env.CONTROL_PLANE_URL ||
-  `http://${process.env.HOST || '0.0.0.0'}:${Number(process.env.PORT) || 8080}`;
+const logger = createLogger('control-plane');
+const env = validateEnv(CONTROL_PLANE_ENV, logger);
+
+const PORT = Number(env.PORT);
+const HOST = env.HOST as string;
+const REDIS_URL = env.REDIS_URL as string;
+const DATABASE_URL = env.DATABASE_URL || '';
+const MEM0_URL = env.MEM0_URL || '';
+const LITELLM_URL = env.LITELLM_URL || '';
+const CONTROL_PLANE_URL = process.env.CONTROL_PLANE_URL || `http://${HOST}:${PORT}`;
 const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 5;
 
 type DependencyHealthDeps = {
