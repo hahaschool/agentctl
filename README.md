@@ -189,6 +189,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 | Method | Endpoint                         | Description                         |
 |--------|----------------------------------|-------------------------------------|
 | GET    | `/health`                        | Health check                        |
+| GET    | `/api/docs/`                     | Swagger UI (interactive API docs)   |
+| GET    | `/api/docs/json`                 | OpenAPI 3.0 JSON spec               |
 | POST   | `/api/agents/register`           | Register a machine                  |
 | POST   | `/api/agents/:id/heartbeat`      | Machine heartbeat                   |
 | GET    | `/api/agents`                    | List registered machines            |
@@ -228,7 +230,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 ## Testing
 
 ```bash
-# Run all tests (3897 tests across 101 files)
+# Run all tests (3902 tests across 102 files)
 pnpm test
 
 # Run specific package tests
