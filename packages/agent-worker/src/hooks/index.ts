@@ -20,6 +20,14 @@ export {
 } from './pre-tool-use.js';
 
 export {
+  type InjectionDetection,
+  type InjectionSeverity,
+  normalizeHomoglyphs,
+  type ScanResult,
+  sanitizeInput,
+  scanForInjections,
+} from './prompt-injection-detector.js';
+export {
   createStopHook,
   type StopHookOptions,
   type StopInput,
