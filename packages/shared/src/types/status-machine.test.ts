@@ -270,13 +270,43 @@ describe('getStatusDescription', () => {
     expect(unique.size).toBe(AGENT_STATUSES.length);
   });
 
+  it('returns the expected description for "registered"', () => {
+    expect(getStatusDescription('registered')).toBe(
+      'Agent is registered in the system but has not been started yet.',
+    );
+  });
+
+  it('returns the expected description for "starting"', () => {
+    expect(getStatusDescription('starting')).toBe('Agent is initializing and preparing to run.');
+  });
+
   it('returns the expected description for "running"', () => {
     expect(getStatusDescription('running')).toBe('Agent is actively executing tasks.');
+  });
+
+  it('returns the expected description for "stopping"', () => {
+    expect(getStatusDescription('stopping')).toBe('Agent is gracefully shutting down.');
+  });
+
+  it('returns the expected description for "stopped"', () => {
+    expect(getStatusDescription('stopped')).toBe('Agent has been stopped and is idle.');
   });
 
   it('returns the expected description for "error"', () => {
     expect(getStatusDescription('error')).toBe(
       'Agent encountered an error and is no longer running.',
+    );
+  });
+
+  it('returns the expected description for "timeout"', () => {
+    expect(getStatusDescription('timeout')).toBe(
+      'Agent exceeded the allowed time limit and was terminated.',
+    );
+  });
+
+  it('returns the expected description for "restarting"', () => {
+    expect(getStatusDescription('restarting')).toBe(
+      'Agent is being restarted after a stop, error, or timeout.',
     );
   });
 });
@@ -323,6 +353,170 @@ describe('isTerminalStatus', () => {
       const hasRecovery = next.some((s) => s === 'starting' || s === 'restarting');
       expect(hasRecovery).toBe(true);
     }
+  });
+});
+
+// ── validateTransition — exhaustive per-status error cases ──────────
+
+describe('validateTransition — error details for each status', () => {
+  it('includes valid transitions list for registered in error context', () => {
+    try {
+      validateTransition('registered', 'running');
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const agentErr = err as AgentError;
+      expect(agentErr.context?.validTransitions).toEqual(['starting', 'error']);
+    }
+  });
+
+  it('includes valid transitions list for stopping in error context', () => {
+    try {
+      validateTransition('stopping', 'running');
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const agentErr = err as AgentError;
+      expect(agentErr.context?.validTransitions).toEqual(['stopped', 'error', 'timeout']);
+    }
+  });
+
+  it('includes valid transitions list for error in error context', () => {
+    try {
+      validateTransition('error', 'running');
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const agentErr = err as AgentError;
+      expect(agentErr.context?.validTransitions).toEqual(['restarting', 'starting']);
+    }
+  });
+
+  it('includes valid transitions list for timeout in error context', () => {
+    try {
+      validateTransition('timeout', 'running');
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const agentErr = err as AgentError;
+      expect(agentErr.context?.validTransitions).toEqual(['restarting', 'starting']);
+    }
+  });
+
+  it('includes valid transitions list for restarting in error context', () => {
+    try {
+      validateTransition('restarting', 'running');
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const agentErr = err as AgentError;
+      expect(agentErr.context?.validTransitions).toEqual(['starting', 'error']);
+    }
+  });
+});
+
+// ── Full lifecycle simulation ───────────────────────────────────────
+
+describe('status machine — lifecycle scenarios', () => {
+  it('supports happy path: registered → starting → running → stopping → stopped', () => {
+    const transitions: [AgentStatus, AgentStatus][] = [
+      ['registered', 'starting'],
+      ['starting', 'running'],
+      ['running', 'stopping'],
+      ['stopping', 'stopped'],
+    ];
+
+    for (const [from, to] of transitions) {
+      expect(() => validateTransition(from, to)).not.toThrow();
+    }
+  });
+
+  it('supports error recovery: running → error → restarting → starting → running', () => {
+    const transitions: [AgentStatus, AgentStatus][] = [
+      ['running', 'error'],
+      ['error', 'restarting'],
+      ['restarting', 'starting'],
+      ['starting', 'running'],
+    ];
+
+    for (const [from, to] of transitions) {
+      expect(() => validateTransition(from, to)).not.toThrow();
+    }
+  });
+
+  it('supports timeout recovery: running → timeout → starting → running', () => {
+    const transitions: [AgentStatus, AgentStatus][] = [
+      ['running', 'timeout'],
+      ['timeout', 'starting'],
+      ['starting', 'running'],
+    ];
+
+    for (const [from, to] of transitions) {
+      expect(() => validateTransition(from, to)).not.toThrow();
+    }
+  });
+
+  it('supports restart from stopped: stopped → restarting → starting → running', () => {
+    const transitions: [AgentStatus, AgentStatus][] = [
+      ['stopped', 'restarting'],
+      ['restarting', 'starting'],
+      ['starting', 'running'],
+    ];
+
+    for (const [from, to] of transitions) {
+      expect(() => validateTransition(from, to)).not.toThrow();
+    }
+  });
+
+  it('supports error during restart: restarting → error → starting', () => {
+    const transitions: [AgentStatus, AgentStatus][] = [
+      ['restarting', 'error'],
+      ['error', 'starting'],
+    ];
+
+    for (const [from, to] of transitions) {
+      expect(() => validateTransition(from, to)).not.toThrow();
+    }
+  });
+});
+
+// ── Module-level integrity check ────────────────────────────────────
+
+describe('status machine — module integrity', () => {
+  it('AGENT_STATUSES contains exactly 8 statuses', () => {
+    expect(AGENT_STATUSES.length).toBe(8);
+  });
+
+  it('AGENT_STATUSES contains all expected statuses', () => {
+    const expected: AgentStatus[] = [
+      'registered',
+      'starting',
+      'running',
+      'stopping',
+      'stopped',
+      'error',
+      'timeout',
+      'restarting',
+    ];
+    expect([...AGENT_STATUSES]).toEqual(expected);
+  });
+
+  it('non-terminal statuses are not in terminal set', () => {
+    const nonTerminal: AgentStatus[] = [
+      'registered',
+      'starting',
+      'running',
+      'stopping',
+      'restarting',
+    ];
+    for (const status of nonTerminal) {
+      expect(isTerminalStatus(status)).toBe(false);
+    }
+  });
+
+  it('terminal statuses are exactly stopped, error, and timeout', () => {
+    const terminal: AgentStatus[] = ['stopped', 'error', 'timeout'];
+    for (const status of terminal) {
+      expect(isTerminalStatus(status)).toBe(true);
+    }
+    // Count: exactly 3 terminal statuses
+    const terminalCount = AGENT_STATUSES.filter((s) => isTerminalStatus(s)).length;
+    expect(terminalCount).toBe(3);
   });
 });
 
