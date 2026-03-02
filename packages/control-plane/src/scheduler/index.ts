@@ -1,4 +1,9 @@
 export {
+  type CircuitBreakerOptions,
+  type CircuitState,
+  MachineCircuitBreaker,
+} from './circuit-breaker.js';
+export {
   createRepeatableJobManager,
   type RepeatableJobInfo,
   type RepeatableJobManager,

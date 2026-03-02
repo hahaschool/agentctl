@@ -14,6 +14,7 @@ import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
 import { DbAgentRegistry } from './registry/db-registry.js';
 import { LiteLLMClient } from './router/litellm-client.js';
+import { MachineCircuitBreaker } from './scheduler/circuit-breaker.js';
 import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
@@ -217,6 +218,10 @@ async function main(): Promise<void> {
     logger.info('LITELLM_URL not set — LLM router routes disabled');
   }
 
+  const circuitBreaker = new MachineCircuitBreaker({
+    logger: logger.child({ component: 'circuit-breaker' }),
+  });
+
   const taskQueue = createTaskQueue(redisConnection);
   const worker = createTaskWorker({
     connection: redisConnection,
@@ -226,6 +231,7 @@ async function main(): Promise<void> {
     memoryInjector: memoryInjector ?? null,
     litellmClient: litellmClient ?? null,
     controlPlaneUrl: CONTROL_PLANE_URL,
+    circuitBreaker,
   });
   const repeatableJobs = createRepeatableJobManager(
     taskQueue,

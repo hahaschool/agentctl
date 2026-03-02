@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
+import type { MachineCircuitBreaker } from './circuit-breaker.js';
 import { AGENT_TASKS_QUEUE, type AgentTaskJobData, type AgentTaskJobName } from './task-queue.js';
 
 const DEFAULT_WORKER_PORT = 9000;
@@ -17,6 +18,8 @@ export type TaskWorkerOptions = {
   memoryInjector?: MemoryInjector | null;
   litellmClient?: LiteLLMClient | null;
   controlPlaneUrl?: string;
+  /** Optional circuit breaker to prevent dispatching to flaky machines. */
+  circuitBreaker?: MachineCircuitBreaker | null;
 };
 
 type DispatchPayload = {
@@ -97,6 +100,7 @@ export function createTaskWorker({
   memoryInjector = null,
   litellmClient = null,
   controlPlaneUrl,
+  circuitBreaker = null,
 }: TaskWorkerOptions): Worker<AgentTaskJobData, void, AgentTaskJobName> {
   const worker = new Worker<AgentTaskJobData, void, AgentTaskJobName>(
     AGENT_TASKS_QUEUE,
@@ -165,6 +169,17 @@ export function createTaskWorker({
           throw new ControlPlaneError(
             'MACHINE_OFFLINE',
             `Machine '${machine.id}' (${machine.hostname}) is offline`,
+            { agentId, machineId: machine.id, hostname: machine.hostname },
+          );
+        }
+
+        // -------------------------------------------------------------------
+        // 1a-ii. Circuit breaker check — prevent dispatching to flaky machines
+        // -------------------------------------------------------------------
+        if (circuitBreaker?.isOpen(machine.id)) {
+          throw new ControlPlaneError(
+            'MACHINE_CIRCUIT_OPEN',
+            `Circuit breaker is open for machine '${machine.id}' (${machine.hostname}) — dispatch blocked`,
             { agentId, machineId: machine.id, hostname: machine.hostname },
           );
         }
@@ -248,6 +263,9 @@ export function createTaskWorker({
 
         const result = await dispatchToWorker(dispatchUrl, payload, jobLogger);
 
+        // Record successful dispatch with the circuit breaker.
+        circuitBreaker?.recordSuccess(machine.id);
+
         // -------------------------------------------------------------------
         // 5. The run was created with status 'running' by createRun above.
         //    dispatchToWorker() only confirms the worker *accepted* the HTTP
@@ -273,6 +291,19 @@ export function createTaskWorker({
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         jobLogger.error({ err, runId }, 'Agent task job failed');
+
+        // Record dispatch failure with the circuit breaker when the error
+        // is a dispatch-level problem (connection error or HTTP error).
+        if (circuitBreaker && err instanceof ControlPlaneError) {
+          const dispatchErrorCodes = new Set(['DISPATCH_CONNECTION_ERROR', 'DISPATCH_HTTP_ERROR']);
+
+          if (dispatchErrorCodes.has(err.code) && err.context?.url) {
+            // Extract machineId from the job data since the machine local
+            // variable may not be in scope depending on where the error was
+            // thrown.
+            circuitBreaker.recordFailure(machineId);
+          }
+        }
 
         // -------------------------------------------------------------------
         // Mark the run as failed if one was created
