@@ -136,6 +136,66 @@ describe('AgentPool', () => {
     await startPromise;
   });
 
+  it('getTotalAgentsStarted increments on each createAgent call', async () => {
+    const pool = new AgentPool({ logger: mockLogger });
+
+    expect(pool.getTotalAgentsStarted()).toBe(0);
+
+    await pool.createAgent(makeAgentOptions('agent-1'));
+    expect(pool.getTotalAgentsStarted()).toBe(1);
+
+    await pool.createAgent(makeAgentOptions('agent-2'));
+    expect(pool.getTotalAgentsStarted()).toBe(2);
+
+    // Removing an agent does not decrement the lifetime counter
+    await pool.removeAgent('agent-1');
+    expect(pool.getTotalAgentsStarted()).toBe(2);
+  });
+
+  it('getWorktreeCount returns zero when no worktree manager is configured', async () => {
+    const pool = new AgentPool({ logger: mockLogger });
+
+    await pool.createAgent(makeAgentOptions('agent-1'));
+
+    expect(pool.getWorktreeCount()).toBe(0);
+  });
+
+  it('getAgentStats returns correct aggregate statistics', async () => {
+    const pool = new AgentPool({ maxConcurrent: 5, logger: mockLogger });
+
+    // Empty pool
+    const emptyStats = pool.getAgentStats();
+    expect(emptyStats.poolSize).toBe(0);
+    expect(emptyStats.byStatus).toEqual({});
+    expect(emptyStats.totalCostUsd).toBe(0);
+    expect(emptyStats.oldestAgent).toBeNull();
+
+    // Add agents in different states
+    const agent1 = await pool.createAgent(makeAgentOptions('agent-1'));
+    await pool.createAgent(makeAgentOptions('agent-2'));
+
+    // Both are in 'registered' state
+    const registeredStats = pool.getAgentStats();
+    expect(registeredStats.poolSize).toBe(2);
+    expect(registeredStats.byStatus).toEqual({ registered: 2 });
+    expect(registeredStats.totalCostUsd).toBe(0);
+    expect(registeredStats.oldestAgent).toBeNull();
+
+    // Start one agent so it becomes running
+    const p1 = agent1.start('test');
+    await vi.advanceTimersByTimeAsync(0);
+
+    const runningStats = pool.getAgentStats();
+    expect(runningStats.byStatus.running).toBe(1);
+    expect(runningStats.byStatus.registered).toBe(1);
+    expect(runningStats.oldestAgent).not.toBeNull();
+    expect(runningStats.oldestAgent?.agentId).toBe('agent-1');
+
+    await agent1.stop(false);
+    vi.runAllTimers();
+    await p1;
+  });
+
   it('getRunningCount returns correct count', async () => {
     const pool = new AgentPool({ maxConcurrent: 5, logger: mockLogger });
 

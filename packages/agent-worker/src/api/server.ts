@@ -24,9 +24,17 @@ export async function createWorkerServer({
   });
 
   app.get('/health', async () => {
+    const rssBytes = process.memoryUsage().rss;
+    const rssMb = Math.round((rssBytes / 1_048_576) * 100) / 100;
+
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      activeAgents: agentPool.getRunningCount(),
+      totalAgentsStarted: agentPool.getTotalAgentsStarted(),
+      worktreesActive: agentPool.getWorktreeCount(),
+      memoryUsage: rssMb,
       agents: {
         running: agentPool.getRunningCount(),
         total: agentPool.size,

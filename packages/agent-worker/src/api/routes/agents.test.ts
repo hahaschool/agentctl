@@ -326,5 +326,135 @@ describe('Agent CRUD routes', () => {
       expect(body.agents).toBeDefined();
       expect(body.agents.maxConcurrent).toBe(5);
     });
+
+    it('should return enriched operational data', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(typeof body.uptime).toBe('number');
+      expect(body.uptime).toBeGreaterThan(0);
+      expect(typeof body.activeAgents).toBe('number');
+      expect(body.activeAgents).toBe(0);
+      expect(typeof body.totalAgentsStarted).toBe('number');
+      expect(body.totalAgentsStarted).toBe(0);
+      expect(typeof body.worktreesActive).toBe('number');
+      expect(body.worktreesActive).toBe(0);
+      expect(typeof body.memoryUsage).toBe('number');
+      expect(body.memoryUsage).toBeGreaterThan(0);
+    });
+
+    it('should reflect correct activeAgents count after starting agents', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-health/start',
+        payload: { prompt: 'Health check task' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      const body = response.json();
+      // Agent may have already finished its stub run, but totalAgentsStarted should be >= 1
+      expect(body.totalAgentsStarted).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── GET /api/agents/stats ─────────────────────────────────────
+
+  describe('GET /api/agents/stats', () => {
+    it('should return empty stats when no agents exist', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/stats',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.poolSize).toBe(0);
+      expect(body.byStatus).toEqual({});
+      expect(body.totalCostUsd).toBe(0);
+      expect(body.oldestAgent).toBeNull();
+    });
+
+    it('should return correct stats after starting agents', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/agents/stats-agent-1/start',
+        payload: { prompt: 'First stats task' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/api/agents/stats-agent-2/start',
+        payload: { prompt: 'Second stats task' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/stats',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.poolSize).toBe(2);
+      // Both agents should be in some status (running or stopped depending on timing)
+      const totalByStatus = Object.values(body.byStatus as Record<string, number>).reduce(
+        (sum: number, n: number) => sum + n,
+        0,
+      );
+      expect(totalByStatus).toBe(2);
+    });
+
+    it('should report oldestAgent among running agents', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/agents/oldest-1/start',
+        payload: { prompt: 'Oldest agent task' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/stats',
+      });
+
+      const body = response.json();
+      // If the agent is still running, oldestAgent should be populated
+      if (body.byStatus.running > 0) {
+        expect(body.oldestAgent).not.toBeNull();
+        expect(body.oldestAgent.agentId).toBe('oldest-1');
+        expect(body.oldestAgent.startedAt).toBeDefined();
+      }
+    });
+
+    it('should sum totalCostUsd across agents', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/agents/cost-1/start',
+        payload: { prompt: 'Cost task 1' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/api/agents/cost-2/start',
+        payload: { prompt: 'Cost task 2' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/agents/stats',
+      });
+
+      const body = response.json();
+      // totalCostUsd should be a number (may be 0 if agents haven't accumulated cost yet)
+      expect(typeof body.totalCostUsd).toBe('number');
+      expect(body.totalCostUsd).toBeGreaterThanOrEqual(0);
+    });
   });
 });

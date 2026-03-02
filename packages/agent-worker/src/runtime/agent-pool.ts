@@ -28,6 +28,13 @@ type AgentSummary = {
   projectPath: string;
 };
 
+type AgentStats = {
+  poolSize: number;
+  byStatus: Record<string, number>;
+  totalCostUsd: number;
+  oldestAgent: { agentId: string; startedAt: string } | null;
+};
+
 export class AgentPool extends EventEmitter {
   private readonly agents: Map<string, AgentInstance> = new Map();
   private readonly maxConcurrent: number;
@@ -36,6 +43,8 @@ export class AgentPool extends EventEmitter {
   private readonly worktreeManager: WorktreeManager | undefined;
   /** Tracks which agents have an active worktree so we can clean up on removal. */
   private readonly agentWorktrees: Set<string> = new Set();
+  /** Lifetime count of agents created through this pool. */
+  private totalAgentsStartedCount: number = 0;
 
   constructor(options: AgentPoolOptions) {
     super();
@@ -106,6 +115,7 @@ export class AgentPool extends EventEmitter {
     });
 
     this.agents.set(options.agentId, instance);
+    this.totalAgentsStartedCount++;
 
     this.log.info(
       { agentId: options.agentId, projectPath: effectiveProjectPath },
@@ -291,5 +301,55 @@ export class AgentPool extends EventEmitter {
 
   getMaxConcurrent(): number {
     return this.maxConcurrent;
+  }
+
+  /** Lifetime count of agents created through this pool. */
+  getTotalAgentsStarted(): number {
+    return this.totalAgentsStartedCount;
+  }
+
+  /** Number of active worktrees currently tracked by the pool. */
+  getWorktreeCount(): number {
+    return this.agentWorktrees.size;
+  }
+
+  /**
+   * Return aggregate statistics across all agents in the pool.
+   *
+   * Includes a per-status breakdown, summed cost, and the longest-running
+   * agent (oldest `startedAt` among those currently running).
+   */
+  getAgentStats(): AgentStats {
+    const byStatus: Record<string, number> = {};
+    let totalCostUsd = 0;
+    let oldestAgent: { agentId: string; startedAt: string } | null = null;
+    let oldestTime: number | null = null;
+
+    for (const instance of this.agents.values()) {
+      const json = instance.toJSON();
+      const status = json.status as string;
+
+      byStatus[status] = (byStatus[status] ?? 0) + 1;
+      totalCostUsd += json.costUsd as number;
+
+      // Track the longest-running agent (earliest startedAt among running agents).
+      if (status === 'running' && json.startedAt) {
+        const startedMs = new Date(json.startedAt as string).getTime();
+        if (oldestTime === null || startedMs < oldestTime) {
+          oldestTime = startedMs;
+          oldestAgent = {
+            agentId: json.agentId as string,
+            startedAt: json.startedAt as string,
+          };
+        }
+      }
+    }
+
+    return {
+      poolSize: this.agents.size,
+      byStatus,
+      totalCostUsd,
+      oldestAgent,
+    };
   }
 }

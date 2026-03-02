@@ -74,6 +74,12 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
     });
   });
 
+  // GET /api/agents/stats — aggregate pool statistics
+  app.get('/stats', async (_request, reply) => {
+    const stats = pool.getAgentStats();
+    return reply.send(stats);
+  });
+
   // GET /api/agents/:id — get single agent details
   app.get<{ Params: AgentIdParams }>('/:id', async (request, reply) => {
     const { id } = request.params;
