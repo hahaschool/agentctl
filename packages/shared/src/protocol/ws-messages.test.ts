@@ -1,302 +1,379 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AGENT_STATUSES } from '../types/agent.js';
-import type {
-  AgentApprovalEvent,
-  AgentCostEvent,
-  AgentEvent,
-  AgentHeartbeatEvent,
-  AgentOutputEvent,
-  AgentStatusEvent,
-} from './events.js';
+import type { WsClientMessage, WsServerMessage } from './ws-messages.js';
+import {
+  isValidClientMessageType,
+  parseClientMessage,
+  serializeServerMessage,
+} from './ws-messages.js';
 
-// ── Helpers ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// parseClientMessage
+// ---------------------------------------------------------------------------
 
-/** Runtime type-guard: narrows AgentEvent by its `event` discriminant. */
-function isOutputEvent(e: AgentEvent): e is AgentOutputEvent {
-  return e.event === 'output';
-}
-function isStatusEvent(e: AgentEvent): e is AgentStatusEvent {
-  return e.event === 'status';
-}
-function isCostEvent(e: AgentEvent): e is AgentCostEvent {
-  return e.event === 'cost';
-}
-function isApprovalEvent(e: AgentEvent): e is AgentApprovalEvent {
-  return e.event === 'approval_needed';
-}
-function isHeartbeatEvent(e: AgentEvent): e is AgentHeartbeatEvent {
-  return e.event === 'heartbeat';
-}
+describe('parseClientMessage', () => {
+  it('parses an agent:start message', () => {
+    const raw = JSON.stringify({
+      type: 'agent:start',
+      agentId: 'agent-1',
+      machineId: 'machine-1',
+      prompt: 'Fix the bug',
+      model: 'claude-sonnet-4-20250514',
+    });
 
-// ── AgentOutputEvent ────────────────────────────────────────────────
+    const msg = parseClientMessage(raw);
 
-describe('AgentOutputEvent', () => {
-  it('has the correct shape with type "text"', () => {
-    const event: AgentOutputEvent = {
-      event: 'output',
-      data: { type: 'text', content: 'Hello, world!' },
-    };
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('agent:start');
 
-    expect(event.event).toBe('output');
-    expect(event.data.type).toBe('text');
-    expect(event.data.content).toBe('Hello, world!');
-  });
-
-  it('accepts all valid output data types', () => {
-    const validTypes = ['text', 'tool_use', 'tool_result', 'tool_blocked'] as const;
-
-    for (const type of validTypes) {
-      const event: AgentOutputEvent = {
-        event: 'output',
-        data: { type, content: `content for ${type}` },
-      };
-
-      expect(event.data.type).toBe(type);
+    if (msg?.type === 'agent:start') {
+      expect(msg.agentId).toBe('agent-1');
+      expect(msg.machineId).toBe('machine-1');
+      expect(msg.prompt).toBe('Fix the bug');
+      expect(msg.model).toBe('claude-sonnet-4-20250514');
     }
   });
 
-  it('is identified by the discriminant through a type guard', () => {
-    const event: AgentEvent = {
-      event: 'output',
-      data: { type: 'tool_use', content: 'bash ls' },
-    };
+  it('parses an agent:start message without optional model field', () => {
+    const raw = JSON.stringify({
+      type: 'agent:start',
+      agentId: 'a1',
+      machineId: 'm1',
+      prompt: 'Hello',
+    });
 
-    expect(isOutputEvent(event)).toBe(true);
-    expect(isStatusEvent(event)).toBe(false);
-    expect(isCostEvent(event)).toBe(false);
-    expect(isApprovalEvent(event)).toBe(false);
-    expect(isHeartbeatEvent(event)).toBe(false);
+    const msg = parseClientMessage(raw);
+
+    expect(msg).not.toBeNull();
+
+    if (msg?.type === 'agent:start') {
+      expect(msg.model).toBeUndefined();
+    }
+  });
+
+  it('parses an agent:stop message', () => {
+    const raw = JSON.stringify({ type: 'agent:stop', agentId: 'agent-2' });
+    const msg = parseClientMessage(raw);
+
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('agent:stop');
+
+    if (msg?.type === 'agent:stop') {
+      expect(msg.agentId).toBe('agent-2');
+    }
+  });
+
+  it('parses an agent:signal message', () => {
+    const raw = JSON.stringify({
+      type: 'agent:signal',
+      agentId: 'agent-3',
+      message: 'check tests',
+      metadata: { priority: 1 },
+    });
+    const msg = parseClientMessage(raw);
+
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('agent:signal');
+
+    if (msg?.type === 'agent:signal') {
+      expect(msg.agentId).toBe('agent-3');
+      expect(msg.message).toBe('check tests');
+      expect(msg.metadata).toEqual({ priority: 1 });
+    }
+  });
+
+  it('parses an agent:signal message without optional metadata', () => {
+    const raw = JSON.stringify({
+      type: 'agent:signal',
+      agentId: 'agent-3',
+      message: 'hello',
+    });
+    const msg = parseClientMessage(raw);
+
+    expect(msg).not.toBeNull();
+
+    if (msg?.type === 'agent:signal') {
+      expect(msg.metadata).toBeUndefined();
+    }
+  });
+
+  it('parses an agent:subscribe message', () => {
+    const raw = JSON.stringify({ type: 'agent:subscribe', agentId: 'agent-4' });
+    const msg = parseClientMessage(raw);
+
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('agent:subscribe');
+
+    if (msg?.type === 'agent:subscribe') {
+      expect(msg.agentId).toBe('agent-4');
+    }
+  });
+
+  it('parses an agent:unsubscribe message', () => {
+    const raw = JSON.stringify({ type: 'agent:unsubscribe', agentId: 'agent-5' });
+    const msg = parseClientMessage(raw);
+
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('agent:unsubscribe');
+
+    if (msg?.type === 'agent:unsubscribe') {
+      expect(msg.agentId).toBe('agent-5');
+    }
+  });
+
+  it('parses a ping message', () => {
+    const raw = JSON.stringify({ type: 'ping' });
+    const msg = parseClientMessage(raw);
+
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('ping');
+  });
+
+  it('returns null for invalid JSON', () => {
+    expect(parseClientMessage('not json at all')).toBeNull();
+    expect(parseClientMessage('{broken')).toBeNull();
+    expect(parseClientMessage('')).toBeNull();
+  });
+
+  it('returns null for a JSON array', () => {
+    expect(parseClientMessage('[1,2,3]')).toBeNull();
+  });
+
+  it('returns null for a JSON primitive', () => {
+    expect(parseClientMessage('"just a string"')).toBeNull();
+    expect(parseClientMessage('42')).toBeNull();
+    expect(parseClientMessage('null')).toBeNull();
+    expect(parseClientMessage('true')).toBeNull();
+  });
+
+  it('returns null when type field is missing', () => {
+    expect(parseClientMessage(JSON.stringify({ agentId: 'x' }))).toBeNull();
+  });
+
+  it('returns null for an unknown message type', () => {
+    expect(parseClientMessage(JSON.stringify({ type: 'unknown:action' }))).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ type: 'agent:destroy' }))).toBeNull();
+  });
+
+  it('returns null for server message types sent as client messages', () => {
+    expect(parseClientMessage(JSON.stringify({ type: 'pong' }))).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ type: 'agent:started', agentId: 'a1' }))).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ type: 'error', message: 'fail' }))).toBeNull();
   });
 });
 
-// ── AgentStatusEvent ────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// serializeServerMessage
+// ---------------------------------------------------------------------------
 
-describe('AgentStatusEvent', () => {
-  it('has the correct shape with required fields', () => {
-    const event: AgentStatusEvent = {
-      event: 'status',
-      data: { status: 'running' },
+describe('serializeServerMessage', () => {
+  it('serializes an agent:started message', () => {
+    const msg: WsServerMessage = {
+      type: 'agent:started',
+      agentId: 'agent-1',
+      sessionId: 'sess-abc',
     };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
 
-    expect(event.event).toBe('status');
-    expect(event.data.status).toBe('running');
-    expect(event.data.reason).toBeUndefined();
+    expect(parsed.type).toBe('agent:started');
+    expect(parsed.agentId).toBe('agent-1');
+    expect(parsed.sessionId).toBe('sess-abc');
   });
 
-  it('accepts an optional reason field', () => {
-    const event: AgentStatusEvent = {
-      event: 'status',
-      data: { status: 'error', reason: 'Out of memory' },
-    };
+  it('serializes an agent:stopped message', () => {
+    const msg: WsServerMessage = { type: 'agent:stopped', agentId: 'agent-1' };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
 
-    expect(event.data.reason).toBe('Out of memory');
+    expect(parsed.type).toBe('agent:stopped');
+    expect(parsed.agentId).toBe('agent-1');
   });
 
-  it('accepts all AGENT_STATUSES values', () => {
-    const statuses: (typeof AGENT_STATUSES)[number][] = [
-      'registered',
-      'starting',
-      'running',
-      'stopping',
-      'stopped',
+  it('serializes an agent:output message with stdout', () => {
+    const msg: WsServerMessage = {
+      type: 'agent:output',
+      agentId: 'agent-1',
+      data: 'Hello world\n',
+      stream: 'stdout',
+    };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.type).toBe('agent:output');
+    expect(parsed.stream).toBe('stdout');
+    expect(parsed.data).toBe('Hello world\n');
+  });
+
+  it('serializes an agent:output message with stderr', () => {
+    const msg: WsServerMessage = {
+      type: 'agent:output',
+      agentId: 'agent-1',
+      data: 'Error occurred',
+      stream: 'stderr',
+    };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.stream).toBe('stderr');
+  });
+
+  it('serializes an agent:status message', () => {
+    const msg: WsServerMessage = {
+      type: 'agent:status',
+      agentId: 'agent-1',
+      status: 'running',
+    };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.type).toBe('agent:status');
+    expect(parsed.status).toBe('running');
+  });
+
+  it('serializes an agent:error message', () => {
+    const msg: WsServerMessage = {
+      type: 'agent:error',
+      agentId: 'agent-1',
+      error: 'Something went wrong',
+      code: 'AGENT_TIMEOUT',
+    };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.type).toBe('agent:error');
+    expect(parsed.error).toBe('Something went wrong');
+    expect(parsed.code).toBe('AGENT_TIMEOUT');
+  });
+
+  it('serializes an agent:cost_alert message', () => {
+    const msg: WsServerMessage = {
+      type: 'agent:cost_alert',
+      agentId: 'agent-1',
+      message: 'Cost exceeds 80% of budget',
+      severity: 'warning',
+      percentage: 82.5,
+    };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.type).toBe('agent:cost_alert');
+    expect(parsed.percentage).toBe(82.5);
+    expect(parsed.severity).toBe('warning');
+  });
+
+  it('serializes a pong message', () => {
+    const msg: WsServerMessage = { type: 'pong' };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.type).toBe('pong');
+  });
+
+  it('serializes a top-level error message', () => {
+    const msg: WsServerMessage = {
+      type: 'error',
+      message: 'Invalid request',
+      code: 'INVALID_JSON',
+    };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.type).toBe('error');
+    expect(parsed.message).toBe('Invalid request');
+    expect(parsed.code).toBe('INVALID_JSON');
+  });
+
+  it('serializes a top-level error without optional code', () => {
+    const msg: WsServerMessage = { type: 'error', message: 'Unknown error' };
+    const json = serializeServerMessage(msg);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.type).toBe('error');
+    expect(parsed.code).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-trip parse/serialize
+// ---------------------------------------------------------------------------
+
+describe('round-trip', () => {
+  it('a serialized server message produces valid JSON', () => {
+    const messages: WsServerMessage[] = [
+      { type: 'agent:started', agentId: 'a1' },
+      { type: 'agent:stopped', agentId: 'a1' },
+      { type: 'agent:output', agentId: 'a1', data: 'text', stream: 'stdout' },
+      { type: 'agent:status', agentId: 'a1', status: 'running' },
+      { type: 'agent:error', agentId: 'a1', error: 'boom', code: 'ERR' },
+      { type: 'agent:cost_alert', agentId: 'a1', message: 'hi', severity: 'warn', percentage: 50 },
+      { type: 'pong' },
+      { type: 'error', message: 'bad' },
+    ];
+
+    for (const msg of messages) {
+      const json = serializeServerMessage(msg);
+      const parsed = JSON.parse(json) as WsServerMessage;
+      expect(parsed.type).toBe(msg.type);
+    }
+  });
+
+  it('a client message can be serialized and parsed back', () => {
+    const original: WsClientMessage = {
+      type: 'agent:start',
+      agentId: 'agent-1',
+      machineId: 'machine-1',
+      prompt: 'Deploy',
+    };
+
+    const json = JSON.stringify(original);
+    const parsed = parseClientMessage(json);
+
+    expect(parsed).toEqual(original);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isValidClientMessageType
+// ---------------------------------------------------------------------------
+
+describe('isValidClientMessageType', () => {
+  it('returns true for all valid client message types', () => {
+    const validTypes = [
+      'agent:start',
+      'agent:stop',
+      'agent:signal',
+      'agent:subscribe',
+      'agent:unsubscribe',
+      'ping',
+    ];
+
+    for (const t of validTypes) {
+      expect(isValidClientMessageType(t)).toBe(true);
+    }
+  });
+
+  it('returns false for server message types', () => {
+    const serverTypes = [
+      'agent:started',
+      'agent:stopped',
+      'agent:output',
+      'agent:status',
+      'agent:error',
+      'agent:cost_alert',
+      'pong',
       'error',
-      'timeout',
-      'restarting',
     ];
 
-    for (const status of statuses) {
-      const event: AgentStatusEvent = {
-        event: 'status',
-        data: { status },
-      };
-      expect(event.data.status).toBe(status);
+    for (const t of serverTypes) {
+      expect(isValidClientMessageType(t)).toBe(false);
     }
   });
 
-  it('is identified by the discriminant through a type guard', () => {
-    const event: AgentEvent = {
-      event: 'status',
-      data: { status: 'stopped' },
-    };
-
-    expect(isStatusEvent(event)).toBe(true);
-    expect(isOutputEvent(event)).toBe(false);
-  });
-});
-
-// ── AgentCostEvent ──────────────────────────────────────────────────
-
-describe('AgentCostEvent', () => {
-  it('has the correct shape with turnCost and totalCost', () => {
-    const event: AgentCostEvent = {
-      event: 'cost',
-      data: { turnCost: 0.0032, totalCost: 1.45 },
-    };
-
-    expect(event.event).toBe('cost');
-    expect(event.data.turnCost).toBe(0.0032);
-    expect(event.data.totalCost).toBe(1.45);
-  });
-
-  it('handles zero costs', () => {
-    const event: AgentCostEvent = {
-      event: 'cost',
-      data: { turnCost: 0, totalCost: 0 },
-    };
-
-    expect(event.data.turnCost).toBe(0);
-    expect(event.data.totalCost).toBe(0);
-  });
-
-  it('is identified by the discriminant through a type guard', () => {
-    const event: AgentEvent = {
-      event: 'cost',
-      data: { turnCost: 0.01, totalCost: 0.5 },
-    };
-
-    expect(isCostEvent(event)).toBe(true);
-    expect(isOutputEvent(event)).toBe(false);
-    expect(isHeartbeatEvent(event)).toBe(false);
-  });
-});
-
-// ── AgentApprovalEvent ──────────────────────────────────────────────
-
-describe('AgentApprovalEvent', () => {
-  it('has the correct shape with tool, input, and timeoutSeconds', () => {
-    const event: AgentApprovalEvent = {
-      event: 'approval_needed',
-      data: {
-        tool: 'Bash',
-        input: { command: 'rm -rf /tmp/test' },
-        timeoutSeconds: 120,
-      },
-    };
-
-    expect(event.event).toBe('approval_needed');
-    expect(event.data.tool).toBe('Bash');
-    expect(event.data.input).toEqual({ command: 'rm -rf /tmp/test' });
-    expect(event.data.timeoutSeconds).toBe(120);
-  });
-
-  it('accepts any value for the input field (unknown type)', () => {
-    const stringInput: AgentApprovalEvent = {
-      event: 'approval_needed',
-      data: { tool: 'Write', input: 'string input', timeoutSeconds: 60 },
-    };
-    expect(stringInput.data.input).toBe('string input');
-
-    const nullInput: AgentApprovalEvent = {
-      event: 'approval_needed',
-      data: { tool: 'Read', input: null, timeoutSeconds: 30 },
-    };
-    expect(nullInput.data.input).toBeNull();
-
-    const arrayInput: AgentApprovalEvent = {
-      event: 'approval_needed',
-      data: { tool: 'Edit', input: [1, 2, 3], timeoutSeconds: 30 },
-    };
-    expect(arrayInput.data.input).toEqual([1, 2, 3]);
-  });
-
-  it('is identified by the discriminant through a type guard', () => {
-    const event: AgentEvent = {
-      event: 'approval_needed',
-      data: { tool: 'Bash', input: {}, timeoutSeconds: 60 },
-    };
-
-    expect(isApprovalEvent(event)).toBe(true);
-    expect(isOutputEvent(event)).toBe(false);
-    expect(isStatusEvent(event)).toBe(false);
-  });
-});
-
-// ── AgentHeartbeatEvent ─────────────────────────────────────────────
-
-describe('AgentHeartbeatEvent', () => {
-  it('has the correct shape with timestamp', () => {
-    const now = Date.now();
-    const event: AgentHeartbeatEvent = {
-      event: 'heartbeat',
-      data: { timestamp: now },
-    };
-
-    expect(event.event).toBe('heartbeat');
-    expect(event.data.timestamp).toBe(now);
-  });
-
-  it('is identified by the discriminant through a type guard', () => {
-    const event: AgentEvent = {
-      event: 'heartbeat',
-      data: { timestamp: 1000000 },
-    };
-
-    expect(isHeartbeatEvent(event)).toBe(true);
-    expect(isOutputEvent(event)).toBe(false);
-    expect(isCostEvent(event)).toBe(false);
-  });
-});
-
-// ── AgentEvent discriminated union ──────────────────────────────────
-
-describe('AgentEvent discriminated union', () => {
-  it('covers all five event types', () => {
-    const events: AgentEvent[] = [
-      { event: 'output', data: { type: 'text', content: 'hi' } },
-      { event: 'status', data: { status: 'running' } },
-      { event: 'cost', data: { turnCost: 0.01, totalCost: 0.1 } },
-      { event: 'approval_needed', data: { tool: 'Bash', input: {}, timeoutSeconds: 60 } },
-      { event: 'heartbeat', data: { timestamp: Date.now() } },
-    ];
-
-    const discriminants = events.map((e) => e.event);
-    expect(discriminants).toEqual(['output', 'status', 'cost', 'approval_needed', 'heartbeat']);
-  });
-
-  it('narrows correctly in a switch statement', () => {
-    const event: AgentEvent = {
-      event: 'output',
-      data: { type: 'tool_result', content: '{ "ok": true }' },
-    };
-
-    let matched = false;
-    switch (event.event) {
-      case 'output':
-        // Inside this branch, event.data should have type and content
-        expect(event.data.type).toBe('tool_result');
-        expect(event.data.content).toBe('{ "ok": true }');
-        matched = true;
-        break;
-      default:
-        break;
-    }
-    expect(matched).toBe(true);
-  });
-
-  it('each event type has a unique discriminant', () => {
-    const discriminants = new Set(['output', 'status', 'cost', 'approval_needed', 'heartbeat']);
-    expect(discriminants.size).toBe(5);
-  });
-
-  it('can be serialized and deserialized as JSON', () => {
-    const events: AgentEvent[] = [
-      { event: 'output', data: { type: 'text', content: 'hello' } },
-      { event: 'status', data: { status: 'running', reason: 'started' } },
-      { event: 'cost', data: { turnCost: 0.05, totalCost: 2.0 } },
-      {
-        event: 'approval_needed',
-        data: { tool: 'Bash', input: { cmd: 'ls' }, timeoutSeconds: 30 },
-      },
-      { event: 'heartbeat', data: { timestamp: 1709000000000 } },
-    ];
-
-    for (const original of events) {
-      const serialized = JSON.stringify(original);
-      const deserialized = JSON.parse(serialized) as AgentEvent;
-
-      expect(deserialized.event).toBe(original.event);
-      expect(deserialized.data).toEqual(original.data);
-    }
+  it('returns false for arbitrary strings', () => {
+    expect(isValidClientMessageType('')).toBe(false);
+    expect(isValidClientMessageType('foo')).toBe(false);
+    expect(isValidClientMessageType('agent:destroy')).toBe(false);
+    expect(isValidClientMessageType('PING')).toBe(false);
   });
 });

@@ -16,3 +16,9 @@ export type {
   LoopCompleteEvent,
   LoopIterationEvent,
 } from './events.js';
+export type { WsClientMessage, WsServerMessage } from './ws-messages.js';
+export {
+  isValidClientMessageType,
+  parseClientMessage,
+  serializeServerMessage,
+} from './ws-messages.js';
