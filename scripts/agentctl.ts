@@ -17,6 +17,11 @@
 //   models                    List available LLM models
 //   health                    Check control plane health
 //   memory search <query>     Search memories by semantic query
+//   schedule list             List scheduled (repeatable) jobs
+//   schedule add-heartbeat    Add a heartbeat job
+//   schedule add-cron         Add a cron job
+//   schedule remove <key>     Remove a scheduled job by key
+//   runs <agentId> [limit]    Show recent runs for an agent
 //   help                      Show this help message
 // =============================================================================
 
@@ -331,6 +336,149 @@ async function cmdMemorySearch(query: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Schedule subcommands
+// ---------------------------------------------------------------------------
+
+async function cmdScheduleList(): Promise<void> {
+  const data = (await request('GET', '/api/scheduler/jobs')) as { jobs: unknown[] };
+
+  if (!Array.isArray(data.jobs)) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(bold(`\nScheduled Jobs (${data.jobs.length})\n`));
+
+  const headers = ['KEY', 'NAME', 'PATTERN', 'EVERY', 'NEXT RUN'];
+  const rows = data.jobs.map((j: unknown) => {
+    const job = j as Record<string, unknown>;
+    return [
+      String(job.key ?? ''),
+      String(job.name ?? ''),
+      job.pattern ? String(job.pattern) : '-',
+      job.every ? `${String(job.every)}ms` : '-',
+      job.next ? new Date(Number(job.next)).toLocaleString() : '-',
+    ];
+  });
+
+  printTable(headers, rows);
+  console.log('');
+}
+
+async function cmdScheduleAddHeartbeat(
+  agentId: string,
+  machineId: string,
+  intervalMs: number,
+): Promise<void> {
+  const data = (await request('POST', '/api/scheduler/jobs/heartbeat', {
+    agentId,
+    machineId,
+    intervalMs,
+  })) as Record<string, unknown>;
+
+  console.log(green('✓') + ' Heartbeat job added');
+  console.log(`  agentId:    ${cyan(agentId)}`);
+  console.log(`  machineId:  ${machineId}`);
+  console.log(`  intervalMs: ${String(intervalMs)}`);
+  if (data.ok !== undefined) {
+    console.log(dim(`  ok: ${String(data.ok)}`));
+  }
+}
+
+async function cmdScheduleAddCron(
+  agentId: string,
+  machineId: string,
+  pattern: string,
+  model: string | null,
+): Promise<void> {
+  const body: Record<string, unknown> = { agentId, machineId, pattern };
+  if (model) {
+    body.model = model;
+  }
+
+  const data = (await request('POST', '/api/scheduler/jobs/cron', body)) as Record<string, unknown>;
+
+  console.log(green('✓') + ' Cron job added');
+  console.log(`  agentId:   ${cyan(agentId)}`);
+  console.log(`  machineId: ${machineId}`);
+  console.log(`  pattern:   ${pattern}`);
+  if (model) {
+    console.log(`  model:     ${model}`);
+  }
+  if (data.ok !== undefined) {
+    console.log(dim(`  ok: ${String(data.ok)}`));
+  }
+}
+
+async function cmdScheduleRemove(key: string): Promise<void> {
+  const data = (await request(
+    'DELETE',
+    `/api/scheduler/jobs/${encodeURIComponent(key)}`,
+  )) as Record<string, unknown>;
+
+  console.log(green('✓') + ' Scheduled job removed');
+  console.log(`  key:          ${cyan(key)}`);
+  if (data.removedCount !== undefined) {
+    console.log(`  removedCount: ${String(data.removedCount)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Runs subcommand
+// ---------------------------------------------------------------------------
+
+async function cmdRuns(agentId: string, limit: number): Promise<void> {
+  const path =
+    `/api/agents/agents/${encodeURIComponent(agentId)}/runs` +
+    (limit ? `?limit=${limit}` : '');
+
+  const data = await request('GET', path);
+
+  if (!Array.isArray(data)) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log(bold(`\nRecent Runs for ${cyan(agentId)} (${data.length})\n`));
+
+  const headers = ['RUN ID', 'TRIGGER', 'STATUS', 'MODEL', 'COST (USD)', 'STARTED', 'DURATION'];
+  const rows = data.map((r: unknown) => {
+    const run = r as Record<string, unknown>;
+    const startedAt = run.startedAt ? new Date(String(run.startedAt)) : null;
+    const finishedAt = run.finishedAt ? new Date(String(run.finishedAt)) : null;
+
+    let duration = '-';
+    if (startedAt && finishedAt) {
+      const ms = finishedAt.getTime() - startedAt.getTime();
+      if (ms < 1000) {
+        duration = `${ms}ms`;
+      } else if (ms < 60000) {
+        duration = `${(ms / 1000).toFixed(1)}s`;
+      } else {
+        duration = `${(ms / 60000).toFixed(1)}m`;
+      }
+    } else if (run.status === 'running') {
+      duration = 'running...';
+    }
+
+    const cost = run.costUsd != null ? `$${Number(run.costUsd).toFixed(4)}` : '-';
+
+    return [
+      String(run.id ?? ''),
+      String(run.trigger ?? '-'),
+      String(run.status ?? 'unknown'),
+      String(run.model ?? '-'),
+      cost,
+      startedAt ? startedAt.toLocaleString() : '-',
+      duration,
+    ];
+  });
+
+  printTable(headers, rows);
+  console.log('');
+}
+
+// ---------------------------------------------------------------------------
 // Help
 // ---------------------------------------------------------------------------
 
@@ -353,6 +501,13 @@ ${bold('COMMANDS')}
   ${cyan('models')}                     List available LLM models via LiteLLM
   ${cyan('health')}                     Check control plane health
   ${cyan('memory search')} <query>      Search memories by semantic query
+  ${cyan('schedule list')}              List all scheduled (repeatable) jobs
+  ${cyan('schedule add-heartbeat')} <agentId> <machineId> <intervalMs>
+                               Add a heartbeat job
+  ${cyan('schedule add-cron')} <agentId> <machineId> <pattern> [model]
+                               Add a cron job
+  ${cyan('schedule remove')} <key>      Remove a scheduled job by key
+  ${cyan('runs')} <agentId> [limit]     Show recent runs for an agent
   ${cyan('help')}                       Show this help message
 
 ${bold('EXAMPLES')}
@@ -370,6 +525,24 @@ ${bold('EXAMPLES')}
 
   ${dim('# Search through agent memory')}
   npx tsx scripts/agentctl.ts memory search "authentication flow"
+
+  ${dim('# List all scheduled jobs')}
+  npx tsx scripts/agentctl.ts schedule list
+
+  ${dim('# Add a heartbeat job (every 30 seconds)')}
+  npx tsx scripts/agentctl.ts schedule add-heartbeat agent-1 ec2-us-east-1 30000
+
+  ${dim('# Add a cron job (every 5 minutes)')}
+  npx tsx scripts/agentctl.ts schedule add-cron agent-2 mac-mini "*/5 * * * *"
+
+  ${dim('# Add a cron job with a specific model')}
+  npx tsx scripts/agentctl.ts schedule add-cron agent-2 mac-mini "0 */6 * * *" claude-sonnet-4-20250514
+
+  ${dim('# Remove a scheduled job')}
+  npx tsx scripts/agentctl.ts schedule remove agent-1
+
+  ${dim('# Show last 10 runs for an agent')}
+  npx tsx scripts/agentctl.ts runs agent-1 10
 
   ${dim('# Use a different control plane URL')}
   CONTROL_URL=http://ec2-host:8080 npx tsx scripts/agentctl.ts machines
@@ -461,6 +634,77 @@ async function main(): Promise<void> {
         console.error('Available: memory search <query>');
         process.exit(1);
       }
+      break;
+    }
+
+    case 'schedule': {
+      const subcommand = args[1];
+
+      if (subcommand === 'list') {
+        await cmdScheduleList();
+      } else if (subcommand === 'add-heartbeat') {
+        const agentId = args[2];
+        const machineId = args[3];
+        const intervalMs = Number(args[4]);
+
+        if (!agentId || !machineId || !Number.isFinite(intervalMs) || intervalMs <= 0) {
+          console.error(
+            red('Error: ') +
+              'Usage: agentctl schedule add-heartbeat <agentId> <machineId> <intervalMs>',
+          );
+          process.exit(1);
+        }
+
+        await cmdScheduleAddHeartbeat(agentId, machineId, intervalMs);
+      } else if (subcommand === 'add-cron') {
+        const agentId = args[2];
+        const machineId = args[3];
+        const pattern = args[4];
+        const model = args[5] ?? null;
+
+        if (!agentId || !machineId || !pattern) {
+          console.error(
+            red('Error: ') +
+              'Usage: agentctl schedule add-cron <agentId> <machineId> <pattern> [model]',
+          );
+          process.exit(1);
+        }
+
+        await cmdScheduleAddCron(agentId, machineId, pattern, model);
+      } else if (subcommand === 'remove') {
+        const key = args[2];
+
+        if (!key) {
+          console.error(red('Error: ') + 'Usage: agentctl schedule remove <key>');
+          process.exit(1);
+        }
+
+        await cmdScheduleRemove(key);
+      } else {
+        console.error(
+          red('Error: ') + `Unknown schedule subcommand: ${subcommand ?? '(none)'}`,
+        );
+        console.error('Available: schedule list | add-heartbeat | add-cron | remove');
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'runs': {
+      const agentId = args[1];
+      const limit = args[2] ? Number(args[2]) : 20;
+
+      if (!agentId) {
+        console.error(red('Error: ') + 'Usage: agentctl runs <agentId> [limit]');
+        process.exit(1);
+      }
+
+      if (args[2] && (!Number.isFinite(limit) || limit < 1)) {
+        console.error(red('Error: ') + 'Limit must be a positive integer');
+        process.exit(1);
+      }
+
+      await cmdRuns(agentId, limit);
       break;
     }
 
