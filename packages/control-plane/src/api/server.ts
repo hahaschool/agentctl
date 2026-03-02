@@ -3,6 +3,8 @@ import * as crypto from 'node:crypto';
 import { ControlPlaneError } from '@agentctl/shared';
 import fastifyCors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyWebsocket from '@fastify/websocket';
 import type { Queue } from 'bullmq';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
@@ -115,6 +117,53 @@ export async function createServer({
     errorResponseBuilder: () => {
       return { error: 'RATE_LIMITED', message: 'Too many requests' };
     },
+  });
+
+  // --- OpenAPI / Swagger ---
+  await app.register(fastifySwagger, {
+    openapi: {
+      info: {
+        title: 'AgentCTL Control Plane',
+        description: 'Multi-machine AI agent orchestration API',
+        version: '0.1.0',
+      },
+      tags: [
+        { name: 'health', description: 'Health checks and system status' },
+        { name: 'machines', description: 'Machine registration and heartbeat' },
+        { name: 'agents', description: 'Agent CRUD and lifecycle control' },
+        { name: 'scheduler', description: 'Repeatable job scheduling' },
+        { name: 'memory', description: 'Mem0 memory search' },
+        { name: 'router', description: 'LiteLLM model routing' },
+        { name: 'audit', description: 'Action audit log and replay' },
+        { name: 'dashboard', description: 'Analytics and cost dashboards' },
+        { name: 'webhooks', description: 'Webhook subscription management' },
+        { name: 'stream', description: 'SSE agent output streaming' },
+      ],
+      components: {
+        schemas: {
+          DependencyStatus: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['ok', 'error'] },
+              latencyMs: { type: 'number' },
+              error: { type: 'string' },
+            },
+            required: ['status', 'latencyMs'],
+          },
+          ErrorResponse: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+            required: ['error', 'message'],
+          },
+        },
+      },
+    },
+  });
+  await app.register(fastifySwaggerUi, {
+    routePrefix: '/api/docs',
   });
 
   // Register @fastify/websocket before any WebSocket route plugins.

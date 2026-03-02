@@ -150,88 +150,104 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     Params: { id: string };
     Body: { prompt: string; config: Record<string, unknown> };
     Querystring: { workerUrl?: string; machineId?: string };
-  }>('/:id/loop', async (request, reply) => {
-    const agentId = request.params.id;
+  }>(
+    '/:id/loop',
+    { schema: { tags: ['agents'], summary: 'Start an agent loop' } },
+    async (request, reply) => {
+      const agentId = request.params.id;
 
-    const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
-    if (!resolved.ok) {
-      return reply
-        .status(resolved.status)
-        .send({ error: resolved.error, message: resolved.message });
-    }
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      if (!resolved.ok) {
+        return reply
+          .status(resolved.status)
+          .send({ error: resolved.error, message: resolved.message });
+      }
 
-    const result = await proxyToWorker(resolved.url, agentId, 'POST', request.body);
-    if (!result.ok) {
-      return reply.status(result.status).send({ error: result.error, message: result.message });
-    }
+      const result = await proxyToWorker(resolved.url, agentId, 'POST', request.body);
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
+      }
 
-    return reply.status(result.status).send(result.data);
-  });
+      return reply.status(result.status).send(result.data);
+    },
+  );
 
   // PUT /api/agents/:id/loop — Pause or resume (proxy to worker)
   app.put<{
     Params: { id: string };
     Body: { action: string };
     Querystring: { workerUrl?: string; machineId?: string };
-  }>('/:id/loop', async (request, reply) => {
-    const agentId = request.params.id;
+  }>(
+    '/:id/loop',
+    { schema: { tags: ['agents'], summary: 'Pause or resume an agent loop' } },
+    async (request, reply) => {
+      const agentId = request.params.id;
 
-    const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
-    if (!resolved.ok) {
-      return reply
-        .status(resolved.status)
-        .send({ error: resolved.error, message: resolved.message });
-    }
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      if (!resolved.ok) {
+        return reply
+          .status(resolved.status)
+          .send({ error: resolved.error, message: resolved.message });
+      }
 
-    const result = await proxyToWorker(resolved.url, agentId, 'PUT', request.body);
-    if (!result.ok) {
-      return reply.status(result.status).send({ error: result.error, message: result.message });
-    }
+      const result = await proxyToWorker(resolved.url, agentId, 'PUT', request.body);
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
+      }
 
-    return reply.status(result.status).send(result.data);
-  });
+      return reply.status(result.status).send(result.data);
+    },
+  );
 
   // DELETE /api/agents/:id/loop — Stop loop (proxy to worker)
   app.delete<{
     Params: { id: string };
     Querystring: { workerUrl?: string; machineId?: string };
-  }>('/:id/loop', async (request, reply) => {
-    const agentId = request.params.id;
+  }>(
+    '/:id/loop',
+    { schema: { tags: ['agents'], summary: 'Stop an agent loop' } },
+    async (request, reply) => {
+      const agentId = request.params.id;
 
-    const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
-    if (!resolved.ok) {
-      return reply
-        .status(resolved.status)
-        .send({ error: resolved.error, message: resolved.message });
-    }
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      if (!resolved.ok) {
+        return reply
+          .status(resolved.status)
+          .send({ error: resolved.error, message: resolved.message });
+      }
 
-    const result = await proxyToWorker(resolved.url, agentId, 'DELETE');
-    if (!result.ok) {
-      return reply.status(result.status).send({ error: result.error, message: result.message });
-    }
+      const result = await proxyToWorker(resolved.url, agentId, 'DELETE');
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
+      }
 
-    return reply.status(result.status).send(result.data);
-  });
+      return reply.status(result.status).send(result.data);
+    },
+  );
 
   // GET /api/agents/:id/loop — Get loop status (proxy to worker)
   app.get<{
     Params: { id: string };
     Querystring: { workerUrl?: string; machineId?: string };
-  }>('/:id/loop', async (request, reply) => {
-    const agentId = request.params.id;
+  }>(
+    '/:id/loop',
+    { schema: { tags: ['agents'], summary: 'Get agent loop status' } },
+    async (request, reply) => {
+      const agentId = request.params.id;
 
-    const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
-    if (!resolved.ok) {
-      return reply
-        .status(resolved.status)
-        .send({ error: resolved.error, message: resolved.message });
-    }
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      if (!resolved.ok) {
+        return reply
+          .status(resolved.status)
+          .send({ error: resolved.error, message: resolved.message });
+      }
 
-    const result = await proxyToWorker(resolved.url, agentId, 'GET');
-    if (!result.ok) {
-      return reply.status(result.status).send({ error: result.error, message: result.message });
-    }
+      const result = await proxyToWorker(resolved.url, agentId, 'GET');
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
+      }
 
-    return reply.status(result.status).send(result.data);
-  });
+      return reply.status(result.status).send(result.data);
+    },
+  );
 };

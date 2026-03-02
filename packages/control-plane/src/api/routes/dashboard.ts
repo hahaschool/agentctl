@@ -107,100 +107,112 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
   // GET /overview — System summary
   // -------------------------------------------------------------------------
 
-  app.get('/overview', async (_request, reply) => {
-    try {
-      const [
-        agentCountsResult,
-        runTotalResult,
-        runCountsResult,
-        webhookResult,
-        recentErrorsResult,
-      ] = await Promise.all([
-        db.execute(sql`SELECT status, COUNT(*)::int AS count FROM agents GROUP BY status`),
-        db.execute(sql`SELECT COUNT(*)::int AS total FROM agent_runs`),
-        db.execute(sql`SELECT status, COUNT(*)::int AS count FROM agent_runs GROUP BY status`),
-        db.execute(
-          sql`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE active = true)::int AS active FROM webhook_subscriptions`,
-        ),
-        db.execute(
-          sql`SELECT agent_id, error_message, finished_at FROM agent_runs WHERE status = 'error' ORDER BY finished_at DESC LIMIT 10`,
-        ),
-      ]);
+  app.get(
+    '/overview',
+    {
+      schema: {
+        tags: ['dashboard'],
+        summary: 'Get system overview with agent, run, and webhook counts',
+      },
+    },
+    async (_request, reply) => {
+      try {
+        const [
+          agentCountsResult,
+          runTotalResult,
+          runCountsResult,
+          webhookResult,
+          recentErrorsResult,
+        ] = await Promise.all([
+          db.execute(sql`SELECT status, COUNT(*)::int AS count FROM agents GROUP BY status`),
+          db.execute(sql`SELECT COUNT(*)::int AS total FROM agent_runs`),
+          db.execute(sql`SELECT status, COUNT(*)::int AS count FROM agent_runs GROUP BY status`),
+          db.execute(
+            sql`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE active = true)::int AS active FROM webhook_subscriptions`,
+          ),
+          db.execute(
+            sql`SELECT agent_id, error_message, finished_at FROM agent_runs WHERE status = 'error' ORDER BY finished_at DESC LIMIT 10`,
+          ),
+        ]);
 
-      const agentCounts = agentCountsResult.rows as unknown as AgentCountRow[];
-      const runTotal = (runTotalResult.rows as unknown as RunTotalRow[])[0]?.total ?? 0;
-      const runCounts = runCountsResult.rows as unknown as RunCountRow[];
-      const webhook = (webhookResult.rows as unknown as WebhookCountRow[])[0] ?? {
-        total: 0,
-        active: 0,
-      };
-      const recentErrors = recentErrorsResult.rows as unknown as RecentErrorRow[];
+        const agentCounts = agentCountsResult.rows as unknown as AgentCountRow[];
+        const runTotal = (runTotalResult.rows as unknown as RunTotalRow[])[0]?.total ?? 0;
+        const runCounts = runCountsResult.rows as unknown as RunCountRow[];
+        const webhook = (webhookResult.rows as unknown as WebhookCountRow[])[0] ?? {
+          total: 0,
+          active: 0,
+        };
+        const recentErrors = recentErrorsResult.rows as unknown as RecentErrorRow[];
 
-      let totalAgents = 0;
-      let onlineAgents = 0;
-      let offlineAgents = 0;
+        let totalAgents = 0;
+        let onlineAgents = 0;
+        let offlineAgents = 0;
 
-      for (const row of agentCounts) {
-        totalAgents += row.count;
-        if (row.status === 'online' || row.status === 'running') {
-          onlineAgents += row.count;
-        } else if (row.status === 'offline') {
-          offlineAgents += row.count;
+        for (const row of agentCounts) {
+          totalAgents += row.count;
+          if (row.status === 'online' || row.status === 'running') {
+            onlineAgents += row.count;
+          } else if (row.status === 'offline') {
+            offlineAgents += row.count;
+          }
         }
-      }
 
-      let activeRuns = 0;
-      let completedRuns = 0;
-      let failedRuns = 0;
+        let activeRuns = 0;
+        let completedRuns = 0;
+        let failedRuns = 0;
 
-      for (const row of runCounts) {
-        if (row.status === 'running' || row.status === 'active') {
-          activeRuns += row.count;
-        } else if (row.status === 'completed' || row.status === 'success') {
-          completedRuns += row.count;
-        } else if (row.status === 'error' || row.status === 'failed') {
-          failedRuns += row.count;
+        for (const row of runCounts) {
+          if (row.status === 'running' || row.status === 'active') {
+            activeRuns += row.count;
+          } else if (row.status === 'completed' || row.status === 'success') {
+            completedRuns += row.count;
+          } else if (row.status === 'error' || row.status === 'failed') {
+            failedRuns += row.count;
+          }
         }
-      }
 
-      return {
-        agents: {
-          total: totalAgents,
-          online: onlineAgents,
-          offline: offlineAgents,
-        },
-        runs: {
-          total: runTotal,
-          active: activeRuns,
-          completed: completedRuns,
-          failed: failedRuns,
-        },
-        webhooks: {
-          total: webhook.total,
-          active: webhook.active,
-        },
-        recentErrors: recentErrors.map((row) => ({
-          agentId: row.agent_id,
-          error: row.error_message,
-          timestamp: row.finished_at,
-        })),
-      };
-    } catch {
-      return reply.code(500).send({
-        error: 'Failed to fetch dashboard overview',
-        code: 'DASHBOARD_OVERVIEW_ERROR',
-      });
-    }
-  });
+        return {
+          agents: {
+            total: totalAgents,
+            online: onlineAgents,
+            offline: offlineAgents,
+          },
+          runs: {
+            total: runTotal,
+            active: activeRuns,
+            completed: completedRuns,
+            failed: failedRuns,
+          },
+          webhooks: {
+            total: webhook.total,
+            active: webhook.active,
+          },
+          recentErrors: recentErrors.map((row) => ({
+            agentId: row.agent_id,
+            error: row.error_message,
+            timestamp: row.finished_at,
+          })),
+        };
+      } catch {
+        return reply.code(500).send({
+          error: 'Failed to fetch dashboard overview',
+          code: 'DASHBOARD_OVERVIEW_ERROR',
+        });
+      }
+    },
+  );
 
   // -------------------------------------------------------------------------
   // GET /agent-stats — Per-agent statistics
   // -------------------------------------------------------------------------
 
-  app.get('/agent-stats', async (_request, reply) => {
-    try {
-      const result = await db.execute(
-        sql`SELECT
+  app.get(
+    '/agent-stats',
+    { schema: { tags: ['dashboard'], summary: 'Get per-agent statistics and success rates' } },
+    async (_request, reply) => {
+      try {
+        const result = await db.execute(
+          sql`SELECT
             a.id AS agent_id,
             a.name AS agent_name,
             a.status,
@@ -214,46 +226,50 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           LEFT JOIN agent_runs r ON r.agent_id = a.id
           GROUP BY a.id, a.name, a.status
           ORDER BY total_runs DESC`,
-      );
+        );
 
-      const rows = result.rows as unknown as AgentStatRow[];
+        const rows = result.rows as unknown as AgentStatRow[];
 
-      const stats = rows.map((row) => {
-        const totalRuns = row.total_runs;
-        const successfulRuns = row.successful_runs;
-        const successRate = totalRuns > 0 ? Number((successfulRuns / totalRuns).toFixed(4)) : 0;
+        const stats = rows.map((row) => {
+          const totalRuns = row.total_runs;
+          const successfulRuns = row.successful_runs;
+          const successRate = totalRuns > 0 ? Number((successfulRuns / totalRuns).toFixed(4)) : 0;
 
-        return {
-          agentId: row.agent_id,
-          agentName: row.agent_name,
-          status: row.status,
-          totalRuns,
-          successRate,
-          avgDurationMs: row.avg_duration_ms ?? 0,
-          totalTokens: row.total_tokens != null ? Number(row.total_tokens) : 0,
-          totalCostUsd: row.total_cost_usd != null ? Number(row.total_cost_usd) : 0,
-          lastRunAt: row.last_run_at,
-        };
-      });
+          return {
+            agentId: row.agent_id,
+            agentName: row.agent_name,
+            status: row.status,
+            totalRuns,
+            successRate,
+            avgDurationMs: row.avg_duration_ms ?? 0,
+            totalTokens: row.total_tokens != null ? Number(row.total_tokens) : 0,
+            totalCostUsd: row.total_cost_usd != null ? Number(row.total_cost_usd) : 0,
+            lastRunAt: row.last_run_at,
+          };
+        });
 
-      return { stats };
-    } catch {
-      return reply.code(500).send({
-        error: 'Failed to fetch agent stats',
-        code: 'DASHBOARD_AGENT_STATS_ERROR',
-      });
-    }
-  });
+        return { stats };
+      } catch {
+        return reply.code(500).send({
+          error: 'Failed to fetch agent stats',
+          code: 'DASHBOARD_AGENT_STATS_ERROR',
+        });
+      }
+    },
+  );
 
   // -------------------------------------------------------------------------
   // GET /tool-usage — Tool analytics
   // -------------------------------------------------------------------------
 
-  app.get('/tool-usage', async (_request, reply) => {
-    try {
-      const [toolResult, topAgentsResult] = await Promise.all([
-        db.execute(
-          sql`SELECT
+  app.get(
+    '/tool-usage',
+    { schema: { tags: ['dashboard'], summary: 'Get tool usage analytics and top agents' } },
+    async (_request, reply) => {
+      try {
+        const [toolResult, topAgentsResult] = await Promise.all([
+          db.execute(
+            sql`SELECT
               tool_name,
               COUNT(*)::int AS count,
               AVG(duration_ms)::int AS avg_duration_ms
@@ -261,9 +277,9 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
             WHERE tool_name IS NOT NULL
             GROUP BY tool_name
             ORDER BY count DESC`,
-        ),
-        db.execute(
-          sql`SELECT
+          ),
+          db.execute(
+            sql`SELECT
               agent_id,
               COUNT(*)::int AS total_tool_calls
             FROM agent_actions
@@ -271,98 +287,108 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
             GROUP BY agent_id
             ORDER BY total_tool_calls DESC
             LIMIT 10`,
-        ),
-      ]);
+          ),
+        ]);
 
-      const tools = (toolResult.rows as unknown as ToolUsageRow[]).map((row) => ({
-        tool: row.tool_name,
-        count: row.count,
-        avgDurationMs: row.avg_duration_ms ?? 0,
-      }));
+        const tools = (toolResult.rows as unknown as ToolUsageRow[]).map((row) => ({
+          tool: row.tool_name,
+          count: row.count,
+          avgDurationMs: row.avg_duration_ms ?? 0,
+        }));
 
-      const topAgentsByToolUse = (topAgentsResult.rows as unknown as TopAgentByToolUseRow[]).map(
-        (row) => ({
-          agentId: row.agent_id,
-          totalToolCalls: row.total_tool_calls,
-        }),
-      );
+        const topAgentsByToolUse = (topAgentsResult.rows as unknown as TopAgentByToolUseRow[]).map(
+          (row) => ({
+            agentId: row.agent_id,
+            totalToolCalls: row.total_tool_calls,
+          }),
+        );
 
-      return { tools, topAgentsByToolUse };
-    } catch {
-      return reply.code(500).send({
-        error: 'Failed to fetch tool usage',
-        code: 'DASHBOARD_TOOL_USAGE_ERROR',
-      });
-    }
-  });
+        return { tools, topAgentsByToolUse };
+      } catch {
+        return reply.code(500).send({
+          error: 'Failed to fetch tool usage',
+          code: 'DASHBOARD_TOOL_USAGE_ERROR',
+        });
+      }
+    },
+  );
 
   // -------------------------------------------------------------------------
   // GET /cost-summary?period=7d — Cost breakdown
   // -------------------------------------------------------------------------
 
-  app.get<{ Querystring: { period?: string } }>('/cost-summary', async (request, reply) => {
-    const rawPeriod = request.query.period ?? '7d';
+  app.get<{ Querystring: { period?: string } }>(
+    '/cost-summary',
+    {
+      schema: {
+        tags: ['dashboard'],
+        summary: 'Get cost breakdown by agent and provider for a period',
+      },
+    },
+    async (request, reply) => {
+      const rawPeriod = request.query.period ?? '7d';
 
-    if (!isValidPeriod(rawPeriod)) {
-      return reply.code(400).send({
-        error: `Invalid period "${rawPeriod}". Must be one of: ${VALID_PERIODS.join(', ')}`,
-        code: 'INVALID_PERIOD',
-      });
-    }
+      if (!isValidPeriod(rawPeriod)) {
+        return reply.code(400).send({
+          error: `Invalid period "${rawPeriod}". Must be one of: ${VALID_PERIODS.join(', ')}`,
+          code: 'INVALID_PERIOD',
+        });
+      }
 
-    const interval = periodToInterval(rawPeriod);
+      const interval = periodToInterval(rawPeriod);
 
-    try {
-      const [totalResult, byAgentResult, byProviderResult] = await Promise.all([
-        db.execute(
-          sql`SELECT COALESCE(SUM(cost_usd), 0)::numeric AS total_cost_usd
+      try {
+        const [totalResult, byAgentResult, byProviderResult] = await Promise.all([
+          db.execute(
+            sql`SELECT COALESCE(SUM(cost_usd), 0)::numeric AS total_cost_usd
             FROM agent_runs
             WHERE started_at >= NOW() - ${sql.raw(`INTERVAL '${interval}'`)}`,
-        ),
-        db.execute(
-          sql`SELECT
+          ),
+          db.execute(
+            sql`SELECT
               agent_id,
               COALESCE(SUM(cost_usd), 0)::numeric AS cost_usd
             FROM agent_runs
             WHERE started_at >= NOW() - ${sql.raw(`INTERVAL '${interval}'`)}
             GROUP BY agent_id
             ORDER BY cost_usd DESC`,
-        ),
-        db.execute(
-          sql`SELECT
+          ),
+          db.execute(
+            sql`SELECT
               COALESCE(provider, 'unknown') AS provider,
               COALESCE(SUM(cost_usd), 0)::numeric AS cost_usd
             FROM agent_runs
             WHERE started_at >= NOW() - ${sql.raw(`INTERVAL '${interval}'`)}
             GROUP BY provider
             ORDER BY cost_usd DESC`,
-        ),
-      ]);
+          ),
+        ]);
 
-      const totalRow = (totalResult.rows as unknown as TotalCostRow[])[0];
-      const totalCostUsd = totalRow ? Number(totalRow.total_cost_usd) : 0;
+        const totalRow = (totalResult.rows as unknown as TotalCostRow[])[0];
+        const totalCostUsd = totalRow ? Number(totalRow.total_cost_usd) : 0;
 
-      const byAgent = (byAgentResult.rows as unknown as CostByAgentRow[]).map((row) => ({
-        agentId: row.agent_id,
-        costUsd: Number(row.cost_usd),
-      }));
+        const byAgent = (byAgentResult.rows as unknown as CostByAgentRow[]).map((row) => ({
+          agentId: row.agent_id,
+          costUsd: Number(row.cost_usd),
+        }));
 
-      const byProvider = (byProviderResult.rows as unknown as CostByProviderRow[]).map((row) => ({
-        provider: row.provider,
-        costUsd: Number(row.cost_usd),
-      }));
+        const byProvider = (byProviderResult.rows as unknown as CostByProviderRow[]).map((row) => ({
+          provider: row.provider,
+          costUsd: Number(row.cost_usd),
+        }));
 
-      return {
-        period: rawPeriod,
-        totalCostUsd,
-        byAgent,
-        byProvider,
-      };
-    } catch {
-      return reply.code(500).send({
-        error: 'Failed to fetch cost summary',
-        code: 'DASHBOARD_COST_SUMMARY_ERROR',
-      });
-    }
-  });
+        return {
+          period: rawPeriod,
+          totalCostUsd,
+          byAgent,
+          byProvider,
+        };
+      } catch {
+        return reply.code(500).send({
+          error: 'Failed to fetch cost summary',
+          code: 'DASHBOARD_COST_SUMMARY_ERROR',
+        });
+      }
+    },
+  );
 };

@@ -35,6 +35,7 @@ export const checkpointRoutes: FastifyPluginAsync<CheckpointRoutesOptions> = asy
 
   app.post<{ Params: { id: string }; Body: CheckpointBody }>(
     '/:id/checkpoint',
+    { schema: { tags: ['agents'], summary: 'Receive loop checkpoint from agent worker' } },
     async (request, reply) => {
       const agentId = request.params.id;
       const body = request.body;

@@ -35,6 +35,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
   app.get<{ Params: ReplayParams; Querystring: ReplayQuerystring }>(
     '/:sessionId',
+    { schema: { tags: ['audit'], summary: 'Get full session replay timeline' } },
     async (request, reply) => {
       const { sessionId } = request.params;
       const { agentId } = request.query;
@@ -101,6 +102,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
   app.get<{ Params: ReplayParams; Querystring: ReplayQuerystring }>(
     '/:sessionId/summary',
+    { schema: { tags: ['audit'], summary: 'Get session summary statistics' } },
     async (request, reply) => {
       const { sessionId } = request.params;
       const { agentId } = request.query;
@@ -160,6 +162,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
   app.get<{ Params: ReplayParams; Querystring: ReplayQuerystring }>(
     '/:sessionId/suspicious',
+    { schema: { tags: ['audit'], summary: 'Detect suspicious patterns in a session' } },
     async (request, reply) => {
       const { sessionId } = request.params;
       const { agentId } = request.query;

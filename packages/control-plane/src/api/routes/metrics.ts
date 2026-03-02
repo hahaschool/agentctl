@@ -149,117 +149,123 @@ export const metricsRoutes: FastifyPluginAsync<MetricsRoutesOptions> = async (ap
     requestTracker: tracker,
   } = opts;
 
-  app.get('/metrics', async (_request, reply) => {
-    const prom = new PrometheusRegistry();
+  app.get(
+    '/metrics',
+    { schema: { tags: ['health'], summary: 'Get Prometheus metrics' } },
+    async (_request, reply) => {
+      const prom = new PrometheusRegistry();
 
-    // --- Static gauges ---
-    prom.register('agentctl_control_plane_up', 'Control plane is up', 'gauge');
-    prom.set('agentctl_control_plane_up', 1);
+      // --- Static gauges ---
+      prom.register('agentctl_control_plane_up', 'Control plane is up', 'gauge');
+      prom.set('agentctl_control_plane_up', 1);
 
-    // --- Agent counts ---
-    let totalAgents = 0;
-    let activeAgents = 0;
+      // --- Agent counts ---
+      let totalAgents = 0;
+      let activeAgents = 0;
 
-    if (dbRegistry) {
-      try {
-        const allAgents = await dbRegistry.listAgents();
-        totalAgents = allAgents.length;
-        activeAgents = allAgents.filter((a) => a.status === 'running').length;
-      } catch {
-        // If DB is unreachable, leave counts at 0
-      }
-    } else if (registry) {
-      const machines = await registry.listMachines();
-      totalAgents = machines.length;
-      // In-memory registry tracks machines, not individual agent status;
-      // treat all registered machines as "active" for this gauge.
-      activeAgents = machines.filter((m) => (m as { status?: string }).status === 'online').length;
-    }
-
-    prom.register('agentctl_agents_total', 'Total registered agents', 'gauge');
-    prom.set('agentctl_agents_total', totalAgents);
-
-    prom.register('agentctl_agents_active', 'Currently running agents', 'gauge');
-    prom.set('agentctl_agents_active', activeAgents);
-
-    // --- Runs dispatched ---
-    prom.register('agentctl_runs_total', 'Total runs dispatched', 'counter');
-    prom.set('agentctl_runs_total', runsDispatched?.count ?? 0);
-
-    // --- HTTP request tracking ---
-    prom.register('agentctl_http_requests_total', 'Total HTTP requests', 'counter');
-    for (const [key, count] of tracker.requests) {
-      const [method, path, status] = key.split('|');
-      prom.set('agentctl_http_requests_total', count, { method, path, status });
-    }
-
-    // --- HTTP request duration histogram ---
-    // Since the PrometheusRegistry histogram API expects individual observe() calls
-    // but we've pre-aggregated the data, render the histogram manually and append
-    // it to the registry output.
-    let histogramOutput = '';
-    if (tracker.durations.size > 0) {
-      histogramOutput +=
-        '# HELP agentctl_http_request_duration_seconds HTTP request duration in seconds\n';
-      histogramOutput += '# TYPE agentctl_http_request_duration_seconds histogram\n';
-
-      for (const [key, hist] of tracker.durations) {
-        const [method, path] = key.split('|');
-        const baseLabels = `method="${method}",path="${path}"`;
-
-        for (let i = 0; i < HISTOGRAM_BUCKETS.length; i++) {
-          histogramOutput += `agentctl_http_request_duration_seconds_bucket{${baseLabels},le="${HISTOGRAM_BUCKETS[i]}"} ${hist.buckets[i]}\n`;
+      if (dbRegistry) {
+        try {
+          const allAgents = await dbRegistry.listAgents();
+          totalAgents = allAgents.length;
+          activeAgents = allAgents.filter((a) => a.status === 'running').length;
+        } catch {
+          // If DB is unreachable, leave counts at 0
         }
-        histogramOutput += `agentctl_http_request_duration_seconds_bucket{${baseLabels},le="+Inf"} ${hist.count}\n`;
-        histogramOutput += `agentctl_http_request_duration_seconds_sum{${baseLabels}} ${hist.sum}\n`;
-        histogramOutput += `agentctl_http_request_duration_seconds_count{${baseLabels}} ${hist.count}\n`;
+      } else if (registry) {
+        const machines = await registry.listMachines();
+        totalAgents = machines.length;
+        // In-memory registry tracks machines, not individual agent status;
+        // treat all registered machines as "active" for this gauge.
+        activeAgents = machines.filter(
+          (m) => (m as { status?: string }).status === 'online',
+        ).length;
       }
-    }
 
-    // --- Dependency health ---
-    prom.register(
-      'agentctl_dependency_healthy',
-      'Dependency health status (1=healthy, 0=unhealthy)',
-      'gauge',
-    );
+      prom.register('agentctl_agents_total', 'Total registered agents', 'gauge');
+      prom.set('agentctl_agents_total', totalAgents);
 
-    const [pgHealthy, redisHealthy, mem0Healthy, litellmHealthy] = await Promise.all([
-      db
-        ? isHealthy('postgres', async () => {
-            const { sql: sqlTag } = await import('drizzle-orm');
-            await db.execute(sqlTag`SELECT 1`);
-          })
-        : true,
-      redis
-        ? isHealthy('redis', async () => {
-            await redis.ping();
-          })
-        : true,
-      mem0Client
-        ? isHealthy('mem0', async () => {
-            const healthy = await mem0Client.health();
-            if (!healthy) throw new Error('unhealthy');
-          })
-        : true,
-      litellmClient
-        ? isHealthy('litellm', async () => {
-            const healthy = await litellmClient.health();
-            if (!healthy) throw new Error('unhealthy');
-          })
-        : true,
-    ]);
+      prom.register('agentctl_agents_active', 'Currently running agents', 'gauge');
+      prom.set('agentctl_agents_active', activeAgents);
 
-    prom.set('agentctl_dependency_healthy', pgHealthy ? 1 : 0, { name: 'postgres' });
-    prom.set('agentctl_dependency_healthy', redisHealthy ? 1 : 0, { name: 'redis' });
-    prom.set('agentctl_dependency_healthy', mem0Healthy ? 1 : 0, { name: 'mem0' });
-    prom.set('agentctl_dependency_healthy', litellmHealthy ? 1 : 0, { name: 'litellm' });
+      // --- Runs dispatched ---
+      prom.register('agentctl_runs_total', 'Total runs dispatched', 'counter');
+      prom.set('agentctl_runs_total', runsDispatched?.count ?? 0);
 
-    // --- Combine output ---
-    const registryOutput = prom.render();
-    const fullOutput = registryOutput + histogramOutput;
+      // --- HTTP request tracking ---
+      prom.register('agentctl_http_requests_total', 'Total HTTP requests', 'counter');
+      for (const [key, count] of tracker.requests) {
+        const [method, path, status] = key.split('|');
+        prom.set('agentctl_http_requests_total', count, { method, path, status });
+      }
 
-    return reply
-      .header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
-      .send(fullOutput);
-  });
+      // --- HTTP request duration histogram ---
+      // Since the PrometheusRegistry histogram API expects individual observe() calls
+      // but we've pre-aggregated the data, render the histogram manually and append
+      // it to the registry output.
+      let histogramOutput = '';
+      if (tracker.durations.size > 0) {
+        histogramOutput +=
+          '# HELP agentctl_http_request_duration_seconds HTTP request duration in seconds\n';
+        histogramOutput += '# TYPE agentctl_http_request_duration_seconds histogram\n';
+
+        for (const [key, hist] of tracker.durations) {
+          const [method, path] = key.split('|');
+          const baseLabels = `method="${method}",path="${path}"`;
+
+          for (let i = 0; i < HISTOGRAM_BUCKETS.length; i++) {
+            histogramOutput += `agentctl_http_request_duration_seconds_bucket{${baseLabels},le="${HISTOGRAM_BUCKETS[i]}"} ${hist.buckets[i]}\n`;
+          }
+          histogramOutput += `agentctl_http_request_duration_seconds_bucket{${baseLabels},le="+Inf"} ${hist.count}\n`;
+          histogramOutput += `agentctl_http_request_duration_seconds_sum{${baseLabels}} ${hist.sum}\n`;
+          histogramOutput += `agentctl_http_request_duration_seconds_count{${baseLabels}} ${hist.count}\n`;
+        }
+      }
+
+      // --- Dependency health ---
+      prom.register(
+        'agentctl_dependency_healthy',
+        'Dependency health status (1=healthy, 0=unhealthy)',
+        'gauge',
+      );
+
+      const [pgHealthy, redisHealthy, mem0Healthy, litellmHealthy] = await Promise.all([
+        db
+          ? isHealthy('postgres', async () => {
+              const { sql: sqlTag } = await import('drizzle-orm');
+              await db.execute(sqlTag`SELECT 1`);
+            })
+          : true,
+        redis
+          ? isHealthy('redis', async () => {
+              await redis.ping();
+            })
+          : true,
+        mem0Client
+          ? isHealthy('mem0', async () => {
+              const healthy = await mem0Client.health();
+              if (!healthy) throw new Error('unhealthy');
+            })
+          : true,
+        litellmClient
+          ? isHealthy('litellm', async () => {
+              const healthy = await litellmClient.health();
+              if (!healthy) throw new Error('unhealthy');
+            })
+          : true,
+      ]);
+
+      prom.set('agentctl_dependency_healthy', pgHealthy ? 1 : 0, { name: 'postgres' });
+      prom.set('agentctl_dependency_healthy', redisHealthy ? 1 : 0, { name: 'redis' });
+      prom.set('agentctl_dependency_healthy', mem0Healthy ? 1 : 0, { name: 'mem0' });
+      prom.set('agentctl_dependency_healthy', litellmHealthy ? 1 : 0, { name: 'litellm' });
+
+      // --- Combine output ---
+      const registryOutput = prom.render();
+      const fullOutput = registryOutput + histogramOutput;
+
+      return reply
+        .header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
+        .send(fullOutput);
+    },
+  );
 };

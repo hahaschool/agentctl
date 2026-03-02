@@ -33,34 +33,39 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Machine registration & heartbeat
   // ---------------------------------------------------------------------------
 
-  app.post<{ Body: RegisterWorkerRequest }>('/register', async (request, reply) => {
-    const body = request.body;
+  app.post<{ Body: RegisterWorkerRequest }>(
+    '/register',
+    { schema: { tags: ['machines'], summary: 'Register a machine' } },
+    async (request, reply) => {
+      const body = request.body;
 
-    if (!body.machineId || typeof body.machineId !== 'string') {
-      return reply.code(400).send({
-        error: 'A non-empty "machineId" string is required',
-        code: 'INVALID_MACHINE_ID',
-      });
-    }
+      if (!body.machineId || typeof body.machineId !== 'string') {
+        return reply.code(400).send({
+          error: 'A non-empty "machineId" string is required',
+          code: 'INVALID_MACHINE_ID',
+        });
+      }
 
-    if (!body.hostname || typeof body.hostname !== 'string') {
-      return reply.code(400).send({
-        error: 'A non-empty "hostname" string is required',
-        code: 'INVALID_HOSTNAME',
-      });
-    }
+      if (!body.hostname || typeof body.hostname !== 'string') {
+        return reply.code(400).send({
+          error: 'A non-empty "hostname" string is required',
+          code: 'INVALID_HOSTNAME',
+        });
+      }
 
-    if (dbRegistry) {
-      await dbRegistry.registerMachine(body);
-    } else {
-      await registry.registerMachine(body.machineId, body.hostname);
-    }
+      if (dbRegistry) {
+        await dbRegistry.registerMachine(body);
+      } else {
+        await registry.registerMachine(body.machineId, body.hostname);
+      }
 
-    return { ok: true, machineId: body.machineId };
-  });
+      return { ok: true, machineId: body.machineId };
+    },
+  );
 
   app.post<{ Params: { id: string }; Body: HeartbeatRequest }>(
     '/:id/heartbeat',
+    { schema: { tags: ['machines'], summary: 'Machine heartbeat' } },
     async (request) => {
       if (dbRegistry) {
         await dbRegistry.heartbeat(request.params.id);
@@ -76,13 +81,17 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Machine listing
   // ---------------------------------------------------------------------------
 
-  app.get('/', async () => {
-    if (dbRegistry) {
-      return await dbRegistry.listMachines();
-    }
+  app.get(
+    '/',
+    { schema: { tags: ['machines'], summary: 'List registered machines' } },
+    async () => {
+      if (dbRegistry) {
+        return await dbRegistry.listMachines();
+      }
 
-    return await registry.listMachines();
-  });
+      return await registry.listMachines();
+    },
+  );
 
   // ---------------------------------------------------------------------------
   // Agent CRUD (only available when dbRegistry is configured)
@@ -98,39 +107,52 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       worktreeBranch?: string;
       config?: Record<string, unknown>;
     };
-  }>('/agents', async (request, reply) => {
-    if (!dbRegistry) {
-      return reply.code(501).send({ error: 'Database not configured' });
-    }
+  }>(
+    '/agents',
+    { schema: { tags: ['agents'], summary: 'Create an agent' } },
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply.code(501).send({ error: 'Database not configured' });
+      }
 
-    const agentId = await dbRegistry.createAgent(request.body);
-    return { ok: true, agentId };
-  });
+      const agentId = await dbRegistry.createAgent(request.body);
+      return { ok: true, agentId };
+    },
+  );
 
-  app.get<{ Querystring: { machineId?: string } }>('/agents/list', async (request, reply) => {
-    if (!dbRegistry) {
-      return reply.code(501).send({ error: 'Database not configured' });
-    }
+  app.get<{ Querystring: { machineId?: string } }>(
+    '/agents/list',
+    { schema: { tags: ['agents'], summary: 'List agents' } },
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply.code(501).send({ error: 'Database not configured' });
+      }
 
-    return await dbRegistry.listAgents(request.query.machineId);
-  });
+      return await dbRegistry.listAgents(request.query.machineId);
+    },
+  );
 
-  app.get<{ Params: { agentId: string } }>('/agents/:agentId', async (request, reply) => {
-    if (!dbRegistry) {
-      return reply.code(501).send({ error: 'Database not configured' });
-    }
+  app.get<{ Params: { agentId: string } }>(
+    '/agents/:agentId',
+    { schema: { tags: ['agents'], summary: 'Get agent by ID' } },
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply.code(501).send({ error: 'Database not configured' });
+      }
 
-    const agent = await dbRegistry.getAgent(request.params.agentId);
+      const agent = await dbRegistry.getAgent(request.params.agentId);
 
-    if (!agent) {
-      return reply.code(404).send({ error: 'Agent not found' });
-    }
+      if (!agent) {
+        return reply.code(404).send({ error: 'Agent not found' });
+      }
 
-    return agent;
-  });
+      return agent;
+    },
+  );
 
   app.patch<{ Params: { agentId: string }; Body: { status: string } }>(
     '/agents/:agentId/status',
+    { schema: { tags: ['agents'], summary: 'Update agent status' } },
     async (request, reply) => {
       if (!dbRegistry) {
         return reply.code(501).send({ error: 'Database not configured' });
@@ -156,6 +178,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
 
   app.get<{ Params: { agentId: string }; Querystring: { limit?: string } }>(
     '/agents/:agentId/runs',
+    { schema: { tags: ['agents'], summary: 'Recent runs for agent' } },
     async (request, reply) => {
       if (!dbRegistry) {
         return reply.code(501).send({ error: 'Database not configured' });
@@ -185,6 +208,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
 
   app.post<{ Params: { id: string }; Body: StartAgentRequest & { machineId?: string } }>(
     '/:id/start',
+    { schema: { tags: ['agents'], summary: 'Start an agent task' } },
     async (request, reply) => {
       const {
         prompt,
@@ -264,17 +288,21 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     },
   );
 
-  app.post<{ Params: { id: string }; Body: StopAgentRequest }>('/:id/stop', async (request) => {
-    const { reason, graceful } = request.body;
-    const agentId = request.params.id;
+  app.post<{ Params: { id: string }; Body: StopAgentRequest }>(
+    '/:id/stop',
+    { schema: { tags: ['agents'], summary: 'Stop an agent' } },
+    async (request) => {
+      const { reason, graceful } = request.body;
+      const agentId = request.params.id;
 
-    if (repeatableJobs) {
-      const removedCount = await repeatableJobs.removeJobsByAgentId(agentId);
-      return { ok: true, agentId, reason, graceful, removedRepeatableJobs: removedCount };
-    }
+      if (repeatableJobs) {
+        const removedCount = await repeatableJobs.removeJobsByAgentId(agentId);
+        return { ok: true, agentId, reason, graceful, removedRepeatableJobs: removedCount };
+      }
 
-    return { ok: true, agentId, reason, graceful };
-  });
+      return { ok: true, agentId, reason, graceful };
+    },
+  );
 
   // ---------------------------------------------------------------------------
   // Run completion callback — called by the agent worker when a run finishes
@@ -290,91 +318,95 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       durationMs?: number;
       sessionId?: string;
     };
-  }>('/:id/complete', async (request, reply) => {
-    if (!dbRegistry) {
-      return reply.code(501).send({
-        error: 'DATABASE_NOT_CONFIGURED',
-        message: 'Completion endpoint requires a database registry',
-      });
-    }
-
-    const { runId, status, errorMessage, costUsd, durationMs, sessionId } = request.body;
-
-    if (!runId || typeof runId !== 'string') {
-      return reply.code(400).send({
-        error: 'INVALID_RUN_ID',
-        message: 'A non-empty "runId" string is required',
-      });
-    }
-
-    if (!status || (status !== 'success' && status !== 'failure')) {
-      return reply.code(400).send({
-        error: 'INVALID_STATUS',
-        message: 'Status must be "success" or "failure"',
-      });
-    }
-
-    try {
-      await dbRegistry.completeRun(runId, {
-        status,
-        errorMessage: errorMessage ?? null,
-        costUsd: costUsd != null ? String(costUsd) : null,
-      });
-
-      app.log.info(
-        {
-          agentId: request.params.id,
-          runId,
-          status,
-          costUsd: costUsd ?? null,
-          durationMs: durationMs ?? null,
-          sessionId: sessionId ?? null,
-        },
-        'Agent run completion reported by worker',
-      );
-
-      // -----------------------------------------------------------------
-      // Fire-and-forget: sync run metadata into memory on success
-      // -----------------------------------------------------------------
-      if (memoryInjector && status === 'success') {
-        const agentId = request.params.id;
-        const summary = `Agent run ${runId} completed successfully.`;
-
-        memoryInjector
-          .syncAfterRun(agentId, summary, {
-            runId,
-            status,
-            costUsd: costUsd ?? null,
-          })
-          .catch((syncErr: unknown) => {
-            app.log.warn(
-              { err: syncErr, agentId, runId },
-              'Memory sync after run completion failed — ignoring',
-            );
-          });
-      }
-
-      return reply.code(200).send({ ok: true, runId, status });
-    } catch (err) {
-      if (err instanceof ControlPlaneError && err.code === 'RUN_NOT_FOUND') {
-        return reply.code(404).send({
-          error: err.code,
-          message: err.message,
+  }>(
+    '/:id/complete',
+    { schema: { tags: ['agents'], summary: 'Run completion callback' } },
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply.code(501).send({
+          error: 'DATABASE_NOT_CONFIGURED',
+          message: 'Completion endpoint requires a database registry',
         });
       }
 
-      app.log.error(
-        { err, runId, agentId: request.params.id },
-        'Failed to process run completion callback',
-      );
+      const { runId, status, errorMessage, costUsd, durationMs, sessionId } = request.body;
 
-      const message = err instanceof Error ? err.message : String(err);
-      return reply.code(500).send({
-        error: 'COMPLETION_FAILED',
-        message: `Failed to complete run: ${message}`,
-      });
-    }
-  });
+      if (!runId || typeof runId !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_RUN_ID',
+          message: 'A non-empty "runId" string is required',
+        });
+      }
+
+      if (!status || (status !== 'success' && status !== 'failure')) {
+        return reply.code(400).send({
+          error: 'INVALID_STATUS',
+          message: 'Status must be "success" or "failure"',
+        });
+      }
+
+      try {
+        await dbRegistry.completeRun(runId, {
+          status,
+          errorMessage: errorMessage ?? null,
+          costUsd: costUsd != null ? String(costUsd) : null,
+        });
+
+        app.log.info(
+          {
+            agentId: request.params.id,
+            runId,
+            status,
+            costUsd: costUsd ?? null,
+            durationMs: durationMs ?? null,
+            sessionId: sessionId ?? null,
+          },
+          'Agent run completion reported by worker',
+        );
+
+        // -----------------------------------------------------------------
+        // Fire-and-forget: sync run metadata into memory on success
+        // -----------------------------------------------------------------
+        if (memoryInjector && status === 'success') {
+          const agentId = request.params.id;
+          const summary = `Agent run ${runId} completed successfully.`;
+
+          memoryInjector
+            .syncAfterRun(agentId, summary, {
+              runId,
+              status,
+              costUsd: costUsd ?? null,
+            })
+            .catch((syncErr: unknown) => {
+              app.log.warn(
+                { err: syncErr, agentId, runId },
+                'Memory sync after run completion failed — ignoring',
+              );
+            });
+        }
+
+        return reply.code(200).send({ ok: true, runId, status });
+      } catch (err) {
+        if (err instanceof ControlPlaneError && err.code === 'RUN_NOT_FOUND') {
+          return reply.code(404).send({
+            error: err.code,
+            message: err.message,
+          });
+        }
+
+        app.log.error(
+          { err, runId, agentId: request.params.id },
+          'Failed to process run completion callback',
+        );
+
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({
+          error: 'COMPLETION_FAILED',
+          message: `Failed to complete run: ${message}`,
+        });
+      }
+    },
+  );
 
   // ---------------------------------------------------------------------------
   // Signal trigger — fire an external signal to trigger an agent run
@@ -382,6 +414,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
 
   app.post<{ Params: { id: string }; Body: SignalAgentRequest }>(
     '/:id/signal',
+    { schema: { tags: ['agents'], summary: 'Signal a running agent' } },
     async (request, reply) => {
       const agentId = request.params.id;
       const { prompt, metadata } = request.body;

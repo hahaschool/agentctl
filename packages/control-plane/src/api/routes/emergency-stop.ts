@@ -178,89 +178,97 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
   app.post<{
     Params: { id: string };
     Querystring: { workerUrl?: string; machineId?: string };
-  }>('/:id/emergency-stop', async (request, reply) => {
-    const agentId = request.params.id;
+  }>(
+    '/:id/emergency-stop',
+    { schema: { tags: ['agents'], summary: 'Emergency stop a single agent' } },
+    async (request, reply) => {
+      const agentId = request.params.id;
 
-    app.log.error({ agentId }, 'Emergency stop requested via control plane');
+      app.log.error({ agentId }, 'Emergency stop requested via control plane');
 
-    const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
-    if (!resolved.ok) {
-      return reply
-        .status(resolved.status)
-        .send({ error: resolved.error, message: resolved.message });
-    }
-
-    const result = await proxyEmergencyStop(resolved.url, agentId);
-    if (!result.ok) {
-      return reply.status(result.status).send({ error: result.error, message: result.message });
-    }
-
-    // Update agent status in the database to 'stopped'
-    if (dbRegistry) {
-      try {
-        await dbRegistry.updateAgentStatus(agentId, 'stopped');
-      } catch {
-        // Best-effort: don't fail the emergency stop if the DB update fails
-        app.log.warn({ agentId }, 'Failed to update agent status in DB after emergency stop');
+      const resolved = await resolveWorkerUrl(agentId, request.query, registry, dbRegistry);
+      if (!resolved.ok) {
+        return reply
+          .status(resolved.status)
+          .send({ error: resolved.error, message: resolved.message });
       }
-    }
 
-    return reply.status(result.status).send(result.data);
-  });
+      const result = await proxyEmergencyStop(resolved.url, agentId);
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
+      }
+
+      // Update agent status in the database to 'stopped'
+      if (dbRegistry) {
+        try {
+          await dbRegistry.updateAgentStatus(agentId, 'stopped');
+        } catch {
+          // Best-effort: don't fail the emergency stop if the DB update fails
+          app.log.warn({ agentId }, 'Failed to update agent status in DB after emergency stop');
+        }
+      }
+
+      return reply.status(result.status).send(result.data);
+    },
+  );
 
   // POST /api/agents/emergency-stop-all — Emergency stop ALL agents on ALL workers
-  app.post('/emergency-stop-all', async (_request, reply) => {
-    app.log.error('Emergency stop ALL requested via control plane');
+  app.post(
+    '/emergency-stop-all',
+    { schema: { tags: ['agents'], summary: 'Emergency stop all agents on all workers' } },
+    async (_request, reply) => {
+      app.log.error('Emergency stop ALL requested via control plane');
 
-    type MachineResult = {
-      machineId: string;
-      stoppedCount: number;
-      error?: string;
-    };
+      type MachineResult = {
+        machineId: string;
+        stoppedCount: number;
+        error?: string;
+      };
 
-    const results: MachineResult[] = [];
+      const results: MachineResult[] = [];
 
-    // Get all registered machines
-    let allMachines: { hostname: string; tailscaleIp?: string; [key: string]: unknown }[];
+      // Get all registered machines
+      let allMachines: { hostname: string; tailscaleIp?: string; [key: string]: unknown }[];
 
-    if (dbRegistry) {
-      allMachines = await dbRegistry.listMachines();
-    } else {
-      allMachines = await registry.listMachines();
-    }
-
-    // Fan out emergency-stop-all to each online machine
-    const proxyPromises = allMachines.map(async (machine) => {
-      const machineId = (machine.id ?? machine.machineId ?? machine.hostname) as string;
-      const machineStatus = machine.status as string | undefined;
-
-      // Skip offline machines
-      if (machineStatus === 'offline') {
-        results.push({ machineId, stoppedCount: 0, error: 'machine_offline' });
-        return;
+      if (dbRegistry) {
+        allMachines = await dbRegistry.listMachines();
+      } else {
+        allMachines = await registry.listMachines();
       }
 
-      const address = machine.tailscaleIp ?? machine.hostname;
-      const workerUrl = `http://${address}:${String(WORKER_PORT)}`;
+      // Fan out emergency-stop-all to each online machine
+      const proxyPromises = allMachines.map(async (machine) => {
+        const machineId = (machine.id ?? machine.machineId ?? machine.hostname) as string;
+        const machineStatus = machine.status as string | undefined;
 
-      const result = await proxyEmergencyStopAll(workerUrl);
+        // Skip offline machines
+        if (machineStatus === 'offline') {
+          results.push({ machineId, stoppedCount: 0, error: 'machine_offline' });
+          return;
+        }
 
-      if (!result.ok) {
-        results.push({ machineId, stoppedCount: 0, error: result.message });
-        return;
-      }
+        const address = machine.tailscaleIp ?? machine.hostname;
+        const workerUrl = `http://${address}:${String(WORKER_PORT)}`;
 
-      const data = result.data as { stoppedCount?: number };
-      results.push({ machineId, stoppedCount: data.stoppedCount ?? 0 });
-    });
+        const result = await proxyEmergencyStopAll(workerUrl);
 
-    await Promise.all(proxyPromises);
+        if (!result.ok) {
+          results.push({ machineId, stoppedCount: 0, error: result.message });
+          return;
+        }
 
-    app.log.error({ results }, 'Emergency stop ALL completed across all machines');
+        const data = result.data as { stoppedCount?: number };
+        results.push({ machineId, stoppedCount: data.stoppedCount ?? 0 });
+      });
 
-    return reply.status(200).send({
-      ok: true,
-      results,
-    });
-  });
+      await Promise.all(proxyPromises);
+
+      app.log.error({ results }, 'Emergency stop ALL completed across all machines');
+
+      return reply.status(200).send({
+        ok: true,
+        results,
+      });
+    },
+  );
 };
