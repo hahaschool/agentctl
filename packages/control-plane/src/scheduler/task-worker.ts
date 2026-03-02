@@ -18,6 +18,7 @@ export type TaskWorkerOptions = {
 };
 
 type DispatchPayload = {
+  runId: string;
   prompt: string | null;
   config: {
     model: string | null;
@@ -200,6 +201,7 @@ export function createTaskWorker({
         const dispatchUrl = `http://${machine.tailscaleIp}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
 
         const payload: DispatchPayload = {
+          runId,
           prompt: enrichedPrompt,
           config: {
             model,
@@ -212,13 +214,13 @@ export function createTaskWorker({
         const result = await dispatchToWorker(dispatchUrl, payload, jobLogger);
 
         // -------------------------------------------------------------------
-        // 5. Complete the run with success
+        // 5. The run was created with status 'running' by createRun above.
+        //    dispatchToWorker() only confirms the worker *accepted* the HTTP
+        //    request — the agent itself is still executing asynchronously.
+        //    Do NOT call completeRun here; the worker will report the final
+        //    status (success/failure) via the audit reporter or a completion
+        //    callback, which will call completeRun at that point.
         // -------------------------------------------------------------------
-        await registry.completeRun(runId, {
-          status: 'success',
-          resultSummary: result.message ?? null,
-        });
-
         jobLogger.info(
           {
             runId,
@@ -231,7 +233,7 @@ export function createTaskWorker({
             model,
             controlPlaneUrl: controlPlaneUrl ?? null,
           },
-          'Agent task dispatched and run completed successfully',
+          'Agent task dispatched; run is now executing on the worker',
         );
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);

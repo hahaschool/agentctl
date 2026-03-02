@@ -302,7 +302,7 @@ describe('createTaskWorker()', () => {
   });
 
   describe('processor — successful dispatch', () => {
-    it('creates a run record, dispatches to worker, and marks run as success', async () => {
+    it('creates a run record and dispatches to worker without completing the run', async () => {
       const registry = createMockRegistry();
       mockFetchSuccess({ ok: true, message: 'agent started' });
 
@@ -324,11 +324,10 @@ describe('createTaskWorker()', () => {
 
       expect(fetch).toHaveBeenCalledOnce();
 
-      expect(registry.completeRun).toHaveBeenCalledOnce();
-      expect(registry.completeRun).toHaveBeenCalledWith(
-        'run-001',
-        expect.objectContaining({ status: 'success' }),
-      );
+      // completeRun should NOT be called on success — the agent is still
+      // running asynchronously on the worker. The worker reports final
+      // status via the audit reporter or completion callback.
+      expect(registry.completeRun).not.toHaveBeenCalled();
     });
 
     it('dispatches to the correct Tailscale URL for the machine', async () => {

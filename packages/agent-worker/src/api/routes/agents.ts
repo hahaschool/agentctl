@@ -15,6 +15,8 @@ type StartAgentBody = {
   prompt: string;
   config?: AgentConfig;
   projectPath?: string;
+  /** Run ID assigned by the control plane for this execution. Stored on the agent instance for audit correlation. */
+  runId?: string;
 };
 
 type StopAgentBody = {
@@ -90,7 +92,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
     '/:id/start',
     async (request, reply) => {
       const { id } = request.params;
-      const { prompt, config, projectPath } = request.body;
+      const { prompt, config, projectPath, runId } = request.body;
 
       if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return reply.status(400).send({
@@ -110,6 +112,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
             config: config ?? {},
             projectPath: projectPath ?? process.cwd(),
             logger,
+            runId,
           });
         }
 

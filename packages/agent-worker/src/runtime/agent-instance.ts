@@ -26,6 +26,8 @@ export type AgentInstanceOptions = {
   auditLogDir?: string;
   /** Maximum execution time in milliseconds before the agent is forcefully timed out. */
   maxExecutionMs?: number;
+  /** Run ID assigned by the control plane. Used to correlate audit events with their run record. */
+  runId?: string;
 };
 
 type AgentInstanceState = {
@@ -64,6 +66,8 @@ export class AgentInstance extends EventEmitter {
   readonly config: AgentConfig;
   readonly projectPath: string;
   readonly outputBuffer: OutputBuffer;
+  /** Run ID from the control plane. Populated when the agent is dispatched via the task worker. */
+  readonly runId: string | null;
 
   private readonly log: Logger;
   private readonly auditLogger: AuditLogger;
@@ -82,6 +86,7 @@ export class AgentInstance extends EventEmitter {
     this.machineId = options.machineId;
     this.config = options.config;
     this.projectPath = options.projectPath;
+    this.runId = options.runId ?? null;
     this.log = options.logger.child({ agentId: this.agentId, machineId: this.machineId });
     this.outputBuffer = new OutputBuffer();
 
@@ -267,6 +272,7 @@ export class AgentInstance extends EventEmitter {
       machineId: this.machineId,
       status: this.state.status,
       sessionId: this.state.sessionId,
+      runId: this.runId,
       startedAt: this.state.startedAt?.toISOString() ?? null,
       stoppedAt: this.state.stoppedAt?.toISOString() ?? null,
       costUsd: this.state.costUsd,

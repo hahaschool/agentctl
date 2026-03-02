@@ -161,6 +161,7 @@ describe('AgentInstance', () => {
       machineId: 'test-machine',
       status: 'registered',
       sessionId: null,
+      runId: null,
       startedAt: null,
       stoppedAt: null,
       costUsd: 0,
