@@ -409,9 +409,26 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             return;
           }
 
+          let machineId = agentId;
+
+          if (dbRegistry) {
+            const agent = await dbRegistry.getAgent(agentId);
+
+            if (!agent) {
+              sendError(
+                socket,
+                'AGENT_NOT_FOUND',
+                `Agent '${agentId}' does not exist in the registry`,
+              );
+              return;
+            }
+
+            machineId = agent.machineId;
+          }
+
           const jobData: AgentTaskJobData = {
             agentId,
-            machineId: agentId,
+            machineId,
             prompt,
             model: config?.model ?? null,
             trigger: 'manual',

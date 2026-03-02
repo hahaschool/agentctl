@@ -181,29 +181,47 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Agent start / stop (existing BullMQ-based control)
   // ---------------------------------------------------------------------------
 
-  app.post<{ Params: { id: string }; Body: StartAgentRequest }>('/:id/start', async (request) => {
-    const { prompt, model, tools, resumeSession } = request.body;
-    const agentId = request.params.id;
+  app.post<{ Params: { id: string }; Body: StartAgentRequest }>(
+    '/:id/start',
+    async (request, reply) => {
+      const { prompt, model, tools, resumeSession } = request.body;
+      const agentId = request.params.id;
 
-    if (taskQueue) {
-      const jobData: AgentTaskJobData = {
-        agentId,
-        machineId: agentId,
-        prompt: prompt ?? null,
-        model: model ?? null,
-        trigger: 'manual',
-        tools: tools ?? null,
-        resumeSession: resumeSession ?? null,
-        createdAt: new Date().toISOString(),
-      };
+      if (taskQueue) {
+        let machineId = agentId;
 
-      const job = await taskQueue.add('agent:start', jobData);
+        if (dbRegistry) {
+          const agent = await dbRegistry.getAgent(agentId);
 
-      return { ok: true, agentId, jobId: job.id, prompt, model };
-    }
+          if (!agent) {
+            return reply.code(404).send({
+              error: 'AGENT_NOT_FOUND',
+              message: `Agent '${agentId}' does not exist in the registry`,
+            });
+          }
 
-    return { ok: true, agentId, prompt, model };
-  });
+          machineId = agent.machineId;
+        }
+
+        const jobData: AgentTaskJobData = {
+          agentId,
+          machineId,
+          prompt: prompt ?? null,
+          model: model ?? null,
+          trigger: 'manual',
+          tools: tools ?? null,
+          resumeSession: resumeSession ?? null,
+          createdAt: new Date().toISOString(),
+        };
+
+        const job = await taskQueue.add('agent:start', jobData);
+
+        return { ok: true, agentId, jobId: job.id, prompt, model };
+      }
+
+      return { ok: true, agentId, prompt, model };
+    },
+  );
 
   app.post<{ Params: { id: string }; Body: StopAgentRequest }>('/:id/stop', async (request) => {
     const { reason, graceful } = request.body;
