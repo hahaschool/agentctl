@@ -82,7 +82,11 @@ export async function createWorkerServer({
               signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
             });
             if (!response.ok) {
-              throw new Error(`Control plane returned HTTP ${response.status}`);
+              throw new WorkerError(
+                'HEALTH_CHECK_FAILED',
+                `Control plane returned HTTP ${response.status}`,
+                { httpStatus: response.status },
+              );
             }
           })
         : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),

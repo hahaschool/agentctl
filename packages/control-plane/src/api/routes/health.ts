@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { ControlPlaneError } from '@agentctl/shared';
+
 import type { Database } from '../../db/index.js';
 import type { Mem0Client } from '../../memory/mem0-client.js';
 import type { LiteLLMClient } from '../../router/litellm-client.js';
@@ -96,13 +98,23 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
           mem0Client
             ? checkWithTimeout('mem0', async () => {
                 const healthy = await mem0Client.health();
-                if (!healthy) throw new Error('Mem0 health endpoint returned non-OK');
+                if (!healthy)
+                  throw new ControlPlaneError(
+                    'HEALTH_CHECK_FAILED',
+                    'Mem0 health endpoint returned non-OK',
+                    { component: 'mem0' },
+                  );
               })
             : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
           litellmClient
             ? checkWithTimeout('litellm', async () => {
                 const healthy = await litellmClient.health();
-                if (!healthy) throw new Error('LiteLLM health endpoint returned non-OK');
+                if (!healthy)
+                  throw new ControlPlaneError(
+                    'HEALTH_CHECK_FAILED',
+                    'LiteLLM health endpoint returned non-OK',
+                    { component: 'litellm' },
+                  );
               })
             : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
         ]);
@@ -131,13 +143,23 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
         mem0Client
           ? checkWithTimeout('mem0', async () => {
               const healthy = await mem0Client.health();
-              if (!healthy) throw new Error('Mem0 health endpoint returned non-OK');
+              if (!healthy)
+                  throw new ControlPlaneError(
+                    'HEALTH_CHECK_FAILED',
+                    'Mem0 health endpoint returned non-OK',
+                    { component: 'mem0' },
+                  );
             })
           : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
         litellmClient
           ? checkWithTimeout('litellm', async () => {
               const healthy = await litellmClient.health();
-              if (!healthy) throw new Error('LiteLLM health endpoint returned non-OK');
+              if (!healthy)
+                  throw new ControlPlaneError(
+                    'HEALTH_CHECK_FAILED',
+                    'LiteLLM health endpoint returned non-OK',
+                    { component: 'litellm' },
+                  );
             })
           : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
       ]);

@@ -1,4 +1,4 @@
-import { PrometheusRegistry } from '@agentctl/shared';
+import { ControlPlaneError, PrometheusRegistry } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
@@ -243,13 +243,21 @@ export const metricsRoutes: FastifyPluginAsync<MetricsRoutesOptions> = async (ap
         mem0Client
           ? isHealthy('mem0', async () => {
               const healthy = await mem0Client.health();
-              if (!healthy) throw new Error('unhealthy');
+              if (!healthy)
+                throw new ControlPlaneError('HEALTH_CHECK_FAILED', 'Mem0 health check failed', {
+                  component: 'mem0',
+                });
             })
           : true,
         litellmClient
           ? isHealthy('litellm', async () => {
               const healthy = await litellmClient.health();
-              if (!healthy) throw new Error('unhealthy');
+              if (!healthy)
+                throw new ControlPlaneError(
+                  'HEALTH_CHECK_FAILED',
+                  'LiteLLM health check failed',
+                  { component: 'litellm' },
+                );
             })
           : true,
       ]);
