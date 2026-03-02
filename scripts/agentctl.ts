@@ -3,19 +3,25 @@
 // agentctl — CLI tool for managing the AgentCTL fleet
 //
 // Usage:
-//   npx tsx scripts/agentctl.ts <command> [args...]
+//   npx tsx scripts/agentctl.ts <command> [--json] [args...]
 //
 // Environment:
 //   CONTROL_URL  Base URL of the control plane (default: http://localhost:8080)
+//   WORKER_URL   Base URL of the agent worker  (default: http://localhost:9000)
+//
+// Options:
+//   --json                    Output raw JSON instead of formatted text
 //
 // Commands:
+//   health                    Check control plane health with dependency details
+//   health-worker             Check agent worker health
+//   status                    Combined system overview (control plane + worker)
 //   machines                  List registered machines
 //   agents                    List registered agents
 //   start <agentId> <prompt>  Start an agent with a prompt
 //   stop <agentId>            Stop an agent
 //   signal <agentId> <prompt> Send a signal to an agent
 //   models                    List available LLM models
-//   health                    Check control plane health
 //   memory search <query>     Search memories by semantic query
 //   schedule list             List scheduled (repeatable) jobs
 //   schedule add-heartbeat    Add a heartbeat job
@@ -84,6 +90,14 @@ class CliError extends Error {
 // ---------------------------------------------------------------------------
 
 const CONTROL_URL = (process.env.CONTROL_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+const WORKER_URL = (process.env.WORKER_URL ?? 'http://localhost:9000').replace(/\/$/, '');
+
+// ---------------------------------------------------------------------------
+// Global flags
+// ---------------------------------------------------------------------------
+
+/** When true, commands output raw JSON instead of formatted text. */
+let jsonOutput = false;
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -91,12 +105,34 @@ const CONTROL_URL = (process.env.CONTROL_URL ?? 'http://localhost:8080').replace
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
+/**
+ * Suggest common fixes based on the failed URL and error.
+ */
+function suggestFix(url: string, errorMessage: string): string[] {
+  const suggestions: string[] = [];
+
+  if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('fetch failed')) {
+    if (url.includes(CONTROL_URL)) {
+      suggestions.push('Is the control plane running? Try: cd packages/control-plane && pnpm dev');
+    }
+    if (url.includes(WORKER_URL)) {
+      suggestions.push('Is the agent worker running? Try: cd packages/agent-worker && pnpm dev');
+    }
+    suggestions.push(`Check that the URL is correct: ${url}`);
+    suggestions.push('If using Tailscale, verify the mesh is connected: tailscale status');
+  }
+
+  return suggestions;
+}
+
 async function request(
   method: HttpMethod,
   path: string,
   body?: Record<string, unknown>,
+  baseUrl?: string,
 ): Promise<unknown> {
-  const url = `${CONTROL_URL}${path}`;
+  const base = baseUrl ?? CONTROL_URL;
+  const url = `${base}${path}`;
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -114,8 +150,10 @@ async function request(
     response = await fetch(url, init);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new CliError('CONNECTION_FAILED', `Failed to connect to ${CONTROL_URL}: ${message}`, {
+    const suggestions = suggestFix(url, message);
+    throw new CliError('CONNECTION_FAILED', `Failed to connect to ${url}: ${message}`, {
       url,
+      suggestions,
     });
   }
 
@@ -173,19 +211,243 @@ function printTable(headers: string[], rows: string[][]): void {
 }
 
 // ---------------------------------------------------------------------------
+// Status formatting helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Colorize a status string: green for ok, yellow for degraded, red for error/fail.
+ */
+function colorStatus(status: string): string {
+  const lower = status.toLowerCase();
+  if (lower === 'ok') return green('OK');
+  if (lower === 'degraded') return yellow('DEGRADED');
+  return red(status.toUpperCase());
+}
+
+/**
+ * Format seconds into a human-readable uptime string like "3h 42m".
+ */
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
+
+// ---------------------------------------------------------------------------
+// Type definitions for health responses
+// ---------------------------------------------------------------------------
+
+type DependencyStatus = {
+  status: 'ok' | 'error';
+  latencyMs: number;
+  error?: string;
+};
+
+type ControlPlaneHealthResponse = {
+  status: 'ok' | 'degraded';
+  timestamp: string;
+  dependencies?: {
+    postgres: DependencyStatus;
+    redis: DependencyStatus;
+    mem0: DependencyStatus;
+    litellm: DependencyStatus;
+  };
+};
+
+type WorkerHealthResponse = {
+  status: 'ok' | 'degraded';
+  timestamp: string;
+  uptime: number;
+  activeAgents: number;
+  totalAgentsStarted: number;
+  worktreesActive: number;
+  memoryUsage: number;
+  agents: {
+    running: number;
+    total: number;
+    maxConcurrent: number;
+  };
+  dependencies?: {
+    controlPlane: DependencyStatus;
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Subcommands
 // ---------------------------------------------------------------------------
 
 async function cmdHealth(): Promise<void> {
-  const data = (await request('GET', '/health')) as { status: string; timestamp: string };
+  const data = (await request('GET', '/health?detail=true')) as ControlPlaneHealthResponse;
 
-  if (data.status === 'ok') {
-    console.log(`${green('✓')} Control plane is ${green('healthy')}`);
-  } else {
-    console.log(`${red('✗')} Control plane status: ${red(data.status)}`);
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
   }
-  console.log(dim(`  timestamp: ${data.timestamp}`));
-  console.log(dim(`  endpoint:  ${CONTROL_URL}`));
+
+  const statusLabel = colorStatus(data.status);
+  console.log(`${bold('Control Plane:')} ${statusLabel} (${dim(CONTROL_URL)})`);
+
+  if (data.dependencies) {
+    const deps = data.dependencies;
+    const entries: Array<[string, DependencyStatus]> = [
+      ['PostgreSQL', deps.postgres],
+      ['Redis', deps.redis],
+      ['Mem0', deps.mem0],
+      ['LiteLLM', deps.litellm],
+    ];
+
+    for (const [name, dep] of entries) {
+      const label = name.padEnd(12);
+      if (dep.status === 'ok') {
+        const latency = dep.latencyMs > 0 ? dim(` (${dep.latencyMs}ms)`) : '';
+        console.log(`  ${label} ${colorStatus('ok')}${latency}`);
+      } else {
+        const detail = dep.error ? dim(` (${dep.error})`) : '';
+        console.log(`  ${label} ${colorStatus('error')}${detail}`);
+      }
+    }
+  }
+
+  console.log(dim(`  timestamp:  ${data.timestamp}`));
+}
+
+async function cmdHealthWorker(): Promise<void> {
+  const data = (await request(
+    'GET',
+    '/health?detail=true',
+    undefined,
+    WORKER_URL,
+  )) as WorkerHealthResponse;
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  const statusLabel = colorStatus(data.status);
+  console.log(`${bold('Agent Worker:')} ${statusLabel} (${dim(WORKER_URL)})`);
+
+  if (data.dependencies?.controlPlane) {
+    const cp = data.dependencies.controlPlane;
+    if (cp.status === 'ok') {
+      const latency = cp.latencyMs > 0 ? dim(` (${cp.latencyMs}ms)`) : '';
+      console.log(`  Control Plane: ${colorStatus('ok')}${latency}`);
+    } else {
+      const detail = cp.error ? dim(` (${cp.error})`) : '';
+      console.log(`  Control Plane: ${colorStatus('error')}${detail}`);
+    }
+  }
+
+  console.log(`  Active Agents: ${data.activeAgents}`);
+  console.log(`  Uptime:        ${formatUptime(data.uptime)}`);
+  console.log(`  Memory:        ${data.memoryUsage} MB`);
+  console.log(`  Agents:        ${data.agents.running}/${data.agents.maxConcurrent} (running/max)`);
+}
+
+async function cmdStatus(): Promise<void> {
+  type FetchResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+  const [cpResult, workerResult] = await Promise.allSettled([
+    request('GET', '/health?detail=true') as Promise<ControlPlaneHealthResponse>,
+    request('GET', '/health?detail=true', undefined, WORKER_URL) as Promise<WorkerHealthResponse>,
+  ]);
+
+  const cp: FetchResult<ControlPlaneHealthResponse> =
+    cpResult.status === 'fulfilled'
+      ? { ok: true, data: cpResult.value }
+      : {
+          ok: false,
+          error:
+            cpResult.reason instanceof Error ? cpResult.reason.message : String(cpResult.reason),
+        };
+
+  const worker: FetchResult<WorkerHealthResponse> =
+    workerResult.status === 'fulfilled'
+      ? { ok: true, data: workerResult.value }
+      : {
+          ok: false,
+          error:
+            workerResult.reason instanceof Error
+              ? workerResult.reason.message
+              : String(workerResult.reason),
+        };
+
+  if (jsonOutput) {
+    console.log(
+      JSON.stringify(
+        {
+          controlPlane: cp.ok ? cp.data : { status: 'unreachable', error: cp.error },
+          agentWorker: worker.ok ? worker.data : { status: 'unreachable', error: worker.error },
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  // ── Control Plane ──────────────────────────────────────────────
+  console.log(bold('=== System Status ==='));
+  console.log('');
+
+  if (cp.ok) {
+    console.log(`${bold('Control Plane:')} ${colorStatus(cp.data.status)} (${dim(CONTROL_URL)})`);
+
+    if (cp.data.dependencies) {
+      const deps = cp.data.dependencies;
+      const entries: Array<[string, DependencyStatus]> = [
+        ['PostgreSQL', deps.postgres],
+        ['Redis', deps.redis],
+        ['Mem0', deps.mem0],
+        ['LiteLLM', deps.litellm],
+      ];
+
+      for (const [name, dep] of entries) {
+        const label = name.padEnd(12);
+        if (dep.status === 'ok') {
+          const latency = dep.latencyMs > 0 ? dim(` (${dep.latencyMs}ms)`) : '';
+          console.log(`  ${label} ${colorStatus('ok')}${latency}`);
+        } else {
+          const detail = dep.error ? dim(` (${dep.error})`) : '';
+          console.log(`  ${label} ${colorStatus('error')}${detail}`);
+        }
+      }
+    }
+  } else {
+    console.log(`${bold('Control Plane:')} ${red('UNREACHABLE')} (${dim(CONTROL_URL)})`);
+    console.log(`  ${dim(cp.error)}`);
+  }
+
+  console.log('');
+
+  // ── Agent Worker ───────────────────────────────────────────────
+  if (worker.ok) {
+    console.log(
+      `${bold('Agent Worker:')}  ${colorStatus(worker.data.status)} (${dim(WORKER_URL)})`,
+    );
+
+    if (worker.data.dependencies?.controlPlane) {
+      const cp2 = worker.data.dependencies.controlPlane;
+      if (cp2.status === 'ok') {
+        const latency = cp2.latencyMs > 0 ? dim(` (${cp2.latencyMs}ms)`) : '';
+        console.log(`  Control Plane: ${colorStatus('ok')}${latency}`);
+      } else {
+        const detail = cp2.error ? dim(` (${cp2.error})`) : '';
+        console.log(`  Control Plane: ${colorStatus('error')}${detail}`);
+      }
+    }
+
+    console.log(`  Active Agents: ${worker.data.activeAgents}`);
+    console.log(`  Uptime:        ${formatUptime(worker.data.uptime)}`);
+    console.log(`  Memory:        ${worker.data.memoryUsage} MB`);
+  } else {
+    console.log(`${bold('Agent Worker:')}  ${red('UNREACHABLE')} (${dim(WORKER_URL)})`);
+    console.log(`  ${dim(worker.error)}`);
+  }
+
+  console.log('');
 }
 
 async function cmdMachines(): Promise<void> {
@@ -485,19 +747,25 @@ function printHelp(): void {
 ${bold('agentctl')} — CLI tool for managing the AgentCTL fleet
 
 ${bold('USAGE')}
-  npx tsx scripts/agentctl.ts ${cyan('<command>')} [args...]
+  npx tsx scripts/agentctl.ts ${cyan('<command>')} [options] [args...]
 
 ${bold('ENVIRONMENT')}
   CONTROL_URL  Base URL of the control plane (default: ${dim('http://localhost:8080')})
+  WORKER_URL   Base URL of the agent worker  (default: ${dim('http://localhost:9000')})
+
+${bold('OPTIONS')}
+  ${cyan('--json')}                     Output raw JSON instead of formatted text
 
 ${bold('COMMANDS')}
+  ${cyan('health')}                     Check control plane health with dependency details
+  ${cyan('health-worker')}              Check agent worker health
+  ${cyan('status')}                     Combined system overview (control plane + worker)
   ${cyan('machines')}                   List registered machines
   ${cyan('agents')}                     List registered agents (requires database)
   ${cyan('start')} <agentId> <prompt>   Start an agent with a prompt
   ${cyan('stop')} <agentId>             Stop an agent gracefully
   ${cyan('signal')} <agentId> <prompt>  Send a signal to trigger an agent run
   ${cyan('models')}                     List available LLM models via LiteLLM
-  ${cyan('health')}                     Check control plane health
   ${cyan('memory search')} <query>      Search memories by semantic query
   ${cyan('schedule list')}              List all scheduled (repeatable) jobs
   ${cyan('schedule add-heartbeat')} <agentId> <machineId> <intervalMs>
@@ -509,8 +777,14 @@ ${bold('COMMANDS')}
   ${cyan('help')}                       Show this help message
 
 ${bold('EXAMPLES')}
-  ${dim('# Check if the control plane is running')}
-  npx tsx scripts/agentctl.ts health
+  ${dim('# Check the full system status')}
+  npx tsx scripts/agentctl.ts status
+
+  ${dim('# Check control plane health with JSON output')}
+  npx tsx scripts/agentctl.ts health --json
+
+  ${dim('# Check agent worker health')}
+  npx tsx scripts/agentctl.ts health-worker
 
   ${dim('# List all machines in the fleet')}
   npx tsx scripts/agentctl.ts machines
@@ -544,6 +818,9 @@ ${bold('EXAMPLES')}
 
   ${dim('# Use a different control plane URL')}
   CONTROL_URL=http://ec2-host:8080 npx tsx scripts/agentctl.ts machines
+
+  ${dim('# Check worker on a different host')}
+  WORKER_URL=http://mac-mini:9000 npx tsx scripts/agentctl.ts health-worker
 `);
 }
 
@@ -552,7 +829,17 @@ ${bold('EXAMPLES')}
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+
+  // Extract global flags before command parsing
+  const args = rawArgs.filter((a) => {
+    if (a === '--json') {
+      jsonOutput = true;
+      return false;
+    }
+    return true;
+  });
+
   const command = args[0];
 
   if (!command || command === 'help' || command === '--help' || command === '-h') {
@@ -563,6 +850,14 @@ async function main(): Promise<void> {
   switch (command) {
     case 'health':
       await cmdHealth();
+      break;
+
+    case 'health-worker':
+      await cmdHealthWorker();
+      break;
+
+    case 'status':
+      await cmdStatus();
       break;
 
     case 'machines':
@@ -717,10 +1012,20 @@ main().catch((error: unknown) => {
     if (error.context?.status) {
       console.error(dim(`  HTTP status: ${String(error.context.status)}`));
     }
+    if (error.context?.url) {
+      console.error(dim(`  URL: ${String(error.context.url)}`));
+    }
     if (error.context?.body && typeof error.context.body === 'object') {
       const body = error.context.body as Record<string, unknown>;
       if (body.message) {
         console.error(dim(`  detail: ${String(body.message)}`));
+      }
+    }
+    if (Array.isArray(error.context?.suggestions)) {
+      console.error('');
+      console.error(yellow('Suggestions:'));
+      for (const suggestion of error.context.suggestions) {
+        console.error(`  ${dim('•')} ${String(suggestion)}`);
       }
     }
   } else if (error instanceof Error) {
