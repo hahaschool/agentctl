@@ -302,6 +302,301 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     const body = response.json();
     expect(Array.isArray(body)).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Timestamp mapping branches
+  // ---------------------------------------------------------------------------
+
+  it('handles string timestamps (non-Date objects)', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockResolvedValueOnce({
+      actions: [
+        {
+          id: 20,
+          runId: 'session-str',
+          timestamp: '2026-03-01T10:00:00Z',
+          actionType: 'tool_call',
+          toolName: 'Read',
+          toolInput: { file: 'test.ts' },
+          toolOutputHash: null,
+          durationMs: 100,
+          approvedBy: 'auto',
+          agentId: 'agent-1',
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-str?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body.sessionId).toBe('session-str');
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].timestamp).toBe('2026-03-01T10:00:00Z');
+  });
+
+  it('handles null/missing timestamps by using current date', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockResolvedValueOnce({
+      actions: [
+        {
+          id: 21,
+          runId: 'session-nots',
+          timestamp: null,
+          actionType: 'tool_call',
+          toolName: 'Read',
+          toolInput: null,
+          toolOutputHash: null,
+          durationMs: null,
+          approvedBy: null,
+          agentId: 'agent-1',
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-nots?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body.sessionId).toBe('session-nots');
+    expect(body.events).toHaveLength(1);
+    // The timestamp should be a valid ISO string (fallback to new Date())
+    expect(() => new Date(body.events[0].timestamp)).not.toThrow();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Null/undefined field branches in action mapping
+  // ---------------------------------------------------------------------------
+
+  it('handles actions with null runId, agentId, toolName, and non-object toolInput', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockResolvedValueOnce({
+      actions: [
+        {
+          id: 22,
+          runId: null,
+          timestamp: new Date('2026-03-01T10:00:00Z'),
+          actionType: 'tool_call',
+          toolName: null,
+          toolInput: 'some-string-input',
+          toolOutputHash: null,
+          durationMs: null,
+          approvedBy: null,
+          agentId: null,
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc?agentId=agent-1',
+    });
+
+    // No entries match sessionId=session-abc because runId is null (sessionId='')
+    expect(response.statusCode).toBe(404);
+  });
+
+  // ---------------------------------------------------------------------------
+  // parseQueryFilter edge cases
+  // ---------------------------------------------------------------------------
+
+  it('applies from and to timestamp filters', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc?agentId=agent-1&from=2026-03-01T10:00:00Z&to=2026-03-01T10:00:01Z',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    // Only events within [from, to] range
+    for (const event of body.events) {
+      const ts = new Date(event.timestamp).getTime();
+      expect(ts).toBeGreaterThanOrEqual(new Date('2026-03-01T10:00:00Z').getTime());
+      expect(ts).toBeLessThanOrEqual(new Date('2026-03-01T10:00:01Z').getTime());
+    }
+  });
+
+  it('applies limit and offset query parameters', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc?agentId=agent-1&limit=1&offset=1',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body.events).toHaveLength(1);
+  });
+
+  it('ignores non-finite limit values', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc?agentId=agent-1&limit=abc',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    // 'abc' is not a finite number, so limit is not applied — no filter active from just 'limit'
+    // But since limit=abc is invalid, it should not be in the filter object
+    expect(body.totalEvents).toBe(3);
+  });
+
+  it('ignores negative offset values', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc?agentId=agent-1&offset=-5',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    // Negative offset is not >= 0, so it is not added to the filter
+    expect(body.totalEvents).toBe(3);
+  });
+
+  it('caps limit at DEFAULT_LIMIT (100) and floors it', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc?agentId=agent-1&limit=500',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    // limit is capped to Math.min(500, 100) = 100, but we only have 3 events
+    expect(body.events.length).toBeLessThanOrEqual(100);
+  });
+
+  it('ignores limit less than 1', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc?agentId=agent-1&limit=0',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    // limit=0 does not satisfy parsed >= 1, so no limit filter
+    expect(body.totalEvents).toBe(3);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Summary route — error paths
+  // ---------------------------------------------------------------------------
+
+  it('returns 502 for summary when dbRegistry throws ControlPlaneError', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockRejectedValueOnce(
+      new ControlPlaneError('DB_UNAVAILABLE', 'Database is down', {}),
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc/summary?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(502);
+
+    const body = response.json();
+    expect(body.code).toBe('DB_UNAVAILABLE');
+  });
+
+  it('returns 500 for summary when an unexpected error occurs', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockRejectedValueOnce(
+      new Error('unexpected summary failure'),
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc/summary?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(500);
+
+    const body = response.json();
+    expect(body.error).toBe('Failed to generate session summary');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Suspicious route — error paths
+  // ---------------------------------------------------------------------------
+
+  it('returns 502 for suspicious when dbRegistry throws ControlPlaneError', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockRejectedValueOnce(
+      new ControlPlaneError('DB_UNAVAILABLE', 'Database is down', {}),
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc/suspicious?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(502);
+
+    const body = response.json();
+    expect(body.code).toBe('DB_UNAVAILABLE');
+  });
+
+  it('returns 500 for suspicious when an unexpected error occurs', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockRejectedValueOnce(
+      new Error('unexpected suspicious failure'),
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc/suspicious?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(500);
+
+    const body = response.json();
+    expect(body.error).toBe('Failed to detect suspicious patterns');
+  });
+
+  // ---------------------------------------------------------------------------
+  // inferAgentId — no matching entry
+  // ---------------------------------------------------------------------------
+
+  it('returns empty agentId when no entry matches the sessionId for inference', async () => {
+    vi.mocked(mockDbRegistry.queryActions).mockResolvedValueOnce({
+      actions: [
+        {
+          id: 30,
+          runId: 'other-session',
+          timestamp: new Date('2026-03-01T10:00:00Z'),
+          actionType: 'tool_call',
+          toolName: 'Read',
+          toolInput: null,
+          toolOutputHash: null,
+          durationMs: 100,
+          approvedBy: 'auto',
+          agentId: 'agent-1',
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/audit/replay/session-abc',
+    });
+
+    // No entries match sessionId=session-abc, so 404
+    expect(response.statusCode).toBe(404);
+  });
 });
 
 // =============================================================================

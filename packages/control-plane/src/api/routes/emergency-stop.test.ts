@@ -84,6 +84,24 @@ describe('Emergency stop proxy routes -- without dbRegistry', () => {
     expect(body.ok).toBe(true);
     expect(body.results).toEqual([]);
   });
+
+  it('resolves worker URL via machineId when machine is found in in-memory registry', async () => {
+    // Use 127.0.0.1 to avoid DNS lookup hangs on non-existent hostnames.
+    registry.registerMachine('mac-mini-1', '127.0.0.1');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/emergency-stop?machineId=mac-mini-1',
+    });
+
+    // Worker is not actually running, so we get 502 (unreachable) —
+    // but the key is that machineId resolution succeeded (no 404).
+    expect(response.statusCode).toBe(502);
+
+    const body = response.json();
+    expect(body.error).toBe('WORKER_UNREACHABLE');
+    expect(body.message).toContain('127.0.0.1');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -327,5 +345,280 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
     expect(offlineResult).toBeDefined();
     expect(offlineResult.stoppedCount).toBe(0);
     expect(offlineResult.error).toBe('machine_offline');
+  });
+
+  // ---------------------------------------------------------------------------
+  // resolveWorkerUrl — machine found via machineId query param (with dbRegistry)
+  // ---------------------------------------------------------------------------
+
+  it('resolves via machineId query param using the in-memory registry', async () => {
+    // When machineId is provided, it uses the registry (not dbRegistry).
+    // We need a machine registered in the registry. But the registry here is
+    // created by createServer internally. The machineId code path uses
+    // opts.registry.getMachine(), which is the AgentRegistry created in server.
+    // Since we didn't provide an external registry, the server creates one.
+    // The internal registry is empty, so getMachine returns undefined -> 404.
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/emergency-stop?machineId=unknown',
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    const body = response.json();
+    expect(body.error).toBe('MACHINE_NOT_FOUND');
+  });
+
+  // ---------------------------------------------------------------------------
+  // resolveWorkerUrl — machine not found via dbRegistry.getMachine
+  // ---------------------------------------------------------------------------
+
+  it('returns 404 when machine for agent is not found in dbRegistry', async () => {
+    vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce(undefined as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/emergency-stop',
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    const body = response.json();
+    expect(body.error).toBe('MACHINE_NOT_FOUND');
+    expect(body.message).toContain('machine-1');
+    expect(body.message).toContain('agent-1');
+  });
+
+  // ---------------------------------------------------------------------------
+  // DB updateAgentStatus failure — best-effort catch
+  // ---------------------------------------------------------------------------
+
+  it('still succeeds when dbRegistry.updateAgentStatus throws (best-effort update)', async () => {
+    // We need a successful proxy response. Mock global fetch for this test.
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ stopped: true, agentId: 'agent-1' }),
+    });
+
+    vi.mocked(mockDbRegistry.updateAgentStatus).mockRejectedValueOnce(new Error('DB write failed'));
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/emergency-stop',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.stopped).toBe(true);
+
+      // updateAgentStatus was called but failed — should be best-effort
+      expect(mockDbRegistry.updateAgentStatus).toHaveBeenCalledWith('agent-1', 'stopped');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Successful proxy response forwarding
+  // ---------------------------------------------------------------------------
+
+  it('forwards the worker response status and data on successful proxy', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ stopped: true, agentId: 'agent-1', pid: 12345 }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/emergency-stop',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.stopped).toBe(true);
+      expect(body.agentId).toBe('agent-1');
+      expect(body.pid).toBe(12345);
+
+      // Verify updateAgentStatus was called for the success path
+      expect(mockDbRegistry.updateAgentStatus).toHaveBeenCalledWith('agent-1', 'stopped');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // emergency-stop-all — machine ID fallback (machineId then hostname)
+  // ---------------------------------------------------------------------------
+
+  it('uses machineId as fallback when id is not present in machine record', async () => {
+    vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([
+      {
+        machineId: 'machine-alt',
+        hostname: 'host-alt.local',
+        tailscaleIp: '127.0.0.1',
+        os: 'linux',
+        arch: 'x64',
+        status: 'online',
+        lastHeartbeat: new Date(),
+        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+        createdAt: new Date(),
+      },
+    ] as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/emergency-stop-all',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body.results).toHaveLength(1);
+    expect(body.results[0].machineId).toBe('machine-alt');
+  });
+
+  it('uses hostname as fallback when neither id nor machineId is present', async () => {
+    vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([
+      {
+        hostname: 'host-only.local',
+        tailscaleIp: '127.0.0.1',
+        os: 'linux',
+        arch: 'x64',
+        status: 'online',
+        lastHeartbeat: new Date(),
+        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+        createdAt: new Date(),
+      },
+    ] as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/emergency-stop-all',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body.results).toHaveLength(1);
+    expect(body.results[0].machineId).toBe('host-only.local');
+  });
+
+  // ---------------------------------------------------------------------------
+  // emergency-stop-all — machine without tailscaleIp (hostname fallback)
+  // ---------------------------------------------------------------------------
+
+  it('falls back to hostname when machine has no tailscaleIp in stop-all', async () => {
+    vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([
+      {
+        id: 'machine-no-ts',
+        hostname: '127.0.0.1',
+        os: 'linux',
+        arch: 'x64',
+        status: 'online',
+        lastHeartbeat: new Date(),
+        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+        createdAt: new Date(),
+      },
+    ] as never);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/emergency-stop-all',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+    expect(body.results).toHaveLength(1);
+    // Should use hostname as address since tailscaleIp is missing
+    expect(body.results[0].machineId).toBe('machine-no-ts');
+  });
+
+  // ---------------------------------------------------------------------------
+  // emergency-stop-all — successful proxy response with stoppedCount
+  // ---------------------------------------------------------------------------
+
+  it('reports stoppedCount from successful worker responses in stop-all', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ stoppedCount: 3 }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/emergency-stop-all',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].stoppedCount).toBe(3);
+      expect(body.results[0].error).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('defaults stoppedCount to 0 when worker response omits it in stop-all', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/emergency-stop-all',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].stoppedCount).toBe(0);
+      expect(body.results[0].error).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // proxyEmergencyStop — non-Error throw
+  // ---------------------------------------------------------------------------
+
+  it('handles non-Error throws from fetch in emergency stop proxy', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue('string-error');
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/emergency-stop',
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = response.json();
+      expect(body.error).toBe('WORKER_UNREACHABLE');
+      expect(body.message).toContain('string-error');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
