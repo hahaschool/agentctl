@@ -1,9 +1,11 @@
 import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AnomalyDetector, AnomalyReport } from './anomaly-detector.js';
 import type { AuditLogger } from './audit-logger.js';
 import { sha256 } from './audit-logger.js';
 import { createPreToolUseHook, type PreToolUseInput } from './pre-tool-use.js';
+import type { RateLimitCheckResult, ToolRateLimiter } from './tool-rate-limiter.js';
 
 const mockLogger = {
   child: () => mockLogger,
@@ -439,6 +441,378 @@ describe('createPreToolUseHook', () => {
       expect(r1).toBe('allow');
       expect(r2).toBe('deny');
       expect(r3).toBe('allow'); // Read is not Bash, so it's allowed
+      expect(mockAuditLogger.write).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ── Layer 1: Rate limiting ──────────────────────────────────────
+
+  describe('rate limiting (layer 1)', () => {
+    function makeRateLimiter(overrides?: Partial<RateLimitCheckResult>): ToolRateLimiter {
+      return {
+        check: vi.fn().mockReturnValue({
+          allowed: true,
+          remaining: 10,
+          resetAt: new Date('2026-01-01T00:00:00Z'),
+          ...overrides,
+        }),
+        reset: vi.fn(),
+        getStats: vi.fn(),
+      } as unknown as ToolRateLimiter;
+    }
+
+    it('allows the call when rateLimiter.check returns allowed: true', async () => {
+      const rateLimiter = makeRateLimiter({ allowed: true });
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        rateLimiter,
+      });
+
+      const result = await hook(makeInput({ toolInput: { command: 'echo hello' } }));
+
+      expect(result).toBe('allow');
+      expect(rateLimiter.check).toHaveBeenCalledWith('agent-1', 'Bash');
+    });
+
+    it('denies the call when rateLimiter.check returns allowed: false', async () => {
+      const resetAt = new Date('2026-03-03T12:00:00Z');
+      const rateLimiter = makeRateLimiter({
+        allowed: false,
+        remaining: 0,
+        resetAt,
+        exceededLimit: 'per_minute',
+      });
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        rateLimiter,
+      });
+
+      const result = await hook(makeInput({ toolInput: { command: 'echo hello' } }));
+
+      expect(result).toBe('deny');
+    });
+
+    it('deny reason includes exceededLimit and resetAt', async () => {
+      const resetAt = new Date('2026-03-03T14:30:00Z');
+      const rateLimiter = makeRateLimiter({
+        allowed: false,
+        remaining: 0,
+        resetAt,
+        exceededLimit: 'per_hour',
+      });
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        rateLimiter,
+      });
+
+      await hook(makeInput());
+
+      const entry = (mockAuditLogger.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+      expect(entry.decision).toBe('deny');
+      expect(entry.denyReason).toContain('per_hour');
+      expect(entry.denyReason).toContain(resetAt.toISOString());
+    });
+
+    it('rate-limited call skips anomaly detection and pattern matching', async () => {
+      const resetAt = new Date('2026-03-03T14:30:00Z');
+      const rateLimiter = makeRateLimiter({
+        allowed: false,
+        remaining: 0,
+        resetAt,
+        exceededLimit: 'per_minute',
+      });
+      const anomalyDetector = {
+        recordCall: vi.fn().mockReturnValue([]),
+      } as unknown as AnomalyDetector;
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        rateLimiter,
+        anomalyDetector,
+      });
+
+      // Even with a dangerous command, the rate limit fires first
+      const result = await hook(makeInput({ toolInput: { command: 'rm -rf /' } }));
+
+      expect(result).toBe('deny');
+      // Anomaly detector should not have been called
+      expect(anomalyDetector.recordCall).not.toHaveBeenCalled();
+      // The deny reason should be about rate limiting, not pattern matching
+      const entry = (mockAuditLogger.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(entry.denyReason).toContain('Rate limit exceeded');
+    });
+  });
+
+  // ── Layer 2: Anomaly detection ─────────────────────────────────
+
+  describe('anomaly detection (layer 2)', () => {
+    function makeAnomalyDetector(anomalies: AnomalyReport[]): AnomalyDetector {
+      return {
+        recordCall: vi.fn().mockReturnValue(anomalies),
+        getBaseline: vi.fn(),
+        reset: vi.fn(),
+      } as unknown as AnomalyDetector;
+    }
+
+    it('allows when anomalyDetector returns no anomalies', async () => {
+      const anomalyDetector = makeAnomalyDetector([]);
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        anomalyDetector,
+      });
+
+      const result = await hook(makeInput({ toolInput: { command: 'echo safe' } }));
+
+      expect(result).toBe('allow');
+      expect(anomalyDetector.recordCall).toHaveBeenCalledWith('agent-1', 'Bash');
+    });
+
+    it('denies when anomalyDetector returns a high-severity anomaly', async () => {
+      const anomalyDetector = makeAnomalyDetector([
+        {
+          type: 'frequency_spike',
+          severity: 'high',
+          message: 'Spike detected',
+          agentId: 'agent-1',
+          tool: 'Bash',
+          detectedAt: new Date().toISOString(),
+        },
+      ]);
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        anomalyDetector,
+      });
+
+      const result = await hook(makeInput({ toolInput: { command: 'echo safe' } }));
+
+      expect(result).toBe('deny');
+      const entry = (mockAuditLogger.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(entry.denyReason).toContain('Anomaly detected');
+      expect(entry.denyReason).toContain('Spike detected');
+    });
+
+    it('allows but logs warning for medium-severity anomaly', async () => {
+      const anomalyDetector = makeAnomalyDetector([
+        {
+          type: 'new_tool',
+          severity: 'medium',
+          message: 'New tool usage detected',
+          agentId: 'agent-1',
+          tool: 'Bash',
+          detectedAt: new Date().toISOString(),
+        },
+      ]);
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        anomalyDetector,
+      });
+
+      const result = await hook(makeInput({ toolInput: { command: 'echo safe' } }));
+
+      expect(result).toBe('allow');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anomalyType: 'new_tool',
+          anomalySeverity: 'medium',
+        }),
+        expect.stringContaining('Anomaly detected'),
+      );
+    });
+
+    it('allows and logs info for low-severity anomaly', async () => {
+      const anomalyDetector = makeAnomalyDetector([
+        {
+          type: 'new_tool',
+          severity: 'low',
+          message: 'Minor anomaly',
+          agentId: 'agent-1',
+          tool: 'Bash',
+          detectedAt: new Date().toISOString(),
+        },
+      ]);
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        anomalyDetector,
+      });
+
+      const result = await hook(makeInput({ toolInput: { command: 'echo safe' } }));
+
+      expect(result).toBe('allow');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anomalyType: 'new_tool',
+          anomalySeverity: 'low',
+        }),
+        expect.stringContaining('Anomaly detected'),
+      );
+    });
+
+    it('denies when multiple anomalies include at least one high severity', async () => {
+      const anomalyDetector = makeAnomalyDetector([
+        {
+          type: 'new_tool',
+          severity: 'low',
+          message: 'Low anomaly',
+          agentId: 'agent-1',
+          tool: 'Bash',
+          detectedAt: new Date().toISOString(),
+        },
+        {
+          type: 'frequency_spike',
+          severity: 'high',
+          message: 'High anomaly',
+          agentId: 'agent-1',
+          tool: 'Bash',
+          detectedAt: new Date().toISOString(),
+        },
+      ]);
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        anomalyDetector,
+      });
+
+      const result = await hook(makeInput({ toolInput: { command: 'echo safe' } }));
+
+      expect(result).toBe('deny');
+    });
+
+    it('anomaly-denied call skips pattern matching', async () => {
+      const anomalyDetector = makeAnomalyDetector([
+        {
+          type: 'frequency_spike',
+          severity: 'high',
+          message: 'High anomaly blocks',
+          agentId: 'agent-1',
+          tool: 'Bash',
+          detectedAt: new Date().toISOString(),
+        },
+      ]);
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        anomalyDetector,
+      });
+
+      // Dangerous command, but anomaly detection denies first
+      const result = await hook(makeInput({ toolInput: { command: 'rm -rf /' } }));
+
+      expect(result).toBe('deny');
+      const entry = (mockAuditLogger.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      // Deny reason should reference anomaly, not pattern
+      expect(entry.denyReason).toContain('Anomaly detected');
+      expect(entry.denyReason).not.toContain('Blocked pattern');
+    });
+  });
+
+  // ── Layer 3: Pattern matching — additional coverage ────────────
+
+  describe('pattern matching (layer 3) — non-Bash tools', () => {
+    it('non-Bash tools skip pattern matching even with dangerous input', async () => {
+      const hook = createPreToolUseHook({ auditLogger: mockAuditLogger, logger: mockLogger });
+
+      // This tool input contains a dangerous command, but tool is not Bash
+      const result = await hook(
+        makeInput({ toolName: 'Write', toolInput: { command: 'rm -rf /' } }),
+      );
+
+      expect(result).toBe('allow');
+    });
+
+    it('non-Bash tools skip pattern matching with cat secret patterns', async () => {
+      const hook = createPreToolUseHook({ auditLogger: mockAuditLogger, logger: mockLogger });
+
+      const result = await hook(
+        makeInput({ toolName: 'Edit', toolInput: { command: 'cat ~/.ssh/id_rsa' } }),
+      );
+
+      expect(result).toBe('allow');
+    });
+  });
+
+  // ── Audit entry structure verification ──────────────────────────
+
+  describe('audit entry structure', () => {
+    it('audit entry for allow contains all required fields', async () => {
+      const hook = createPreToolUseHook({ auditLogger: mockAuditLogger, logger: mockLogger });
+
+      await hook(makeInput());
+
+      const entry = (mockAuditLogger.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+      expect(entry).toHaveProperty('kind', 'pre_tool_use');
+      expect(entry).toHaveProperty('timestamp');
+      expect(entry).toHaveProperty('sessionId', 'session-1');
+      expect(entry).toHaveProperty('agentId', 'agent-1');
+      expect(entry).toHaveProperty('tool', 'Bash');
+      expect(entry).toHaveProperty('inputHash');
+      expect(entry).toHaveProperty('decision', 'allow');
+      expect(entry).not.toHaveProperty('denyReason');
+    });
+
+    it('audit entry for deny contains all required fields including denyReason', async () => {
+      const hook = createPreToolUseHook({ auditLogger: mockAuditLogger, logger: mockLogger });
+
+      await hook(makeInput({ toolInput: { command: 'rm -rf /' } }));
+
+      const entry = (mockAuditLogger.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+      expect(entry).toHaveProperty('kind', 'pre_tool_use');
+      expect(entry).toHaveProperty('timestamp');
+      expect(entry).toHaveProperty('sessionId', 'session-1');
+      expect(entry).toHaveProperty('agentId', 'agent-1');
+      expect(entry).toHaveProperty('tool', 'Bash');
+      expect(entry).toHaveProperty('inputHash');
+      expect(entry).toHaveProperty('decision', 'deny');
+      expect(entry).toHaveProperty('denyReason');
+      expect(typeof entry.denyReason).toBe('string');
+    });
+
+    it('audit entry for rate-limited deny contains rate limit information', async () => {
+      const resetAt = new Date('2026-06-01T00:00:00Z');
+      const rateLimiter = {
+        check: vi.fn().mockReturnValue({
+          allowed: false,
+          remaining: 0,
+          resetAt,
+          exceededLimit: 'per_minute',
+        }),
+      } as unknown as ToolRateLimiter;
+      const hook = createPreToolUseHook({
+        auditLogger: mockAuditLogger,
+        logger: mockLogger,
+        rateLimiter,
+      });
+
+      await hook(makeInput());
+
+      const entry = (mockAuditLogger.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+      expect(entry.kind).toBe('pre_tool_use');
+      expect(entry.decision).toBe('deny');
+      expect(entry.denyReason).toContain('Rate limit exceeded');
+      expect(entry.denyReason).toContain('per_minute');
+      expect(entry.denyReason).toContain(resetAt.toISOString());
+    });
+
+    it('audit entry is written for every call regardless of outcome', async () => {
+      const hook = createPreToolUseHook({ auditLogger: mockAuditLogger, logger: mockLogger });
+
+      // allow
+      await hook(makeInput({ toolInput: { command: 'echo safe' } }));
+      // deny
+      await hook(makeInput({ toolInput: { command: 'rm -rf /' } }));
+      // allow (non-Bash)
+      await hook(makeInput({ toolName: 'Read', toolInput: { file_path: '/foo' } }));
+
       expect(mockAuditLogger.write).toHaveBeenCalledTimes(3);
     });
   });

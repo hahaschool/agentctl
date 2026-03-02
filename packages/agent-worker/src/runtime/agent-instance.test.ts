@@ -11,6 +11,39 @@ vi.mock('./sdk-runner.js', () => ({
   runWithSdk: vi.fn().mockResolvedValue(null),
 }));
 
+// Mock the AuditLogger to avoid real filesystem writes
+vi.mock('../hooks/audit-logger.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../hooks/audit-logger.js')>();
+  return {
+    ...original,
+    AuditLogger: vi.fn().mockImplementation(() => ({
+      write: vi.fn().mockResolvedValue(undefined),
+      getLogFilePath: vi.fn().mockReturnValue('/tmp/audit.ndjson'),
+    })),
+  };
+});
+
+// Mock AuditReporter to avoid real file system / network operations
+vi.mock('../hooks/audit-reporter.js', () => ({
+  AuditReporter: vi.fn().mockImplementation(() => ({
+    start: vi.fn(),
+    stop: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+// Mock the hook factories so we don't rely on real implementations
+vi.mock('../hooks/pre-tool-use.js', () => ({
+  createPreToolUseHook: vi.fn().mockReturnValue(vi.fn().mockResolvedValue('allow')),
+}));
+
+vi.mock('../hooks/post-tool-use.js', () => ({
+  createPostToolUseHook: vi.fn().mockReturnValue(vi.fn().mockResolvedValue(undefined)),
+}));
+
+vi.mock('../hooks/stop-hook.js', () => ({
+  createStopHook: vi.fn().mockReturnValue(vi.fn().mockResolvedValue(undefined)),
+}));
+
 const mockLogger = {
   child: () => mockLogger,
   info: vi.fn(),
@@ -708,5 +741,483 @@ describe('AgentInstance', () => {
     await agent.stop(false);
     vi.runAllTimers();
     await startPromise;
+  });
+
+  // ── Session resume via SDK ───────────────────────────────────
+
+  describe('session resume via SDK', () => {
+    it('SDK run with resumeSessionId succeeds and sets isResumed=true', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+
+      (runWithSdk as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        sessionId: 'resumed-session-abc',
+        costUsd: 0.05,
+        tokensIn: 1000,
+        tokensOut: 500,
+        result: 'completed',
+      });
+
+      const agent = new AgentInstance(
+        makeOptions({
+          resumeSession: 'old-session-id',
+        }),
+      );
+
+      const startPromise = agent.start('resume test');
+      await vi.advanceTimersByTimeAsync(0);
+      await startPromise;
+
+      const json = agent.toJSON();
+      expect(json.isResumed).toBe(true);
+      expect(json.sessionId).toBe('resumed-session-abc');
+      expect(json.costUsd).toBe(0.05);
+      expect(json.status).toBe('stopped');
+    });
+
+    it('resume failure falls back to fresh session', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+
+      // First call (with resumeSessionId) throws AgentError
+      (runWithSdk as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new AgentError('SDK_RUN_FAILED', 'Session not found', {}))
+        // Second call (without resume) succeeds
+        .mockResolvedValueOnce({
+          sessionId: 'fresh-session-xyz',
+          costUsd: 0.02,
+          tokensIn: 500,
+          tokensOut: 200,
+          result: 'ok',
+        });
+
+      const agent = new AgentInstance(
+        makeOptions({
+          resumeSession: 'stale-session',
+        }),
+      );
+
+      const startPromise = agent.start('resume test');
+      await vi.advanceTimersByTimeAsync(0);
+      await startPromise;
+
+      // Should have called runWithSdk twice
+      expect(runWithSdk).toHaveBeenCalledTimes(2);
+      // First with resumeSessionId
+      expect((runWithSdk as ReturnType<typeof vi.fn>).mock.calls[0][0]).toHaveProperty(
+        'resumeSessionId',
+        'stale-session',
+      );
+      // Second without resumeSessionId
+      expect((runWithSdk as ReturnType<typeof vi.fn>).mock.calls[1][0]).toHaveProperty(
+        'resumeSessionId',
+        undefined,
+      );
+
+      const json = agent.toJSON();
+      expect(json.isResumed).toBe(false);
+      expect(json.status).toBe('stopped');
+    });
+
+    it('resume not supported in stub mode logs info message', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+
+      // SDK not available — returns null
+      (runWithSdk as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+
+      const agent = new AgentInstance(
+        makeOptions({
+          resumeSession: 'session-to-resume',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Session resume is not supported in stub simulation mode',
+      );
+
+      await agent.stop(false);
+      vi.runAllTimers();
+      await startPromise;
+    });
+  });
+
+  // ── Execution timeout ──────────────────────────────────────────
+
+  describe('execution timeout', () => {
+    it('fires timeout, transitions to timeout status, and emits event with reason', async () => {
+      const agent = new AgentInstance(
+        makeOptions({
+          maxExecutionMs: 300,
+        }),
+      );
+      const events: AgentEvent[] = [];
+
+      agent.onEvent((event: AgentEvent) => {
+        events.push(event);
+      });
+
+      const startPromise = agent.start('long running task');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(agent.getStatus()).toBe('running');
+
+      // Trigger timeout
+      await vi.advanceTimersByTimeAsync(400);
+
+      expect(agent.getStatus()).toBe('timeout');
+      expect(agent.getStoppedAt()).toBeInstanceOf(Date);
+
+      const timeoutEvent = events.find((e) => e.event === 'status' && e.data.status === 'timeout');
+      expect(timeoutEvent).toBeDefined();
+      if (timeoutEvent?.event === 'status') {
+        expect(timeoutEvent.data.reason).toBe('execution_timeout');
+      }
+
+      vi.runAllTimers();
+      await startPromise;
+    });
+  });
+
+  // ── notifyRunCompletion ────────────────────────────────────────
+
+  describe('notifyRunCompletion', () => {
+    it('posts completion to control plane when controlPlaneUrl and runId are set', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-42',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      await agent.stop(false);
+
+      // Advance timers so fire-and-forget fetch resolves
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/api/agents/agent-1/complete'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const callBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(callBody.runId).toBe('run-42');
+      expect(callBody.status).toBe('success');
+
+      fetchSpy.mockRestore();
+      vi.runAllTimers();
+      await startPromise;
+    });
+
+    it('handles non-OK response from control plane gracefully', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('Internal Server Error', { status: 500 }));
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-err',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Should not throw
+      await agent.stop(false);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchSpy).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ httpStatus: 500 }),
+        expect.stringContaining('non-OK response'),
+      );
+
+      fetchSpy.mockRestore();
+      vi.runAllTimers();
+      await startPromise;
+    });
+
+    it('handles fetch error gracefully', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('Network unreachable'));
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-net-err',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Should not throw
+      await agent.stop(false);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchSpy).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        expect.stringContaining('Failed to send run completion callback'),
+      );
+
+      fetchSpy.mockRestore();
+      vi.runAllTimers();
+      await startPromise;
+    });
+
+    it('does not call fetch when controlPlaneUrl is not set', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      const agent = new AgentInstance(makeOptions());
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      await agent.stop(false);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      vi.runAllTimers();
+      await startPromise;
+    });
+  });
+
+  // ── stopAuditReporter ──────────────────────────────────────────
+
+  describe('stopAuditReporter', () => {
+    it('stops the audit reporter on finish when controlPlaneUrl and runId are set', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('{}', { status: 200 }));
+      const { AuditReporter } = await import('../hooks/audit-reporter.js');
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-reporter',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      // AuditReporter should have been constructed
+      expect(AuditReporter).toHaveBeenCalled();
+
+      await agent.stop(false);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The reporter's stop method should have been called
+      const reporterInstance = (AuditReporter as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(reporterInstance.stop).toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      vi.runAllTimers();
+      await startPromise;
+    });
+
+    it('handles audit reporter stop error gracefully', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('{}', { status: 200 }));
+      const { AuditReporter } = await import('../hooks/audit-reporter.js');
+
+      // Make the reporter's stop throw
+      (AuditReporter as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+        start: vi.fn(),
+        stop: vi.fn().mockRejectedValue(new Error('Reporter flush failed')),
+      }));
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-reporter-err',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Should not throw
+      await agent.stop(false);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        expect.stringContaining('Failed to stop per-instance audit reporter'),
+      );
+
+      fetchSpy.mockRestore();
+      vi.runAllTimers();
+      await startPromise;
+    });
+  });
+
+  // ── handleError ────────────────────────────────────────────────
+
+  describe('handleError', () => {
+    it('transitions to error status when SDK throws a non-AgentError', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+
+      // Make runWithSdk throw a generic error (not AgentError, so it won't be treated as resume_failed)
+      (runWithSdk as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Unexpected SDK failure'),
+      );
+
+      const agent = new AgentInstance(makeOptions());
+      const events: AgentEvent[] = [];
+
+      agent.onEvent((event: AgentEvent) => {
+        events.push(event);
+      });
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+      await startPromise;
+
+      expect(agent.getStatus()).toBe('error');
+
+      const errorEvent = events.find((e) => e.event === 'status' && e.data.status === 'error');
+      expect(errorEvent).toBeDefined();
+      if (errorEvent?.event === 'status') {
+        expect(errorEvent.data.reason).toContain('Unexpected SDK failure');
+      }
+    });
+
+    it('handleError notifies control plane on failure', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+
+      (runWithSdk as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('SDK crashed'));
+
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('{}', { status: 200 }));
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-error',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+      await startPromise;
+
+      expect(agent.getStatus()).toBe('error');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/api/agents/agent-1/complete'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+
+      const callBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(callBody.status).toBe('failure');
+      expect(callBody.errorMessage).toContain('SDK crashed');
+
+      fetchSpy.mockRestore();
+      vi.runAllTimers();
+    });
+  });
+
+  // ── Invalid state transition ───────────────────────────────────
+
+  describe('invalid state transitions', () => {
+    it('throws AgentError with INVALID_TRANSITION code for invalid transition', async () => {
+      const agent = new AgentInstance(makeOptions());
+
+      // Agent is in 'registered' state. Graceful stop tries 'stopping' which is invalid.
+      try {
+        await agent.stop(true);
+      } catch (err) {
+        expect(err).toBeInstanceOf(AgentError);
+        expect((err as AgentError).code).toBe('INVALID_TRANSITION');
+        expect((err as AgentError).message).toContain('registered');
+        expect((err as AgentError).message).toContain('stopping');
+      }
+    });
+  });
+
+  // ── toJSON ─────────────────────────────────────────────────────
+
+  describe('toJSON', () => {
+    it('returns correct structure with all fields after SDK run', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+
+      (runWithSdk as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        sessionId: 'sdk-session-123',
+        costUsd: 0.1,
+        tokensIn: 2000,
+        tokensOut: 1000,
+        result: 'done',
+      });
+
+      const agent = new AgentInstance(
+        makeOptions({
+          agentId: 'json-test',
+          machineId: 'machine-json',
+          projectPath: '/path/to/project',
+          runId: 'run-json',
+        }),
+      );
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+      await startPromise;
+
+      const json = agent.toJSON();
+
+      expect(json.agentId).toBe('json-test');
+      expect(json.machineId).toBe('machine-json');
+      expect(json.status).toBe('stopped');
+      expect(json.sessionId).toBe('sdk-session-123');
+      expect(json.runId).toBe('run-json');
+      expect(json.startedAt).toBeDefined();
+      expect(json.stoppedAt).toBeDefined();
+      expect(json.costUsd).toBe(0.1);
+      expect(json.projectPath).toBe('/path/to/project');
+      expect(json.isResumed).toBe(false);
+    });
+  });
+
+  // ── reportAction ───────────────────────────────────────────────
+
+  describe('reportAction', () => {
+    it('writes an audit entry via the audit logger', async () => {
+      const { AuditLogger } = await import('../hooks/audit-logger.js');
+
+      const agent = new AgentInstance(makeOptions());
+
+      const auditEntry = {
+        kind: 'pre_tool_use' as const,
+        timestamp: new Date().toISOString(),
+        sessionId: 'session-report',
+        agentId: 'agent-1',
+        tool: 'Bash',
+        inputHash: 'abc123',
+        decision: 'allow' as const,
+      };
+
+      await agent.reportAction(auditEntry);
+
+      // Get the mocked AuditLogger instance
+      const loggerInstance = (AuditLogger as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(loggerInstance.write).toHaveBeenCalledWith(auditEntry);
+    });
   });
 });
