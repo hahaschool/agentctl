@@ -16,7 +16,7 @@ Full CI/CD pipeline with 9 workflow files:
 - **Migration Check** (`migration-check.yml`): PR validation with throwaway PostgreSQL
 - **Build Images** (`build-images.yml`): multi-stage Docker with Trivy + SBOM
 
-**2476 tests** across 83 files. All packages build cleanly.
+**2536 tests** across 84 files. All packages build cleanly.
 
 ---
 
@@ -66,7 +66,7 @@ Full CI/CD pipeline with 9 workflow files:
 ### 2.3 Container Security Scanning
 
 - [x] `aquasecurity/trivy-action` — fail on CRITICAL/HIGH, SARIF to GitHub Security tab
-- [ ] `anchore/scan-action` (Grype) as second scanner
+- [x] `anchore/scan-action` (Grype) as second scanner
 - [x] Generate SBOM with Trivy, upload as build artifact
 
 ### 2.4 Image Layer Caching
@@ -157,7 +157,7 @@ Full CI/CD pipeline with 9 workflow files:
 
 ### 5.3 Rollback
 
-- [ ] Keep last 5 image tags in ghcr.io
+- [x] Keep last 5 image tags in ghcr.io (cleanup-images.yml)
 - [x] `workflow_dispatch` rollback workflow (select previous tag)
 - [x] Post-rollback health check
 
@@ -283,7 +283,7 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
   - Dependency vulnerabilities and outdated packages
   - OWASP Agentic Top 10 compliance gaps
 - [x] **Output**: structured JSON report (severity, file, line, description, recommendation)
-- [ ] **Integration**: results posted to control plane; high-severity -> auto-create GitHub Issues
+- [x] **Integration**: results posted to control plane; high-severity -> auto-create GitHub Issues (60 tests)
 - [x] **Guardrails**: audit agent itself runs sandboxed (read-only FS, no network egress, restricted tools)
 
 ### 9.4 Runtime Security Controls
