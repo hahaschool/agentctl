@@ -38,7 +38,7 @@ export function LogsPage(): React.JSX.Element {
   }, [health.data]);
 
   return (
-    <div className="p-6 max-w-[1100px]">
+    <div className="p-6 max-w-[1100px] animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>

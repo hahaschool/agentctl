@@ -9,7 +9,7 @@ import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
-import type { WsConnectionStatus } from '../hooks/use-websocket';
+import { WsStatusIndicator } from '../components/WsStatusIndicator';
 import { useWebSocket } from '../hooks/use-websocket';
 import { truncate } from '../lib/format-utils';
 import {
@@ -71,7 +71,7 @@ export function DashboardPage(): React.JSX.Element {
   const healthLabel = healthStatus ?? 'unknown';
 
   return (
-    <div className="p-6 max-w-[1100px]">
+    <div className="p-6 max-w-[1100px] animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="text-[22px] font-bold">Command Center</h1>
@@ -336,36 +336,5 @@ function DashboardEmptyPanel({
     <div className="p-8 text-center text-muted-foreground bg-card text-[13px]">
       {loading ? 'Loading...' : message}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// WebSocket status indicator
-// ---------------------------------------------------------------------------
-
-const WS_STATUS_CONFIG: Record<
-  WsConnectionStatus,
-  { textClass: string; bgClass: string; label: string }
-> = {
-  connected: { textClass: 'text-green-500', bgClass: 'bg-green-500', label: 'WS Connected' },
-  connecting: { textClass: 'text-yellow-500', bgClass: 'bg-yellow-500', label: 'WS Connecting' },
-  disconnected: {
-    textClass: 'text-muted-foreground',
-    bgClass: 'bg-muted-foreground',
-    label: 'WS Disconnected',
-  },
-};
-
-function WsStatusIndicator({ status }: { status: WsConnectionStatus }): React.JSX.Element {
-  const { textClass, bgClass, label } = WS_STATUS_CONFIG[status];
-
-  return (
-    <span
-      title={label}
-      className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium', textClass)}
-    >
-      <span className={cn('w-[7px] h-[7px] rounded-full shrink-0', bgClass)} />
-      {label}
-    </span>
   );
 }

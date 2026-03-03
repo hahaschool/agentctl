@@ -7,6 +7,8 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
+import { useWebSocket } from '../hooks/use-websocket';
+import { WsStatusIndicator } from './WsStatusIndicator';
 
 type NavItem = {
   href: string;
@@ -35,6 +37,7 @@ export function Sidebar(): React.JSX.Element {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { status: wsStatus } = useWebSocket();
 
   useEffect(() => setMounted(true), []);
 
@@ -158,6 +161,10 @@ export function Sidebar(): React.JSX.Element {
           <div>
             <Kbd>Esc</Kbd> Close panels
           </div>
+        </div>
+
+        <div className="px-5 py-1.5 border-t border-border hidden md:flex items-center gap-2">
+          <WsStatusIndicator status={wsStatus} compact />
         </div>
 
         <div className="px-5 py-2.5 border-t border-border flex items-center justify-between">

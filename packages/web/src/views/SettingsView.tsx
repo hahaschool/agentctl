@@ -14,7 +14,7 @@ import { healthQuery } from '../lib/queries';
 
 export function SettingsView(): React.JSX.Element {
   return (
-    <div className="p-6 max-w-3xl space-y-6">
+    <div className="p-6 max-w-3xl space-y-6 animate-fade-in">
       <div>
         <h1 className="text-[22px] font-bold">Settings</h1>
         <p className="text-[13px] text-muted-foreground mt-1">

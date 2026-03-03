@@ -114,6 +114,7 @@ function resolveWsUrl(override?: string): string {
 
   // In production, derive the WebSocket URL from the current page origin so
   // that it works behind any reverse proxy / domain.
+  if (typeof window === 'undefined') return 'ws://localhost:8080/api/ws';
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}/api/ws`;
 }
