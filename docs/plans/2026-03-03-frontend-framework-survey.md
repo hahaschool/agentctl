@@ -193,7 +193,23 @@ A separate React Native (Expo) mobile app exists in `packages/mobile/`.
 
 ---
 
-## Recommendation
+## Decision (Updated)
+
+**Next.js App Router** — after re-evaluating the product positioning. This is not an internal admin dashboard; it is the **primary user interface** where users spend most of their time interacting with Claude Code agents. This changes the requirements:
+
+- First impressions and perceived performance matter → Server Components reduce initial JS
+- URL shareability matters → SSR provides meaningful content at each URL
+- UI polish expectations are high → Next.js ecosystem (shadcn/ui, Tailwind, next-auth) is the most mature
+- The app will grow to include settings, auth, onboarding, documentation → full framework pays for itself
+- API routes can absorb some proxy logic currently in the control plane
+
+The original "overkill" assessment assumed an internal-only admin tool. For a user-facing product, Next.js is the appropriate choice.
+
+See `docs/plans/2026-03-03-nextjs-migration-design.md` for the migration plan.
+
+---
+
+## Original Recommendation (Superseded)
 
 **Option 5b: Vite + TanStack Router (v1, stable) + TanStack Query v5**
 
