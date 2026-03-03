@@ -8,6 +8,7 @@ import { useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -88,9 +89,11 @@ export default function AgentDetailPage(): React.JSX.Element {
     return (
       <div className="p-6 max-w-[1000px]">
         <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: 'Error' }]} />
-        <div className="mt-6 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg text-sm">
-          Failed to load agent: {agent.error.message}
-        </div>
+        <ErrorBanner
+          message={`Failed to load agent: ${agent.error.message}`}
+          onRetry={() => void agent.refetch()}
+          className="mt-6"
+        />
       </div>
     );
   }
@@ -253,9 +256,10 @@ export default function AgentDetailPage(): React.JSX.Element {
               ))}
             </div>
           ) : runs.error ? (
-            <div className="px-3 py-2 bg-red-900/50 text-red-300 rounded text-xs">
-              Failed to load runs: {runs.error.message}
-            </div>
+            <ErrorBanner
+              message={`Failed to load runs: ${runs.error.message}`}
+              onRetry={() => void runs.refetch()}
+            />
           ) : runList.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
               No runs recorded yet.

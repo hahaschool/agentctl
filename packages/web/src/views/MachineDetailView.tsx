@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -69,9 +70,11 @@ export function MachineDetailView(): React.JSX.Element {
     return (
       <div className="p-6 max-w-[1000px]">
         <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: 'Error' }]} />
-        <div className="px-4 py-3 bg-red-900/50 text-red-300 rounded-lg text-sm">
-          Failed to load machines: {machines.error.message}
-        </div>
+        <ErrorBanner
+          message={`Failed to load machines: ${machines.error.message}`}
+          onRetry={() => void machines.refetch()}
+          className="mt-6"
+        />
       </div>
     );
   }
@@ -179,9 +182,10 @@ export function MachineDetailView(): React.JSX.Element {
               ))}
             </div>
           ) : agents.error ? (
-            <div className="px-3 py-2 bg-red-900/50 text-red-300 rounded text-xs">
-              Failed to load agents: {agents.error.message}
-            </div>
+            <ErrorBanner
+              message={`Failed to load agents: ${agents.error.message}`}
+              onRetry={() => void agents.refetch()}
+            />
           ) : machineAgents.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
               No agents registered on this machine.
@@ -253,9 +257,10 @@ export function MachineDetailView(): React.JSX.Element {
               ))}
             </div>
           ) : sessions.error ? (
-            <div className="px-3 py-2 bg-red-900/50 text-red-300 rounded text-xs">
-              Failed to load sessions: {sessions.error.message}
-            </div>
+            <ErrorBanner
+              message={`Failed to load sessions: ${sessions.error.message}`}
+              onRetry={() => void sessions.refetch()}
+            />
           ) : recentSessions.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
               No sessions found for this machine.
