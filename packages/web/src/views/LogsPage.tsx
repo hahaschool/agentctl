@@ -11,6 +11,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatusBadge } from '../components/StatusBadge';
+import { formatNumber } from '../lib/format-utils';
 import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
 export function LogsPage(): React.JSX.Element {
@@ -144,13 +145,16 @@ export function LogsPage(): React.JSX.Element {
         />
         <MetricCard
           label="Agents Total"
-          value={String(metricsVal('agentctl_agents_total') ?? '-')}
+          value={formatNumber(metricsVal('agentctl_agents_total') ?? '-')}
         />
         <MetricCard
           label="Agents Active"
-          value={String(metricsVal('agentctl_agents_active') ?? '-')}
+          value={formatNumber(metricsVal('agentctl_agents_active') ?? '-')}
         />
-        <MetricCard label="Runs Total" value={String(metricsVal('agentctl_runs_total') ?? '-')} />
+        <MetricCard
+          label="Runs Total"
+          value={formatNumber(metricsVal('agentctl_runs_total') ?? '-')}
+        />
         <MetricCard label="Machines Online" value={`${onlineMachines} / ${machineList.length}`} />
         <MetricCard
           label="Health Status"

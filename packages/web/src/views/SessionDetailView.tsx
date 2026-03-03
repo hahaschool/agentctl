@@ -11,9 +11,10 @@ import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import type { Session, SessionContentMessage } from '../lib/api';
-import { formatDuration, shortenPath } from '../lib/format-utils';
+import { formatDuration, formatNumber, shortenPath } from '../lib/format-utils';
 import {
   queryKeys,
   sessionContentQuery,
@@ -191,7 +192,7 @@ function MessageList({
     if (count !== prevCountRef.current) {
       prevCountRef.current = count;
       if (autoScroll && scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
       }
     }
   });
@@ -208,8 +209,8 @@ function MessageList({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
-        <span>{totalMessages} total messages</span>
-        <span>{visibleMessages.length} shown</span>
+        <span>{formatNumber(totalMessages)} total messages</span>
+        <span>{formatNumber(visibleMessages.length)} shown</span>
         <button
           type="button"
           onClick={() => setShowTools(!showTools)}
@@ -226,7 +227,10 @@ function MessageList({
             onClick={() => {
               setAutoScroll(true);
               if (scrollRef.current) {
-                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                scrollRef.current.scrollTo({
+                  top: scrollRef.current.scrollHeight,
+                  behavior: 'smooth',
+                });
               }
             }}
             className="ml-auto px-2 py-0.5 bg-primary text-primary-foreground rounded-sm text-[10px] cursor-pointer"
@@ -248,11 +252,7 @@ function MessageList({
           </div>
         )}
 
-        {error && (
-          <div className="px-4 py-2.5 bg-red-900/50 text-red-300 rounded-lg text-[13px]">
-            {error}
-          </div>
-        )}
+        {error && <ErrorBanner message={error} />}
 
         {!isLoading && visibleMessages.length === 0 && (
           <div className="p-8 text-center text-muted-foreground text-[13px]">No messages yet</div>
@@ -260,7 +260,7 @@ function MessageList({
 
         {totalMessages > messages.length && (
           <div className="py-2 text-center text-muted-foreground text-xs">
-            Showing last {messages.length} of {totalMessages} messages
+            Showing last {formatNumber(messages.length)} of {formatNumber(totalMessages)} messages
           </div>
         )}
 
@@ -530,12 +530,12 @@ function SessionMetadataBadges({
       )}
       {inputTokens !== null && (
         <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
-          {inputTokens.toLocaleString()} in
+          {formatNumber(inputTokens)} in
         </span>
       )}
       {outputTokens !== null && (
         <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
-          {outputTokens.toLocaleString()} out
+          {formatNumber(outputTokens)} out
         </span>
       )}
     </div>

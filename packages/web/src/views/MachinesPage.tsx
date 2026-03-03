@@ -89,11 +89,13 @@ export function MachinesPage(): React.JSX.Element {
           placeholder="Search machines..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search machines"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as MachineStatusFilter)}
+          aria-label="Filter by status"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
         >
           <option value="all">All statuses</option>
