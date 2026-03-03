@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -538,13 +539,21 @@ export function SessionsPage(): React.JSX.Element {
                   <StatusBadge status={selected.status} />
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleStop}
-                className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium"
-              >
-                End Session
-              </button>
+              <div className="flex gap-2 items-center">
+                <Link
+                  href={`/sessions/${selected.id}`}
+                  className="px-3.5 py-1.5 bg-primary text-primary-foreground rounded-sm text-xs font-medium no-underline"
+                >
+                  Open Full View
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium"
+                >
+                  End Session
+                </button>
+              </div>
             </div>
 
             {/* Session metadata */}

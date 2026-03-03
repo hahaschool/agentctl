@@ -10,6 +10,8 @@ export const queryKeys = {
   health: ['health'] as const,
   machines: ['machines'] as const,
   agents: ['agents'] as const,
+  agent: (id: string) => ['agents', id] as const,
+  agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
   sessions: (params?: { status?: string; machineId?: string }) =>
     params ? (['sessions', params] as const) : (['sessions'] as const),
   session: (id: string) => ['sessions', id] as const,
@@ -47,6 +49,26 @@ export function agentsQuery() {
   return queryOptions({
     queryKey: queryKeys.agents,
     queryFn: api.listAgents,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function agentQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.agent(id),
+    queryFn: () => api.getAgent(id),
+    enabled: !!id,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function agentRunsQuery(agentId: string) {
+  return queryOptions({
+    queryKey: queryKeys.agentRuns(agentId),
+    queryFn: () => api.getAgentRuns(agentId),
+    enabled: !!agentId,
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   });

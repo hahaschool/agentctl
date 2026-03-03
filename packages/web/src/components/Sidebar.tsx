@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4' },
   { href: '/discover', label: 'Discover', icon: '\u2315', shortcut: '5' },
   { href: '/logs', label: 'Logs', icon: '\u2261', shortcut: '6' },
+  { href: '/settings', label: 'Settings', icon: '\u2630', shortcut: '7' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
@@ -30,6 +32,13 @@ for (const item of NAV_ITEMS) {
 
 export function Sidebar(): React.JSX.Element {
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch — only render theme toggle after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Keyboard shortcuts: 1-6 to navigate pages
   useEffect(() => {
@@ -47,6 +56,10 @@ export function Sidebar(): React.JSX.Element {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
+
+  const toggleTheme = (): void => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
 
   return (
     <nav className="w-[220px] min-w-[220px] bg-sidebar border-r border-border flex flex-col py-4">
@@ -90,15 +103,28 @@ export function Sidebar(): React.JSX.Element {
       <div className="px-5 py-2 text-[11px] text-muted-foreground leading-relaxed">
         <div className="mb-0.5 font-medium text-[10px] uppercase tracking-wider">Shortcuts</div>
         <div>
-          <Kbd>1</Kbd>-<Kbd>6</Kbd> Navigate
+          <Kbd>1</Kbd>-<Kbd>7</Kbd> Navigate
         </div>
         <div>
           <Kbd>Esc</Kbd> Close panels
         </div>
       </div>
 
-      <div className="px-5 py-2.5 text-[11px] text-muted-foreground border-t border-border">
-        AgentCTL v0.1.0
+      <div className="px-5 py-2.5 border-t border-border flex items-center justify-between">
+        <span className="text-[11px] text-muted-foreground">AgentCTL v0.1.0</span>
+        {mounted ? (
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-150 px-1.5 py-0.5 rounded-sm hover:bg-muted"
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? '\u263D' : '\u2600'}
+          </button>
+        ) : (
+          <span className="w-6 h-5" />
+        )}
       </div>
     </nav>
   );

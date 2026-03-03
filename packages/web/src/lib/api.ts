@@ -77,6 +77,18 @@ export type SessionContentResponse = {
   totalMessages: number;
 };
 
+export type AgentRun = {
+  id: string;
+  agentId: string;
+  status: string;
+  prompt?: string;
+  costUsd?: number;
+  durationMs?: number;
+  startedAt: string;
+  endedAt?: string;
+  errorMessage?: string;
+};
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -135,6 +147,7 @@ export const api = {
     request<{ ok: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
+  getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/agents/${id}/runs`),
 
   // Sessions
   listSessions: (params?: { status?: string; machineId?: string }) => {

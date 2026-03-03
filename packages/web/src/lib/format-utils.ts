@@ -77,13 +77,26 @@ export function shortenPath(fullPath: string | null | undefined): string {
 
   const startsWithTilde = shortened.startsWith('~');
   const lastTwo = segments.slice(-2).join('/');
-  return startsWithTilde ? `~/.../` + lastTwo : `.../` + lastTwo;
+  return startsWithTilde ? `~/.../${lastTwo}` : `.../${lastTwo}`;
 }
 
 /** Truncate a string with ellipsis if it exceeds maxLen. */
 export function truncate(str: string, maxLen: number): string {
   if (str.length <= maxLen) return str;
   return `${str.slice(0, maxLen - 1)}\u2026`;
+}
+
+/** Duration from milliseconds, e.g. "2h 15m" or "45s". */
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (ms == null || ms <= 0) return '-';
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainSec = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainSec}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainMin = minutes % 60;
+  return `${hours}h ${remainMin}m`;
 }
 
 /** Format a cost value as "$1.23". */

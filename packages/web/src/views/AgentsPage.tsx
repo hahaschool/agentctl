@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 
@@ -372,7 +373,12 @@ export function AgentsPage(): React.JSX.Element {
             <div key={agent.id} className="p-4 bg-card border border-border rounded-lg">
               {/* Card header: name + status */}
               <div className="flex justify-between items-center mb-3">
-                <span className="font-semibold text-[15px]">{agent.name}</span>
+                <Link
+                  href={`/agents/${agent.id}`}
+                  className="font-semibold text-[15px] hover:text-primary transition-colors no-underline text-foreground"
+                >
+                  {agent.name}
+                </Link>
                 <StatusBadge status={agent.status} />
               </div>
 
