@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 
 import { cn } from '@/lib/utils';
+import { LastUpdated } from '../components/LastUpdated';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import type { WsConnectionStatus } from '../hooks/use-websocket';
@@ -73,6 +74,7 @@ export function DashboardPage(): React.JSX.Element {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="text-[22px] font-bold">Command Center</h1>
         <div className="flex items-center gap-3">
+          <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
           <WsStatusIndicator status={wsStatus} />
           <button
             type="button"

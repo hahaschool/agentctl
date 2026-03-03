@@ -4,8 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useMemo } from 'react';
 
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
+import { LastUpdated } from '../components/LastUpdated';
 import { StatusBadge } from '../components/StatusBadge';
 import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
@@ -38,24 +40,27 @@ export function LogsPage(): React.JSX.Element {
   return (
     <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold">Logs &amp; Metrics</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
             System health, dependency status, and runtime metrics.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            health.refetch();
-            metrics.refetch();
-            machines.refetch();
-          }}
-          className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px]"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
+          <button
+            type="button"
+            onClick={() => {
+              void health.refetch();
+              void metrics.refetch();
+              void machines.refetch();
+            }}
+            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px]"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Error banner */}
@@ -156,20 +161,35 @@ export function LogsPage(): React.JSX.Element {
 
       {/* Worker Health */}
       <SectionHeading>Worker Health</SectionHeading>
-      {machineList.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">
-          {machines.isLoading ? 'Loading workers...' : 'No workers registered'}
-        </div>
-      ) : (
+      {machines.isLoading ? (
         <div className="border border-border rounded overflow-hidden">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div
+              key={`wsk-${String(i)}`}
+              className={cn(
+                'px-3.5 py-3 flex items-center gap-4',
+                i > 0 && 'border-t border-border',
+              )}
+            >
+              <Skeleton className="h-5 w-28" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-4 w-24 hidden sm:block" />
+              <Skeleton className="h-4 w-20 ml-auto" />
+            </div>
+          ))}
+        </div>
+      ) : machineList.length === 0 ? (
+        <div className="py-12 text-center text-muted-foreground">No workers registered</div>
+      ) : (
+        <div className="border border-border rounded overflow-x-auto">
           <table className="w-full border-collapse text-[13px]">
             <thead>
               <tr className="bg-muted text-left">
                 <th className={TH_CLASSES}>Hostname</th>
                 <th className={TH_CLASSES}>Status</th>
-                <th className={TH_CLASSES}>Tailscale IP</th>
-                <th className={TH_CLASSES}>OS / Arch</th>
-                <th className={TH_CLASSES}>Max Agents</th>
+                <th className={cn(TH_CLASSES, 'hidden sm:table-cell')}>Tailscale IP</th>
+                <th className={cn(TH_CLASSES, 'hidden md:table-cell')}>OS / Arch</th>
+                <th className={cn(TH_CLASSES, 'hidden md:table-cell')}>Max Agents</th>
                 <th className={TH_CLASSES}>Last Heartbeat</th>
               </tr>
             </thead>
@@ -179,18 +199,22 @@ export function LogsPage(): React.JSX.Element {
                   <td className={TD_CLASSES}>
                     <span className="font-medium">{m.hostname}</span>
                     <br />
-                    <span className="text-[11px] text-muted-foreground font-mono">{m.id}</span>
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      {m.id.slice(0, 12)}...
+                    </span>
                   </td>
                   <td className={TD_CLASSES}>
                     <StatusBadge status={m.status} />
                   </td>
-                  <td className={TD_CLASSES}>
+                  <td className={cn(TD_CLASSES, 'hidden sm:table-cell')}>
                     <span className="font-mono text-xs">{m.tailscaleIp}</span>
                   </td>
-                  <td className={TD_CLASSES}>
+                  <td className={cn(TD_CLASSES, 'hidden md:table-cell')}>
                     {m.os} / {m.arch}
                   </td>
-                  <td className={TD_CLASSES}>{m.capabilities?.maxConcurrentAgents ?? '-'}</td>
+                  <td className={cn(TD_CLASSES, 'hidden md:table-cell')}>
+                    {m.capabilities?.maxConcurrentAgents ?? '-'}
+                  </td>
                   <td className={TD_CLASSES}>
                     {m.lastHeartbeat ? new Date(m.lastHeartbeat).toLocaleString() : 'never'}
                   </td>
