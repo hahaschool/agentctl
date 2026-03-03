@@ -5,7 +5,10 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'AgentCTL',
+  title: {
+    default: 'AgentCTL',
+    template: '%s | AgentCTL',
+  },
   description: 'Multi-Machine AI Agent Orchestration Platform',
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x2699;</text></svg>",
