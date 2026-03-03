@@ -39,6 +39,17 @@ const SORT_OPTIONS: { label: string; value: SortOption }[] = [
   { label: 'Project name', value: 'project' },
 ];
 
+/** Compute a human-readable recency label directly from a date string. */
+function recencyTitle(dateStr: string): string {
+  if (!dateStr) return 'Older';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const oneHour = 60 * 60 * 1000;
+  const oneDay = 24 * oneHour;
+  if (diff < oneHour) return 'Active in last hour';
+  if (diff < oneDay) return 'Active today';
+  return 'Older';
+}
+
 export function DiscoverPage(): React.JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -510,13 +521,7 @@ export function DiscoverPage(): React.JSX.Element {
                             <span
                               className="w-[7px] h-[7px] rounded-full shrink-0 inline-block"
                               style={{ backgroundColor: dotColor }}
-                              title={
-                                dotColor === 'var(--green)'
-                                  ? 'Active in last hour'
-                                  : dotColor === 'var(--yellow)'
-                                    ? 'Active today'
-                                    : 'Older'
-                              }
+                              title={recencyTitle(s.lastActivity)}
                             />
 
                             {/* Summary */}

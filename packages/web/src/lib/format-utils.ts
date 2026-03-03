@@ -112,11 +112,11 @@ export function formatCost(value: number | null | undefined): string {
  * - muted: older
  */
 export function recencyColor(dateStr: string): string {
-  if (!dateStr) return 'var(--text-muted)';
+  if (!dateStr) return '#9ca3af';
   const diff = Date.now() - new Date(dateStr).getTime();
   const oneHour = 60 * 60 * 1000;
   const oneDay = 24 * oneHour;
-  if (diff < oneHour) return 'var(--green)';
-  if (diff < oneDay) return 'var(--yellow)';
-  return 'var(--text-muted)';
+  if (diff < oneHour) return '#22c55e';
+  if (diff < oneDay) return '#f59e0b';
+  return '#9ca3af';
 }

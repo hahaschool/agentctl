@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CopyableText } from '@/components/CopyableText';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { Session, SessionContentMessage } from '../lib/api';
 import { formatDuration, shortenPath, timeAgo } from '../lib/format-utils';
@@ -275,7 +276,7 @@ function MessageList({
 function MessageBubble({ message }: { message: SessionContentMessage }): React.JSX.Element {
   const style = MSG_STYLES[message.type] ?? {
     label: message.type,
-    color: 'var(--text-muted)',
+    color: 'var(--color-muted-foreground)',
     bg: 'transparent',
   };
 
@@ -482,10 +483,19 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
 
 function LoadingState(): React.JSX.Element {
   return (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-[15px] text-muted-foreground mb-2">Loading session...</div>
-        <div className="text-xs text-muted-foreground">Fetching session details</div>
+    <div className="p-6 max-w-[900px]">
+      <Skeleton className="h-4 w-28 mb-4" />
+      <div className="flex items-center gap-3 mb-6">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-5 w-16 rounded-full" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={`sk-${String(i)}`} className="flex gap-3">
+            <Skeleton className="h-4 w-12 shrink-0" />
+            <Skeleton className="h-16 flex-1 rounded" />
+          </div>
+        ))}
       </div>
     </div>
   );

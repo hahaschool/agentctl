@@ -186,8 +186,8 @@ const TYPE_STYLES: Record<string, { label: string; color: string; bg: string }> 
 function MessageBubble({ message }: { message: SessionContentMessage }): React.JSX.Element {
   const style = TYPE_STYLES[message.type] ?? {
     label: message.type,
-    color: 'var(--text-muted)',
-    bg: 'var(--bg-secondary)',
+    color: 'var(--color-muted-foreground)',
+    bg: 'var(--color-card)',
   };
 
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';

@@ -1,8 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { StatCard } from '../components/StatCard';
@@ -105,32 +107,43 @@ export function MachinesPage(): React.JSX.Element {
 
       {/* Summary stats */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-        <StatCard label="Total Machines" value={String(list.length)} color="var(--text-primary)" />
-        <StatCard
-          label="Online"
-          value={String(online)}
-          color={online > 0 ? 'var(--green)' : 'var(--text-muted)'}
-        />
+        <StatCard label="Total Machines" value={String(list.length)} />
+        <StatCard label="Online" value={String(online)} />
         <StatCard
           label="Offline"
           value={String(offline)}
-          color={offline > 0 ? 'var(--text-muted)' : 'var(--green)'}
           sublabel={offline > 0 ? 'Needs attention' : 'All clear'}
         />
         <StatCard
           label="Degraded"
           value={String(degraded)}
-          color={degraded > 0 ? 'var(--yellow)' : 'var(--text-muted)'}
           sublabel={degraded > 0 ? 'Partial issues' : 'Healthy'}
         />
       </div>
 
       {/* Machine cards or empty state */}
-      {filteredList.length === 0 ? (
-        <EmptyState
-          loading={machines.isLoading}
-          hasFilters={list.length > 0 && filteredList.length === 0}
-        />
+      {machines.isLoading ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(480px,1fr))] gap-4">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div
+              key={`sk-${String(i)}`}
+              className="p-5 bg-card border border-border rounded-lg space-y-3"
+            >
+              <div className="flex justify-between items-center">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filteredList.length === 0 ? (
+        <EmptyState loading={false} hasFilters={list.length > 0 && filteredList.length === 0} />
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(480px,1fr))] gap-4">
           {filteredList.map((m) => (
@@ -154,7 +167,12 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
       {/* Top row: hostname + status */}
       <div className="flex justify-between items-start">
         <div>
-          <div className="text-[17px] font-bold text-foreground mb-0.5">{m.hostname}</div>
+          <Link
+            href={`/machines/${m.id}`}
+            className="text-[17px] font-bold text-foreground hover:text-primary transition-colors no-underline"
+          >
+            {m.hostname}
+          </Link>
           <CopyableText value={m.id} maxDisplay={12} />
         </div>
         <StatusBadge status={m.status} />

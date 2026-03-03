@@ -51,14 +51,20 @@ export function DashboardPage(): React.JSX.Element {
   const anyError =
     health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error;
 
-  // Health status color
+  // Health status — Tailwind class helpers
   const healthStatus = health.data?.status;
-  const healthColor =
+  const healthTextClass =
     healthStatus === 'ok'
-      ? 'var(--green)'
+      ? 'text-green-500'
       : healthStatus === 'degraded'
-        ? 'var(--yellow)'
-        : 'var(--text-muted)';
+        ? 'text-yellow-500'
+        : 'text-muted-foreground';
+  const healthBgClass =
+    healthStatus === 'ok'
+      ? 'bg-green-500'
+      : healthStatus === 'degraded'
+        ? 'bg-yellow-500'
+        : 'bg-muted-foreground';
   const healthLabel = healthStatus ?? 'unknown';
 
   return (
@@ -98,16 +104,13 @@ export function DashboardPage(): React.JSX.Element {
           <span
             className={cn(
               'w-3 h-3 rounded-full shrink-0',
-              healthStatus === 'ok' && 'shadow-[0_0_8px_var(--green)]',
+              healthBgClass,
+              healthStatus === 'ok' && 'shadow-[0_0_8px_rgba(34,197,94,0.5)]',
             )}
-            style={{ backgroundColor: healthColor }}
           />
           <div>
             <div className="text-[15px] font-semibold text-foreground">
-              Control Plane:{' '}
-              <span className="uppercase" style={{ color: healthColor }}>
-                {healthLabel}
-              </span>
+              Control Plane: <span className={cn('uppercase', healthTextClass)}>{healthLabel}</span>
             </div>
             {health.data?.timestamp && (
               <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -127,7 +130,6 @@ export function DashboardPage(): React.JSX.Element {
         <StatCard
           label="Machines Online"
           value={`${machinesOnline} / ${machineList.length}`}
-          color={machinesOnline > 0 ? 'var(--green)' : 'var(--text-muted)'}
           sublabel={
             machineList.length > 0
               ? `${machineList.filter((m) => m.status === 'offline').length} offline`
@@ -137,7 +139,6 @@ export function DashboardPage(): React.JSX.Element {
         <StatCard
           label="Sessions Discovered"
           value={String(discovered.data?.count ?? 0)}
-          color="var(--accent)"
           sublabel={
             discovered.data
               ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
@@ -147,19 +148,13 @@ export function DashboardPage(): React.JSX.Element {
         <StatCard
           label="Agents Registered"
           value={String(agentsRegistered)}
-          color="var(--text-primary)"
           sublabel={
             agentList.filter((a) => a.status === 'error').length > 0
               ? `${agentList.filter((a) => a.status === 'error').length} in error`
               : undefined
           }
         />
-        <StatCard
-          label="Active Runs"
-          value={String(activeRuns)}
-          color={activeRuns > 0 ? 'var(--green)' : 'var(--text-muted)'}
-          sublabel={`${totalRuns} total`}
-        />
+        <StatCard label="Active Runs" value={String(activeRuns)} sublabel={`${totalRuns} total`} />
       </div>
 
       {/* Two-column layout: Recent Activity + Machine Status */}
@@ -337,22 +332,28 @@ function EmptyState({
 // WebSocket status indicator
 // ---------------------------------------------------------------------------
 
-const WS_STATUS_CONFIG: Record<WsConnectionStatus, { color: string; label: string }> = {
-  connected: { color: 'var(--green)', label: 'WS Connected' },
-  connecting: { color: 'var(--yellow)', label: 'WS Connecting' },
-  disconnected: { color: 'var(--text-muted)', label: 'WS Disconnected' },
+const WS_STATUS_CONFIG: Record<
+  WsConnectionStatus,
+  { textClass: string; bgClass: string; label: string }
+> = {
+  connected: { textClass: 'text-green-500', bgClass: 'bg-green-500', label: 'WS Connected' },
+  connecting: { textClass: 'text-yellow-500', bgClass: 'bg-yellow-500', label: 'WS Connecting' },
+  disconnected: {
+    textClass: 'text-muted-foreground',
+    bgClass: 'bg-muted-foreground',
+    label: 'WS Disconnected',
+  },
 };
 
 function WsStatusIndicator({ status }: { status: WsConnectionStatus }): React.JSX.Element {
-  const { color, label } = WS_STATUS_CONFIG[status];
+  const { textClass, bgClass, label } = WS_STATUS_CONFIG[status];
 
   return (
     <span
       title={label}
-      className="inline-flex items-center gap-1.5 text-[11px] font-medium"
-      style={{ color }}
+      className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium', textClass)}
     >
-      <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: color }} />
+      <span className={cn('w-[7px] h-[7px] rounded-full shrink-0', bgClass)} />
       {label}
     </span>
   );

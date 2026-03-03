@@ -3,7 +3,6 @@ import { Card, CardContent } from '@/components/ui/card';
 type Props = {
   label: string;
   value: string;
-  color?: string;
   sublabel?: string;
 };
 

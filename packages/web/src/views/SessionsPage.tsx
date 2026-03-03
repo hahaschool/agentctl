@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
@@ -470,13 +471,19 @@ export function SessionsPage(): React.JSX.Element {
         )}
 
         <div className="flex-1 overflow-auto">
-          {filteredSessions.length === 0 ? (
+          {sessions.isLoading ? (
+            <div className="p-3 space-y-1">
+              {Array.from({ length: 6 }, (_, i) => (
+                <div key={`sk-${String(i)}`} className="flex items-center gap-3 px-3 py-2.5">
+                  <Skeleton className="w-[7px] h-[7px] rounded-full shrink-0" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-3 w-12 shrink-0" />
+                </div>
+              ))}
+            </div>
+          ) : filteredSessions.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground text-[13px]">
-              {sessions.isLoading
-                ? 'Loading...'
-                : searchQuery || statusFilter !== 'all'
-                  ? 'No matching sessions'
-                  : 'No sessions found'}
+              {searchQuery || statusFilter !== 'all' ? 'No matching sessions' : 'No sessions found'}
             </div>
           ) : groupedSessions ? (
             Array.from(groupedSessions.entries()).map(([groupKey, groupItems]) => (
@@ -899,8 +906,8 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
   const [expanded, setExpanded] = useState(false);
   const msgStyle = MSG_STYLES[message.type] ?? {
     label: message.type,
-    color: 'var(--text-muted)',
-    bg: 'var(--bg-secondary)',
+    color: 'var(--color-muted-foreground)',
+    bg: 'var(--color-card)',
   };
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
   const isLong = message.content.length > TRUNCATE_THRESHOLD;

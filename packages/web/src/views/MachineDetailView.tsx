@@ -1,0 +1,393 @@
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import type React from 'react';
+import { useMemo } from 'react';
+
+import { CopyableText } from '@/components/CopyableText';
+import { StatusBadge } from '@/components/StatusBadge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { formatDate, shortenPath, timeAgo } from '@/lib/format-utils';
+import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
+import { cn } from '@/lib/utils';
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export function MachineDetailView(): React.JSX.Element {
+  const params = useParams<{ id: string }>();
+  const machineId = params.id;
+
+  const machines = useQuery(machinesQuery());
+  const agents = useQuery(agentsQuery());
+  const sessions = useQuery(sessionsQuery({ machineId }));
+
+  const machine = useMemo(
+    () => machines.data?.find((m) => m.id === machineId) ?? null,
+    [machines.data, machineId],
+  );
+
+  const machineAgents = useMemo(
+    () => (agents.data ?? []).filter((a) => a.machineId === machineId),
+    [agents.data, machineId],
+  );
+
+  const recentSessions = useMemo(() => {
+    const list = sessions.data ?? [];
+    return [...list].sort(
+      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+    );
+  }, [sessions.data]);
+
+  // -- Loading state --
+
+  if (machines.isLoading) {
+    return (
+      <div className="p-6 max-w-[1000px]">
+        <Skeleton className="h-4 w-32 mb-4" />
+        <Skeleton className="h-8 w-64 mb-2" />
+        <Skeleton className="h-4 w-48 mb-6" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+          {['sk-1', 'sk-2', 'sk-3', 'sk-4', 'sk-5', 'sk-6'].map((key) => (
+            <Skeleton key={key} className="h-16 rounded-lg" />
+          ))}
+        </div>
+        <Skeleton className="h-48 rounded-lg" />
+      </div>
+    );
+  }
+
+  // -- Error state --
+
+  if (machines.error) {
+    return (
+      <div className="p-6 max-w-[1000px]">
+        <Link
+          href="/machines"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          &larr; Back to Machines
+        </Link>
+        <div className="mt-6 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg text-sm">
+          Failed to load machines: {machines.error.message}
+        </div>
+      </div>
+    );
+  }
+
+  // -- Not found state --
+
+  if (!machine) {
+    return (
+      <div className="p-6 max-w-[1000px]">
+        <Link
+          href="/machines"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          &larr; Back to Machines
+        </Link>
+        <div className="mt-6 text-center text-muted-foreground text-sm py-12">
+          Machine not found.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-[1000px]">
+      {/* Back link */}
+      <Link
+        href="/machines"
+        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        &larr; Back to Machines
+      </Link>
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 mb-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-[22px] font-bold">{machine.hostname}</h1>
+          <StatusBadge status={machine.status} />
+        </div>
+      </div>
+
+      {/* Machine details card */}
+      <Card className="mb-4">
+        <CardHeader className="pb-0">
+          <CardTitle className="text-sm">Machine Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+            <InfoField label="ID">
+              <CopyableText value={machine.id} maxDisplay={16} />
+            </InfoField>
+            <InfoField label="Tailscale IP">
+              <CopyableText value={machine.tailscaleIp} label={machine.tailscaleIp} />
+            </InfoField>
+            <InfoField label="OS / Architecture">
+              <span>
+                {machine.os} / {machine.arch}
+              </span>
+            </InfoField>
+            <InfoField label="Last Heartbeat">
+              <span
+                className={cn(
+                  machine.lastHeartbeat
+                    ? isStaleHeartbeat(machine.lastHeartbeat)
+                      ? 'text-yellow-500'
+                      : 'text-green-500'
+                    : 'text-muted-foreground',
+                )}
+              >
+                {machine.lastHeartbeat ? timeAgo(machine.lastHeartbeat) : 'Never'}
+              </span>
+            </InfoField>
+            <InfoField label="Registered">
+              <span>{formatDate(machine.createdAt)}</span>
+            </InfoField>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Capabilities card */}
+      {machine.capabilities && (
+        <Card className="mb-4">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm">Capabilities</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+              <InfoField label="GPU">
+                <CapabilityIndicator enabled={machine.capabilities.gpu} />
+              </InfoField>
+              <InfoField label="Docker">
+                <CapabilityIndicator enabled={machine.capabilities.docker} />
+              </InfoField>
+              <InfoField label="Max Concurrent Agents">
+                <span className="font-mono">{machine.capabilities.maxConcurrentAgents}</span>
+              </InfoField>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Agents on this machine */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="text-sm">
+            Agents on this Machine
+            {machineAgents.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({machineAgents.length})
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {agents.isLoading ? (
+            <div className="space-y-2">
+              {['agent-sk-1', 'agent-sk-2'].map((key) => (
+                <Skeleton key={key} className="h-10 rounded" />
+              ))}
+            </div>
+          ) : agents.error ? (
+            <div className="px-3 py-2 bg-red-900/50 text-red-300 rounded text-xs">
+              Failed to load agents: {agents.error.message}
+            </div>
+          ) : machineAgents.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground text-sm">
+              No agents registered on this machine.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="pb-2 pr-4 font-medium">Name</th>
+                    <th className="pb-2 pr-4 font-medium">Status</th>
+                    <th className="pb-2 pr-4 font-medium">Type</th>
+                    <th className="pb-2 pr-4 font-medium">Project</th>
+                    <th className="pb-2 font-medium">Last Run</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {machineAgents.map((agent) => (
+                    <tr key={agent.id} className="border-b border-border/50 last:border-0">
+                      <td className="py-2.5 pr-4">
+                        <Link
+                          href={`/agents/${agent.id}`}
+                          className="text-foreground hover:text-primary transition-colors font-medium no-underline"
+                        >
+                          {agent.name}
+                        </Link>
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <StatusBadge status={agent.status} />
+                      </td>
+                      <td className="py-2.5 pr-4 text-xs text-muted-foreground capitalize">
+                        {agent.type}
+                      </td>
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground max-w-[200px] truncate">
+                        {agent.projectPath ? shortenPath(agent.projectPath) : '-'}
+                      </td>
+                      <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {agent.lastRunAt ? timeAgo(agent.lastRunAt) : 'Never'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent sessions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">
+            Recent Sessions
+            {recentSessions.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({recentSessions.length})
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {sessions.isLoading ? (
+            <div className="space-y-2">
+              {['sess-sk-1', 'sess-sk-2', 'sess-sk-3'].map((key) => (
+                <Skeleton key={key} className="h-10 rounded" />
+              ))}
+            </div>
+          ) : sessions.error ? (
+            <div className="px-3 py-2 bg-red-900/50 text-red-300 rounded text-xs">
+              Failed to load sessions: {sessions.error.message}
+            </div>
+          ) : recentSessions.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground text-sm">
+              No sessions found for this machine.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="pb-2 pr-4 font-medium">Session ID</th>
+                    <th className="pb-2 pr-4 font-medium">Status</th>
+                    <th className="pb-2 pr-4 font-medium">Agent</th>
+                    <th className="pb-2 pr-4 font-medium">Project</th>
+                    <th className="pb-2 font-medium">Started</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentSessions.map((session) => (
+                    <tr key={session.id} className="border-b border-border/50 last:border-0">
+                      <td className="py-2.5 pr-4">
+                        <Link
+                          href={`/sessions/${session.id}`}
+                          className="text-foreground hover:text-primary transition-colors font-mono text-xs no-underline"
+                        >
+                          {session.id.slice(0, 12)}...
+                        </Link>
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <StatusBadge status={session.status} />
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <AgentName agentId={session.agentId} agents={agents.data ?? []} />
+                      </td>
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground max-w-[200px] truncate">
+                        {session.projectPath ? shortenPath(session.projectPath) : '-'}
+                      </td>
+                      <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {timeAgo(session.startedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function isStaleHeartbeat(dateStr: string): boolean {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  return diffMs > 60_000;
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponents
+// ---------------------------------------------------------------------------
+
+function InfoField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div>
+      <div className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground mb-1">
+        {label}
+      </div>
+      <div className="text-foreground">{children}</div>
+    </div>
+  );
+}
+
+function CapabilityIndicator({ enabled }: { enabled: boolean }): React.JSX.Element {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 text-sm',
+        enabled ? 'text-green-500' : 'text-muted-foreground',
+      )}
+    >
+      <span
+        className={cn(
+          'h-2 w-2 rounded-full shrink-0',
+          enabled ? 'bg-green-500' : 'bg-muted-foreground/30',
+        )}
+      />
+      {enabled ? 'Available' : 'Not available'}
+    </span>
+  );
+}
+
+function AgentName({
+  agentId,
+  agents,
+}: {
+  agentId: string;
+  agents: { id: string; name: string }[];
+}): React.JSX.Element {
+  const agent = agents.find((a) => a.id === agentId);
+
+  if (agent) {
+    return (
+      <Link
+        href={`/agents/${agent.id}`}
+        className="text-xs text-foreground hover:text-primary transition-colors no-underline"
+      >
+        {agent.name}
+      </Link>
+    );
+  }
+
+  return <span className="text-xs font-mono text-muted-foreground">{agentId.slice(0, 12)}...</span>;
+}

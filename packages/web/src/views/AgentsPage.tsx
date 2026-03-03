@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { StatCard } from '../components/StatCard';
@@ -343,29 +344,41 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Summary stats */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-6">
-        <StatCard
-          label="Total Agents"
-          value={String(agentList.length)}
-          color="var(--text-primary)"
-        />
+        <StatCard label="Total Agents" value={String(agentList.length)} />
         {Object.entries(statusCounts).map(([status, count]) => (
           <StatCard
             key={status}
             label={status.charAt(0).toUpperCase() + status.slice(1)}
             value={String(count)}
-            color={statusColor(status)}
           />
         ))}
       </div>
 
       {/* Agent cards grid */}
-      {filteredAgents.length === 0 ? (
+      {agents.isLoading ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div
+              key={`sk-${String(i)}`}
+              className="p-4 bg-card border border-border rounded-lg space-y-3"
+            >
+              <div className="flex justify-between items-center">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+              <Skeleton className="h-8 w-20 mt-2" />
+            </div>
+          ))}
+        </div>
+      ) : filteredAgents.length === 0 ? (
         <div className="p-12 text-center text-muted-foreground text-sm">
-          {agents.isLoading
-            ? 'Loading agents...'
-            : agentList.length === 0
-              ? 'No agents registered'
-              : 'No agents match the current filters'}
+          {agentList.length === 0 ? 'No agents registered' : 'No agents match the current filters'}
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3">
@@ -482,22 +495,6 @@ export function AgentsPage(): React.JSX.Element {
 // ---------------------------------------------------------------------------
 // Subcomponents
 // ---------------------------------------------------------------------------
-
-function statusColor(status: string): string {
-  switch (status) {
-    case 'running':
-    case 'online':
-    case 'active':
-      return 'var(--green)';
-    case 'starting':
-    case 'stopping':
-      return 'var(--yellow)';
-    case 'error':
-      return 'var(--red, #ef4444)';
-    default:
-      return 'var(--text-muted)';
-  }
-}
 
 function Info({
   label,
