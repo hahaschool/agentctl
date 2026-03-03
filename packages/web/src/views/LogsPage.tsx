@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ import { formatNumber } from '../lib/format-utils';
 import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
 export function LogsPage(): React.JSX.Element {
+  const [rawMetricsOpen, setRawMetricsOpen] = useState(false);
   const health = useQuery(healthQuery());
   const metrics = useQuery(metricsQuery());
   const machines = useQuery(machinesQuery());
@@ -166,12 +167,31 @@ export function LogsPage(): React.JSX.Element {
       {/* Raw Metrics (collapsible debug view) */}
       {metrics.data && (
         <div className="mb-6">
-          <SectionHeading>Raw Metrics</SectionHeading>
-          <div className="p-3.5 bg-card border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-all max-h-[300px] overflow-auto">
-            {Object.entries(metrics.data)
-              .map(([k, v]) => `${k} ${String(v)}`)
-              .join('\n')}
-          </div>
+          <button
+            type="button"
+            onClick={() => setRawMetricsOpen(!rawMetricsOpen)}
+            className="flex items-center gap-2 mb-2.5 bg-transparent border-none p-0 cursor-pointer text-left"
+          >
+            <span
+              className={cn(
+                'text-xs transition-transform duration-150 text-muted-foreground',
+                rawMetricsOpen ? 'rotate-0' : '-rotate-90',
+              )}
+            >
+              &#x25BC;
+            </span>
+            <span className="text-[15px] font-semibold text-muted-foreground">Raw Metrics</span>
+            <span className="text-[11px] text-muted-foreground font-normal">
+              ({Object.keys(metrics.data).length} keys)
+            </span>
+          </button>
+          {rawMetricsOpen && (
+            <div className="p-3.5 bg-card border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-all max-h-[300px] overflow-auto">
+              {Object.entries(metrics.data)
+                .map(([k, v]) => `${k} ${String(v)}`)
+                .join('\n')}
+            </div>
+          )}
         </div>
       )}
 

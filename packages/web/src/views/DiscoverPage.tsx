@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { HighlightText } from '../components/HighlightText';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { SessionPreview } from '../components/SessionPreview';
 import { SimpleTooltip } from '../components/SimpleTooltip';
@@ -584,7 +585,7 @@ export function DiscoverPage(): React.JSX.Element {
                             {/* Summary */}
                             <SimpleTooltip content={s.summary || 'Untitled'}>
                               <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-                                {s.summary || 'Untitled'}
+                                <HighlightText text={s.summary || 'Untitled'} highlight={search} />
                               </span>
                             </SimpleTooltip>
 

@@ -485,11 +485,7 @@ export function SessionsPage(): React.JSX.Element {
             </select>
 
             {/* Error / Success feedback */}
-            {formError && (
-              <div className="px-2 py-1.5 bg-red-900 text-red-300 text-xs rounded-sm mb-2.5">
-                {formError}
-              </div>
-            )}
+            {formError && <ErrorBanner message={formError} className="mb-2.5" />}
             {/* Submit button */}
             <button
               type="button"

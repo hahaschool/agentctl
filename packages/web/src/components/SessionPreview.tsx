@@ -4,8 +4,10 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
+import { ErrorBanner } from '../components/ErrorBanner';
 import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
+import { formatNumber } from '../lib/format-utils';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,79 +82,87 @@ export function SessionPreview({
     : [];
 
   return (
-    <div
-      ref={panelRef}
-      className="fixed top-0 right-0 bottom-0 w-1/2 min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.3)]"
-    >
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex justify-between items-center shrink-0">
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">Session Preview</div>
-          <div className="text-[11px] text-muted-foreground font-mono mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">
-            {sessionId.slice(0, 32)}...
+    <>
+      {/* Backdrop for click-outside close */}
+      <button
+        type="button"
+        className="fixed inset-0 z-[99] bg-black/30 border-none cursor-default"
+        onClick={onClose}
+        aria-label="Close preview"
+      />
+      <div
+        ref={panelRef}
+        className="fixed top-0 right-0 bottom-0 w-1/2 min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.3)]"
+      >
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-border flex justify-between items-center shrink-0">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">Session Preview</div>
+            <div className="text-[11px] text-muted-foreground font-mono mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">
+              {sessionId.slice(0, 32)}...
+            </div>
+          </div>
+          <div className="flex gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => setShowTools(!showTools)}
+              className={cn(
+                'px-2.5 py-1 border border-border rounded-sm text-[11px] cursor-pointer',
+                showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {showTools ? 'Hide Tools' : 'Show Tools'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
+            >
+              Close (Esc)
+            </button>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <button
-            type="button"
-            onClick={() => setShowTools(!showTools)}
-            className={cn(
-              'px-2.5 py-1 border border-border rounded-sm text-[11px] cursor-pointer',
-              showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
-            )}
-          >
-            {showTools ? 'Hide Tools' : 'Show Tools'}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
-          >
-            Close (Esc)
-          </button>
+
+        {/* Stats bar */}
+        {data && (
+          <div className="px-4 py-1.5 border-b border-border flex gap-4 text-[11px] text-muted-foreground bg-card shrink-0">
+            <span>{formatNumber(data.totalMessages)} total messages</span>
+            <span>
+              {formatNumber(visibleMessages.length)} shown
+              {!showTools && ' (conversations only)'}
+            </span>
+          </div>
+        )}
+
+        {/* Content */}
+        <div ref={scrollRef} className="flex-1 overflow-auto px-4 py-3">
+          {loading && (
+            <div className="p-8 text-center text-muted-foreground text-[13px]">
+              Loading session content...
+            </div>
+          )}
+
+          {error && <ErrorBanner message={error} onRetry={() => void fetchContent()} />}
+
+          {data && visibleMessages.length === 0 && (
+            <div className="p-8 text-center text-muted-foreground text-[13px]">
+              No messages found in this session
+            </div>
+          )}
+
+          {visibleMessages.map((msg, i) => (
+            <MessageBubble key={`${msg.type}-${String(i)}`} message={msg} />
+          ))}
+
+          {data && data.totalMessages > data.messages.length && (
+            <div className="py-2 text-center text-muted-foreground text-xs">
+              Showing last {formatNumber(data.messages.length)} of{' '}
+              {formatNumber(data.totalMessages)} messages
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Stats bar */}
-      {data && (
-        <div className="px-4 py-1.5 border-b border-border flex gap-4 text-[11px] text-muted-foreground bg-card shrink-0">
-          <span>{data.totalMessages} total messages</span>
-          <span>
-            {visibleMessages.length} shown
-            {!showTools && ' (conversations only)'}
-          </span>
-        </div>
-      )}
-
-      {/* Content */}
-      <div ref={scrollRef} className="flex-1 overflow-auto px-4 py-3">
-        {loading && (
-          <div className="p-8 text-center text-muted-foreground text-[13px]">
-            Loading session content...
-          </div>
-        )}
-
-        {error && (
-          <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg text-[13px]">{error}</div>
-        )}
-
-        {data && visibleMessages.length === 0 && (
-          <div className="p-8 text-center text-muted-foreground text-[13px]">
-            No messages found in this session
-          </div>
-        )}
-
-        {visibleMessages.map((msg, i) => (
-          <MessageBubble key={`${msg.type}-${String(i)}`} message={msg} />
-        ))}
-
-        {data && data.totalMessages > data.messages.length && (
-          <div className="py-2 text-center text-muted-foreground text-xs">
-            Showing last {data.messages.length} of {data.totalMessages} messages
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   );
 }
 
