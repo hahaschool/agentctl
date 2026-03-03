@@ -1,6 +1,7 @@
 import {
   bigint,
   bigserial,
+  index,
   inet,
   integer,
   jsonb,
@@ -64,6 +65,33 @@ export const agentRuns = pgTable('agent_runs', {
   /** Links sub-runs to their parent loop run (null for top-level runs). */
   parentRunId: text('parent_run_id'),
 });
+
+export const rcSessions = pgTable(
+  'rc_sessions',
+  {
+    id: text('id').primaryKey(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id),
+    machineId: text('machine_id')
+      .notNull()
+      .references(() => machines.id),
+    sessionUrl: text('session_url'),
+    claudeSessionId: text('claude_session_id'),
+    status: text('status').notNull().default('starting'),
+    projectPath: text('project_path'),
+    pid: integer('pid'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    lastHeartbeat: timestamp('last_heartbeat', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    metadata: jsonb('metadata').default({}),
+  },
+  (table) => [
+    index('idx_rc_sessions_agent_id').on(table.agentId),
+    index('idx_rc_sessions_machine_id').on(table.machineId),
+    index('idx_rc_sessions_status').on(table.status),
+  ],
+);
 
 export const agentActions = pgTable('agent_actions', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),

@@ -1,0 +1,1040 @@
+import Fastify, { type FastifyInstance } from 'fastify';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { sessionRoutes } from './sessions.js';
+
+// ---------------------------------------------------------------------------
+// Mock helpers
+// ---------------------------------------------------------------------------
+
+const NOW = new Date('2026-03-03T12:00:00Z');
+
+function makeSession(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'sess-001',
+    agentId: 'agent-1',
+    machineId: 'machine-1',
+    sessionUrl: null,
+    claudeSessionId: null,
+    status: 'active',
+    projectPath: '/home/user/project',
+    pid: null,
+    startedAt: NOW,
+    lastHeartbeat: null,
+    endedAt: null,
+    metadata: {},
+    ...overrides,
+  };
+}
+
+function makeMachine(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'machine-1',
+    hostname: 'test-host',
+    tailscaleIp: '100.64.0.1',
+    os: 'linux',
+    arch: 'x64',
+    status: 'online',
+    lastHeartbeat: NOW,
+    capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+    createdAt: NOW,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Chainable Drizzle query builder mock
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a mock database that simulates Drizzle's chainable query builder.
+ *
+ * Each method in the chain (select, from, where, orderBy, limit, offset,
+ * insert, update, values, set, returning) returns the chain itself so that
+ * calls like `db.select().from(table).where(cond)` resolve correctly.
+ *
+ * The mock stores a `rows` array that is returned when the chain is awaited
+ * (via a `.then` method). Call `setRows()` to configure what a query returns.
+ */
+function createMockDb() {
+  let rows: unknown[] = [];
+
+  const chain: Record<string, unknown> = {};
+
+  const chainMethods = [
+    'select',
+    'from',
+    'where',
+    'orderBy',
+    'limit',
+    'offset',
+    'insert',
+    'update',
+    'values',
+    'set',
+    'returning',
+    'onConflictDoUpdate',
+  ];
+
+  for (const method of chainMethods) {
+    chain[method] = vi.fn(() => chain);
+  }
+
+  // When the chain is awaited, resolve with the configured rows.
+  // biome-ignore lint/suspicious/noThenProperty: Drizzle query builder mock requires a thenable
+  chain.then = (resolve: (value: unknown) => void) => {
+    resolve(rows);
+    return chain;
+  };
+
+  return {
+    db: chain,
+    setRows: (newRows: unknown[]) => {
+      rows = newRows;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mock DbAgentRegistry
+// ---------------------------------------------------------------------------
+
+function createMockDbRegistry() {
+  return {
+    getAgent: vi.fn().mockResolvedValue({
+      id: 'agent-1',
+      machineId: 'machine-1',
+      name: 'Test Agent',
+      type: 'adhoc',
+      status: 'registered',
+      config: {},
+    }),
+    getMachine: vi.fn().mockResolvedValue(makeMachine()),
+    registerMachine: vi.fn(),
+    heartbeat: vi.fn(),
+    listMachines: vi.fn().mockResolvedValue([]),
+    createAgent: vi.fn(),
+    updateAgentStatus: vi.fn(),
+    listAgents: vi.fn().mockResolvedValue([]),
+    getRecentRuns: vi.fn().mockResolvedValue([]),
+    completeRun: vi.fn(),
+    createRun: vi.fn(),
+    insertActions: vi.fn(),
+  } as unknown as DbAgentRegistry;
+}
+
+// ---------------------------------------------------------------------------
+// Mock fetch — prevent real HTTP calls to worker machines
+// ---------------------------------------------------------------------------
+
+const originalFetch = globalThis.fetch;
+
+function mockFetchOk(body: Record<string, unknown> = { ok: true }) {
+  globalThis.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  });
+}
+
+function mockFetchError(status = 500) {
+  globalThis.fetch = vi.fn().mockResolvedValue({
+    ok: false,
+    status,
+    json: async () => ({ error: 'WORKER_ERROR' }),
+    text: async () => 'Internal Server Error',
+  });
+}
+
+function mockFetchThrow(message = 'Connection refused') {
+  globalThis.fetch = vi.fn().mockRejectedValue(new Error(message));
+}
+
+// ---------------------------------------------------------------------------
+// App builder
+// ---------------------------------------------------------------------------
+
+async function buildApp(
+  mockDb: ReturnType<typeof createMockDb>,
+  mockDbRegistry: DbAgentRegistry,
+): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false });
+  await app.register(sessionRoutes, {
+    prefix: '/api/sessions',
+    db: mockDb.db as never,
+    dbRegistry: mockDbRegistry,
+    workerPort: 9000,
+  });
+  await app.ready();
+  return app;
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+describe('Session routes — /api/sessions', () => {
+  let app: FastifyInstance;
+  let mockDb: ReturnType<typeof createMockDb>;
+  let mockDbRegistry: DbAgentRegistry;
+
+  beforeAll(async () => {
+    mockDb = createMockDb();
+    mockDbRegistry = createMockDbRegistry();
+    app = await buildApp(mockDb, mockDbRegistry);
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/sessions — list sessions
+  // ---------------------------------------------------------------------------
+
+  describe('GET /api/sessions', () => {
+    it('returns 200 with an array of sessions', async () => {
+      const sessions = [makeSession(), makeSession({ id: 'sess-002', status: 'ended' })];
+      mockDb.setRows(sessions);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(Array.isArray(body)).toBe(true);
+      expect(body).toHaveLength(2);
+    });
+
+    it('returns empty array when no sessions exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(Array.isArray(body)).toBe(true);
+      expect(body).toHaveLength(0);
+    });
+
+    it('accepts machineId filter parameter', async () => {
+      mockDb.setRows([makeSession()]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions?machineId=machine-1',
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('accepts status filter parameter', async () => {
+      mockDb.setRows([makeSession({ status: 'active' })]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions?status=active',
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('accepts limit and offset parameters', async () => {
+      mockDb.setRows([makeSession()]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions?limit=10&offset=5',
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/sessions/:sessionId — get single session
+  // ---------------------------------------------------------------------------
+
+  describe('GET /api/sessions/:sessionId', () => {
+    it('returns 200 with session details when session exists', async () => {
+      const session = makeSession();
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/sess-001',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.id).toBe('sess-001');
+      expect(body.agentId).toBe('agent-1');
+      expect(body.machineId).toBe('machine-1');
+      expect(body.status).toBe('active');
+    });
+
+    it('returns 404 when session does not exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/nonexistent',
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('SESSION_NOT_FOUND');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/sessions — create a new session
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/sessions', () => {
+    it('creates a session and returns 201 with session data', async () => {
+      const inserted = makeSession({ status: 'starting' });
+      mockDb.setRows([inserted]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+          model: 'claude-sonnet-4-20250514',
+          prompt: 'Fix the tests',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.sessionId).toBeDefined();
+      expect(body.session).toBeDefined();
+    });
+
+    it('returns 400 when agentId is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_AGENT_ID');
+    });
+
+    it('returns 400 when machineId is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          projectPath: '/home/user/project',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_MACHINE_ID');
+    });
+
+    it('returns 400 when projectPath is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_PROJECT_PATH');
+    });
+
+    it('returns 404 when agent does not exist', async () => {
+      vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce(undefined as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'ghost-agent',
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('AGENT_NOT_FOUND');
+    });
+
+    it('returns 404 when machine does not exist', async () => {
+      vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce(undefined as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'ghost-machine',
+          projectPath: '/home/user/project',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('MACHINE_NOT_FOUND');
+    });
+
+    it('returns 503 when machine is offline', async () => {
+      vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce(
+        makeMachine({ status: 'offline' }) as never,
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+
+      const body = response.json();
+      expect(body.error).toBe('MACHINE_OFFLINE');
+    });
+
+    it('creates session even if worker dispatch fails (fire-and-forget)', async () => {
+      const inserted = makeSession({ status: 'starting' });
+      mockDb.setRows([inserted]);
+      mockFetchThrow('Connection refused');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+        },
+      });
+
+      // Session is still created even though worker is unreachable
+      expect(response.statusCode).toBe(201);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/sessions/:sessionId/resume — resume a session
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/sessions/:sessionId/resume', () => {
+    it('resumes a paused session and returns 200', async () => {
+      const session = makeSession({ status: 'paused' });
+      mockDb.setRows([session]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/resume',
+        payload: { prompt: 'Continue working on the feature' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+
+    it('returns 400 when prompt is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/resume',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_PROMPT');
+    });
+
+    it('returns 404 when session does not exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/nonexistent/resume',
+        payload: { prompt: 'Resume' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('SESSION_NOT_FOUND');
+    });
+
+    it('returns 409 when session is already active', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/resume',
+        payload: { prompt: 'Resume' },
+      });
+
+      expect(response.statusCode).toBe(409);
+
+      const body = response.json();
+      expect(body.error).toBe('SESSION_ALREADY_ACTIVE');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/sessions/:sessionId/message — send a message
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/sessions/:sessionId/message', () => {
+    it('forwards message to worker and returns 200', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchOk({ ok: true, received: true });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/message',
+        payload: { message: 'Run the test suite' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.sessionId).toBe('sess-001');
+    });
+
+    it('returns 400 when message is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/message',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_MESSAGE');
+    });
+
+    it('returns 404 when session does not exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/nonexistent/message',
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('SESSION_NOT_FOUND');
+    });
+
+    it('returns 409 when session is not active', async () => {
+      const session = makeSession({ status: 'ended' });
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/message',
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(409);
+
+      const body = response.json();
+      expect(body.error).toBe('SESSION_NOT_ACTIVE');
+    });
+
+    it('returns 404 when machine is not found', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce(undefined as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/message',
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('MACHINE_NOT_FOUND');
+    });
+
+    it('returns 503 when machine is offline', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce(
+        makeMachine({ status: 'offline' }) as never,
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/message',
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(503);
+
+      const body = response.json();
+      expect(body.error).toBe('MACHINE_OFFLINE');
+    });
+
+    it('returns 502 when worker returns an error', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchError(500);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/message',
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = response.json();
+      expect(body.error).toBe('WORKER_ERROR');
+    });
+
+    it('returns 500 when worker is unreachable', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchThrow('ECONNREFUSED');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/message',
+        payload: { message: 'Hello' },
+      });
+
+      // ControlPlaneError with WORKER_UNREACHABLE — mapped by Fastify error handler
+      expect(response.statusCode).toBe(500);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // DELETE /api/sessions/:sessionId — end a session
+  // ---------------------------------------------------------------------------
+
+  describe('DELETE /api/sessions/:sessionId', () => {
+    it('ends a session and returns 200', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/sess-001',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.sessionId).toBe('sess-001');
+    });
+
+    it('returns 404 when session does not exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/nonexistent',
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('SESSION_NOT_FOUND');
+    });
+
+    it('returns ok when session is already ended (idempotent)', async () => {
+      const session = makeSession({ status: 'ended' });
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/sess-001',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.message).toBe('Session was already ended');
+    });
+
+    it('ends session even when worker notification fails', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchThrow('Connection refused');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/sess-001',
+      });
+
+      // Session is still ended in control plane
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/sessions/discover — fan-out session discovery
+  // ---------------------------------------------------------------------------
+
+  describe('GET /api/sessions/discover', () => {
+    it('returns merged sessions from all online workers', async () => {
+      const machine1 = makeMachine({
+        id: 'machine-1',
+        hostname: 'mac-mini-01',
+        tailscaleIp: '100.64.0.1',
+      });
+      const machine2 = makeMachine({
+        id: 'machine-2',
+        hostname: 'ec2-worker',
+        tailscaleIp: '100.64.0.2',
+      });
+
+      vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([machine1, machine2] as never);
+
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('100.64.0.1')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              sessions: [
+                {
+                  sessionId: 'sess-a',
+                  projectPath: '/home/user/project-a',
+                  summary: 'Fix auth bug',
+                  messageCount: 12,
+                  lastActivity: '2026-03-03T09:00:00Z',
+                  branch: 'main',
+                },
+              ],
+              count: 1,
+              machineId: 'machine-1',
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sessions: [
+              {
+                sessionId: 'sess-b',
+                projectPath: '/home/user/project-b',
+                summary: 'Add tests',
+                messageCount: 5,
+                lastActivity: '2026-03-03T10:00:00Z',
+                branch: 'feature/tests',
+              },
+            ],
+            count: 1,
+            machineId: 'machine-2',
+          }),
+        });
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.count).toBe(2);
+      expect(body.machinesQueried).toBe(2);
+      expect(body.machinesFailed).toBe(0);
+      expect(body.sessions).toHaveLength(2);
+
+      // Should be sorted by lastActivity desc — sess-b (10:00) before sess-a (09:00)
+      expect(body.sessions[0].sessionId).toBe('sess-b');
+      expect(body.sessions[0].machineId).toBe('machine-2');
+      expect(body.sessions[0].hostname).toBe('ec2-worker');
+      expect(body.sessions[1].sessionId).toBe('sess-a');
+      expect(body.sessions[1].machineId).toBe('machine-1');
+      expect(body.sessions[1].hostname).toBe('mac-mini-01');
+    });
+
+    it('returns empty sessions when no machines are registered', async () => {
+      vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([] as never);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.sessions).toHaveLength(0);
+      expect(body.count).toBe(0);
+      expect(body.machinesQueried).toBe(0);
+      expect(body.machinesFailed).toBe(0);
+    });
+
+    it('skips offline machines', async () => {
+      const onlineMachine = makeMachine({
+        id: 'machine-1',
+        hostname: 'mac-mini-01',
+        status: 'online',
+      });
+      const offlineMachine = makeMachine({
+        id: 'machine-2',
+        hostname: 'ec2-dead',
+        status: 'offline',
+      });
+
+      vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([
+        onlineMachine,
+        offlineMachine,
+      ] as never);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          sessions: [
+            {
+              sessionId: 'sess-a',
+              projectPath: '/project',
+              summary: 'Work',
+              messageCount: 1,
+              lastActivity: '2026-03-03T10:00:00Z',
+              branch: null,
+            },
+          ],
+          count: 1,
+          machineId: 'machine-1',
+        }),
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.machinesQueried).toBe(1);
+      expect(body.sessions).toHaveLength(1);
+
+      // fetch should only be called once (for the online machine)
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('includes partial results when some workers fail', async () => {
+      const machine1 = makeMachine({
+        id: 'machine-1',
+        hostname: 'mac-mini-01',
+        tailscaleIp: '100.64.0.1',
+      });
+      const machine2 = makeMachine({
+        id: 'machine-2',
+        hostname: 'ec2-flaky',
+        tailscaleIp: '100.64.0.2',
+      });
+
+      vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([machine1, machine2] as never);
+
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('100.64.0.1')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              sessions: [
+                {
+                  sessionId: 'sess-a',
+                  projectPath: '/project',
+                  summary: 'Work',
+                  messageCount: 3,
+                  lastActivity: '2026-03-03T10:00:00Z',
+                  branch: 'main',
+                },
+              ],
+              count: 1,
+              machineId: 'machine-1',
+            }),
+          });
+        }
+        // Second machine fails
+        return Promise.reject(new Error('Connection refused'));
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.count).toBe(1);
+      expect(body.machinesQueried).toBe(2);
+      expect(body.machinesFailed).toBe(1);
+      expect(body.sessions).toHaveLength(1);
+      expect(body.sessions[0].sessionId).toBe('sess-a');
+    });
+
+    it('counts worker HTTP errors as failures', async () => {
+      const machine1 = makeMachine({ id: 'machine-1', hostname: 'mac-mini-01' });
+
+      vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([machine1] as never);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'INTERNAL_ERROR' }),
+        text: async () => 'Internal Server Error',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.count).toBe(0);
+      expect(body.machinesQueried).toBe(1);
+      expect(body.machinesFailed).toBe(1);
+      expect(body.sessions).toHaveLength(0);
+    });
+
+    it('passes projectPath query parameter to workers', async () => {
+      const machine1 = makeMachine({ id: 'machine-1', hostname: 'mac-mini-01' });
+
+      vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([machine1] as never);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          sessions: [],
+          count: 0,
+          machineId: 'machine-1',
+        }),
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/discover?projectPath=/home/user/myproject',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+      const calledUrl = fetchCall[0] as string;
+      expect(calledUrl).toContain('projectPath=%2Fhome%2Fuser%2Fmyproject');
+    });
+
+    it('returns 200 with all failures when every worker is unreachable', async () => {
+      const machine1 = makeMachine({
+        id: 'machine-1',
+        hostname: 'mac-mini-01',
+        tailscaleIp: '100.64.0.1',
+      });
+      const machine2 = makeMachine({
+        id: 'machine-2',
+        hostname: 'ec2-dead',
+        tailscaleIp: '100.64.0.2',
+      });
+
+      vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([machine1, machine2] as never);
+
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.sessions).toHaveLength(0);
+      expect(body.count).toBe(0);
+      expect(body.machinesQueried).toBe(2);
+      expect(body.machinesFailed).toBe(2);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Nonexistent routes
+  // ---------------------------------------------------------------------------
+
+  describe('nonexistent routes', () => {
+    it('returns 404 for unknown sub-path', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions/sess-001/nonexistent',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+});

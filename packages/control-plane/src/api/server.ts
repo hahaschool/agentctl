@@ -31,6 +31,7 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
+import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { wsRoutes } from './routes/ws.js';
@@ -143,6 +144,7 @@ export async function createServer({
         { name: 'audit', description: 'Action audit log and replay' },
         { name: 'dashboard', description: 'Analytics and cost dashboards' },
         { name: 'webhooks', description: 'Webhook subscription management' },
+        { name: 'sessions', description: 'Remote Control session management' },
         { name: 'stream', description: 'SSE agent output streaming' },
       ],
       components: {
@@ -273,6 +275,16 @@ export async function createServer({
     await app.register(webhookRoutes, {
       prefix: '/api/webhooks',
       db,
+    });
+  }
+
+  // Register session management routes when both db and dbRegistry are available.
+  if (db && dbRegistry) {
+    await app.register(sessionRoutes, {
+      prefix: '/api/sessions',
+      db,
+      dbRegistry,
+      workerPort,
     });
   }
 

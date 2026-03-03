@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS "rc_sessions" (
   "id" text PRIMARY KEY,
-  "agent_id" text NOT NULL REFERENCES "agents"("id"),
+  "agent_id" uuid NOT NULL REFERENCES "agents"("id"),
   "machine_id" text NOT NULL REFERENCES "machines"("id"),
   "session_url" text,
   "claude_session_id" text,
