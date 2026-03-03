@@ -254,6 +254,30 @@ export async function sessionRoutes(
   });
 
   // -----------------------------------------------------------------------
+  // Periodic heartbeat: report active sessions to the control plane
+  // -----------------------------------------------------------------------
+
+  const CP_HEARTBEAT_INTERVAL_MS = 30_000;
+
+  const cpHeartbeatTimer = controlPlaneUrl
+    ? setInterval(() => {
+        for (const [workerSessionId] of cpSessionIdMap) {
+          const session = sessionManager.getSession(workerSessionId);
+          if (session && (session.status === 'running' || session.status === 'starting')) {
+            void reportStatusToControlPlane(workerSessionId, {
+              status: 'active',
+              costUsd: session.costUsd,
+            });
+          }
+        }
+      }, CP_HEARTBEAT_INTERVAL_MS)
+    : null;
+
+  app.addHook('onClose', async () => {
+    if (cpHeartbeatTimer) clearInterval(cpHeartbeatTimer);
+  });
+
+  // -----------------------------------------------------------------------
   // GET / — list all active sessions on this worker
   // -----------------------------------------------------------------------
 
