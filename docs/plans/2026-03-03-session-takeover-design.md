@@ -1,288 +1,269 @@
-# Design: Claude Code Session Takeover via Remote Control
+# Design: Claude Code Session Control — Multi-Layer Architecture
 
 > Date: 2026-03-03
-> Status: Draft
+> Status: Draft (Revised)
 > Priority: Critical — user's #1 request
 
-## Problem
+## Executive Summary
 
-AgentCTL currently spawns Claude Code as a **subprocess** via `@anthropic-ai/claude-agent-sdk`. This is wrong for the user's primary use case: **taking over and controlling existing, already-running Claude Code sessions** from a remote device (iPhone/iPad).
+AgentCTL needs to remotely control Claude Code sessions across multiple machines from iOS devices. After evaluating seven approaches, the recommended architecture is a **3-layer strategy** that routes work through the right channel based on billing constraints:
 
-The user wants:
-1. Attach to an already-running Claude Code session from iOS
-2. Send commands, grant permissions, monitor output remotely
-3. Seamlessly switch between local terminal and mobile control
-4. Future: session handoff between Claude Code and Codex
+1. **CLI `-p` mode** for Team plan machines (programmatic, no extra billing)
+2. **Agent SDK** for autonomous/background agents (API key billing, full SDK features)
+3. **tmux + Tailscale** as emergency fallback (zero dependencies, any plan)
 
-## Key Discovery: Claude Code Remote Control (Feb 24, 2026)
+The built-in Remote Control feature (`claude remote-control`) is demoted to an optional enhancement because it requires a Max plan ($200/mo per seat), and the user only has one Max seat alongside one Team plan seat.
 
-Anthropic launched a built-in **Remote Control** feature that does exactly what AgentCTL needs:
+## Critical Constraint: Plan Billing Topology
 
-### How It Works
+| Plan | Seats | Auth Method | Remote Control | CLI `-p` Mode | Agent SDK |
+| ------ | ------- | ------------- | ---------------- | --------------- | ----------- |
+| Max ($200/mo) | 1 | OAuth | Yes | Yes | No (needs API key) |
+| Team ($30/mo) | 1 | OAuth | No | Yes | No (needs API key) |
+| API (pay-per-use) | N/A | API key | No | No (needs OAuth) | Yes |
 
-**Architecture: Outbound Polling Model**
-- CLI runs `claude remote-control` or `/remote-control` (in-session)
-- The local process registers with the Anthropic API and polls for work
-- **No inbound ports** — outbound-only connections (same pattern as Tailscale/ngrok)
-- The Anthropic API acts as a relay, routing messages between remote client and local session
-- Data flows bidirectionally over the relay, but TCP connections are always initiated by endpoints
+**Implications:**
 
-**Two Entry Points:**
-1. `claude remote-control` — standalone bridge process, spawns child Claude processes per remote session
-2. `/remote-control` or `/rc` — attaches to an existing interactive Claude session
+- **Built-in Remote Control** works on exactly 1 machine (the Max seat). Not viable as primary fleet approach.
+- **Agent SDK** (`@anthropic-ai/claude-agent-sdk`) requires `ANTHROPIC_API_KEY` and bills against the API, completely separate from subscription plans. It cannot use Team/Max plan OAuth credentials.
+- **CLI `-p` mode** works on any machine where Claude Code is logged in via OAuth (both Max and Team plans). This is the sweet spot: programmatic control billed against the subscription.
 
-**Communication Protocols:**
-- CLI → Anthropic: HTTPS polling ("got any new messages?")
-- Anthropic → CLI: SSE (Server-Sent Events) for streaming back results
-- Phone → Anthropic: Regular HTTPS + SSE (same as claude.ai chat)
+## Approach Evaluation
 
-**API Endpoints (Anthropic Environments API):**
-- `POST /v1/environments/bridge` — register/deregister
-- `GET /v1/environments/{id}/work/poll` — long-poll for work
-- `POST /v1/sessions/{id}/events` — send events
+| Approach | Plan Required | Complexity | Structured Output | Session Resume | Verdict |
+| ---------- | --------------- | ------------ | ------------------- | ---------------- | --------- |
+| Built-in Remote Control | Max only | Low | Yes (relay) | Yes | Limited to 1 seat |
+| CLI `-p` mode | Any (OAuth login) | Low | Yes (`stream-json`) | Yes (`--resume`) | **Primary** |
+| Agent SDK | API key (separate billing) | Medium | Yes (SDK events) | Yes (session mgmt) | **Background agents** |
+| Happy Coder pattern | Any | Medium | Yes (custom relay) | Partial | Reference for iOS UX |
+| tmux + SSH + Tailscale | Any | Low | No (terminal scraping) | Yes (tmux attach) | **Fallback** |
+| MCP Bridge | Any | High | Yes | No | Wrong direction (model-to-tool) |
+| Direct API | API key | Very High | Yes | Manual | Too much reimplementation |
 
-**Session Management:**
-- Session URL + QR code for connecting from other devices
-- Sessions listed in claude.ai/code with computer icon + green dot when online
-- `/rename` to name sessions for easy discovery
-- Auto-reconnect on network recovery
-- 10-minute server-side TTL (resets on each poll)
+Eliminated approaches:
 
-**Security Model:**
-- OAuth-only authentication (Max plan required, Pro coming soon)
-- Multiple short-lived credentials scoped to single purposes
-- Only chat messages and tool results flow through relay
-- Files, MCP servers, env vars, project settings stay local
-- All traffic over TLS
+- **ACP (IBM)** — Not an Anthropic product. Irrelevant.
+- **MCP Bridge** — MCP is designed for model-to-tool communication, not user-to-model. Would require Claude to poll for commands, which is unnatural and fragile.
+- **Direct API** — Reimplements everything Claude Code already provides (tool execution, file management, context handling). No advantage over the SDK.
 
-### What This Means for AgentCTL
+## Recommended Architecture: 3-Layer Strategy
 
-**The relay is NOT a network tunnel** — it's an application-level message bridge. It forwards structured messages (chat prompts, tool execution results, status updates), not raw TCP. This means Remote Control is confined to the Claude Code conversation model.
-
-## Revised Architecture
-
-### Option A: Leverage Built-in Remote Control (Recommended)
-
-Instead of spawning Claude Code as a subprocess, AgentCTL should **orchestrate Remote Control sessions**:
-
-```
-┌─────────────┐                    ┌────────────────────┐
-│  iOS App    │◄──── HTTPS/SSE ───►│  Anthropic Relay   │
-│  (AgentCTL) │                    │  (claude.ai/code)  │
-└─────────────┘                    └────────┬───────────┘
-                                            │
-                                   HTTPS polling + SSE
-                                            │
-┌─────────────────────────────────────────────┐
+```text
+┌──────────────────┐
+│  iOS App          │
+│  (React Native)   │
+│                   │
+│  Session List     │
+│  Command Input    │
+│  Output Viewer    │
+└────────┬─────────┘
+         │ WebSocket (E2E encrypted)
+         ▼
+┌──────────────────────────────────────────┐
+│  AgentCTL Control Plane                   │
+│                                           │
+│  ┌──────────────┐  ┌──────────────────┐  │
+│  │ Session       │  │ Task Scheduler   │  │
+│  │ Registry      │  │ (BullMQ)         │  │
+│  └──────┬───────┘  └────────┬─────────┘  │
+│         │                   │             │
+│         ▼                   ▼             │
+│  ┌──────────────────────────────────┐    │
+│  │ Dispatch Router                   │    │
+│  │ • Team plan machine? → CLI -p     │    │
+│  │ • Background/autonomous? → SDK    │    │
+│  │ • Fallback needed? → tmux         │    │
+│  └──────────────┬───────────────────┘    │
+└─────────────────┼────────────────────────┘
+                  │ Tailscale mesh
+                  ▼
+┌────────────────────────────────────────────┐
 │  Agent Worker Machine                       │
 │                                             │
-│  ┌─────────────────┐  ┌──────────────────┐  │
-│  │ AgentCTL Worker  │  │ Claude Code CLI  │  │
-│  │                  │──│ (remote-control) │  │
-│  │ • Start sessions │  │ • Polls relay    │  │
-│  │ • Monitor health │  │ • Executes tools │  │
-│  │ • Report status  │  │ • Streams output │  │
-│  └─────────────────┘  └──────────────────┘  │
-└─────────────────────────────────────────────┘
+│  Layer 1: CLI -p Mode (Team/Max plan)       │
+│  ┌────────────────────────────────────────┐ │
+│  │ claude -p "prompt"                     │ │
+│  │   --output-format stream-json          │ │
+│  │   --resume <session-id>                │ │
+│  │   --allowedTools "Read,Edit,Bash"      │ │
+│  └────────────────────────────────────────┘ │
+│                                             │
+│  Layer 2: Agent SDK (API key billing)       │
+│  ┌────────────────────────────────────────┐ │
+│  │ const agent = new Agent({              │ │
+│  │   model: "claude-sonnet-4-20250514",   │ │
+│  │   apiKey: ANTHROPIC_API_KEY,           │ │
+│  │   tools: [...],                        │ │
+│  │ });                                    │ │
+│  └────────────────────────────────────────┘ │
+│                                             │
+│  Layer 3: tmux Fallback                     │
+│  ┌────────────────────────────────────────┐ │
+│  │ tmux send-keys -t session "prompt" C-m │ │
+│  │ tmux capture-pane -t session -p        │ │
+│  └────────────────────────────────────────┘ │
+└────────────────────────────────────────────┘
 ```
 
-**Worker's role changes from "run agent" to "manage agent lifecycle":**
-1. Start `claude remote-control` processes (or `claude --resume <id> /rc`)
-2. Capture the session URL / QR code
-3. Monitor process health (is it still running? is it polling?)
-4. Report session URLs back to control plane
-5. Auto-restart on failure
-6. Manage multiple concurrent sessions
+### Layer 1: CLI `-p` Mode (Primary)
 
-**iOS app's role changes to "native Remote Control client":**
-1. Connect directly to Anthropic relay (same as claude.ai/code)
-2. Display session list from both Anthropic and AgentCTL
-3. Send prompts, grant permissions
-4. Render streamed output natively (not terminal emulation)
+The `claude` CLI with `-p` / `--print` flag runs non-interactively and bills against the logged-in user's subscription plan (Team or Max). This is the most cost-effective approach for the fleet.
 
-### Option B: Custom Relay (Self-Hosted Alternative)
+Key flags:
 
-For Enterprise/self-hosted use where Anthropic's relay isn't available:
+- `-p "prompt"` / `--print "prompt"` — non-interactive, single prompt
+- `--output-format stream-json` — structured streaming JSON output
+- `--resume <session-id>` — resume a previous session (preserves context)
+- `--continue` — continue the most recent session
+- `--allowedTools "Read,Edit,Bash,Glob,Grep"` — auto-approve specific tools (no permission prompts)
+- `--max-turns N` — limit conversation turns for autonomous runs
 
-```
-┌─────────────┐                    ┌────────────────────┐
-│  iOS App    │◄──── WebSocket ───►│  AgentCTL Control  │
-│  (AgentCTL) │                    │  Plane (relay)     │
-└─────────────┘                    └────────┬───────────┘
-                                            │
-                                    Tailscale mesh
-                                            │
-                                   ┌────────┴───────────┐
-                                   │  Agent Worker       │
-                                   │  Claude Code CLI    │
-                                   │  (stdin/stdout IPC) │
-                                   └────────────────────┘
+Session lifecycle:
+
+```text
+1. Start new session:
+   claude -p "implement feature X" --output-format stream-json
+   → Returns session-id in output
+
+2. Resume with follow-up:
+   claude -p "now add tests" --resume <session-id> --output-format stream-json
+   → Continues in same context
+
+3. Continue most recent:
+   claude -p "fix the failing test" --continue --output-format stream-json
 ```
 
-This requires implementing our own relay, which is essentially what the current WebSocket route (`ws.ts`) + SSE proxy already do. The worker would interact with Claude Code via stdin/stdout piping (the `sdk-runner.ts` approach, improved).
+stream-json output format:
 
-### Option C: Hybrid (Recommended for MVP)
+Each line is a JSON object with a `type` field. Key types:
 
-Use Anthropic's Remote Control for the happy path, with AgentCTL providing:
-- Fleet management (which sessions on which machines)
-- Auto-start sessions based on triggers (cron, webhook, manual)
-- Health monitoring and auto-recovery
-- Session metadata and naming
-- Cross-machine session discovery
-- Future: Codex integration via similar pattern
+- `assistant` — Claude's text response chunks
+- `tool_use` — tool invocation (file read, edit, bash, etc.)
+- `tool_result` — tool execution result
+- `result` — final result with session ID, cost info, token usage
 
-## Implementation Plan
+When to use: Any interactive or ad-hoc session where the user wants to send prompts and see results. Works on all machines with Claude Code logged in via OAuth.
 
-### Phase 1: Remote Control Integration (MVP)
+### Layer 2: Agent SDK (Background/Autonomous)
 
-**1.1 Worker: Session Manager**
+The `@anthropic-ai/claude-agent-sdk` provides full programmatic control with hooks, MCP servers, and subagent support. It requires an `ANTHROPIC_API_KEY` and bills against API usage (separate from subscription).
 
-Replace `sdk-runner.ts` subprocess spawning with Remote Control management:
+When to use:
 
-```typescript
-// packages/agent-worker/src/runtime/rc-session-manager.ts
+- Long-running autonomous agents (heartbeat/cron triggers)
+- Background tasks that don't need interactive control
+- Tasks requiring custom hooks (PreToolUse, PostToolUse, Stop)
+- Multi-step workflows with programmatic branching
 
-export class RcSessionManager {
-  // Start a new Remote Control session
-  async startSession(config: SessionConfig): Promise<RcSession> {
-    // Spawn: claude remote-control --project <path>
-    // Parse session URL from stdout
-    // Return session metadata
-  }
+Trade-off: Extra cost (API billing), but provides richer programmatic control than CLI `-p` mode.
 
-  // Attach remote control to an existing Claude Code session
-  async attachToSession(sessionId: string): Promise<RcSession> {
-    // Spawn: claude --resume <sessionId> then send /rc
-    // Parse session URL
-  }
+### Layer 3: tmux + Tailscale (Emergency Fallback)
 
-  // List active remote control sessions
-  async listSessions(): Promise<RcSession[]> {
-    // Parse claude session list or track internally
-  }
+Run Claude Code inside a tmux session. AgentCTL reads pane output and injects keystrokes over SSH via Tailscale.
 
-  // Health check: is the RC process still polling?
-  async checkHealth(sessionId: string): Promise<SessionHealth> {
-    // Check process alive + last poll timestamp
-  }
-}
+When to use:
+
+- CLI `-p` mode is unavailable or broken
+- Need to attach to a session that was started manually in a terminal
+- Debugging production issues where structured output isn't parsing
+
+Limitations: No structured output. Terminal scraping is fragile. Permission dialogs require heuristic parsing.
+
+## Built-in Remote Control (Optional Enhancement)
+
+The built-in `claude remote-control` feature (launched Feb 24, 2026) is a well-designed relay system, but it is **limited to Max plan seats**.
+
+How it works:
+
+- CLI registers with Anthropic API via outbound HTTPS polling
+- Anthropic relay bridges messages between remote client and local session
+- Session URL / QR code for connecting from other devices
+- Sessions visible at claude.ai/code with live status indicator
+
+AgentCTL integration (Max seat only):
+
+- Worker can start `claude remote-control` on the Max-plan machine
+- Capture session URL and register in control plane
+- iOS app can deep-link to claude.ai/code for that session
+- This provides the richest UX (native claude.ai interface) but only for 1 machine
+
+Not recommended as primary approach because:
+
+1. Max plan required ($200/mo per seat)
+2. Only 1 Max seat available, fleet has multiple machines
+3. Cannot scale to multi-machine without multiple Max seats
+
+## Current Implementation Status
+
+> Updated: 2026-03-03
+
+All three layers of the architecture are implemented with tests. The system is ready for integration testing on real machines.
+
+### Completed Components
+
+| Component | Location | Tests | Status |
+| --- | --- | --- | --- |
+| `CliSessionManager` | `agent-worker/src/runtime/cli-session-manager.ts` | 50+ tests | Done |
+| Worker session routes | `agent-worker/src/api/routes/sessions.ts` | 25+ tests | Done, wired into server |
+| Control plane session routes | `control-plane/src/api/routes/sessions.ts` | 30+ tests | Done, wired into server |
+| Session DB migration | `control-plane/drizzle/0004_add_rc_sessions.sql` | — | Done |
+| `RcSessionManager` | `agent-worker/src/runtime/rc-session-manager.ts` | 14 tests | Done (Max plan only) |
+| Mobile `SessionScreen` | `mobile/src/ui-screens/session-screen.tsx` | — | Done |
+| Mobile `SessionApi` | `mobile/src/services/session-api.ts` | — | Done |
+| Mobile `DashboardScreen` | `mobile/src/ui-screens/dashboard-screen.tsx` | — | Done |
+| Mobile `AgentListScreen` | `mobile/src/ui-screens/agent-list-screen.tsx` | — | Done |
+| Mobile `TabNavigator` | `mobile/src/navigation/tab-navigator.tsx` | — | Done (5 tabs) |
+| Mobile `App.tsx` entry | `mobile/App.tsx` | — | Done |
+
+### Architecture Flow (As Built)
+
+```text
+iOS App (React Native)
+  │
+  ├─ SessionScreen → SessionApi → Control Plane POST/GET /api/sessions
+  ├─ DashboardScreen → ApiClient → Control Plane GET /health, /api/agents
+  └─ AgentListScreen → DashboardPresenter → Control Plane GET /api/agents
+
+Control Plane (/api/sessions)
+  │
+  ├─ POST / → Insert DB row → Dispatch to worker POST /api/sessions
+  ├─ POST /:id/resume → Update DB → Dispatch to worker POST /api/sessions/:id/resume
+  ├─ POST /:id/message → Forward to worker POST /api/sessions/:id/message
+  └─ DELETE /:id → Update DB → Notify worker DELETE /api/sessions/:id
+
+Worker (/api/sessions)
+  │
+  ├─ POST / → CliSessionManager.startSession() → spawn claude -p
+  ├─ POST /:id/resume → CliSessionManager.resumeSession() → spawn claude -p --resume
+  ├─ POST /:id/message → CliSessionManager.resumeSession() (same as resume)
+  ├─ DELETE /:id → CliSessionManager.stopSession() → SIGTERM/SIGKILL
+  ├─ GET /discover → CliSessionManager.discoverLocalSessions() → read ~/.claude/projects/
+  └─ GET /:id/stream → SSE stream with buffered event replay + live subscription
 ```
 
-**1.2 Control Plane: Session Registry**
+### Remaining Work
 
-New database table and API endpoints:
-
-```sql
-CREATE TABLE IF NOT EXISTS "rc_sessions" (
-  "id" text PRIMARY KEY,
-  "agent_id" text NOT NULL REFERENCES "agents"("id"),
-  "machine_id" text NOT NULL REFERENCES "machines"("id"),
-  "session_url" text,
-  "status" text NOT NULL DEFAULT 'starting',
-  "started_at" timestamptz NOT NULL DEFAULT now(),
-  "last_heartbeat" timestamptz,
-  "metadata" jsonb DEFAULT '{}'
-);
-```
-
-New API endpoints:
-- `GET /api/sessions` — list all RC sessions across fleet
-- `POST /api/sessions` — start a new RC session on a specific machine
-- `GET /api/sessions/:id` — get session details including URL
-- `DELETE /api/sessions/:id` — stop an RC session
-- `POST /api/sessions/:id/attach` — attach RC to existing session
-
-**1.3 iOS App: Session Browser**
-
-New screens:
-- Session list (shows all active RC sessions with connection status)
-- Session detail (deep link to claude.ai/code or embed WebView)
-- Quick start (one-tap to create new session on best available machine)
-
-### Phase 2: Enhanced Control
-
-**2.1 Auto-Enable Remote Control**
-
-Configure worker to auto-enable RC for all sessions:
-```bash
-# In Claude Code config
-claude config set remote_control_auto_enable true
-```
-
-**2.2 Session Discovery**
-
-Worker periodically scans for Claude Code sessions and reports to control plane:
-```typescript
-// Parse ~/.claude/projects/*/sessions.json
-// Report new/ended sessions
-```
-
-**2.3 Health Dashboard**
-
-Control plane aggregates session health across fleet:
-- Which machines have active sessions
-- Session age, last activity, output summary
-- Auto-restart stale sessions
-
-### Phase 3: Codex Integration (Future)
-
-**3.1 Codex CLI Integration**
-
-Similar pattern — Codex CLI may expose its own remote control or API:
-```typescript
-export class CodexSessionManager {
-  async startSession(config: CodexConfig): Promise<CodexSession>;
-  async listSessions(): Promise<CodexSession[]>;
-}
-```
-
-**3.2 Session Handoff**
-
-Transfer context between Claude Code and Codex within the same logical session:
-1. Export Claude Code conversation context (CLAUDE.md + recent messages)
-2. Import into Codex session with context
-3. Track lineage: Session A (Claude) → Session B (Codex) → Session C (Claude)
-
-## Migration from Current Architecture
-
-### What Changes
-
-| Component | Current | New |
-|-----------|---------|-----|
-| `sdk-runner.ts` | Spawns Claude Code subprocess via SDK | Spawns `claude remote-control` process |
-| `agent-instance.ts` | Manages SDK subprocess lifecycle | Manages RC process lifecycle + session URL |
-| Worker API | `/api/agents/:id/start` spawns subprocess | `/api/agents/:id/start` starts RC session |
-| iOS connection | Direct WebSocket to worker | Connect to Anthropic relay via session URL |
-| IPC mechanism | Filesystem JSON files | RC relay (HTTPS polling + SSE) |
-
-### What Stays the Same
-
-- Control plane API structure
-- BullMQ task scheduling
-- Database schema (agents, machines, runs)
-- Health monitoring / heartbeats
-- Fleet management (Tailscale mesh)
-- Memory system (Mem0)
-- Git worktree isolation
-
-## Requirements
-
-- Claude Code v2.1.52+ (Remote Control support)
-- Claude Max subscription (Pro support coming soon)
-- API keys NOT supported for Remote Control — must use OAuth
+1. **Layer router / dispatch logic** — Control plane should select the right layer (CLI `-p` vs SDK vs tmux) based on machine capabilities and request type
+2. **Session discovery aggregation** — Control plane endpoint that fans out `GET /discover` to all online workers and merges results
+3. **E2E encryption** — TweetNaCl relay between iOS app and control plane WebSocket
+4. **Push notifications** — APNs integration for permission_request events
+5. **Codex integration** — Phase 10 in roadmap, same architecture pattern
 
 ## Open Questions
 
-1. **Can Remote Control be programmatically driven?** — The documented flow requires interactive QR/URL sharing. Can AgentCTL programmatically connect to a session via the Environments API?
-2. **Rate limits on Environments API?** — How many concurrent RC sessions per account?
-3. **Enterprise plan support?** — Currently only Max tier. When will Team/Enterprise be supported?
-4. **Codex remote control?** — Does OpenAI's Codex CLI have any similar remote control feature?
-5. **Auto-enable via config?** — Can `remote_control_auto_enable` be set programmatically?
+1. **`stream-json` schema stability** — Is the `--output-format stream-json` format documented with a stability guarantee, or could it change between CLI versions?
+2. **Concurrent CLI `-p` sessions** — Are there limits on how many concurrent `claude -p` processes can run under a single OAuth login?
+3. **Session ID persistence** — Does `--resume <session-id>` work across machine reboots, or is the session state ephemeral?
+4. **Team plan rate limits** — What are the rate limits for Team plan usage via CLI `-p` mode? Are they the same as interactive usage?
+5. **SDK + OAuth hybrid** — Will the Agent SDK ever support OAuth/subscription auth instead of API keys?
 
 ## References
 
-- [Claude Code Remote Control Docs](https://code.claude.com/docs/en/remote-control)
+- [Claude Code CLI Flags](https://docs.anthropic.com/en/docs/claude-code) — `-p`, `--output-format`, `--resume`, `--allowedTools`
+- [Claude Code Remote Control Docs](https://code.claude.com/docs/en/remote-control) — Max plan feature
+- [Happy Coder](https://github.com/nomadics9/happy-coder) — Open-source iOS + CLI wrapper with E2E encrypted relay
+- [Claude-Code-Remote (JessyTsui)](https://github.com/JessyTsui/Claude-Code-Remote) — Hook-based relay for Telegram/email/Discord
+- [CloudCLI (siteboon)](https://github.com/nicobailon/cloudcli) — Web UI for Claude Code sessions
 - [Deep Dive: How Remote Control Works](https://dev.to/chwu1946/deep-dive-how-claude-code-remote-control-actually-works-50p6)
 - [Remote Control Implementation Details (Gist)](https://gist.github.com/sorrycc/9b9ac045d5329ac03084a465345b59c3)
-- [Claude-Code-Remote (3rd party)](https://github.com/JessyTsui/Claude-Code-Remote) — email/discord/telegram control
-- [OpenCode Remote Control Feature Request](https://github.com/anomalyco/opencode/issues/15236)
+- [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) — Requires API key, separate billing
