@@ -1,9 +1,14 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
-import type { Machine, Session } from '../lib/api.ts';
+import type {
+  Machine,
+  Session,
+  SessionContentMessage,
+  SessionContentResponse,
+} from '../lib/api.ts';
 import { api } from '../lib/api.ts';
 
 const MODEL_OPTIONS = [
@@ -784,8 +789,29 @@ export function SessionsPage(): React.JSX.Element {
               </div>
             </div>
 
-            {/* Action area */}
-            <div style={{ flex: 1 }} />
+            {/* Session content viewer */}
+            {selected.claudeSessionId && selected.machineId && (
+              <SessionContent
+                sessionId={selected.claudeSessionId}
+                machineId={selected.machineId}
+                projectPath={selected.projectPath ?? undefined}
+              />
+            )}
+
+            {!selected.claudeSessionId && (
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: 13,
+                }}
+              >
+                No conversation content available
+              </div>
+            )}
 
             {actionError && (
               <div
@@ -890,6 +916,207 @@ function DetailRow({
         }}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inline session content viewer
+// ---------------------------------------------------------------------------
+
+const MSG_STYLES: Record<string, { label: string; color: string; bg: string }> = {
+  human: { label: 'You', color: '#818cf8', bg: 'rgba(99, 102, 241, 0.08)' },
+  assistant: { label: 'Claude', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.06)' },
+  tool_use: { label: 'Tool', color: '#facc15', bg: 'rgba(234, 179, 8, 0.04)' },
+  tool_result: { label: 'Result', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.04)' },
+};
+
+function SessionContent({
+  sessionId,
+  machineId,
+  projectPath,
+}: {
+  sessionId: string;
+  machineId: string;
+  projectPath?: string;
+}): React.JSX.Element {
+  const [data, setData] = useState<SessionContentResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showTools, setShowTools] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const fetchContent = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.getSessionContent(sessionId, {
+        machineId,
+        projectPath,
+        limit: 100,
+      });
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, machineId, projectPath]);
+
+  useEffect(() => {
+    void fetchContent();
+  }, [fetchContent]);
+
+  useEffect(() => {
+    if (data && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [data]);
+
+  const messages = data
+    ? showTools
+      ? data.messages
+      : data.messages.filter((m) => m.type === 'human' || m.type === 'assistant')
+    : [];
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {/* Controls */}
+      <div
+        style={{
+          padding: '6px 20px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {data ? `${messages.length} messages${showTools ? '' : ' (conversations only)'}` : ''}
+        </span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setShowTools(!showTools)}
+            style={{
+              padding: '3px 8px',
+              backgroundColor: showTools ? 'var(--accent)' : 'var(--bg-tertiary)',
+              color: showTools ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 10,
+              cursor: 'pointer',
+            }}
+          >
+            {showTools ? 'Hide Tools' : 'Show Tools'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void fetchContent()}
+            style={{
+              padding: '3px 8px',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 10,
+              cursor: 'pointer',
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '8px 20px' }}>
+        {loading && (
+          <div
+            style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}
+          >
+            Loading conversation...
+          </div>
+        )}
+        {error && (
+          <div
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#7f1d1d',
+              color: '#fca5a5',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 12,
+            }}
+          >
+            {error}
+          </div>
+        )}
+        {data && messages.length === 0 && !loading && (
+          <div
+            style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}
+          >
+            No messages yet
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InlineMessage({ message }: { message: SessionContentMessage }): React.JSX.Element {
+  const style = MSG_STYLES[message.type] ?? {
+    label: message.type,
+    color: 'var(--text-muted)',
+    bg: 'var(--bg-secondary)',
+  };
+  const isTool = message.type === 'tool_use' || message.type === 'tool_result';
+
+  return (
+    <div
+      style={{
+        marginBottom: 6,
+        padding: '6px 10px',
+        backgroundColor: style.bg,
+        borderRadius: 'var(--radius-sm)',
+        borderLeft: `2px solid ${style.color}`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: style.color }}>{style.label}</span>
+        {message.toolName && (
+          <span
+            style={{
+              fontSize: 10,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {message.toolName}
+          </span>
+        )}
+        {message.timestamp && (
+          <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+            {new Date(message.timestamp).toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+      <div
+        style={{
+          fontSize: isTool ? 11 : 12,
+          lineHeight: 1.5,
+          color: 'var(--text-primary)',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          fontFamily: isTool ? 'var(--font-mono)' : undefined,
+          maxHeight: isTool ? 150 : 300,
+          overflow: 'auto',
+        }}
+      >
+        {message.content.length > 500 ? `${message.content.slice(0, 500)}...` : message.content}
       </div>
     </div>
   );

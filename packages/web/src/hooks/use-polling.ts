@@ -42,16 +42,41 @@ export function usePolling<T>({
     void doFetch();
   }, [doFetch]);
 
+  // Start/stop polling interval
+  const startPolling = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(doFetch, intervalMs);
+  }, [doFetch, intervalMs]);
+
+  const stopPolling = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!enabled) return;
 
     void doFetch();
-    timerRef.current = setInterval(doFetch, intervalMs);
+    startPolling();
+
+    // Pause polling when tab is hidden, resume when visible
+    const handleVisibility = (): void => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        void doFetch(); // Immediate refresh when tab becomes visible
+        startPolling();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [doFetch, intervalMs, enabled]);
+  }, [doFetch, startPolling, stopPolling, enabled]);
 
   return { data, error, isLoading, refresh };
 }
