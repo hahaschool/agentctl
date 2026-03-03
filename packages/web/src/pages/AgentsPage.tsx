@@ -10,6 +10,9 @@ import { formatCost, timeAgo } from '../lib/format-utils.ts';
 
 const AGENT_TYPES = ['autonomous', 'adhoc', 'scheduled'] as const;
 
+type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
+type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -36,6 +39,11 @@ export function AgentsPage(): React.JSX.Element {
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
 
+  // -- Filter / Sort state --
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<AgentStatusFilter>('all');
+  const [sortOrder, setSortOrder] = useState<AgentSortOrder>('name');
+
   const agentList = agents.data ?? [];
   const machineList = machines.data ?? [];
 
@@ -47,6 +55,51 @@ export function AgentsPage(): React.JSX.Element {
     }
     return counts;
   }, [agentList]);
+
+  // Filtered + sorted list
+  const filteredAgents = useMemo(() => {
+    let list = agentList;
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      list = list.filter((a) => a.status === statusFilter);
+    }
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          a.id.toLowerCase().includes(q) ||
+          a.machineId.toLowerCase().includes(q) ||
+          (a.projectPath ?? '').toLowerCase().includes(q),
+      );
+    }
+
+    // Sort
+    const sorted = [...list];
+    switch (sortOrder) {
+      case 'name':
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case 'status':
+        sorted.sort((a, b) => a.status.localeCompare(b.status));
+        break;
+      case 'lastRun':
+        sorted.sort((a, b) => {
+          const ta = a.lastRunAt ? new Date(a.lastRunAt).getTime() : 0;
+          const tb = b.lastRunAt ? new Date(b.lastRunAt).getTime() : 0;
+          return tb - ta;
+        });
+        break;
+      case 'cost':
+        sorted.sort((a, b) => (b.totalCostUsd ?? 0) - (a.totalCostUsd ?? 0));
+        break;
+    }
+
+    return sorted;
+  }, [agentList, statusFilter, search, sortOrder]);
 
   // -- Create agent handler --
   const handleCreate = useCallback(
@@ -375,6 +428,72 @@ export function AgentsPage(): React.JSX.Element {
         </form>
       )}
 
+      {/* Filter / Sort controls */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Search agents..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            padding: '6px 10px',
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 12,
+            outline: 'none',
+            minWidth: 180,
+          }}
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as AgentStatusFilter)}
+          style={{
+            padding: '6px 10px',
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 12,
+          }}
+        >
+          <option value="all">All statuses</option>
+          <option value="running">Running</option>
+          <option value="registered">Registered</option>
+          <option value="stopped">Stopped</option>
+          <option value="error">Error</option>
+        </select>
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as AgentSortOrder)}
+          style={{
+            padding: '6px 10px',
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 12,
+          }}
+        >
+          <option value="name">Sort: Name</option>
+          <option value="status">Sort: Status</option>
+          <option value="lastRun">Sort: Last run</option>
+          <option value="cost">Sort: Total cost</option>
+        </select>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+          {filteredAgents.length}/{agentList.length} agents
+        </span>
+      </div>
+
       {/* Summary stats */}
       <div
         style={{
@@ -400,7 +519,7 @@ export function AgentsPage(): React.JSX.Element {
       </div>
 
       {/* Agent cards grid */}
-      {agentList.length === 0 ? (
+      {filteredAgents.length === 0 ? (
         <div
           style={{
             padding: 48,
@@ -409,7 +528,11 @@ export function AgentsPage(): React.JSX.Element {
             fontSize: 14,
           }}
         >
-          {agents.isLoading ? 'Loading agents...' : 'No agents registered'}
+          {agents.isLoading
+            ? 'Loading agents...'
+            : agentList.length === 0
+              ? 'No agents registered'
+              : 'No agents match the current filters'}
         </div>
       ) : (
         <div
@@ -419,7 +542,7 @@ export function AgentsPage(): React.JSX.Element {
             gap: 12,
           }}
         >
-          {agentList.map((agent) => (
+          {filteredAgents.map((agent) => (
             <div
               key={agent.id}
               style={{
