@@ -89,18 +89,28 @@ describe('Emergency stop proxy routes -- without dbRegistry', () => {
     // Use 127.0.0.1 to avoid DNS lookup hangs on non-existent hostnames.
     registry.registerMachine('mac-mini-1', '127.0.0.1');
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/agents/agent-1/emergency-stop?machineId=mac-mini-1',
-    });
+    // Mock fetch to simulate an unreachable worker so the test is
+    // deterministic regardless of whether anything is listening on the
+    // resolved port locally.
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
-    // Worker is not actually running, so we get 502 (unreachable) —
-    // but the key is that machineId resolution succeeded (no 404).
-    expect(response.statusCode).toBe(502);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/emergency-stop?machineId=mac-mini-1',
+      });
 
-    const body = response.json();
-    expect(body.error).toBe('WORKER_UNREACHABLE');
-    expect(body.message).toContain('127.0.0.1');
+      // Worker is not actually running, so we get 502 (unreachable) —
+      // but the key is that machineId resolution succeeded (no 404).
+      expect(response.statusCode).toBe(502);
+
+      const body = response.json();
+      expect(body.error).toBe('WORKER_UNREACHABLE');
+      expect(body.message).toContain('127.0.0.1');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
@@ -206,20 +216,30 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
   });
 
   it('POST /api/agents/:id/emergency-stop resolves via dbRegistry and returns 502 when worker is down', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/agents/agent-1/emergency-stop',
-    });
+    // Mock fetch to simulate an unreachable worker so the test is
+    // deterministic regardless of whether anything is listening on the
+    // resolved port locally.
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
-    // Worker is not actually running, so fetch() will fail
-    expect(response.statusCode).toBe(502);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/emergency-stop',
+      });
 
-    const body = response.json();
-    expect(body.error).toBe('WORKER_UNREACHABLE');
+      // Worker is not actually running, so fetch() will fail
+      expect(response.statusCode).toBe(502);
 
-    // Verify the registry was consulted
-    expect(mockDbRegistry.getAgent).toHaveBeenCalledWith('agent-1');
-    expect(mockDbRegistry.getMachine).toHaveBeenCalledWith('machine-1');
+      const body = response.json();
+      expect(body.error).toBe('WORKER_UNREACHABLE');
+
+      // Verify the registry was consulted
+      expect(mockDbRegistry.getAgent).toHaveBeenCalledWith('agent-1');
+      expect(mockDbRegistry.getMachine).toHaveBeenCalledWith('machine-1');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('returns 404 when agent is not found in dbRegistry', async () => {
@@ -281,24 +301,34 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
   });
 
   it('POST /api/agents/emergency-stop-all fans out to all online machines', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/agents/emergency-stop-all',
-    });
+    // Mock fetch to simulate an unreachable worker so the test is
+    // deterministic regardless of whether anything is listening on the
+    // resolved port locally.
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
-    expect(response.statusCode).toBe(200);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/emergency-stop-all',
+      });
 
-    const body = response.json();
-    expect(body.ok).toBe(true);
-    expect(Array.isArray(body.results)).toBe(true);
+      expect(response.statusCode).toBe(200);
 
-    // There should be one result for the single mocked machine
-    expect(body.results).toHaveLength(1);
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(Array.isArray(body.results)).toBe(true);
 
-    // The worker is not running, so the result should have an error
-    const machineResult = body.results[0];
-    expect(machineResult.machineId).toBe('machine-1');
-    expect(machineResult.error).toBeDefined();
+      // There should be one result for the single mocked machine
+      expect(body.results).toHaveLength(1);
+
+      // The worker is not running, so the result should have an error
+      const machineResult = body.results[0];
+      expect(machineResult.machineId).toBe('machine-1');
+      expect(machineResult.error).toBeDefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('POST /api/agents/emergency-stop-all skips offline machines', async () => {

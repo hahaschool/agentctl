@@ -176,6 +176,7 @@ describe('Loop proxy routes — with dbRegistry', () => {
     app = await createServer({
       logger,
       dbRegistry: mockDbRegistry,
+      workerPort: 19999,
     });
     await app.ready();
   });
