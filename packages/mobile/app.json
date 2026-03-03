@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "AgentCTL",
+    "slug": "agentctl",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "agentctl",
+    "ios": { "bundleIdentifier": "com.agentctl.mobile" },
+    "plugins": []
+  }
+}
