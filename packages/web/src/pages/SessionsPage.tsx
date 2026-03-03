@@ -11,6 +11,7 @@ import type {
   SessionContentResponse,
 } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
+import { formatDuration, shortenPath, timeAgo } from '../lib/format-utils.ts';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -30,76 +31,6 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'ended', label: 'Ended' },
   { key: 'error', label: 'Error' },
 ];
-
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-
-  if (diffMs < 0) return 'just now';
-
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
-
-function shortenProjectPath(path: string | null): string | null {
-  if (!path) return null;
-  const homePrefixes = ['/Users/', '/home/', '/root'];
-  let shortened = path;
-
-  for (const prefix of homePrefixes) {
-    if (shortened.startsWith(prefix)) {
-      if (prefix === '/root') {
-        shortened = `~${shortened.slice('/root'.length)}`;
-      } else {
-        const afterPrefix = shortened.slice(prefix.length);
-        const slashIdx = afterPrefix.indexOf('/');
-        if (slashIdx >= 0) {
-          shortened = `~${afterPrefix.slice(slashIdx)}`;
-        } else {
-          shortened = '~';
-        }
-      }
-      break;
-    }
-  }
-
-  const segments = shortened.split('/').filter(Boolean);
-  if (segments.length <= 2) return shortened;
-
-  const startsWithTilde = shortened.startsWith('~');
-  const lastTwo = segments.slice(-2).join('/');
-  return startsWithTilde ? `~/${lastTwo}` : lastTwo;
-}
-
-function formatDuration(startStr: string, endStr?: string | null): string {
-  const start = new Date(startStr).getTime();
-  const end = endStr ? new Date(endStr).getTime() : Date.now();
-  const diffMs = Math.max(0, end - start);
-
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return `${seconds}s`;
-
-  const minutes = Math.floor(seconds / 60);
-  const remainSec = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${remainSec}s`;
-
-  const hours = Math.floor(minutes / 60);
-  const remainMin = minutes % 60;
-  return `${hours}h ${remainMin}m`;
-}
 
 function matchesStatusFilter(status: string, filter: StatusFilter): boolean {
   if (filter === 'all') return true;
@@ -268,7 +199,7 @@ export function SessionsPage(): React.JSX.Element {
     const groups = new Map<string, Session[]>();
     for (const s of filteredSessions) {
       const key =
-        groupBy === 'project' ? (shortenProjectPath(s.projectPath) ?? '(no project)') : s.machineId;
+        groupBy === 'project' ? (shortenPath(s.projectPath) ?? '(no project)') : s.machineId;
       const existing = groups.get(key);
       if (existing) {
         existing.push(s);
@@ -1056,7 +987,7 @@ function SessionListItem({
   isSelected: boolean;
   onSelect: (id: string) => void;
 }): React.JSX.Element {
-  const shortPath = shortenProjectPath(s.projectPath);
+  const shortPath = shortenPath(s.projectPath);
   return (
     <button
       type="button"
@@ -1126,7 +1057,7 @@ function SessionListItem({
           gap: 8,
         }}
       >
-        <span>{formatRelativeTime(s.startedAt)}</span>
+        <span>{timeAgo(s.startedAt)}</span>
         <span style={{ color: 'var(--text-secondary)' }}>
           {formatDuration(s.startedAt, s.endedAt)}
         </span>

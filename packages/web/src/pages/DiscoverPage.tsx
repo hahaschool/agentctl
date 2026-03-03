@@ -1,11 +1,13 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
+import { CopyableText } from '../components/CopyableText.tsx';
 import { SessionPreview } from '../components/SessionPreview.tsx';
 import { useToast } from '../components/Toast.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
 import type { DiscoveredSession } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
+import { recencyColor, shortenPath, timeAgo } from '../lib/format-utils.ts';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
 type SortOption = 'recent' | 'messages' | 'project';
@@ -32,107 +34,6 @@ const SORT_OPTIONS: { label: string; value: SortOption }[] = [
   { label: 'Most messages', value: 'messages' },
   { label: 'Project name', value: 'project' },
 ];
-
-/**
- * Shorten a filesystem path for display:
- *  - Replace /Users/hahaschool/ or /home/<user>/ with ~/
- *  - For long paths, show only the last 2-3 segments
- */
-function shortenPath(fullPath: string): string {
-  let shortened = fullPath;
-  // Replace /Users/hahaschool/ with ~/
-  shortened = shortened.replace(/^\/Users\/hahaschool\//, '~/');
-  // Replace /home/<anyuser>/ with ~/
-  shortened = shortened.replace(/^\/home\/[^/]+\//, '~/');
-
-  // If the path still has more than 4 segments, show last 3
-  const segments = shortened.split('/');
-  if (segments.length > 4) {
-    const lastThree = segments.slice(-3);
-    return `.../${lastThree.join('/')}`;
-  }
-  return shortened;
-}
-
-/**
- * Determine recency color for a session's activity dot.
- *  - green: active within the last hour
- *  - yellow: active today (within 24h)
- *  - gray: older
- */
-function recencyColor(dateStr: string): string {
-  if (!dateStr) return 'var(--text-muted)';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const oneHour = 60 * 60 * 1000;
-  const oneDay = 24 * oneHour;
-  if (diff < oneHour) return 'var(--green)';
-  if (diff < oneDay) return 'var(--yellow)';
-  return 'var(--text-muted)';
-}
-
-function relativeTime(dateStr: string): string {
-  if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
-
-/**
- * A tiny inline component that copies text on click and shows brief "Copied!" feedback.
- */
-function CopyableSessionId({ sessionId }: { sessionId: string }): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const handleCopy = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      void navigator.clipboard.writeText(sessionId).then(() => {
-        setCopied(true);
-        if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setCopied(false), 1500);
-      });
-    },
-    [sessionId],
-  );
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title={copied ? 'Copied!' : `Click to copy: ${sessionId}`}
-      style={{
-        fontSize: 11,
-        fontFamily: 'var(--font-mono)',
-        color: copied ? 'var(--green)' : 'var(--text-muted)',
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-        cursor: 'pointer',
-        padding: '1px 4px',
-        borderRadius: 'var(--radius-sm)',
-        transition: 'color 0.2s, background-color 0.2s',
-        backgroundColor: copied ? 'var(--bg-tertiary)' : 'transparent',
-        border: 'none',
-        font: 'inherit',
-        lineHeight: 'inherit',
-      }}
-    >
-      {copied ? 'Copied!' : sessionId.slice(0, 8)}
-    </button>
-  );
-}
 
 export function DiscoverPage(): React.JSX.Element {
   const toast = useToast();
@@ -792,7 +693,7 @@ export function DiscoverPage(): React.JSX.Element {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        last active: {relativeTime(group.latestActivity)}
+                        last active: {timeAgo(group.latestActivity)}
                       </span>
                       <span
                         style={{
@@ -958,11 +859,11 @@ export function DiscoverPage(): React.JSX.Element {
                                 textAlign: 'right',
                               }}
                             >
-                              {relativeTime(s.lastActivity)}
+                              {timeAgo(s.lastActivity)}
                             </span>
 
                             {/* Session ID (copyable) */}
-                            <CopyableSessionId sessionId={s.sessionId} />
+                            <CopyableText value={s.sessionId} />
 
                             {/* Resume button */}
                             {!isResuming && (
