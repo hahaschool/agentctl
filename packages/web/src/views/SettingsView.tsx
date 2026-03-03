@@ -143,6 +143,7 @@ const SHORTCUTS = [
   { keys: ['4'], desc: 'Sessions' },
   { keys: ['5'], desc: 'Discover' },
   { keys: ['6'], desc: 'Logs & Metrics' },
+  { keys: ['7'], desc: 'Settings' },
   { keys: ['Esc'], desc: 'Close panels / Cancel' },
 ];
 
