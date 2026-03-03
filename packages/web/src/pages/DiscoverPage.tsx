@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { SessionPreview } from '../components/SessionPreview.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
@@ -8,6 +8,7 @@ import { api } from '../lib/api.ts';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
 type SortOption = 'recent' | 'messages' | 'project';
+type GroupMode = 'project' | 'flat';
 
 type SessionGroup = {
   projectPath: string;
@@ -30,6 +31,107 @@ const SORT_OPTIONS: { label: string; value: SortOption }[] = [
   { label: 'Most messages', value: 'messages' },
   { label: 'Project name', value: 'project' },
 ];
+
+/**
+ * Shorten a filesystem path for display:
+ *  - Replace /Users/hahaschool/ or /home/<user>/ with ~/
+ *  - For long paths, show only the last 2-3 segments
+ */
+function shortenPath(fullPath: string): string {
+  let shortened = fullPath;
+  // Replace /Users/hahaschool/ with ~/
+  shortened = shortened.replace(/^\/Users\/hahaschool\//, '~/');
+  // Replace /home/<anyuser>/ with ~/
+  shortened = shortened.replace(/^\/home\/[^/]+\//, '~/');
+
+  // If the path still has more than 4 segments, show last 3
+  const segments = shortened.split('/');
+  if (segments.length > 4) {
+    const lastThree = segments.slice(-3);
+    return `.../${lastThree.join('/')}`;
+  }
+  return shortened;
+}
+
+/**
+ * Determine recency color for a session's activity dot.
+ *  - green: active within the last hour
+ *  - yellow: active today (within 24h)
+ *  - gray: older
+ */
+function recencyColor(dateStr: string): string {
+  if (!dateStr) return 'var(--text-muted)';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const oneHour = 60 * 60 * 1000;
+  const oneDay = 24 * oneHour;
+  if (diff < oneHour) return 'var(--green)';
+  if (diff < oneDay) return 'var(--yellow)';
+  return 'var(--text-muted)';
+}
+
+function relativeTime(dateStr: string): string {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+/**
+ * A tiny inline component that copies text on click and shows brief "Copied!" feedback.
+ */
+function CopyableSessionId({ sessionId }: { sessionId: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      void navigator.clipboard.writeText(sessionId).then(() => {
+        setCopied(true);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setCopied(false), 1500);
+      });
+    },
+    [sessionId],
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copied ? 'Copied!' : `Click to copy: ${sessionId}`}
+      style={{
+        fontSize: 11,
+        fontFamily: 'var(--font-mono)',
+        color: copied ? 'var(--green)' : 'var(--text-muted)',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        cursor: 'pointer',
+        padding: '1px 4px',
+        borderRadius: 'var(--radius-sm)',
+        transition: 'color 0.2s, background-color 0.2s',
+        backgroundColor: copied ? 'var(--bg-tertiary)' : 'transparent',
+        border: 'none',
+        font: 'inherit',
+        lineHeight: 'inherit',
+      }}
+    >
+      {copied ? 'Copied!' : sessionId.slice(0, 8)}
+    </button>
+  );
+}
 
 export function DiscoverPage(): React.JSX.Element {
   const discovered = usePolling<{
@@ -57,6 +159,7 @@ export function DiscoverPage(): React.JSX.Element {
   const [search, setSearch] = useState('');
   const [minMessages, setMinMessages] = useState<MinMessages>(1);
   const [sort, setSort] = useState<SortOption>('recent');
+  const [groupMode, setGroupMode] = useState<GroupMode>('project');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const data = discovered.data;
@@ -77,6 +180,33 @@ export function DiscoverPage(): React.JSX.Element {
 
   // Grouped + sorted
   const groups = useMemo((): SessionGroup[] => {
+    if (groupMode === 'flat') {
+      // Flat list: one synthetic group containing all sessions
+      const sorted = [...filtered];
+      sorted.sort((a, b) => {
+        if (sort === 'messages') return b.messageCount - a.messageCount;
+        if (sort === 'project') return (a.summary || '').localeCompare(b.summary || '');
+        return b.lastActivity.localeCompare(a.lastActivity);
+      });
+      let totalMessages = 0;
+      let latestActivity = '';
+      for (const s of sorted) {
+        totalMessages += s.messageCount;
+        if (!latestActivity || s.lastActivity > latestActivity) {
+          latestActivity = s.lastActivity;
+        }
+      }
+      return [
+        {
+          projectPath: '__flat__',
+          projectName: 'All Sessions',
+          sessions: sorted,
+          totalMessages,
+          latestActivity,
+        },
+      ];
+    }
+
     const map = new Map<string, DiscoveredSession[]>();
     for (const s of filtered) {
       const key = s.projectPath;
@@ -100,7 +230,13 @@ export function DiscoverPage(): React.JSX.Element {
           latestActivity = s.lastActivity;
         }
       }
-      result.push({ projectPath, projectName, sessions, totalMessages, latestActivity });
+      result.push({
+        projectPath,
+        projectName,
+        sessions,
+        totalMessages,
+        latestActivity,
+      });
     }
 
     // Sort sessions within each group by last activity descending
@@ -120,10 +256,11 @@ export function DiscoverPage(): React.JSX.Element {
     });
 
     return result;
-  }, [filtered, sort]);
+  }, [filtered, sort, groupMode]);
 
   // Unique project count
-  const projectCount = groups.length;
+  const projectCount =
+    groupMode === 'flat' ? new Set(filtered.map((s) => s.projectPath)).size : groups.length;
 
   // Find the full selected session for preview
   const selectedSession = selectedSessionId
@@ -286,10 +423,19 @@ export function DiscoverPage(): React.JSX.Element {
           }}
         >
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+            <label
+              htmlFor="new-session-project-path"
+              style={{
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                marginBottom: 4,
+                display: 'block',
+              }}
+            >
               Project Path
-            </div>
+            </label>
             <input
+              id="new-session-project-path"
               type="text"
               value={newProjectPath}
               onChange={(e) => setNewProjectPath(e.target.value)}
@@ -309,8 +455,19 @@ export function DiscoverPage(): React.JSX.Element {
             />
           </div>
           <div style={{ flex: 2, minWidth: 300 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Prompt</div>
+            <label
+              htmlFor="new-session-prompt"
+              style={{
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                marginBottom: 4,
+                display: 'block',
+              }}
+            >
+              Prompt
+            </label>
             <input
+              id="new-session-prompt"
               type="text"
               value={newPrompt}
               onChange={(e) => setNewPrompt(e.target.value)}
@@ -399,6 +556,7 @@ export function DiscoverPage(): React.JSX.Element {
         }}
       >
         <input
+          id="discover-search"
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -415,9 +573,18 @@ export function DiscoverPage(): React.JSX.Element {
             outline: 'none',
           }}
         />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <label
+          htmlFor="discover-min-msgs"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 13,
+          }}
+        >
           <span style={{ color: 'var(--text-secondary)' }}>Min msgs:</span>
           <select
+            id="discover-min-msgs"
             value={minMessages}
             onChange={(e) => setMinMessages(Number(e.target.value) as MinMessages)}
             style={{
@@ -436,9 +603,18 @@ export function DiscoverPage(): React.JSX.Element {
             ))}
           </select>
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <label
+          htmlFor="discover-sort"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 13,
+          }}
+        >
           <span style={{ color: 'var(--text-secondary)' }}>Sort:</span>
           <select
+            id="discover-sort"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
             style={{
@@ -457,22 +633,42 @@ export function DiscoverPage(): React.JSX.Element {
             ))}
           </select>
         </label>
+        {/* Group by toggle */}
         <button
           type="button"
-          onClick={toggleAll}
+          onClick={() => setGroupMode((prev) => (prev === 'project' ? 'flat' : 'project'))}
           style={{
             padding: '5px 12px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-secondary)',
+            backgroundColor: groupMode === 'project' ? 'var(--bg-tertiary)' : 'var(--accent)',
+            color: groupMode === 'project' ? 'var(--text-secondary)' : '#fff',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
             fontSize: 12,
             cursor: 'pointer',
             whiteSpace: 'nowrap',
+            fontWeight: 500,
           }}
         >
-          {allExpanded ? 'Collapse All' : 'Expand All'}
+          {groupMode === 'project' ? 'Group by Project' : 'Flat List'}
         </button>
+        {groupMode === 'project' && (
+          <button
+            type="button"
+            onClick={toggleAll}
+            style={{
+              padding: '5px 12px',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 12,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {allExpanded ? 'Collapse All' : 'Expand All'}
+          </button>
+        )}
       </div>
 
       {/* Stats line */}
@@ -493,11 +689,30 @@ export function DiscoverPage(): React.JSX.Element {
             padding: 48,
             textAlign: 'center',
             color: 'var(--text-muted)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
           }}
         >
-          {discovered.isLoading
-            ? 'Scanning machines for sessions...'
-            : 'No sessions discovered across the fleet'}
+          {discovered.isLoading ? (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 500 }}>Scanning machines for sessions...</div>
+              {data && (
+                <div style={{ fontSize: 13 }}>Querying {data.machinesQueried} machine(s)</div>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 500 }}>No sessions discovered</div>
+              <div style={{ fontSize: 13, maxWidth: 420 }}>
+                {data
+                  ? `Scanned ${data.machinesQueried} machine(s) and found no Claude Code sessions.`
+                  : 'No machines have been queried yet.'}{' '}
+                Try clicking "Scan All Machines" or start a new session.
+              </div>
+            </>
+          )}
         </div>
       ) : filtered.length === 0 ? (
         <div
@@ -512,6 +727,7 @@ export function DiscoverPage(): React.JSX.Element {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {groups.map((group) => {
+            const isFlat = group.projectPath === '__flat__';
             const isCollapsed = collapsedGroups.has(group.projectPath);
             return (
               <div
@@ -522,82 +738,111 @@ export function DiscoverPage(): React.JSX.Element {
                   overflow: 'hidden',
                 }}
               >
-                {/* Group header */}
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.projectPath)}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '10px 16px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: 'none',
-                    borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  <span
+                {/* Group header (hidden in flat mode) */}
+                {!isFlat && (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.projectPath)}
                     style={{
-                      fontSize: 12,
-                      transition: 'transform 0.15s',
-                      transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-                      display: 'inline-block',
-                      width: 16,
-                      textAlign: 'center',
-                      flexShrink: 0,
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 16px',
+                      backgroundColor: 'var(--bg-secondary)',
+                      border: 'none',
+                      borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: 'var(--text-primary)',
                     }}
                   >
-                    ▼
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{group.projectName}</div>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        transition: 'transform 0.15s',
+                        transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                        display: 'inline-block',
+                        width: 16,
+                        textAlign: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {'\u25BC'}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 14,
+                          lineHeight: '20px',
+                        }}
+                      >
+                        {group.projectName}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          color: 'var(--text-muted)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          lineHeight: '16px',
+                        }}
+                      >
+                        {shortenPath(group.projectPath)}
+                      </div>
+                    </div>
                     <div
                       style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        gap: 10,
+                        alignItems: 'center',
+                        flexShrink: 0,
                       }}
                     >
-                      {group.projectPath}
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--text-muted)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        last active: {relativeTime(group.latestActivity)}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--text-secondary)',
+                          backgroundColor: 'var(--bg-tertiary)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {group.sessions.length} session
+                        {group.sessions.length !== 1 ? 's' : ''}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        {group.totalMessages} msgs
+                      </span>
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--text-secondary)',
-                        backgroundColor: 'var(--bg-tertiary)',
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {group.sessions.length} session{group.sessions.length !== 1 ? 's' : ''}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      {group.totalMessages} msgs
-                    </span>
-                  </div>
-                </button>
+                  </button>
+                )}
 
                 {/* Session rows */}
-                {!isCollapsed && (
+                {(isFlat || !isCollapsed) && (
                   <div>
                     {group.sessions.map((s) => {
                       const isSelected = selectedSessionId === s.sessionId;
                       const isResuming = resuming === s.sessionId;
+                      const dotColor = recencyColor(s.lastActivity);
                       return (
                         <div key={`${s.machineId}-${s.sessionId}`}>
                           <button
@@ -608,7 +853,7 @@ export function DiscoverPage(): React.JSX.Element {
                               display: 'flex',
                               alignItems: 'center',
                               gap: 12,
-                              padding: '8px 16px 8px 44px',
+                              padding: isFlat ? '8px 16px' : '8px 16px 8px 44px',
                               backgroundColor: isSelected
                                 ? 'var(--bg-tertiary)'
                                 : 'var(--bg-primary)',
@@ -635,6 +880,25 @@ export function DiscoverPage(): React.JSX.Element {
                                 : 'var(--bg-primary)';
                             }}
                           >
+                            {/* Recency dot */}
+                            <span
+                              style={{
+                                width: 7,
+                                height: 7,
+                                borderRadius: '50%',
+                                backgroundColor: dotColor,
+                                flexShrink: 0,
+                                display: 'inline-block',
+                              }}
+                              title={
+                                dotColor === 'var(--green)'
+                                  ? 'Active in last hour'
+                                  : dotColor === 'var(--yellow)'
+                                    ? 'Active today'
+                                    : 'Older'
+                              }
+                            />
+
                             {/* Summary */}
                             <span
                               style={{
@@ -714,18 +978,8 @@ export function DiscoverPage(): React.JSX.Element {
                               {relativeTime(s.lastActivity)}
                             </span>
 
-                            {/* Session ID */}
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontFamily: 'var(--font-mono)',
-                                color: 'var(--text-muted)',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                              }}
-                            >
-                              {s.sessionId.slice(0, 8)}
-                            </span>
+                            {/* Session ID (copyable) */}
+                            <CopyableSessionId sessionId={s.sessionId} />
 
                             {/* Resume button */}
                             {!isResuming && (
@@ -760,7 +1014,7 @@ export function DiscoverPage(): React.JSX.Element {
                               style={{
                                 display: 'flex',
                                 gap: 6,
-                                padding: '6px 16px 6px 44px',
+                                padding: isFlat ? '6px 16px' : '6px 16px 6px 44px',
                                 backgroundColor: 'var(--bg-secondary)',
                                 borderBottom: '1px solid var(--border)',
                               }}
@@ -841,17 +1095,4 @@ export function DiscoverPage(): React.JSX.Element {
       )}
     </div>
   );
-}
-
-function relativeTime(dateStr: string): string {
-  if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
 }
