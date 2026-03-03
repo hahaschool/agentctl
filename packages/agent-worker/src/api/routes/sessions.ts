@@ -1,0 +1,731 @@
+// ---------------------------------------------------------------------------
+// Worker-side session routes — HTTP endpoints that the control plane dispatches
+// to for managing Claude Code CLI sessions on this worker machine.
+//
+// Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
+// ---------------------------------------------------------------------------
+
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+import type { AgentEvent } from '@agentctl/shared';
+import { AgentError, WorkerError } from '@agentctl/shared';
+import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
+import type { Logger } from 'pino';
+
+import type {
+  CliSession,
+  CliSessionEvent,
+  CliSessionManager,
+} from '../../runtime/cli-session-manager.js';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type SessionRouteOptions = FastifyPluginOptions & {
+  sessionManager: CliSessionManager;
+  machineId: string;
+  logger: Logger;
+};
+
+type CreateSessionBody = {
+  sessionId: string;
+  agentId: string;
+  projectPath: string;
+  model?: string | null;
+  prompt?: string | null;
+};
+
+type ResumeSessionBody = {
+  prompt: string;
+};
+
+type MessageBody = {
+  message: string;
+};
+
+type SessionIdParams = {
+  sessionId: string;
+};
+
+type ContentParams = {
+  claudeSessionId: string;
+};
+
+type ContentQuerystring = {
+  projectPath?: string;
+  limit?: string;
+};
+
+type ContentMessage = {
+  type: string;
+  content: string;
+  timestamp?: string;
+  toolName?: string;
+};
+
+const DEFAULT_CONTENT_LIMIT = 100;
+const MAX_SEARCH_DEPTH = 3;
+
+// ---------------------------------------------------------------------------
+// SSE constants
+// ---------------------------------------------------------------------------
+
+const SSE_BUFFER_LIMIT = 100;
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
+// ---------------------------------------------------------------------------
+// Error helpers
+// ---------------------------------------------------------------------------
+
+const ERROR_STATUS_MAP: Record<string, number> = {
+  SESSION_NOT_FOUND: 404,
+  MAX_SESSIONS_EXCEEDED: 503,
+  INVALID_INPUT: 400,
+};
+
+function errorToStatusCode(err: unknown): number {
+  if (err instanceof AgentError || err instanceof WorkerError) {
+    return ERROR_STATUS_MAP[err.code] ?? 500;
+  }
+  return 500;
+}
+
+function errorToResponse(err: unknown): { error: string; code: string } {
+  if (err instanceof AgentError || err instanceof WorkerError) {
+    return { error: err.message, code: err.code };
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return { error: message, code: 'INTERNAL_ERROR' };
+}
+
+// ---------------------------------------------------------------------------
+// Session event buffer — collects AgentEvents per session for SSE catch-up
+// ---------------------------------------------------------------------------
+
+type SessionEventBuffer = {
+  events: AgentEvent[];
+  subscribers: Set<(event: AgentEvent) => void>;
+};
+
+// ---------------------------------------------------------------------------
+// Plugin
+// ---------------------------------------------------------------------------
+
+export async function sessionRoutes(
+  app: FastifyInstance,
+  options: SessionRouteOptions,
+): Promise<void> {
+  const { sessionManager, machineId, logger } = options;
+
+  // Per-session output buffers for SSE streaming
+  const sessionBuffers = new Map<string, SessionEventBuffer>();
+
+  function getOrCreateBuffer(sessionId: string): SessionEventBuffer {
+    let buf = sessionBuffers.get(sessionId);
+    if (!buf) {
+      buf = { events: [], subscribers: new Set() };
+      sessionBuffers.set(sessionId, buf);
+    }
+    return buf;
+  }
+
+  // Wire CliSessionManager events → session buffers
+  sessionManager.on('session_output', (event: CliSessionEvent) => {
+    if (event.type !== 'session_output') return;
+
+    const buf = getOrCreateBuffer(event.sessionId);
+
+    // Append to ring buffer
+    buf.events.push(event.event);
+    if (buf.events.length > SSE_BUFFER_LIMIT) {
+      buf.events.shift();
+    }
+
+    // Notify live subscribers
+    for (const sub of buf.subscribers) {
+      sub(event.event);
+    }
+  });
+
+  sessionManager.on('session_ended', (event: CliSessionEvent) => {
+    if (event.type !== 'session_ended') return;
+
+    const buf = sessionBuffers.get(event.sessionId);
+    if (buf) {
+      // Emit a synthetic "ended" event to all subscribers
+      const endedEvent: AgentEvent = {
+        event: 'status',
+        data: { status: 'ended', exitCode: event.exitCode },
+      };
+      buf.events.push(endedEvent);
+      for (const sub of buf.subscribers) {
+        sub(endedEvent);
+      }
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // GET / — list all active sessions on this worker
+  // -----------------------------------------------------------------------
+
+  app.get('/', async () => {
+    const sessions = sessionManager.listSessions();
+    return {
+      sessions: sessions.map(sessionToJson),
+      count: sessions.length,
+      machineId,
+    };
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /discover — discover existing Claude Code sessions on this machine
+  // -----------------------------------------------------------------------
+
+  app.get<{ Querystring: { projectPath?: string } }>('/discover', async (request) => {
+    const { projectPath } = request.query;
+    const discovered = sessionManager.discoverLocalSessions(projectPath ?? undefined);
+    return { sessions: discovered, count: discovered.length, machineId };
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /content/:claudeSessionId — read conversation history from JSONL
+  // -----------------------------------------------------------------------
+
+  app.get<{ Params: ContentParams; Querystring: ContentQuerystring }>(
+    '/content/:claudeSessionId',
+    async (request, reply) => {
+      const { claudeSessionId } = request.params;
+      const { projectPath, limit: limitStr } = request.query;
+
+      let limit = DEFAULT_CONTENT_LIMIT;
+      if (limitStr !== undefined) {
+        const parsed = Number(limitStr);
+        if (Number.isInteger(parsed) && parsed >= 1) {
+          limit = parsed;
+        }
+      }
+
+      const jsonlPath = findSessionJsonl(claudeSessionId, projectPath);
+
+      if (!jsonlPath) {
+        return reply.status(404).send({
+          error: `JSONL file for session '${claudeSessionId}' not found`,
+          code: 'SESSION_CONTENT_NOT_FOUND',
+        });
+      }
+
+      try {
+        const raw = readFileSync(jsonlPath, 'utf-8');
+        const lines = raw.split('\n').filter((line) => line.trim().length > 0);
+
+        const allMessages: ContentMessage[] = [];
+
+        for (const line of lines) {
+          try {
+            const parsed: unknown = JSON.parse(line);
+            const msgs = parseJsonlEntry(parsed);
+            for (const msg of msgs) {
+              allMessages.push(msg);
+            }
+          } catch {
+            // Skip unparseable lines — partial results are acceptable
+          }
+        }
+
+        const totalMessages = allMessages.length;
+        const messages = allMessages.slice(-limit);
+
+        return {
+          messages,
+          sessionId: claudeSessionId,
+          totalMessages,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error(
+          { claudeSessionId, jsonlPath, err: message },
+          'Failed to read session JSONL file',
+        );
+        return reply.status(500).send({
+          error: `Failed to read session content: ${message}`,
+          code: 'CONTENT_READ_ERROR',
+        });
+      }
+    },
+  );
+
+  // -----------------------------------------------------------------------
+  // GET /:sessionId — get a single session's details
+  // -----------------------------------------------------------------------
+
+  app.get<{ Params: SessionIdParams }>('/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params;
+    const session = sessionManager.getSession(sessionId);
+
+    if (!session) {
+      return reply.status(404).send({
+        error: `Session '${sessionId}' not found`,
+        code: 'SESSION_NOT_FOUND',
+      });
+    }
+
+    return sessionToJson(session);
+  });
+
+  // -----------------------------------------------------------------------
+  // POST / — start a new CLI session (dispatched from control plane)
+  // -----------------------------------------------------------------------
+
+  app.post<{ Body: CreateSessionBody }>('/', async (request, reply) => {
+    const { sessionId: _cpSessionId, agentId, projectPath, model, prompt } = request.body;
+
+    if (!agentId || typeof agentId !== 'string') {
+      return reply.status(400).send({
+        error: 'A non-empty "agentId" string is required',
+        code: 'INVALID_INPUT',
+      });
+    }
+
+    if (!projectPath || typeof projectPath !== 'string') {
+      return reply.status(400).send({
+        error: 'A non-empty "projectPath" string is required',
+        code: 'INVALID_INPUT',
+      });
+    }
+
+    try {
+      const session = sessionManager.startSession({
+        agentId,
+        projectPath,
+        prompt: prompt ?? 'Continue working.',
+        model: model ?? undefined,
+      });
+
+      logger.info(
+        { sessionId: session.id, agentId, machineId, projectPath },
+        'CLI session started',
+      );
+
+      return reply.status(201).send({
+        ok: true,
+        session: sessionToJson(session),
+      });
+    } catch (err) {
+      const statusCode = errorToStatusCode(err);
+      return reply.status(statusCode).send(errorToResponse(err));
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /:sessionId/resume — resume a previously completed session
+  // -----------------------------------------------------------------------
+
+  app.post<{ Params: SessionIdParams; Body: ResumeSessionBody }>(
+    '/:sessionId/resume',
+    async (request, reply) => {
+      const { sessionId } = request.params;
+      const { prompt } = request.body;
+
+      if (!prompt || typeof prompt !== 'string') {
+        return reply.status(400).send({
+          error: 'A non-empty "prompt" string is required',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      // Try to find the session — it might be a manager ID or a Claude session ID
+      const existingSession =
+        sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
+
+      if (!existingSession) {
+        return reply.status(404).send({
+          error: `Session '${sessionId}' not found`,
+          code: 'SESSION_NOT_FOUND',
+        });
+      }
+
+      // If the session doesn't have a Claude session ID, we can't resume it
+      if (!existingSession.claudeSessionId) {
+        return reply.status(400).send({
+          error: 'Session has no Claude session ID to resume',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      try {
+        const newSession = sessionManager.resumeSession(existingSession.claudeSessionId, {
+          agentId: existingSession.agentId,
+          projectPath: existingSession.projectPath,
+          prompt,
+          model: existingSession.model,
+        });
+
+        logger.info(
+          {
+            newSessionId: newSession.id,
+            resumedFrom: existingSession.claudeSessionId,
+            machineId,
+          },
+          'CLI session resumed',
+        );
+
+        return reply.status(200).send({
+          ok: true,
+          session: sessionToJson(newSession),
+          resumedFrom: existingSession.id,
+        });
+      } catch (err) {
+        const statusCode = errorToStatusCode(err);
+        return reply.status(statusCode).send(errorToResponse(err));
+      }
+    },
+  );
+
+  // -----------------------------------------------------------------------
+  // POST /:sessionId/message — send a follow-up message to a session
+  //
+  // In CLI `-p` mode, each prompt is a separate process. To "send a message"
+  // to a completed session, we resume it with `--resume`.
+  // -----------------------------------------------------------------------
+
+  app.post<{ Params: SessionIdParams; Body: MessageBody }>(
+    '/:sessionId/message',
+    async (request, reply) => {
+      const { sessionId } = request.params;
+      const { message } = request.body;
+
+      if (!message || typeof message !== 'string') {
+        return reply.status(400).send({
+          error: 'A non-empty "message" string is required',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      const existingSession =
+        sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
+
+      if (!existingSession) {
+        return reply.status(404).send({
+          error: `Session '${sessionId}' not found`,
+          code: 'SESSION_NOT_FOUND',
+        });
+      }
+
+      // If the session is still running, we can't send another `-p` call
+      if (existingSession.status === 'running') {
+        return reply.status(409).send({
+          error: 'Session is currently running. Wait for it to finish or stop it first.',
+          code: 'SESSION_BUSY',
+        });
+      }
+
+      if (!existingSession.claudeSessionId) {
+        return reply.status(400).send({
+          error: 'Session has no Claude session ID — cannot resume',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      try {
+        const newSession = sessionManager.resumeSession(existingSession.claudeSessionId, {
+          agentId: existingSession.agentId,
+          projectPath: existingSession.projectPath,
+          prompt: message,
+          model: existingSession.model,
+        });
+
+        logger.info(
+          {
+            newSessionId: newSession.id,
+            resumedFrom: existingSession.claudeSessionId,
+            machineId,
+          },
+          'Message sent via session resume',
+        );
+
+        return reply.status(200).send({
+          ok: true,
+          session: sessionToJson(newSession),
+        });
+      } catch (err) {
+        const statusCode = errorToStatusCode(err);
+        return reply.status(statusCode).send(errorToResponse(err));
+      }
+    },
+  );
+
+  // -----------------------------------------------------------------------
+  // DELETE /:sessionId — stop/end a session
+  // -----------------------------------------------------------------------
+
+  app.delete<{ Params: SessionIdParams }>('/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params;
+
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      return reply.status(404).send({
+        error: `Session '${sessionId}' not found`,
+        code: 'SESSION_NOT_FOUND',
+      });
+    }
+
+    try {
+      await sessionManager.stopSession(sessionId, true);
+
+      // Clean up event buffer
+      sessionBuffers.delete(sessionId);
+
+      logger.info({ sessionId, machineId }, 'CLI session stopped');
+
+      return reply.status(200).send({
+        ok: true,
+        sessionId,
+      });
+    } catch (err) {
+      const statusCode = errorToStatusCode(err);
+      return reply.status(statusCode).send(errorToResponse(err));
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /:sessionId/stream — SSE stream of session output
+  // -----------------------------------------------------------------------
+
+  app.get<{ Params: SessionIdParams }>('/:sessionId/stream', async (request, reply) => {
+    const { sessionId } = request.params;
+
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      throw new WorkerError('SESSION_NOT_FOUND', `Session '${sessionId}' not found`, {
+        sessionId,
+      });
+    }
+
+    // Hijack the response for raw SSE streaming
+    reply.hijack();
+    const raw = reply.raw;
+
+    raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const writeEvent = (event: AgentEvent): void => {
+      raw.write(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`);
+    };
+
+    // 1. Replay buffered events
+    const buf = getOrCreateBuffer(sessionId);
+    for (const event of buf.events) {
+      writeEvent(event);
+    }
+
+    // 2. Subscribe to live events
+    const onEvent = (event: AgentEvent): void => {
+      if (!raw.destroyed) {
+        writeEvent(event);
+      }
+    };
+    buf.subscribers.add(onEvent);
+
+    // 3. Heartbeat
+    const heartbeat = setInterval(() => {
+      if (!raw.destroyed) {
+        raw.write(`: heartbeat\n\n`);
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    // 4. Cleanup on disconnect
+    request.raw.on('close', () => {
+      clearInterval(heartbeat);
+      buf.subscribers.delete(onEvent);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// JSONL content helpers
+// ---------------------------------------------------------------------------
+
+const PREVIEW_TYPES = new Set(['user', 'assistant']);
+
+/**
+ * Recursively search directories under `~/.claude/projects/` for a JSONL file
+ * matching `<claudeSessionId>.jsonl`, respecting a maximum depth.
+ */
+function findSessionJsonl(claudeSessionId: string, projectPath?: string): string | null {
+  const projectsDir = join(homedir(), '.claude', 'projects');
+
+  if (!existsSync(projectsDir)) {
+    return null;
+  }
+
+  const fileName = `${claudeSessionId}.jsonl`;
+
+  // If projectPath is provided, check the specific encoded directory first
+  if (projectPath) {
+    const encoded = projectPath.replace(/\//g, '-');
+
+    // Direct: ~/.claude/projects/<encoded>/<sessionId>.jsonl
+    const directPath = join(projectsDir, encoded, fileName);
+    if (existsSync(directPath)) {
+      return directPath;
+    }
+
+    // Nested under `-` parent: ~/.claude/projects/-/<encoded-rest>/<sessionId>.jsonl
+    const encodedRest = projectPath.startsWith('/')
+      ? projectPath.slice(1).replace(/\//g, '-')
+      : projectPath.replace(/\//g, '-');
+    const nestedPath = join(projectsDir, '-', encodedRest, fileName);
+    if (existsSync(nestedPath)) {
+      return nestedPath;
+    }
+  }
+
+  // Fall back to recursive search across all subdirectories
+  return searchForJsonl(projectsDir, fileName, 0);
+}
+
+/**
+ * Recursively search a directory tree for a file, with depth limiting.
+ */
+function searchForJsonl(dir: string, fileName: string, currentDepth: number): string | null {
+  if (currentDepth > MAX_SEARCH_DEPTH) {
+    return null;
+  }
+
+  const directPath = join(dir, fileName);
+  if (existsSync(directPath)) {
+    return directPath;
+  }
+
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    const entryPath = join(dir, entry);
+    try {
+      if (statSync(entryPath).isDirectory()) {
+        const found = searchForJsonl(entryPath, fileName, currentDepth + 1);
+        if (found) {
+          return found;
+        }
+      }
+    } catch {
+      // Skip entries we can't stat
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Parse a single JSONL entry and return ContentMessage(s).
+ *
+ * Claude Code JSONL format:
+ * - type: "user"      → message.content[] has {type:"text"} and {type:"tool_result"} blocks
+ * - type: "assistant"  → message.content[] has {type:"text"}, {type:"thinking"}, {type:"tool_use"} blocks
+ * - type: "progress" / "queue-operation" / "file-history-snapshot" / "system" → skip
+ *
+ * Each content block becomes a separate ContentMessage so the frontend can
+ * render them individually with appropriate styling.
+ */
+function parseJsonlEntry(entry: unknown): ContentMessage[] {
+  if (typeof entry !== 'object' || entry === null) {
+    return [];
+  }
+
+  const obj = entry as Record<string, unknown>;
+  const entryType = typeof obj.type === 'string' ? obj.type : null;
+
+  if (!entryType || !PREVIEW_TYPES.has(entryType)) {
+    return [];
+  }
+
+  const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : undefined;
+
+  const message = obj.message as Record<string, unknown> | undefined;
+  if (!message || typeof message !== 'object') {
+    return [];
+  }
+
+  const contentBlocks = Array.isArray(message.content) ? message.content : [];
+  if (contentBlocks.length === 0) {
+    return [];
+  }
+
+  const results: ContentMessage[] = [];
+
+  for (const block of contentBlocks) {
+    if (typeof block !== 'object' || block === null) continue;
+    const b = block as Record<string, unknown>;
+    const blockType = typeof b.type === 'string' ? b.type : null;
+
+    if (entryType === 'user') {
+      if (blockType === 'text' && typeof b.text === 'string') {
+        // Skip system-injected text (IDE events, system reminders)
+        const text = b.text.trim();
+        if (text.startsWith('<') && (text.includes('system-reminder') || text.includes('ide_'))) {
+          continue;
+        }
+        if (text.length > 0) {
+          results.push({ type: 'human', content: text, timestamp });
+        }
+      } else if (blockType === 'tool_result') {
+        const content =
+          typeof b.content === 'string'
+            ? b.content.slice(0, 2000)
+            : JSON.stringify(b.content ?? '').slice(0, 2000);
+        results.push({ type: 'tool_result', content, timestamp });
+      }
+    }
+
+    if (entryType === 'assistant') {
+      if (blockType === 'text' && typeof b.text === 'string') {
+        const text = b.text.trim();
+        if (text.length > 0) {
+          results.push({ type: 'assistant', content: text, timestamp });
+        }
+      } else if (blockType === 'tool_use' && typeof b.name === 'string') {
+        const input =
+          typeof b.input === 'string'
+            ? b.input.slice(0, 1000)
+            : JSON.stringify(b.input ?? '', null, 2).slice(0, 1000);
+        results.push({ type: 'tool_use', content: input, toolName: b.name, timestamp });
+      }
+      // Skip "thinking" blocks — they are internal reasoning and too verbose
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Serialisation
+// ---------------------------------------------------------------------------
+
+function sessionToJson(session: CliSession): Record<string, unknown> {
+  return {
+    id: session.id,
+    claudeSessionId: session.claudeSessionId,
+    agentId: session.agentId,
+    projectPath: session.projectPath,
+    status: session.status,
+    model: session.model,
+    pid: session.pid,
+    costUsd: session.costUsd,
+    messageCount: session.messageCount,
+    startedAt: session.startedAt.toISOString(),
+    lastActivity: session.lastActivity.toISOString(),
+    isResumed: session.isResumed,
+  };
+}

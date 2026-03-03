@@ -1,6 +1,15 @@
 export { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 export { AgentPool } from './agent-pool.js';
 export {
+  type CliSession,
+  type CliSessionEvent,
+  CliSessionManager,
+  type CliSessionManagerOptions,
+  type CliSessionStatus,
+  type DiscoveredSession,
+  type StartCliSessionOptions,
+} from './cli-session-manager.js';
+export {
   type CheckpointConfig,
   type CheckpointData,
   LoopCheckpoint,

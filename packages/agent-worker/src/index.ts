@@ -10,6 +10,7 @@ import { AuditReporter } from './hooks/audit-reporter.js';
 import type { IpcMessage, IpcResponse } from './ipc/index.js';
 import { createIpcResponse, IpcServer } from './ipc/index.js';
 import { createLogger } from './logger.js';
+import { CliSessionManager } from './runtime/cli-session-manager.js';
 import { AgentPool } from './runtime/index.js';
 import { WorktreeManager } from './worktree/index.js';
 
@@ -239,11 +240,16 @@ async function main(): Promise<void> {
 
   ipcServer.onMessage(createIpcHandler(pool));
 
+  const sessionManager = new CliSessionManager({
+    maxConcurrentSessions: MAX_CONCURRENT_AGENTS * 2,
+  });
+
   const server = await createWorkerServer({
     logger,
     agentPool: pool,
     machineId: MACHINE_ID,
     controlPlaneUrl: CONTROL_PLANE_URL,
+    sessionManager,
   });
 
   const healthReporter = new HealthReporter({
@@ -302,6 +308,12 @@ async function main(): Promise<void> {
     shuttingDown = true;
 
     logger.info('Shutting down agent worker...');
+
+    try {
+      await sessionManager.stopAll();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error stopping CLI sessions');
+    }
 
     try {
       await pool.stopAll();
