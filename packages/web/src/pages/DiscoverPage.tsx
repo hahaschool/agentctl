@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { SessionPreview } from '../components/SessionPreview.tsx';
+import { useToast } from '../components/Toast.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
 import type { DiscoveredSession } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
@@ -134,6 +135,7 @@ function CopyableSessionId({ sessionId }: { sessionId: string }): React.JSX.Elem
 }
 
 export function DiscoverPage(): React.JSX.Element {
+  const toast = useToast();
   const discovered = usePolling<{
     sessions: DiscoveredSession[];
     count: number;
@@ -146,7 +148,6 @@ export function DiscoverPage(): React.JSX.Element {
 
   const [resuming, setResuming] = useState<string | null>(null);
   const [resumePrompt, setResumePrompt] = useState('');
-  const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   // New session form state
@@ -292,7 +293,6 @@ export function DiscoverPage(): React.JSX.Element {
   const handleNewSession = useCallback(async () => {
     if (!newProjectPath.trim() || !newPrompt.trim()) return;
     setNewSessionCreating(true);
-    setActionMsg(null);
     try {
       // Use the first machine from discovered sessions, or 'mac-local' as default
       const first = allSessions[0];
@@ -303,23 +303,22 @@ export function DiscoverPage(): React.JSX.Element {
         projectPath: newProjectPath.trim(),
         prompt: newPrompt.trim(),
       });
-      setActionMsg('Session created successfully');
+      toast.success('Session created successfully');
       setNewProjectPath('');
       setNewPrompt('');
       setShowNewSession(false);
       discovered.refresh();
     } catch (err) {
-      setActionMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setNewSessionCreating(false);
     }
-  }, [newProjectPath, newPrompt, allSessions, discovered]);
+  }, [newProjectPath, newPrompt, allSessions, discovered, toast]);
 
   const handleResume = useCallback(
     async (session: DiscoveredSession) => {
       if (!resumePrompt.trim()) return;
       setResuming(session.sessionId);
-      setActionMsg(null);
       try {
         await api.createSession({
           agentId: 'adhoc',
@@ -328,16 +327,16 @@ export function DiscoverPage(): React.JSX.Element {
           prompt: resumePrompt.trim(),
           resumeSessionId: session.sessionId,
         });
-        setActionMsg(`Session resumed on ${session.hostname}`);
+        toast.success(`Session resumed on ${session.hostname}`);
         setResumePrompt('');
         setResuming(null);
         discovered.refresh();
       } catch (err) {
-        setActionMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        toast.error(err instanceof Error ? err.message : String(err));
         setResuming(null);
       }
     },
-    [resumePrompt, discovered],
+    [resumePrompt, discovered, toast],
   );
 
   return (
@@ -522,22 +521,6 @@ export function DiscoverPage(): React.JSX.Element {
           }}
         >
           {discovered.error.message}
-        </div>
-      )}
-
-      {/* Action message banner */}
-      {actionMsg && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: actionMsg.startsWith('Error') ? '#7f1d1d' : '#14532d',
-            color: actionMsg.startsWith('Error') ? '#fca5a5' : '#86efac',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
-          {actionMsg}
         </div>
       )}
 

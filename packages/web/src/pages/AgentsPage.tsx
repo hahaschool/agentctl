@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
 import { StatusBadge } from '../components/StatusBadge.tsx';
+import { useToast } from '../components/Toast.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
 import type { Agent, Machine } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
@@ -36,6 +37,7 @@ const AGENT_TYPES = ['autonomous', 'adhoc', 'scheduled'] as const;
 // ---------------------------------------------------------------------------
 
 export function AgentsPage(): React.JSX.Element {
+  const toast = useToast();
   const agents = usePolling<Agent[]>({
     fetcher: api.listAgents,
     intervalMs: 10_000,
@@ -55,7 +57,6 @@ export function AgentsPage(): React.JSX.Element {
 
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [actionError, setActionError] = useState<string | null>(null);
 
   const agentList = agents.data ?? [];
   const machineList = machines.data ?? [];
@@ -83,49 +84,50 @@ export function AgentsPage(): React.JSX.Element {
           machineId: createMachineId,
           type: createType,
         });
+        toast.success(`Agent "${createName.trim()}" created`);
         setCreateName('');
         setCreateMachineId('');
         setCreateType('autonomous');
         setShowCreateForm(false);
         agents.refresh();
       } catch (err) {
-        setCreateError(err instanceof Error ? err.message : String(err));
+        toast.error(err instanceof Error ? err.message : String(err));
       } finally {
         setCreateLoading(false);
       }
     },
-    [createName, createMachineId, createType, agents],
+    [createName, createMachineId, createType, agents, toast],
   );
 
   // -- Start agent handler --
   const handleStart = useCallback(
     async (agentId: string) => {
       if (!prompt.trim()) return;
-      setActionError(null);
       try {
         await api.startAgent(agentId, prompt.trim());
+        toast.success('Agent started');
         setPrompt('');
         setPromptAgentId(null);
         agents.refresh();
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : String(err));
+        toast.error(err instanceof Error ? err.message : String(err));
       }
     },
-    [prompt, agents],
+    [prompt, agents, toast],
   );
 
   // -- Stop agent handler --
   const handleStop = useCallback(
     async (agentId: string) => {
-      setActionError(null);
       try {
         await api.stopAgent(agentId);
+        toast.success('Agent stopped');
         agents.refresh();
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : String(err));
+        toast.error(err instanceof Error ? err.message : String(err));
       }
     },
-    [agents],
+    [agents, toast],
   );
 
   return (
@@ -208,38 +210,6 @@ export function AgentsPage(): React.JSX.Element {
           }}
         >
           {agents.error.message}
-        </div>
-      )}
-
-      {actionError && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: '#7f1d1d',
-            color: '#fca5a5',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            fontSize: 13,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span>{actionError}</span>
-          <button
-            type="button"
-            onClick={() => setActionError(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#fca5a5',
-              fontSize: 16,
-              cursor: 'pointer',
-              padding: '0 4px',
-            }}
-          >
-            x
-          </button>
         </div>
       )}
 
