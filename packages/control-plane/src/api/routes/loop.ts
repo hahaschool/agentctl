@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
 
 const DEFAULT_WORKER_PORT = 9000;
@@ -12,48 +13,6 @@ export type LoopRoutesOptions = {
   dbRegistry?: DbAgentRegistry | null;
   workerPort?: number;
 };
-
-/**
- * Proxy an HTTP request to the agent worker and return its response.
- */
-async function proxyToWorker(
-  workerBaseUrl: string,
-  agentId: string,
-  method: string,
-  body?: unknown,
-): Promise<
-  | { ok: true; status: number; data: unknown }
-  | { ok: false; status: number; error: string; message: string }
-> {
-  const url = `${workerBaseUrl}/api/agents/${encodeURIComponent(agentId)}/loop`;
-
-  const fetchOptions: RequestInit = {
-    method,
-    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
-    headers: { 'Content-Type': 'application/json' },
-  };
-
-  if (body !== undefined && method !== 'GET' && method !== 'DELETE') {
-    fetchOptions.body = JSON.stringify(body);
-  }
-
-  let response: Response;
-
-  try {
-    response = await fetch(url, fetchOptions);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      status: 502,
-      error: 'WORKER_UNREACHABLE',
-      message: `Failed to connect to worker at ${workerBaseUrl}: ${message}`,
-    };
-  }
-
-  const data: unknown = await response.json();
-  return { ok: true, status: response.status, data };
-}
 
 /**
  * Fastify plugin that registers loop management proxy routes.
@@ -85,7 +44,13 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
           .send({ error: resolved.error, message: resolved.message });
       }
 
-      const result = await proxyToWorker(resolved.url, agentId, 'POST', request.body);
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: resolved.url,
+        path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
+        method: 'POST',
+        body: request.body,
+        timeoutMs: PROXY_TIMEOUT_MS,
+      });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
       }
@@ -116,7 +81,13 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
           .send({ error: resolved.error, message: resolved.message });
       }
 
-      const result = await proxyToWorker(resolved.url, agentId, 'PUT', request.body);
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: resolved.url,
+        path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
+        method: 'PUT',
+        body: request.body,
+        timeoutMs: PROXY_TIMEOUT_MS,
+      });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
       }
@@ -146,7 +117,12 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
           .send({ error: resolved.error, message: resolved.message });
       }
 
-      const result = await proxyToWorker(resolved.url, agentId, 'DELETE');
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: resolved.url,
+        path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
+        method: 'DELETE',
+        timeoutMs: PROXY_TIMEOUT_MS,
+      });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
       }
@@ -176,7 +152,12 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
           .send({ error: resolved.error, message: resolved.message });
       }
 
-      const result = await proxyToWorker(resolved.url, agentId, 'GET');
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: resolved.url,
+        path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
+        method: 'GET',
+        timeoutMs: PROXY_TIMEOUT_MS,
+      });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
       }

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
 
 const DEFAULT_WORKER_PORT = 9000;
@@ -12,73 +13,6 @@ export type EmergencyStopRoutesOptions = {
   dbRegistry?: DbAgentRegistry | null;
   workerPort?: number;
 };
-
-/**
- * Proxy an emergency-stop request to a single agent worker.
- */
-async function proxyEmergencyStop(
-  workerBaseUrl: string,
-  agentId: string,
-): Promise<
-  | { ok: true; status: number; data: unknown }
-  | { ok: false; status: number; error: string; message: string }
-> {
-  const url = `${workerBaseUrl}/api/agents/${encodeURIComponent(agentId)}/emergency-stop`;
-
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
-      headers: { 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      status: 502,
-      error: 'WORKER_UNREACHABLE',
-      message: `Failed to connect to worker at ${workerBaseUrl}: ${message}`,
-    };
-  }
-
-  const data: unknown = await response.json();
-  return { ok: true, status: response.status, data };
-}
-
-/**
- * Proxy an emergency-stop-all request to a worker.
- */
-async function proxyEmergencyStopAll(
-  workerBaseUrl: string,
-): Promise<
-  | { ok: true; status: number; data: unknown }
-  | { ok: false; status: number; error: string; message: string }
-> {
-  const url = `${workerBaseUrl}/api/agents/emergency-stop-all`;
-
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
-      headers: { 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      status: 502,
-      error: 'WORKER_UNREACHABLE',
-      message: `Failed to connect to worker at ${workerBaseUrl}: ${message}`,
-    };
-  }
-
-  const data: unknown = await response.json();
-  return { ok: true, status: response.status, data };
-}
 
 /**
  * Fastify plugin that registers emergency stop proxy routes.
@@ -115,7 +49,12 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
           .send({ error: resolved.error, message: resolved.message });
       }
 
-      const result = await proxyEmergencyStop(resolved.url, agentId);
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: resolved.url,
+        path: `/api/agents/${encodeURIComponent(agentId)}/emergency-stop`,
+        method: 'POST',
+        timeoutMs: PROXY_TIMEOUT_MS,
+      });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
       }
@@ -172,7 +111,12 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
         const address = machine.tailscaleIp ?? machine.hostname;
         const workerUrl = `http://${address}:${String(workerPort)}`;
 
-        const result = await proxyEmergencyStopAll(workerUrl);
+        const result = await proxyWorkerRequest({
+          workerBaseUrl: workerUrl,
+          path: '/api/agents/emergency-stop-all',
+          method: 'POST',
+          timeoutMs: PROXY_TIMEOUT_MS,
+        });
 
         if (!result.ok) {
           results.push({ machineId, stoppedCount: 0, error: result.message });
