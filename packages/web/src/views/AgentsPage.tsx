@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { ConfirmButton } from '../components/ConfirmButton';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -430,13 +431,13 @@ export function AgentsPage(): React.JSX.Element {
               {/* Actions */}
               <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
                 {agent.status === 'running' ? (
-                  <button
-                    type="button"
-                    onClick={() => handleStop(agent.id)}
+                  <ConfirmButton
+                    label="Stop"
+                    confirmLabel="Stop Agent?"
+                    onConfirm={() => handleStop(agent.id)}
                     className="px-3.5 py-1.5 bg-red-900 text-red-300 border border-red-800 rounded-sm text-xs font-medium cursor-pointer"
-                  >
-                    Stop
-                  </button>
+                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white border border-red-600 rounded-sm text-xs font-medium cursor-pointer animate-pulse"
+                  />
                 ) : promptAgentId === agent.id ? (
                   <>
                     <input

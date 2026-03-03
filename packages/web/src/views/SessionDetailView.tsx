@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { ConfirmButton } from '../components/ConfirmButton';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import type { Session, SessionContentMessage } from '../lib/api';
 import { formatDuration, shortenPath } from '../lib/format-utils';
@@ -105,13 +106,13 @@ function SessionHeader({ session }: { session: Session }): React.JSX.Element {
         )}
         <div className="ml-auto flex gap-2">
           {(session.status === 'active' || session.status === 'starting') && (
-            <button
-              type="button"
-              onClick={handleEnd}
+            <ConfirmButton
+              label="End Session"
+              confirmLabel="Confirm End?"
+              onConfirm={handleEnd}
               className="px-3 py-1 bg-red-900/50 text-red-300 border border-red-800/50 rounded-sm text-xs cursor-pointer hover:bg-red-900"
-            >
-              End Session
-            </button>
+              confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-sm text-xs cursor-pointer animate-pulse"
+            />
           )}
         </div>
       </div>

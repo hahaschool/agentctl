@@ -6,6 +6,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { ConfirmButton } from '../components/ConfirmButton';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
@@ -609,13 +610,13 @@ export function SessionsPage(): React.JSX.Element {
                 >
                   Open Full View
                 </Link>
-                <button
-                  type="button"
-                  onClick={handleStop}
-                  className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium"
-                >
-                  End Session
-                </button>
+                <ConfirmButton
+                  label="End Session"
+                  confirmLabel="End Session?"
+                  onConfirm={() => void handleStop()}
+                  className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium cursor-pointer"
+                  confirmClassName="px-3.5 py-1.5 bg-red-700 text-white rounded-sm text-xs font-medium cursor-pointer animate-pulse"
+                />
               </div>
             </div>
 
