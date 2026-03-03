@@ -1,12 +1,13 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
-import { usePolling } from '../hooks/use-polling';
 import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
 import { formatDuration, shortenPath, timeAgo } from '../lib/format-utils';
+import { queryKeys, sessionsQuery } from '../lib/queries';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -45,10 +46,8 @@ function matchesSearchQuery(session: Session, query: string): boolean {
 
 export function SessionsPage(): React.JSX.Element {
   const toast = useToast();
-  const sessions = usePolling<Session[]>({
-    fetcher: api.listSessions,
-    intervalMs: 5_000,
-  });
+  const queryClient = useQueryClient();
+  const sessions = useQuery(sessionsQuery());
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -127,13 +126,13 @@ export function SessionsPage(): React.JSX.Element {
       toast.success(`Session created: ${result.sessionId.slice(0, 16)}...`);
       resetForm();
       setShowCreateForm(false);
-      sessions.refresh();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setFormSubmitting(false);
     }
-  }, [formMachineId, formProjectPath, formPrompt, formModel, resetForm, sessions, toast]);
+  }, [formMachineId, formProjectPath, formPrompt, formModel, resetForm, queryClient, toast]);
 
   const sessionList = sessions.data ?? [];
 
@@ -229,24 +228,24 @@ export function SessionsPage(): React.JSX.Element {
         await api.resumeSession(selected.id, prompt.trim());
       }
       setPrompt('');
-      sessions.refresh();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setSending(false);
     }
-  }, [selected, prompt, sessions, toast]);
+  }, [selected, prompt, queryClient, toast]);
 
   const handleStop = useCallback(async () => {
     if (!selected) return;
     try {
       await api.deleteSession(selected.id);
       toast.success('Session ended');
-      sessions.refresh();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [selected, sessions, toast]);
+  }, [selected, queryClient, toast]);
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -303,7 +302,7 @@ export function SessionsPage(): React.JSX.Element {
             </button>
             <button
               type="button"
-              onClick={sessions.refresh}
+              onClick={() => void sessions.refetch()}
               style={{
                 padding: '4px 10px',
                 backgroundColor: 'var(--bg-tertiary)',

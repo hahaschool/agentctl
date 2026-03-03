@@ -1,48 +1,24 @@
 import type React from 'react';
 
+import { useQuery } from '@tanstack/react-query';
+
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
-import { usePolling } from '../hooks/use-polling';
 import type { WsConnectionStatus } from '../hooks/use-websocket';
 import { useWebSocket } from '../hooks/use-websocket';
-import type { Agent, DiscoveredSession, HealthResponse, Machine } from '../lib/api';
-import { api } from '../lib/api';
 import { timeAgo, truncate } from '../lib/format-utils';
+import { agentsQuery, discoverQuery, healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
 export function DashboardPage(): React.JSX.Element {
-  const health = usePolling<HealthResponse>({
-    fetcher: api.health,
-    intervalMs: 15_000,
-  });
-
-  const metrics = usePolling<Record<string, string | number>>({
-    fetcher: api.metrics,
-    intervalMs: 15_000,
-  });
-
-  const machines = usePolling<Machine[]>({
-    fetcher: api.listMachines,
-    intervalMs: 15_000,
-  });
-
-  const agents = usePolling<Agent[]>({
-    fetcher: api.listAgents,
-    intervalMs: 15_000,
-  });
-
-  const discovered = usePolling<{
-    sessions: DiscoveredSession[];
-    count: number;
-    machinesQueried: number;
-    machinesFailed: number;
-  }>({
-    fetcher: api.discoverSessions,
-    intervalMs: 15_000,
-  });
+  const health = useQuery(healthQuery());
+  const metrics = useQuery(metricsQuery());
+  const machines = useQuery(machinesQuery());
+  const agents = useQuery(agentsQuery());
+  const discovered = useQuery(discoverQuery());
 
   const { status: wsStatus } = useWebSocket();
 
@@ -57,11 +33,11 @@ export function DashboardPage(): React.JSX.Element {
   const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
 
   const refreshAll = (): void => {
-    health.refresh();
-    metrics.refresh();
-    machines.refresh();
-    agents.refresh();
-    discovered.refresh();
+    void health.refetch();
+    void metrics.refetch();
+    void machines.refetch();
+    void agents.refetch();
+    void discovered.refetch();
   };
 
   const anyError =
@@ -175,7 +151,7 @@ export function DashboardPage(): React.JSX.Element {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <ActionButton label="Discover Sessions" onClick={() => discovered.refresh()} />
+          <ActionButton label="Discover Sessions" onClick={() => void discovered.refetch()} />
           <ActionButton label="Refresh All" onClick={refreshAll} />
         </div>
       </div>

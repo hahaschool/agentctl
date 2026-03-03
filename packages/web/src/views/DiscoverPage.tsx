@@ -1,13 +1,15 @@
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
 import { CopyableText } from '../components/CopyableText';
 import { SessionPreview } from '../components/SessionPreview';
 import { useToast } from '../components/Toast';
-import { usePolling } from '../hooks/use-polling';
 import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
 import { recencyColor, shortenPath, timeAgo } from '../lib/format-utils';
+import { discoverQuery, queryKeys } from '../lib/queries';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
 type SortOption = 'recent' | 'messages' | 'project';
@@ -37,15 +39,10 @@ const SORT_OPTIONS: { label: string; value: SortOption }[] = [
 
 export function DiscoverPage(): React.JSX.Element {
   const toast = useToast();
-  const discovered = usePolling<{
-    sessions: DiscoveredSession[];
-    count: number;
-    machinesQueried: number;
-    machinesFailed: number;
-  }>({
-    fetcher: api.discoverSessions,
-    intervalMs: 30_000,
-  });
+  const queryClient = useQueryClient();
+  const query = useQuery(discoverQuery());
+  const { data, error, refetch } = query;
+  const isLoading = query.isLoading;
 
   const [resuming, setResuming] = useState<string | null>(null);
   const [resumePrompt, setResumePrompt] = useState('');
@@ -64,7 +61,6 @@ export function DiscoverPage(): React.JSX.Element {
   const [groupMode, setGroupMode] = useState<GroupMode>('project');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  const data = discovered.data;
   const allSessions = data?.sessions ?? [];
 
   // Filtered sessions
@@ -208,13 +204,14 @@ export function DiscoverPage(): React.JSX.Element {
       setNewProjectPath('');
       setNewPrompt('');
       setShowNewSession(false);
-      discovered.refresh();
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setNewSessionCreating(false);
     }
-  }, [newProjectPath, newPrompt, allSessions, discovered, toast]);
+  }, [newProjectPath, newPrompt, allSessions, queryClient, toast]);
 
   const handleResume = useCallback(
     async (session: DiscoveredSession) => {
@@ -231,13 +228,14 @@ export function DiscoverPage(): React.JSX.Element {
         toast.success(`Session resumed on ${session.hostname}`);
         setResumePrompt('');
         setResuming(null);
-        discovered.refresh();
+        void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));
         setResuming(null);
       }
     },
-    [resumePrompt, discovered, toast],
+    [resumePrompt, queryClient, toast],
   );
 
   return (
@@ -291,7 +289,7 @@ export function DiscoverPage(): React.JSX.Element {
           </button>
           <button
             type="button"
-            onClick={discovered.refresh}
+            onClick={() => void refetch()}
             style={{
               padding: '6px 14px',
               backgroundColor: 'var(--bg-tertiary)',
@@ -410,7 +408,7 @@ export function DiscoverPage(): React.JSX.Element {
       )}
 
       {/* Error banner */}
-      {discovered.error && (
+      {error && (
         <div
           style={{
             padding: '10px 16px',
@@ -421,7 +419,7 @@ export function DiscoverPage(): React.JSX.Element {
             fontSize: 13,
           }}
         >
-          {discovered.error.message}
+          {error.message}
         </div>
       )}
 
@@ -579,7 +577,7 @@ export function DiscoverPage(): React.JSX.Element {
             gap: 12,
           }}
         >
-          {discovered.isLoading ? (
+          {isLoading ? (
             <>
               <div style={{ fontSize: 15, fontWeight: 500 }}>Scanning machines for sessions...</div>
               {data && (

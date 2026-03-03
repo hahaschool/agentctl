@@ -4,10 +4,10 @@ import { useMemo, useState } from 'react';
 import { CopyableText } from '../components/CopyableText';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
-import { usePolling } from '../hooks/use-polling';
+import { useQuery } from '@tanstack/react-query';
 import type { Machine } from '../lib/api';
-import { api } from '../lib/api';
 import { formatDate, timeAgo } from '../lib/format-utils';
+import { machinesQuery } from '../lib/queries';
 
 type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
 
@@ -16,10 +16,7 @@ type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
 // ---------------------------------------------------------------------------
 
 export function MachinesPage(): React.JSX.Element {
-  const machines = usePolling<Machine[]>({
-    fetcher: api.listMachines,
-    intervalMs: 15_000,
-  });
+  const machines = useQuery(machinesQuery());
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MachineStatusFilter>('all');
@@ -88,7 +85,7 @@ export function MachinesPage(): React.JSX.Element {
         </div>
         <button
           type="button"
-          onClick={machines.refresh}
+          onClick={() => machines.refetch()}
           style={{
             padding: '6px 14px',
             backgroundColor: 'var(--bg-tertiary)',

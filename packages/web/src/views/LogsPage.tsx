@@ -1,32 +1,14 @@
+import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { StatusBadge } from '../components/StatusBadge';
-import { usePolling } from '../hooks/use-polling';
-import type { HealthResponse, Machine } from '../lib/api';
-import { api } from '../lib/api';
-
-type MetricsData = Record<string, string | number>;
+import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
 export function LogsPage(): React.JSX.Element {
-  const healthFetcher = useCallback(() => api.health(), []);
-  const metricsFetcher = useCallback(() => api.metrics(), []);
-  const machinesFetcher = useCallback(() => api.listMachines(), []);
-
-  const health = usePolling<HealthResponse>({
-    fetcher: healthFetcher,
-    intervalMs: 10_000,
-  });
-
-  const metrics = usePolling<MetricsData>({
-    fetcher: metricsFetcher,
-    intervalMs: 10_000,
-  });
-
-  const machines = usePolling<Machine[]>({
-    fetcher: machinesFetcher,
-    intervalMs: 10_000,
-  });
+  const health = useQuery(healthQuery());
+  const metrics = useQuery(metricsQuery());
+  const machines = useQuery(machinesQuery());
 
   const deps = health.data?.dependencies;
   const machineList = machines.data ?? [];
@@ -62,9 +44,9 @@ export function LogsPage(): React.JSX.Element {
         <button
           type="button"
           onClick={() => {
-            health.refresh();
-            metrics.refresh();
-            machines.refresh();
+            health.refetch();
+            metrics.refetch();
+            machines.refetch();
           }}
           style={{
             padding: '6px 14px',
