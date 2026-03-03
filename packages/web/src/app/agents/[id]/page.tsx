@@ -266,15 +266,15 @@ export default function AgentDetailPage(): React.JSX.Element {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" aria-label="Recent agent runs">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th className="pb-2 pr-4 font-medium">Status</th>
-                    <th className="pb-2 pr-4 font-medium">Prompt</th>
-                    <th className="pb-2 pr-4 font-medium">Duration</th>
-                    <th className="pb-2 pr-4 font-medium">Cost</th>
-                    <th className="pb-2 pr-4 font-medium">Started</th>
-                    <th className="pb-2 font-medium">Ended</th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">Status</th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">Prompt</th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">Duration</th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">Cost</th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">Started</th>
+                    <th scope="col" className="pb-2 font-medium">Ended</th>
                   </tr>
                 </thead>
                 <tbody>

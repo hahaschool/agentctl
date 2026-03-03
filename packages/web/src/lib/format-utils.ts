@@ -26,6 +26,26 @@ export function formatDate(dateStr: string): string {
   });
 }
 
+/** Format a date string as "Mar 3, 2026, 2:15 PM". */
+export function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/** Format a time string as "2:15:30 PM". */
+export function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 /** Duration between two timestamps, e.g. "2h 15m" or "45s". */
 export function formatDuration(startStr: string, endStr?: string | null): string {
   const start = new Date(startStr).getTime();

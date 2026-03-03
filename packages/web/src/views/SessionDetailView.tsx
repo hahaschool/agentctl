@@ -14,7 +14,7 @@ import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import type { Session, SessionContentMessage } from '../lib/api';
-import { formatDuration, formatNumber, shortenPath } from '../lib/format-utils';
+import { formatDuration, formatNumber, formatTime, shortenPath } from '../lib/format-utils';
 import {
   queryKeys,
   sessionContentQuery,
@@ -326,7 +326,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
         <div className="flex gap-2 items-center">
           {message.timestamp && (
             <span className="text-[10px] text-muted-foreground">
-              {new Date(message.timestamp).toLocaleTimeString()}
+              {formatTime(message.timestamp)}
             </span>
           )}
           {isTool && (

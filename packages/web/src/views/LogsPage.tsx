@@ -11,7 +11,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatusBadge } from '../components/StatusBadge';
-import { formatNumber } from '../lib/format-utils';
+import { formatDateTime, formatNumber } from '../lib/format-utils';
 import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
 export function LogsPage(): React.JSX.Element {
@@ -106,7 +106,7 @@ export function LogsPage(): React.JSX.Element {
           </div>
           <div className="text-xs text-muted-foreground font-mono mt-0.5">
             {health.data?.timestamp
-              ? `Last checked: ${new Date(health.data.timestamp).toLocaleString()}`
+              ? `Last checked: ${formatDateTime(health.data.timestamp)}`
               : 'Polling every 10s'}
           </div>
         </div>
@@ -170,6 +170,8 @@ export function LogsPage(): React.JSX.Element {
           <button
             type="button"
             onClick={() => setRawMetricsOpen(!rawMetricsOpen)}
+            aria-expanded={rawMetricsOpen}
+            aria-label="Toggle raw metrics"
             className="flex items-center gap-2 mb-2.5 bg-transparent border-none p-0 cursor-pointer text-left"
           >
             <span
@@ -218,15 +220,15 @@ export function LogsPage(): React.JSX.Element {
         <div className="py-12 text-center text-muted-foreground">No workers registered</div>
       ) : (
         <div className="border border-border rounded overflow-x-auto">
-          <table className="w-full border-collapse text-[13px]">
+          <table className="w-full border-collapse text-[13px]" aria-label="Worker machines">
             <thead>
               <tr className="bg-muted text-left">
-                <th className={TH_CLASSES}>Hostname</th>
-                <th className={TH_CLASSES}>Status</th>
-                <th className={cn(TH_CLASSES, 'hidden sm:table-cell')}>Tailscale IP</th>
-                <th className={cn(TH_CLASSES, 'hidden md:table-cell')}>OS / Arch</th>
-                <th className={cn(TH_CLASSES, 'hidden md:table-cell')}>Max Agents</th>
-                <th className={TH_CLASSES}>Last Heartbeat</th>
+                <th scope="col" className={TH_CLASSES}>Hostname</th>
+                <th scope="col" className={TH_CLASSES}>Status</th>
+                <th scope="col" className={cn(TH_CLASSES, 'hidden sm:table-cell')}>Tailscale IP</th>
+                <th scope="col" className={cn(TH_CLASSES, 'hidden md:table-cell')}>OS / Arch</th>
+                <th scope="col" className={cn(TH_CLASSES, 'hidden md:table-cell')}>Max Agents</th>
+                <th scope="col" className={TH_CLASSES}>Last Heartbeat</th>
               </tr>
             </thead>
             <tbody>

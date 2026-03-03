@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { timeAgo } from '../lib/format-utils';
+import { formatDateTime, timeAgo } from '../lib/format-utils';
 
 type Props = {
   /** ISO date string or any string parseable by Date constructor */
@@ -36,7 +36,7 @@ export function LiveTimeAgo({
   }
 
   return (
-    <span className={className} title={new Date(date).toLocaleString()}>
+    <span className={className} title={formatDateTime(date)}>
       {timeAgo(date)}
     </span>
   );

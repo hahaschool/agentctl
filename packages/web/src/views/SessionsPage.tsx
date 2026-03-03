@@ -13,7 +13,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
-import { formatDuration, shortenPath } from '../lib/format-utils';
+import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
 import { queryKeys, sessionsQuery } from '../lib/queries';
 
 const MODEL_OPTIONS = [
@@ -528,6 +528,7 @@ export function SessionsPage(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => toggleGroupCollapsed(groupKey)}
+                  aria-expanded={!collapsedGroups.has(groupKey)}
                   className="flex items-center gap-1.5 w-full px-3 py-2 bg-card border-b border-border text-[11px] font-semibold text-muted-foreground cursor-pointer text-left"
                 >
                   <span
@@ -627,9 +628,9 @@ export function SessionsPage(): React.JSX.Element {
                 <DetailRow label="Project" value={selected.projectPath ?? '-'} mono />
                 <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
                 <DetailRow label="PID" value={selected.pid ? String(selected.pid) : '-'} mono />
-                <DetailRow label="Started" value={new Date(selected.startedAt).toLocaleString()} />
+                <DetailRow label="Started" value={formatDateTime(selected.startedAt)} />
                 {selected.endedAt && (
-                  <DetailRow label="Ended" value={new Date(selected.endedAt).toLocaleString()} />
+                  <DetailRow label="Ended" value={formatDateTime(selected.endedAt)} />
                 )}
                 <DetailRow
                   label="Duration"
@@ -985,7 +986,7 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
         )}
         {message.timestamp && (
           <span className="text-[9px] text-muted-foreground ml-auto">
-            {new Date(message.timestamp).toLocaleTimeString()}
+            {formatTime(message.timestamp)}
           </span>
         )}
       </div>

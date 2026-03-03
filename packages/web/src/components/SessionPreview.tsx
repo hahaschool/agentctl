@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { ErrorBanner } from '../components/ErrorBanner';
 import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
-import { formatNumber } from '../lib/format-utils';
+import { formatNumber, formatTime } from '../lib/format-utils';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -244,7 +244,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
         <div className="flex gap-2 items-center">
           {message.timestamp && (
             <span className="text-[10px] text-muted-foreground">
-              {new Date(message.timestamp).toLocaleTimeString()}
+              {formatTime(message.timestamp)}
             </span>
           )}
           {isTool && (

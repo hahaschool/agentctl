@@ -515,6 +515,7 @@ export function DiscoverPage(): React.JSX.Element {
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.projectPath)}
+                    aria-expanded={!isCollapsed}
                     className={cn(
                       'w-full flex items-center gap-3 px-4 py-2.5 bg-card border-none cursor-pointer text-left text-foreground',
                       !isCollapsed && 'border-b border-border',
