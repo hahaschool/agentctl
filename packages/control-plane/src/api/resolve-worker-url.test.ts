@@ -11,9 +11,7 @@ function mockRegistry(machines: Record<string, { hostname: string; tailscaleIp?:
   return {
     getMachine: vi.fn(async (id: string) => machines[id] ?? null),
     registerMachine: vi.fn(),
-    listMachines: vi.fn(async () =>
-      Object.entries(machines).map(([id, m]) => ({ id, ...m })),
-    ),
+    listMachines: vi.fn(async () => Object.entries(machines).map(([id, m]) => ({ id, ...m }))),
   };
 }
 
@@ -38,9 +36,13 @@ const WORKER_PORT = 9000;
 
 describe('resolveWorkerUrl', () => {
   it('returns explicit workerUrl when provided', async () => {
-    const result = await resolveWorkerUrl('agent-1', { workerUrl: 'http://custom:8080' }, {
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'agent-1',
+      { workerUrl: 'http://custom:8080' },
+      {
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({ ok: true, url: 'http://custom:8080' });
   });
@@ -50,10 +52,14 @@ describe('resolveWorkerUrl', () => {
       'machine-1': { hostname: 'mac-mini', tailscaleIp: '100.64.0.1' },
     });
 
-    const result = await resolveWorkerUrl('agent-1', { machineId: 'machine-1' }, {
-      registry,
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'agent-1',
+      { machineId: 'machine-1' },
+      {
+        registry,
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({ ok: true, url: 'http://100.64.0.1:9000' });
     expect(registry.getMachine).toHaveBeenCalledWith('machine-1');
@@ -64,10 +70,14 @@ describe('resolveWorkerUrl', () => {
       'machine-1': { hostname: 'mac-mini' },
     });
 
-    const result = await resolveWorkerUrl('agent-1', { machineId: 'machine-1' }, {
-      registry,
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'agent-1',
+      { machineId: 'machine-1' },
+      {
+        registry,
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({ ok: true, url: 'http://mac-mini:9000' });
   });
@@ -75,10 +85,14 @@ describe('resolveWorkerUrl', () => {
   it('returns MACHINE_NOT_FOUND when machineId is unknown', async () => {
     const registry = mockRegistry({});
 
-    const result = await resolveWorkerUrl('agent-1', { machineId: 'unknown' }, {
-      registry,
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'agent-1',
+      { machineId: 'unknown' },
+      {
+        registry,
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -101,10 +115,14 @@ describe('resolveWorkerUrl', () => {
       },
     );
 
-    const result = await resolveWorkerUrl('agent-1', {}, {
-      dbRegistry: dbRegistry as never,
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'agent-1',
+      {},
+      {
+        dbRegistry: dbRegistry as never,
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({ ok: true, url: 'http://100.64.0.5:9000' });
   });
@@ -112,10 +130,14 @@ describe('resolveWorkerUrl', () => {
   it('returns AGENT_NOT_FOUND when agent is unknown', async () => {
     const dbRegistry = mockDbRegistry({}, {});
 
-    const result = await resolveWorkerUrl('unknown-agent', {}, {
-      dbRegistry: dbRegistry as never,
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'unknown-agent',
+      {},
+      {
+        dbRegistry: dbRegistry as never,
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -138,10 +160,14 @@ describe('resolveWorkerUrl', () => {
       },
     );
 
-    const result = await resolveWorkerUrl('agent-1', {}, {
-      dbRegistry: dbRegistry as never,
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'agent-1',
+      {},
+      {
+        dbRegistry: dbRegistry as never,
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -152,9 +178,13 @@ describe('resolveWorkerUrl', () => {
   });
 
   it('returns REGISTRY_UNAVAILABLE when no registry and no machineId', async () => {
-    const result = await resolveWorkerUrl('agent-1', {}, {
-      workerPort: WORKER_PORT,
-    });
+    const result = await resolveWorkerUrl(
+      'agent-1',
+      {},
+      {
+        workerPort: WORKER_PORT,
+      },
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -212,17 +242,21 @@ describe('resolveWorkerUrl', () => {
 
 describe('resolveWorkerUrlOrThrow', () => {
   it('returns the URL on success', async () => {
-    const url = await resolveWorkerUrlOrThrow('agent-1', { workerUrl: 'http://x:1' }, {
-      workerPort: 9000,
-    });
+    const url = await resolveWorkerUrlOrThrow(
+      'agent-1',
+      { workerUrl: 'http://x:1' },
+      {
+        workerPort: 9000,
+      },
+    );
 
     expect(url).toBe('http://x:1');
   });
 
   it('throws ControlPlaneError on failure', async () => {
-    await expect(
-      resolveWorkerUrlOrThrow('agent-1', {}, { workerPort: 9000 }),
-    ).rejects.toThrow(ControlPlaneError);
+    await expect(resolveWorkerUrlOrThrow('agent-1', {}, { workerPort: 9000 })).rejects.toThrow(
+      ControlPlaneError,
+    );
   });
 
   it('includes agentId in the thrown error context', async () => {

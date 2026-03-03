@@ -115,10 +115,7 @@ describe('ControlPlaneError', () => {
   });
 
   it('stores code and message', () => {
-    const error = new ControlPlaneError(
-      'DB_CONNECTION_FAILED',
-      'Cannot connect to PostgreSQL',
-    );
+    const error = new ControlPlaneError('DB_CONNECTION_FAILED', 'Cannot connect to PostgreSQL');
     expect(error.code).toBe('DB_CONNECTION_FAILED');
     expect(error.message).toBe('Cannot connect to PostgreSQL');
   });
