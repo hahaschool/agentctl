@@ -252,6 +252,30 @@ export function SessionsPage(): React.JSX.Element {
     }
   }, [selected, queryClient, toast]);
 
+  // Keyboard navigation: arrow up/down to move through sessions, Escape to deselect
+  const handleListKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedId(null);
+        return;
+      }
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      const list = filteredSessions;
+      if (list.length === 0) return;
+      const idx = selectedId ? list.findIndex((s) => s.id === selectedId) : -1;
+      let next: number;
+      if (e.key === 'ArrowDown') {
+        next = idx < list.length - 1 ? idx + 1 : 0;
+      } else {
+        next = idx > 0 ? idx - 1 : list.length - 1;
+      }
+      const nextSession = list[next];
+      if (nextSession) setSelectedId(nextSession.id);
+    },
+    [filteredSessions, selectedId],
+  );
+
   const isFormDisabled =
     formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim();
 
@@ -479,7 +503,13 @@ export function SessionsPage(): React.JSX.Element {
           </div>
         )}
 
-        <div className="flex-1 overflow-auto">
+        <div
+          className="flex-1 overflow-auto"
+          role="listbox"
+          tabIndex={0}
+          onKeyDown={handleListKeyDown}
+          aria-label="Session list"
+        >
           {sessions.isLoading ? (
             <div className="p-3 space-y-1">
               {Array.from({ length: 6 }, (_, i) => (
@@ -709,6 +739,8 @@ function SessionListItem({
   return (
     <button
       type="button"
+      role="option"
+      aria-selected={isSelected}
       onClick={() => onSelect(s.id)}
       className={cn(
         'block w-full text-left px-4 py-3 border-b border-border transition-colors duration-100',
