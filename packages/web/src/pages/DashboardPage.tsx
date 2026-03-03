@@ -151,12 +151,13 @@ export function DashboardPage(): React.JSX.Element {
         style={{
           padding: '16px 20px',
           backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
+          border: `1px solid ${healthStatus === 'ok' ? 'var(--green-subtle)' : 'var(--border)'}`,
           borderRadius: 'var(--radius)',
           marginBottom: 20,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          boxShadow: healthStatus === 'ok' ? '0 0 20px rgba(34, 197, 94, 0.04)' : 'none',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -425,6 +426,46 @@ export function DashboardPage(): React.JSX.Element {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Quick Stats Summary */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 16,
+          marginTop: 4,
+          padding: '10px 16px',
+          backgroundColor: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          marginBottom: 20,
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          alignItems: 'center',
+        }}
+      >
+        <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Platform</span>
+        <span>
+          Uptime:{' '}
+          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {metricsData.agentctl_control_plane_up === 1 ? 'Healthy' : 'Down'}
+          </span>
+        </span>
+        <span>
+          Total Cost:{' '}
+          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            $
+            {typeof metricsData.agentctl_total_cost_usd === 'number'
+              ? metricsData.agentctl_total_cost_usd.toFixed(2)
+              : '0.00'}
+          </span>
+        </span>
+        <span>
+          Total Runs:{' '}
+          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {totalRuns}
+          </span>
+        </span>
       </div>
 
       {/* Dependencies */}

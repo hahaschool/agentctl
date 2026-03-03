@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
@@ -13,6 +13,83 @@ const MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
 ];
 
+type StatusFilter = 'all' | 'active' | 'completed' | 'ended';
+
+const STATUS_TABS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'ended', label: 'Ended' },
+];
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+
+  if (diffMs < 0) return 'just now';
+
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
+function shortenProjectPath(path: string | null): string | null {
+  if (!path) return null;
+  const homePrefixes = ['/Users/', '/home/', '/root'];
+  let shortened = path;
+
+  for (const prefix of homePrefixes) {
+    if (shortened.startsWith(prefix)) {
+      if (prefix === '/root') {
+        shortened = `~${shortened.slice('/root'.length)}`;
+      } else {
+        const afterPrefix = shortened.slice(prefix.length);
+        const slashIdx = afterPrefix.indexOf('/');
+        if (slashIdx >= 0) {
+          shortened = `~${afterPrefix.slice(slashIdx)}`;
+        } else {
+          shortened = '~';
+        }
+      }
+      break;
+    }
+  }
+
+  const segments = shortened.split('/').filter(Boolean);
+  if (segments.length <= 2) return shortened;
+
+  const startsWithTilde = shortened.startsWith('~');
+  const lastTwo = segments.slice(-2).join('/');
+  return startsWithTilde ? `~/${lastTwo}` : lastTwo;
+}
+
+function matchesStatusFilter(status: string, filter: StatusFilter): boolean {
+  if (filter === 'all') return true;
+  return status === filter;
+}
+
+function matchesSearchQuery(session: Session, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  if (session.id.toLowerCase().includes(q)) return true;
+  if (session.agentId.toLowerCase().includes(q)) return true;
+  if (session.projectPath?.toLowerCase().includes(q)) return true;
+  if (session.machineId.toLowerCase().includes(q)) return true;
+  return false;
+}
+
 export function SessionsPage(): React.JSX.Element {
   const sessions = usePolling<Session[]>({
     fetcher: api.listSessions,
@@ -23,6 +100,8 @@ export function SessionsPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // --- New Session form state ---
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -103,6 +182,28 @@ export function SessionsPage(): React.JSX.Element {
   }, [formMachineId, formProjectPath, formPrompt, formModel, resetForm, sessions]);
 
   const sessionList = sessions.data ?? [];
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<StatusFilter, number> = {
+      all: sessionList.length,
+      active: 0,
+      completed: 0,
+      ended: 0,
+    };
+    for (const s of sessionList) {
+      if (s.status === 'active') counts.active++;
+      else if (s.status === 'completed') counts.completed++;
+      else if (s.status === 'ended') counts.ended++;
+    }
+    return counts;
+  }, [sessionList]);
+
+  const filteredSessions = useMemo(() => {
+    return sessionList.filter(
+      (s) => matchesStatusFilter(s.status, statusFilter) && matchesSearchQuery(s, searchQuery),
+    );
+  }, [sessionList, statusFilter, searchQuery]);
+
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
   const handleSend = useCallback(async () => {
@@ -156,7 +257,19 @@ export function SessionsPage(): React.JSX.Element {
             alignItems: 'center',
           }}
         >
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Sessions</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600 }}>
+            Sessions
+            <span
+              style={{
+                marginLeft: 8,
+                fontSize: 12,
+                fontWeight: 400,
+                color: 'var(--text-muted)',
+              }}
+            >
+              ({filteredSessions.length})
+            </span>
+          </h2>
           <div style={{ display: 'flex', gap: 6 }}>
             <button
               type="button"
@@ -192,6 +305,87 @@ export function SessionsPage(): React.JSX.Element {
               Refresh
             </button>
           </div>
+        </div>
+
+        {/* Search / filter input */}
+        <div
+          style={{
+            padding: '8px 16px',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          <label
+            htmlFor="session-search"
+            style={{
+              position: 'absolute',
+              width: 1,
+              height: 1,
+              overflow: 'hidden',
+              clip: 'rect(0,0,0,0)',
+            }}
+          >
+            Search sessions
+          </label>
+          <input
+            id="session-search"
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filter by ID, project, agent..."
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 12,
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* Status filter tabs */}
+        <div
+          style={{
+            display: 'flex',
+            borderBottom: '1px solid var(--border)',
+            padding: '0 8px',
+          }}
+        >
+          {STATUS_TABS.map((tab) => (
+            <button
+              type="button"
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              style={{
+                flex: 1,
+                padding: '8px 4px',
+                fontSize: 11,
+                fontWeight: statusFilter === tab.key ? 600 : 400,
+                color: statusFilter === tab.key ? 'var(--accent)' : 'var(--text-muted)',
+                backgroundColor: 'transparent',
+                border: 'none',
+                borderBottom:
+                  statusFilter === tab.key ? '2px solid var(--accent)' : '2px solid transparent',
+                cursor: 'pointer',
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+            >
+              {tab.label}
+              <span
+                style={{
+                  marginLeft: 4,
+                  fontSize: 10,
+                  color: statusFilter === tab.key ? 'var(--accent)' : 'var(--text-muted)',
+                  opacity: 0.7,
+                }}
+              >
+                {statusCounts[tab.key]}
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Inline "New Session" creation form */}
@@ -410,7 +604,7 @@ export function SessionsPage(): React.JSX.Element {
         )}
 
         <div style={{ flex: 1, overflow: 'auto' }}>
-          {sessionList.length === 0 ? (
+          {filteredSessions.length === 0 ? (
             <div
               style={{
                 padding: 32,
@@ -419,66 +613,94 @@ export function SessionsPage(): React.JSX.Element {
                 fontSize: 13,
               }}
             >
-              {sessions.isLoading ? 'Loading...' : 'No sessions found'}
+              {sessions.isLoading
+                ? 'Loading...'
+                : searchQuery || statusFilter !== 'all'
+                  ? 'No matching sessions'
+                  : 'No sessions found'}
             </div>
           ) : (
-            sessionList.map((s) => (
-              <button
-                type="button"
-                key={s.id}
-                onClick={() => setSelectedId(s.id)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '12px 16px',
-                  backgroundColor: selectedId === s.id ? 'var(--bg-hover)' : 'transparent',
-                  borderBottom: '1px solid var(--border)',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedId !== s.id)
-                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedId !== s.id) e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                <div
+            filteredSessions.map((s) => {
+              const shortPath = shortenProjectPath(s.projectPath);
+              return (
+                <button
+                  type="button"
+                  key={s.id}
+                  onClick={() => setSelectedId(s.id)}
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 4,
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    backgroundColor: selectedId === s.id ? 'var(--bg-hover)' : 'transparent',
+                    borderBottom: '1px solid var(--border)',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedId !== s.id)
+                      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedId !== s.id) e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <span
+                  <div
                     style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 12,
-                      fontWeight: 500,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 4,
                     }}
                   >
-                    {s.id.slice(0, 16)}...
-                  </span>
-                  <StatusBadge status={s.status} />
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--text-muted)',
-                    display: 'flex',
-                    gap: 8,
-                  }}
-                >
-                  <span>{s.agentId}</span>
-                  <span>{s.machineId}</span>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {new Date(s.startedAt).toLocaleString()}
-                </div>
-              </button>
-            ))
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {s.id.slice(0, 16)}...
+                    </span>
+                    <StatusBadge status={s.status} />
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-muted)',
+                      display: 'flex',
+                      gap: 8,
+                    }}
+                  >
+                    <span>{s.agentId}</span>
+                    <span>{s.machineId}</span>
+                  </div>
+                  {shortPath && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-secondary)',
+                        fontFamily: 'var(--font-mono)',
+                        marginTop: 2,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {shortPath}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      marginTop: 2,
+                    }}
+                  >
+                    {formatRelativeTime(s.startedAt)}
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
       </div>
@@ -498,7 +720,13 @@ export function SessionsPage(): React.JSX.Element {
               }}
             >
               <div>
-                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 600,
+                    marginBottom: 4,
+                  }}
+                >
                   Session: {selected.id.slice(0, 20)}...
                 </div>
                 <div
