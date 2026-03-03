@@ -7,6 +7,14 @@ export {
 } from './loop-checkpoint.js';
 export { OutputBuffer } from './output-buffer.js';
 export {
+  type RcSession,
+  type RcSessionEvent,
+  RcSessionManager,
+  type RcSessionManagerOptions,
+  type RcSessionStatus,
+  type StartSessionOptions,
+} from './rc-session-manager.js';
+export {
   runWithSdk,
   type SdkRunnerHooks,
   type SdkRunnerOptions,
