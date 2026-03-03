@@ -1,14 +1,14 @@
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
-import { CopyableText } from '../components/CopyableText.tsx';
-import { StatCard } from '../components/StatCard.tsx';
-import { StatusBadge } from '../components/StatusBadge.tsx';
-import { useToast } from '../components/Toast.tsx';
-import { usePolling } from '../hooks/use-polling.ts';
-import type { Agent, Machine } from '../lib/api.ts';
-import { api } from '../lib/api.ts';
-import { formatCost, timeAgo } from '../lib/format-utils.ts';
+import { CopyableText } from '../components/CopyableText';
+import { StatCard } from '../components/StatCard';
+import { StatusBadge } from '../components/StatusBadge';
+import { useToast } from '../components/Toast';
+import { usePolling } from '../hooks/use-polling';
+import type { Agent, Machine } from '../lib/api';
+import { api } from '../lib/api';
+import { formatCost, timeAgo } from '../lib/format-utils';
 
 const AGENT_TYPES = ['autonomous', 'adhoc', 'scheduled'] as const;
 

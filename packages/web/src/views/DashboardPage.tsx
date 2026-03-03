@@ -1,13 +1,13 @@
 import type React from 'react';
 
-import { StatCard } from '../components/StatCard.tsx';
-import { StatusBadge } from '../components/StatusBadge.tsx';
-import { usePolling } from '../hooks/use-polling.ts';
-import type { WsConnectionStatus } from '../hooks/use-websocket.ts';
-import { useWebSocket } from '../hooks/use-websocket.ts';
-import type { Agent, DiscoveredSession, HealthResponse, Machine } from '../lib/api.ts';
-import { api } from '../lib/api.ts';
-import { timeAgo, truncate } from '../lib/format-utils.ts';
+import { StatCard } from '../components/StatCard';
+import { StatusBadge } from '../components/StatusBadge';
+import { usePolling } from '../hooks/use-polling';
+import type { WsConnectionStatus } from '../hooks/use-websocket';
+import { useWebSocket } from '../hooks/use-websocket';
+import type { Agent, DiscoveredSession, HealthResponse, Machine } from '../lib/api';
+import { api } from '../lib/api';
+import { timeAgo, truncate } from '../lib/format-utils';
 
 // ---------------------------------------------------------------------------
 // Main component

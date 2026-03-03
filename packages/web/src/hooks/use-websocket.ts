@@ -106,9 +106,9 @@ const RECONNECT_JITTER = 0.3;
 function resolveWsUrl(override?: string): string {
   if (override) return override;
 
-  // In development, Vite proxies HTTP but not WebSocket, so connect directly
-  // to the control plane backend.
-  if (import.meta.env.DEV) {
+  // In development, Next.js rewrites HTTP but not WebSocket, so connect
+  // directly to the control plane backend.
+  if (process.env.NODE_ENV === 'development') {
     return 'ws://localhost:8080/api/ws';
   }
 

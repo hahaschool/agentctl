@@ -1,8 +1,8 @@
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { SessionContentMessage, SessionContentResponse } from '../lib/api.ts';
-import { api } from '../lib/api.ts';
+import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
+import { api } from '../lib/api';
 
 // ---------------------------------------------------------------------------
 // Types

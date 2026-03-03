@@ -1,13 +1,13 @@
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
-import { CopyableText } from '../components/CopyableText.tsx';
-import { SessionPreview } from '../components/SessionPreview.tsx';
-import { useToast } from '../components/Toast.tsx';
-import { usePolling } from '../hooks/use-polling.ts';
-import type { DiscoveredSession } from '../lib/api.ts';
-import { api } from '../lib/api.ts';
-import { recencyColor, shortenPath, timeAgo } from '../lib/format-utils.ts';
+import { CopyableText } from '../components/CopyableText';
+import { SessionPreview } from '../components/SessionPreview';
+import { useToast } from '../components/Toast';
+import { usePolling } from '../hooks/use-polling';
+import type { DiscoveredSession } from '../lib/api';
+import { api } from '../lib/api';
+import { recencyColor, shortenPath, timeAgo } from '../lib/format-utils';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
 type SortOption = 'recent' | 'messages' | 'project';

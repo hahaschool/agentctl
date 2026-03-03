@@ -1,10 +1,10 @@
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
 
-import { StatusBadge } from '../components/StatusBadge.tsx';
-import { usePolling } from '../hooks/use-polling.ts';
-import type { HealthResponse, Machine } from '../lib/api.ts';
-import { api } from '../lib/api.ts';
+import { StatusBadge } from '../components/StatusBadge';
+import { usePolling } from '../hooks/use-polling';
+import type { HealthResponse, Machine } from '../lib/api';
+import { api } from '../lib/api';
 
 type MetricsData = Record<string, string | number>;
 

@@ -1,45 +1,50 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import type React from 'react';
 import { useEffect } from 'react';
 
-export type Page = 'dashboard' | 'machines' | 'agents' | 'sessions' | 'discover' | 'logs';
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  shortcut: string;
+};
 
-const NAV_ITEMS: { key: Page; label: string; icon: string; shortcut: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: '\u25A0', shortcut: '1' },
-  { key: 'machines', label: 'Machines', icon: '\u2302', shortcut: '2' },
-  { key: 'agents', label: 'Agents', icon: '\u2699', shortcut: '3' },
-  { key: 'sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4' },
-  { key: 'discover', label: 'Discover', icon: '\u2315', shortcut: '5' },
-  { key: 'logs', label: 'Logs', icon: '\u2261', shortcut: '6' },
+const NAV_ITEMS: NavItem[] = [
+  { href: '/', label: 'Dashboard', icon: '\u25A0', shortcut: '1' },
+  { href: '/machines', label: 'Machines', icon: '\u2302', shortcut: '2' },
+  { href: '/agents', label: 'Agents', icon: '\u2699', shortcut: '3' },
+  { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4' },
+  { href: '/discover', label: 'Discover', icon: '\u2315', shortcut: '5' },
+  { href: '/logs', label: 'Logs', icon: '\u2261', shortcut: '6' },
 ];
 
-const PAGE_BY_KEY: Record<string, Page> = {};
+const SHORTCUT_MAP: Record<string, string> = {};
 for (const item of NAV_ITEMS) {
-  PAGE_BY_KEY[item.shortcut] = item.key;
+  SHORTCUT_MAP[item.shortcut] = item.href;
 }
 
-export function Sidebar({
-  activePage,
-  onNavigate,
-}: {
-  activePage: Page;
-  onNavigate: (page: Page) => void;
-}): React.JSX.Element {
+export function Sidebar(): React.JSX.Element {
+  const pathname = usePathname();
+
   // Keyboard shortcuts: 1-6 to navigate pages
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
-      // Don't intercept if user is typing in an input/textarea/select
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-      const page = PAGE_BY_KEY[e.key];
-      if (page) {
+      const href = SHORTCUT_MAP[e.key];
+      if (href) {
         e.preventDefault();
-        onNavigate(page);
+        window.history.pushState(null, '', href);
+        window.dispatchEvent(new PopStateEvent('popstate'));
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onNavigate]);
+  }, []);
 
   return (
     <nav
@@ -87,12 +92,11 @@ export function Sidebar({
       </div>
 
       {NAV_ITEMS.map((item) => {
-        const isActive = activePage === item.key;
+        const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
         return (
-          <button
-            type="button"
-            key={item.key}
-            onClick={() => onNavigate(item.key)}
+          <Link
+            key={item.href}
+            href={item.href}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -104,12 +108,7 @@ export function Sidebar({
               fontWeight: isActive ? 600 : 400,
               borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
               transition: 'all 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-            }}
-            onMouseLeave={(e) => {
-              if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+              textDecoration: 'none',
             }}
           >
             <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{item.icon}</span>
@@ -127,13 +126,12 @@ export function Sidebar({
             >
               {item.shortcut}
             </span>
-          </button>
+          </Link>
         );
       })}
 
       <div style={{ flex: 1 }} />
 
-      {/* Keyboard shortcuts help */}
       <div
         style={{
           padding: '8px 20px',

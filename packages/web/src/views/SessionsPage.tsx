@@ -1,17 +1,12 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { StatusBadge } from '../components/StatusBadge.tsx';
-import { useToast } from '../components/Toast.tsx';
-import { usePolling } from '../hooks/use-polling.ts';
-import type {
-  Machine,
-  Session,
-  SessionContentMessage,
-  SessionContentResponse,
-} from '../lib/api.ts';
-import { api } from '../lib/api.ts';
-import { formatDuration, shortenPath, timeAgo } from '../lib/format-utils.ts';
+import { StatusBadge } from '../components/StatusBadge';
+import { useToast } from '../components/Toast';
+import { usePolling } from '../hooks/use-polling';
+import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
+import { api } from '../lib/api';
+import { formatDuration, shortenPath, timeAgo } from '../lib/format-utils';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
