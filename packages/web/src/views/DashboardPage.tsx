@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 
 import { cn } from '@/lib/utils';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { SimpleTooltip } from '../components/SimpleTooltip';
@@ -89,11 +90,7 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Error banner */}
-      {anyError && (
-        <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg mb-4 text-[13px]">
-          {anyError.message}
-        </div>
-      )}
+      {anyError && <ErrorBanner message={anyError.message} onRetry={refreshAll} />}
 
       {/* Health status card */}
       <div

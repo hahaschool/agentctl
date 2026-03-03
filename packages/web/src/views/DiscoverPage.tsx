@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { SessionPreview } from '../components/SessionPreview';
 import { SimpleTooltip } from '../components/SimpleTooltip';
@@ -357,11 +358,7 @@ export function DiscoverPage(): React.JSX.Element {
       )}
 
       {/* Error banner */}
-      {error && (
-        <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg mb-4 text-[13px]">
-          {error.message}
-        </div>
-      )}
+      {error && <ErrorBanner message={error.message} onRetry={() => void query.refetch()} />}
 
       {/* Filter bar */}
       <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border rounded-lg mb-4">

@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { ErrorBanner } from '../components/ErrorBanner';
 
 import { LastUpdated } from '../components/LastUpdated';
 import { StatusBadge } from '../components/StatusBadge';
@@ -65,9 +66,19 @@ export function LogsPage(): React.JSX.Element {
 
       {/* Error banner */}
       {hasError && (
-        <div className="px-4 py-2.5 bg-red-950 text-red-300 rounded mb-4 text-[13px]">
-          {health.error?.message ?? metrics.error?.message ?? machines.error?.message}
-        </div>
+        <ErrorBanner
+          message={
+            health.error?.message ??
+            metrics.error?.message ??
+            machines.error?.message ??
+            'An error occurred'
+          }
+          onRetry={() => {
+            void health.refetch();
+            void metrics.refetch();
+            void machines.refetch();
+          }}
+        />
       )}
 
       {/* Control Plane Status */}
