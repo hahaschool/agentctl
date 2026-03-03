@@ -10,7 +10,7 @@ export type StatusTransition = {
 /** Map of valid transitions from each status. */
 export const VALID_TRANSITIONS: Record<AgentStatus, readonly AgentStatus[]> = {
   registered: ['starting', 'error'],
-  starting: ['running', 'error', 'timeout'],
+  starting: ['running', 'error', 'timeout', 'stopped'],
   running: ['stopping', 'error', 'timeout', 'restarting'],
   stopping: ['stopped', 'error', 'timeout'],
   stopped: ['starting', 'restarting'],

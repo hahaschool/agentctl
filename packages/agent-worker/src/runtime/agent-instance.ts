@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
 import type { AgentConfig, AgentEvent, AgentStatus } from '@agentctl/shared';
-import { AgentError } from '@agentctl/shared';
+import { AgentError, VALID_TRANSITIONS } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
 import type { AuditEntry } from '../hooks/audit-logger.js';
@@ -45,22 +45,6 @@ type AgentInstanceState = {
   prompt: string | null;
   /** Whether this run is a resumed session (vs. a fresh start). */
   isResumed: boolean;
-};
-
-/**
- * Valid status transitions for an agent instance.
- * Each key is the current status, and the value is an array of statuses
- * the agent can transition to from that state.
- */
-const VALID_TRANSITIONS: Record<AgentStatus, AgentStatus[]> = {
-  registered: ['starting'],
-  starting: ['running', 'error', 'stopped'],
-  running: ['stopping', 'error', 'timeout'],
-  stopping: ['stopped', 'error'],
-  stopped: ['starting', 'restarting'],
-  error: ['starting', 'restarting'],
-  timeout: ['starting', 'restarting'],
-  restarting: ['starting', 'error'],
 };
 
 const STUB_RUN_DURATION_MS = 5_000;

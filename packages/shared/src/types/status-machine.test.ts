@@ -60,6 +60,7 @@ describe('isValidTransition — valid transitions', () => {
     ['starting', 'running'],
     ['starting', 'error'],
     ['starting', 'timeout'],
+    ['starting', 'stopped'],
     // running ->
     ['running', 'stopping'],
     ['running', 'error'],
@@ -100,7 +101,6 @@ describe('isValidTransition — invalid transitions', () => {
     ['registered', 'restarting'],
     ['registered', 'timeout'],
     ['starting', 'stopping'],
-    ['starting', 'stopped'],
     ['starting', 'restarting'],
     ['starting', 'registered'],
     ['running', 'registered'],
@@ -157,8 +157,8 @@ describe('getValidNextStatuses', () => {
     expect(getValidNextStatuses('registered')).toEqual(['starting', 'error']);
   });
 
-  it('returns ["running", "error", "timeout"] for starting', () => {
-    expect(getValidNextStatuses('starting')).toEqual(['running', 'error', 'timeout']);
+  it('returns ["running", "error", "timeout", "stopped"] for starting', () => {
+    expect(getValidNextStatuses('starting')).toEqual(['running', 'error', 'timeout', 'stopped']);
   });
 
   it('returns ["stopping", "error", "timeout", "restarting"] for running', () => {
@@ -224,14 +224,14 @@ describe('validateTransition', () => {
 
   it('includes from, to, and validTransitions in error context', () => {
     try {
-      validateTransition('starting', 'stopped');
+      validateTransition('starting', 'stopping');
       expect.unreachable('should have thrown');
     } catch (err) {
       const agentErr = err as AgentError;
       expect(agentErr.context).toEqual({
         from: 'starting',
-        to: 'stopped',
-        validTransitions: ['running', 'error', 'timeout'],
+        to: 'stopping',
+        validTransitions: ['running', 'error', 'timeout', 'stopped'],
       });
     }
   });
