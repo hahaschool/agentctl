@@ -56,7 +56,7 @@ export function LogsPage(): React.JSX.Element {
               void metrics.refetch();
               void machines.refetch();
             }}
-            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px]"
+            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
           >
             Refresh
           </button>

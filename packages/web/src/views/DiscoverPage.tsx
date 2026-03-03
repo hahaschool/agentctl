@@ -8,11 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
+import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { SessionPreview } from '../components/SessionPreview';
+import { SimpleTooltip } from '../components/SimpleTooltip';
 import { useToast } from '../components/Toast';
 import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
-import { recencyColor, shortenPath, timeAgo } from '../lib/format-utils';
+import { recencyColor, shortenPath } from '../lib/format-utils';
 import { discoverQuery, queryKeys } from '../lib/queries';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
@@ -525,18 +527,17 @@ export function DiscoverPage(): React.JSX.Element {
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm leading-5">{group.projectName}</div>
-                      <div
-                        title={group.projectPath}
-                        className="font-mono text-[11px] text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap leading-4 cursor-default"
-                      >
-                        {groupMode === 'machine'
-                          ? `${new Set(group.sessions.map((s) => s.projectPath)).size} project(s)`
-                          : shortenPath(group.projectPath)}
-                      </div>
+                      <SimpleTooltip content={group.projectPath}>
+                        <div className="font-mono text-[11px] text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap leading-4 cursor-default">
+                          {groupMode === 'machine'
+                            ? `${new Set(group.sessions.map((s) => s.projectPath)).size} project(s)`
+                            : shortenPath(group.projectPath)}
+                        </div>
+                      </SimpleTooltip>
                     </div>
                     <div className="flex gap-2.5 items-center shrink-0">
                       <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                        last active: {timeAgo(group.latestActivity)}
+                        last active: <LiveTimeAgo date={group.latestActivity} />
                       </span>
                       <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-sm font-medium">
                         {group.sessions.length} session
@@ -579,9 +580,11 @@ export function DiscoverPage(): React.JSX.Element {
                             />
 
                             {/* Summary */}
-                            <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-                              {s.summary || 'Untitled'}
-                            </span>
+                            <SimpleTooltip content={s.summary || 'Untitled'}>
+                              <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
+                                {s.summary || 'Untitled'}
+                              </span>
+                            </SimpleTooltip>
 
                             {/* Message count */}
                             <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
@@ -602,7 +605,7 @@ export function DiscoverPage(): React.JSX.Element {
 
                             {/* Last activity */}
                             <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 min-w-[60px] text-right">
-                              {timeAgo(s.lastActivity)}
+                              <LiveTimeAgo date={s.lastActivity} />
                             </span>
 
                             {/* Session ID (copyable) */}

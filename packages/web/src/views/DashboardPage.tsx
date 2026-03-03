@@ -5,11 +5,13 @@ import type React from 'react';
 
 import { cn } from '@/lib/utils';
 import { LastUpdated } from '../components/LastUpdated';
+import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import type { WsConnectionStatus } from '../hooks/use-websocket';
 import { useWebSocket } from '../hooks/use-websocket';
-import { timeAgo, truncate } from '../lib/format-utils';
+import { truncate } from '../lib/format-utils';
 import {
   agentsQuery,
   discoverQuery,
@@ -79,7 +81,7 @@ export function DashboardPage(): React.JSX.Element {
           <button
             type="button"
             onClick={refreshAll}
-            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded text-[13px] cursor-pointer"
+            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
           >
             Refresh
           </button>
@@ -116,7 +118,7 @@ export function DashboardPage(): React.JSX.Element {
             </div>
             {health.data?.timestamp && (
               <div className="text-[11px] text-muted-foreground mt-0.5">
-                Last checked: {timeAgo(health.data.timestamp)}
+                Last checked: <LiveTimeAgo date={health.data.timestamp} />
               </div>
             )}
           </div>
@@ -177,20 +179,24 @@ export function DashboardPage(): React.JSX.Element {
                   className={cn('px-4 py-3 bg-card', idx > 0 && 'border-t border-border')}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-[13px] font-medium text-foreground">
-                      {truncate(session.summary || 'Untitled session', 50)}
-                    </span>
+                    <SimpleTooltip content={session.summary || 'Untitled session'}>
+                      <span className="text-[13px] font-medium text-foreground">
+                        {truncate(session.summary || 'Untitled session', 50)}
+                      </span>
+                    </SimpleTooltip>
                     <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
-                      {timeAgo(session.lastActivity)}
+                      <LiveTimeAgo date={session.lastActivity} />
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                     <span className="font-mono bg-muted px-1.5 py-px rounded">
                       {session.hostname}
                     </span>
-                    <span className="font-mono">
-                      {truncate(session.projectPath.split('/').pop() ?? session.projectPath, 30)}
-                    </span>
+                    <SimpleTooltip content={session.projectPath}>
+                      <span className="font-mono">
+                        {truncate(session.projectPath.split('/').pop() ?? session.projectPath, 30)}
+                      </span>
+                    </SimpleTooltip>
                     {session.branch && <span className="font-mono">{session.branch}</span>}
                     <span>{session.messageCount} msgs</span>
                   </div>
@@ -235,7 +241,7 @@ export function DashboardPage(): React.JSX.Element {
                         GPU
                       </span>
                     )}
-                    {machine.lastHeartbeat && <span>{timeAgo(machine.lastHeartbeat)}</span>}
+                    {machine.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
                   </div>
                 </div>
               ))

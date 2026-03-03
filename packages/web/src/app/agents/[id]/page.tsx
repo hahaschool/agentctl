@@ -8,12 +8,13 @@ import { useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
+import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatCost, formatDate, formatDurationMs, timeAgo } from '@/lib/format-utils';
+import { formatCost, formatDate, formatDurationMs } from '@/lib/format-utils';
 import { agentQuery, agentRunsQuery, useStartAgent, useStopAgent } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -201,7 +202,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               <span>{formatDate(data.createdAt)}</span>
             </InfoField>
             <InfoField label="Last Run">
-              <span>{data.lastRunAt ? timeAgo(data.lastRunAt) : 'Never'}</span>
+              <span>{data.lastRunAt ? <LiveTimeAgo date={data.lastRunAt} /> : 'Never'}</span>
             </InfoField>
             {data.currentSessionId && (
               <InfoField label="Current Session">
@@ -308,10 +309,10 @@ export default function AgentDetailPage(): React.JSX.Element {
                         {formatCost(run.costUsd)}
                       </td>
                       <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
-                        {timeAgo(run.startedAt)}
+                        <LiveTimeAgo date={run.startedAt} />
                       </td>
                       <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {run.endedAt ? timeAgo(run.endedAt) : 'In progress'}
+                        {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : 'In progress'}
                       </td>
                     </tr>
                   ))}

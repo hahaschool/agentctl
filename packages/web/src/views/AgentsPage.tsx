@@ -9,10 +9,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
+import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
-import { formatCost, timeAgo } from '../lib/format-utils';
+import { formatCost } from '../lib/format-utils';
 import {
   agentsQuery,
   machinesQuery,
@@ -423,7 +424,7 @@ export function AgentsPage(): React.JSX.Element {
                   </span>
                 </div>
                 <span className="text-muted-foreground text-[11px]">
-                  {agent.lastRunAt ? timeAgo(agent.lastRunAt) : 'never run'}
+                  {agent.lastRunAt ? <LiveTimeAgo date={agent.lastRunAt} /> : 'never run'}
                 </span>
               </div>
 

@@ -8,10 +8,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
+import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import type { Machine } from '../lib/api';
-import { formatDate, timeAgo } from '../lib/format-utils';
+import { formatDate } from '../lib/format-utils';
 import { machinesQuery } from '../lib/queries';
 
 type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
@@ -193,7 +194,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
         <DetailField label="OS / Architecture" value={`${m.os} / ${m.arch}`} />
         <DetailField
           label="Last Heartbeat"
-          value={m.lastHeartbeat ? timeAgo(m.lastHeartbeat) : 'Never'}
+          value={m.lastHeartbeat ? <LiveTimeAgo date={m.lastHeartbeat} /> : 'Never'}
           highlight={
             m.lastHeartbeat ? (isStaleHeartbeat(m.lastHeartbeat) ? 'warn' : 'ok') : 'muted'
           }
@@ -250,7 +251,7 @@ function DetailField({
   highlight,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   mono?: boolean;
   highlight?: 'ok' | 'warn' | 'muted';
 }): React.JSX.Element {

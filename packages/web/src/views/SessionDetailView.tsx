@@ -10,8 +10,9 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import type { Session, SessionContentMessage } from '../lib/api';
-import { formatDuration, shortenPath, timeAgo } from '../lib/format-utils';
+import { formatDuration, shortenPath } from '../lib/format-utils';
 import {
   queryKeys,
   sessionContentQuery,
@@ -133,7 +134,9 @@ function SessionHeader({ session }: { session: Session }): React.JSX.Element {
             {shortenPath(session.projectPath)}
           </span>
         )}
-        <span>Started {timeAgo(session.startedAt)}</span>
+        <span>
+          Started <LiveTimeAgo date={session.startedAt} />
+        </span>
         {session.endedAt && (
           <span>Duration: {formatDuration(session.startedAt, session.endedAt)}</span>
         )}

@@ -6,11 +6,12 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
-import { formatDuration, shortenPath, timeAgo } from '../lib/format-utils';
+import { formatDuration, shortenPath } from '../lib/format-utils';
 import { queryKeys, sessionsQuery } from '../lib/queries';
 
 const MODEL_OPTIONS = [
@@ -561,7 +562,7 @@ export function SessionsPage(): React.JSX.Element {
                   >
                     {'\u2190'}
                   </button>
-                  <div className="text-[15px] font-semibold truncate">
+                  <div className="text-[15px] font-semibold truncate" title={selected.id}>
                     Session: {selected.id.slice(0, 20)}...
                   </div>
                 </div>
@@ -738,7 +739,7 @@ function SessionListItem({
         </div>
       )}
       <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
-        <span>{timeAgo(s.startedAt)}</span>
+        <LiveTimeAgo date={s.startedAt} />
         <span className="text-muted-foreground">{formatDuration(s.startedAt, s.endedAt)}</span>
       </div>
     </button>
