@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { resolveWorkerUrlOrThrow } from '../resolve-worker-url.js';
 
 const DEFAULT_WORKER_PORT = 9000;
 
@@ -35,67 +36,12 @@ export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app,
     { schema: { tags: ['stream'], summary: 'Proxy SSE stream from agent worker' } },
     async (request, reply) => {
       const agentId = request.params.id;
-      const { workerUrl: explicitUrl, machineId } = request.query;
 
-      // Resolve the upstream worker URL.
-      let workerBaseUrl: string;
-
-      if (explicitUrl) {
-        workerBaseUrl = explicitUrl;
-      } else if (machineId) {
-        const machine = await registry.getMachine(machineId);
-
-        if (!machine) {
-          throw new ControlPlaneError(
-            'MACHINE_NOT_FOUND',
-            `Machine '${machineId}' is not registered`,
-            { machineId },
-          );
-        }
-
-        // Use tailscaleIp for cross-machine communication via the Tailscale
-        // mesh. Fall back to hostname only if tailscaleIp is not available
-        // (e.g. in-memory registry without Tailscale data).
-        const address = machine.tailscaleIp ?? machine.hostname;
-        workerBaseUrl = `http://${address}:${String(workerPort)}`;
-      } else if (dbRegistry) {
-        // No explicit machineId — look up the agent to find its machine.
-        const agent = await dbRegistry.getAgent(agentId);
-
-        if (!agent) {
-          throw new ControlPlaneError(
-            'AGENT_NOT_FOUND',
-            `Agent '${agentId}' does not exist in the registry`,
-            { agentId },
-          );
-        }
-
-        const machine = await dbRegistry.getMachine(agent.machineId);
-
-        if (!machine) {
-          throw new ControlPlaneError(
-            'MACHINE_NOT_FOUND',
-            `Machine '${agent.machineId}' for agent '${agentId}' is not registered`,
-            { agentId, machineId: agent.machineId },
-          );
-        }
-
-        if (machine.status === 'offline') {
-          throw new ControlPlaneError(
-            'MACHINE_OFFLINE',
-            `Machine '${machine.id}' (${machine.hostname}) is offline`,
-            { agentId, machineId: machine.id, hostname: machine.hostname },
-          );
-        }
-
-        workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
-      } else {
-        throw new ControlPlaneError(
-          'REGISTRY_UNAVAILABLE',
-          'Cannot resolve worker URL: no machineId provided and database registry is not configured',
-          { agentId },
-        );
-      }
+      const workerBaseUrl = await resolveWorkerUrlOrThrow(agentId, request.query, {
+        registry,
+        dbRegistry,
+        workerPort,
+      });
 
       const upstreamUrl = `${workerBaseUrl}/api/agents/${encodeURIComponent(agentId)}/stream`;
 

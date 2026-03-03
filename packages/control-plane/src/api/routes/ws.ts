@@ -7,6 +7,7 @@ import type { WebSocket } from 'ws';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
+import { resolveWorkerUrlOrThrow } from '../resolve-worker-url.js';
 
 const DEFAULT_WORKER_PORT = 9000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -203,61 +204,8 @@ function subscribeSse(
 }
 
 // ---------------------------------------------------------------------------
-// Worker URL resolution helper
+// Worker URL resolution — uses shared utility from resolve-worker-url.ts
 // ---------------------------------------------------------------------------
-
-/**
- * Resolve the base URL of the agent worker hosting a given agent.
- *
- * Looks up the agent in the database registry to find its `machineId`, then
- * resolves the machine to obtain the `tailscaleIp`. Constructs the URL as
- * `http://<tailscaleIp>:<WORKER_PORT>`.
- *
- * This mirrors the resolution strategy in `task-worker.ts`.
- */
-async function resolveWorkerUrl(
-  agentId: string,
-  dbRegistry: DbAgentRegistry,
-  logger: Logger,
-  workerPort: number,
-): Promise<string> {
-  const agent = await dbRegistry.getAgent(agentId);
-
-  if (!agent) {
-    throw new ControlPlaneError(
-      'AGENT_NOT_FOUND',
-      `Agent '${agentId}' does not exist in the registry`,
-      { agentId },
-    );
-  }
-
-  const machine = await dbRegistry.getMachine(agent.machineId);
-
-  if (!machine) {
-    throw new ControlPlaneError(
-      'MACHINE_NOT_FOUND',
-      `Machine '${agent.machineId}' for agent '${agentId}' is not registered`,
-      { agentId, machineId: agent.machineId },
-    );
-  }
-
-  if (machine.status === 'offline') {
-    throw new ControlPlaneError(
-      'MACHINE_OFFLINE',
-      `Machine '${machine.id}' (${machine.hostname}) is offline`,
-      { agentId, machineId: machine.id, hostname: machine.hostname },
-    );
-  }
-
-  const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
-
-  logger.debug(
-    { agentId, machineId: agent.machineId, tailscaleIp: machine.tailscaleIp, workerBaseUrl },
-    'Resolved worker URL for agent',
-  );
-
-  return workerBaseUrl;
-}
 
 // ---------------------------------------------------------------------------
 // Plugin
@@ -366,7 +314,14 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             return;
           }
 
-          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger, workerPort);
+          const workerBaseUrl = await resolveWorkerUrlOrThrow(
+            agentId,
+            {},
+            {
+              dbRegistry,
+              workerPort,
+            },
+          );
 
           const sub = subscribeSse(agentId, workerBaseUrl, socket, logger);
           subscriptions.set(agentId, sub);
@@ -506,7 +461,14 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
             return;
           }
 
-          const workerBaseUrl = await resolveWorkerUrl(agentId, dbRegistry, logger, workerPort);
+          const workerBaseUrl = await resolveWorkerUrlOrThrow(
+            agentId,
+            {},
+            {
+              dbRegistry,
+              workerPort,
+            },
+          );
           const stopUrl = `${workerBaseUrl}/api/agents/${encodeURIComponent(agentId)}/stop`;
 
           try {
