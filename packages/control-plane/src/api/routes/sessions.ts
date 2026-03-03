@@ -318,12 +318,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       projectPath: string;
       model?: string;
       prompt?: string;
+      resumeSessionId?: string;
     };
   }>(
     '/',
     { schema: { tags: ['sessions'], summary: 'Create a new session' } },
     async (request, reply) => {
-      const { agentId, machineId, projectPath, model, prompt } = request.body;
+      const { agentId, machineId, projectPath, model, prompt, resumeSessionId } = request.body;
 
       if (!agentId || typeof agentId !== 'string') {
         return reply.code(400).send({
@@ -400,6 +401,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             projectPath,
             model: model ?? null,
             prompt: prompt ?? null,
+            resumeSessionId: resumeSessionId ?? null,
           }),
         });
 

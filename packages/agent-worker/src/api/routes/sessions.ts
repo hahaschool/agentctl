@@ -36,6 +36,7 @@ type CreateSessionBody = {
   projectPath: string;
   model?: string | null;
   prompt?: string | null;
+  resumeSessionId?: string | null;
 };
 
 type ResumeSessionBody = {
@@ -280,7 +281,14 @@ export async function sessionRoutes(
   // -----------------------------------------------------------------------
 
   app.post<{ Body: CreateSessionBody }>('/', async (request, reply) => {
-    const { sessionId: _cpSessionId, agentId, projectPath, model, prompt } = request.body;
+    const {
+      sessionId: _cpSessionId,
+      agentId,
+      projectPath,
+      model,
+      prompt,
+      resumeSessionId,
+    } = request.body;
 
     if (!agentId || typeof agentId !== 'string') {
       return reply.status(400).send({
@@ -302,6 +310,7 @@ export async function sessionRoutes(
         projectPath,
         prompt: prompt ?? 'Continue working.',
         model: model ?? undefined,
+        resumeSessionId: resumeSessionId ?? undefined,
       });
 
       logger.info(

@@ -151,6 +151,7 @@ export const api = {
     projectPath: string;
     prompt?: string;
     model?: string;
+    resumeSessionId?: string;
   }) =>
     request<{ ok: boolean; sessionId: string; session: Session }>('/api/sessions', {
       method: 'POST',

@@ -189,8 +189,9 @@ export function DiscoverPage(): React.JSX.Element {
           machineId: session.machineId,
           projectPath: session.projectPath,
           prompt: resumePrompt.trim(),
+          resumeSessionId: session.sessionId,
         });
-        setActionMsg(`Session created on ${session.hostname}`);
+        setActionMsg(`Session resumed on ${session.hostname}`);
         setResumePrompt('');
         setResuming(null);
         discovered.refresh();
