@@ -190,6 +190,22 @@ export const api = {
     );
   },
 
-  // Dashboard / Metrics
-  metrics: () => request<Record<string, unknown>>('/metrics'),
+  // Dashboard / Metrics (Prometheus text format → parsed object)
+  metrics: async (): Promise<Record<string, string | number>> => {
+    const res = await fetch('/metrics');
+    if (!res.ok) throw new ApiError(res.status, 'METRICS_ERROR', res.statusText);
+    const text = await res.text();
+    const result: Record<string, string | number> = {};
+    for (const line of text.split('\n')) {
+      if (line.startsWith('#') || line.trim() === '') continue;
+      const spaceIdx = line.indexOf(' ');
+      if (spaceIdx > 0) {
+        const key = line.slice(0, spaceIdx);
+        const val = line.slice(spaceIdx + 1).trim();
+        const num = Number(val);
+        result[key] = Number.isNaN(num) ? val : num;
+      }
+    }
+    return result;
+  },
 };

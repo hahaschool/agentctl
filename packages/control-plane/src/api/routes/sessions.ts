@@ -346,13 +346,15 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      // Verify the agent exists
-      const agent = await dbRegistry.getAgent(agentId);
-      if (!agent) {
-        return reply.code(404).send({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${agentId}' does not exist`,
-        });
+      // Verify the agent exists (skip for adhoc sessions)
+      if (agentId !== 'adhoc') {
+        const agent = await dbRegistry.getAgent(agentId);
+        if (!agent) {
+          return reply.code(404).send({
+            error: 'AGENT_NOT_FOUND',
+            message: `Agent '${agentId}' does not exist`,
+          });
+        }
       }
 
       // Verify the machine exists

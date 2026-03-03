@@ -70,9 +70,7 @@ export const rcSessions = pgTable(
   'rc_sessions',
   {
     id: text('id').primaryKey(),
-    agentId: uuid('agent_id')
-      .notNull()
-      .references(() => agents.id),
+    agentId: text('agent_id').notNull(),
     machineId: text('machine_id')
       .notNull()
       .references(() => machines.id),

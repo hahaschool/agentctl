@@ -6,23 +6,7 @@ import { usePolling } from '../hooks/use-polling.ts';
 import type { HealthResponse, Machine } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
 
-type MetricsData = Record<string, unknown>;
-
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86_400);
-  const h = Math.floor((seconds % 86_400) / 3_600);
-  const m = Math.floor((seconds % 3_600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
-}
+type MetricsData = Record<string, string | number>;
 
 export function LogsPage(): React.JSX.Element {
   const healthFetcher = useCallback(() => api.health(), []);
@@ -48,6 +32,8 @@ export function LogsPage(): React.JSX.Element {
   const machineList = machines.data ?? [];
   const onlineMachines = machineList.filter((m) => m.status === 'online').length;
   const hasError = health.error || metrics.error || machines.error;
+
+  const metricsVal = (key: string): number | string | undefined => metrics.data?.[key];
 
   const statusColor = useMemo(() => {
     if (!health.data) return 'var(--text-muted)';
@@ -237,37 +223,21 @@ export function LogsPage(): React.JSX.Element {
         }}
       >
         <MetricCard
-          label="Uptime"
-          value={
-            typeof metrics.data?.uptimeSeconds === 'number'
-              ? formatUptime(metrics.data.uptimeSeconds as number)
-              : '-'
+          label="Control Plane"
+          value={metricsVal('agentctl_control_plane_up') === 1 ? 'UP' : 'DOWN'}
+          valueColor={
+            metricsVal('agentctl_control_plane_up') === 1 ? 'var(--green)' : 'var(--red, #ef4444)'
           }
         />
         <MetricCard
-          label="Memory (RSS)"
-          value={
-            typeof metrics.data?.memoryRssBytes === 'number'
-              ? formatBytes(metrics.data.memoryRssBytes as number)
-              : '-'
-          }
+          label="Agents Total"
+          value={String(metricsVal('agentctl_agents_total') ?? '-')}
         />
         <MetricCard
-          label="Active Sessions"
-          value={
-            typeof metrics.data?.activeSessions === 'number'
-              ? String(metrics.data.activeSessions)
-              : '-'
-          }
+          label="Agents Active"
+          value={String(metricsVal('agentctl_agents_active') ?? '-')}
         />
-        <MetricCard
-          label="Total Requests"
-          value={
-            typeof metrics.data?.totalRequests === 'number'
-              ? String(metrics.data.totalRequests)
-              : '-'
-          }
-        />
+        <MetricCard label="Runs Total" value={String(metricsVal('agentctl_runs_total') ?? '-')} />
         <MetricCard label="Machines Online" value={`${onlineMachines} / ${machineList.length}`} />
         <MetricCard
           label="Health Status"
@@ -295,7 +265,9 @@ export function LogsPage(): React.JSX.Element {
               overflow: 'auto',
             }}
           >
-            {JSON.stringify(metrics.data, null, 2)}
+            {Object.entries(metrics.data)
+              .map(([k, v]) => `${k} ${String(v)}`)
+              .join('\n')}
           </div>
         </div>
       )}
