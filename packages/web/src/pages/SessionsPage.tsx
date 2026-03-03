@@ -1035,6 +1035,7 @@ function SessionListItem({
       </div>
       {shortPath && (
         <div
+          title={s.projectPath ?? ''}
           style={{
             fontSize: 11,
             color: 'var(--text-secondary)',
@@ -1043,6 +1044,7 @@ function SessionListItem({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            cursor: 'default',
           }}
         >
           {shortPath}

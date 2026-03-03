@@ -665,6 +665,7 @@ export function DiscoverPage(): React.JSX.Element {
                         {group.projectName}
                       </div>
                       <div
+                        title={group.projectPath}
                         style={{
                           fontFamily: 'var(--font-mono)',
                           fontSize: 11,
@@ -673,6 +674,7 @@ export function DiscoverPage(): React.JSX.Element {
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
                           lineHeight: '16px',
+                          cursor: 'default',
                         }}
                       >
                         {shortenPath(group.projectPath)}
