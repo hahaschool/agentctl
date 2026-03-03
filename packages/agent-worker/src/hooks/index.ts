@@ -1,4 +1,13 @@
 export {
+  type AgentBaseline,
+  AnomalyDetector,
+  type AnomalyDetectorConfig,
+  type AnomalyReport,
+  type AnomalySeverity,
+  type AnomalyType,
+  type ToolBaseline,
+} from './anomaly-detector.js';
+export {
   type AuditEntry,
   type AuditEntryPostTool,
   type AuditEntryPreTool,
@@ -18,7 +27,6 @@ export {
   type PreToolUseInput,
   type PreToolUseResult,
 } from './pre-tool-use.js';
-
 export {
   type InjectionDetection,
   type InjectionSeverity,
@@ -32,3 +40,9 @@ export {
   type StopHookOptions,
   type StopInput,
 } from './stop-hook.js';
+export {
+  type RateLimitCheckResult,
+  type RateLimiterConfig,
+  type ToolCallStats,
+  ToolRateLimiter,
+} from './tool-rate-limiter.js';

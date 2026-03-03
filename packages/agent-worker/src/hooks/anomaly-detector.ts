@@ -66,6 +66,8 @@ export type AnomalyDetectorConfig = {
   frequencyWindowMs?: number;
 };
 
+const MIN_PRUNE_WINDOW_MS = 30_000;
+const MIN_PRUNE_RETENTION_MS = 120_000;
 const DEFAULT_BASELINE_CALL_THRESHOLD = 50;
 const DEFAULT_FREQUENCY_SPIKE_MULTIPLIER = 3;
 const DEFAULT_SUSPICIOUS_COMBINATION_WINDOW_MS = 5_000;
@@ -135,7 +137,7 @@ export class AnomalyDetector {
     state.recentCalls.push([toolName, ts]);
 
     // Prune old entries from recentCalls (keep last 30 seconds)
-    const recentCutoff = ts - Math.max(this.combinationWindowMs * 6, 30_000);
+    const recentCutoff = ts - Math.max(this.combinationWindowMs * 6, MIN_PRUNE_WINDOW_MS);
     state.recentCalls = state.recentCalls.filter(([, t]) => t > recentCutoff);
 
     // Check if we should freeze the baseline
@@ -388,7 +390,7 @@ export class AnomalyDetector {
    * unbounded memory growth.
    */
   private pruneToolCalls(state: AgentState, now: number): void {
-    const cutoff = now - Math.max(this.frequencyWindowMs * 2, 120_000);
+    const cutoff = now - Math.max(this.frequencyWindowMs * 2, MIN_PRUNE_RETENTION_MS);
 
     for (const [tool, timestamps] of state.toolCalls) {
       const pruned = timestamps.filter((t) => t > cutoff);

@@ -87,6 +87,7 @@ const IPC_DIR = env.IPC_DIR || '.agentctl/ipc';
 const RUN_ID = env.RUN_ID || '';
 const AUDIT_FLUSH_INTERVAL_MS = Number(env.AUDIT_FLUSH_INTERVAL_MS) || 5_000;
 const PROJECT_PATH = env.PROJECT_PATH || '';
+const HEALTH_REPORTER_INTERVAL_MS = 15_000;
 
 /**
  * Dispatch an incoming IPC message to the correct pool operation based
@@ -248,7 +249,7 @@ async function main(): Promise<void> {
   const healthReporter = new HealthReporter({
     machineId: MACHINE_ID,
     controlPlaneUrl: CONTROL_PLANE_URL,
-    intervalMs: 15_000,
+    intervalMs: HEALTH_REPORTER_INTERVAL_MS,
     logger,
     agentPool: pool,
   });

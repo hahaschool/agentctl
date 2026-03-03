@@ -73,11 +73,13 @@ export function parseClientMessage(raw: string): WsClientMessage | null {
 
   const obj = parsed as Record<string, unknown>;
 
-  if (!isValidClientMessageType(obj.type as string)) {
+  if (typeof obj.type !== 'string' || !isValidClientMessageType(obj.type)) {
     return null;
   }
 
-  return obj as unknown as WsClientMessage;
+  // At this point we know `obj` has a valid discriminant `type` value.
+  // The remaining fields are validated by the caller or at runtime usage.
+  return obj as WsClientMessage;
 }
 
 /**

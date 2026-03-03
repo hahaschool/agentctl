@@ -123,19 +123,21 @@ export function decodePairingPayload(encoded: string): PairingPayload {
     );
   }
 
-  if (typeof payload.devicePublicKey !== 'string' || payload.devicePublicKey.length === 0) {
+  const { devicePublicKey, deviceName, timestamp } = payload;
+
+  if (typeof devicePublicKey !== 'string' || devicePublicKey.length === 0) {
     throw new AgentError('INVALID_PAIRING_PAYLOAD', 'Missing or invalid devicePublicKey');
   }
 
-  if (typeof payload.deviceName !== 'string' || payload.deviceName.length === 0) {
+  if (typeof deviceName !== 'string' || deviceName.length === 0) {
     throw new AgentError('INVALID_PAIRING_PAYLOAD', 'Missing or invalid deviceName');
   }
 
-  if (typeof payload.timestamp !== 'number' || !Number.isFinite(payload.timestamp)) {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
     throw new AgentError('INVALID_PAIRING_PAYLOAD', 'Missing or invalid timestamp');
   }
 
-  const age = Date.now() - (payload.timestamp as number);
+  const age = Date.now() - timestamp;
   if (age > MAX_PAIRING_PAYLOAD_AGE_MS) {
     throw new AgentError(
       'PAIRING_PAYLOAD_EXPIRED',
@@ -149,9 +151,9 @@ export function decodePairingPayload(encoded: string): PairingPayload {
 
   return {
     version: PAIRING_VERSION,
-    devicePublicKey: payload.devicePublicKey as string,
-    deviceName: payload.deviceName as string,
-    timestamp: payload.timestamp as number,
+    devicePublicKey,
+    deviceName,
+    timestamp,
   };
 }
 

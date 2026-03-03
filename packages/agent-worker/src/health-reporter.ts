@@ -6,6 +6,8 @@ import type { Logger } from 'pino';
 
 import type { AgentPool } from './runtime/agent-pool.js';
 
+const TAILSCALE_CLI_TIMEOUT_MS = 5_000;
+
 type HealthReporterOptions = {
   machineId: string;
   controlPlaneUrl: string;
@@ -32,7 +34,7 @@ async function resolveTailscaleIp(logger: Logger): Promise<string> {
 
   try {
     const output = execSync('tailscale ip -4', {
-      timeout: 5_000,
+      timeout: TAILSCALE_CLI_TIMEOUT_MS,
       encoding: 'utf-8',
     }).trim();
 
