@@ -898,13 +898,27 @@ export function SessionsPage(): React.JSX.Element {
                 style={{
                   flex: 1,
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  gap: 8,
                   color: 'var(--text-muted)',
                   fontSize: 13,
                 }}
               >
-                No conversation content available
+                <span>
+                  {selected.status === 'error'
+                    ? 'Session failed before the CLI process started'
+                    : selected.status === 'starting'
+                      ? 'Waiting for CLI to initialize...'
+                      : 'No conversation content available'}
+                </span>
+                {selected.status === 'error' &&
+                  typeof selected.metadata?.errorMessage === 'string' && (
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', opacity: 0.7 }}>
+                      {selected.metadata.errorMessage}
+                    </span>
+                  )}
               </div>
             )}
 

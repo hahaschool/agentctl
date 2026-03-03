@@ -566,7 +566,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/resume`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt }),
+            body: JSON.stringify({
+              prompt,
+              claudeSessionId: session.claudeSessionId,
+              projectPath: session.projectPath,
+              agentId: session.agentId,
+            }),
           });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

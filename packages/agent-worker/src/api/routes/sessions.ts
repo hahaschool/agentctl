@@ -42,6 +42,10 @@ type CreateSessionBody = {
 
 type ResumeSessionBody = {
   prompt: string;
+  claudeSessionId?: string | null;
+  projectPath?: string | null;
+  agentId?: string | null;
+  model?: string | null;
 };
 
 type MessageBody = {
@@ -450,7 +454,7 @@ export async function sessionRoutes(
     '/:sessionId/resume',
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt } = request.body;
+      const { prompt, claudeSessionId: bodyClaudeId, projectPath, agentId, model } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.status(400).send({
@@ -459,19 +463,21 @@ export async function sessionRoutes(
         });
       }
 
-      // Try to find the session — it might be a manager ID or a Claude session ID
+      // Try to find the session in memory — might be a manager ID or a Claude session ID
       const existingSession =
         sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
 
-      if (!existingSession) {
-        return reply.status(404).send({
-          error: `Session '${sessionId}' not found`,
-          code: 'SESSION_NOT_FOUND',
-        });
-      }
+      // Determine the Claude session ID to resume from
+      const resumeId = existingSession?.claudeSessionId ?? bodyClaudeId;
 
-      // If the session doesn't have a Claude session ID, we can't resume it
-      if (!existingSession.claudeSessionId) {
+      if (!resumeId) {
+        // Session not in memory and no claudeSessionId provided — can't resume
+        if (!existingSession) {
+          return reply.status(404).send({
+            error: `Session '${sessionId}' not found and no claudeSessionId provided`,
+            code: 'SESSION_NOT_FOUND',
+          });
+        }
         return reply.status(400).send({
           error: 'Session has no Claude session ID to resume',
           code: 'INVALID_INPUT',
@@ -479,17 +485,17 @@ export async function sessionRoutes(
       }
 
       try {
-        const newSession = sessionManager.resumeSession(existingSession.claudeSessionId, {
-          agentId: existingSession.agentId,
-          projectPath: existingSession.projectPath,
+        const newSession = sessionManager.resumeSession(resumeId, {
+          agentId: existingSession?.agentId ?? agentId ?? 'adhoc',
+          projectPath: existingSession?.projectPath ?? projectPath ?? process.cwd(),
           prompt,
-          model: existingSession.model,
+          model: existingSession?.model ?? model ?? undefined,
         });
 
         logger.info(
           {
             newSessionId: newSession.id,
-            resumedFrom: existingSession.claudeSessionId,
+            resumedFrom: resumeId,
             machineId,
           },
           'CLI session resumed',
@@ -498,7 +504,7 @@ export async function sessionRoutes(
         return reply.status(200).send({
           ok: true,
           session: sessionToJson(newSession),
-          resumedFrom: existingSession.id,
+          resumedFrom: existingSession?.id ?? sessionId,
         });
       } catch (err) {
         const statusCode = errorToStatusCode(err);
