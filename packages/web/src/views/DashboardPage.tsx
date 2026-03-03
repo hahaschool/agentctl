@@ -70,7 +70,7 @@ export function DashboardPage(): React.JSX.Element {
   return (
     <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="text-[22px] font-bold">Command Center</h1>
         <div className="flex items-center gap-3">
           <WsStatusIndicator status={wsStatus} />
@@ -119,7 +119,7 @@ export function DashboardPage(): React.JSX.Element {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <ActionButton label="Discover Sessions" onClick={() => void discovered.refetch()} />
           <ActionButton label="Refresh All" onClick={refreshAll} />
         </div>
@@ -158,7 +158,7 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Two-column layout: Recent Activity + Machine Status */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Recent Activity */}
         <div>
           <SectionHeader title="Recent Activity" />
@@ -240,7 +240,7 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Quick Stats Summary */}
-      <div className="flex gap-4 mt-1 px-4 py-2.5 bg-card border border-border rounded-lg mb-5 text-xs text-muted-foreground items-center">
+      <div className="flex gap-4 mt-1 px-4 py-2.5 bg-card border border-border rounded-lg mb-5 text-xs text-muted-foreground items-center flex-wrap">
         <span className="font-medium text-muted-foreground">Platform</span>
         <span>
           Uptime:{' '}

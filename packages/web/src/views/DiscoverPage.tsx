@@ -264,7 +264,7 @@ export function DiscoverPage(): React.JSX.Element {
   return (
     <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
           <h1 className="text-[22px] font-bold">Discover Sessions</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
@@ -304,7 +304,7 @@ export function DiscoverPage(): React.JSX.Element {
       {/* Quick new session form */}
       {showNewSession && (
         <div className="p-4 bg-card border border-border rounded-lg mb-4 flex gap-3 items-end flex-wrap">
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 min-w-[150px]">
             <label
               htmlFor="new-session-project-path"
               className="text-[11px] text-muted-foreground mb-1 block"
@@ -320,7 +320,7 @@ export function DiscoverPage(): React.JSX.Element {
               className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
             />
           </div>
-          <div className="flex-[2] min-w-[300px]">
+          <div className="flex-[2] min-w-[200px]">
             <label
               htmlFor="new-session-prompt"
               className="text-[11px] text-muted-foreground mb-1 block"
@@ -368,7 +368,7 @@ export function DiscoverPage(): React.JSX.Element {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search sessions..."
-          className="flex-1 min-w-[200px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-[13px] outline-none"
+          className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-[13px] outline-none"
         />
         <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
           <span className="text-muted-foreground">Min msgs:</span>
@@ -591,13 +591,13 @@ export function DiscoverPage(): React.JSX.Element {
 
                             {/* Branch */}
                             {s.branch && (
-                              <span className="text-[11px] font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
+                              <span className="hidden sm:inline text-[11px] font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
                                 {s.branch}
                               </span>
                             )}
 
                             {/* Hostname */}
-                            <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
+                            <span className="hidden sm:inline text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
                               {s.hostname}
                             </span>
 
@@ -607,7 +607,9 @@ export function DiscoverPage(): React.JSX.Element {
                             </span>
 
                             {/* Session ID (copyable) */}
-                            <CopyableText value={s.sessionId} />
+                            <span className="hidden md:inline">
+                              <CopyableText value={s.sessionId} />
+                            </span>
 
                             {/* Resume button */}
                             {!isResuming && (

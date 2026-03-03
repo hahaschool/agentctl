@@ -257,7 +257,15 @@ export function SessionsPage(): React.JSX.Element {
   return (
     <div className="flex h-full">
       {/* Session list panel */}
-      <div className="w-[340px] min-w-[340px] border-r border-border flex flex-col">
+      <div
+        className={cn(
+          'border-r border-border flex flex-col',
+          // Mobile: full width, hidden when a session is selected
+          selected ? 'hidden md:flex' : 'flex w-full',
+          // Desktop: fixed sidebar width
+          'md:w-[340px] md:min-w-[340px]',
+        )}
+      >
         <div className="px-4 pt-4 pb-3 border-b border-border flex justify-between items-center">
           <h2 className="text-base font-semibold">
             Sessions
@@ -531,22 +539,39 @@ export function SessionsPage(): React.JSX.Element {
       </div>
 
       {/* Session detail panel */}
-      <div className="flex-1 flex flex-col">
+      <div
+        className={cn(
+          'flex-1 flex flex-col',
+          // Mobile: hidden when no session selected, full width when selected
+          selected ? 'flex' : 'hidden md:flex',
+        )}
+      >
         {selected ? (
           <>
             {/* Header */}
-            <div className="px-5 py-4 border-b border-border flex justify-between items-center">
-              <div>
-                <div className="text-[15px] font-semibold mb-1">
-                  Session: {selected.id.slice(0, 20)}...
+            <div className="px-5 py-4 border-b border-border flex justify-between items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  {/* Mobile back button */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(null)}
+                    className="md:hidden text-muted-foreground text-sm shrink-0"
+                    aria-label="Back to session list"
+                  >
+                    {'\u2190'}
+                  </button>
+                  <div className="text-[15px] font-semibold truncate">
+                    Session: {selected.id.slice(0, 20)}...
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground flex gap-3">
+                <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1">
                   <span>Agent: {selected.agentId}</span>
                   <span>Machine: {selected.machineId}</span>
                   <StatusBadge status={selected.status} />
                 </div>
               </div>
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-center shrink-0">
                 <Link
                   href={`/sessions/${selected.id}`}
                   className="px-3.5 py-1.5 bg-primary text-primary-foreground rounded-sm text-xs font-medium no-underline"
@@ -565,7 +590,7 @@ export function SessionsPage(): React.JSX.Element {
 
             {/* Session metadata */}
             <div className="px-5 py-4 border-b border-border text-[13px]">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <DetailRow label="ID" value={selected.id} mono />
                 <DetailRow label="Status" value={selected.status} />
                 <DetailRow label="Agent" value={selected.agentId} mono />

@@ -104,7 +104,7 @@ export function MachineDetailView(): React.JSX.Element {
           <CardTitle className="text-sm">Machine Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
             <InfoField label="ID">
               <CopyableText value={machine.id} maxDisplay={16} />
             </InfoField>
@@ -143,7 +143,7 @@ export function MachineDetailView(): React.JSX.Element {
             <CardTitle className="text-sm">Capabilities</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
               <InfoField label="GPU">
                 <CapabilityIndicator enabled={machine.capabilities.gpu} />
               </InfoField>

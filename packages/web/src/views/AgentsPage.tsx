@@ -176,7 +176,7 @@ export function AgentsPage(): React.JSX.Element {
   return (
     <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
           <h1 className="text-[22px] font-bold">Agents</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
@@ -228,7 +228,7 @@ export function AgentsPage(): React.JSX.Element {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div>
               <label
                 htmlFor="create-agent-name"
@@ -314,7 +314,7 @@ export function AgentsPage(): React.JSX.Element {
           placeholder="Search agents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[180px]"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]"
         />
         <select
           value={statusFilter}
@@ -356,7 +356,7 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Agent cards grid */}
       {agents.isLoading ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           {Array.from({ length: 4 }, (_, i) => (
             <div
               key={`sk-${String(i)}`}
@@ -381,7 +381,7 @@ export function AgentsPage(): React.JSX.Element {
           {agentList.length === 0 ? 'No agents registered' : 'No agents match the current filters'}
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           {filteredAgents.map((agent) => (
             <div key={agent.id} className="p-4 bg-card border border-border rounded-lg">
               {/* Card header: name + status */}

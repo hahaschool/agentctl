@@ -51,7 +51,7 @@ export function MachinesPage(): React.JSX.Element {
   return (
     <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-[22px] font-bold">Fleet Machines</h1>
@@ -88,7 +88,7 @@ export function MachinesPage(): React.JSX.Element {
           placeholder="Search machines..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[180px]"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]"
         />
         <select
           value={statusFilter}
@@ -123,7 +123,7 @@ export function MachinesPage(): React.JSX.Element {
 
       {/* Machine cards or empty state */}
       {machines.isLoading ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(480px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
           {Array.from({ length: 3 }, (_, i) => (
             <div
               key={`sk-${String(i)}`}
@@ -145,7 +145,7 @@ export function MachinesPage(): React.JSX.Element {
       ) : filteredList.length === 0 ? (
         <EmptyState loading={false} hasFilters={list.length > 0 && filteredList.length === 0} />
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(480px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
           {filteredList.map((m) => (
             <MachineCard key={m.id} machine={m} />
           ))}
@@ -179,7 +179,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
       </div>
 
       {/* Details grid */}
-      <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-border">
         <DetailField label="Tailscale IP" value={m.tailscaleIp} mono />
         <DetailField label="OS / Architecture" value={`${m.os} / ${m.arch}`} />
         <DetailField
