@@ -1144,6 +1144,16 @@ function DetailRow({
   value: string;
   mono?: boolean;
 }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    if (!mono || value === '-') return;
+    void navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [mono, value]);
+
   return (
     <div>
       <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{label}</span>
@@ -1152,9 +1162,39 @@ function DetailRow({
           fontFamily: mono ? 'var(--font-mono)' : undefined,
           fontSize: 12,
           wordBreak: 'break-all',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 4,
         }}
       >
-        {value}
+        <span style={{ flex: 1 }}>{value}</span>
+        {mono && value !== '-' && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            title={copied ? 'Copied!' : 'Copy to clipboard'}
+            style={{
+              flexShrink: 0,
+              padding: '1px 4px',
+              fontSize: 10,
+              color: copied ? 'var(--green)' : 'var(--text-muted)',
+              backgroundColor: copied ? 'var(--bg-tertiary)' : 'transparent',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              opacity: copied ? 1 : 0.5,
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = copied ? '1' : '0.5';
+            }}
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1334,13 +1374,19 @@ function SessionContent({
   );
 }
 
+const TRUNCATE_THRESHOLD = 800;
+
 function InlineMessage({ message }: { message: SessionContentMessage }): React.JSX.Element {
+  const [expanded, setExpanded] = useState(false);
   const style = MSG_STYLES[message.type] ?? {
     label: message.type,
     color: 'var(--text-muted)',
     bg: 'var(--bg-secondary)',
   };
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
+  const isLong = message.content.length > TRUNCATE_THRESHOLD;
+  const displayContent =
+    isLong && !expanded ? `${message.content.slice(0, TRUNCATE_THRESHOLD)}...` : message.content;
 
   return (
     <div
@@ -1379,12 +1425,32 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
           fontFamily: isTool ? 'var(--font-mono)' : undefined,
-          maxHeight: isTool ? 150 : 300,
-          overflow: 'auto',
+          maxHeight: expanded ? 'none' : isTool ? 150 : 400,
+          overflow: expanded ? 'visible' : 'auto',
         }}
       >
-        {message.content.length > 500 ? `${message.content.slice(0, 500)}...` : message.content}
+        {displayContent}
       </div>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            marginTop: 4,
+            padding: '2px 8px',
+            fontSize: 10,
+            color: 'var(--accent)',
+            backgroundColor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 500,
+          }}
+        >
+          {expanded
+            ? 'Show less'
+            : `Show all (${Math.round(message.content.length / 1000)}k chars)`}
+        </button>
+      )}
     </div>
   );
 }
