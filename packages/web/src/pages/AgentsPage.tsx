@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
+import { CopyableText } from '../components/CopyableText.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { useToast } from '../components/Toast.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
@@ -574,8 +575,8 @@ export function AgentsPage(): React.JSX.Element {
                   fontSize: 12,
                 }}
               >
-                <Info label="ID" value={agent.id} mono />
-                <Info label="Machine" value={agent.machineId} mono />
+                <Info label="ID" value={agent.id} mono copyable />
+                <Info label="Machine" value={agent.machineId} mono copyable />
                 <Info label="Type" value={agent.type} />
                 {agent.projectPath && <Info label="Project" value={agent.projectPath} mono />}
                 {agent.worktreeBranch && <Info label="Branch" value={agent.worktreeBranch} mono />}
@@ -786,10 +787,12 @@ function Info({
   label,
   value,
   mono,
+  copyable,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  copyable?: boolean;
 }): React.JSX.Element {
   return (
     <div>
@@ -811,7 +814,7 @@ function Info({
           wordBreak: 'break-all',
         }}
       >
-        {value}
+        {copyable ? <CopyableText value={value} maxDisplay={12} fontSize={12} /> : value}
       </div>
     </div>
   );

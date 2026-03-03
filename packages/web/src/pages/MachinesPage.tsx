@@ -1,10 +1,14 @@
 import type React from 'react';
+import { useMemo, useState } from 'react';
 
+import { CopyableText } from '../components/CopyableText.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
 import type { Machine } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
 import { formatDate, timeAgo } from '../lib/format-utils.ts';
+
+type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -16,10 +20,31 @@ export function MachinesPage(): React.JSX.Element {
     intervalMs: 15_000,
   });
 
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<MachineStatusFilter>('all');
+
   const list = machines.data ?? [];
   const online = list.filter((m) => m.status === 'online').length;
   const offline = list.filter((m) => m.status === 'offline').length;
   const degraded = list.filter((m) => m.status === 'degraded').length;
+
+  const filteredList = useMemo(() => {
+    let result = list;
+    if (statusFilter !== 'all') {
+      result = result.filter((m) => m.status === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (m) =>
+          m.hostname.toLowerCase().includes(q) ||
+          m.id.toLowerCase().includes(q) ||
+          m.tailscaleIp.includes(q) ||
+          m.os.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [list, statusFilter, search]);
 
   return (
     <div style={{ padding: 24, maxWidth: 1100 }}>
@@ -93,6 +118,54 @@ export function MachinesPage(): React.JSX.Element {
         </div>
       )}
 
+      {/* Filter controls */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Search machines..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            padding: '6px 10px',
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 12,
+            outline: 'none',
+            minWidth: 180,
+          }}
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as MachineStatusFilter)}
+          style={{
+            padding: '6px 10px',
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 12,
+          }}
+        >
+          <option value="all">All statuses</option>
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+          <option value="degraded">Degraded</option>
+        </select>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+          {filteredList.length}/{list.length} machines
+        </span>
+      </div>
+
       {/* Summary stats */}
       <div
         style={{
@@ -123,8 +196,11 @@ export function MachinesPage(): React.JSX.Element {
       </div>
 
       {/* Machine cards or empty state */}
-      {list.length === 0 ? (
-        <EmptyState loading={machines.isLoading} />
+      {filteredList.length === 0 ? (
+        <EmptyState
+          loading={machines.isLoading}
+          hasFilters={list.length > 0 && filteredList.length === 0}
+        />
       ) : (
         <div
           style={{
@@ -133,7 +209,7 @@ export function MachinesPage(): React.JSX.Element {
             gap: 16,
           }}
         >
-          {list.map((m) => (
+          {filteredList.map((m) => (
             <MachineCard key={m.id} machine={m} />
           ))}
         </div>
@@ -180,16 +256,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           >
             {m.hostname}
           </div>
-          <div
-            style={{
-              fontSize: 11,
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-muted)',
-              wordBreak: 'break-all',
-            }}
-          >
-            {m.id}
-          </div>
+          <CopyableText value={m.id} maxDisplay={12} fontSize={11} />
         </div>
         <StatusBadge status={m.status} />
       </div>
@@ -410,7 +477,13 @@ function CapBadge({
   );
 }
 
-function EmptyState({ loading }: { loading: boolean }): React.JSX.Element {
+function EmptyState({
+  loading,
+  hasFilters,
+}: {
+  loading: boolean;
+  hasFilters?: boolean;
+}): React.JSX.Element {
   return (
     <div
       style={{
@@ -429,9 +502,13 @@ function EmptyState({ loading }: { loading: boolean }): React.JSX.Element {
           marginBottom: 8,
         }}
       >
-        {loading ? 'Loading machines...' : 'No machines registered'}
+        {loading
+          ? 'Loading machines...'
+          : hasFilters
+            ? 'No machines match the current filters'
+            : 'No machines registered'}
       </div>
-      {!loading && (
+      {!loading && !hasFilters && (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           Register a machine by running{' '}
           <code
