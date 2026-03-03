@@ -14,20 +14,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className="dark">
+      <body className="h-full bg-background text-foreground antialiased">
         <Providers>
-          <div style={{ height: '100%', display: 'flex' }}>
+          <div className="h-full flex">
             <Sidebar />
-            <main
-              style={{
-                flex: 1,
-                overflow: 'auto',
-                backgroundColor: 'var(--bg-primary)',
-              }}
-            >
-              {children}
-            </main>
+            <main className="flex-1 overflow-auto bg-background">{children}</main>
           </div>
         </Providers>
       </body>

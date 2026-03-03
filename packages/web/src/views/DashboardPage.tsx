@@ -1,13 +1,21 @@
-import type React from 'react';
+'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import type React from 'react';
 
+import { cn } from '@/lib/utils';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import type { WsConnectionStatus } from '../hooks/use-websocket';
 import { useWebSocket } from '../hooks/use-websocket';
 import { timeAgo, truncate } from '../lib/format-utils';
-import { agentsQuery, discoverQuery, healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
+import {
+  agentsQuery,
+  discoverQuery,
+  healthQuery,
+  machinesQuery,
+  metricsQuery,
+} from '../lib/queries';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -54,31 +62,16 @@ export function DashboardPage(): React.JSX.Element {
   const healthLabel = healthStatus ?? 'unknown';
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100 }}>
+    <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 24,
-        }}
-      >
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Command Center</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-[22px] font-bold">Command Center</h1>
+        <div className="flex items-center gap-3">
           <WsStatusIndicator status={wsStatus} />
           <button
             type="button"
             onClick={refreshAll}
-            style={{
-              padding: '6px 14px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
+            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded text-[13px] cursor-pointer"
           >
             Refresh
           </button>
@@ -87,84 +80,50 @@ export function DashboardPage(): React.JSX.Element {
 
       {/* Error banner */}
       {anyError && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: '#7f1d1d',
-            color: '#fca5a5',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
+        <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg mb-4 text-[13px]">
           {anyError.message}
         </div>
       )}
 
       {/* Health status card */}
       <div
-        style={{
-          padding: '16px 20px',
-          backgroundColor: 'var(--bg-secondary)',
-          border: `1px solid ${healthStatus === 'ok' ? 'var(--green-subtle)' : 'var(--border)'}`,
-          borderRadius: 'var(--radius)',
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          boxShadow: healthStatus === 'ok' ? '0 0 20px rgba(34, 197, 94, 0.04)' : 'none',
-        }}
+        className={cn(
+          'px-5 py-4 bg-card border rounded-lg mb-5 flex items-center justify-between',
+          healthStatus === 'ok'
+            ? 'border-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.04)]'
+            : 'border-border',
+        )}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="flex items-center gap-3">
           <span
-            style={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              backgroundColor: healthColor,
-              flexShrink: 0,
-              boxShadow: healthStatus === 'ok' ? `0 0 8px ${healthColor}` : 'none',
-            }}
+            className={cn(
+              'w-3 h-3 rounded-full shrink-0',
+              healthStatus === 'ok' && 'shadow-[0_0_8px_var(--green)]',
+            )}
+            style={{ backgroundColor: healthColor }}
           />
           <div>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-              }}
-            >
+            <div className="text-[15px] font-semibold text-foreground">
               Control Plane:{' '}
-              <span style={{ color: healthColor, textTransform: 'uppercase' }}>{healthLabel}</span>
+              <span className="uppercase" style={{ color: healthColor }}>
+                {healthLabel}
+              </span>
             </div>
             {health.data?.timestamp && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  marginTop: 2,
-                }}
-              >
+              <div className="text-[11px] text-muted-foreground mt-0.5">
                 Last checked: {timeAgo(health.data.timestamp)}
               </div>
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <ActionButton label="Discover Sessions" onClick={() => void discovered.refetch()} />
           <ActionButton label="Refresh All" onClick={refreshAll} />
         </div>
       </div>
 
       {/* Stats grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: 12,
-          marginBottom: 24,
-        }}
-      >
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
         <StatCard
           label="Machines Online"
           value={`${machinesOnline} / ${machineList.length}`}
@@ -204,88 +163,35 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Two-column layout: Recent Activity + Machine Status */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 20,
-        }}
-      >
+      <div className="grid grid-cols-2 gap-5">
         {/* Recent Activity */}
         <div>
           <SectionHeader title="Recent Activity" />
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              overflow: 'hidden',
-            }}
-          >
+          <div className="border border-border rounded-lg overflow-hidden">
             {discoveredSessions.length === 0 ? (
               <EmptyState loading={discovered.isLoading} message="No sessions discovered" />
             ) : (
               discoveredSessions.slice(0, 5).map((session, idx) => (
                 <div
                   key={session.sessionId}
-                  style={{
-                    padding: '12px 16px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderTop: idx > 0 ? '1px solid var(--border)' : 'none',
-                  }}
+                  className={cn('px-4 py-3 bg-card', idx > 0 && 'border-t border-border')}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: 'var(--text-primary)',
-                      }}
-                    >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-[13px] font-medium text-foreground">
                       {truncate(session.summary || 'Untitled session', 50)}
                     </span>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        flexShrink: 0,
-                        marginLeft: 8,
-                      }}
-                    >
+                    <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
                       {timeAgo(session.lastActivity)}
                     </span>
                   </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontSize: 11,
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        backgroundColor: 'var(--bg-tertiary)',
-                        padding: '1px 6px',
-                        borderRadius: 'var(--radius-sm)',
-                      }}
-                    >
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="font-mono bg-muted px-1.5 py-px rounded">
                       {session.hostname}
                     </span>
-                    <span style={{ fontFamily: 'var(--font-mono)' }}>
+                    <span className="font-mono">
                       {truncate(session.projectPath.split('/').pop() ?? session.projectPath, 30)}
                     </span>
-                    {session.branch && (
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{session.branch}</span>
-                    )}
+                    {session.branch && <span className="font-mono">{session.branch}</span>}
                     <span>{session.messageCount} msgs</span>
                   </div>
                 </div>
@@ -297,80 +203,35 @@ export function DashboardPage(): React.JSX.Element {
         {/* Machine Status */}
         <div>
           <SectionHeader title="Fleet Status" />
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              overflow: 'hidden',
-            }}
-          >
+          <div className="border border-border rounded-lg overflow-hidden">
             {machineList.length === 0 ? (
               <EmptyState loading={machines.isLoading} message="No machines registered" />
             ) : (
               machineList.map((machine, idx) => (
                 <div
                   key={machine.id}
-                  style={{
-                    padding: '10px 16px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderTop: idx > 0 ? '1px solid var(--border)' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
+                  className={cn(
+                    'px-4 py-2.5 bg-card flex items-center justify-between',
+                    idx > 0 && 'border-t border-border',
+                  )}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                    }}
-                  >
+                  <div className="flex items-center gap-2.5">
                     <StatusBadge status={machine.status} />
                     <div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 500,
-                          color: 'var(--text-primary)',
-                        }}
-                      >
+                      <div className="text-[13px] font-medium text-foreground">
                         {machine.hostname}
                       </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--text-muted)',
-                          fontFamily: 'var(--font-mono)',
-                        }}
-                      >
+                      <div className="text-[11px] text-muted-foreground font-mono">
                         {machine.tailscaleIp}
                       </div>
                     </div>
                   </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontSize: 11,
-                      color: 'var(--text-muted)',
-                    }}
-                  >
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                     <span>
                       {machine.os}/{machine.arch}
                     </span>
                     {machine.capabilities.gpu && (
-                      <span
-                        style={{
-                          backgroundColor: 'var(--bg-tertiary)',
-                          padding: '1px 5px',
-                          borderRadius: 'var(--radius-sm)',
-                          fontSize: 10,
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                        }}
-                      >
+                      <span className="bg-muted px-1.5 py-px rounded text-[10px] font-semibold uppercase">
                         GPU
                       </span>
                     )}
@@ -384,31 +245,17 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Quick Stats Summary */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 16,
-          marginTop: 4,
-          padding: '10px 16px',
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          marginBottom: 20,
-          fontSize: 12,
-          color: 'var(--text-muted)',
-          alignItems: 'center',
-        }}
-      >
-        <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Platform</span>
+      <div className="flex gap-4 mt-1 px-4 py-2.5 bg-card border border-border rounded-lg mb-5 text-xs text-muted-foreground items-center">
+        <span className="font-medium text-muted-foreground">Platform</span>
         <span>
           Uptime:{' '}
-          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+          <span className="text-foreground font-mono">
             {metricsData.agentctl_control_plane_up === 1 ? 'Healthy' : 'Down'}
           </span>
         </span>
         <span>
           Total Cost:{' '}
-          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+          <span className="text-foreground font-mono">
             $
             {typeof metricsData.agentctl_total_cost_usd === 'number'
               ? metricsData.agentctl_total_cost_usd.toFixed(2)
@@ -416,60 +263,23 @@ export function DashboardPage(): React.JSX.Element {
           </span>
         </span>
         <span>
-          Total Runs:{' '}
-          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-            {totalRuns}
-          </span>
+          Total Runs: <span className="text-foreground font-mono">{totalRuns}</span>
         </span>
       </div>
 
       {/* Dependencies */}
       {health.data?.dependencies && (
-        <div style={{ marginTop: 24 }}>
+        <div className="mt-6">
           <SectionHeader title="Dependencies" />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: 8,
-            }}
-          >
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
             {Object.entries(health.data.dependencies).map(([name, dep]) => (
               <div
                 key={name}
-                style={{
-                  padding: '10px 14px',
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
+                className="px-3.5 py-2.5 bg-card border border-border rounded-lg flex justify-between items-center"
               >
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {name}
-                </span>
-                <span
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--text-muted)',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
+                <span className="text-[13px] font-medium capitalize">{name}</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground font-mono">
                     {dep.latencyMs.toFixed(0)}ms
                   </span>
                   <StatusBadge status={dep.status} />
@@ -488,18 +298,7 @@ export function DashboardPage(): React.JSX.Element {
 // ---------------------------------------------------------------------------
 
 function SectionHeader({ title }: { title: string }): React.JSX.Element {
-  return (
-    <h2
-      style={{
-        fontSize: 15,
-        fontWeight: 600,
-        color: 'var(--text-secondary)',
-        marginBottom: 10,
-      }}
-    >
-      {title}
-    </h2>
-  );
+  return <h2 className="text-[15px] font-semibold text-muted-foreground mb-2.5">{title}</h2>;
 }
 
 function ActionButton({
@@ -513,16 +312,7 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      style={{
-        padding: '5px 12px',
-        backgroundColor: 'transparent',
-        color: 'var(--accent)',
-        border: '1px solid var(--accent)',
-        borderRadius: 'var(--radius-sm)',
-        fontSize: 12,
-        fontWeight: 500,
-        cursor: 'pointer',
-      }}
+      className="px-3 py-1.5 bg-transparent text-primary border border-primary rounded text-xs font-medium cursor-pointer"
     >
       {label}
     </button>
@@ -537,15 +327,7 @@ function EmptyState({
   message: string;
 }): React.JSX.Element {
   return (
-    <div
-      style={{
-        padding: 32,
-        textAlign: 'center',
-        color: 'var(--text-muted)',
-        backgroundColor: 'var(--bg-secondary)',
-        fontSize: 13,
-      }}
-    >
+    <div className="p-8 text-center text-muted-foreground bg-card text-[13px]">
       {loading ? 'Loading...' : message}
     </div>
   );
@@ -567,24 +349,10 @@ function WsStatusIndicator({ status }: { status: WsConnectionStatus }): React.JS
   return (
     <span
       title={label}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        fontSize: 11,
-        fontWeight: 500,
-        color,
-      }}
+      className="inline-flex items-center gap-1.5 text-[11px] font-medium"
+      style={{ color }}
     >
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          backgroundColor: color,
-          flexShrink: 0,
-        }}
-      />
+      <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: color }} />
       {label}
     </span>
   );

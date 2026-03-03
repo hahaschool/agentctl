@@ -1,10 +1,12 @@
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useMemo, useState } from 'react';
-
+import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
-import { useQuery } from '@tanstack/react-query';
 import type { Machine } from '../lib/api';
 import { formatDate, timeAgo } from '../lib/format-utils';
 import { machinesQuery } from '../lib/queries';
@@ -45,56 +47,26 @@ export function MachinesPage(): React.JSX.Element {
   }, [list, statusFilter, search]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100 }}>
+    <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 24,
-        }}
-      >
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700 }}>Fleet Machines</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[22px] font-bold">Fleet Machines</h1>
             {list.length > 0 && (
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: 'var(--text-muted)',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-sm)',
-                }}
-              >
+              <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-sm">
                 {list.length}
               </span>
             )}
           </div>
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--text-muted)',
-              marginTop: 4,
-            }}
-          >
+          <p className="text-[13px] text-muted-foreground mt-1">
             Machines connected via Tailscale mesh. Auto-refreshes every 15s.
           </p>
         </div>
         <button
           type="button"
           onClick={() => machines.refetch()}
-          style={{
-            padding: '6px 14px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 13,
-            cursor: 'pointer',
-          }}
+          className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
         >
           Refresh
         </button>
@@ -102,77 +74,37 @@ export function MachinesPage(): React.JSX.Element {
 
       {/* Error banner */}
       {machines.error && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: '#7f1d1d',
-            color: '#fca5a5',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
+        <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg mb-4 text-[13px]">
           {machines.error.message}
         </div>
       )}
 
       {/* Filter controls */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 10,
-          alignItems: 'center',
-          marginBottom: 16,
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="flex gap-2.5 items-center mb-4 flex-wrap">
         <input
           type="text"
           placeholder="Search machines..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{
-            padding: '6px 10px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-            outline: 'none',
-            minWidth: 180,
-          }}
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[180px]"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as MachineStatusFilter)}
-          style={{
-            padding: '6px 10px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-          }}
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
         >
           <option value="all">All statuses</option>
           <option value="online">Online</option>
           <option value="offline">Offline</option>
           <option value="degraded">Degraded</option>
         </select>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+        <span className="text-[11px] text-muted-foreground ml-auto">
           {filteredList.length}/{list.length} machines
         </span>
       </div>
 
       {/* Summary stats */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: 12,
-          marginBottom: 24,
-        }}
-      >
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
         <StatCard label="Total Machines" value={String(list.length)} color="var(--text-primary)" />
         <StatCard
           label="Online"
@@ -200,13 +132,7 @@ export function MachinesPage(): React.JSX.Element {
           hasFilters={list.length > 0 && filteredList.length === 0}
         />
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))',
-            gap: 16,
-          }}
-        >
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(480px,1fr))] gap-4">
           {filteredList.map((m) => (
             <MachineCard key={m.id} machine={m} />
           ))}
@@ -224,51 +150,18 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
   const m = machine;
 
   return (
-    <div
-      style={{
-        padding: 20,
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-      }}
-    >
+    <div className="p-5 bg-card border border-border rounded-lg flex flex-col gap-3.5">
       {/* Top row: hostname + status */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-        }}
-      >
+      <div className="flex justify-between items-start">
         <div>
-          <div
-            style={{
-              fontSize: 17,
-              fontWeight: 700,
-              color: 'var(--text-primary)',
-              marginBottom: 3,
-            }}
-          >
-            {m.hostname}
-          </div>
-          <CopyableText value={m.id} maxDisplay={12} fontSize={11} />
+          <div className="text-[17px] font-bold text-foreground mb-0.5">{m.hostname}</div>
+          <CopyableText value={m.id} maxDisplay={12} />
         </div>
         <StatusBadge status={m.status} />
       </div>
 
       {/* Details grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 12,
-          paddingTop: 10,
-          borderTop: '1px solid var(--border)',
-        }}
-      >
+      <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border">
         <DetailField label="Tailscale IP" value={m.tailscaleIp} mono />
         <DetailField label="OS / Architecture" value={`${m.os} / ${m.arch}`} />
         <DetailField
@@ -283,25 +176,8 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
 
       {/* Capabilities row */}
       {m.capabilities && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-            paddingTop: 10,
-            borderTop: '1px solid var(--border)',
-          }}
-        >
-          <span
-            style={{
-              fontSize: 10,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              marginRight: 4,
-            }}
-          >
+        <div className="flex items-center gap-2 flex-wrap pt-2.5 border-t border-border">
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wide mr-1">
             Capabilities
           </span>
           <CapBadge
@@ -318,18 +194,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
             activeBorder="#1d4ed8"
             activeText="#93c5fd"
           />
-          <span
-            style={{
-              padding: '3px 10px',
-              fontSize: 11,
-              fontWeight: 500,
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
+          <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-sm bg-muted text-muted-foreground border border-border font-mono">
             {m.capabilities.maxConcurrentAgents} max agents
           </span>
         </div>
@@ -362,33 +227,20 @@ function DetailField({
   mono?: boolean;
   highlight?: 'ok' | 'warn' | 'muted';
 }): React.JSX.Element {
-  const valueColor =
-    highlight === 'ok'
-      ? 'var(--green)'
-      : highlight === 'warn'
-        ? 'var(--yellow)'
-        : 'var(--text-secondary)';
-
   return (
     <div>
-      <div
-        style={{
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          marginBottom: 2,
-        }}
-      >
+      <div className="text-[10px] text-muted-foreground uppercase tracking-[0.04em] mb-0.5">
         {label}
       </div>
       <div
-        style={{
-          fontSize: 13,
-          fontFamily: mono ? 'var(--font-mono)' : undefined,
-          color: valueColor,
-          wordBreak: 'break-all',
-        }}
+        className={cn(
+          'text-[13px] break-all',
+          mono && 'font-mono',
+          highlight === 'ok' && 'text-green-500',
+          highlight === 'warn' && 'text-yellow-500',
+          !highlight && 'text-muted-foreground',
+          highlight === 'muted' && 'text-muted-foreground',
+        )}
       >
         {value}
       </div>
@@ -411,17 +263,19 @@ function CapBadge({
 }): React.JSX.Element {
   return (
     <span
-      style={{
-        padding: '3px 10px',
-        fontSize: 11,
-        fontWeight: 600,
-        borderRadius: 'var(--radius-sm)',
-        backgroundColor: enabled ? activeColor : 'var(--bg-tertiary)',
-        color: enabled ? activeText : 'var(--text-muted)',
-        border: `1px solid ${enabled ? activeBorder : 'var(--border)'}`,
-        textTransform: 'uppercase',
-        letterSpacing: '0.03em',
-      }}
+      className={cn(
+        'px-2.5 py-0.5 text-[11px] font-semibold rounded-sm uppercase tracking-[0.03em] border',
+        !enabled && 'bg-muted text-muted-foreground border-border',
+      )}
+      style={
+        enabled
+          ? {
+              backgroundColor: activeColor,
+              color: activeText,
+              borderColor: activeBorder,
+            }
+          : undefined
+      }
     >
       {label}
     </span>
@@ -436,23 +290,8 @@ function EmptyState({
   hasFilters?: boolean;
 }): React.JSX.Element {
   return (
-    <div
-      style={{
-        padding: 64,
-        textAlign: 'center',
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 15,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          marginBottom: 8,
-        }}
-      >
+    <div className="p-16 text-center bg-card border border-border rounded-lg">
+      <div className="text-[15px] font-semibold text-muted-foreground mb-2">
         {loading
           ? 'Loading machines...'
           : hasFilters
@@ -460,17 +299,9 @@ function EmptyState({
             : 'No machines registered'}
       </div>
       {!loading && !hasFilters && (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+        <div className="text-[13px] text-muted-foreground">
           Register a machine by running{' '}
-          <code
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              backgroundColor: 'var(--bg-tertiary)',
-              padding: '2px 6px',
-              borderRadius: 'var(--radius-sm)',
-            }}
-          >
+          <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded-sm">
             ./scripts/setup-machine.sh
           </code>{' '}
           on the target host.

@@ -1,60 +1,39 @@
-import type React from 'react';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
-type StatusConfig = {
-  color: string;
-  bg: string;
-  pulse?: boolean;
+const STATUS_VARIANTS: Record<string, string> = {
+  online: 'bg-green-500/10 text-green-500 border-green-500/20',
+  running: 'bg-green-500/10 text-green-500 border-green-500/20',
+  active: 'bg-green-500/10 text-green-500 border-green-500/20',
+  ok: 'bg-green-500/10 text-green-500 border-green-500/20',
+  registered: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  starting: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+  stopping: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+  degraded: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+  paused: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  offline: 'bg-muted text-muted-foreground border-transparent',
+  stopped: 'bg-muted text-muted-foreground border-transparent',
+  idle: 'bg-muted text-muted-foreground border-transparent',
+  ended: 'bg-muted text-muted-foreground border-transparent',
+  error: 'bg-red-500/10 text-red-500 border-red-500/20',
+  timeout: 'bg-red-500/10 text-red-500 border-red-500/20',
 };
 
-const STATUS_MAP: Record<string, StatusConfig> = {
-  online: { color: 'var(--green)', bg: 'var(--green-subtle)', pulse: true },
-  running: { color: 'var(--green)', bg: 'var(--green-subtle)', pulse: true },
-  active: { color: 'var(--green)', bg: 'var(--green-subtle)', pulse: true },
-  ok: { color: 'var(--green)', bg: 'var(--green-subtle)' },
-  registered: { color: 'var(--accent)', bg: 'var(--accent-subtle)' },
-  starting: { color: 'var(--yellow)', bg: 'var(--yellow-subtle)', pulse: true },
-  stopping: { color: 'var(--yellow)', bg: 'var(--yellow-subtle)' },
-  degraded: { color: 'var(--yellow)', bg: 'var(--yellow-subtle)' },
-  paused: { color: 'var(--orange)', bg: 'rgba(249, 115, 22, 0.1)' },
-  offline: { color: 'var(--text-muted)', bg: 'transparent' },
-  stopped: { color: 'var(--text-muted)', bg: 'transparent' },
-  idle: { color: 'var(--text-muted)', bg: 'transparent' },
-  ended: { color: 'var(--text-muted)', bg: 'transparent' },
-  error: { color: 'var(--red)', bg: 'var(--red-subtle)' },
-  timeout: { color: 'var(--red)', bg: 'var(--red-subtle)' },
-};
-
-const DEFAULT_CONFIG: StatusConfig = { color: 'var(--text-muted)', bg: 'transparent' };
+const PULSE_STATUSES = new Set(['running', 'active', 'starting', 'online']);
 
 export function StatusBadge({ status }: { status: string }): React.JSX.Element {
-  const cfg = STATUS_MAP[status] ?? DEFAULT_CONFIG;
+  const variant = STATUS_VARIANTS[status] ?? 'bg-muted text-muted-foreground';
+  const shouldPulse = PULSE_STATUSES.has(status);
 
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        fontSize: 11,
-        fontWeight: 500,
-        color: cfg.color,
-        backgroundColor: cfg.bg,
-        padding: '2px 8px',
-        borderRadius: 'var(--radius-sm)',
-        textTransform: 'capitalize',
-      }}
-    >
+    <Badge variant="outline" className={cn('gap-1.5 capitalize', variant)}>
       <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          backgroundColor: cfg.color,
-          flexShrink: 0,
-          boxShadow: cfg.pulse ? `0 0 4px ${cfg.color}` : undefined,
-        }}
+        className={cn(
+          'h-1.5 w-1.5 rounded-full bg-current shrink-0',
+          shouldPulse && 'animate-pulse',
+        )}
       />
       {status}
-    </span>
+    </Badge>
   );
 }

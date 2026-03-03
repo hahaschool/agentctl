@@ -1,25 +1,21 @@
-import type React from 'react';
+'use client';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { cn } from '@/lib/utils';
+
 type Props = {
-  /** Full text to copy to clipboard. */
   value: string;
-  /** Max characters to display (rest is truncated). Defaults to 8. */
   maxDisplay?: number;
-  /** Optional label shown instead of truncated value. */
   label?: string;
-  /** Font size in pixels. Defaults to 11. */
-  fontSize?: number;
+  className?: string;
 };
 
-/**
- * Inline button that copies text on click with brief "Copied!" feedback.
- */
 export function CopyableText({
   value,
   maxDisplay = 8,
   label,
-  fontSize = 11,
+  className,
 }: Props): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,21 +45,15 @@ export function CopyableText({
       type="button"
       onClick={handleCopy}
       title={copied ? 'Copied!' : `Click to copy: ${value}`}
-      style={{
-        fontSize,
-        fontFamily: 'var(--font-mono)',
-        color: copied ? 'var(--green)' : 'var(--text-muted)',
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-        cursor: 'pointer',
-        padding: '1px 4px',
-        borderRadius: 'var(--radius-sm)',
-        transition: 'color 0.2s, background-color 0.2s',
-        backgroundColor: copied ? 'var(--bg-tertiary)' : 'transparent',
-        border: 'none',
-        font: 'inherit',
-        lineHeight: 'inherit',
-      }}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-sm px-1 py-0.5',
+        'font-mono text-[11px] whitespace-nowrap shrink-0 cursor-pointer',
+        'transition-colors duration-200',
+        copied
+          ? 'text-green-500 bg-muted'
+          : 'text-muted-foreground bg-transparent hover:bg-muted/50',
+        className,
+      )}
     >
       {copied ? 'Copied!' : display}
     </button>

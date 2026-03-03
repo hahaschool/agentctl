@@ -1,37 +1,22 @@
-import type React from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 
 type Props = {
   label: string;
   value: string;
-  color: string;
+  color?: string;
   sublabel?: string;
 };
 
-export function StatCard({ label, value, color, sublabel }: Props): React.JSX.Element {
+export function StatCard({ label, value, sublabel }: Props): React.JSX.Element {
   return (
-    <div
-      style={{
-        padding: '16px 18px',
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          marginBottom: 6,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
-      {sublabel && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{sublabel}</div>
-      )}
-    </div>
+    <Card className="bg-card border-border">
+      <CardContent className="p-4">
+        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+          {label}
+        </div>
+        <div className="text-2xl font-bold text-foreground">{value}</div>
+        {sublabel && <div className="mt-1 text-[11px] text-muted-foreground">{sublabel}</div>}
+      </CardContent>
+    </Card>
   );
 }

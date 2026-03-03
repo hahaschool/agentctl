@@ -1,7 +1,10 @@
+'use client';
+
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 
+import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
@@ -166,26 +169,15 @@ export function AgentsPage(): React.JSX.Element {
     });
   };
 
+  const isCreateDisabled = createLoading || !createName.trim() || !createMachineId;
+
   return (
-    <div style={{ padding: 24, maxWidth: 1100 }}>
+    <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 20,
-        }}
-      >
+      <div className="flex justify-between items-center mb-5">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Agents</h1>
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--text-muted)',
-              marginTop: 4,
-            }}
-          >
+          <h1 className="text-[22px] font-bold">Agents</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">
             {agentList.length} agent{agentList.length !== 1 ? 's' : ''} registered
             {Object.keys(statusCounts).length > 0 && (
               <span>
@@ -198,35 +190,18 @@ export function AgentsPage(): React.JSX.Element {
             )}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={() => void agents.refetch()}
-            style={{
-              padding: '6px 14px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
+            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
           >
             Refresh
           </button>
           <button
             type="button"
             onClick={() => setShowCreateForm((prev) => !prev)}
-            style={{
-              padding: '6px 14px',
-              backgroundColor: 'var(--accent)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
+            className="px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-[13px] font-medium cursor-pointer"
           >
             {showCreateForm ? 'Cancel' : 'Create Agent'}
           </button>
@@ -235,76 +210,27 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Error banners */}
       {agents.error && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: '#7f1d1d',
-            color: '#fca5a5',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
+        <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg mb-4 text-[13px]">
           {agents.error.message}
         </div>
       )}
 
       {/* Inline create form */}
       {showCreateForm && (
-        <form
-          onSubmit={handleCreate}
-          style={{
-            padding: 16,
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            marginBottom: 20,
-          }}
-        >
-          <h3
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              marginBottom: 12,
-            }}
-          >
-            New Agent
-          </h3>
+        <form onSubmit={handleCreate} className="p-4 bg-card border border-border rounded-lg mb-5">
+          <h3 className="text-sm font-semibold mb-3">New Agent</h3>
 
           {createError && (
-            <div
-              style={{
-                padding: '8px 12px',
-                backgroundColor: '#7f1d1d',
-                color: '#fca5a5',
-                borderRadius: 'var(--radius-sm)',
-                marginBottom: 12,
-                fontSize: 12,
-              }}
-            >
+            <div className="px-3 py-2 bg-red-900 text-red-300 rounded-sm mb-3 text-xs">
               {createError}
             </div>
           )}
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: 12,
-              alignItems: 'end',
-            }}
-          >
+          <div className="grid grid-cols-3 gap-3 items-end">
             <div>
               <label
                 htmlFor="create-agent-name"
-                style={{
-                  display: 'block',
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  marginBottom: 4,
-                }}
+                className="block text-[11px] text-muted-foreground uppercase tracking-[0.04em] mb-1"
               >
                 Name
               </label>
@@ -315,31 +241,14 @@ export function AgentsPage(): React.JSX.Element {
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
                 placeholder="my-agent"
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 13,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
+                className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none box-border"
               />
             </div>
 
             <div>
               <label
                 htmlFor="create-agent-machine"
-                style={{
-                  display: 'block',
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  marginBottom: 4,
-                }}
+                className="block text-[11px] text-muted-foreground uppercase tracking-[0.04em] mb-1"
               >
                 Machine
               </label>
@@ -348,17 +257,7 @@ export function AgentsPage(): React.JSX.Element {
                 required
                 value={createMachineId}
                 onChange={(e) => setCreateMachineId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 13,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
+                className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none box-border"
               >
                 <option value="">Select machine...</option>
                 {machineList.map((m) => (
@@ -372,14 +271,7 @@ export function AgentsPage(): React.JSX.Element {
             <div>
               <label
                 htmlFor="create-agent-type"
-                style={{
-                  display: 'block',
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  marginBottom: 4,
-                }}
+                className="block text-[11px] text-muted-foreground uppercase tracking-[0.04em] mb-1"
               >
                 Type
               </label>
@@ -387,17 +279,7 @@ export function AgentsPage(): React.JSX.Element {
                 id="create-agent-type"
                 value={createType}
                 onChange={(e) => setCreateType(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 13,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
+                className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none box-border"
               >
                 {AGENT_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -408,24 +290,14 @@ export function AgentsPage(): React.JSX.Element {
             </div>
           </div>
 
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="mt-3 flex justify-end">
             <button
               type="submit"
-              disabled={createLoading || !createName.trim() || !createMachineId}
-              style={{
-                padding: '8px 20px',
-                backgroundColor: 'var(--accent)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor:
-                  createLoading || !createName.trim() || !createMachineId
-                    ? 'not-allowed'
-                    : 'pointer',
-                opacity: createLoading || !createName.trim() || !createMachineId ? 0.5 : 1,
-              }}
+              disabled={isCreateDisabled}
+              className={cn(
+                'px-5 py-2 bg-primary text-white border-none rounded-sm text-[13px] font-medium',
+                isCreateDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer opacity-100',
+              )}
             >
               {createLoading ? 'Creating...' : 'Create'}
             </button>
@@ -434,42 +306,18 @@ export function AgentsPage(): React.JSX.Element {
       )}
 
       {/* Filter / Sort controls */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 10,
-          alignItems: 'center',
-          marginBottom: 16,
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="flex gap-2.5 items-center mb-4 flex-wrap">
         <input
           type="text"
           placeholder="Search agents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{
-            padding: '6px 10px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-            outline: 'none',
-            minWidth: 180,
-          }}
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[180px]"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as AgentStatusFilter)}
-          style={{
-            padding: '6px 10px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-          }}
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
         >
           <option value="all">All statuses</option>
           <option value="running">Running</option>
@@ -480,34 +328,20 @@ export function AgentsPage(): React.JSX.Element {
         <select
           value={sortOrder}
           onChange={(e) => setSortOrder(e.target.value as AgentSortOrder)}
-          style={{
-            padding: '6px 10px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-          }}
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
         >
           <option value="name">Sort: Name</option>
           <option value="status">Sort: Status</option>
           <option value="lastRun">Sort: Last run</option>
           <option value="cost">Sort: Total cost</option>
         </select>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+        <span className="text-[11px] text-muted-foreground ml-auto">
           {filteredAgents.length}/{agentList.length} agents
         </span>
       </div>
 
       {/* Summary stats */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-          gap: 12,
-          marginBottom: 24,
-        }}
-      >
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-6">
         <StatCard
           label="Total Agents"
           value={String(agentList.length)}
@@ -525,14 +359,7 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Agent cards grid */}
       {filteredAgents.length === 0 ? (
-        <div
-          style={{
-            padding: 48,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            fontSize: 14,
-          }}
-        >
+        <div className="p-12 text-center text-muted-foreground text-sm">
           {agents.isLoading
             ? 'Loading agents...'
             : agentList.length === 0
@@ -540,45 +367,17 @@ export function AgentsPage(): React.JSX.Element {
               : 'No agents match the current filters'}
         </div>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-            gap: 12,
-          }}
-        >
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3">
           {filteredAgents.map((agent) => (
-            <div
-              key={agent.id}
-              style={{
-                padding: 16,
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-              }}
-            >
+            <div key={agent.id} className="p-4 bg-card border border-border rounded-lg">
               {/* Card header: name + status */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 12,
-                }}
-              >
-                <span style={{ fontWeight: 600, fontSize: 15 }}>{agent.name}</span>
+              <div className="flex justify-between items-center mb-3">
+                <span className="font-semibold text-[15px]">{agent.name}</span>
                 <StatusBadge status={agent.status} />
               </div>
 
               {/* Card details */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 8,
-                  fontSize: 12,
-                }}
-              >
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <Info label="ID" value={agent.id} mono copyable />
                 <Info label="Machine" value={agent.machineId} mono copyable />
                 <Info label="Type" value={agent.type} />
@@ -588,55 +387,27 @@ export function AgentsPage(): React.JSX.Element {
               </div>
 
               {/* Cost + Last run */}
-              <div
-                style={{
-                  marginTop: 10,
-                  paddingTop: 10,
-                  borderTop: '1px solid var(--border)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: 12,
-                }}
-              >
-                <div style={{ display: 'flex', gap: 16 }}>
-                  <span style={{ color: 'var(--text-muted)' }}>
+              <div className="mt-2.5 pt-2.5 border-t border-border flex justify-between items-center text-xs">
+                <div className="flex gap-4">
+                  <span className="text-muted-foreground">
                     Last: {formatCost(agent.lastCostUsd)}
                   </span>
-                  <span style={{ color: 'var(--text-muted)' }}>
+                  <span className="text-muted-foreground">
                     Total: {formatCost(agent.totalCostUsd)}
                   </span>
                 </div>
-                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                <span className="text-muted-foreground text-[11px]">
                   {agent.lastRunAt ? timeAgo(agent.lastRunAt) : 'never run'}
                 </span>
               </div>
 
               {/* Actions */}
-              <div
-                style={{
-                  marginTop: 10,
-                  paddingTop: 10,
-                  borderTop: '1px solid var(--border)',
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'center',
-                }}
-              >
+              <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
                 {agent.status === 'running' ? (
                   <button
                     type="button"
                     onClick={() => handleStop(agent.id)}
-                    style={{
-                      padding: '6px 14px',
-                      backgroundColor: '#7f1d1d',
-                      color: '#fca5a5',
-                      border: '1px solid #991b1b',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                    }}
+                    className="px-3.5 py-1.5 bg-red-900 text-red-300 border border-red-800 rounded-sm text-xs font-medium cursor-pointer"
                   >
                     Stop
                   </button>
@@ -655,32 +426,18 @@ export function AgentsPage(): React.JSX.Element {
                         }
                       }}
                       placeholder="Enter prompt..."
-                      style={{
-                        flex: 1,
-                        padding: '6px 10px',
-                        backgroundColor: 'var(--bg-tertiary)',
-                        color: 'var(--text-primary)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: 12,
-                        outline: 'none',
-                      }}
+                      className="flex-1 px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => handleStart(agent.id)}
                       disabled={!prompt.trim()}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: 'var(--accent)',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: 12,
-                        fontWeight: 500,
-                        cursor: prompt.trim() ? 'pointer' : 'not-allowed',
-                        opacity: prompt.trim() ? 1 : 0.5,
-                      }}
+                      className={cn(
+                        'px-3 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium',
+                        prompt.trim()
+                          ? 'cursor-pointer opacity-100'
+                          : 'cursor-not-allowed opacity-50',
+                      )}
                     >
                       Go
                     </button>
@@ -690,15 +447,7 @@ export function AgentsPage(): React.JSX.Element {
                         setPromptAgentId(null);
                         setPrompt('');
                       }}
-                      style={{
-                        padding: '6px 10px',
-                        backgroundColor: 'var(--bg-tertiary)',
-                        color: 'var(--text-secondary)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: 12,
-                        cursor: 'pointer',
-                      }}
+                      className="px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -710,16 +459,7 @@ export function AgentsPage(): React.JSX.Element {
                       setPromptAgentId(agent.id);
                       setPrompt('');
                     }}
-                    style={{
-                      padding: '6px 14px',
-                      backgroundColor: 'var(--accent)',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                    }}
+                    className="px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium cursor-pointer"
                   >
                     Start
                   </button>
@@ -766,25 +506,9 @@ function Info({
 }): React.JSX.Element {
   return (
     <div>
-      <span
-        style={{
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-        }}
-      >
-        {label}
-      </span>
-      <div
-        style={{
-          marginTop: 1,
-          fontFamily: mono ? 'var(--font-mono)' : undefined,
-          fontSize: 12,
-          wordBreak: 'break-all',
-        }}
-      >
-        {copyable ? <CopyableText value={value} maxDisplay={12} fontSize={12} /> : value}
+      <span className="text-[10px] text-muted-foreground uppercase tracking-[0.04em]">{label}</span>
+      <div className={cn('mt-px text-xs break-all', mono && 'font-mono')}>
+        {copyable ? <CopyableText value={value} maxDisplay={12} /> : value}
       </div>
     </div>
   );

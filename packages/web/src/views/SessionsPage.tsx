@@ -1,7 +1,9 @@
+'use client';
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
+import { cn } from '@/lib/utils';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
@@ -247,70 +249,38 @@ export function SessionsPage(): React.JSX.Element {
     }
   }, [selected, queryClient, toast]);
 
+  const isFormDisabled =
+    formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim();
+
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
+    <div className="flex h-full">
       {/* Session list panel */}
-      <div
-        style={{
-          width: 340,
-          minWidth: 340,
-          borderRight: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <div
-          style={{
-            padding: '16px 16px 12px',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>
+      <div className="w-[340px] min-w-[340px] border-r border-border flex flex-col">
+        <div className="px-4 pt-4 pb-3 border-b border-border flex justify-between items-center">
+          <h2 className="text-base font-semibold">
             Sessions
-            <span
-              style={{
-                marginLeft: 8,
-                fontSize: 12,
-                fontWeight: 400,
-                color: 'var(--text-muted)',
-              }}
-            >
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
               ({filteredSessions.length})
             </span>
           </h2>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div className="flex gap-1.5">
             <button
               type="button"
               onClick={() => {
                 setShowCreateForm((prev) => !prev);
                 setFormError(null);
               }}
-              style={{
-                padding: '4px 10px',
-                backgroundColor: showCreateForm ? 'var(--accent)' : 'var(--bg-tertiary)',
-                color: showCreateForm ? '#fff' : 'var(--text-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-                fontWeight: 500,
-              }}
+              className={cn(
+                'px-2.5 py-1 border border-border rounded-sm text-xs font-medium',
+                showCreateForm ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+              )}
             >
               {showCreateForm ? 'Cancel' : '+ New Session'}
             </button>
             <button
               type="button"
               onClick={() => void sessions.refetch()}
-              style={{
-                padding: '4px 10px',
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-              }}
+              className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs"
             >
               Refresh
             </button>
@@ -318,21 +288,10 @@ export function SessionsPage(): React.JSX.Element {
         </div>
 
         {/* Search / filter input */}
-        <div
-          style={{
-            padding: '8px 16px',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
+        <div className="px-4 py-2 border-b border-border">
           <label
             htmlFor="session-search"
-            style={{
-              position: 'absolute',
-              width: 1,
-              height: 1,
-              overflow: 'hidden',
-              clip: 'rect(0,0,0,0)',
-            }}
+            className="absolute w-px h-px overflow-hidden [clip:rect(0,0,0,0)]"
           >
             Search sessions
           </label>
@@ -342,55 +301,30 @@ export function SessionsPage(): React.JSX.Element {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter by ID, project, agent..."
-            style={{
-              width: '100%',
-              padding: '6px 8px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 12,
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
+            className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none box-border"
           />
         </div>
 
         {/* Status filter tabs */}
-        <div
-          style={{
-            display: 'flex',
-            borderBottom: '1px solid var(--border)',
-            padding: '0 8px',
-          }}
-        >
+        <div className="flex border-b border-border px-2">
           {STATUS_TABS.map((tab) => (
             <button
               type="button"
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
-              style={{
-                flex: 1,
-                padding: '8px 4px',
-                fontSize: 11,
-                fontWeight: statusFilter === tab.key ? 600 : 400,
-                color: statusFilter === tab.key ? 'var(--accent)' : 'var(--text-muted)',
-                backgroundColor: 'transparent',
-                border: 'none',
-                borderBottom:
-                  statusFilter === tab.key ? '2px solid var(--accent)' : '2px solid transparent',
-                cursor: 'pointer',
-                transition: 'color 0.15s, border-color 0.15s',
-              }}
+              className={cn(
+                'flex-1 py-2 px-1 text-[11px] bg-transparent border-0 cursor-pointer transition-colors duration-150',
+                statusFilter === tab.key
+                  ? 'font-semibold text-primary border-b-2 border-b-primary'
+                  : 'font-normal text-muted-foreground border-b-2 border-b-transparent',
+              )}
             >
               {tab.label}
               <span
-                style={{
-                  marginLeft: 4,
-                  fontSize: 10,
-                  color: statusFilter === tab.key ? 'var(--accent)' : 'var(--text-muted)',
-                  opacity: 0.7,
-                }}
+                className={cn(
+                  'ml-1 text-[10px] opacity-70',
+                  statusFilter === tab.key ? 'text-primary' : 'text-muted-foreground',
+                )}
               >
                 {statusCounts[tab.key]}
               </span>
@@ -399,28 +333,12 @@ export function SessionsPage(): React.JSX.Element {
         </div>
 
         {/* Sort / Group / Filter controls */}
-        <div
-          style={{
-            padding: '6px 12px',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 flex-wrap">
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
             aria-label="Sort order"
-            style={{
-              padding: '3px 6px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 10,
-            }}
+            className="px-1.5 py-[3px] bg-muted text-muted-foreground border border-border rounded-sm text-[10px]"
           >
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
@@ -430,35 +348,18 @@ export function SessionsPage(): React.JSX.Element {
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
             aria-label="Group by"
-            style={{
-              padding: '3px 6px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 10,
-            }}
+            className="px-1.5 py-[3px] bg-muted text-muted-foreground border border-border rounded-sm text-[10px]"
           >
             <option value="none">No grouping</option>
             <option value="project">Group by Project</option>
             <option value="machine">Group by Machine</option>
           </select>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 10,
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              marginLeft: 'auto',
-            }}
-          >
+          <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer ml-auto">
             <input
               type="checkbox"
               checked={hideEmpty}
               onChange={(e) => setHideEmpty(e.target.checked)}
-              style={{ width: 12, height: 12, cursor: 'pointer' }}
+              className="w-3 h-3 cursor-pointer"
             />
             Hide empty
           </label>
@@ -466,26 +367,13 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Inline "New Session" creation form */}
         {showCreateForm && (
-          <div
-            style={{
-              padding: '14px 16px',
-              borderBottom: '1px solid var(--border)',
-              backgroundColor: 'var(--bg-secondary)',
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
-              Create New Session
-            </div>
+          <div className="px-4 py-3.5 border-b border-border bg-card">
+            <div className="text-[13px] font-semibold mb-2.5">Create New Session</div>
 
             {/* Machine selector */}
             <label
               htmlFor="create-session-machine"
-              style={{
-                display: 'block',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                marginBottom: 4,
-              }}
+              className="block text-[11px] text-muted-foreground mb-1"
             >
               Machine
             </label>
@@ -494,17 +382,7 @@ export function SessionsPage(): React.JSX.Element {
               value={formMachineId}
               onChange={(e) => setFormMachineId(e.target.value)}
               disabled={machinesLoading}
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-                marginBottom: 10,
-                outline: 'none',
-              }}
+              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-2.5 outline-none"
             >
               {machinesLoading && <option value="">Loading machines...</option>}
               {!machinesLoading && machines.length === 0 && (
@@ -520,12 +398,7 @@ export function SessionsPage(): React.JSX.Element {
             {/* Project path */}
             <label
               htmlFor="create-session-project"
-              style={{
-                display: 'block',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                marginBottom: 4,
-              }}
+              className="block text-[11px] text-muted-foreground mb-1"
             >
               Project Path
             </label>
@@ -535,30 +408,13 @@ export function SessionsPage(): React.JSX.Element {
               value={formProjectPath}
               onChange={(e) => setFormProjectPath(e.target.value)}
               placeholder="/home/user/project"
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                marginBottom: 10,
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
+              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm font-mono text-xs mb-2.5 outline-none box-border"
             />
 
             {/* Prompt */}
             <label
               htmlFor="create-session-prompt"
-              style={{
-                display: 'block',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                marginBottom: 4,
-              }}
+              className="block text-[11px] text-muted-foreground mb-1"
             >
               Prompt
             </label>
@@ -568,31 +424,13 @@ export function SessionsPage(): React.JSX.Element {
               onChange={(e) => setFormPrompt(e.target.value)}
               placeholder="What should Claude work on?"
               rows={3}
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-                marginBottom: 10,
-                outline: 'none',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                boxSizing: 'border-box',
-              }}
+              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-2.5 outline-none resize-y font-[inherit] box-border"
             />
 
             {/* Model selector */}
             <label
               htmlFor="create-session-model"
-              style={{
-                display: 'block',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                marginBottom: 4,
-              }}
+              className="block text-[11px] text-muted-foreground mb-1"
             >
               Model (optional)
             </label>
@@ -600,17 +438,7 @@ export function SessionsPage(): React.JSX.Element {
               id="create-session-model"
               value={formModel}
               onChange={(e) => setFormModel(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-                marginBottom: 12,
-                outline: 'none',
-              }}
+              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-3 outline-none"
             >
               {MODEL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -621,16 +449,7 @@ export function SessionsPage(): React.JSX.Element {
 
             {/* Error / Success feedback */}
             {formError && (
-              <div
-                style={{
-                  padding: '6px 8px',
-                  backgroundColor: '#7f1d1d',
-                  color: '#fca5a5',
-                  fontSize: 12,
-                  borderRadius: 'var(--radius-sm)',
-                  marginBottom: 10,
-                }}
-              >
+              <div className="px-2 py-1.5 bg-red-900 text-red-300 text-xs rounded-sm mb-2.5">
                 {formError}
               </div>
             )}
@@ -638,42 +457,20 @@ export function SessionsPage(): React.JSX.Element {
             <button
               type="button"
               onClick={() => void handleCreateSession()}
-              disabled={
-                formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim()
-              }
-              style={{
-                width: '100%',
-                padding: '7px 14px',
-                backgroundColor: 'var(--accent)',
-                color: '#fff',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-                fontWeight: 500,
-                opacity:
-                  formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim()
-                    ? 0.5
-                    : 1,
-                cursor:
-                  formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim()
-                    ? 'not-allowed'
-                    : 'pointer',
-              }}
+              disabled={isFormDisabled}
+              className={cn(
+                'w-full py-[7px] px-3.5 bg-primary text-white rounded-sm text-xs font-medium',
+                isFormDisabled ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer',
+              )}
             >
               {formSubmitting ? 'Creating...' : 'Create Session'}
             </button>
           </div>
         )}
 
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div className="flex-1 overflow-auto">
           {filteredSessions.length === 0 ? (
-            <div
-              style={{
-                padding: 32,
-                textAlign: 'center',
-                color: 'var(--text-muted)',
-                fontSize: 13,
-              }}
-            >
+            <div className="p-8 text-center text-muted-foreground text-[13px]">
               {sessions.isLoading
                 ? 'Loading...'
                 : searchQuery || statusFilter !== 'all'
@@ -686,45 +483,20 @@ export function SessionsPage(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => toggleGroupCollapsed(groupKey)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    width: '100%',
-                    padding: '8px 12px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderBottom: '1px solid var(--border)',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
+                  className="flex items-center gap-1.5 w-full px-3 py-2 bg-card border-b border-border text-[11px] font-semibold text-muted-foreground cursor-pointer text-left"
                 >
                   <span
-                    style={{
-                      display: 'inline-block',
-                      transition: 'transform 0.15s',
-                      transform: collapsedGroups.has(groupKey) ? 'rotate(-90deg)' : 'rotate(0deg)',
-                      fontSize: 10,
-                    }}
+                    className={cn(
+                      'inline-block text-[10px] transition-transform duration-150',
+                      collapsedGroups.has(groupKey) ? '-rotate-90' : 'rotate-0',
+                    )}
                   >
                     &#x25BC;
                   </span>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <span className="font-mono flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                     {groupKey}
                   </span>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
-                    {groupItems.length}
-                  </span>
+                  <span className="text-muted-foreground font-normal">{groupItems.length}</span>
                 </button>
                 {!collapsedGroups.has(groupKey) &&
                   groupItems.map((s) => (
@@ -751,37 +523,16 @@ export function SessionsPage(): React.JSX.Element {
       </div>
 
       {/* Session detail panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div className="flex-1 flex flex-col">
         {selected ? (
           <>
             {/* Header */}
-            <div
-              style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid var(--border)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
+            <div className="px-5 py-4 border-b border-border flex justify-between items-center">
               <div>
-                <div
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 600,
-                    marginBottom: 4,
-                  }}
-                >
+                <div className="text-[15px] font-semibold mb-1">
                   Session: {selected.id.slice(0, 20)}...
                 </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--text-muted)',
-                    display: 'flex',
-                    gap: 12,
-                  }}
-                >
+                <div className="text-xs text-muted-foreground flex gap-3">
                   <span>Agent: {selected.agentId}</span>
                   <span>Machine: {selected.machineId}</span>
                   <StatusBadge status={selected.status} />
@@ -790,34 +541,15 @@ export function SessionsPage(): React.JSX.Element {
               <button
                 type="button"
                 onClick={handleStop}
-                style={{
-                  padding: '6px 14px',
-                  backgroundColor: '#7f1d1d',
-                  color: '#fca5a5',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 12,
-                  fontWeight: 500,
-                }}
+                className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium"
               >
                 End Session
               </button>
             </div>
 
             {/* Session metadata */}
-            <div
-              style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid var(--border)',
-                fontSize: 13,
-              }}
-            >
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 8,
-                }}
-              >
+            <div className="px-5 py-4 border-b border-border text-[13px]">
+              <div className="grid grid-cols-2 gap-2">
                 <DetailRow label="ID" value={selected.id} mono />
                 <DetailRow label="Status" value={selected.status} />
                 <DetailRow label="Agent" value={selected.agentId} mono />
@@ -837,18 +569,8 @@ export function SessionsPage(): React.JSX.Element {
 
               {/* Error message display */}
               {selected.status === 'error' && selected.metadata && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: '8px 10px',
-                    backgroundColor: 'rgba(127, 29, 29, 0.3)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: '#fca5a5',
-                    fontSize: 12,
-                  }}
-                >
-                  <span style={{ fontWeight: 600 }}>Error: </span>
+                <div className="mt-2.5 px-2.5 py-2 bg-red-900/30 border border-red-500/30 rounded-sm text-red-300 text-xs">
+                  <span className="font-semibold">Error: </span>
                   {(selected.metadata as Record<string, unknown>).errorMessage
                     ? String((selected.metadata as Record<string, unknown>).errorMessage)
                     : 'Unknown error'}
@@ -857,20 +579,7 @@ export function SessionsPage(): React.JSX.Element {
 
               {/* Starting state indicator */}
               {selected.status === 'starting' && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: '8px 10px',
-                    backgroundColor: 'rgba(234, 179, 8, 0.1)',
-                    border: '1px solid rgba(234, 179, 8, 0.2)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: '#facc15',
-                    fontSize: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
+                <div className="mt-2.5 px-2.5 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-sm text-yellow-400 text-xs flex items-center gap-2">
                   <span style={{ animation: 'fadeInUp 1s ease infinite alternate' }}>&#x25CF;</span>
                   Session is starting... Waiting for worker to respond.
                 </div>
@@ -888,18 +597,7 @@ export function SessionsPage(): React.JSX.Element {
             )}
 
             {!selected.claudeSessionId && (
-              <div
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  color: 'var(--text-muted)',
-                  fontSize: 13,
-                }}
-              >
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground text-[13px]">
                 <span>
                   {selected.status === 'error'
                     ? 'Session failed before the CLI process started'
@@ -909,7 +607,7 @@ export function SessionsPage(): React.JSX.Element {
                 </span>
                 {selected.status === 'error' &&
                   typeof selected.metadata?.errorMessage === 'string' && (
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', opacity: 0.7 }}>
+                    <span className="text-xs text-muted-foreground opacity-70">
                       {selected.metadata.errorMessage}
                     </span>
                   )}
@@ -917,14 +615,7 @@ export function SessionsPage(): React.JSX.Element {
             )}
 
             {/* Prompt input */}
-            <div
-              style={{
-                padding: '12px 20px',
-                borderTop: '1px solid var(--border)',
-                display: 'flex',
-                gap: 8,
-              }}
-            >
+            <div className="px-5 py-3 border-t border-border flex gap-2">
               <input
                 type="text"
                 value={prompt}
@@ -938,46 +629,23 @@ export function SessionsPage(): React.JSX.Element {
                 placeholder={
                   selected.status === 'active' ? 'Send message...' : 'Resume session with prompt...'
                 }
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 13,
-                  outline: 'none',
-                }}
+                className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none"
               />
               <button
                 type="button"
                 onClick={() => void handleSend()}
                 disabled={sending || !prompt.trim()}
-                style={{
-                  padding: '8px 18px',
-                  backgroundColor: 'var(--accent)',
-                  color: '#fff',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  opacity: sending || !prompt.trim() ? 0.5 : 1,
-                }}
+                className={cn(
+                  'px-[18px] py-2 bg-primary text-white rounded-sm text-[13px] font-medium',
+                  sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
+                )}
               >
                 {sending ? '...' : selected.status === 'active' ? 'Send' : 'Resume'}
               </button>
             </div>
           </>
         ) : (
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 14,
-            }}
-          >
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             Select a session to view details
           </div>
         )}
@@ -1000,77 +668,37 @@ function SessionListItem({
     <button
       type="button"
       onClick={() => onSelect(s.id)}
-      style={{
-        display: 'block',
-        width: '100%',
-        textAlign: 'left',
-        padding: '12px 16px',
-        backgroundColor: isSelected ? 'var(--bg-hover)' : 'transparent',
-        borderBottom: '1px solid var(--border)',
-        borderLeft:
-          s.status === 'error'
-            ? '3px solid var(--red-subtle, #ef4444)'
-            : s.status === 'starting'
-              ? '3px solid var(--yellow-subtle, #eab308)'
-              : s.status === 'active'
-                ? '3px solid var(--green-subtle, #22c55e)'
-                : '3px solid transparent',
-        transition: 'background 0.1s',
-      }}
-      onMouseEnter={(e) => {
-        if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-      }}
-      onMouseLeave={(e) => {
-        if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-      }}
+      className={cn(
+        'block w-full text-left px-4 py-3 border-b border-border transition-colors duration-100',
+        isSelected ? 'bg-accent/10' : 'bg-transparent hover:bg-accent/10',
+        s.status === 'error'
+          ? 'border-l-[3px] border-l-red-500'
+          : s.status === 'starting'
+            ? 'border-l-[3px] border-l-yellow-500'
+            : s.status === 'active'
+              ? 'border-l-[3px] border-l-green-500'
+              : 'border-l-[3px] border-l-transparent',
+      )}
     >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 4,
-        }}
-      >
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500 }}>
-          {s.id.slice(0, 16)}...
-        </span>
+      <div className="flex justify-between items-center mb-1">
+        <span className="font-mono text-xs font-medium">{s.id.slice(0, 16)}...</span>
         <StatusBadge status={s.status} />
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8 }}>
+      <div className="text-xs text-muted-foreground flex gap-2">
         <span>{s.agentId}</span>
         <span>{s.machineId}</span>
       </div>
       {shortPath && (
         <div
           title={s.projectPath ?? ''}
-          style={{
-            fontSize: 11,
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--font-mono)',
-            marginTop: 2,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            cursor: 'default',
-          }}
+          className="text-[11px] text-muted-foreground font-mono mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap cursor-default"
         >
           {shortPath}
         </div>
       )}
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          marginTop: 2,
-          display: 'flex',
-          gap: 8,
-        }}
-      >
+      <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
         <span>{timeAgo(s.startedAt)}</span>
-        <span style={{ color: 'var(--text-secondary)' }}>
-          {formatDuration(s.startedAt, s.endedAt)}
-        </span>
+        <span className="text-muted-foreground">{formatDuration(s.startedAt, s.endedAt)}</span>
       </div>
     </button>
   );
@@ -1097,41 +725,20 @@ function DetailRow({
 
   return (
     <div>
-      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{label}</span>
-      <div
-        style={{
-          fontFamily: mono ? 'var(--font-mono)' : undefined,
-          fontSize: 12,
-          wordBreak: 'break-all',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 4,
-        }}
-      >
-        <span style={{ flex: 1 }}>{value}</span>
+      <span className="text-muted-foreground text-[11px]">{label}</span>
+      <div className={cn('text-xs break-all flex items-start gap-1', mono && 'font-mono')}>
+        <span className="flex-1">{value}</span>
         {mono && value !== '-' && (
           <button
             type="button"
             onClick={handleCopy}
             title={copied ? 'Copied!' : 'Copy to clipboard'}
-            style={{
-              flexShrink: 0,
-              padding: '1px 4px',
-              fontSize: 10,
-              color: copied ? 'var(--green)' : 'var(--text-muted)',
-              backgroundColor: copied ? 'var(--bg-tertiary)' : 'transparent',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              opacity: copied ? 1 : 0.5,
-              transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '1';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = copied ? '1' : '0.5';
-            }}
+            className={cn(
+              'shrink-0 px-1 py-px text-[10px] border-0 rounded-sm cursor-pointer transition-opacity duration-150',
+              copied
+                ? 'text-green-500 bg-muted opacity-100'
+                : 'text-muted-foreground bg-transparent opacity-50 hover:opacity-100',
+            )}
           >
             {copied ? 'Copied' : 'Copy'}
           </button>
@@ -1229,49 +836,27 @@ function SessionContent({
     : [];
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Controls */}
-      <div
-        style={{
-          padding: '6px 20px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+      <div className="px-5 py-1.5 border-b border-border flex justify-between items-center shrink-0">
+        <span className="text-[11px] text-muted-foreground">
           {data ? `${messages.length} messages${showTools ? '' : ' (conversations only)'}` : ''}
         </span>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div className="flex gap-1.5">
           <button
             type="button"
             onClick={() => setShowTools(!showTools)}
-            style={{
-              padding: '3px 8px',
-              backgroundColor: showTools ? 'var(--accent)' : 'var(--bg-tertiary)',
-              color: showTools ? '#fff' : 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 10,
-              cursor: 'pointer',
-            }}
+            className={cn(
+              'px-2 py-[3px] border border-border rounded-sm text-[10px] cursor-pointer',
+              showTools ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+            )}
           >
             {showTools ? 'Hide Tools' : 'Show Tools'}
           </button>
           <button
             type="button"
             onClick={() => void fetchContent()}
-            style={{
-              padding: '3px 8px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 10,
-              cursor: 'pointer',
-            }}
+            className="px-2 py-[3px] bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer"
           >
             Refresh
           </button>
@@ -1279,33 +864,17 @@ function SessionContent({
       </div>
 
       {/* Content */}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '8px 20px' }}>
+      <div ref={scrollRef} className="flex-1 overflow-auto px-5 py-2">
         {loading && (
-          <div
-            style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}
-          >
+          <div className="p-5 text-center text-muted-foreground text-xs">
             Loading conversation...
           </div>
         )}
         {error && (
-          <div
-            style={{
-              padding: '8px 12px',
-              backgroundColor: '#7f1d1d',
-              color: '#fca5a5',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 12,
-            }}
-          >
-            {error}
-          </div>
+          <div className="px-3 py-2 bg-red-900 text-red-300 rounded-sm text-xs">{error}</div>
         )}
         {data && messages.length === 0 && !loading && (
-          <div
-            style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}
-          >
-            No messages yet
-          </div>
+          <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
         )}
         {messages.map((msg, i) => (
           <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />
@@ -1319,7 +888,7 @@ const TRUNCATE_THRESHOLD = 800;
 
 function InlineMessage({ message }: { message: SessionContentMessage }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
-  const style = MSG_STYLES[message.type] ?? {
+  const msgStyle = MSG_STYLES[message.type] ?? {
     label: message.type,
     color: 'var(--text-muted)',
     bg: 'var(--bg-secondary)',
@@ -1331,44 +900,32 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
 
   return (
     <div
+      className="mb-1.5 px-2.5 py-1.5 rounded-sm"
       style={{
-        marginBottom: 6,
-        padding: '6px 10px',
-        backgroundColor: style.bg,
-        borderRadius: 'var(--radius-sm)',
-        borderLeft: `2px solid ${style.color}`,
+        backgroundColor: msgStyle.bg,
+        borderLeft: `2px solid ${msgStyle.color}`,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-        <span style={{ fontSize: 10, fontWeight: 600, color: style.color }}>{style.label}</span>
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <span className="text-[10px] font-semibold" style={{ color: msgStyle.color }}>
+          {msgStyle.label}
+        </span>
         {message.toolName && (
-          <span
-            style={{
-              fontSize: 10,
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            {message.toolName}
-          </span>
+          <span className="text-[10px] font-mono text-muted-foreground">{message.toolName}</span>
         )}
         {message.timestamp && (
-          <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+          <span className="text-[9px] text-muted-foreground ml-auto">
             {new Date(message.timestamp).toLocaleTimeString()}
           </span>
         )}
       </div>
       <div
-        style={{
-          fontSize: isTool ? 11 : 12,
-          lineHeight: 1.5,
-          color: 'var(--text-primary)',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          fontFamily: isTool ? 'var(--font-mono)' : undefined,
-          maxHeight: expanded ? 'none' : isTool ? 150 : 400,
-          overflow: expanded ? 'visible' : 'auto',
-        }}
+        className={cn(
+          'leading-6 text-foreground whitespace-pre-wrap break-words',
+          isTool ? 'text-[11px] font-mono' : 'text-xs',
+          !expanded && (isTool ? 'max-h-[150px] overflow-auto' : 'max-h-[400px] overflow-auto'),
+          expanded && 'max-h-none overflow-visible',
+        )}
       >
         {displayContent}
       </div>
@@ -1376,16 +933,7 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          style={{
-            marginTop: 4,
-            padding: '2px 8px',
-            fontSize: 10,
-            color: 'var(--accent)',
-            backgroundColor: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: 500,
-          }}
+          className="mt-1 px-2 py-0.5 text-[10px] text-primary bg-transparent border-0 cursor-pointer font-medium"
         >
           {expanded
             ? 'Show less'

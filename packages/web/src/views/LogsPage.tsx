@@ -1,6 +1,10 @@
+'use client';
+
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useMemo } from 'react';
+
+import { cn } from '@/lib/utils';
 
 import { StatusBadge } from '../components/StatusBadge';
 import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
@@ -17,27 +21,27 @@ export function LogsPage(): React.JSX.Element {
 
   const metricsVal = (key: string): number | string | undefined => metrics.data?.[key];
 
-  const statusColor = useMemo(() => {
-    if (!health.data) return 'var(--text-muted)';
-    if (health.data.status === 'ok') return 'var(--green)';
-    if (health.data.status === 'degraded') return 'var(--yellow)';
-    return 'var(--red)';
+  const statusClasses = useMemo(() => {
+    if (!health.data) return 'bg-muted-foreground';
+    if (health.data.status === 'ok') return 'bg-green-500';
+    if (health.data.status === 'degraded') return 'bg-yellow-500';
+    return 'bg-red-500';
+  }, [health.data]);
+
+  const statusTextClasses = useMemo(() => {
+    if (!health.data) return 'text-muted-foreground';
+    if (health.data.status === 'ok') return 'text-green-500';
+    if (health.data.status === 'degraded') return 'text-yellow-500';
+    return 'text-red-500';
   }, [health.data]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100 }}>
+    <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 24,
-        }}
-      >
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Logs &amp; Metrics</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+          <h1 className="text-[22px] font-bold">Logs &amp; Metrics</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">
             System health, dependency status, and runtime metrics.
           </p>
         </div>
@@ -48,14 +52,7 @@ export function LogsPage(): React.JSX.Element {
             metrics.refetch();
             machines.refetch();
           }}
-          style={{
-            padding: '6px 14px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 13,
-          }}
+          className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px]"
         >
           Refresh
         </button>
@@ -63,46 +60,23 @@ export function LogsPage(): React.JSX.Element {
 
       {/* Error banner */}
       {hasError && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: '#7f1d1d',
-            color: '#fca5a5',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
+        <div className="px-4 py-2.5 bg-red-950 text-red-300 rounded mb-4 text-[13px]">
           {health.error?.message ?? metrics.error?.message ?? machines.error?.message}
         </div>
       )}
 
       {/* Control Plane Status */}
       <SectionHeading>Control Plane</SectionHeading>
-      <div
-        style={{
-          padding: 16,
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          marginBottom: 24,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-        }}
-      >
+      <div className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4">
         <span
-          style={{
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            backgroundColor: statusColor,
-            flexShrink: 0,
-            boxShadow: health.data?.status === 'ok' ? '0 0 6px var(--green)' : undefined,
-          }}
+          className={cn(
+            'w-3 h-3 rounded-full shrink-0',
+            statusClasses,
+            health.data?.status === 'ok' && 'shadow-[0_0_6px] shadow-green-500',
+          )}
         />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>
+        <div className="flex-1">
+          <div className="font-semibold text-[15px]">
             {health.data?.status === 'ok'
               ? 'All Systems Operational'
               : health.data?.status === 'degraded'
@@ -111,14 +85,7 @@ export function LogsPage(): React.JSX.Element {
                   ? 'Checking...'
                   : 'Unavailable'}
           </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              marginTop: 2,
-            }}
-          >
+          <div className="text-xs text-muted-foreground font-mono mt-0.5">
             {health.data?.timestamp
               ? `Last checked: ${new Date(health.data.timestamp).toLocaleString()}`
               : 'Polling every 10s'}
@@ -129,64 +96,20 @@ export function LogsPage(): React.JSX.Element {
 
       {/* Dependencies */}
       {deps && Object.keys(deps).length > 0 && (
-        <div style={{ marginBottom: 24 }}>
+        <div className="mb-6">
           <SectionHeading>Dependencies</SectionHeading>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 8,
-            }}
-          >
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
             {Object.entries(deps).map(([name, dep]) => (
-              <div
-                key={name}
-                style={{
-                  padding: '12px 14px',
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {name}
-                  </span>
+              <div key={name} className="px-3.5 py-3 bg-card border border-border rounded">
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-[13px] font-medium capitalize">{name}</span>
                   <StatusBadge status={dep.status} />
                 </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)',
-                  }}
-                >
+                <div className="text-[11px] text-muted-foreground font-mono">
                   Latency: {dep.latencyMs.toFixed(0)}ms
                 </div>
                 {dep.error && (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--red, #ef4444)',
-                      marginTop: 4,
-                      wordBreak: 'break-all',
-                    }}
-                  >
-                    {dep.error}
-                  </div>
+                  <div className="text-[11px] text-red-500 mt-1 break-all">{dep.error}</div>
                 )}
               </div>
             ))}
@@ -196,20 +119,11 @@ export function LogsPage(): React.JSX.Element {
 
       {/* Metrics */}
       <SectionHeading>Metrics</SectionHeading>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: 12,
-          marginBottom: 24,
-        }}
-      >
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
         <MetricCard
           label="Control Plane"
           value={metricsVal('agentctl_control_plane_up') === 1 ? 'UP' : 'DOWN'}
-          valueColor={
-            metricsVal('agentctl_control_plane_up') === 1 ? 'var(--green)' : 'var(--red, #ef4444)'
-          }
+          valueVariant={metricsVal('agentctl_control_plane_up') === 1 ? 'green' : 'red'}
         />
         <MetricCard
           label="Agents Total"
@@ -224,29 +138,15 @@ export function LogsPage(): React.JSX.Element {
         <MetricCard
           label="Health Status"
           value={health.data?.status ?? '-'}
-          valueColor={statusColor}
+          valueClassName={statusTextClasses}
         />
       </div>
 
       {/* Raw Metrics (collapsible debug view) */}
       {metrics.data && (
-        <div style={{ marginBottom: 24 }}>
+        <div className="mb-6">
           <SectionHeading>Raw Metrics</SectionHeading>
-          <div
-            style={{
-              padding: 14,
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              color: 'var(--text-secondary)',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-              maxHeight: 300,
-              overflow: 'auto',
-            }}
-          >
+          <div className="p-3.5 bg-card border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-all max-h-[300px] overflow-auto">
             {Object.entries(metrics.data)
               .map(([k, v]) => `${k} ${String(v)}`)
               .join('\n')}
@@ -257,84 +157,41 @@ export function LogsPage(): React.JSX.Element {
       {/* Worker Health */}
       <SectionHeading>Worker Health</SectionHeading>
       {machineList.length === 0 ? (
-        <div
-          style={{
-            padding: 48,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-          }}
-        >
+        <div className="py-12 text-center text-muted-foreground">
           {machines.isLoading ? 'Loading workers...' : 'No workers registered'}
         </div>
       ) : (
-        <div
-          style={{
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            overflow: 'hidden',
-          }}
-        >
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              fontSize: 13,
-            }}
-          >
+        <div className="border border-border rounded overflow-hidden">
+          <table className="w-full border-collapse text-[13px]">
             <thead>
-              <tr
-                style={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  textAlign: 'left',
-                }}
-              >
-                <th style={thStyle}>Hostname</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Tailscale IP</th>
-                <th style={thStyle}>OS / Arch</th>
-                <th style={thStyle}>Max Agents</th>
-                <th style={thStyle}>Last Heartbeat</th>
+              <tr className="bg-muted text-left">
+                <th className={TH_CLASSES}>Hostname</th>
+                <th className={TH_CLASSES}>Status</th>
+                <th className={TH_CLASSES}>Tailscale IP</th>
+                <th className={TH_CLASSES}>OS / Arch</th>
+                <th className={TH_CLASSES}>Max Agents</th>
+                <th className={TH_CLASSES}>Last Heartbeat</th>
               </tr>
             </thead>
             <tbody>
               {machineList.map((m) => (
-                <tr
-                  key={m.id}
-                  style={{
-                    borderTop: '1px solid var(--border)',
-                  }}
-                >
-                  <td style={tdStyle}>
-                    <span style={{ fontWeight: 500 }}>{m.hostname}</span>
+                <tr key={m.id} className="border-t border-border">
+                  <td className={TD_CLASSES}>
+                    <span className="font-medium">{m.hostname}</span>
                     <br />
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    >
-                      {m.id}
-                    </span>
+                    <span className="text-[11px] text-muted-foreground font-mono">{m.id}</span>
                   </td>
-                  <td style={tdStyle}>
+                  <td className={TD_CLASSES}>
                     <StatusBadge status={m.status} />
                   </td>
-                  <td style={tdStyle}>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                      }}
-                    >
-                      {m.tailscaleIp}
-                    </span>
+                  <td className={TD_CLASSES}>
+                    <span className="font-mono text-xs">{m.tailscaleIp}</span>
                   </td>
-                  <td style={tdStyle}>
+                  <td className={TD_CLASSES}>
                     {m.os} / {m.arch}
                   </td>
-                  <td style={tdStyle}>{m.capabilities?.maxConcurrentAgents ?? '-'}</td>
-                  <td style={tdStyle}>
+                  <td className={TD_CLASSES}>{m.capabilities?.maxConcurrentAgents ?? '-'}</td>
+                  <td className={TD_CLASSES}>
                     {m.lastHeartbeat ? new Date(m.lastHeartbeat).toLocaleString() : 'never'}
                   </td>
                 </tr>
@@ -352,55 +209,37 @@ export function LogsPage(): React.JSX.Element {
 // ---------------------------------------------------------------------------
 
 function SectionHeading({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <h2
-      style={{
-        fontSize: 15,
-        fontWeight: 600,
-        color: 'var(--text-secondary)',
-        marginBottom: 10,
-      }}
-    >
-      {children}
-    </h2>
-  );
+  return <h2 className="text-[15px] font-semibold text-muted-foreground mb-2.5">{children}</h2>;
 }
+
+const VALUE_VARIANT_CLASSES = {
+  green: 'text-green-500',
+  red: 'text-red-500',
+  yellow: 'text-yellow-500',
+  default: 'text-foreground',
+} as const;
 
 function MetricCard({
   label,
   value,
-  valueColor,
+  valueVariant,
+  valueClassName,
 }: {
   label: string;
   value: string;
-  valueColor?: string;
+  valueVariant?: 'green' | 'red' | 'yellow';
+  valueClassName?: string;
 }): React.JSX.Element {
   return (
-    <div
-      style={{
-        padding: '16px 18px',
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          marginBottom: 6,
-        }}
-      >
+    <div className="px-[18px] py-4 bg-card border border-border rounded">
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1.5">
         {label}
       </div>
       <div
-        style={{
-          fontSize: 24,
-          fontWeight: 700,
-          color: valueColor ?? 'var(--text-primary)',
-        }}
+        className={cn(
+          'text-2xl font-bold',
+          valueClassName ?? VALUE_VARIANT_CLASSES[valueVariant ?? 'default'],
+        )}
       >
         {value}
       </div>
@@ -409,18 +248,10 @@ function MetricCard({
 }
 
 // ---------------------------------------------------------------------------
-// Table styles
+// Table class strings
 // ---------------------------------------------------------------------------
 
-const thStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-};
+const TH_CLASSES =
+  'px-3.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.04em]';
 
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px',
-};
+const TD_CLASSES = 'px-3.5 py-2.5';

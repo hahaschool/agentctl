@@ -1,8 +1,10 @@
+'use client';
+
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-
+import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { SessionPreview } from '../components/SessionPreview';
 import { useToast } from '../components/Toast';
@@ -239,66 +241,39 @@ export function DiscoverPage(): React.JSX.Element {
   );
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100 }}>
+    <div className="p-6 max-w-[1100px]">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 20,
-        }}
-      >
+      <div className="flex justify-between items-center mb-5">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Discover Sessions</h1>
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--text-muted)',
-              marginTop: 4,
-            }}
-          >
+          <h1 className="text-[22px] font-bold">Discover Sessions</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">
             Browse Claude Code sessions across all fleet machines.
             {data && (
               <span>
                 {' '}
                 Queried {data.machinesQueried} machine(s)
                 {data.machinesFailed > 0 && (
-                  <span style={{ color: 'var(--yellow)' }}>, {data.machinesFailed} failed</span>
+                  <span className="text-yellow-500">, {data.machinesFailed} failed</span>
                 )}
               </span>
             )}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setShowNewSession(!showNewSession)}
-            style={{
-              padding: '6px 14px',
-              backgroundColor: showNewSession ? 'var(--accent)' : 'var(--bg-tertiary)',
-              color: showNewSession ? '#fff' : 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-              cursor: 'pointer',
-              fontWeight: 500,
-            }}
+            className={cn(
+              'px-3.5 py-1.5 border border-border rounded-sm text-[13px] cursor-pointer font-medium',
+              showNewSession ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+            )}
           >
             {showNewSession ? 'Cancel' : '+ New Session'}
           </button>
           <button
             type="button"
             onClick={() => void refetch()}
-            style={{
-              padding: '6px 14px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
+            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
           >
             Scan All Machines
           </button>
@@ -307,28 +282,11 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Quick new session form */}
       {showNewSession && (
-        <div
-          style={{
-            padding: '16px',
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            display: 'flex',
-            gap: 12,
-            alignItems: 'flex-end',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 200 }}>
+        <div className="p-4 bg-card border border-border rounded-lg mb-4 flex gap-3 items-end flex-wrap">
+          <div className="flex-1 min-w-[200px]">
             <label
               htmlFor="new-session-project-path"
-              style={{
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                marginBottom: 4,
-                display: 'block',
-              }}
+              className="text-[11px] text-muted-foreground mb-1 block"
             >
               Project Path
             </label>
@@ -338,29 +296,13 @@ export function DiscoverPage(): React.JSX.Element {
               value={newProjectPath}
               onChange={(e) => setNewProjectPath(e.target.value)}
               placeholder="/Users/hahaschool/my-project"
-              style={{
-                width: '100%',
-                padding: '6px 10px',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
+              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
             />
           </div>
-          <div style={{ flex: 2, minWidth: 300 }}>
+          <div className="flex-[2] min-w-[300px]">
             <label
               htmlFor="new-session-prompt"
-              style={{
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                marginBottom: 4,
-                display: 'block',
-              }}
+              className="text-[11px] text-muted-foreground mb-1 block"
             >
               Prompt
             </label>
@@ -373,34 +315,17 @@ export function DiscoverPage(): React.JSX.Element {
                 if (e.key === 'Enter') void handleNewSession();
               }}
               placeholder="What should Claude work on?"
-              style={{
-                width: '100%',
-                padding: '6px 10px',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
+              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-xs outline-none box-border"
             />
           </div>
           <button
             type="button"
             onClick={() => void handleNewSession()}
             disabled={!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating}
-            style={{
-              padding: '6px 18px',
-              backgroundColor: 'var(--accent)',
-              color: '#fff',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-              fontWeight: 500,
-              border: 'none',
-              cursor: 'pointer',
-              opacity: !newProjectPath.trim() || !newPrompt.trim() || newSessionCreating ? 0.5 : 1,
-            }}
+            className={cn(
+              'px-[18px] py-1.5 bg-primary text-white rounded-sm text-[13px] font-medium border-none cursor-pointer',
+              (!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating) && 'opacity-50',
+            )}
           >
             {newSessionCreating ? 'Creating...' : 'Create'}
           </button>
@@ -409,74 +334,28 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Error banner */}
       {error && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: '#7f1d1d',
-            color: '#fca5a5',
-            borderRadius: 'var(--radius)',
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
+        <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg mb-4 text-[13px]">
           {error.message}
         </div>
       )}
 
       {/* Filter bar */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          padding: '12px 16px',
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          marginBottom: 16,
-        }}
-      >
+      <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border rounded-lg mb-4">
         <input
           id="discover-search"
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search sessions..."
-          style={{
-            flex: 1,
-            minWidth: 200,
-            padding: '6px 10px',
-            backgroundColor: 'var(--bg-primary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 13,
-            outline: 'none',
-          }}
+          className="flex-1 min-w-[200px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-[13px] outline-none"
         />
-        <label
-          htmlFor="discover-min-msgs"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 13,
-          }}
-        >
-          <span style={{ color: 'var(--text-secondary)' }}>Min msgs:</span>
+        <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
+          <span className="text-muted-foreground">Min msgs:</span>
           <select
             id="discover-min-msgs"
             value={minMessages}
             onChange={(e) => setMinMessages(Number(e.target.value) as MinMessages)}
-            style={{
-              padding: '5px 8px',
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-            }}
+            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
           >
             {MIN_MESSAGE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -485,28 +364,13 @@ export function DiscoverPage(): React.JSX.Element {
             ))}
           </select>
         </label>
-        <label
-          htmlFor="discover-sort"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 13,
-          }}
-        >
-          <span style={{ color: 'var(--text-secondary)' }}>Sort:</span>
+        <label htmlFor="discover-sort" className="flex items-center gap-1.5 text-[13px]">
+          <span className="text-muted-foreground">Sort:</span>
           <select
             id="discover-sort"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
-            style={{
-              padding: '5px 8px',
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 13,
-            }}
+            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -519,17 +383,10 @@ export function DiscoverPage(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setGroupMode((prev) => (prev === 'project' ? 'flat' : 'project'))}
-          style={{
-            padding: '5px 12px',
-            backgroundColor: groupMode === 'project' ? 'var(--bg-tertiary)' : 'var(--accent)',
-            color: groupMode === 'project' ? 'var(--text-secondary)' : '#fff',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            fontWeight: 500,
-          }}
+          className={cn(
+            'py-[5px] px-3 border border-border rounded-sm text-xs cursor-pointer whitespace-nowrap font-medium',
+            groupMode === 'project' ? 'bg-muted text-muted-foreground' : 'bg-primary text-white',
+          )}
         >
           {groupMode === 'project' ? 'Group by Project' : 'Flat List'}
         </button>
@@ -537,16 +394,7 @@ export function DiscoverPage(): React.JSX.Element {
           <button
             type="button"
             onClick={toggleAll}
-            style={{
-              padding: '5px 12px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 12,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
+            className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer whitespace-nowrap"
           >
             {allExpanded ? 'Collapse All' : 'Expand All'}
           </button>
@@ -554,40 +402,24 @@ export function DiscoverPage(): React.JSX.Element {
       </div>
 
       {/* Stats line */}
-      <div
-        style={{
-          fontSize: 13,
-          color: 'var(--text-muted)',
-          marginBottom: 16,
-        }}
-      >
+      <div className="text-[13px] text-muted-foreground mb-4">
         Showing {filtered.length} of {allSessions.length} sessions across {projectCount} projects
       </div>
 
       {/* Content */}
       {allSessions.length === 0 ? (
-        <div
-          style={{
-            padding: 48,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
+        <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
           {isLoading ? (
             <>
-              <div style={{ fontSize: 15, fontWeight: 500 }}>Scanning machines for sessions...</div>
+              <div className="text-[15px] font-medium">Scanning machines for sessions...</div>
               {data && (
-                <div style={{ fontSize: 13 }}>Querying {data.machinesQueried} machine(s)</div>
+                <div className="text-[13px]">Querying {data.machinesQueried} machine(s)</div>
               )}
             </>
           ) : (
             <>
-              <div style={{ fontSize: 15, fontWeight: 500 }}>No sessions discovered</div>
-              <div style={{ fontSize: 13, maxWidth: 420 }}>
+              <div className="text-[15px] font-medium">No sessions discovered</div>
+              <div className="text-[13px] max-w-[420px]">
                 {data
                   ? `Scanned ${data.machinesQueried} machine(s) and found no Claude Code sessions.`
                   : 'No machines have been queried yet.'}{' '}
@@ -597,123 +429,55 @@ export function DiscoverPage(): React.JSX.Element {
           )}
         </div>
       ) : filtered.length === 0 ? (
-        <div
-          style={{
-            padding: 48,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-          }}
-        >
+        <div className="p-12 text-center text-muted-foreground">
           No sessions match the current filters
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex flex-col gap-3">
           {groups.map((group) => {
             const isFlat = group.projectPath === '__flat__';
             const isCollapsed = collapsedGroups.has(group.projectPath);
             return (
               <div
                 key={group.projectPath}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  overflow: 'hidden',
-                }}
+                className="border border-border rounded-lg overflow-hidden"
               >
                 {/* Group header (hidden in flat mode) */}
                 {!isFlat && (
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.projectPath)}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      padding: '10px 16px',
-                      backgroundColor: 'var(--bg-secondary)',
-                      border: 'none',
-                      borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      color: 'var(--text-primary)',
-                    }}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-4 py-2.5 bg-card border-none cursor-pointer text-left text-foreground',
+                      !isCollapsed && 'border-b border-border',
+                    )}
                   >
                     <span
-                      style={{
-                        fontSize: 12,
-                        transition: 'transform 0.15s',
-                        transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-                        display: 'inline-block',
-                        width: 16,
-                        textAlign: 'center',
-                        flexShrink: 0,
-                      }}
+                      className={cn(
+                        'text-xs inline-block w-4 text-center shrink-0 transition-transform duration-150',
+                        isCollapsed && '-rotate-90',
+                      )}
                     >
                       {'\u25BC'}
                     </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          fontSize: 14,
-                          lineHeight: '20px',
-                        }}
-                      >
-                        {group.projectName}
-                      </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm leading-5">{group.projectName}</div>
                       <div
                         title={group.projectPath}
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: 11,
-                          color: 'var(--text-muted)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          lineHeight: '16px',
-                          cursor: 'default',
-                        }}
+                        className="font-mono text-[11px] text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap leading-4 cursor-default"
                       >
                         {shortenPath(group.projectPath)}
                       </div>
                     </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        alignItems: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--text-muted)',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
+                    <div className="flex gap-2.5 items-center shrink-0">
+                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                         last active: {timeAgo(group.latestActivity)}
                       </span>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: 'var(--text-secondary)',
-                          backgroundColor: 'var(--bg-tertiary)',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--radius-sm)',
-                          fontWeight: 500,
-                        }}
-                      >
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-sm font-medium">
                         {group.sessions.length} session
                         {group.sessions.length !== 1 ? 's' : ''}
                       </span>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: 'var(--text-muted)',
-                        }}
-                      >
+                      <span className="text-xs text-muted-foreground">
                         {group.totalMessages} msgs
                       </span>
                     </div>
@@ -732,48 +496,20 @@ export function DiscoverPage(): React.JSX.Element {
                           <button
                             type="button"
                             onClick={() => setSelectedSessionId(s.sessionId)}
-                            style={{
-                              width: '100%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 12,
-                              padding: isFlat ? '8px 16px' : '8px 16px 8px 44px',
-                              backgroundColor: isSelected
-                                ? 'var(--bg-tertiary)'
-                                : 'var(--bg-primary)',
-                              borderLeft: isSelected
-                                ? '3px solid var(--accent)'
-                                : '3px solid transparent',
-                              borderRight: 'none',
-                              borderTop: 'none',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid var(--border)',
-                              transition: 'background-color 0.1s',
-                              textAlign: 'left',
-                              color: 'var(--text-primary)',
-                              font: 'inherit',
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isSelected) {
-                                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = isSelected
-                                ? 'var(--bg-tertiary)'
-                                : 'var(--bg-primary)';
-                            }}
+                            className={cn(
+                              'w-full flex items-center gap-3 border-b border-border transition-colors duration-100 text-left text-foreground font-[inherit]',
+                              'border-t-0 border-r-0',
+                              isFlat ? 'px-4 py-2' : 'py-2 pr-4 pl-[44px]',
+                              isSelected
+                                ? 'bg-muted border-l-[3px] border-l-primary'
+                                : 'bg-background border-l-[3px] border-l-transparent hover:bg-accent/10',
+                              'cursor-pointer',
+                            )}
                           >
                             {/* Recency dot */}
                             <span
-                              style={{
-                                width: 7,
-                                height: 7,
-                                borderRadius: '50%',
-                                backgroundColor: dotColor,
-                                flexShrink: 0,
-                                display: 'inline-block',
-                              }}
+                              className="w-[7px] h-[7px] rounded-full shrink-0 inline-block"
+                              style={{ backgroundColor: dotColor }}
                               title={
                                 dotColor === 'var(--green)'
                                   ? 'Active in last hour'
@@ -784,81 +520,29 @@ export function DiscoverPage(): React.JSX.Element {
                             />
 
                             {/* Summary */}
-                            <span
-                              style={{
-                                flex: 1,
-                                fontSize: 13,
-                                fontWeight: 500,
-                                color: 'var(--text-primary)',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                minWidth: 0,
-                              }}
-                            >
+                            <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
                               {s.summary || 'Untitled'}
                             </span>
 
                             {/* Message count */}
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--text-muted)',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                              }}
-                            >
+                            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
                               {s.messageCount} msgs
                             </span>
 
                             {/* Branch */}
                             {s.branch && (
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  fontFamily: 'var(--font-mono)',
-                                  color: 'var(--green)',
-                                  backgroundColor: 'var(--bg-tertiary)',
-                                  padding: '1px 6px',
-                                  borderRadius: 'var(--radius-sm)',
-                                  whiteSpace: 'nowrap',
-                                  flexShrink: 0,
-                                  maxWidth: 140,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
+                              <span className="text-[11px] font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
                                 {s.branch}
                               </span>
                             )}
 
                             {/* Hostname */}
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontFamily: 'var(--font-mono)',
-                                color: 'var(--text-muted)',
-                                backgroundColor: 'var(--bg-tertiary)',
-                                padding: '1px 6px',
-                                borderRadius: 'var(--radius-sm)',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                              }}
-                            >
+                            <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
                               {s.hostname}
                             </span>
 
                             {/* Last activity */}
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--text-muted)',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                                minWidth: 60,
-                                textAlign: 'right',
-                              }}
-                            >
+                            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 min-w-[60px] text-right">
                               {timeAgo(s.lastActivity)}
                             </span>
 
@@ -874,18 +558,7 @@ export function DiscoverPage(): React.JSX.Element {
                                   setResuming(s.sessionId);
                                   setResumePrompt('');
                                 }}
-                                style={{
-                                  padding: '3px 10px',
-                                  backgroundColor: 'var(--accent)',
-                                  color: '#fff',
-                                  borderRadius: 'var(--radius-sm)',
-                                  fontSize: 11,
-                                  fontWeight: 500,
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  whiteSpace: 'nowrap',
-                                  flexShrink: 0,
-                                }}
+                                className="px-2.5 py-[3px] bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
                               >
                                 Resume
                               </button>
@@ -895,13 +568,10 @@ export function DiscoverPage(): React.JSX.Element {
                           {/* Inline resume input */}
                           {isResuming && (
                             <div
-                              style={{
-                                display: 'flex',
-                                gap: 6,
-                                padding: isFlat ? '6px 16px' : '6px 16px 6px 44px',
-                                backgroundColor: 'var(--bg-secondary)',
-                                borderBottom: '1px solid var(--border)',
-                              }}
+                              className={cn(
+                                'flex gap-1.5 bg-card border-b border-border',
+                                isFlat ? 'px-4 py-1.5' : 'py-1.5 pr-4 pl-[44px]',
+                              )}
                             >
                               <input
                                 type="text"
@@ -912,46 +582,23 @@ export function DiscoverPage(): React.JSX.Element {
                                   if (e.key === 'Escape') setResuming(null);
                                 }}
                                 placeholder="Enter prompt to resume..."
-                                style={{
-                                  flex: 1,
-                                  padding: '5px 10px',
-                                  backgroundColor: 'var(--bg-primary)',
-                                  color: 'var(--text-primary)',
-                                  border: '1px solid var(--border)',
-                                  borderRadius: 'var(--radius-sm)',
-                                  fontSize: 12,
-                                  outline: 'none',
-                                }}
+                                className="flex-1 px-2.5 py-[5px] bg-background text-foreground border border-border rounded-sm text-xs outline-none"
                               />
                               <button
                                 type="button"
                                 onClick={() => void handleResume(s)}
                                 disabled={!resumePrompt.trim()}
-                                style={{
-                                  padding: '5px 12px',
-                                  backgroundColor: 'var(--accent)',
-                                  color: '#fff',
-                                  borderRadius: 'var(--radius-sm)',
-                                  fontSize: 12,
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  opacity: resumePrompt.trim() ? 1 : 0.5,
-                                }}
+                                className={cn(
+                                  'py-[5px] px-3 bg-primary text-white rounded-sm text-xs border-none cursor-pointer',
+                                  !resumePrompt.trim() && 'opacity-50',
+                                )}
                               >
                                 Go
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setResuming(null)}
-                                style={{
-                                  padding: '5px 10px',
-                                  backgroundColor: 'var(--bg-tertiary)',
-                                  color: 'var(--text-secondary)',
-                                  border: '1px solid var(--border)',
-                                  borderRadius: 'var(--radius-sm)',
-                                  fontSize: 12,
-                                  cursor: 'pointer',
-                                }}
+                                className="py-[5px] px-2.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
                               >
                                 Cancel
                               </button>

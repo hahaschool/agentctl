@@ -1,6 +1,9 @@
+'use client';
+
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { cn } from '@/lib/utils';
 import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
 
@@ -78,78 +81,32 @@ export function SessionPreview({
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        bottom: 0,
-        width: '50%',
-        minWidth: 400,
-        maxWidth: 800,
-        backgroundColor: 'var(--bg-primary)',
-        borderLeft: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 100,
-        boxShadow: '-4px 0 24px rgba(0,0,0,0.3)',
-      }}
       ref={panelRef}
+      className="fixed top-0 right-0 bottom-0 w-1/2 min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.3)]"
     >
       {/* Header */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Session Preview</div>
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              marginTop: 2,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
+      <div className="px-4 py-3 border-b border-border flex justify-between items-center shrink-0">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">Session Preview</div>
+          <div className="text-[11px] text-muted-foreground font-mono mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">
             {sessionId.slice(0, 32)}...
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="flex gap-2 items-center">
           <button
             type="button"
             onClick={() => setShowTools(!showTools)}
-            style={{
-              padding: '4px 10px',
-              backgroundColor: showTools ? 'var(--accent)' : 'var(--bg-tertiary)',
-              color: showTools ? '#fff' : 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 11,
-              cursor: 'pointer',
-            }}
+            className={cn(
+              'px-2.5 py-1 border border-border rounded-sm text-[11px] cursor-pointer',
+              showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+            )}
           >
             {showTools ? 'Hide Tools' : 'Show Tools'}
           </button>
           <button
             type="button"
             onClick={onClose}
-            style={{
-              padding: '4px 10px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
+            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
           >
             Close (Esc)
           </button>
@@ -158,18 +115,7 @@ export function SessionPreview({
 
       {/* Stats bar */}
       {data && (
-        <div
-          style={{
-            padding: '6px 16px',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            gap: 16,
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            backgroundColor: 'var(--bg-secondary)',
-            flexShrink: 0,
-          }}
-        >
+        <div className="px-4 py-1.5 border-b border-border flex gap-4 text-[11px] text-muted-foreground bg-card shrink-0">
           <span>{data.totalMessages} total messages</span>
           <span>
             {visibleMessages.length} shown
@@ -179,43 +125,19 @@ export function SessionPreview({
       )}
 
       {/* Content */}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
+      <div ref={scrollRef} className="flex-1 overflow-auto px-4 py-3">
         {loading && (
-          <div
-            style={{
-              padding: 32,
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 13,
-            }}
-          >
+          <div className="p-8 text-center text-muted-foreground text-[13px]">
             Loading session content...
           </div>
         )}
 
         {error && (
-          <div
-            style={{
-              padding: '10px 16px',
-              backgroundColor: '#7f1d1d',
-              color: '#fca5a5',
-              borderRadius: 'var(--radius)',
-              fontSize: 13,
-            }}
-          >
-            {error}
-          </div>
+          <div className="px-4 py-2.5 bg-red-900 text-red-300 rounded-lg text-[13px]">{error}</div>
         )}
 
         {data && visibleMessages.length === 0 && (
-          <div
-            style={{
-              padding: 32,
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 13,
-            }}
-          >
+          <div className="p-8 text-center text-muted-foreground text-[13px]">
             No messages found in this session
           </div>
         )}
@@ -225,14 +147,7 @@ export function SessionPreview({
         ))}
 
         {data && data.totalMessages > data.messages.length && (
-          <div
-            style={{
-              padding: '8px 0',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 12,
-            }}
-          >
+          <div className="py-2 text-center text-muted-foreground text-xs">
             Showing last {data.messages.length} of {data.totalMessages} messages
           </div>
         )}
@@ -285,56 +200,16 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginBottom: 4,
-          padding: '4px 12px',
-          backgroundColor: style.bg,
-          borderRadius: 'var(--radius-sm)',
-          borderLeft: `2px solid ${style.color}`,
-          border: 'none',
-          borderLeftWidth: 2,
-          borderLeftStyle: 'solid',
-          borderLeftColor: style.color,
-          cursor: 'pointer',
-          textAlign: 'left',
-          color: 'var(--text-primary)',
-          font: 'inherit',
-        }}
+        className="w-full flex items-center gap-2 mb-1 px-3 py-1 rounded-sm border-none cursor-pointer text-left text-foreground font-[inherit]"
+        style={{ backgroundColor: style.bg, borderLeft: `2px solid ${style.color}` }}
       >
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            color: style.color,
-            flexShrink: 0,
-          }}
-        >
+        <span className="text-[10px] font-semibold shrink-0" style={{ color: style.color }}>
           {style.label}
         </span>
         {message.toolName && (
-          <span
-            style={{
-              fontSize: 11,
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {message.toolName}
-          </span>
+          <span className="text-[11px] font-mono text-muted-foreground">{message.toolName}</span>
         )}
-        <span
-          style={{
-            fontSize: 10,
-            color: 'var(--text-muted)',
-            marginLeft: 'auto',
-          }}
-        >
-          click to expand
-        </span>
+        <span className="text-[10px] text-muted-foreground ml-auto">click to expand</span>
       </button>
     );
   }
@@ -344,40 +219,21 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
 
   return (
     <div
-      style={{
-        marginBottom: 8,
-        padding: '8px 12px',
-        backgroundColor: style.bg,
-        borderRadius: 'var(--radius)',
-        borderLeft: `3px solid ${style.color}`,
-      }}
+      className="mb-2 px-3 py-2 rounded-lg"
+      style={{ backgroundColor: style.bg, borderLeft: `3px solid ${style.color}` }}
     >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 4,
-        }}
-      >
-        <span style={{ fontSize: 11, fontWeight: 600, color: style.color }}>
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-[11px] font-semibold" style={{ color: style.color }}>
           {style.label}
           {message.toolName && (
-            <span
-              style={{
-                marginLeft: 6,
-                fontWeight: 400,
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--text-muted)',
-              }}
-            >
+            <span className="ml-1.5 font-normal font-mono text-muted-foreground">
               {message.toolName}
             </span>
           )}
         </span>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="flex gap-2 items-center">
           {message.timestamp && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+            <span className="text-[10px] text-muted-foreground">
               {new Date(message.timestamp).toLocaleTimeString()}
             </span>
           )}
@@ -385,14 +241,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              style={{
-                fontSize: 10,
-                color: 'var(--accent)',
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-              }}
+              className="text-[10px] text-primary bg-transparent border-none p-0 cursor-pointer"
             >
               collapse
             </button>
@@ -400,16 +249,10 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
         </div>
       </div>
       <div
-        style={{
-          fontSize: isTool ? 11 : 13,
-          lineHeight: 1.6,
-          color: 'var(--text-primary)',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          fontFamily: isTool ? 'var(--font-mono)' : undefined,
-          maxHeight: isTool ? 300 : undefined,
-          overflow: isTool ? 'auto' : undefined,
-        }}
+        className={cn(
+          'leading-relaxed text-foreground whitespace-pre-wrap break-words',
+          isTool ? 'text-[11px] font-mono max-h-[300px] overflow-auto' : 'text-[13px]',
+        )}
       >
         {displayContent}
       </div>
@@ -417,15 +260,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          style={{
-            marginTop: 4,
-            fontSize: 11,
-            color: 'var(--accent)',
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-          }}
+          className="mt-1 text-[11px] text-primary bg-transparent border-none p-0 cursor-pointer"
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>

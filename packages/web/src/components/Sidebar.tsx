@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import type React from 'react';
 import { useEffect } from 'react';
 
+import { cn } from '@/lib/utils';
+
 type NavItem = {
   href: string;
   label: string;
@@ -47,46 +49,10 @@ export function Sidebar(): React.JSX.Element {
   }, []);
 
   return (
-    <nav
-      style={{
-        width: 220,
-        minWidth: 220,
-        backgroundColor: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '16px 0',
-      }}
-    >
-      <div
-        style={{
-          padding: '0 20px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 18,
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.02em',
-          }}
-        >
-          AgentCTL
-        </span>
-        <span
-          style={{
-            fontSize: 10,
-            color: 'var(--accent)',
-            backgroundColor: 'rgba(59, 130, 246, 0.12)',
-            padding: '1px 6px',
-            borderRadius: 'var(--radius-sm)',
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-          }}
-        >
+    <nav className="w-[220px] min-w-[220px] bg-sidebar border-r border-border flex flex-col py-4">
+      <div className="px-5 pb-5 flex items-center gap-2">
+        <span className="text-lg font-bold text-foreground tracking-tight">AgentCTL</span>
+        <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
           BETA
         </span>
       </div>
@@ -97,32 +63,21 @@ export function Sidebar(): React.JSX.Element {
           <Link
             key={item.href}
             href={item.href}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 20px',
-              backgroundColor: isActive ? 'var(--bg-hover)' : 'transparent',
-              color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-              fontSize: 14,
-              fontWeight: isActive ? 600 : 400,
-              borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
-              transition: 'all 0.15s',
-              textDecoration: 'none',
-            }}
+            className={cn(
+              'flex items-center gap-2.5 px-5 py-2.5 text-sm no-underline transition-all duration-150',
+              'border-l-[3px]',
+              isActive
+                ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
+                : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
+            )}
           >
-            <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{item.icon}</span>
-            <span style={{ flex: 1 }}>{item.label}</span>
+            <span className="text-base w-5 text-center">{item.icon}</span>
+            <span className="flex-1">{item.label}</span>
             <span
-              style={{
-                fontSize: 10,
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--text-muted)',
-                backgroundColor: 'var(--bg-tertiary)',
-                padding: '1px 5px',
-                borderRadius: 'var(--radius-sm)',
-                opacity: isActive ? 0.8 : 0.5,
-              }}
+              className={cn(
+                'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm',
+                isActive ? 'opacity-80' : 'opacity-50',
+              )}
             >
               {item.shortcut}
             </span>
@@ -130,58 +85,29 @@ export function Sidebar(): React.JSX.Element {
         );
       })}
 
-      <div style={{ flex: 1 }} />
+      <div className="flex-1" />
 
-      <div
-        style={{
-          padding: '8px 20px',
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          lineHeight: 1.6,
-        }}
-      >
-        <div
-          style={{
-            marginBottom: 2,
-            fontWeight: 500,
-            fontSize: 10,
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-          }}
-        >
-          Shortcuts
+      <div className="px-5 py-2 text-[11px] text-muted-foreground leading-relaxed">
+        <div className="mb-0.5 font-medium text-[10px] uppercase tracking-wider">Shortcuts</div>
+        <div>
+          <Kbd>1</Kbd>-<Kbd>6</Kbd> Navigate
         </div>
         <div>
-          <kbd style={kbdStyle}>1</kbd>-<kbd style={kbdStyle}>6</kbd> Navigate
-        </div>
-        <div>
-          <kbd style={kbdStyle}>Esc</kbd> Close panels
+          <Kbd>Esc</Kbd> Close panels
         </div>
       </div>
 
-      <div
-        style={{
-          padding: '10px 20px',
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          borderTop: '1px solid var(--border)',
-        }}
-      >
+      <div className="px-5 py-2.5 text-[11px] text-muted-foreground border-t border-border">
         AgentCTL v0.1.0
       </div>
     </nav>
   );
 }
 
-const kbdStyle: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '0 4px',
-  fontSize: 10,
-  fontFamily: 'var(--font-mono)',
-  backgroundColor: 'var(--bg-tertiary)',
-  borderRadius: 2,
-  border: '1px solid var(--border)',
-  lineHeight: '16px',
-  minWidth: 16,
-  textAlign: 'center',
-};
+function Kbd({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <kbd className="inline-block px-1 text-[10px] font-mono bg-muted rounded-sm border border-border leading-4 min-w-4 text-center">
+      {children}
+    </kbd>
+  );
+}
