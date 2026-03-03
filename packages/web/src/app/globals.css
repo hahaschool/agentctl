@@ -58,6 +58,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+button,
+a,
+select,
+[role="button"] {
+  touch-action: manipulation;
+}
+
 button {
   cursor: pointer;
   border: none;

@@ -622,7 +622,7 @@ export function DiscoverPage(): React.JSX.Element {
                                   setResuming(s.sessionId);
                                   setResumePrompt('');
                                 }}
-                                className="px-2.5 py-[3px] bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
+                                className="px-2.5 py-1 bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
                               >
                                 Resume
                               </button>

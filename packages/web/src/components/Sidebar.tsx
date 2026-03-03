@@ -130,7 +130,7 @@ export function Sidebar(): React.JSX.Element {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-2.5 px-5 py-2.5 text-sm no-underline transition-all duration-150',
+                'flex items-center gap-2.5 px-5 py-3 md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0',
                 'border-l-[3px]',
                 isActive
                   ? 'bg-accent/10 text-foreground font-semibold border-l-primary'

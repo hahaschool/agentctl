@@ -373,7 +373,7 @@ export function SessionsPage(): React.JSX.Element {
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
             aria-label="Sort order"
-            className="px-1.5 py-[3px] bg-muted text-muted-foreground border border-border rounded-sm text-[10px]"
+            className="px-2 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] min-h-[32px]"
           >
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
@@ -383,18 +383,18 @@ export function SessionsPage(): React.JSX.Element {
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
             aria-label="Group by"
-            className="px-1.5 py-[3px] bg-muted text-muted-foreground border border-border rounded-sm text-[10px]"
+            className="px-2 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] min-h-[32px]"
           >
             <option value="none">No grouping</option>
             <option value="project">Group by Project</option>
             <option value="machine">Group by Machine</option>
           </select>
-          <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer ml-auto">
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer ml-auto py-1">
             <input
               type="checkbox"
               checked={hideEmpty}
               onChange={(e) => setHideEmpty(e.target.checked)}
-              className="w-3 h-3 cursor-pointer"
+              className="w-3.5 h-3.5 cursor-pointer"
             />
             Hide empty
           </label>
