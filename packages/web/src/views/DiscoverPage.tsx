@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
+import { EmptyState } from '../components/EmptyState';
 import { SessionPreview } from '../components/SessionPreview';
 import { useToast } from '../components/Toast';
 import type { DiscoveredSession } from '../lib/api';
@@ -483,19 +484,17 @@ export function DiscoverPage(): React.JSX.Element {
           ))}
         </div>
       ) : allSessions.length === 0 ? (
-        <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
-          <div className="text-[15px] font-medium">No sessions discovered</div>
-          <div className="text-[13px] max-w-[420px]">
-            {data
-              ? `Scanned ${data.machinesQueried} machine(s) and found no Claude Code sessions.`
-              : 'No machines have been queried yet.'}{' '}
-            Try clicking &quot;Scan All Machines&quot; or start a new session.
-          </div>
-        </div>
+        <EmptyState
+          icon={'\u25B6'}
+          title="No sessions discovered"
+          description={
+            data
+              ? `Scanned ${data.machinesQueried} machine(s) and found no Claude Code sessions. Try clicking "Scan All Machines" or start a new session.`
+              : 'No machines have been queried yet. Try clicking "Scan All Machines" to get started.'
+          }
+        />
       ) : filtered.length === 0 ? (
-        <div className="p-12 text-center text-muted-foreground">
-          No sessions match the current filters
-        </div>
+        <EmptyState icon={'\u2315'} title="No sessions match the current filters" />
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((group) => {

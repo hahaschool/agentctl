@@ -141,6 +141,9 @@ function SessionHeader({ session }: { session: Session }): React.JSX.Element {
           <span>Running for {formatDuration(session.startedAt)}</span>
         )}
       </div>
+
+      {/* Cost / Model metadata (when available) */}
+      <SessionMetadataBadges metadata={session.metadata} />
     </div>
   );
 }
@@ -493,6 +496,44 @@ function LoadingState(): React.JSX.Element {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SessionMetadataBadges({
+  metadata,
+}: {
+  metadata: Record<string, unknown>;
+}): React.JSX.Element | null {
+  const model = typeof metadata.model === 'string' ? metadata.model : null;
+  const costUsd = typeof metadata.costUsd === 'number' ? metadata.costUsd : null;
+  const inputTokens = typeof metadata.inputTokens === 'number' ? metadata.inputTokens : null;
+  const outputTokens = typeof metadata.outputTokens === 'number' ? metadata.outputTokens : null;
+
+  if (!model && costUsd === null && inputTokens === null) return null;
+
+  return (
+    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+      {model && (
+        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
+          {model}
+        </span>
+      )}
+      {costUsd !== null && (
+        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
+          ${costUsd.toFixed(4)}
+        </span>
+      )}
+      {inputTokens !== null && (
+        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
+          {inputTokens.toLocaleString()} in
+        </span>
+      )}
+      {outputTokens !== null && (
+        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
+          {outputTokens.toLocaleString()} out
+        </span>
+      )}
     </div>
   );
 }

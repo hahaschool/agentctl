@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
+import { EmptyState } from '../components/EmptyState';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
@@ -377,9 +378,15 @@ export function AgentsPage(): React.JSX.Element {
           ))}
         </div>
       ) : filteredAgents.length === 0 ? (
-        <div className="p-12 text-center text-muted-foreground text-sm">
-          {agentList.length === 0 ? 'No agents registered' : 'No agents match the current filters'}
-        </div>
+        agentList.length === 0 ? (
+          <EmptyState
+            icon={'\u2699'}
+            title="No agents registered"
+            description="Create an agent using the button above to get started."
+          />
+        ) : (
+          <EmptyState icon={'\u2315'} title="No agents match the current filters" />
+        )
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           {filteredAgents.map((agent) => (

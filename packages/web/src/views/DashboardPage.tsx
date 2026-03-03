@@ -164,7 +164,10 @@ export function DashboardPage(): React.JSX.Element {
           <SectionHeader title="Recent Activity" />
           <div className="border border-border rounded-lg overflow-hidden">
             {discoveredSessions.length === 0 ? (
-              <EmptyState loading={discovered.isLoading} message="No sessions discovered" />
+              <DashboardEmptyPanel
+                loading={discovered.isLoading}
+                message="No sessions discovered"
+              />
             ) : (
               discoveredSessions.slice(0, 5).map((session, idx) => (
                 <div
@@ -200,7 +203,7 @@ export function DashboardPage(): React.JSX.Element {
           <SectionHeader title="Fleet Status" />
           <div className="border border-border rounded-lg overflow-hidden">
             {machineList.length === 0 ? (
-              <EmptyState loading={machines.isLoading} message="No machines registered" />
+              <DashboardEmptyPanel loading={machines.isLoading} message="No machines registered" />
             ) : (
               machineList.map((machine, idx) => (
                 <div
@@ -314,7 +317,7 @@ function ActionButton({
   );
 }
 
-function EmptyState({
+function DashboardEmptyPanel({
   loading,
   message,
 }: {

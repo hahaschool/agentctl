@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
+import { EmptyState } from '../components/EmptyState';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import type { Machine } from '../lib/api';
@@ -143,7 +144,15 @@ export function MachinesPage(): React.JSX.Element {
           ))}
         </div>
       ) : filteredList.length === 0 ? (
-        <EmptyState loading={false} hasFilters={list.length > 0 && filteredList.length === 0} />
+        list.length > 0 ? (
+          <EmptyState icon={'\u2315'} title="No machines match the current filters" />
+        ) : (
+          <EmptyState
+            icon={'\u2302'}
+            title="No machines registered"
+            description="Register a machine by running ./scripts/setup-machine.sh on the target host."
+          />
+        )
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
           {filteredList.map((m) => (
@@ -297,34 +306,5 @@ function CapBadge({
     >
       {label}
     </span>
-  );
-}
-
-function EmptyState({
-  loading,
-  hasFilters,
-}: {
-  loading: boolean;
-  hasFilters?: boolean;
-}): React.JSX.Element {
-  return (
-    <div className="p-16 text-center bg-card border border-border rounded-lg">
-      <div className="text-[15px] font-semibold text-muted-foreground mb-2">
-        {loading
-          ? 'Loading machines...'
-          : hasFilters
-            ? 'No machines match the current filters'
-            : 'No machines registered'}
-      </div>
-      {!loading && !hasFilters && (
-        <div className="text-[13px] text-muted-foreground">
-          Register a machine by running{' '}
-          <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded-sm">
-            ./scripts/setup-machine.sh
-          </code>{' '}
-          on the target host.
-        </div>
-      )}
-    </div>
   );
 }
