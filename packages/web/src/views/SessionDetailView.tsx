@@ -1,10 +1,10 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -95,13 +95,9 @@ function SessionHeader({ session }: { session: Session }): React.JSX.Element {
   return (
     <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
       <div className="flex items-center gap-3 mb-2">
-        <Link
-          href="/sessions"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          &larr; Sessions
-        </Link>
-        <span className="text-muted-foreground/40">|</span>
+        <Breadcrumb
+          items={[{ label: 'Sessions', href: '/sessions' }, { label: session.id.slice(0, 12) }]}
+        />
         <StatusBadge status={session.status} />
         {session.status === 'active' && (
           <span className="text-[11px] text-green-500 animate-pulse">Live</span>
@@ -507,9 +503,7 @@ function ErrorState({ error }: { error: string }): React.JSX.Element {
       <div className="text-center max-w-md">
         <div className="text-[15px] text-red-400 mb-2">Error</div>
         <div className="text-[13px] text-muted-foreground mb-4">{error}</div>
-        <Link href="/sessions" className="text-xs text-primary hover:underline">
-          &larr; Back to Sessions
-        </Link>
+        <Breadcrumb items={[{ label: 'Sessions', href: '/sessions' }, { label: 'Error' }]} />
       </div>
     </div>
   );

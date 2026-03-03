@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { SessionPreview } from '../components/SessionPreview';
@@ -15,7 +16,7 @@ import { discoverQuery, queryKeys } from '../lib/queries';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
 type SortOption = 'recent' | 'messages' | 'project';
-type GroupMode = 'project' | 'flat';
+type GroupMode = 'project' | 'machine' | 'flat';
 
 type SessionGroup = {
   projectPath: string;
@@ -70,24 +71,33 @@ export function DiscoverPage(): React.JSX.Element {
   // Filter state
   const [search, setSearch] = useState('');
   const [minMessages, setMinMessages] = useState<MinMessages>(1);
+  const [machineFilter, setMachineFilter] = useState<string>('all');
   const [sort, setSort] = useState<SortOption>('recent');
   const [groupMode, setGroupMode] = useState<GroupMode>('project');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const allSessions = data?.sessions ?? [];
 
+  // Unique hostnames for filter dropdown
+  const hostnames = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of allSessions) set.add(s.hostname);
+    return Array.from(set).sort();
+  }, [allSessions]);
+
   // Filtered sessions
   const filtered = useMemo(() => {
     const lowerSearch = search.toLowerCase().trim();
     return allSessions.filter((s) => {
       if (s.messageCount < minMessages) return false;
+      if (machineFilter !== 'all' && s.hostname !== machineFilter) return false;
       if (lowerSearch) {
-        const haystack = `${s.summary} ${s.projectPath} ${s.sessionId}`.toLowerCase();
+        const haystack = `${s.summary} ${s.projectPath} ${s.sessionId} ${s.hostname}`.toLowerCase();
         if (!haystack.includes(lowerSearch)) return false;
       }
       return true;
     });
-  }, [allSessions, minMessages, search]);
+  }, [allSessions, minMessages, machineFilter, search]);
 
   // Grouped + sorted
   const groups = useMemo((): SessionGroup[] => {
@@ -120,7 +130,7 @@ export function DiscoverPage(): React.JSX.Element {
 
     const map = new Map<string, DiscoveredSession[]>();
     for (const s of filtered) {
-      const key = s.projectPath;
+      const key = groupMode === 'machine' ? s.hostname : s.projectPath;
       const arr = map.get(key);
       if (arr) {
         arr.push(s);
@@ -131,8 +141,8 @@ export function DiscoverPage(): React.JSX.Element {
 
     const result: SessionGroup[] = [];
     for (const [projectPath, sessions] of map) {
-      const parts = projectPath.split('/');
-      const projectName = parts[parts.length - 1] || projectPath;
+      const projectName =
+        groupMode === 'machine' ? projectPath : projectPath.split('/').pop() || projectPath;
       let totalMessages = 0;
       let latestActivity = '';
       for (const s of sessions) {
@@ -169,9 +179,9 @@ export function DiscoverPage(): React.JSX.Element {
     return result;
   }, [filtered, sort, groupMode]);
 
-  // Unique project count
-  const projectCount =
-    groupMode === 'flat' ? new Set(filtered.map((s) => s.projectPath)).size : groups.length;
+  // Unique project and machine counts
+  const projectCount = new Set(filtered.map((s) => s.projectPath)).size;
+  const machineCount = new Set(filtered.map((s) => s.hostname)).size;
 
   // Find the full selected session for preview
   const selectedSession = selectedSessionId
@@ -390,18 +400,40 @@ export function DiscoverPage(): React.JSX.Element {
             ))}
           </select>
         </label>
+        {/* Machine filter */}
+        {hostnames.length > 1 && (
+          <label htmlFor="discover-machine" className="flex items-center gap-1.5 text-[13px]">
+            <span className="text-muted-foreground">Machine:</span>
+            <select
+              id="discover-machine"
+              value={machineFilter}
+              onChange={(e) => setMachineFilter(e.target.value)}
+              className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
+            >
+              <option value="all">All ({hostnames.length})</option>
+              {hostnames.map((h) => (
+                <option key={h} value={h}>
+                  {h}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {/* Group by toggle */}
-        <button
-          type="button"
-          onClick={() => setGroupMode((prev) => (prev === 'project' ? 'flat' : 'project'))}
-          className={cn(
-            'py-[5px] px-3 border border-border rounded-sm text-xs cursor-pointer whitespace-nowrap font-medium',
-            groupMode === 'project' ? 'bg-muted text-muted-foreground' : 'bg-primary text-white',
-          )}
-        >
-          {groupMode === 'project' ? 'Group by Project' : 'Flat List'}
-        </button>
-        {groupMode === 'project' && (
+        <label htmlFor="discover-group" className="flex items-center gap-1.5 text-[13px]">
+          <span className="text-muted-foreground">Group:</span>
+          <select
+            id="discover-group"
+            value={groupMode}
+            onChange={(e) => setGroupMode(e.target.value as GroupMode)}
+            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
+          >
+            <option value="project">By Project</option>
+            <option value="machine">By Machine</option>
+            <option value="flat">Flat List</option>
+          </select>
+        </label>
+        {groupMode !== 'flat' && (
           <button
             type="button"
             onClick={toggleAll}
@@ -414,30 +446,51 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Stats line */}
       <div className="text-[13px] text-muted-foreground mb-4">
-        Showing {filtered.length} of {allSessions.length} sessions across {projectCount} projects
+        Showing {filtered.length} of {allSessions.length} sessions across {projectCount} project
+        {projectCount !== 1 ? 's' : ''} on {machineCount} machine{machineCount !== 1 ? 's' : ''}
       </div>
 
       {/* Content */}
-      {allSessions.length === 0 ? (
-        <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
-          {isLoading ? (
-            <>
-              <div className="text-[15px] font-medium">Scanning machines for sessions...</div>
-              {data && (
-                <div className="text-[13px]">Querying {data.machinesQueried} machine(s)</div>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="text-[15px] font-medium">No sessions discovered</div>
-              <div className="text-[13px] max-w-[420px]">
-                {data
-                  ? `Scanned ${data.machinesQueried} machine(s) and found no Claude Code sessions.`
-                  : 'No machines have been queried yet.'}{' '}
-                Try clicking "Scan All Machines" or start a new session.
+      {isLoading ? (
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 3 }, (_, gi) => (
+            <div
+              key={`gsk-${String(gi)}`}
+              className="border border-border rounded-lg overflow-hidden"
+            >
+              <div className="px-4 py-2.5 bg-card flex items-center gap-3">
+                <Skeleton className="w-4 h-4 shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+                <Skeleton className="h-4 w-20" />
               </div>
-            </>
-          )}
+              <div>
+                {Array.from({ length: gi === 0 ? 4 : 2 }, (_, si) => (
+                  <div
+                    key={`ssk-${String(si)}`}
+                    className="flex items-center gap-3 px-4 py-2 border-t border-border"
+                  >
+                    <Skeleton className="w-[7px] h-[7px] rounded-full shrink-0" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-3 w-12 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : allSessions.length === 0 ? (
+        <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
+          <div className="text-[15px] font-medium">No sessions discovered</div>
+          <div className="text-[13px] max-w-[420px]">
+            {data
+              ? `Scanned ${data.machinesQueried} machine(s) and found no Claude Code sessions.`
+              : 'No machines have been queried yet.'}{' '}
+            Try clicking &quot;Scan All Machines&quot; or start a new session.
+          </div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="p-12 text-center text-muted-foreground">
@@ -477,7 +530,9 @@ export function DiscoverPage(): React.JSX.Element {
                         title={group.projectPath}
                         className="font-mono text-[11px] text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap leading-4 cursor-default"
                       >
-                        {shortenPath(group.projectPath)}
+                        {groupMode === 'machine'
+                          ? `${new Set(group.sessions.map((s) => s.projectPath)).size} project(s)`
+                          : shortenPath(group.projectPath)}
                       </div>
                     </div>
                     <div className="flex gap-2.5 items-center shrink-0">

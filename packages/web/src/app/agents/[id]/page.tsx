@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import type React from 'react';
 import { useState } from 'react';
 
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -85,12 +86,7 @@ export default function AgentDetailPage(): React.JSX.Element {
   if (agent.error) {
     return (
       <div className="p-6 max-w-[1000px]">
-        <Link
-          href="/agents"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          &larr; Back to Agents
-        </Link>
+        <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: 'Error' }]} />
         <div className="mt-6 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg text-sm">
           Failed to load agent: {agent.error.message}
         </div>
@@ -103,12 +99,7 @@ export default function AgentDetailPage(): React.JSX.Element {
   if (!data) {
     return (
       <div className="p-6 max-w-[1000px]">
-        <Link
-          href="/agents"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          &larr; Back to Agents
-        </Link>
+        <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: 'Error' }]} />
         <div className="mt-6 text-center text-muted-foreground text-sm py-12">Agent not found.</div>
       </div>
     );
@@ -118,16 +109,10 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   return (
     <div className="p-6 max-w-[1000px]">
-      {/* Back link */}
-      <Link
-        href="/agents"
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        &larr; Back to Agents
-      </Link>
+      <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: data.name }]} />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-[22px] font-bold">{data.name}</h1>
           <StatusBadge status={data.status} />

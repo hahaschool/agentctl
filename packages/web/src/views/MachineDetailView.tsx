@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import type React from 'react';
 import { useMemo } from 'react';
 
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -66,13 +67,8 @@ export function MachineDetailView(): React.JSX.Element {
   if (machines.error) {
     return (
       <div className="p-6 max-w-[1000px]">
-        <Link
-          href="/machines"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          &larr; Back to Machines
-        </Link>
-        <div className="mt-6 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg text-sm">
+        <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: 'Error' }]} />
+        <div className="px-4 py-3 bg-red-900/50 text-red-300 rounded-lg text-sm">
           Failed to load machines: {machines.error.message}
         </div>
       </div>
@@ -84,31 +80,18 @@ export function MachineDetailView(): React.JSX.Element {
   if (!machine) {
     return (
       <div className="p-6 max-w-[1000px]">
-        <Link
-          href="/machines"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          &larr; Back to Machines
-        </Link>
-        <div className="mt-6 text-center text-muted-foreground text-sm py-12">
-          Machine not found.
-        </div>
+        <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: 'Not Found' }]} />
+        <div className="text-center text-muted-foreground text-sm py-12">Machine not found.</div>
       </div>
     );
   }
 
   return (
     <div className="p-6 max-w-[1000px]">
-      {/* Back link */}
-      <Link
-        href="/machines"
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        &larr; Back to Machines
-      </Link>
+      <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: machine.hostname }]} />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-[22px] font-bold">{machine.hostname}</h1>
           <StatusBadge status={machine.status} />
