@@ -113,7 +113,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('query');
+      expect(body.error).toBe('INVALID_PARAMS');
+      expect(body.message).toContain('query');
     });
 
     it('returns 400 when query is empty string', async () => {
@@ -126,7 +127,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('query');
+      expect(body.error).toBe('INVALID_PARAMS');
+      expect(body.message).toContain('query');
     });
 
     it('returns 400 when query is not a string', async () => {
@@ -139,7 +141,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('query');
+      expect(body.error).toBe('INVALID_PARAMS');
+      expect(body.message).toContain('query');
     });
 
     it('returns 400 when query is an array', async () => {
@@ -152,7 +155,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('query');
+      expect(body.error).toBe('INVALID_PARAMS');
+      expect(body.message).toContain('query');
     });
 
     it('returns 502 when mem0Client.search throws ControlPlaneError', async () => {
@@ -171,8 +175,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('Mem0 service unreachable');
-      expect(body.code).toBe('MEM0_CONNECTION_ERROR');
+      expect(body.error).toBe('MEM0_CONNECTION_ERROR');
+      expect(body.message).toBe('Mem0 service unreachable');
     });
 
     it('returns 500 for unknown errors during search', async () => {
@@ -187,7 +191,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to search memories');
+      expect(body.error).toBe('SEARCH_FAILED');
+      expect(body.message).toBe('Failed to search memories');
     });
   });
 
@@ -257,7 +262,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('messages');
+      expect(body.error).toBe('INVALID_PARAMS');
+      expect(body.message).toContain('messages');
     });
 
     it('returns 400 when messages is an empty array', async () => {
@@ -270,7 +276,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('messages');
+      expect(body.error).toBe('INVALID_PARAMS');
+      expect(body.message).toContain('messages');
     });
 
     it('returns 400 when messages is not an array', async () => {
@@ -283,7 +290,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('messages');
+      expect(body.error).toBe('INVALID_PARAMS');
+      expect(body.message).toContain('messages');
     });
 
     it('returns 502 when mem0Client.add throws ControlPlaneError', async () => {
@@ -302,8 +310,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('Mem0 returned 500');
-      expect(body.code).toBe('MEM0_API_ERROR');
+      expect(body.error).toBe('MEM0_API_ERROR');
+      expect(body.message).toBe('Mem0 returned 500');
     });
 
     it('returns 500 for unknown errors during add', async () => {
@@ -320,7 +328,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to add memory');
+      expect(body.error).toBe('ADD_FAILED');
+      expect(body.message).toBe('Failed to add memory');
     });
   });
 
@@ -398,8 +407,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('Mem0 connection timeout');
-      expect(body.code).toBe('MEM0_CONNECTION_ERROR');
+      expect(body.error).toBe('MEM0_CONNECTION_ERROR');
+      expect(body.message).toBe('Mem0 connection timeout');
     });
 
     it('returns 500 for unknown errors during getAll', async () => {
@@ -413,7 +422,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to list memories');
+      expect(body.error).toBe('LIST_FAILED');
+      expect(body.message).toBe('Failed to list memories');
     });
   });
 
@@ -463,8 +473,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('Mem0 delete failed');
-      expect(body.code).toBe('MEM0_API_ERROR');
+      expect(body.error).toBe('MEM0_API_ERROR');
+      expect(body.message).toBe('Mem0 delete failed');
       expect(body.memoryId).toBe('mem-999');
     });
 
@@ -479,7 +489,8 @@ describe('Memory routes — /api/memory', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to delete memory');
+      expect(body.error).toBe('DELETE_FAILED');
+      expect(body.message).toBe('Failed to delete memory');
       expect(body.memoryId).toBe('mem-500');
     });
   });

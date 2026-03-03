@@ -195,8 +195,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         };
       } catch {
         return reply.code(500).send({
-          error: 'Failed to fetch dashboard overview',
-          code: 'DASHBOARD_OVERVIEW_ERROR',
+          error: 'DASHBOARD_OVERVIEW_ERROR',
+          message: 'Failed to fetch dashboard overview',
         });
       }
     },
@@ -251,8 +251,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         return { stats };
       } catch {
         return reply.code(500).send({
-          error: 'Failed to fetch agent stats',
-          code: 'DASHBOARD_AGENT_STATS_ERROR',
+          error: 'DASHBOARD_AGENT_STATS_ERROR',
+          message: 'Failed to fetch agent stats',
         });
       }
     },
@@ -306,8 +306,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         return { tools, topAgentsByToolUse };
       } catch {
         return reply.code(500).send({
-          error: 'Failed to fetch tool usage',
-          code: 'DASHBOARD_TOOL_USAGE_ERROR',
+          error: 'DASHBOARD_TOOL_USAGE_ERROR',
+          message: 'Failed to fetch tool usage',
         });
       }
     },
@@ -330,8 +330,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
 
       if (!isValidPeriod(rawPeriod)) {
         return reply.code(400).send({
-          error: `Invalid period "${rawPeriod}". Must be one of: ${VALID_PERIODS.join(', ')}`,
-          code: 'INVALID_PERIOD',
+          error: 'INVALID_PERIOD',
+          message: `Invalid period "${rawPeriod}". Must be one of: ${VALID_PERIODS.join(', ')}`,
         });
       }
 
@@ -385,8 +385,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         };
       } catch {
         return reply.code(500).send({
-          error: 'Failed to fetch cost summary',
-          code: 'DASHBOARD_COST_SUMMARY_ERROR',
+          error: 'DASHBOARD_COST_SUMMARY_ERROR',
+          message: 'Failed to fetch cost summary',
         });
       }
     },

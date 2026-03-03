@@ -130,45 +130,45 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
 
       if (!url || typeof url !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "url" string is required',
-          code: 'INVALID_URL',
+          error: 'INVALID_URL',
+          message: 'A non-empty "url" string is required',
         });
       }
 
       if (!isValidUrl(url)) {
         return reply.code(400).send({
-          error: '"url" must be a valid HTTP or HTTPS URL',
-          code: 'INVALID_URL',
+          error: 'INVALID_URL',
+          message: '"url" must be a valid HTTP or HTTPS URL',
         });
       }
 
       if (!isValidProvider(provider)) {
         return reply.code(400).send({
-          error: `Invalid provider "${provider}". Must be one of: ${WEBHOOK_PROVIDERS.join(', ')}`,
-          code: 'INVALID_PROVIDER',
+          error: 'INVALID_PROVIDER',
+          message: `Invalid provider "${provider}". Must be one of: ${WEBHOOK_PROVIDERS.join(', ')}`,
         });
       }
 
       if (!Array.isArray(eventTypes) || eventTypes.length === 0) {
         return reply.code(400).send({
-          error: 'A non-empty "eventTypes" array is required',
-          code: 'INVALID_EVENT_TYPES',
+          error: 'INVALID_EVENT_TYPES',
+          message: 'A non-empty "eventTypes" array is required',
         });
       }
 
       for (const eventType of eventTypes) {
         if (!isValidEventType(eventType)) {
           return reply.code(400).send({
-            error: `Invalid event type "${eventType}". Must be one of: ${WEBHOOK_EVENT_TYPES.join(', ')}`,
-            code: 'INVALID_EVENT_TYPES',
+            error: 'INVALID_EVENT_TYPES',
+            message: `Invalid event type "${eventType}". Must be one of: ${WEBHOOK_EVENT_TYPES.join(', ')}`,
           });
         }
       }
 
       if (agentFilter !== undefined && !Array.isArray(agentFilter)) {
         return reply.code(400).send({
-          error: '"agentFilter" must be an array of agent IDs',
-          code: 'INVALID_AGENT_FILTER',
+          error: 'INVALID_AGENT_FILTER',
+          message: '"agentFilter" must be an array of agent IDs',
         });
       }
 
@@ -197,12 +197,12 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
         });
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         const message = error instanceof Error ? error.message : String(error);
         return reply.code(500).send({
-          error: `Failed to create webhook subscription: ${message}`,
-          code: 'WEBHOOK_CREATE_FAILED',
+          error: 'WEBHOOK_CREATE_FAILED',
+          message: `Failed to create webhook subscription: ${message}`,
         });
       }
     },
@@ -226,11 +226,11 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
         return { subscriptions };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to list webhook subscriptions',
-          code: 'WEBHOOK_LIST_FAILED',
+          error: 'WEBHOOK_LIST_FAILED',
+          message: 'Failed to list webhook subscriptions',
         });
       }
     },
@@ -264,13 +264,13 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           if (error.code === 'WEBHOOK_NOT_FOUND') {
-            return reply.code(404).send({ error: error.message, code: error.code });
+            return reply.code(404).send({ error: error.code, message: error.message });
           }
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to get webhook subscription',
-          code: 'WEBHOOK_GET_FAILED',
+          error: 'WEBHOOK_GET_FAILED',
+          message: 'Failed to get webhook subscription',
         });
       }
     },
@@ -290,32 +290,32 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       if (url !== undefined) {
         if (typeof url !== 'string' || !isValidUrl(url)) {
           return reply.code(400).send({
-            error: '"url" must be a valid HTTP or HTTPS URL',
-            code: 'INVALID_URL',
+            error: 'INVALID_URL',
+            message: '"url" must be a valid HTTP or HTTPS URL',
           });
         }
       }
 
       if (provider !== undefined && !isValidProvider(provider)) {
         return reply.code(400).send({
-          error: `Invalid provider "${provider}". Must be one of: ${WEBHOOK_PROVIDERS.join(', ')}`,
-          code: 'INVALID_PROVIDER',
+          error: 'INVALID_PROVIDER',
+          message: `Invalid provider "${provider}". Must be one of: ${WEBHOOK_PROVIDERS.join(', ')}`,
         });
       }
 
       if (eventTypes !== undefined) {
         if (!Array.isArray(eventTypes) || eventTypes.length === 0) {
           return reply.code(400).send({
-            error: 'A non-empty "eventTypes" array is required',
-            code: 'INVALID_EVENT_TYPES',
+            error: 'INVALID_EVENT_TYPES',
+            message: 'A non-empty "eventTypes" array is required',
           });
         }
 
         for (const eventType of eventTypes) {
           if (!isValidEventType(eventType)) {
             return reply.code(400).send({
-              error: `Invalid event type "${eventType}". Must be one of: ${WEBHOOK_EVENT_TYPES.join(', ')}`,
-              code: 'INVALID_EVENT_TYPES',
+              error: 'INVALID_EVENT_TYPES',
+              message: `Invalid event type "${eventType}". Must be one of: ${WEBHOOK_EVENT_TYPES.join(', ')}`,
             });
           }
         }
@@ -323,8 +323,8 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
 
       if (agentFilter !== undefined && agentFilter !== null && !Array.isArray(agentFilter)) {
         return reply.code(400).send({
-          error: '"agentFilter" must be an array of agent IDs or null',
-          code: 'INVALID_AGENT_FILTER',
+          error: 'INVALID_AGENT_FILTER',
+          message: '"agentFilter" must be an array of agent IDs or null',
         });
       }
 
@@ -367,8 +367,8 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
 
         if (setParts.length === 0) {
           return reply.code(400).send({
-            error: 'No fields to update',
-            code: 'EMPTY_UPDATE',
+            error: 'EMPTY_UPDATE',
+            message: 'No fields to update',
           });
         }
 
@@ -387,13 +387,13 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           if (error.code === 'WEBHOOK_NOT_FOUND') {
-            return reply.code(404).send({ error: error.message, code: error.code });
+            return reply.code(404).send({ error: error.code, message: error.message });
           }
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to update webhook subscription',
-          code: 'WEBHOOK_UPDATE_FAILED',
+          error: 'WEBHOOK_UPDATE_FAILED',
+          message: 'Failed to update webhook subscription',
         });
       }
     },
@@ -431,13 +431,13 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           if (error.code === 'WEBHOOK_NOT_FOUND') {
-            return reply.code(404).send({ error: error.message, code: error.code });
+            return reply.code(404).send({ error: error.code, message: error.message });
           }
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to delete webhook subscription',
-          code: 'WEBHOOK_DELETE_FAILED',
+          error: 'WEBHOOK_DELETE_FAILED',
+          message: 'Failed to delete webhook subscription',
         });
       }
     },
@@ -481,13 +481,13 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           if (error.code === 'WEBHOOK_NOT_FOUND') {
-            return reply.code(404).send({ error: error.message, code: error.code });
+            return reply.code(404).send({ error: error.code, message: error.message });
           }
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to list webhook deliveries',
-          code: 'WEBHOOK_DELIVERIES_FAILED',
+          error: 'WEBHOOK_DELIVERIES_FAILED',
+          message: 'Failed to list webhook deliveries',
         });
       }
     },
@@ -581,13 +581,13 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           if (error.code === 'WEBHOOK_NOT_FOUND') {
-            return reply.code(404).send({ error: error.message, code: error.code });
+            return reply.code(404).send({ error: error.code, message: error.message });
           }
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to send test webhook',
-          code: 'WEBHOOK_TEST_FAILED',
+          error: 'WEBHOOK_TEST_FAILED',
+          message: 'Failed to send test webhook',
         });
       }
     },

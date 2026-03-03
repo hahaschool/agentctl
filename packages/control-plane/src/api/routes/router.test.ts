@@ -138,8 +138,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('LiteLLM proxy unreachable');
-      expect(body.code).toBe('LITELLM_CONNECTION_ERROR');
+      expect(body.error).toBe('LITELLM_CONNECTION_ERROR');
+      expect(body.message).toBe('LiteLLM proxy unreachable');
     });
   });
 
@@ -177,8 +177,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('LiteLLM returned 500');
-      expect(body.code).toBe('LITELLM_API_ERROR');
+      expect(body.error).toBe('LITELLM_API_ERROR');
+      expect(body.message).toBe('LiteLLM returned 500');
     });
 
     it('returns 500 when getModelInfo() throws non-ControlPlaneError', async () => {
@@ -192,7 +192,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to fetch model info');
+      expect(body.error).toBe('MODEL_INFO_FAILED');
+      expect(body.message).toBe('Failed to fetch model info');
     });
   });
 
@@ -250,8 +251,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('LiteLLM connection timeout');
-      expect(body.code).toBe('LITELLM_CONNECTION_ERROR');
+      expect(body.error).toBe('LITELLM_CONNECTION_ERROR');
+      expect(body.message).toBe('LiteLLM connection timeout');
     });
 
     it('returns 500 when getSpend() throws non-ControlPlaneError', async () => {
@@ -265,7 +266,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to fetch spend logs');
+      expect(body.error).toBe('SPEND_LOGS_FAILED');
+      expect(body.message).toBe('Failed to fetch spend logs');
     });
   });
 
@@ -320,8 +322,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.error).toBe('Model test failed with 429');
-      expect(body.code).toBe('LITELLM_API_ERROR');
+      expect(body.error).toBe('LITELLM_API_ERROR');
+      expect(body.message).toBe('Model test failed with 429');
       expect(body.modelId).toBe('claude-3-opus');
     });
 
@@ -336,7 +338,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to test model');
+      expect(body.error).toBe('TEST_MODEL_FAILED');
+      expect(body.message).toBe('Failed to test model');
       expect(body.modelId).toBe('gpt-4o');
     });
   });
@@ -402,7 +405,8 @@ describe('Router routes — /api/router', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to list models');
+      expect(body.error).toBe('LIST_MODELS_FAILED');
+      expect(body.message).toBe('Failed to list models');
     });
   });
 });

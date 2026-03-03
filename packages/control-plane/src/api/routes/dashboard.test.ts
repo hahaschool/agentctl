@@ -323,7 +323,7 @@ describe('Dashboard routes — /api/dashboard', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('DASHBOARD_OVERVIEW_ERROR');
+      expect(body.error).toBe('DASHBOARD_OVERVIEW_ERROR');
     });
   });
 
@@ -429,7 +429,7 @@ describe('Dashboard routes — /api/dashboard', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('DASHBOARD_AGENT_STATS_ERROR');
+      expect(body.error).toBe('DASHBOARD_AGENT_STATS_ERROR');
     });
   });
 
@@ -490,7 +490,7 @@ describe('Dashboard routes — /api/dashboard', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('DASHBOARD_TOOL_USAGE_ERROR');
+      expect(body.error).toBe('DASHBOARD_TOOL_USAGE_ERROR');
     });
   });
 
@@ -583,8 +583,8 @@ describe('Dashboard routes — /api/dashboard', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_PERIOD');
-      expect(body.error).toContain('2w');
+      expect(body.error).toBe('INVALID_PERIOD');
+      expect(body.message).toContain('2w');
     });
 
     it('returns 400 for another invalid period value', async () => {
@@ -596,7 +596,7 @@ describe('Dashboard routes — /api/dashboard', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_PERIOD');
+      expect(body.error).toBe('INVALID_PERIOD');
     });
 
     it('returns 500 when database query fails', async () => {
@@ -610,7 +610,7 @@ describe('Dashboard routes — /api/dashboard', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('DASHBOARD_COST_SUMMARY_ERROR');
+      expect(body.error).toBe('DASHBOARD_COST_SUMMARY_ERROR');
     });
   });
 });

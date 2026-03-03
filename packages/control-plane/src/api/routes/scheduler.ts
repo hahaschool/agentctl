@@ -37,9 +37,11 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         return { jobs };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(500).send({ error: error.message, code: error.code });
+          return reply.code(500).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to list repeatable jobs' });
+        return reply
+          .code(500)
+          .send({ error: 'LIST_JOBS_FAILED', message: 'Failed to list repeatable jobs' });
       }
     },
   );
@@ -92,9 +94,11 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         return { ok: true, agentId, machineId, intervalMs };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(500).send({ error: error.message, code: error.code });
+          return reply.code(500).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to add heartbeat job' });
+        return reply
+          .code(500)
+          .send({ error: 'ADD_HEARTBEAT_FAILED', message: 'Failed to add heartbeat job' });
       }
     },
   );
@@ -147,9 +151,11 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         return { ok: true, agentId, machineId, pattern, model: model ?? null };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(500).send({ error: error.message, code: error.code });
+          return reply.code(500).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to add cron job' });
+        return reply
+          .code(500)
+          .send({ error: 'ADD_CRON_FAILED', message: 'Failed to add cron job' });
       }
     },
   );
@@ -170,9 +176,11 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         return { ok: true, key, removedCount };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(500).send({ error: error.message, code: error.code });
+          return reply.code(500).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to remove repeatable job' });
+        return reply
+          .code(500)
+          .send({ error: 'REMOVE_JOB_FAILED', message: 'Failed to remove repeatable job' });
       }
     },
   );
@@ -219,9 +227,12 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         return { ok: true, removedCount: totalRemoved };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(500).send({ error: error.message, code: error.code });
+          return reply.code(500).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to remove all repeatable jobs' });
+        return reply.code(500).send({
+          error: 'REMOVE_ALL_JOBS_FAILED',
+          message: 'Failed to remove all repeatable jobs',
+        });
       }
     },
   );

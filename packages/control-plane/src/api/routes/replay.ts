@@ -46,7 +46,9 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
       const { agentId } = request.query;
 
       if (!sessionId || typeof sessionId !== 'string') {
-        return reply.code(400).send({ error: 'A valid sessionId parameter is required' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: 'A valid sessionId parameter is required' });
       }
 
       try {
@@ -79,8 +81,8 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
         if (timeline.totalEvents === 0) {
           return reply.code(404).send({
-            error: `No audit entries found for session '${sessionId}'`,
-            code: 'SESSION_NOT_FOUND',
+            error: 'SESSION_NOT_FOUND',
+            message: `No audit entries found for session '${sessionId}'`,
           });
         }
 
@@ -94,9 +96,11 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
         return timeline;
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to build session replay' });
+        return reply
+          .code(500)
+          .send({ error: 'REPLAY_FAILED', message: 'Failed to build session replay' });
       }
     },
   );
@@ -113,7 +117,9 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
       const { agentId } = request.query;
 
       if (!sessionId || typeof sessionId !== 'string') {
-        return reply.code(400).send({ error: 'A valid sessionId parameter is required' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: 'A valid sessionId parameter is required' });
       }
 
       try {
@@ -146,17 +152,19 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
         if (timeline.totalEvents === 0) {
           return reply.code(404).send({
-            error: `No audit entries found for session '${sessionId}'`,
-            code: 'SESSION_NOT_FOUND',
+            error: 'SESSION_NOT_FOUND',
+            message: `No audit entries found for session '${sessionId}'`,
           });
         }
 
         return generateSummary(timeline);
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to generate session summary' });
+        return reply
+          .code(500)
+          .send({ error: 'SUMMARY_FAILED', message: 'Failed to generate session summary' });
       }
     },
   );
@@ -173,7 +181,9 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
       const { agentId } = request.query;
 
       if (!sessionId || typeof sessionId !== 'string') {
-        return reply.code(400).send({ error: 'A valid sessionId parameter is required' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: 'A valid sessionId parameter is required' });
       }
 
       try {
@@ -206,17 +216,20 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
         if (timeline.totalEvents === 0) {
           return reply.code(404).send({
-            error: `No audit entries found for session '${sessionId}'`,
-            code: 'SESSION_NOT_FOUND',
+            error: 'SESSION_NOT_FOUND',
+            message: `No audit entries found for session '${sessionId}'`,
           });
         }
 
         return findSuspiciousPatterns(timeline);
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to detect suspicious patterns' });
+        return reply.code(500).send({
+          error: 'SUSPICIOUS_PATTERNS_FAILED',
+          message: 'Failed to detect suspicious patterns',
+        });
       }
     },
   );

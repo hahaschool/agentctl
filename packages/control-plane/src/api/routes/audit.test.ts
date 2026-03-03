@@ -190,7 +190,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/runId/i);
+      expect(body.message).toMatch(/runId/i);
     });
 
     it('returns 400 when runId is an empty string', async () => {
@@ -206,7 +206,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/runId/i);
+      expect(body.message).toMatch(/runId/i);
     });
 
     it('returns 400 when runId is not a string', async () => {
@@ -222,7 +222,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/runId/i);
+      expect(body.message).toMatch(/runId/i);
     });
 
     it('returns 400 when actions is missing', async () => {
@@ -237,7 +237,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/actions/i);
+      expect(body.message).toMatch(/actions/i);
     });
 
     it('returns 400 when actions is an empty array', async () => {
@@ -253,7 +253,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/actions/i);
+      expect(body.message).toMatch(/actions/i);
     });
 
     it('returns 400 when actions is not an array', async () => {
@@ -269,7 +269,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/actions/i);
+      expect(body.message).toMatch(/actions/i);
     });
 
     it('returns 400 when batch size exceeds maximum of 1000', async () => {
@@ -289,9 +289,9 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/1001/);
-      expect(body.error).toMatch(/1000/);
-      expect(body.code).toBe('BATCH_SIZE_EXCEEDED');
+      expect(body.message).toMatch(/1001/);
+      expect(body.message).toMatch(/1000/);
+      expect(body.error).toBe('BATCH_SIZE_EXCEEDED');
     });
 
     it('accepts exactly 1000 actions (boundary)', async () => {
@@ -330,7 +330,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/actionType/i);
+      expect(body.message).toMatch(/actionType/i);
     });
 
     it('returns 400 when an action has empty string actionType', async () => {
@@ -346,7 +346,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/actionType/i);
+      expect(body.message).toMatch(/actionType/i);
     });
 
     it('returns 400 when an action has non-string actionType', async () => {
@@ -362,7 +362,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/actionType/i);
+      expect(body.message).toMatch(/actionType/i);
     });
 
     it('returns 400 on first invalid action in a mixed batch', async () => {
@@ -382,7 +382,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toMatch(/actionType/i);
+      expect(body.message).toMatch(/actionType/i);
 
       // dbRegistry.insertActions should NOT have been called
       expect(mockDbRegistry.insertActions).not.toHaveBeenCalled();
@@ -418,8 +418,8 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(502);
 
       const body = response.json();
-      expect(body.code).toBe('AUDIT_INSERT_FAILED');
-      expect(body.error).toMatch(/insert/i);
+      expect(body.error).toBe('AUDIT_INSERT_FAILED');
+      expect(body.message).toMatch(/insert/i);
     });
 
     it('returns 500 when dbRegistry throws an unexpected error', async () => {
@@ -437,7 +437,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to ingest audit actions');
+      expect(body.error).toBe('INGEST_FAILED');
     });
 
     it('returns 500 when dbRegistry throws a non-Error value', async () => {
@@ -455,7 +455,7 @@ describe('Audit routes — /api/audit (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to ingest audit actions');
+      expect(body.error).toBe('INGEST_FAILED');
     });
   });
 });
@@ -650,7 +650,7 @@ describe('Audit routes — GET /api/audit (query)', () => {
     expect(response.statusCode).toBe(400);
 
     const body = response.json();
-    expect(body.error).toMatch(/limit/i);
+    expect(body.message).toMatch(/limit/i);
   });
 
   it('returns 400 for negative limit', async () => {
@@ -662,7 +662,7 @@ describe('Audit routes — GET /api/audit (query)', () => {
     expect(response.statusCode).toBe(400);
 
     const body = response.json();
-    expect(body.error).toMatch(/limit/i);
+    expect(body.message).toMatch(/limit/i);
   });
 
   it('returns 400 for negative offset', async () => {
@@ -674,7 +674,7 @@ describe('Audit routes — GET /api/audit (query)', () => {
     expect(response.statusCode).toBe(400);
 
     const body = response.json();
-    expect(body.error).toMatch(/offset/i);
+    expect(body.message).toMatch(/offset/i);
   });
 
   it('returns 400 for invalid from date', async () => {
@@ -686,7 +686,7 @@ describe('Audit routes — GET /api/audit (query)', () => {
     expect(response.statusCode).toBe(400);
 
     const body = response.json();
-    expect(body.error).toMatch(/from/i);
+    expect(body.message).toMatch(/from/i);
   });
 
   it('returns 400 for invalid to date', async () => {
@@ -698,7 +698,7 @@ describe('Audit routes — GET /api/audit (query)', () => {
     expect(response.statusCode).toBe(400);
 
     const body = response.json();
-    expect(body.error).toMatch(/to/i);
+    expect(body.message).toMatch(/to/i);
   });
 
   // ---------------------------------------------------------------------------
@@ -718,7 +718,7 @@ describe('Audit routes — GET /api/audit (query)', () => {
     expect(response.statusCode).toBe(502);
 
     const body = response.json();
-    expect(body.code).toBe('AUDIT_QUERY_FAILED');
+    expect(body.error).toBe('AUDIT_QUERY_FAILED');
   });
 
   it('returns 500 when queryActions throws an unexpected error', async () => {
@@ -732,7 +732,7 @@ describe('Audit routes — GET /api/audit (query)', () => {
     expect(response.statusCode).toBe(500);
 
     const body = response.json();
-    expect(body.error).toBe('Failed to query audit actions');
+    expect(body.error).toBe('QUERY_FAILED');
   });
 });
 
@@ -825,7 +825,7 @@ describe('Audit routes — GET /api/audit/summary', () => {
     expect(response.statusCode).toBe(400);
 
     const body = response.json();
-    expect(body.error).toMatch(/from/i);
+    expect(body.message).toMatch(/from/i);
   });
 
   it('returns 400 for invalid to date', async () => {
@@ -837,7 +837,7 @@ describe('Audit routes — GET /api/audit/summary', () => {
     expect(response.statusCode).toBe(400);
 
     const body = response.json();
-    expect(body.error).toMatch(/to/i);
+    expect(body.message).toMatch(/to/i);
   });
 
   it('returns 502 when getAuditSummary throws ControlPlaneError', async () => {
@@ -853,7 +853,7 @@ describe('Audit routes — GET /api/audit/summary', () => {
     expect(response.statusCode).toBe(502);
 
     const body = response.json();
-    expect(body.code).toBe('AUDIT_SUMMARY_FAILED');
+    expect(body.error).toBe('AUDIT_SUMMARY_FAILED');
   });
 
   it('returns 500 when getAuditSummary throws an unexpected error', async () => {
@@ -867,7 +867,7 @@ describe('Audit routes — GET /api/audit/summary', () => {
     expect(response.statusCode).toBe(500);
 
     const body = response.json();
-    expect(body.error).toBe('Failed to get audit summary');
+    expect(body.error).toBe('SUMMARY_FAILED');
   });
 });
 

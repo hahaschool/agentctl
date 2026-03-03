@@ -54,24 +54,29 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
       const { runId, actions } = request.body;
 
       if (!runId || typeof runId !== 'string') {
-        return reply.code(400).send({ error: 'A non-empty "runId" string is required' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: 'A non-empty "runId" string is required' });
       }
 
       if (!Array.isArray(actions) || actions.length === 0) {
-        return reply.code(400).send({ error: 'A non-empty "actions" array is required' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: 'A non-empty "actions" array is required' });
       }
 
       if (actions.length > MAX_BATCH_SIZE) {
         return reply.code(400).send({
-          error: `Batch size ${actions.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
-          code: 'BATCH_SIZE_EXCEEDED',
+          error: 'BATCH_SIZE_EXCEEDED',
+          message: `Batch size ${actions.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
         });
       }
 
       for (const action of actions) {
         if (!action.actionType || typeof action.actionType !== 'string') {
           return reply.code(400).send({
-            error: 'Each action must have a non-empty "actionType" string',
+            error: 'INVALID_PARAMS',
+            message: 'Each action must have a non-empty "actionType" string',
           });
         }
       }
@@ -82,9 +87,11 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
         return { ok: true, insertedCount };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to ingest audit actions' });
+        return reply
+          .code(500)
+          .send({ error: 'INGEST_FAILED', message: 'Failed to ingest audit actions' });
       }
     },
   );
@@ -104,7 +111,9 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
       if (limitStr !== undefined) {
         const parsed = Number(limitStr);
         if (!Number.isFinite(parsed) || parsed < 1) {
-          return reply.code(400).send({ error: '"limit" must be a positive integer' });
+          return reply
+            .code(400)
+            .send({ error: 'INVALID_PARAMS', message: '"limit" must be a positive integer' });
         }
         limit = Math.min(Math.floor(parsed), MAX_LIMIT);
       }
@@ -114,17 +123,23 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
       if (offsetStr !== undefined) {
         const parsed = Number(offsetStr);
         if (!Number.isFinite(parsed) || parsed < 0) {
-          return reply.code(400).send({ error: '"offset" must be a non-negative integer' });
+          return reply
+            .code(400)
+            .send({ error: 'INVALID_PARAMS', message: '"offset" must be a non-negative integer' });
         }
         offset = Math.floor(parsed);
       }
 
       // Validate ISO date strings
       if (from !== undefined && Number.isNaN(Date.parse(from))) {
-        return reply.code(400).send({ error: '"from" must be a valid ISO date string' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: '"from" must be a valid ISO date string' });
       }
       if (to !== undefined && Number.isNaN(Date.parse(to))) {
-        return reply.code(400).send({ error: '"to" must be a valid ISO date string' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: '"to" must be a valid ISO date string' });
       }
 
       try {
@@ -140,9 +155,11 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
         return result;
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to query audit actions' });
+        return reply
+          .code(500)
+          .send({ error: 'QUERY_FAILED', message: 'Failed to query audit actions' });
       }
     },
   );
@@ -159,10 +176,14 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
 
       // Validate ISO date strings
       if (from !== undefined && Number.isNaN(Date.parse(from))) {
-        return reply.code(400).send({ error: '"from" must be a valid ISO date string' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: '"from" must be a valid ISO date string' });
       }
       if (to !== undefined && Number.isNaN(Date.parse(to))) {
-        return reply.code(400).send({ error: '"to" must be a valid ISO date string' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: '"to" must be a valid ISO date string' });
       }
 
       try {
@@ -171,9 +192,11 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
         return summary;
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to get audit summary' });
+        return reply
+          .code(500)
+          .send({ error: 'SUMMARY_FAILED', message: 'Failed to get audit summary' });
       }
     },
   );

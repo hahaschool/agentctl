@@ -328,7 +328,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_AGENT_ID');
+    expect(response.json().error).toBe('INVALID_AGENT_ID');
   });
 
   it('returns 400 when agentId is empty', async () => {
@@ -343,7 +343,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_AGENT_ID');
+    expect(response.json().error).toBe('INVALID_AGENT_ID');
   });
 
   it('returns 400 when runId is missing', async () => {
@@ -357,7 +357,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_RUN_ID');
+    expect(response.json().error).toBe('INVALID_RUN_ID');
   });
 
   it('returns 400 when runId is empty', async () => {
@@ -372,7 +372,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_RUN_ID');
+    expect(response.json().error).toBe('INVALID_RUN_ID');
   });
 
   it('returns 400 when findings is missing', async () => {
@@ -386,7 +386,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_FINDINGS');
+    expect(response.json().error).toBe('INVALID_FINDINGS');
   });
 
   it('returns 400 when findings is empty', async () => {
@@ -401,7 +401,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_FINDINGS');
+    expect(response.json().error).toBe('INVALID_FINDINGS');
   });
 
   it('returns 400 when findings is not an array', async () => {
@@ -416,7 +416,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_FINDINGS');
+    expect(response.json().error).toBe('INVALID_FINDINGS');
   });
 
   it('returns 400 when batch exceeds maximum of 500', async () => {
@@ -433,9 +433,9 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('BATCH_SIZE_EXCEEDED');
-    expect(response.json().error).toContain('501');
-    expect(response.json().error).toContain('500');
+    expect(response.json().error).toBe('BATCH_SIZE_EXCEEDED');
+    expect(response.json().message).toContain('501');
+    expect(response.json().message).toContain('500');
   });
 
   it('returns 400 when finding has missing id', async () => {
@@ -458,7 +458,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_FINDING_ID');
+    expect(response.json().error).toBe('INVALID_FINDING_ID');
   });
 
   it('returns 400 when finding has invalid severity', async () => {
@@ -473,7 +473,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_SEVERITY');
+    expect(response.json().error).toBe('INVALID_SEVERITY');
   });
 
   it('returns 400 when finding has missing category', async () => {
@@ -490,7 +490,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_CATEGORY');
+    expect(response.json().error).toBe('INVALID_CATEGORY');
   });
 
   it('returns 400 when finding has missing title', async () => {
@@ -513,7 +513,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_TITLE');
+    expect(response.json().error).toBe('INVALID_TITLE');
   });
 
   it('returns 400 when finding has missing description', async () => {
@@ -530,7 +530,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_DESCRIPTION');
+    expect(response.json().error).toBe('INVALID_DESCRIPTION');
   });
 
   it('returns 400 when finding has missing recommendation', async () => {
@@ -547,7 +547,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_RECOMMENDATION');
+    expect(response.json().error).toBe('INVALID_RECOMMENDATION');
   });
 
   it('does not call db.execute when validation fails', async () => {
@@ -580,7 +580,7 @@ describe('Security findings routes — POST /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().code).toBe('FINDINGS_INGEST_FAILED');
+    expect(response.json().error).toBe('FINDINGS_INGEST_FAILED');
   });
 });
 
@@ -709,7 +709,7 @@ describe('Security findings routes — GET /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_SEVERITY');
+    expect(response.json().error).toBe('INVALID_SEVERITY');
   });
 
   it('returns 400 for invalid limit (non-numeric)', async () => {
@@ -719,7 +719,7 @@ describe('Security findings routes — GET /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_LIMIT');
+    expect(response.json().error).toBe('INVALID_LIMIT');
   });
 
   it('returns 400 for negative limit', async () => {
@@ -729,7 +729,7 @@ describe('Security findings routes — GET /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_LIMIT');
+    expect(response.json().error).toBe('INVALID_LIMIT');
   });
 
   it('returns 400 for negative offset', async () => {
@@ -739,7 +739,7 @@ describe('Security findings routes — GET /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_OFFSET');
+    expect(response.json().error).toBe('INVALID_OFFSET');
   });
 
   it('returns empty findings array when no rows exist', async () => {
@@ -774,7 +774,7 @@ describe('Security findings routes — GET /api/security/findings', () => {
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().code).toBe('FINDINGS_QUERY_FAILED');
+    expect(response.json().error).toBe('FINDINGS_QUERY_FAILED');
   });
 });
 
@@ -906,7 +906,7 @@ describe('Security findings routes — GET /api/security/findings/summary', () =
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().code).toBe('FINDINGS_SUMMARY_FAILED');
+    expect(response.json().error).toBe('FINDINGS_SUMMARY_FAILED');
   });
 });
 
@@ -995,7 +995,7 @@ describe('Security findings routes — POST /api/security/findings/:id/acknowled
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_ACKNOWLEDGED_BY');
+    expect(response.json().error).toBe('INVALID_ACKNOWLEDGED_BY');
   });
 
   it('returns 400 when acknowledgedBy is empty', async () => {
@@ -1008,7 +1008,7 @@ describe('Security findings routes — POST /api/security/findings/:id/acknowled
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_ACKNOWLEDGED_BY');
+    expect(response.json().error).toBe('INVALID_ACKNOWLEDGED_BY');
   });
 
   it('returns 404 when finding does not exist', async () => {
@@ -1031,7 +1031,7 @@ describe('Security findings routes — POST /api/security/findings/:id/acknowled
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().code).toBe('FINDING_NOT_FOUND');
+    expect(response.json().error).toBe('FINDING_NOT_FOUND');
   });
 
   it('returns 500 when database query fails', async () => {
@@ -1046,7 +1046,7 @@ describe('Security findings routes — POST /api/security/findings/:id/acknowled
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().code).toBe('FINDING_ACKNOWLEDGE_FAILED');
+    expect(response.json().error).toBe('FINDING_ACKNOWLEDGE_FAILED');
   });
 });
 
@@ -1216,7 +1216,7 @@ describe('Security findings routes — POST /api/security/findings/github-issues
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_OWNER');
+    expect(response.json().error).toBe('INVALID_OWNER');
   });
 
   it('returns 400 when owner is empty', async () => {
@@ -1230,7 +1230,7 @@ describe('Security findings routes — POST /api/security/findings/github-issues
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_OWNER');
+    expect(response.json().error).toBe('INVALID_OWNER');
   });
 
   it('returns 400 when repo is missing', async () => {
@@ -1243,7 +1243,7 @@ describe('Security findings routes — POST /api/security/findings/github-issues
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_REPO');
+    expect(response.json().error).toBe('INVALID_REPO');
   });
 
   it('returns 400 when repo is empty', async () => {
@@ -1257,7 +1257,7 @@ describe('Security findings routes — POST /api/security/findings/github-issues
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_REPO');
+    expect(response.json().error).toBe('INVALID_REPO');
   });
 
   it('returns 400 when labels is not an array', async () => {
@@ -1272,7 +1272,7 @@ describe('Security findings routes — POST /api/security/findings/github-issues
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('INVALID_LABELS');
+    expect(response.json().error).toBe('INVALID_LABELS');
   });
 
   it('returns 500 when GITHUB_TOKEN is not set', async () => {
@@ -1301,7 +1301,7 @@ describe('Security findings routes — POST /api/security/findings/github-issues
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().code).toBe('GITHUB_TOKEN_MISSING');
+    expect(response.json().error).toBe('GITHUB_TOKEN_MISSING');
   });
 
   it('returns 500 when database query fails', async () => {
@@ -1317,7 +1317,7 @@ describe('Security findings routes — POST /api/security/findings/github-issues
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().code).toBe('GITHUB_ISSUES_FAILED');
+    expect(response.json().error).toBe('GITHUB_ISSUES_FAILED');
   });
 
   it('marks findings as issueCreated after successful GitHub API call', async () => {

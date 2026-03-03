@@ -54,9 +54,11 @@ export const routerRoutes: FastifyPluginAsync<RouterRoutesOptions> = async (app,
         return { models };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to list models' });
+        return reply
+          .code(500)
+          .send({ error: 'LIST_MODELS_FAILED', message: 'Failed to list models' });
       }
     },
   );
@@ -75,9 +77,11 @@ export const routerRoutes: FastifyPluginAsync<RouterRoutesOptions> = async (app,
         return { deployments };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to fetch model info' });
+        return reply
+          .code(500)
+          .send({ error: 'MODEL_INFO_FAILED', message: 'Failed to fetch model info' });
       }
     },
   );
@@ -96,9 +100,11 @@ export const routerRoutes: FastifyPluginAsync<RouterRoutesOptions> = async (app,
         return { entries };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to fetch spend logs' });
+        return reply
+          .code(500)
+          .send({ error: 'SPEND_LOGS_FAILED', message: 'Failed to fetch spend logs' });
       }
     },
   );
@@ -124,9 +130,11 @@ export const routerRoutes: FastifyPluginAsync<RouterRoutesOptions> = async (app,
         };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code, modelId });
+          return reply.code(502).send({ error: error.code, message: error.message, modelId });
         }
-        return reply.code(500).send({ error: 'Failed to test model', modelId });
+        return reply
+          .code(500)
+          .send({ error: 'TEST_MODEL_FAILED', message: 'Failed to test model', modelId });
       }
     },
   );

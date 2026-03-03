@@ -188,7 +188,7 @@ describe('Agent routes — /api/agents', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_MACHINE_ID');
+      expect(body.error).toBe('INVALID_MACHINE_ID');
     });
 
     it('GET on a non-existent route returns 404', async () => {
@@ -321,7 +321,7 @@ describe('Agent routes — /api/agents', () => {
       expect(response.statusCode).toBe(501);
 
       const body = response.json();
-      expect(body.error).toBe('Database not configured');
+      expect(body.error).toBe('DATABASE_NOT_CONFIGURED');
     });
 
     it('GET /api/agents/agents/list returns 501', async () => {
@@ -467,7 +467,7 @@ describe('Agent routes — with dbRegistry', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_STATUS');
+      expect(body.error).toBe('INVALID_STATUS');
     });
 
     it('returns 400 when status is empty string', async () => {
@@ -480,7 +480,7 @@ describe('Agent routes — with dbRegistry', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_STATUS');
+      expect(body.error).toBe('INVALID_STATUS');
     });
   });
 
@@ -591,7 +591,7 @@ describe('Agent routes — with dbRegistry', () => {
       expect(response.statusCode).toBe(404);
 
       const body = response.json();
-      expect(body.error).toBe('Agent not found');
+      expect(body.error).toBe('AGENT_NOT_FOUND');
     });
   });
 

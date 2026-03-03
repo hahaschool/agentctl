@@ -112,7 +112,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('REPEATABLE_JOB_LIST_FAILED');
+      expect(body.error).toBe('REPEATABLE_JOB_LIST_FAILED');
     });
 
     it('returns 500 when listRepeatableJobs throws unexpected error', async () => {
@@ -126,7 +126,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to list repeatable jobs');
+      expect(body.message).toBe('Failed to list repeatable jobs');
     });
   });
 
@@ -265,7 +265,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('HEARTBEAT_JOB_ADD_FAILED');
+      expect(body.error).toBe('HEARTBEAT_JOB_ADD_FAILED');
     });
 
     it('returns 500 when addHeartbeatJob throws unexpected error', async () => {
@@ -284,7 +284,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to add heartbeat job');
+      expect(body.message).toBe('Failed to add heartbeat job');
     });
   });
 
@@ -433,7 +433,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('CRON_JOB_ADD_FAILED');
+      expect(body.error).toBe('CRON_JOB_ADD_FAILED');
     });
   });
 
@@ -470,7 +470,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('REPEATABLE_JOB_REMOVE_FAILED');
+      expect(body.error).toBe('REPEATABLE_JOB_REMOVE_FAILED');
     });
 
     it('returns 500 when removeJobsByAgentId throws unexpected error', async () => {
@@ -484,7 +484,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.error).toBe('Failed to remove repeatable job');
+      expect(body.message).toBe('Failed to remove repeatable job');
     });
   });
 
@@ -546,7 +546,7 @@ describe('Scheduler routes — /api/scheduler (configured)', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('REPEATABLE_JOB_LIST_FAILED');
+      expect(body.error).toBe('REPEATABLE_JOB_LIST_FAILED');
     });
   });
 });

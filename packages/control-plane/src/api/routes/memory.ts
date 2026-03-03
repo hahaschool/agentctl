@@ -23,7 +23,9 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       const { query, agentId, limit } = request.body;
 
       if (!query || typeof query !== 'string') {
-        return reply.code(400).send({ error: 'A non-empty "query" string is required' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: 'A non-empty "query" string is required' });
       }
 
       try {
@@ -32,9 +34,11 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
         return { results: result.results };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to search memories' });
+        return reply
+          .code(500)
+          .send({ error: 'SEARCH_FAILED', message: 'Failed to search memories' });
       }
     },
   );
@@ -56,7 +60,9 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       const { messages, agentId, metadata } = request.body;
 
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        return reply.code(400).send({ error: 'A non-empty "messages" array is required' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_PARAMS', message: 'A non-empty "messages" array is required' });
       }
 
       try {
@@ -65,9 +71,9 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
         return { ok: true, results: result.results };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to add memory' });
+        return reply.code(500).send({ error: 'ADD_FAILED', message: 'Failed to add memory' });
       }
     },
   );
@@ -90,9 +96,9 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
         return { results: result.results };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
-        return reply.code(500).send({ error: 'Failed to list memories' });
+        return reply.code(500).send({ error: 'LIST_FAILED', message: 'Failed to list memories' });
       }
     },
   );
@@ -113,9 +119,11 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
         return { ok: true, memoryId };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code, memoryId });
+          return reply.code(502).send({ error: error.code, message: error.message, memoryId });
         }
-        return reply.code(500).send({ error: 'Failed to delete memory', memoryId });
+        return reply
+          .code(500)
+          .send({ error: 'DELETE_FAILED', message: 'Failed to delete memory', memoryId });
       }
     },
   );

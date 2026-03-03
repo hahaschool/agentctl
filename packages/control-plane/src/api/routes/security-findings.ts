@@ -137,29 +137,29 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
 
       if (!agentId || typeof agentId !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "agentId" string is required',
-          code: 'INVALID_AGENT_ID',
+          error: 'INVALID_AGENT_ID',
+          message: 'A non-empty "agentId" string is required',
         });
       }
 
       if (!runId || typeof runId !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "runId" string is required',
-          code: 'INVALID_RUN_ID',
+          error: 'INVALID_RUN_ID',
+          message: 'A non-empty "runId" string is required',
         });
       }
 
       if (!Array.isArray(findings) || findings.length === 0) {
         return reply.code(400).send({
-          error: 'A non-empty "findings" array is required',
-          code: 'INVALID_FINDINGS',
+          error: 'INVALID_FINDINGS',
+          message: 'A non-empty "findings" array is required',
         });
       }
 
       if (findings.length > MAX_BATCH_SIZE) {
         return reply.code(400).send({
-          error: `Batch size ${findings.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
-          code: 'BATCH_SIZE_EXCEEDED',
+          error: 'BATCH_SIZE_EXCEEDED',
+          message: `Batch size ${findings.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
         });
       }
 
@@ -167,43 +167,43 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
       for (const finding of findings) {
         if (!finding.id || typeof finding.id !== 'string') {
           return reply.code(400).send({
-            error: 'Each finding must have a non-empty "id" string',
-            code: 'INVALID_FINDING_ID',
+            error: 'INVALID_FINDING_ID',
+            message: 'Each finding must have a non-empty "id" string',
           });
         }
 
         if (!finding.severity || !isValidSeverity(finding.severity)) {
           return reply.code(400).send({
-            error: `Invalid severity "${finding.severity}". Must be one of: ${VALID_SEVERITIES.join(', ')}`,
-            code: 'INVALID_SEVERITY',
+            error: 'INVALID_SEVERITY',
+            message: `Invalid severity "${finding.severity}". Must be one of: ${VALID_SEVERITIES.join(', ')}`,
           });
         }
 
         if (!finding.category || typeof finding.category !== 'string') {
           return reply.code(400).send({
-            error: 'Each finding must have a non-empty "category" string',
-            code: 'INVALID_CATEGORY',
+            error: 'INVALID_CATEGORY',
+            message: 'Each finding must have a non-empty "category" string',
           });
         }
 
         if (!finding.title || typeof finding.title !== 'string') {
           return reply.code(400).send({
-            error: 'Each finding must have a non-empty "title" string',
-            code: 'INVALID_TITLE',
+            error: 'INVALID_TITLE',
+            message: 'Each finding must have a non-empty "title" string',
           });
         }
 
         if (!finding.description || typeof finding.description !== 'string') {
           return reply.code(400).send({
-            error: 'Each finding must have a non-empty "description" string',
-            code: 'INVALID_DESCRIPTION',
+            error: 'INVALID_DESCRIPTION',
+            message: 'Each finding must have a non-empty "description" string',
           });
         }
 
         if (!finding.recommendation || typeof finding.recommendation !== 'string') {
           return reply.code(400).send({
-            error: 'Each finding must have a non-empty "recommendation" string',
-            code: 'INVALID_RECOMMENDATION',
+            error: 'INVALID_RECOMMENDATION',
+            message: 'Each finding must have a non-empty "recommendation" string',
           });
         }
       }
@@ -235,11 +235,11 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to ingest security findings',
-          code: 'FINDINGS_INGEST_FAILED',
+          error: 'FINDINGS_INGEST_FAILED',
+          message: 'Failed to ingest security findings',
         });
       }
     },
@@ -258,8 +258,8 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
       // Validate severity filter
       if (severity !== undefined && !isValidSeverity(severity)) {
         return reply.code(400).send({
-          error: `Invalid severity "${severity}". Must be one of: ${VALID_SEVERITIES.join(', ')}`,
-          code: 'INVALID_SEVERITY',
+          error: 'INVALID_SEVERITY',
+          message: `Invalid severity "${severity}". Must be one of: ${VALID_SEVERITIES.join(', ')}`,
         });
       }
 
@@ -269,8 +269,8 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         const parsed = Number(limitStr);
         if (!Number.isFinite(parsed) || parsed < 1) {
           return reply.code(400).send({
-            error: '"limit" must be a positive integer',
-            code: 'INVALID_LIMIT',
+            error: 'INVALID_LIMIT',
+            message: '"limit" must be a positive integer',
           });
         }
         limit = Math.min(Math.floor(parsed), MAX_LIMIT);
@@ -282,8 +282,8 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         const parsed = Number(offsetStr);
         if (!Number.isFinite(parsed) || parsed < 0) {
           return reply.code(400).send({
-            error: '"offset" must be a non-negative integer',
-            code: 'INVALID_OFFSET',
+            error: 'INVALID_OFFSET',
+            message: '"offset" must be a non-negative integer',
           });
         }
         offset = Math.floor(parsed);
@@ -326,11 +326,11 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to query security findings',
-          code: 'FINDINGS_QUERY_FAILED',
+          error: 'FINDINGS_QUERY_FAILED',
+          message: 'Failed to query security findings',
         });
       }
     },
@@ -387,11 +387,11 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to get findings summary',
-          code: 'FINDINGS_SUMMARY_FAILED',
+          error: 'FINDINGS_SUMMARY_FAILED',
+          message: 'Failed to get findings summary',
         });
       }
     },
@@ -410,8 +410,8 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
 
       if (!acknowledgedBy || typeof acknowledgedBy !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "acknowledgedBy" string is required',
-          code: 'INVALID_ACKNOWLEDGED_BY',
+          error: 'INVALID_ACKNOWLEDGED_BY',
+          message: 'A non-empty "acknowledgedBy" string is required',
         });
       }
 
@@ -420,8 +420,8 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
 
         if (existing.rows.length === 0) {
           return reply.code(404).send({
-            error: `Security finding '${id}' not found`,
-            code: 'FINDING_NOT_FOUND',
+            error: 'FINDING_NOT_FOUND',
+            message: `Security finding '${id}' not found`,
           });
         }
 
@@ -432,11 +432,11 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         return { ok: true };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to acknowledge finding',
-          code: 'FINDING_ACKNOWLEDGE_FAILED',
+          error: 'FINDING_ACKNOWLEDGE_FAILED',
+          message: 'Failed to acknowledge finding',
         });
       }
     },
@@ -454,22 +454,22 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
 
       if (!owner || typeof owner !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "owner" string is required',
-          code: 'INVALID_OWNER',
+          error: 'INVALID_OWNER',
+          message: 'A non-empty "owner" string is required',
         });
       }
 
       if (!repo || typeof repo !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "repo" string is required',
-          code: 'INVALID_REPO',
+          error: 'INVALID_REPO',
+          message: 'A non-empty "repo" string is required',
         });
       }
 
       if (labels !== undefined && !Array.isArray(labels)) {
         return reply.code(400).send({
-          error: '"labels" must be an array of strings',
-          code: 'INVALID_LABELS',
+          error: 'INVALID_LABELS',
+          message: '"labels" must be an array of strings',
         });
       }
 
@@ -487,8 +487,8 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         const githubToken = process.env.GITHUB_TOKEN;
         if (!githubToken) {
           return reply.code(500).send({
-            error: 'GITHUB_TOKEN environment variable is not set',
-            code: 'GITHUB_TOKEN_MISSING',
+            error: 'GITHUB_TOKEN_MISSING',
+            message: 'GITHUB_TOKEN environment variable is not set',
           });
         }
 
@@ -550,11 +550,11 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         return { ok: true, issuesCreated };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
-          return reply.code(502).send({ error: error.message, code: error.code });
+          return reply.code(502).send({ error: error.code, message: error.message });
         }
         return reply.code(500).send({
-          error: 'Failed to create GitHub issues',
-          code: 'GITHUB_ISSUES_FAILED',
+          error: 'GITHUB_ISSUES_FAILED',
+          message: 'Failed to create GitHub issues',
         });
       }
     },

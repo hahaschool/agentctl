@@ -319,7 +319,7 @@ describe('E2E smoke tests — full control-plane server', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_MACHINE_ID');
+      expect(body.error).toBe('INVALID_MACHINE_ID');
     });
 
     it('GET /api/agents returns an array', async () => {
@@ -393,7 +393,7 @@ describe('E2E smoke tests — full control-plane server', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_URL');
+      expect(body.error).toBe('INVALID_URL');
     });
 
     it('POST /api/webhooks returns 400 when eventTypes is missing', async () => {
@@ -408,7 +408,7 @@ describe('E2E smoke tests — full control-plane server', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_EVENT_TYPES');
+      expect(body.error).toBe('INVALID_EVENT_TYPES');
     });
 
     it('GET /api/webhooks returns subscriptions array', async () => {
@@ -546,7 +546,7 @@ describe('E2E smoke tests — full control-plane server', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('query');
+      expect(body.message).toContain('query');
     });
 
     it('POST /api/memory/add returns 400 when messages is empty', async () => {
@@ -559,7 +559,7 @@ describe('E2E smoke tests — full control-plane server', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.error).toContain('messages');
+      expect(body.message).toContain('messages');
     });
 
     it('GET /api/memory returns memory list', async () => {

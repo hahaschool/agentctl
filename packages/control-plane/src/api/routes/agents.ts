@@ -41,15 +41,15 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
 
       if (!body.machineId || typeof body.machineId !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "machineId" string is required',
-          code: 'INVALID_MACHINE_ID',
+          error: 'INVALID_MACHINE_ID',
+          message: 'A non-empty "machineId" string is required',
         });
       }
 
       if (!body.hostname || typeof body.hostname !== 'string') {
         return reply.code(400).send({
-          error: 'A non-empty "hostname" string is required',
-          code: 'INVALID_HOSTNAME',
+          error: 'INVALID_HOSTNAME',
+          message: 'A non-empty "hostname" string is required',
         });
       }
 
@@ -112,7 +112,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     { schema: { tags: ['agents'], summary: 'Create an agent' } },
     async (request, reply) => {
       if (!dbRegistry) {
-        return reply.code(501).send({ error: 'Database not configured' });
+        return reply
+          .code(501)
+          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
       const agentId = await dbRegistry.createAgent(request.body);
@@ -125,7 +127,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     { schema: { tags: ['agents'], summary: 'List agents' } },
     async (request, reply) => {
       if (!dbRegistry) {
-        return reply.code(501).send({ error: 'Database not configured' });
+        return reply
+          .code(501)
+          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
       return await dbRegistry.listAgents(request.query.machineId);
@@ -137,13 +141,15 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     { schema: { tags: ['agents'], summary: 'Get agent by ID' } },
     async (request, reply) => {
       if (!dbRegistry) {
-        return reply.code(501).send({ error: 'Database not configured' });
+        return reply
+          .code(501)
+          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
       const agent = await dbRegistry.getAgent(request.params.agentId);
 
       if (!agent) {
-        return reply.code(404).send({ error: 'Agent not found' });
+        return reply.code(404).send({ error: 'AGENT_NOT_FOUND', message: 'Agent not found' });
       }
 
       return agent;
@@ -155,15 +161,17 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     { schema: { tags: ['agents'], summary: 'Update agent status' } },
     async (request, reply) => {
       if (!dbRegistry) {
-        return reply.code(501).send({ error: 'Database not configured' });
+        return reply
+          .code(501)
+          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
       const { status } = request.body;
 
       if (!status || !AGENT_STATUSES.includes(status as AgentStatus)) {
         return reply.code(400).send({
-          error: `Invalid status. Must be one of: ${AGENT_STATUSES.join(', ')}`,
-          code: 'INVALID_STATUS',
+          error: 'INVALID_STATUS',
+          message: `Invalid status. Must be one of: ${AGENT_STATUSES.join(', ')}`,
         });
       }
 
@@ -181,7 +189,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     { schema: { tags: ['agents'], summary: 'Recent runs for agent' } },
     async (request, reply) => {
       if (!dbRegistry) {
-        return reply.code(501).send({ error: 'Database not configured' });
+        return reply
+          .code(501)
+          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
       const DEFAULT_LIMIT = 20;

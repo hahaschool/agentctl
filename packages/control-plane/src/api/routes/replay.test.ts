@@ -154,7 +154,7 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(404);
 
     const body = response.json();
-    expect(body.code).toBe('SESSION_NOT_FOUND');
+    expect(body.error).toBe('SESSION_NOT_FOUND');
   });
 
   it('applies toolName filter to timeline events', async () => {
@@ -194,7 +194,7 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(502);
 
     const body = response.json();
-    expect(body.code).toBe('AUDIT_QUERY_FAILED');
+    expect(body.error).toBe('AUDIT_QUERY_FAILED');
   });
 
   it('returns 500 when an unexpected error occurs', async () => {
@@ -208,7 +208,8 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(500);
 
     const body = response.json();
-    expect(body.error).toBe('Failed to build session replay');
+    expect(body.error).toBe('REPLAY_FAILED');
+    expect(body.message).toBe('Failed to build session replay');
   });
 
   // ---------------------------------------------------------------------------
@@ -241,7 +242,7 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(404);
 
     const body = response.json();
-    expect(body.code).toBe('SESSION_NOT_FOUND');
+    expect(body.error).toBe('SESSION_NOT_FOUND');
   });
 
   // ---------------------------------------------------------------------------
@@ -269,7 +270,7 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(404);
 
     const body = response.json();
-    expect(body.code).toBe('SESSION_NOT_FOUND');
+    expect(body.error).toBe('SESSION_NOT_FOUND');
   });
 
   it('detects suspicious patterns from audit data with cost spikes', async () => {
@@ -510,7 +511,7 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(502);
 
     const body = response.json();
-    expect(body.code).toBe('DB_UNAVAILABLE');
+    expect(body.error).toBe('DB_UNAVAILABLE');
   });
 
   it('returns 500 for summary when an unexpected error occurs', async () => {
@@ -526,7 +527,8 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(500);
 
     const body = response.json();
-    expect(body.error).toBe('Failed to generate session summary');
+    expect(body.error).toBe('SUMMARY_FAILED');
+    expect(body.message).toBe('Failed to generate session summary');
   });
 
   // ---------------------------------------------------------------------------
@@ -546,7 +548,7 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(502);
 
     const body = response.json();
-    expect(body.code).toBe('DB_UNAVAILABLE');
+    expect(body.error).toBe('DB_UNAVAILABLE');
   });
 
   it('returns 500 for suspicious when an unexpected error occurs', async () => {
@@ -562,7 +564,8 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
     expect(response.statusCode).toBe(500);
 
     const body = response.json();
-    expect(body.error).toBe('Failed to detect suspicious patterns');
+    expect(body.error).toBe('SUSPICIOUS_PATTERNS_FAILED');
+    expect(body.message).toBe('Failed to detect suspicious patterns');
   });
 
   // ---------------------------------------------------------------------------

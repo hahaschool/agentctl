@@ -396,7 +396,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_URL');
+      expect(body.error).toBe('INVALID_URL');
     });
 
     it('returns 400 when URL is empty string', async () => {
@@ -412,7 +412,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_URL');
+      expect(body.error).toBe('INVALID_URL');
     });
 
     it('returns 400 when URL is not a valid HTTP/HTTPS URL', async () => {
@@ -428,7 +428,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_URL');
+      expect(body.error).toBe('INVALID_URL');
     });
 
     it('returns 400 for a completely malformed URL', async () => {
@@ -444,7 +444,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_URL');
+      expect(body.error).toBe('INVALID_URL');
     });
 
     it('returns 400 for an invalid provider', async () => {
@@ -461,7 +461,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_PROVIDER');
+      expect(body.error).toBe('INVALID_PROVIDER');
     });
 
     it('returns 400 when eventTypes is missing', async () => {
@@ -476,7 +476,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_EVENT_TYPES');
+      expect(body.error).toBe('INVALID_EVENT_TYPES');
     });
 
     it('returns 400 when eventTypes is empty array', async () => {
@@ -492,7 +492,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_EVENT_TYPES');
+      expect(body.error).toBe('INVALID_EVENT_TYPES');
     });
 
     it('returns 400 for an invalid event type in the array', async () => {
@@ -508,8 +508,8 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_EVENT_TYPES');
-      expect(body.error).toContain('agent.exploded');
+      expect(body.error).toBe('INVALID_EVENT_TYPES');
+      expect(body.message).toContain('agent.exploded');
     });
   });
 
@@ -621,7 +621,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(404);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_NOT_FOUND');
+      expect(body.error).toBe('WEBHOOK_NOT_FOUND');
     });
   });
 
@@ -795,7 +795,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(404);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_NOT_FOUND');
+      expect(body.error).toBe('WEBHOOK_NOT_FOUND');
     });
 
     it('returns 400 when no fields are provided', async () => {
@@ -819,7 +819,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('EMPTY_UPDATE');
+      expect(body.error).toBe('EMPTY_UPDATE');
     });
 
     it('returns 400 for an invalid URL in update', async () => {
@@ -843,7 +843,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_URL');
+      expect(body.error).toBe('INVALID_URL');
     });
 
     it('returns 400 for an invalid provider in update', async () => {
@@ -867,7 +867,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_PROVIDER');
+      expect(body.error).toBe('INVALID_PROVIDER');
     });
 
     it('returns 400 for empty eventTypes in update', async () => {
@@ -891,7 +891,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_EVENT_TYPES');
+      expect(body.error).toBe('INVALID_EVENT_TYPES');
     });
 
     it('returns 400 for invalid event type in update', async () => {
@@ -915,7 +915,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.code).toBe('INVALID_EVENT_TYPES');
+      expect(body.error).toBe('INVALID_EVENT_TYPES');
     });
   });
 
@@ -982,7 +982,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(404);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_NOT_FOUND');
+      expect(body.error).toBe('WEBHOOK_NOT_FOUND');
     });
 
     it('removes the subscription from the list', async () => {
@@ -1050,7 +1050,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(404);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_NOT_FOUND');
+      expect(body.error).toBe('WEBHOOK_NOT_FOUND');
     });
   });
 
@@ -1068,7 +1068,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(404);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_NOT_FOUND');
+      expect(body.error).toBe('WEBHOOK_NOT_FOUND');
     });
 
     it('sends a test delivery and records it (URL is unreachable so status is failed)', async () => {
@@ -1191,7 +1191,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_LIST_FAILED');
+      expect(body.error).toBe('WEBHOOK_LIST_FAILED');
     });
 
     it('returns 500 when db.execute throws on create', async () => {
@@ -1209,7 +1209,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_CREATE_FAILED');
+      expect(body.error).toBe('WEBHOOK_CREATE_FAILED');
     });
 
     it('returns 500 when db.execute throws on get by ID', async () => {
@@ -1223,7 +1223,7 @@ describe('Webhook routes — /api/webhooks', () => {
       expect(response.statusCode).toBe(500);
 
       const body = response.json();
-      expect(body.code).toBe('WEBHOOK_GET_FAILED');
+      expect(body.error).toBe('WEBHOOK_GET_FAILED');
     });
 
     it('returns 500 when db.execute throws on delete', async () => {
