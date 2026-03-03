@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { ErrorBanner } from '../components/ErrorBanner';
 
 import { LastUpdated } from '../components/LastUpdated';
+import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatusBadge } from '../components/StatusBadge';
 import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
@@ -227,7 +228,7 @@ export function LogsPage(): React.JSX.Element {
                     {m.capabilities?.maxConcurrentAgents ?? '-'}
                   </td>
                   <td className={TD_CLASSES}>
-                    {m.lastHeartbeat ? new Date(m.lastHeartbeat).toLocaleString() : 'never'}
+                    {m.lastHeartbeat ? <LiveTimeAgo date={m.lastHeartbeat} /> : 'never'}
                   </td>
                 </tr>
               ))}

@@ -12,7 +12,7 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { WsStatusIndicator } from '../components/WsStatusIndicator';
 import { useWebSocket } from '../hooks/use-websocket';
-import { truncate } from '../lib/format-utils';
+import { formatNumber, truncate } from '../lib/format-utils';
 import {
   agentsQuery,
   discoverQuery,
@@ -139,7 +139,7 @@ export function DashboardPage(): React.JSX.Element {
         />
         <StatCard
           label="Sessions Discovered"
-          value={String(discovered.data?.count ?? 0)}
+          value={formatNumber(discovered.data?.count ?? 0)}
           sublabel={
             discovered.data
               ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
@@ -155,7 +155,11 @@ export function DashboardPage(): React.JSX.Element {
               : undefined
           }
         />
-        <StatCard label="Active Runs" value={String(activeRuns)} sublabel={`${totalRuns} total`} />
+        <StatCard
+          label="Active Runs"
+          value={formatNumber(activeRuns)}
+          sublabel={`${formatNumber(totalRuns)} total`}
+        />
       </div>
 
       {/* Two-column layout: Recent Activity + Machine Status */}
@@ -247,17 +251,20 @@ export function DashboardPage(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Quick Stats Summary */}
-      <div className="flex gap-4 mt-1 px-4 py-2.5 bg-card border border-border rounded-lg mb-5 text-xs text-muted-foreground items-center flex-wrap">
+      {/* Platform summary bar */}
+      <div className="flex gap-4 mt-5 px-4 py-2.5 bg-card border border-border rounded-lg text-xs text-muted-foreground items-center flex-wrap">
         <span className="font-medium text-muted-foreground">Platform</span>
-        <span>
-          Uptime:{' '}
-          <span className="text-foreground font-mono">
-            {metricsData.agentctl_control_plane_up === 1 ? 'Healthy' : 'Down'}
-          </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className={cn(
+              'w-1.5 h-1.5 rounded-full',
+              metricsData.agentctl_control_plane_up === 1 ? 'bg-green-500' : 'bg-red-500',
+            )}
+          />
+          {metricsData.agentctl_control_plane_up === 1 ? 'Healthy' : 'Down'}
         </span>
         <span>
-          Total Cost:{' '}
+          Cost:{' '}
           <span className="text-foreground font-mono">
             $
             {typeof metricsData.agentctl_total_cost_usd === 'number'
@@ -266,7 +273,7 @@ export function DashboardPage(): React.JSX.Element {
           </span>
         </span>
         <span>
-          Total Runs: <span className="text-foreground font-mono">{totalRuns}</span>
+          Runs: <span className="text-foreground font-mono">{formatNumber(totalRuns)}</span>
         </span>
       </div>
 

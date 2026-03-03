@@ -224,11 +224,7 @@ export function AgentsPage(): React.JSX.Element {
         <form onSubmit={handleCreate} className="p-4 bg-card border border-border rounded-lg mb-5">
           <h3 className="text-sm font-semibold mb-3">New Agent</h3>
 
-          {createError && (
-            <div className="px-3 py-2 bg-red-900 text-red-300 rounded-sm mb-3 text-xs">
-              {createError}
-            </div>
-          )}
+          {createError && <ErrorBanner message={createError} className="mb-3" />}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div>
@@ -316,11 +312,13 @@ export function AgentsPage(): React.JSX.Element {
           placeholder="Search agents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search agents"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as AgentStatusFilter)}
+          aria-label="Filter by status"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
         >
           <option value="all">All statuses</option>
@@ -332,6 +330,7 @@ export function AgentsPage(): React.JSX.Element {
         <select
           value={sortOrder}
           onChange={(e) => setSortOrder(e.target.value as AgentSortOrder)}
+          aria-label="Sort order"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
         >
           <option value="name">Sort: Name</option>

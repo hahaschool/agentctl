@@ -105,6 +105,14 @@ export function formatCost(value: number | null | undefined): string {
   return `$${value.toFixed(2)}`;
 }
 
+/** Format a number with locale-appropriate thousands separators. */
+export function formatNumber(n: number | string | null | undefined): string {
+  if (n == null) return '0';
+  const num = typeof n === 'string' ? Number(n) : n;
+  if (Number.isNaN(num)) return String(n);
+  return num.toLocaleString('en-US');
+}
+
 /**
  * Recency color for activity dots.
  * - green: within 1 hour

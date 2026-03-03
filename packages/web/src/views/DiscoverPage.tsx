@@ -15,7 +15,7 @@ import { SimpleTooltip } from '../components/SimpleTooltip';
 import { useToast } from '../components/Toast';
 import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
-import { recencyColor, shortenPath } from '../lib/format-utils';
+import { formatNumber, recencyColor, shortenPath } from '../lib/format-utils';
 import { discoverQuery, queryKeys } from '../lib/queries';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
@@ -368,6 +368,7 @@ export function DiscoverPage(): React.JSX.Element {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search sessions..."
+          aria-label="Search sessions"
           className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-[13px] outline-none"
         />
         <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
@@ -376,6 +377,7 @@ export function DiscoverPage(): React.JSX.Element {
             id="discover-min-msgs"
             value={minMessages}
             onChange={(e) => setMinMessages(Number(e.target.value) as MinMessages)}
+            aria-label="Minimum message count"
             className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
           >
             {MIN_MESSAGE_OPTIONS.map((opt) => (
@@ -391,6 +393,7 @@ export function DiscoverPage(): React.JSX.Element {
             id="discover-sort"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
+            aria-label="Sort order"
             className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
           >
             {SORT_OPTIONS.map((opt) => (
@@ -426,6 +429,7 @@ export function DiscoverPage(): React.JSX.Element {
             id="discover-group"
             value={groupMode}
             onChange={(e) => setGroupMode(e.target.value as GroupMode)}
+            aria-label="Group by"
             className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
           >
             <option value="project">By Project</option>
@@ -446,8 +450,9 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Stats line */}
       <div className="text-[13px] text-muted-foreground mb-4">
-        Showing {filtered.length} of {allSessions.length} sessions across {projectCount} project
-        {projectCount !== 1 ? 's' : ''} on {machineCount} machine{machineCount !== 1 ? 's' : ''}
+        Showing {formatNumber(filtered.length)} of {formatNumber(allSessions.length)} sessions
+        across {projectCount} project{projectCount !== 1 ? 's' : ''} on {machineCount} machine
+        {machineCount !== 1 ? 's' : ''}
       </div>
 
       {/* Content */}
@@ -541,7 +546,7 @@ export function DiscoverPage(): React.JSX.Element {
                         {group.sessions.length !== 1 ? 's' : ''}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {group.totalMessages} msgs
+                        {formatNumber(group.totalMessages)} msgs
                       </span>
                     </div>
                   </button>
@@ -585,7 +590,7 @@ export function DiscoverPage(): React.JSX.Element {
 
                             {/* Message count */}
                             <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                              {s.messageCount} msgs
+                              {formatNumber(s.messageCount)} msgs
                             </span>
 
                             {/* Branch */}

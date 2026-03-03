@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
@@ -898,7 +899,7 @@ function SessionContent({
     if (data && scrollRef.current) {
       const newCount = data.messages.length;
       if (newCount > prevMsgCountRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
       }
       prevMsgCountRef.current = newCount;
     }
@@ -939,15 +940,13 @@ function SessionContent({
       </div>
 
       {/* Content */}
-      <div ref={scrollRef} className="flex-1 overflow-auto px-5 py-2">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-5 py-2 scroll-smooth">
         {loading && (
           <div className="p-5 text-center text-muted-foreground text-xs">
             Loading conversation...
           </div>
         )}
-        {error && (
-          <div className="px-3 py-2 bg-red-900 text-red-300 rounded-sm text-xs">{error}</div>
-        )}
+        {error && <ErrorBanner message={error} onRetry={() => void fetchContent()} />}
         {data && messages.length === 0 && !loading && (
           <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
         )}
