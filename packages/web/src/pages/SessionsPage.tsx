@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { StatusBadge } from '../components/StatusBadge.tsx';
+import { useToast } from '../components/Toast.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
 import type {
   Machine,
@@ -19,6 +20,8 @@ const MODEL_OPTIONS = [
 ];
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
+type SortOrder = 'newest' | 'oldest' | 'status';
+type GroupBy = 'none' | 'project' | 'machine';
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -81,6 +84,23 @@ function shortenProjectPath(path: string | null): string | null {
   return startsWithTilde ? `~/${lastTwo}` : lastTwo;
 }
 
+function formatDuration(startStr: string, endStr?: string | null): string {
+  const start = new Date(startStr).getTime();
+  const end = endStr ? new Date(endStr).getTime() : Date.now();
+  const diffMs = Math.max(0, end - start);
+
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainSec = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainSec}s`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainMin = minutes % 60;
+  return `${hours}h ${remainMin}m`;
+}
+
 function matchesStatusFilter(status: string, filter: StatusFilter): boolean {
   if (filter === 'all') return true;
   if (filter === 'ended') return status === 'ended' || status === 'paused';
@@ -98,6 +118,7 @@ function matchesSearchQuery(session: Session, query: string): boolean {
 }
 
 export function SessionsPage(): React.JSX.Element {
+  const toast = useToast();
   const sessions = usePolling<Session[]>({
     fetcher: api.listSessions,
     intervalMs: 5_000,
@@ -106,9 +127,12 @@ export function SessionsPage(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [hideEmpty, setHideEmpty] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // --- New Session form state ---
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -120,7 +144,6 @@ export function SessionsPage(): React.JSX.Element {
   const [formModel, setFormModel] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!showCreateForm) return;
@@ -148,12 +171,10 @@ export function SessionsPage(): React.JSX.Element {
     setFormPrompt('');
     setFormModel('');
     setFormError(null);
-    setFormSuccess(null);
   }, []);
 
   const handleCreateSession = useCallback(async () => {
     setFormError(null);
-    setFormSuccess(null);
 
     if (!formMachineId) {
       setFormError('Please select a machine.');
@@ -177,16 +198,16 @@ export function SessionsPage(): React.JSX.Element {
         prompt: formPrompt.trim(),
         model: formModel || undefined,
       });
-      setFormSuccess(`Session created: ${result.sessionId.slice(0, 16)}...`);
+      toast.success(`Session created: ${result.sessionId.slice(0, 16)}...`);
       resetForm();
       setShowCreateForm(false);
       sessions.refresh();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setFormSubmitting(false);
     }
-  }, [formMachineId, formProjectPath, formPrompt, formModel, resetForm, sessions]);
+  }, [formMachineId, formProjectPath, formPrompt, formModel, resetForm, sessions, toast]);
 
   const sessionList = sessions.data ?? [];
 
@@ -208,17 +229,73 @@ export function SessionsPage(): React.JSX.Element {
   }, [sessionList]);
 
   const filteredSessions = useMemo(() => {
-    return sessionList.filter(
+    let result = sessionList.filter(
       (s) => matchesStatusFilter(s.status, statusFilter) && matchesSearchQuery(s, searchQuery),
     );
-  }, [sessionList, statusFilter, searchQuery]);
+
+    if (hideEmpty) {
+      result = result.filter((s) => s.claudeSessionId);
+    }
+
+    // Sort
+    if (sortOrder === 'newest') {
+      result = [...result].sort(
+        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
+    } else if (sortOrder === 'oldest') {
+      result = [...result].sort(
+        (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
+      );
+    } else if (sortOrder === 'status') {
+      const statusOrder: Record<string, number> = {
+        active: 0,
+        starting: 1,
+        paused: 2,
+        ended: 3,
+        error: 4,
+      };
+      result = [...result].sort(
+        (a, b) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5),
+      );
+    }
+
+    return result;
+  }, [sessionList, statusFilter, searchQuery, hideEmpty, sortOrder]);
+
+  const groupedSessions = useMemo(() => {
+    if (groupBy === 'none') return null;
+
+    const groups = new Map<string, Session[]>();
+    for (const s of filteredSessions) {
+      const key =
+        groupBy === 'project' ? (shortenProjectPath(s.projectPath) ?? '(no project)') : s.machineId;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.push(s);
+      } else {
+        groups.set(key, [s]);
+      }
+    }
+    return groups;
+  }, [filteredSessions, groupBy]);
+
+  const toggleGroupCollapsed = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
   const handleSend = useCallback(async () => {
     if (!selected || !prompt.trim()) return;
     setSending(true);
-    setActionError(null);
     try {
       if (selected.status === 'active') {
         await api.sendMessage(selected.id, prompt.trim());
@@ -228,22 +305,22 @@ export function SessionsPage(): React.JSX.Element {
       setPrompt('');
       sessions.refresh();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setSending(false);
     }
-  }, [selected, prompt, sessions]);
+  }, [selected, prompt, sessions, toast]);
 
   const handleStop = useCallback(async () => {
     if (!selected) return;
-    setActionError(null);
     try {
       await api.deleteSession(selected.id);
+      toast.success('Session ended');
       sessions.refresh();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [selected, sessions]);
+  }, [selected, sessions, toast]);
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -285,7 +362,6 @@ export function SessionsPage(): React.JSX.Element {
               onClick={() => {
                 setShowCreateForm((prev) => !prev);
                 setFormError(null);
-                setFormSuccess(null);
               }}
               style={{
                 padding: '4px 10px',
@@ -395,6 +471,72 @@ export function SessionsPage(): React.JSX.Element {
               </span>
             </button>
           ))}
+        </div>
+
+        {/* Sort / Group / Filter controls */}
+        <div
+          style={{
+            padding: '6px 12px',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+            aria-label="Sort order"
+            style={{
+              padding: '3px 6px',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 10,
+            }}
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="status">By Status</option>
+          </select>
+          <select
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+            aria-label="Group by"
+            style={{
+              padding: '3px 6px',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 10,
+            }}
+          >
+            <option value="none">No grouping</option>
+            <option value="project">Group by Project</option>
+            <option value="machine">Group by Machine</option>
+          </select>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              marginLeft: 'auto',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={hideEmpty}
+              onChange={(e) => setHideEmpty(e.target.checked)}
+              style={{ width: 12, height: 12, cursor: 'pointer' }}
+            />
+            Hide empty
+          </label>
         </div>
 
         {/* Inline "New Session" creation form */}
@@ -567,21 +709,6 @@ export function SessionsPage(): React.JSX.Element {
                 {formError}
               </div>
             )}
-            {formSuccess && (
-              <div
-                style={{
-                  padding: '6px 8px',
-                  backgroundColor: '#14532d',
-                  color: '#86efac',
-                  fontSize: 12,
-                  borderRadius: 'var(--radius-sm)',
-                  marginBottom: 10,
-                }}
-              >
-                {formSuccess}
-              </div>
-            )}
-
             {/* Submit button */}
             <button
               type="button"
@@ -628,96 +755,72 @@ export function SessionsPage(): React.JSX.Element {
                   ? 'No matching sessions'
                   : 'No sessions found'}
             </div>
-          ) : (
-            filteredSessions.map((s) => {
-              const shortPath = shortenProjectPath(s.projectPath);
-              return (
+          ) : groupedSessions ? (
+            Array.from(groupedSessions.entries()).map(([groupKey, groupItems]) => (
+              <div key={groupKey}>
                 <button
                   type="button"
-                  key={s.id}
-                  onClick={() => setSelectedId(s.id)}
+                  onClick={() => toggleGroupCollapsed(groupKey)}
                   style={{
-                    display: 'block',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
                     width: '100%',
-                    textAlign: 'left',
-                    padding: '12px 16px',
-                    backgroundColor: selectedId === s.id ? 'var(--bg-hover)' : 'transparent',
+                    padding: '8px 12px',
+                    backgroundColor: 'var(--bg-secondary)',
                     borderBottom: '1px solid var(--border)',
-                    borderLeft:
-                      s.status === 'error'
-                        ? '3px solid var(--red-subtle, #ef4444)'
-                        : s.status === 'starting'
-                          ? '3px solid var(--yellow-subtle, #eab308)'
-                          : s.status === 'active'
-                            ? '3px solid var(--green-subtle, #22c55e)'
-                            : '3px solid transparent',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (selectedId !== s.id)
-                      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedId !== s.id) e.currentTarget.style.backgroundColor = 'transparent';
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
                   }}
                 >
-                  <div
+                  <span
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 4,
+                      display: 'inline-block',
+                      transition: 'transform 0.15s',
+                      transform: collapsedGroups.has(groupKey) ? 'rotate(-90deg)' : 'rotate(0deg)',
+                      fontSize: 10,
                     }}
                   >
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {s.id.slice(0, 16)}...
-                    </span>
-                    <StatusBadge status={s.status} />
-                  </div>
-                  <div
+                    &#x25BC;
+                  </span>
+                  <span
                     style={{
-                      fontSize: 12,
-                      color: 'var(--text-muted)',
-                      display: 'flex',
-                      gap: 8,
+                      fontFamily: 'var(--font-mono)',
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    <span>{s.agentId}</span>
-                    <span>{s.machineId}</span>
-                  </div>
-                  {shortPath && (
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-secondary)',
-                        fontFamily: 'var(--font-mono)',
-                        marginTop: 2,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {shortPath}
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--text-muted)',
-                      marginTop: 2,
-                    }}
-                  >
-                    {formatRelativeTime(s.startedAt)}
-                  </div>
+                    {groupKey}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                    {groupItems.length}
+                  </span>
                 </button>
-              );
-            })
+                {!collapsedGroups.has(groupKey) &&
+                  groupItems.map((s) => (
+                    <SessionListItem
+                      key={s.id}
+                      session={s}
+                      isSelected={selectedId === s.id}
+                      onSelect={setSelectedId}
+                    />
+                  ))}
+              </div>
+            ))
+          ) : (
+            filteredSessions.map((s) => (
+              <SessionListItem
+                key={s.id}
+                session={s}
+                isSelected={selectedId === s.id}
+                onSelect={setSelectedId}
+              />
+            ))
           )}
         </div>
       </div>
@@ -801,6 +904,10 @@ export function SessionsPage(): React.JSX.Element {
                 {selected.endedAt && (
                   <DetailRow label="Ended" value={new Date(selected.endedAt).toLocaleString()} />
                 )}
+                <DetailRow
+                  label="Duration"
+                  value={formatDuration(selected.startedAt, selected.endedAt)}
+                />
               </div>
 
               {/* Error message display */}
@@ -851,6 +958,7 @@ export function SessionsPage(): React.JSX.Element {
                 sessionId={selected.claudeSessionId}
                 machineId={selected.machineId}
                 projectPath={selected.projectPath ?? undefined}
+                isActive={selected.status === 'active' || selected.status === 'starting'}
               />
             )}
 
@@ -866,19 +974,6 @@ export function SessionsPage(): React.JSX.Element {
                 }}
               >
                 No conversation content available
-              </div>
-            )}
-
-            {actionError && (
-              <div
-                style={{
-                  padding: '8px 20px',
-                  backgroundColor: '#7f1d1d',
-                  color: '#fca5a5',
-                  fontSize: 12,
-                }}
-              >
-                {actionError}
               </div>
             )}
 
@@ -952,6 +1047,94 @@ export function SessionsPage(): React.JSX.Element {
   );
 }
 
+function SessionListItem({
+  session: s,
+  isSelected,
+  onSelect,
+}: {
+  session: Session;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}): React.JSX.Element {
+  const shortPath = shortenProjectPath(s.projectPath);
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(s.id)}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding: '12px 16px',
+        backgroundColor: isSelected ? 'var(--bg-hover)' : 'transparent',
+        borderBottom: '1px solid var(--border)',
+        borderLeft:
+          s.status === 'error'
+            ? '3px solid var(--red-subtle, #ef4444)'
+            : s.status === 'starting'
+              ? '3px solid var(--yellow-subtle, #eab308)'
+              : s.status === 'active'
+                ? '3px solid var(--green-subtle, #22c55e)'
+                : '3px solid transparent',
+        transition: 'background 0.1s',
+      }}
+      onMouseEnter={(e) => {
+        if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 4,
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500 }}>
+          {s.id.slice(0, 16)}...
+        </span>
+        <StatusBadge status={s.status} />
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8 }}>
+        <span>{s.agentId}</span>
+        <span>{s.machineId}</span>
+      </div>
+      {shortPath && (
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)',
+            marginTop: 2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {shortPath}
+        </div>
+      )}
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          marginTop: 2,
+          display: 'flex',
+          gap: 8,
+        }}
+      >
+        <span>{formatRelativeTime(s.startedAt)}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>
+          {formatDuration(s.startedAt, s.endedAt)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 function DetailRow({
   label,
   value,
@@ -988,24 +1171,27 @@ const MSG_STYLES: Record<string, { label: string; color: string; bg: string }> =
   tool_result: { label: 'Result', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.04)' },
 };
 
+const CONTENT_POLL_MS = 5_000;
+
 function SessionContent({
   sessionId,
   machineId,
   projectPath,
+  isActive,
 }: {
   sessionId: string;
   machineId: string;
   projectPath?: string;
+  isActive?: boolean;
 }): React.JSX.Element {
   const [data, setData] = useState<SessionContentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showTools, setShowTools] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(0);
 
   const fetchContent = useCallback(async () => {
-    setLoading(true);
-    setError(null);
     try {
       const result = await api.getSessionContent(sessionId, {
         machineId,
@@ -1013,6 +1199,7 @@ function SessionContent({
         limit: 100,
       });
       setData(result);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1020,13 +1207,37 @@ function SessionContent({
     }
   }, [sessionId, machineId, projectPath]);
 
+  // Initial fetch
   useEffect(() => {
+    setLoading(true);
     void fetchContent();
   }, [fetchContent]);
 
+  // Auto-poll when session is active
+  useEffect(() => {
+    if (!isActive) return;
+
+    const timer = setInterval(() => void fetchContent(), CONTENT_POLL_MS);
+
+    const handleVisibility = (): void => {
+      if (!document.hidden) void fetchContent();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isActive, fetchContent]);
+
+  // Auto-scroll when new messages arrive
   useEffect(() => {
     if (data && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      const newCount = data.messages.length;
+      if (newCount > prevMsgCountRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+      prevMsgCountRef.current = newCount;
     }
   }, [data]);
 
