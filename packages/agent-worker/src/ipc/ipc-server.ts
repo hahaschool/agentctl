@@ -9,6 +9,7 @@ import {
   type IpcMessage,
   type IpcResponse,
   RSP_EXTENSION,
+  safeUnlink,
 } from './ipc-channel.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
@@ -168,7 +169,7 @@ export class IpcServer {
         { agentId: this.agentId, filename },
         'Failed to parse IPC command file, removing',
       );
-      await this.safeUnlink(cmdPath);
+      await safeUnlink(cmdPath, this.logger);
       return;
     }
 
@@ -217,7 +218,7 @@ export class IpcServer {
 
     // Remove the command file to signal that the message has been
     // processed (and prevent re-processing on the next poll).
-    await this.safeUnlink(cmdPath);
+    await safeUnlink(cmdPath, this.logger);
   }
 
   /**
@@ -269,18 +270,5 @@ export class IpcServer {
         },
       );
     });
-  }
-
-  /**
-   * Remove a file, ignoring ENOENT if it was already deleted.
-   */
-  private async safeUnlink(filePath: string): Promise<void> {
-    try {
-      await fs.unlink(filePath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        this.logger.warn({ agentId: this.agentId, filePath, err }, 'Failed to remove IPC file');
-      }
-    }
   }
 }

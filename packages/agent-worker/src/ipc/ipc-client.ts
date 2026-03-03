@@ -9,6 +9,7 @@ import {
   type IpcMessage,
   type IpcResponse,
   RSP_EXTENSION,
+  safeUnlink,
 } from './ipc-channel.js';
 
 const DEFAULT_RESPONSE_TIMEOUT_MS = 60_000;
@@ -68,7 +69,7 @@ export class IpcClient {
         const response = JSON.parse(raw) as IpcResponse;
 
         // Clean up the response file after reading.
-        await this.safeUnlink(rspPath);
+        await safeUnlink(rspPath, this.logger);
 
         this.logger.debug(
           { messageId: message.id, status: response.status },
@@ -97,7 +98,7 @@ export class IpcClient {
 
     // Clean up the command file that was never picked up.
     const cmdPath = path.join(this.ipcDir, message.id + CMD_EXTENSION);
-    await this.safeUnlink(cmdPath);
+    await safeUnlink(cmdPath, this.logger);
 
     return createIpcResponse(message.id, 'error', {
       code: 'RESPONSE_TIMEOUT',
@@ -132,19 +133,6 @@ export class IpcClient {
 
     const cmdPath = path.join(this.ipcDir, message.id + CMD_EXTENSION);
     await fs.writeFile(cmdPath, JSON.stringify(message, null, 2), 'utf-8');
-  }
-
-  /**
-   * Remove a file, ignoring ENOENT if it was already deleted.
-   */
-  private async safeUnlink(filePath: string): Promise<void> {
-    try {
-      await fs.unlink(filePath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        this.logger.warn({ filePath, err }, 'Failed to remove IPC file');
-      }
-    }
   }
 
   /**

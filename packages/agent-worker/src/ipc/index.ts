@@ -4,6 +4,7 @@ export {
   createIpcMessage,
   createIpcResponse,
   RSP_EXTENSION,
+  safeUnlink,
 } from './ipc-channel.js';
 export type { IpcClientOptions } from './ipc-client.js';
 export { IpcClient } from './ipc-client.js';

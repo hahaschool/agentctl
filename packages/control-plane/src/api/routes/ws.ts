@@ -99,11 +99,16 @@ function sendError(socket: WebSocket, code: string, message: string): void {
   sendJson(socket, { type: 'error', code, message });
 }
 
-function isValidIncomingType(type: unknown): type is IncomingMessage['type'] {
-  return (
-    typeof type === 'string' &&
-    ['subscribe_agent', 'unsubscribe_agent', 'start_agent', 'stop_agent', 'ping'].includes(type)
-  );
+const VALID_INCOMING_TYPES: ReadonlySet<string> = new Set([
+  'subscribe_agent',
+  'unsubscribe_agent',
+  'start_agent',
+  'stop_agent',
+  'ping',
+]);
+
+function isValidIncomingMessage(msg: Record<string, unknown>): msg is IncomingMessage {
+  return typeof msg.type === 'string' && VALID_INCOMING_TYPES.has(msg.type);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +247,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
         return;
       }
 
-      if (!isValidIncomingType(msg.type)) {
+      if (!isValidIncomingMessage(msg)) {
         sendError(
           socket,
           'UNKNOWN_MESSAGE_TYPE',
@@ -254,7 +259,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
       // Handle each message type without awaiting — fire-and-forget with
       // internal error handling so a single bad message never kills the
       // connection.
-      void handleMessage(msg as unknown as IncomingMessage).catch((err) => {
+      void handleMessage(msg).catch((err) => {
         const errMsg = err instanceof Error ? err.message : String(err);
         const code = err instanceof ControlPlaneError ? err.code : 'INTERNAL_ERROR';
         logger.error({ err: errMsg, messageType: msg.type }, 'error handling WebSocket message');

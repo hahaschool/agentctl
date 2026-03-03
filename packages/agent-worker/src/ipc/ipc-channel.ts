@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+
+import type { Logger } from 'pino';
 
 /**
  * A message sent via the filesystem IPC channel.
@@ -65,3 +68,16 @@ export const CMD_EXTENSION = '.cmd.json';
 
 /** File extension for response files. */
 export const RSP_EXTENSION = '.rsp.json';
+
+/**
+ * Remove a file, ignoring ENOENT if it was already deleted.
+ */
+export async function safeUnlink(filePath: string, logger: Logger): Promise<void> {
+  try {
+    await fs.unlink(filePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn({ filePath, err }, 'Failed to remove IPC file');
+    }
+  }
+}
