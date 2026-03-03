@@ -4,13 +4,50 @@ import { StatusBadge } from '../components/StatusBadge.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
 import type { WsConnectionStatus } from '../hooks/use-websocket.ts';
 import { useWebSocket } from '../hooks/use-websocket.ts';
-import type { Agent, HealthResponse } from '../lib/api.ts';
+import type { Agent, DiscoveredSession, HealthResponse, Machine } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
+
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function truncate(str: string, maxLen: number): string {
+  if (str.length <= maxLen) return str;
+  return `${str.slice(0, maxLen - 1)}\u2026`;
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export function DashboardPage(): React.JSX.Element {
   const health = usePolling<HealthResponse>({
     fetcher: api.health,
-    intervalMs: 10_000,
+    intervalMs: 15_000,
+  });
+
+  const metrics = usePolling<Record<string, string | number>>({
+    fetcher: api.metrics,
+    intervalMs: 15_000,
+  });
+
+  const machines = usePolling<Machine[]>({
+    fetcher: api.listMachines,
+    intervalMs: 15_000,
   });
 
   const agents = usePolling<Agent[]>({
@@ -18,15 +55,52 @@ export function DashboardPage(): React.JSX.Element {
     intervalMs: 15_000,
   });
 
+  const discovered = usePolling<{
+    sessions: DiscoveredSession[];
+    count: number;
+    machinesQueried: number;
+    machinesFailed: number;
+  }>({
+    fetcher: api.discoverSessions,
+    intervalMs: 15_000,
+  });
+
   const { status: wsStatus } = useWebSocket();
 
+  const machineList = machines.data ?? [];
   const agentList = agents.data ?? [];
-  const running = agentList.filter((a) => a.status === 'running').length;
-  const errorCount = agentList.filter((a) => a.status === 'error').length;
-  const deps = health.data?.dependencies;
+  const discoveredSessions = discovered.data?.sessions ?? [];
+  const metricsData = metrics.data ?? {};
+
+  const machinesOnline = machineList.filter((m) => m.status === 'online').length;
+  const agentsRegistered = agentList.length;
+  const activeRuns = Number(metricsData.agentctl_agents_active ?? 0);
+  const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
+
+  const refreshAll = (): void => {
+    health.refresh();
+    metrics.refresh();
+    machines.refresh();
+    agents.refresh();
+    discovered.refresh();
+  };
+
+  const anyError =
+    health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error;
+
+  // Health status color
+  const healthStatus = health.data?.status;
+  const healthColor =
+    healthStatus === 'ok'
+      ? 'var(--green)'
+      : healthStatus === 'degraded'
+        ? 'var(--yellow)'
+        : 'var(--text-muted)';
+  const healthLabel = healthStatus ?? 'unknown';
 
   return (
     <div style={{ padding: 24, maxWidth: 1100 }}>
+      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -35,15 +109,12 @@ export function DashboardPage(): React.JSX.Element {
           marginBottom: 24,
         }}
       >
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Dashboard</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Command Center</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <WsStatusIndicator status={wsStatus} />
           <button
             type="button"
-            onClick={() => {
-              health.refresh();
-              agents.refresh();
-            }}
+            onClick={refreshAll}
             style={{
               padding: '6px 14px',
               backgroundColor: 'var(--bg-tertiary)',
@@ -51,6 +122,7 @@ export function DashboardPage(): React.JSX.Element {
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
               fontSize: 13,
+              cursor: 'pointer',
             }}
           >
             Refresh
@@ -59,7 +131,7 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Error banner */}
-      {(health.error || agents.error) && (
+      {anyError && (
         <div
           style={{
             padding: '10px 16px',
@@ -70,9 +142,63 @@ export function DashboardPage(): React.JSX.Element {
             fontSize: 13,
           }}
         >
-          {health.error?.message ?? agents.error?.message}
+          {anyError.message}
         </div>
       )}
+
+      {/* Health status card */}
+      <div
+        style={{
+          padding: '16px 20px',
+          backgroundColor: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              backgroundColor: healthColor,
+              flexShrink: 0,
+              boxShadow: healthStatus === 'ok' ? `0 0 8px ${healthColor}` : 'none',
+            }}
+          />
+          <div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+              }}
+            >
+              Control Plane:{' '}
+              <span style={{ color: healthColor, textTransform: 'uppercase' }}>{healthLabel}</span>
+            </div>
+            {health.data?.timestamp && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-muted)',
+                  marginTop: 2,
+                }}
+              >
+                Last checked: {timeAgo(health.data.timestamp)}
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <ActionButton label="Discover Sessions" onClick={() => discovered.refresh()} />
+          <ActionButton label="Refresh All" onClick={refreshAll} />
+        </div>
+      </div>
 
       {/* Stats grid */}
       <div
@@ -84,42 +210,227 @@ export function DashboardPage(): React.JSX.Element {
         }}
       >
         <StatCard
-          label="Control Plane"
-          value={health.data?.status ?? '...'}
-          color={
-            health.data?.status === 'ok'
-              ? 'var(--green)'
-              : health.data?.status === 'degraded'
-                ? 'var(--yellow)'
-                : 'var(--text-muted)'
+          label="Machines Online"
+          value={`${machinesOnline} / ${machineList.length}`}
+          color={machinesOnline > 0 ? 'var(--green)' : 'var(--text-muted)'}
+          sublabel={
+            machineList.length > 0
+              ? `${machineList.filter((m) => m.status === 'offline').length} offline`
+              : undefined
           }
         />
         <StatCard
-          label="Total Agents"
-          value={String(agentList.length)}
-          color="var(--text-primary)"
+          label="Sessions Discovered"
+          value={String(discovered.data?.count ?? 0)}
+          color="var(--accent)"
+          sublabel={
+            discovered.data
+              ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
+              : undefined
+          }
         />
-        <StatCard label="Running" value={String(running)} color="var(--green)" />
         <StatCard
-          label="Errors"
-          value={String(errorCount)}
-          color={errorCount > 0 ? 'var(--red)' : 'var(--text-muted)'}
+          label="Agents Registered"
+          value={String(agentsRegistered)}
+          color="var(--text-primary)"
+          sublabel={
+            agentList.filter((a) => a.status === 'error').length > 0
+              ? `${agentList.filter((a) => a.status === 'error').length} in error`
+              : undefined
+          }
+        />
+        <StatCard
+          label="Active Runs"
+          value={String(activeRuns)}
+          color={activeRuns > 0 ? 'var(--green)' : 'var(--text-muted)'}
+          sublabel={`${totalRuns} total`}
         />
       </div>
 
-      {/* Dependencies */}
-      {deps && (
-        <div style={{ marginBottom: 24 }}>
-          <h2
+      {/* Two-column layout: Recent Activity + Machine Status */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 20,
+        }}
+      >
+        {/* Recent Activity */}
+        <div>
+          <SectionHeader title="Recent Activity" />
+          <div
             style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-              marginBottom: 10,
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              overflow: 'hidden',
             }}
           >
-            Dependencies
-          </h2>
+            {discoveredSessions.length === 0 ? (
+              <EmptyState loading={discovered.isLoading} message="No sessions discovered" />
+            ) : (
+              discoveredSessions.slice(0, 5).map((session, idx) => (
+                <div
+                  key={session.sessionId}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderTop: idx > 0 ? '1px solid var(--border)' : 'none',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      {truncate(session.summary || 'Untitled session', 50)}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-muted)',
+                        flexShrink: 0,
+                        marginLeft: 8,
+                      }}
+                    >
+                      {timeAgo(session.lastActivity)}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        backgroundColor: 'var(--bg-tertiary)',
+                        padding: '1px 6px',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      {session.hostname}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>
+                      {truncate(session.projectPath.split('/').pop() ?? session.projectPath, 30)}
+                    </span>
+                    {session.branch && (
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>{session.branch}</span>
+                    )}
+                    <span>{session.messageCount} msgs</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Machine Status */}
+        <div>
+          <SectionHeader title="Fleet Status" />
+          <div
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              overflow: 'hidden',
+            }}
+          >
+            {machineList.length === 0 ? (
+              <EmptyState loading={machines.isLoading} message="No machines registered" />
+            ) : (
+              machineList.map((machine, idx) => (
+                <div
+                  key={machine.id}
+                  style={{
+                    padding: '10px 16px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderTop: idx > 0 ? '1px solid var(--border)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                  >
+                    <StatusBadge status={machine.status} />
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {machine.hostname}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--text-muted)',
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        {machine.tailscaleIp}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <span>
+                      {machine.os}/{machine.arch}
+                    </span>
+                    {machine.capabilities.gpu && (
+                      <span
+                        style={{
+                          backgroundColor: 'var(--bg-tertiary)',
+                          padding: '1px 5px',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: 10,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        GPU
+                      </span>
+                    )}
+                    {machine.lastHeartbeat && <span>{timeAgo(machine.lastHeartbeat)}</span>}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Dependencies */}
+      {health.data?.dependencies && (
+        <div style={{ marginTop: 24 }}>
+          <SectionHeader title="Dependencies" />
           <div
             style={{
               display: 'grid',
@@ -127,7 +438,7 @@ export function DashboardPage(): React.JSX.Element {
               gap: 8,
             }}
           >
-            {Object.entries(deps).map(([name, dep]) => (
+            {Object.entries(health.data.dependencies).map(([name, dep]) => (
               <div
                 key={name}
                 style={{
@@ -149,7 +460,13 @@ export function DashboardPage(): React.JSX.Element {
                 >
                   {name}
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
                   <span
                     style={{
                       fontSize: 11,
@@ -166,116 +483,24 @@ export function DashboardPage(): React.JSX.Element {
           </div>
         </div>
       )}
-
-      {/* Agent table */}
-      <h2
-        style={{
-          fontSize: 15,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          marginBottom: 10,
-        }}
-      >
-        Agents
-      </h2>
-
-      {agentList.length === 0 ? (
-        <div
-          style={{
-            padding: 32,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-          }}
-        >
-          {agents.isLoading ? 'Loading...' : 'No agents registered'}
-        </div>
-      ) : (
-        <div
-          style={{
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            overflow: 'hidden',
-          }}
-        >
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              fontSize: 13,
-            }}
-          >
-            <thead>
-              <tr
-                style={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  textAlign: 'left',
-                }}
-              >
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Machine</th>
-                <th style={thStyle}>Cost</th>
-                <th style={thStyle}>Last Run</th>
-              </tr>
-            </thead>
-            <tbody>
-              {agentList.map((agent) => (
-                <tr
-                  key={agent.id}
-                  style={{
-                    borderTop: '1px solid var(--border)',
-                  }}
-                >
-                  <td style={tdStyle}>
-                    <span style={{ fontWeight: 500 }}>{agent.name}</span>
-                    <br />
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    >
-                      {agent.id}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>{agent.type}</td>
-                  <td style={tdStyle}>
-                    <StatusBadge status={agent.status} />
-                  </td>
-                  <td style={tdStyle}>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                      }}
-                    >
-                      {agent.machineId}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>${agent.totalCostUsd.toFixed(4)}</td>
-                  <td style={tdStyle}>
-                    {agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Subcomponents
+// ---------------------------------------------------------------------------
 
 function StatCard({
   label,
   value,
   color,
+  sublabel,
 }: {
   label: string;
   value: string;
   color: string;
+  sublabel?: string;
 }): React.JSX.Element {
   return (
     <div
@@ -306,6 +531,81 @@ function StatCard({
       >
         {value}
       </div>
+      {sublabel && (
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            marginTop: 4,
+          }}
+        >
+          {sublabel}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionHeader({ title }: { title: string }): React.JSX.Element {
+  return (
+    <h2
+      style={{
+        fontSize: 15,
+        fontWeight: 600,
+        color: 'var(--text-secondary)',
+        marginBottom: 10,
+      }}
+    >
+      {title}
+    </h2>
+  );
+}
+
+function ActionButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '5px 12px',
+        backgroundColor: 'transparent',
+        color: 'var(--accent)',
+        border: '1px solid var(--accent)',
+        borderRadius: 'var(--radius-sm)',
+        fontSize: 12,
+        fontWeight: 500,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function EmptyState({
+  loading,
+  message,
+}: {
+  loading: boolean;
+  message: string;
+}): React.JSX.Element {
+  return (
+    <div
+      style={{
+        padding: 32,
+        textAlign: 'center',
+        color: 'var(--text-muted)',
+        backgroundColor: 'var(--bg-secondary)',
+        fontSize: 13,
+      }}
+    >
+      {loading ? 'Loading...' : message}
     </div>
   );
 }
@@ -348,16 +648,3 @@ function WsStatusIndicator({ status }: { status: WsConnectionStatus }): React.JS
     </span>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px',
-};

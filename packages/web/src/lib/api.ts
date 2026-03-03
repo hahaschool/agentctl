@@ -108,7 +108,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   // Health
-  health: () => request<HealthResponse>('/health'),
+  health: () => request<HealthResponse>('/health?detail=true'),
 
   // Machines
   listMachines: () => request<Machine[]>('/api/agents'),

@@ -47,6 +47,12 @@ export function DiscoverPage(): React.JSX.Element {
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
+  // New session form state
+  const [showNewSession, setShowNewSession] = useState(false);
+  const [newProjectPath, setNewProjectPath] = useState('');
+  const [newPrompt, setNewPrompt] = useState('');
+  const [newSessionCreating, setNewSessionCreating] = useState(false);
+
   // Filter state
   const [search, setSearch] = useState('');
   const [minMessages, setMinMessages] = useState<MinMessages>(1);
@@ -146,6 +152,32 @@ export function DiscoverPage(): React.JSX.Element {
     }
   }, [allExpanded, groups]);
 
+  const handleNewSession = useCallback(async () => {
+    if (!newProjectPath.trim() || !newPrompt.trim()) return;
+    setNewSessionCreating(true);
+    setActionMsg(null);
+    try {
+      // Use the first machine from discovered sessions, or 'mac-local' as default
+      const first = allSessions[0];
+      const machineId = first ? first.machineId : 'mac-local';
+      await api.createSession({
+        agentId: 'adhoc',
+        machineId,
+        projectPath: newProjectPath.trim(),
+        prompt: newPrompt.trim(),
+      });
+      setActionMsg('Session created successfully');
+      setNewProjectPath('');
+      setNewPrompt('');
+      setShowNewSession(false);
+      discovered.refresh();
+    } catch (err) {
+      setActionMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setNewSessionCreating(false);
+    }
+  }, [newProjectPath, newPrompt, allSessions, discovered]);
+
   const handleResume = useCallback(
     async (session: DiscoveredSession) => {
       if (!resumePrompt.trim()) return;
@@ -202,22 +234,122 @@ export function DiscoverPage(): React.JSX.Element {
             )}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={discovered.refresh}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setShowNewSession(!showNewSession)}
+            style={{
+              padding: '6px 14px',
+              backgroundColor: showNewSession ? 'var(--accent)' : 'var(--bg-tertiary)',
+              color: showNewSession ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 13,
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            {showNewSession ? 'Cancel' : '+ New Session'}
+          </button>
+          <button
+            type="button"
+            onClick={discovered.refresh}
+            style={{
+              padding: '6px 14px',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Scan All Machines
+          </button>
+        </div>
+      </div>
+
+      {/* Quick new session form */}
+      {showNewSession && (
+        <div
           style={{
-            padding: '6px 14px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-secondary)',
+            padding: '16px',
+            backgroundColor: 'var(--bg-secondary)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 13,
-            cursor: 'pointer',
+            borderRadius: 'var(--radius)',
+            marginBottom: 16,
+            display: 'flex',
+            gap: 12,
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
           }}
         >
-          Scan All Machines
-        </button>
-      </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+              Project Path
+            </div>
+            <input
+              type="text"
+              value={newProjectPath}
+              onChange={(e) => setNewProjectPath(e.target.value)}
+              placeholder="/Users/hahaschool/my-project"
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div style={{ flex: 2, minWidth: 300 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Prompt</div>
+            <input
+              type="text"
+              value={newPrompt}
+              onChange={(e) => setNewPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleNewSession();
+              }}
+              placeholder="What should Claude work on?"
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleNewSession()}
+            disabled={!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating}
+            style={{
+              padding: '6px 18px',
+              backgroundColor: 'var(--accent)',
+              color: '#fff',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 13,
+              fontWeight: 500,
+              border: 'none',
+              cursor: 'pointer',
+              opacity: !newProjectPath.trim() || !newPrompt.trim() || newSessionCreating ? 0.5 : 1,
+            }}
+          >
+            {newSessionCreating ? 'Creating...' : 'Create'}
+          </button>
+        </div>
+      )}
 
       {/* Error banner */}
       {discovered.error && (
