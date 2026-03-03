@@ -28,6 +28,7 @@ type SessionRouteOptions = FastifyPluginOptions & {
   sessionManager: CliSessionManager;
   machineId: string;
   logger: Logger;
+  controlPlaneUrl?: string;
 };
 
 type CreateSessionBody = {
@@ -119,10 +120,58 @@ export async function sessionRoutes(
   app: FastifyInstance,
   options: SessionRouteOptions,
 ): Promise<void> {
-  const { sessionManager, machineId, logger } = options;
+  const { sessionManager, machineId, logger, controlPlaneUrl } = options;
+
+  // Map worker-internal session IDs to control-plane session IDs
+  const cpSessionIdMap = new Map<string, string>();
 
   // Per-session output buffers for SSE streaming
   const sessionBuffers = new Map<string, SessionEventBuffer>();
+
+  /**
+   * Report a session status change back to the control plane.
+   * Best-effort — failures are logged but don't affect local operation.
+   */
+  async function reportStatusToControlPlane(
+    workerSessionId: string,
+    update: {
+      status?: string;
+      claudeSessionId?: string | null;
+      pid?: number | null;
+      costUsd?: number;
+      errorMessage?: string;
+    },
+  ): Promise<void> {
+    const cpSessionId = cpSessionIdMap.get(workerSessionId);
+    if (!cpSessionId || !controlPlaneUrl) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${controlPlaneUrl}/api/sessions/${encodeURIComponent(cpSessionId)}/status`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(update),
+          signal: AbortSignal.timeout(5_000),
+        },
+      );
+
+      if (!response.ok) {
+        logger.warn(
+          { cpSessionId, workerSessionId, httpStatus: response.status },
+          'Failed to report session status to control plane',
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn(
+        { cpSessionId, workerSessionId, err: message },
+        'Error reporting session status to control plane',
+      );
+    }
+  }
 
   function getOrCreateBuffer(sessionId: string): SessionEventBuffer {
     let buf = sessionBuffers.get(sessionId);
@@ -159,12 +208,48 @@ export async function sessionRoutes(
       // Emit a synthetic "ended" event to all subscribers
       const endedEvent: AgentEvent = {
         event: 'status',
-        data: { status: 'ended', exitCode: event.exitCode },
+        data: {
+          status: 'stopped',
+          reason: `CLI process exited with code ${String(event.exitCode)}`,
+        },
       };
       buf.events.push(endedEvent);
       for (const sub of buf.subscribers) {
         sub(endedEvent);
       }
+    }
+
+    // Report session end to the control plane
+    const session = sessionManager.getSession(event.sessionId);
+    const status = session?.status === 'error' ? 'error' : 'ended';
+    void reportStatusToControlPlane(event.sessionId, {
+      status,
+      claudeSessionId: session?.claudeSessionId ?? null,
+      pid: null,
+      costUsd: session?.costUsd,
+      errorMessage:
+        status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
+    });
+  });
+
+  // Track which sessions have had their claudeSessionId reported
+  const reportedClaudeIds = new Set<string>();
+
+  // Report when the Claude session ID becomes available (from init/system message)
+  sessionManager.on('session_output', (event: CliSessionEvent) => {
+    if (event.type !== 'session_output') return;
+
+    const session = sessionManager.getSession(event.sessionId);
+    if (
+      session?.claudeSessionId &&
+      cpSessionIdMap.has(event.sessionId) &&
+      !reportedClaudeIds.has(event.sessionId)
+    ) {
+      reportedClaudeIds.add(event.sessionId);
+      void reportStatusToControlPlane(event.sessionId, {
+        claudeSessionId: session.claudeSessionId,
+        pid: session.pid,
+      });
     }
   });
 
@@ -282,7 +367,7 @@ export async function sessionRoutes(
 
   app.post<{ Body: CreateSessionBody }>('/', async (request, reply) => {
     const {
-      sessionId: _cpSessionId,
+      sessionId: cpSessionId,
       agentId,
       projectPath,
       model,
@@ -313,8 +398,13 @@ export async function sessionRoutes(
         resumeSessionId: resumeSessionId ?? undefined,
       });
 
+      // Store CP→worker session ID mapping for status callbacks
+      if (cpSessionId) {
+        cpSessionIdMap.set(session.id, cpSessionId);
+      }
+
       logger.info(
-        { sessionId: session.id, agentId, machineId, projectPath },
+        { sessionId: session.id, cpSessionId, agentId, machineId, projectPath },
         'CLI session started',
       );
 

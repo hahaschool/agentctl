@@ -184,6 +184,7 @@ export async function createWorkerServer({
       sessionManager,
       machineId,
       logger,
+      controlPlaneUrl,
     });
   }
 

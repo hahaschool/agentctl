@@ -18,13 +18,14 @@ const MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
 ];
 
-type StatusFilter = 'all' | 'active' | 'completed' | 'ended';
+type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
+  { key: 'starting', label: 'Starting' },
   { key: 'active', label: 'Active' },
-  { key: 'completed', label: 'Completed' },
   { key: 'ended', label: 'Ended' },
+  { key: 'error', label: 'Error' },
 ];
 
 function formatRelativeTime(dateStr: string): string {
@@ -82,6 +83,7 @@ function shortenProjectPath(path: string | null): string | null {
 
 function matchesStatusFilter(status: string, filter: StatusFilter): boolean {
   if (filter === 'all') return true;
+  if (filter === 'ended') return status === 'ended' || status === 'paused';
   return status === filter;
 }
 
@@ -191,14 +193,16 @@ export function SessionsPage(): React.JSX.Element {
   const statusCounts = useMemo(() => {
     const counts: Record<StatusFilter, number> = {
       all: sessionList.length,
+      starting: 0,
       active: 0,
-      completed: 0,
       ended: 0,
+      error: 0,
     };
     for (const s of sessionList) {
-      if (s.status === 'active') counts.active++;
-      else if (s.status === 'completed') counts.completed++;
-      else if (s.status === 'ended') counts.ended++;
+      if (s.status === 'starting') counts.starting++;
+      else if (s.status === 'active') counts.active++;
+      else if (s.status === 'ended' || s.status === 'paused') counts.ended++;
+      else if (s.status === 'error') counts.error++;
     }
     return counts;
   }, [sessionList]);
@@ -639,6 +643,14 @@ export function SessionsPage(): React.JSX.Element {
                     padding: '12px 16px',
                     backgroundColor: selectedId === s.id ? 'var(--bg-hover)' : 'transparent',
                     borderBottom: '1px solid var(--border)',
+                    borderLeft:
+                      s.status === 'error'
+                        ? '3px solid var(--red-subtle, #ef4444)'
+                        : s.status === 'starting'
+                          ? '3px solid var(--yellow-subtle, #eab308)'
+                          : s.status === 'active'
+                            ? '3px solid var(--green-subtle, #22c55e)'
+                            : '3px solid transparent',
                     transition: 'background 0.1s',
                   }}
                   onMouseEnter={(e) => {
@@ -786,7 +798,51 @@ export function SessionsPage(): React.JSX.Element {
                 <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
                 <DetailRow label="PID" value={selected.pid ? String(selected.pid) : '-'} mono />
                 <DetailRow label="Started" value={new Date(selected.startedAt).toLocaleString()} />
+                {selected.endedAt && (
+                  <DetailRow label="Ended" value={new Date(selected.endedAt).toLocaleString()} />
+                )}
               </div>
+
+              {/* Error message display */}
+              {selected.status === 'error' && selected.metadata && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: '8px 10px',
+                    backgroundColor: 'rgba(127, 29, 29, 0.3)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: '#fca5a5',
+                    fontSize: 12,
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>Error: </span>
+                  {(selected.metadata as Record<string, unknown>).errorMessage
+                    ? String((selected.metadata as Record<string, unknown>).errorMessage)
+                    : 'Unknown error'}
+                </div>
+              )}
+
+              {/* Starting state indicator */}
+              {selected.status === 'starting' && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: '8px 10px',
+                    backgroundColor: 'rgba(234, 179, 8, 0.1)',
+                    border: '1px solid rgba(234, 179, 8, 0.2)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: '#facc15',
+                    fontSize: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span style={{ animation: 'fadeInUp 1s ease infinite alternate' }}>&#x25CF;</span>
+                  Session is starting... Waiting for worker to respond.
+                </div>
+              )}
             </div>
 
             {/* Session content viewer */}

@@ -439,7 +439,7 @@ describe('Session routes — /api/sessions', () => {
       expect(body.error).toBe('MACHINE_OFFLINE');
     });
 
-    it('creates session even if worker dispatch fails (fire-and-forget)', async () => {
+    it('creates session and marks as error when worker is unreachable', async () => {
       const inserted = makeSession({ status: 'starting' });
       mockDb.setRows([inserted]);
       mockFetchThrow('Connection refused');
@@ -454,7 +454,28 @@ describe('Session routes — /api/sessions', () => {
         },
       });
 
-      // Session is still created even though worker is unreachable
+      // Session is still created but status is updated to error
+      expect(response.statusCode).toBe(201);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+
+    it('marks session as error when worker returns non-OK', async () => {
+      const inserted = makeSession({ status: 'starting' });
+      mockDb.setRows([inserted]);
+      mockFetchError(500);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+        },
+      });
+
       expect(response.statusCode).toBe(201);
 
       const body = response.json();
@@ -1020,6 +1041,98 @@ describe('Session routes — /api/sessions', () => {
       expect(body.count).toBe(0);
       expect(body.machinesQueried).toBe(2);
       expect(body.machinesFailed).toBe(2);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // PATCH /api/sessions/:sessionId/status — worker status updates
+  // ---------------------------------------------------------------------------
+
+  describe('PATCH /api/sessions/:sessionId/status', () => {
+    it('updates session status and returns 200', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/sessions/sess-001/status',
+        payload: {
+          status: 'ended',
+          claudeSessionId: 'claude-abc-123',
+          pid: null,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+
+    it('returns 404 when session does not exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/sessions/nonexistent/status',
+        payload: { status: 'error' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.error).toBe('SESSION_NOT_FOUND');
+    });
+
+    it('returns 400 for invalid status value', async () => {
+      const session = makeSession();
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/sessions/sess-001/status',
+        payload: { status: 'invalid_status' },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_STATUS');
+    });
+
+    it('accepts partial updates (claudeSessionId only)', async () => {
+      const session = makeSession();
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/sessions/sess-001/status',
+        payload: { claudeSessionId: 'claude-new-id' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+
+    it('accepts error message in update', async () => {
+      const session = makeSession();
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/sessions/sess-001/status',
+        payload: {
+          status: 'error',
+          errorMessage: 'CLI process exited with code 1',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
     });
   });
 

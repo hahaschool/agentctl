@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 
 import { ControlPlaneError } from '@agentctl/shared';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
@@ -13,6 +13,11 @@ const MAX_LIMIT = 200;
 const DEFAULT_WORKER_PORT = 9000;
 const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
+
+/** How long a session can stay in 'starting' or 'active' without a heartbeat before being reaped. */
+const STALE_SESSION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+/** How often the stale session reaper runs. */
+const REAPER_INTERVAL_MS = 60 * 1000; // 60 seconds
 
 const RC_SESSION_STATUSES = ['starting', 'active', 'paused', 'ended', 'error'] as const;
 type RcSessionStatus = (typeof RC_SESSION_STATUSES)[number];
@@ -51,6 +56,57 @@ export type SessionRoutesOptions = {
  */
 export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (app, opts) => {
   const { db, dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
+
+  // ---------------------------------------------------------------------------
+  // Stale session reaper — periodically mark stuck sessions as 'error'
+  //
+  // Sessions can get stuck in 'starting' when the worker fails to start the
+  // CLI process and the status callback also fails. This reaper is a safety
+  // net that cleans up sessions that have been in transient states too long.
+  // ---------------------------------------------------------------------------
+
+  async function reapStaleSessions(): Promise<void> {
+    try {
+      const cutoff = new Date(Date.now() - STALE_SESSION_TIMEOUT_MS);
+
+      // Find sessions in 'starting' that were created before the cutoff
+      // and have no heartbeat or a heartbeat older than the cutoff
+      const staleRows = await db
+        .select({ id: rcSessions.id, status: rcSessions.status })
+        .from(rcSessions)
+        .where(and(inArray(rcSessions.status, ['starting']), lt(rcSessions.startedAt, cutoff)));
+
+      if (staleRows.length > 0) {
+        const ids = staleRows.map((r) => r.id);
+        await db
+          .update(rcSessions)
+          .set({
+            status: 'error',
+            endedAt: new Date(),
+            metadata: { errorMessage: 'Session timed out — no response from worker' },
+          })
+          .where(inArray(rcSessions.id, ids));
+
+        app.log.warn(
+          { count: ids.length, sessionIds: ids },
+          'Reaped stale sessions stuck in starting state',
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      app.log.error({ err: message }, 'Stale session reaper failed');
+    }
+  }
+
+  const reaperTimer = setInterval(reapStaleSessions, REAPER_INTERVAL_MS);
+
+  // Clean up on server close
+  app.addHook('onClose', async () => {
+    clearInterval(reaperTimer);
+  });
+
+  // Run once immediately at startup to clean up any sessions stuck from before restart
+  void reapStaleSessions();
 
   // ---------------------------------------------------------------------------
   // GET /discover — fan-out session discovery across all online workers
@@ -405,28 +461,51 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           }),
         });
 
-        if (!workerResponse.ok) {
+        if (workerResponse.ok) {
+          // Worker accepted the session — update status to 'active'
+          await db
+            .update(rcSessions)
+            .set({ status: 'active', lastHeartbeat: new Date() })
+            .where(eq(rcSessions.id, sessionId));
+        } else {
+          // Worker rejected the session — mark as error
+          const errorText = await workerResponse.text().catch(() => 'Unknown error');
           app.log.warn(
             {
               sessionId,
               machineId,
               workerStatus: workerResponse.status,
+              errorText,
             },
-            'Worker returned non-OK for session start — session created but dispatch failed',
+            'Worker returned non-OK for session start — marking session as error',
           );
+          await db
+            .update(rcSessions)
+            .set({ status: 'error', endedAt: new Date() })
+            .where(eq(rcSessions.id, sessionId));
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         app.log.warn(
           { sessionId, machineId, err: message },
-          'Failed to dispatch session start to worker — session created but worker unreachable',
+          'Failed to dispatch session start to worker — marking session as error',
         );
+        await db
+          .update(rcSessions)
+          .set({ status: 'error', endedAt: new Date() })
+          .where(eq(rcSessions.id, sessionId));
       }
+
+      // Re-read the session to return the updated status
+      const [updatedSession] = await db
+        .select()
+        .from(rcSessions)
+        .where(eq(rcSessions.id, sessionId));
 
       return reply.code(201).send({
         ok: true,
         sessionId,
-        session: inserted,
+        session: updatedSession ?? inserted,
       });
     },
   );
@@ -648,6 +727,94 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       }
 
       return { ok: true, sessionId, session: updated };
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // PATCH /:sessionId/status — worker reports session status changes
+  //
+  // This is called by the agent-worker when a CLI session ends, errors, or
+  // when the Claude session ID / PID becomes available. This solves the bug
+  // where sessions get stuck at "starting" because the worker never reported
+  // back after the async CLI process completed or failed.
+  // ---------------------------------------------------------------------------
+
+  app.patch<{
+    Params: { sessionId: string };
+    Body: {
+      status?: string;
+      claudeSessionId?: string | null;
+      pid?: number | null;
+      costUsd?: number;
+      errorMessage?: string;
+    };
+  }>(
+    '/:sessionId/status',
+    { schema: { tags: ['sessions'], summary: 'Worker reports session status update' } },
+    async (request, reply) => {
+      const { sessionId } = request.params;
+      const { status, claudeSessionId, pid, costUsd, errorMessage } = request.body;
+
+      const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
+
+      if (rows.length === 0) {
+        return reply.code(404).send({
+          error: 'SESSION_NOT_FOUND',
+          message: `Session '${sessionId}' does not exist`,
+        });
+      }
+
+      // Build the update set dynamically based on provided fields
+      const updateSet: Record<string, unknown> = {
+        lastHeartbeat: new Date(),
+      };
+
+      if (status) {
+        if (!RC_SESSION_STATUSES.includes(status as RcSessionStatus)) {
+          return reply.code(400).send({
+            error: 'INVALID_STATUS',
+            message: `Invalid status. Must be one of: ${RC_SESSION_STATUSES.join(', ')}`,
+          });
+        }
+        updateSet.status = status;
+
+        if (status === 'ended' || status === 'error') {
+          updateSet.endedAt = new Date();
+        }
+      }
+
+      if (claudeSessionId !== undefined) {
+        updateSet.claudeSessionId = claudeSessionId;
+      }
+
+      if (pid !== undefined) {
+        updateSet.pid = pid;
+      }
+
+      // Store cost and error in metadata (merge with existing)
+      if (costUsd !== undefined || errorMessage !== undefined) {
+        const existingMeta = (rows[0].metadata ?? {}) as Record<string, unknown>;
+        const newMeta = { ...existingMeta };
+
+        if (costUsd !== undefined) {
+          newMeta.costUsd = costUsd;
+        }
+        if (errorMessage !== undefined) {
+          newMeta.errorMessage = errorMessage;
+        }
+
+        updateSet.metadata = newMeta;
+      }
+
+      const [updated] = await db
+        .update(rcSessions)
+        .set(updateSet)
+        .where(eq(rcSessions.id, sessionId))
+        .returning();
+
+      app.log.info({ sessionId, status, claudeSessionId, pid }, 'Session status updated by worker');
+
+      return { ok: true, session: updated };
     },
   );
 };
