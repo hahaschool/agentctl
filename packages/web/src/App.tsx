@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar.tsx';
 import { AgentsPage } from './pages/AgentsPage.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { DiscoverPage } from './pages/DiscoverPage.tsx';
+import { LogsPage } from './pages/LogsPage.tsx';
 import { MachinesPage } from './pages/MachinesPage.tsx';
 import { SessionsPage } from './pages/SessionsPage.tsx';
 
@@ -14,6 +15,7 @@ const PAGE_COMPONENTS: Record<Page, () => React.JSX.Element> = {
   agents: AgentsPage,
   sessions: SessionsPage,
   discover: DiscoverPage,
+  logs: LogsPage,
 };
 
 export function App(): React.JSX.Element {

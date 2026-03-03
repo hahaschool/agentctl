@@ -1,10 +1,17 @@
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
-import type { Session } from '../lib/api.ts';
+import type { Machine, Session } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
+
+const MODEL_OPTIONS = [
+  { value: '', label: 'Default' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+];
 
 export function SessionsPage(): React.JSX.Element {
   const sessions = usePolling<Session[]>({
@@ -16,6 +23,84 @@ export function SessionsPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // --- New Session form state ---
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [machinesLoading, setMachinesLoading] = useState(false);
+  const [formMachineId, setFormMachineId] = useState('');
+  const [formProjectPath, setFormProjectPath] = useState('');
+  const [formPrompt, setFormPrompt] = useState('');
+  const [formModel, setFormModel] = useState('');
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showCreateForm) return;
+    setMachinesLoading(true);
+    api
+      .listMachines()
+      .then((list) => {
+        setMachines(list);
+        if (list.length > 0) {
+          const first = list[0];
+          if (first) setFormMachineId((prev) => prev || first.id);
+        }
+      })
+      .catch(() => {
+        setMachines([]);
+      })
+      .finally(() => {
+        setMachinesLoading(false);
+      });
+  }, [showCreateForm]);
+
+  const resetForm = useCallback(() => {
+    setFormMachineId('');
+    setFormProjectPath('');
+    setFormPrompt('');
+    setFormModel('');
+    setFormError(null);
+    setFormSuccess(null);
+  }, []);
+
+  const handleCreateSession = useCallback(async () => {
+    setFormError(null);
+    setFormSuccess(null);
+
+    if (!formMachineId) {
+      setFormError('Please select a machine.');
+      return;
+    }
+    if (!formProjectPath.trim()) {
+      setFormError('Project path is required.');
+      return;
+    }
+    if (!formPrompt.trim()) {
+      setFormError('Prompt is required.');
+      return;
+    }
+
+    setFormSubmitting(true);
+    try {
+      const result = await api.createSession({
+        agentId: 'adhoc',
+        machineId: formMachineId,
+        projectPath: formProjectPath.trim(),
+        prompt: formPrompt.trim(),
+        model: formModel || undefined,
+      });
+      setFormSuccess(`Session created: ${result.sessionId.slice(0, 16)}...`);
+      resetForm();
+      setShowCreateForm(false);
+      sessions.refresh();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFormSubmitting(false);
+    }
+  }, [formMachineId, formProjectPath, formPrompt, formModel, resetForm, sessions]);
 
   const sessionList = sessions.data ?? [];
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
@@ -72,21 +157,257 @@ export function SessionsPage(): React.JSX.Element {
           }}
         >
           <h2 style={{ fontSize: 16, fontWeight: 600 }}>Sessions</h2>
-          <button
-            type="button"
-            onClick={sessions.refresh}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateForm((prev) => !prev);
+                setFormError(null);
+                setFormSuccess(null);
+              }}
+              style={{
+                padding: '4px 10px',
+                backgroundColor: showCreateForm ? 'var(--accent)' : 'var(--bg-tertiary)',
+                color: showCreateForm ? '#fff' : 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+                fontWeight: 500,
+              }}
+            >
+              {showCreateForm ? 'Cancel' : '+ New Session'}
+            </button>
+            <button
+              type="button"
+              onClick={sessions.refresh}
+              style={{
+                padding: '4px 10px',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* Inline "New Session" creation form */}
+        {showCreateForm && (
+          <div
             style={{
-              padding: '4px 10px',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 12,
+              padding: '14px 16px',
+              borderBottom: '1px solid var(--border)',
+              backgroundColor: 'var(--bg-secondary)',
             }}
           >
-            Refresh
-          </button>
-        </div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+              Create New Session
+            </div>
+
+            {/* Machine selector */}
+            <label
+              htmlFor="create-session-machine"
+              style={{
+                display: 'block',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                marginBottom: 4,
+              }}
+            >
+              Machine
+            </label>
+            <select
+              id="create-session-machine"
+              value={formMachineId}
+              onChange={(e) => setFormMachineId(e.target.value)}
+              disabled={machinesLoading}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+                marginBottom: 10,
+                outline: 'none',
+              }}
+            >
+              {machinesLoading && <option value="">Loading machines...</option>}
+              {!machinesLoading && machines.length === 0 && (
+                <option value="">No machines available</option>
+              )}
+              {machines.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.hostname} ({m.status})
+                </option>
+              ))}
+            </select>
+
+            {/* Project path */}
+            <label
+              htmlFor="create-session-project"
+              style={{
+                display: 'block',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                marginBottom: 4,
+              }}
+            >
+              Project Path
+            </label>
+            <input
+              id="create-session-project"
+              type="text"
+              value={formProjectPath}
+              onChange={(e) => setFormProjectPath(e.target.value)}
+              placeholder="/home/user/project"
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                marginBottom: 10,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Prompt */}
+            <label
+              htmlFor="create-session-prompt"
+              style={{
+                display: 'block',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                marginBottom: 4,
+              }}
+            >
+              Prompt
+            </label>
+            <textarea
+              id="create-session-prompt"
+              value={formPrompt}
+              onChange={(e) => setFormPrompt(e.target.value)}
+              placeholder="What should Claude work on?"
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+                marginBottom: 10,
+                outline: 'none',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Model selector */}
+            <label
+              htmlFor="create-session-model"
+              style={{
+                display: 'block',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                marginBottom: 4,
+              }}
+            >
+              Model (optional)
+            </label>
+            <select
+              id="create-session-model"
+              value={formModel}
+              onChange={(e) => setFormModel(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+                marginBottom: 12,
+                outline: 'none',
+              }}
+            >
+              {MODEL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Error / Success feedback */}
+            {formError && (
+              <div
+                style={{
+                  padding: '6px 8px',
+                  backgroundColor: '#7f1d1d',
+                  color: '#fca5a5',
+                  fontSize: 12,
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: 10,
+                }}
+              >
+                {formError}
+              </div>
+            )}
+            {formSuccess && (
+              <div
+                style={{
+                  padding: '6px 8px',
+                  backgroundColor: '#14532d',
+                  color: '#86efac',
+                  fontSize: 12,
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: 10,
+                }}
+              >
+                {formSuccess}
+              </div>
+            )}
+
+            {/* Submit button */}
+            <button
+              type="button"
+              onClick={() => void handleCreateSession()}
+              disabled={
+                formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim()
+              }
+              style={{
+                width: '100%',
+                padding: '7px 14px',
+                backgroundColor: 'var(--accent)',
+                color: '#fff',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+                fontWeight: 500,
+                opacity:
+                  formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim()
+                    ? 0.5
+                    : 1,
+                cursor:
+                  formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
+            >
+              {formSubmitting ? 'Creating...' : 'Create Session'}
+            </button>
+          </div>
+        )}
 
         <div style={{ flex: 1, overflow: 'auto' }}>
           {sessionList.length === 0 ? (

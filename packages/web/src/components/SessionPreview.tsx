@@ -28,7 +28,9 @@ export function SessionPreview({
   const [data, setData] = useState<SessionContentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showTools, setShowTools] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const fetchContent = useCallback(async () => {
     setLoading(true);
@@ -51,6 +53,13 @@ export function SessionPreview({
     void fetchContent();
   }, [fetchContent]);
 
+  // Auto-scroll to bottom on data load
+  useEffect(() => {
+    if (data && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [data]);
+
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
@@ -59,6 +68,13 @@ export function SessionPreview({
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  // Filter messages based on toggle
+  const visibleMessages = data
+    ? showTools
+      ? data.messages
+      : data.messages.filter((m) => m.type === 'human' || m.type === 'assistant')
+    : [];
 
   return (
     <div
@@ -90,7 +106,7 @@ export function SessionPreview({
           flexShrink: 0,
         }}
       >
-        <div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Session Preview</div>
           <div
             style={{
@@ -98,29 +114,72 @@ export function SessionPreview({
               color: 'var(--text-muted)',
               fontFamily: 'var(--font-mono)',
               marginTop: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
             {sessionId.slice(0, 32)}...
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            padding: '4px 10px',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-          }}
-        >
-          Close (Esc)
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setShowTools(!showTools)}
+            style={{
+              padding: '4px 10px',
+              backgroundColor: showTools ? 'var(--accent)' : 'var(--bg-tertiary)',
+              color: showTools ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 11,
+              cursor: 'pointer',
+            }}
+          >
+            {showTools ? 'Hide Tools' : 'Show Tools'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '4px 10px',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 12,
+              cursor: 'pointer',
+            }}
+          >
+            Close (Esc)
+          </button>
+        </div>
       </div>
 
+      {/* Stats bar */}
+      {data && (
+        <div
+          style={{
+            padding: '6px 16px',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            gap: 16,
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            backgroundColor: 'var(--bg-secondary)',
+            flexShrink: 0,
+          }}
+        >
+          <span>{data.totalMessages} total messages</span>
+          <span>
+            {visibleMessages.length} shown
+            {!showTools && ' (conversations only)'}
+          </span>
+        </div>
+      )}
+
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
         {loading && (
           <div
             style={{
@@ -148,7 +207,7 @@ export function SessionPreview({
           </div>
         )}
 
-        {data && data.messages.length === 0 && (
+        {data && visibleMessages.length === 0 && (
           <div
             style={{
               padding: 32,
@@ -161,7 +220,7 @@ export function SessionPreview({
           </div>
         )}
 
-        {data?.messages.map((msg, i) => (
+        {visibleMessages.map((msg, i) => (
           <MessageBubble key={`${msg.type}-${String(i)}`} message={msg} />
         ))}
 
@@ -174,7 +233,7 @@ export function SessionPreview({
               fontSize: 12,
             }}
           >
-            Showing {data.messages.length} of {data.totalMessages} messages
+            Showing last {data.messages.length} of {data.totalMessages} messages
           </div>
         )}
       </div>
@@ -187,10 +246,26 @@ export function SessionPreview({
 // ---------------------------------------------------------------------------
 
 const TYPE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
-  human: { label: 'You', color: 'var(--accent)', bg: 'rgba(99, 102, 241, 0.08)' },
-  assistant: { label: 'Assistant', color: 'var(--green)', bg: 'rgba(34, 197, 94, 0.06)' },
-  tool_use: { label: 'Tool', color: 'var(--yellow)', bg: 'rgba(234, 179, 8, 0.06)' },
-  tool_result: { label: 'Result', color: 'var(--text-muted)', bg: 'var(--bg-secondary)' },
+  human: {
+    label: 'You',
+    color: '#818cf8',
+    bg: 'rgba(99, 102, 241, 0.08)',
+  },
+  assistant: {
+    label: 'Claude',
+    color: '#4ade80',
+    bg: 'rgba(34, 197, 94, 0.06)',
+  },
+  tool_use: {
+    label: 'Tool Call',
+    color: '#facc15',
+    bg: 'rgba(234, 179, 8, 0.04)',
+  },
+  tool_result: {
+    label: 'Tool Result',
+    color: '#94a3b8',
+    bg: 'rgba(148, 163, 184, 0.04)',
+  },
 };
 
 function MessageBubble({ message }: { message: SessionContentMessage }): React.JSX.Element {
@@ -200,8 +275,70 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
     bg: 'var(--bg-secondary)',
   };
 
-  const [expanded, setExpanded] = useState(message.type !== 'tool_result');
+  const isTool = message.type === 'tool_use' || message.type === 'tool_result';
+  const [expanded, setExpanded] = useState(!isTool);
   const isLong = message.content.length > 500;
+
+  // For tool messages, show compact by default
+  if (isTool && !expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 4,
+          padding: '4px 12px',
+          backgroundColor: style.bg,
+          borderRadius: 'var(--radius-sm)',
+          borderLeft: `2px solid ${style.color}`,
+          border: 'none',
+          borderLeftWidth: 2,
+          borderLeftStyle: 'solid',
+          borderLeftColor: style.color,
+          cursor: 'pointer',
+          textAlign: 'left',
+          color: 'var(--text-primary)',
+          font: 'inherit',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: style.color,
+            flexShrink: 0,
+          }}
+        >
+          {style.label}
+        </span>
+        {message.toolName && (
+          <span
+            style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {message.toolName}
+          </span>
+        )}
+        <span
+          style={{
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            marginLeft: 'auto',
+          }}
+        >
+          click to expand
+        </span>
+      </button>
+    );
+  }
+
   const displayContent =
     !expanded && isLong ? `${message.content.slice(0, 500)}...` : message.content;
 
@@ -238,28 +375,45 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
             </span>
           )}
         </span>
-        {message.timestamp && (
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-            {new Date(message.timestamp).toLocaleTimeString()}
-          </span>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {message.timestamp && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              {new Date(message.timestamp).toLocaleTimeString()}
+            </span>
+          )}
+          {isTool && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              style={{
+                fontSize: 10,
+                color: 'var(--accent)',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+              }}
+            >
+              collapse
+            </button>
+          )}
+        </div>
       </div>
       <div
         style={{
-          fontSize: 12,
-          lineHeight: 1.5,
+          fontSize: isTool ? 11 : 13,
+          lineHeight: 1.6,
           color: 'var(--text-primary)',
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
-          fontFamily:
-            message.type === 'tool_use' || message.type === 'tool_result'
-              ? 'var(--font-mono)'
-              : undefined,
+          fontFamily: isTool ? 'var(--font-mono)' : undefined,
+          maxHeight: isTool ? 300 : undefined,
+          overflow: isTool ? 'auto' : undefined,
         }}
       >
         {displayContent}
       </div>
-      {isLong && (
+      {isLong && !isTool && (
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}

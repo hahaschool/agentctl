@@ -1,6 +1,6 @@
 import type React from 'react';
 
-export type Page = 'dashboard' | 'machines' | 'agents' | 'sessions' | 'discover';
+export type Page = 'dashboard' | 'machines' | 'agents' | 'sessions' | 'discover' | 'logs';
 
 const NAV_ITEMS: { key: Page; label: string; icon: string }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: '\u25A0' },
@@ -8,6 +8,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: string }[] = [
   { key: 'agents', label: 'Agents', icon: '\u2699' },
   { key: 'sessions', label: 'Sessions', icon: '\u25B6' },
   { key: 'discover', label: 'Discover', icon: '\u2315' },
+  { key: 'logs', label: 'Logs', icon: '\u2261' },
 ];
 
 export function Sidebar({
