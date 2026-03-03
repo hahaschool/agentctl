@@ -2,6 +2,7 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 
 import { CopyableText } from '../components/CopyableText.tsx';
+import { StatCard } from '../components/StatCard.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
 import type { Machine } from '../lib/api.ts';
@@ -352,53 +353,6 @@ function isStaleHeartbeat(dateStr: string): boolean {
 // ---------------------------------------------------------------------------
 // Subcomponents
 // ---------------------------------------------------------------------------
-
-function StatCard({
-  label,
-  value,
-  color,
-  sublabel,
-}: {
-  label: string;
-  value: string;
-  color: string;
-  sublabel?: string;
-}): React.JSX.Element {
-  return (
-    <div
-      style={{
-        padding: '16px 18px',
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          marginBottom: 6,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
-      {sublabel && (
-        <div
-          style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            marginTop: 4,
-          }}
-        >
-          {sublabel}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function DetailField({
   label,

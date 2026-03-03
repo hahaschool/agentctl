@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
 import { CopyableText } from '../components/CopyableText.tsx';
+import { StatCard } from '../components/StatCard.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { useToast } from '../components/Toast.tsx';
 import { usePolling } from '../hooks/use-polling.ts';
@@ -747,40 +748,6 @@ function statusColor(status: string): string {
     default:
       return 'var(--text-muted)';
   }
-}
-
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}): React.JSX.Element {
-  return (
-    <div
-      style={{
-        padding: '14px 16px',
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
-    </div>
-  );
 }
 
 function Info({
