@@ -440,7 +440,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           machineId,
           status: 'starting',
           projectPath,
-          metadata: { model: model ?? null, initialPrompt: prompt ?? null },
+          model: model ?? null,
+          metadata: { initialPrompt: prompt ?? null },
         })
         .returning();
 
@@ -571,6 +572,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               claudeSessionId: session.claudeSessionId,
               projectPath: session.projectPath,
               agentId: session.agentId,
+              model: session.model ?? null,
             }),
           });
         } catch (err) {

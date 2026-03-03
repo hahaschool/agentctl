@@ -78,6 +78,7 @@ export const rcSessions = pgTable(
     claudeSessionId: text('claude_session_id'),
     status: text('status').notNull().default('starting'),
     projectPath: text('project_path'),
+    model: text('model'),
     pid: integer('pid'),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     lastHeartbeat: timestamp('last_heartbeat', { withTimezone: true }),
