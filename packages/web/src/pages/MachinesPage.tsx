@@ -5,36 +5,84 @@ import { usePolling } from '../hooks/use-polling.ts';
 import type { Machine } from '../lib/api.ts';
 import { api } from '../lib/api.ts';
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
+
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function MachinesPage(): React.JSX.Element {
   const machines = usePolling<Machine[]>({
     fetcher: api.listMachines,
-    intervalMs: 10_000,
+    intervalMs: 15_000,
   });
 
   const list = machines.data ?? [];
   const online = list.filter((m) => m.status === 'online').length;
-  const offline = list.filter((m) => m.status !== 'online').length;
+  const offline = list.filter((m) => m.status === 'offline').length;
+  const degraded = list.filter((m) => m.status === 'degraded').length;
 
   return (
     <div style={{ padding: 24, maxWidth: 1100 }}>
+      {/* Header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 20,
+          marginBottom: 24,
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Machines</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-            Fleet machines connected via Tailscale mesh.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700 }}>Fleet Machines</h1>
             {list.length > 0 && (
-              <span>
-                {' '}
-                {online} online, {offline} offline
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                {list.length}
               </span>
             )}
+          </div>
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--text-muted)',
+              marginTop: 4,
+            }}
+          >
+            Machines connected via Tailscale mesh. Auto-refreshes every 15s.
           </p>
         </div>
         <button
@@ -47,12 +95,14 @@ export function MachinesPage(): React.JSX.Element {
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
             fontSize: 13,
+            cursor: 'pointer',
           }}
         >
           Refresh
         </button>
       </div>
 
+      {/* Error banner */}
       {machines.error && (
         <div
           style={{
@@ -68,85 +118,48 @@ export function MachinesPage(): React.JSX.Element {
         </div>
       )}
 
+      {/* Summary stats */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: 12,
+          marginBottom: 24,
+        }}
+      >
+        <StatCard label="Total Machines" value={String(list.length)} color="var(--text-primary)" />
+        <StatCard
+          label="Online"
+          value={String(online)}
+          color={online > 0 ? 'var(--green)' : 'var(--text-muted)'}
+        />
+        <StatCard
+          label="Offline"
+          value={String(offline)}
+          color={offline > 0 ? 'var(--text-muted)' : 'var(--green)'}
+          sublabel={offline > 0 ? 'Needs attention' : 'All clear'}
+        />
+        <StatCard
+          label="Degraded"
+          value={String(degraded)}
+          color={degraded > 0 ? 'var(--yellow)' : 'var(--text-muted)'}
+          sublabel={degraded > 0 ? 'Partial issues' : 'Healthy'}
+        />
+      </div>
+
+      {/* Machine cards or empty state */}
       {list.length === 0 ? (
-        <div
-          style={{
-            padding: 48,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-          }}
-        >
-          {machines.isLoading ? 'Loading machines...' : 'No machines registered'}
-        </div>
+        <EmptyState loading={machines.isLoading} />
       ) : (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-            gap: 12,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))',
+            gap: 16,
           }}
         >
           {list.map((m) => (
-            <div
-              key={m.id}
-              style={{
-                padding: 16,
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 10,
-                }}
-              >
-                <span style={{ fontWeight: 600, fontSize: 15 }}>{m.hostname}</span>
-                <StatusBadge status={m.status} />
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 8,
-                  fontSize: 12,
-                }}
-              >
-                <Info label="ID" value={m.id} mono />
-                <Info label="Tailscale IP" value={m.tailscaleIp} mono />
-                <Info label="OS" value={m.os} />
-                <Info label="Arch" value={m.arch} />
-                <Info
-                  label="Last Heartbeat"
-                  value={m.lastHeartbeat ? new Date(m.lastHeartbeat).toLocaleString() : 'never'}
-                />
-                <Info label="Registered" value={new Date(m.createdAt).toLocaleString()} />
-              </div>
-
-              {m.capabilities && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    paddingTop: 10,
-                    borderTop: '1px solid var(--border)',
-                    display: 'flex',
-                    gap: 8,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <CapBadge label="GPU" enabled={m.capabilities.gpu} />
-                  <CapBadge label="Docker" enabled={m.capabilities.docker} />
-                  <CapBadge
-                    label={`Max ${m.capabilities.maxConcurrentAgents} agents`}
-                    enabled={true}
-                  />
-                </div>
-              )}
-            </div>
+            <MachineCard key={m.id} machine={m} />
           ))}
         </div>
       )}
@@ -154,32 +167,233 @@ export function MachinesPage(): React.JSX.Element {
   );
 }
 
-function Info({
+// ---------------------------------------------------------------------------
+// Machine card
+// ---------------------------------------------------------------------------
+
+function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
+  const m = machine;
+
+  return (
+    <div
+      style={{
+        padding: 20,
+        backgroundColor: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+    >
+      {/* Top row: hostname + status */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 17,
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              marginBottom: 3,
+            }}
+          >
+            {m.hostname}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-muted)',
+              wordBreak: 'break-all',
+            }}
+          >
+            {m.id}
+          </div>
+        </div>
+        <StatusBadge status={m.status} />
+      </div>
+
+      {/* Details grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          paddingTop: 10,
+          borderTop: '1px solid var(--border)',
+        }}
+      >
+        <DetailField label="Tailscale IP" value={m.tailscaleIp} mono />
+        <DetailField label="OS / Architecture" value={`${m.os} / ${m.arch}`} />
+        <DetailField
+          label="Last Heartbeat"
+          value={m.lastHeartbeat ? timeAgo(m.lastHeartbeat) : 'Never'}
+          highlight={
+            m.lastHeartbeat ? (isStaleHeartbeat(m.lastHeartbeat) ? 'warn' : 'ok') : 'muted'
+          }
+        />
+        <DetailField label="Registered" value={formatDate(m.createdAt)} />
+      </div>
+
+      {/* Capabilities row */}
+      {m.capabilities && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+            paddingTop: 10,
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              marginRight: 4,
+            }}
+          >
+            Capabilities
+          </span>
+          <CapBadge
+            label="GPU"
+            enabled={m.capabilities.gpu}
+            activeColor="#14532d"
+            activeBorder="#166534"
+            activeText="#86efac"
+          />
+          <CapBadge
+            label="Docker"
+            enabled={m.capabilities.docker}
+            activeColor="#1e3a5f"
+            activeBorder="#1d4ed8"
+            activeText="#93c5fd"
+          />
+          <span
+            style={{
+              padding: '3px 10px',
+              fontSize: 11,
+              fontWeight: 500,
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {m.capabilities.maxConcurrentAgents} max agents
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: is a heartbeat stale (> 60s)?
+// ---------------------------------------------------------------------------
+
+function isStaleHeartbeat(dateStr: string): boolean {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  return diffMs > 60_000;
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponents
+// ---------------------------------------------------------------------------
+
+function StatCard({
+  label,
+  value,
+  color,
+  sublabel,
+}: {
+  label: string;
+  value: string;
+  color: string;
+  sublabel?: string;
+}): React.JSX.Element {
+  return (
+    <div
+      style={{
+        padding: '16px 18px',
+        backgroundColor: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
+      {sublabel && (
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            marginTop: 4,
+          }}
+        >
+          {sublabel}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailField({
   label,
   value,
   mono,
+  highlight,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  highlight?: 'ok' | 'warn' | 'muted';
 }): React.JSX.Element {
+  const valueColor =
+    highlight === 'ok'
+      ? 'var(--green)'
+      : highlight === 'warn'
+        ? 'var(--yellow)'
+        : 'var(--text-secondary)';
+
   return (
     <div>
-      <span
+      <div
         style={{
           fontSize: 10,
           color: 'var(--text-muted)',
           textTransform: 'uppercase',
           letterSpacing: '0.04em',
+          marginBottom: 2,
         }}
       >
         {label}
-      </span>
+      </div>
       <div
         style={{
-          marginTop: 1,
+          fontSize: 13,
           fontFamily: mono ? 'var(--font-mono)' : undefined,
-          fontSize: 12,
+          color: valueColor,
           wordBreak: 'break-all',
         }}
       >
@@ -189,19 +403,76 @@ function Info({
   );
 }
 
-function CapBadge({ label, enabled }: { label: string; enabled: boolean }): React.JSX.Element {
+function CapBadge({
+  label,
+  enabled,
+  activeColor,
+  activeBorder,
+  activeText,
+}: {
+  label: string;
+  enabled: boolean;
+  activeColor: string;
+  activeBorder: string;
+  activeText: string;
+}): React.JSX.Element {
   return (
     <span
       style={{
-        padding: '2px 8px',
+        padding: '3px 10px',
         fontSize: 11,
+        fontWeight: 600,
         borderRadius: 'var(--radius-sm)',
-        backgroundColor: enabled ? '#14532d' : 'var(--bg-tertiary)',
-        color: enabled ? '#86efac' : 'var(--text-muted)',
-        border: `1px solid ${enabled ? '#166534' : 'var(--border)'}`,
+        backgroundColor: enabled ? activeColor : 'var(--bg-tertiary)',
+        color: enabled ? activeText : 'var(--text-muted)',
+        border: `1px solid ${enabled ? activeBorder : 'var(--border)'}`,
+        textTransform: 'uppercase',
+        letterSpacing: '0.03em',
       }}
     >
       {label}
     </span>
+  );
+}
+
+function EmptyState({ loading }: { loading: boolean }): React.JSX.Element {
+  return (
+    <div
+      style={{
+        padding: 64,
+        textAlign: 'center',
+        backgroundColor: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 600,
+          color: 'var(--text-secondary)',
+          marginBottom: 8,
+        }}
+      >
+        {loading ? 'Loading machines...' : 'No machines registered'}
+      </div>
+      {!loading && (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Register a machine by running{' '}
+          <code
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              backgroundColor: 'var(--bg-tertiary)',
+              padding: '2px 6px',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            ./scripts/setup-machine.sh
+          </code>{' '}
+          on the target host.
+        </div>
+      )}
+    </div>
   );
 }
