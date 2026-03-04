@@ -145,6 +145,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                   }
                 }}
                 placeholder="Enter prompt..."
+                aria-label="Prompt to start agent"
                 className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[200px]"
               />
               <Button
@@ -262,7 +263,7 @@ export default function AgentDetailPage(): React.JSX.Element {
             />
           ) : runList.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
-              No runs recorded yet.
+              No runs recorded yet. Use the Start button above to run this agent.
             </div>
           ) : (
             <div className="overflow-x-auto">

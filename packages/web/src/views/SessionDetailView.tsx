@@ -214,6 +214,8 @@ function MessageList({
         <button
           type="button"
           onClick={() => setShowTools(!showTools)}
+          aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
+          aria-pressed={showTools}
           className={cn(
             'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
             showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
@@ -233,6 +235,7 @@ function MessageList({
                 });
               }
             }}
+            aria-label="Jump to bottom of conversation"
             className="ml-auto px-2 py-0.5 bg-primary text-primary-foreground rounded-sm text-[10px] cursor-pointer"
           >
             Jump to bottom
@@ -247,8 +250,14 @@ function MessageList({
         className="flex-1 overflow-auto px-5 py-3 space-y-2"
       >
         {isLoading && (
-          <div className="p-8 text-center text-muted-foreground text-[13px]">
-            Loading conversation...
+          <div className="p-4 space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={`msg-sk-${String(i)}`} className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}>
+                <Skeleton className="h-3 w-16 mb-2" />
+                <Skeleton className="h-3 w-full mb-1" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            ))}
           </div>
         )}
 

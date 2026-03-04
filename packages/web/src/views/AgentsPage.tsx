@@ -458,6 +458,7 @@ export function AgentsPage(): React.JSX.Element {
                       type="button"
                       onClick={() => handleStart(agent.id)}
                       disabled={!prompt.trim()}
+                      aria-label="Start agent with entered prompt"
                       className={cn(
                         'px-3 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium',
                         prompt.trim()
@@ -473,6 +474,7 @@ export function AgentsPage(): React.JSX.Element {
                         setPromptAgentId(null);
                         setPrompt('');
                       }}
+                      aria-label="Cancel agent start"
                       className="px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
                     >
                       Cancel

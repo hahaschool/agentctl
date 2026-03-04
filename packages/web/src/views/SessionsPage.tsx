@@ -520,7 +520,21 @@ export function SessionsPage(): React.JSX.Element {
             </div>
           ) : filteredSessions.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground text-[13px]">
-              {searchQuery || statusFilter !== 'all' ? 'No matching sessions' : 'No sessions found'}
+              {searchQuery || statusFilter !== 'all' ? (
+              <>
+                No matching sessions.{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setStatusFilter('all');
+                  }}
+                  className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px]"
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : 'No sessions found'}
             </div>
           ) : groupedSessions ? (
             Array.from(groupedSessions.entries()).map(([groupKey, groupItems]) => (
@@ -700,12 +714,14 @@ export function SessionsPage(): React.JSX.Element {
                 placeholder={
                   selected.status === 'active' ? 'Send message...' : 'Resume session with prompt...'
                 }
+                aria-label={selected.status === 'active' ? 'Message to send to session' : 'Prompt to resume session'}
                 className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none"
               />
               <button
                 type="button"
                 onClick={() => void handleSend()}
                 disabled={sending || !prompt.trim()}
+                aria-label={selected.status === 'active' ? 'Send message' : 'Resume session'}
                 className={cn(
                   'px-[18px] py-2 bg-primary text-white rounded-sm text-[13px] font-medium',
                   sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
@@ -919,6 +935,8 @@ function SessionContent({
           <button
             type="button"
             onClick={() => setShowTools(!showTools)}
+            aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
+            aria-pressed={showTools}
             className={cn(
               'px-2 py-[3px] border border-border rounded-sm text-[10px] cursor-pointer',
               showTools ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
@@ -929,6 +947,7 @@ function SessionContent({
           <button
             type="button"
             onClick={() => void fetchContent()}
+            aria-label="Refresh conversation"
             className="px-2 py-[3px] bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer"
           >
             Refresh
@@ -939,8 +958,14 @@ function SessionContent({
       {/* Content */}
       <div ref={scrollRef} className="flex-1 overflow-auto px-5 py-2 scroll-smooth">
         {loading && (
-          <div className="p-5 text-center text-muted-foreground text-xs">
-            Loading conversation...
+          <div className="p-4 space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={`msg-sk-${String(i)}`} className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}>
+                <Skeleton className="h-3 w-16 mb-2" />
+                <Skeleton className="h-3 w-full mb-1" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            ))}
           </div>
         )}
         {error && <ErrorBanner message={error} onRetry={() => void fetchContent()} />}

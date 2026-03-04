@@ -188,7 +188,10 @@ export function MachineDetailView(): React.JSX.Element {
             />
           ) : machineAgents.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
-              No agents registered on this machine.
+              No agents registered on this machine.{' '}
+              <Link href="/agents" className="text-primary underline underline-offset-2">
+                View all agents
+              </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -263,7 +266,10 @@ export function MachineDetailView(): React.JSX.Element {
             />
           ) : recentSessions.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
-              No sessions found for this machine.
+              No sessions found for this machine.{' '}
+              <Link href="/sessions" className="text-primary underline underline-offset-2">
+                View all sessions
+              </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">

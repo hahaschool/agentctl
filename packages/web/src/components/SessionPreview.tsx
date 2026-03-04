@@ -3,6 +3,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ErrorBanner } from '../components/ErrorBanner';
 import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
@@ -137,8 +138,14 @@ export function SessionPreview({
         {/* Content */}
         <div ref={scrollRef} className="flex-1 overflow-auto px-4 py-3">
           {loading && (
-            <div className="p-8 text-center text-muted-foreground text-[13px]">
-              Loading session content...
+            <div className="p-4 space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={`prev-sk-${String(i)}`} className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}>
+                  <Skeleton className="h-3 w-16 mb-2" />
+                  <Skeleton className="h-3 w-full mb-1" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              ))}
             </div>
           )}
 

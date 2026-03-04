@@ -626,6 +626,7 @@ export function DiscoverPage(): React.JSX.Element {
                                   setResuming(s.sessionId);
                                   setResumePrompt('');
                                 }}
+                                aria-label={`Resume session ${s.sessionId.slice(0, 8)}`}
                                 className="px-2.5 py-1 bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
                               >
                                 Resume
@@ -650,12 +651,14 @@ export function DiscoverPage(): React.JSX.Element {
                                   if (e.key === 'Escape') setResuming(null);
                                 }}
                                 placeholder="Enter prompt to resume..."
+                                aria-label="Prompt to resume session"
                                 className="flex-1 px-2.5 py-[5px] bg-background text-foreground border border-border rounded-sm text-xs outline-none"
                               />
                               <button
                                 type="button"
                                 onClick={() => void handleResume(s)}
                                 disabled={!resumePrompt.trim()}
+                                aria-label="Submit resume prompt"
                                 className={cn(
                                   'py-[5px] px-3 bg-primary text-white rounded-sm text-xs border-none cursor-pointer',
                                   !resumePrompt.trim() && 'opacity-50',
