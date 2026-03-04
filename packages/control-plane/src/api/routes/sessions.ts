@@ -618,23 +618,84 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         const workerSessionRef = session.claudeSessionId ?? sessionId;
 
         try {
-          await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/resume`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt,
-              claudeSessionId: session.claudeSessionId,
-              projectPath: session.projectPath,
-              agentId: session.agentId,
-              model: session.model ?? null,
-            }),
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          app.log.warn(
-            { sessionId, machineId: session.machineId, err: message },
-            'Failed to dispatch resume to worker',
+          const workerResponse = await fetch(
+            `${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/resume`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                prompt,
+                claudeSessionId: session.claudeSessionId,
+                projectPath: session.projectPath,
+                agentId: session.agentId,
+                model: session.model ?? null,
+              }),
+            },
           );
+
+          if (!workerResponse.ok) {
+            let workerError: { error?: string; code?: string } = {};
+            try {
+              workerError = (await workerResponse.json()) as { error?: string; code?: string };
+            } catch {
+              /* ignore parse errors */
+            }
+
+            const code = workerError.code ?? 'WORKER_ERROR';
+            const msg = workerError.error ?? `Worker returned HTTP ${String(workerResponse.status)}`;
+
+            // If the worker lost the session (e.g. after restart) and also
+            // couldn't resume via the Claude session ID, revert the DB status.
+            if (workerResponse.status === 404 || code === 'SESSION_NOT_FOUND') {
+              app.log.warn(
+                { sessionId, machineId: session.machineId, workerError: msg },
+                'Worker could not resume session (likely worker restart) — reverting DB status',
+              );
+
+              await db
+                .update(rcSessions)
+                .set({ status: 'ended', endedAt: new Date() })
+                .where(eq(rcSessions.id, sessionId));
+
+              return reply.code(410).send({
+                error: 'SESSION_LOST',
+                message:
+                  'This session was lost due to a worker restart. ' +
+                  'You can fork this session or create a new one to continue.',
+              });
+            }
+
+            app.log.warn(
+              { sessionId, machineId: session.machineId, workerError: msg },
+              'Worker rejected resume — reverting DB status',
+            );
+
+            await db
+              .update(rcSessions)
+              .set({ status: session.status, endedAt: session.endedAt })
+              .where(eq(rcSessions.id, sessionId));
+
+            return reply.code(502).send({
+              error: code,
+              message: msg,
+            });
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          app.log.warn(
+            { sessionId, machineId: session.machineId, err: errMsg },
+            'Failed to dispatch resume to worker — reverting DB status',
+          );
+
+          await db
+            .update(rcSessions)
+            .set({ status: session.status, endedAt: session.endedAt })
+            .where(eq(rcSessions.id, sessionId));
+
+          return reply.code(502).send({
+            error: 'WORKER_UNREACHABLE',
+            message: `Failed to resume session on worker: ${errMsg}`,
+          });
         }
       }
 
@@ -876,9 +937,34 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             /* ignore parse errors */
           }
 
-          // Forward worker error code so the frontend can show specific messages
           const code = workerError.code ?? 'WORKER_ERROR';
           const msg = workerError.error ?? `Worker returned HTTP ${String(workerResponse.status)}`;
+
+          // If the worker doesn't have this session in memory (e.g. after worker
+          // restart), mark it as ended in the DB so the UI reflects reality.
+          if (workerResponse.status === 404 || code === 'SESSION_NOT_FOUND') {
+            app.log.warn(
+              { sessionId, machineId: session.machineId, workerError: msg },
+              'Worker session not found (likely worker restart) — marking session as ended',
+            );
+
+            await db
+              .update(rcSessions)
+              .set({
+                status: 'ended',
+                endedAt: new Date(),
+              })
+              .where(eq(rcSessions.id, sessionId));
+
+            return reply.code(410).send({
+              error: 'SESSION_LOST',
+              message:
+                'This session was lost due to a worker restart. ' +
+                'You can fork this session or create a new one to continue.',
+            });
+          }
+
+          // Forward worker error code so the frontend can show specific messages
           return reply.code(workerResponse.status === 409 ? 409 : 502).send({
             error: code,
             message: msg,
@@ -999,6 +1085,28 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
         if (!workerResponse.ok || !workerResponse.body) {
           const errorText = await workerResponse.text().catch(() => 'Unknown error');
+
+          // If the worker lost the session (e.g. after restart), mark it as
+          // ended in the DB so the frontend can show the correct state.
+          if (workerResponse.status === 404) {
+            app.log.warn(
+              { sessionId, machineId: session.machineId },
+              'Worker session not found for stream (likely worker restart) — marking session as ended',
+            );
+
+            await db
+              .update(rcSessions)
+              .set({ status: 'ended', endedAt: new Date() })
+              .where(eq(rcSessions.id, sessionId));
+
+            return reply.code(410).send({
+              error: 'SESSION_LOST',
+              message:
+                'This session was lost due to a worker restart. ' +
+                'You can fork this session or create a new one to continue.',
+            });
+          }
+
           return reply.code(502).send({
             error: 'WORKER_ERROR',
             message: `Worker stream returned HTTP ${String(workerResponse.status)}: ${errorText}`,

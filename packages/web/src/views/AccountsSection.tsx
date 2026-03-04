@@ -1,8 +1,8 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
-import { useToast } from '@/components/Toast';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { api } from '@/lib/api';
 import type { ApiAccount } from '@/lib/api';
 import {
   accountsQuery,
@@ -101,18 +100,13 @@ function getCredentialConfig(provider: string): CredentialFieldConfig {
 // ---------------------------------------------------------------------------
 
 export function AccountsSection(): React.JSX.Element {
-  const queryClient = useQueryClient();
   const { data: accounts = [], isLoading } = useQuery(accountsQuery());
   const createAccount = useCreateAccount();
   const deleteAccount = useDeleteAccount();
   const testAccount = useTestAccount();
   const updateAccount = useUpdateAccount();
 
-  const toast = useToast();
-  const oauthCleanupRef = useRef<(() => void) | null>(null);
-
   const [showAdd, setShowAdd] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; latencyMs?: number }>>(
@@ -161,58 +155,6 @@ export function AccountsSection(): React.JSX.Element {
 
   async function handleToggleActive(account: ApiAccount): Promise<void> {
     await updateAccount.mutateAsync({ id: account.id, isActive: !account.isActive });
-  }
-
-  async function handleOAuthLogin(): Promise<void> {
-    if (!name) return;
-    setOauthLoading(true);
-    try {
-      const { authorizationUrl } = await api.initiateOAuth(provider, name);
-      const popup = window.open(authorizationUrl, 'anthropic-oauth', 'width=600,height=700');
-
-      // Shared cleanup: removes listener + clears polling interval
-      let checkClosed: ReturnType<typeof setInterval> | null = null;
-
-      const cleanup = (): void => {
-        window.removeEventListener('message', handler);
-        if (checkClosed !== null) {
-          clearInterval(checkClosed);
-          checkClosed = null;
-        }
-        oauthCleanupRef.current = null;
-      };
-
-      const handler = (event: MessageEvent): void => {
-        if (event.origin !== window.location.origin) return;
-        const data = event.data as { type?: string; error?: string };
-        if (data.type === 'oauth_success') {
-          void queryClient.invalidateQueries({ queryKey: ['accounts'] });
-          resetForm();
-          setShowAdd(false);
-        } else if (data.type === 'oauth_error') {
-          toast.error(data.error ?? 'OAuth login failed');
-        } else {
-          // Ignore unrelated messages
-          return;
-        }
-        cleanup();
-        setOauthLoading(false);
-      };
-      window.addEventListener('message', handler);
-
-      // Poll for popup being closed without completing OAuth
-      checkClosed = setInterval(() => {
-        if (popup?.closed) {
-          cleanup();
-          setOauthLoading(false);
-        }
-      }, 1000);
-
-      // Store cleanup so it can be called on dialog close / unmount
-      oauthCleanupRef.current = cleanup;
-    } catch {
-      setOauthLoading(false);
-    }
   }
 
   return (
@@ -320,15 +262,7 @@ export function AccountsSection(): React.JSX.Element {
         )}
 
         {/* Add Account Dialog */}
-        <Dialog
-          open={showAdd}
-          onOpenChange={(open) => {
-            if (!open) {
-              oauthCleanupRef.current?.();
-            }
-            setShowAdd(open);
-          }}
-        >
+        <Dialog open={showAdd} onOpenChange={setShowAdd}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add Account</DialogTitle>
@@ -371,23 +305,9 @@ export function AccountsSection(): React.JSX.Element {
                 </Select>
               </div>
 
-              {provider && OAUTH_PROVIDERS.has(provider) && (
-                <div className="space-y-2">
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    disabled={!name || oauthLoading}
-                    onClick={() => void handleOAuthLogin()}
-                  >
-                    {oauthLoading ? 'Waiting for login...' : 'Login with Anthropic'}
-                  </Button>
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <div className="flex-1 border-t" />
-                    <span>or paste token manually</span>
-                    <div className="flex-1 border-t" />
-                  </div>
-                </div>
-              )}
+              {/* OAuth login is disabled until a registered OAuth client_id with
+                  our redirect_uri is available from Anthropic. For now, users
+                  paste the session token from `claude login` manually. */}
 
               {provider && (
                 <div className="space-y-1.5">

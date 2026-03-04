@@ -745,7 +745,14 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
               });
             }, 1000);
           },
-          onError: (err) => toast.error(err.message),
+          onError: (err) => {
+            toast.error(err.message);
+            // Refresh session data so the UI reflects any status change
+            // (e.g. session marked as ended after worker restart)
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.session(session.id),
+            });
+          },
         },
       );
     } else if (canResume) {
@@ -760,7 +767,14 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
               queryKey: queryKeys.session(session.id),
             });
           },
-          onError: (err) => toast.error(err.message),
+          onError: (err) => {
+            toast.error(err.message);
+            // Refresh session data so the UI reflects any status change
+            // (e.g. session marked as ended after worker restart)
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.session(session.id),
+            });
+          },
         },
       );
     }
