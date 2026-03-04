@@ -1,5 +1,9 @@
 'use client';
 
+import Link from 'next/link';
+
+import { Button } from '@/components/ui/button';
+
 export default function ErrorPage({
   error,
   reset,
@@ -19,13 +23,12 @@ export default function ErrorPage({
           {error.message}
         </p>
       )}
-      <button
-        type="button"
-        onClick={reset}
-        className="px-4 py-2 bg-primary text-primary-foreground rounded-sm text-sm font-medium cursor-pointer"
-      >
-        Try Again
-      </button>
+      <div className="flex gap-3">
+        <Button onClick={reset}>Try Again</Button>
+        <Button variant="outline" asChild>
+          <Link href="/">Back to Dashboard</Link>
+        </Button>
+      </div>
     </div>
   );
 }

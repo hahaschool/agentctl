@@ -5,6 +5,9 @@ import Link from 'next/link';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
+import { RefreshButton } from '../components/RefreshButton';
 import { healthQuery } from '../lib/queries';
 
 // ---------------------------------------------------------------------------
@@ -16,16 +19,27 @@ export function RouterConfigView(): React.JSX.Element {
   const litellm = health.data?.dependencies?.litellm;
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl space-y-6 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/settings"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          &larr; Settings
-        </Link>
-        <h1 className="text-[22px] font-bold">LiteLLM Router</h1>
+    <div className="relative p-4 md:p-6 max-w-3xl space-y-6 animate-fade-in">
+      <FetchingBar isFetching={health.isFetching && !health.isLoading} />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/settings"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            &larr; Settings
+          </Link>
+          <h1 className="text-[22px] font-bold">LiteLLM Router</h1>
+        </div>
+        <RefreshButton
+          onClick={() => void health.refetch()}
+          isFetching={health.isFetching && !health.isLoading}
+        />
       </div>
+
+      {health.error && (
+        <ErrorBanner message={health.error.message} onRetry={() => void health.refetch()} />
+      )}
 
       {/* Proxy Status */}
       <Card>
