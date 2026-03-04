@@ -117,6 +117,20 @@ export type AccountDefaults = {
   failoverPolicy: 'none' | 'priority' | 'round_robin';
 };
 
+export type RouterModelsResponse = {
+  models: string[];
+};
+
+export type ModelDeploymentInfo = {
+  modelName: string;
+  litellmParams: Record<string, unknown>;
+  modelInfo: Record<string, unknown>;
+};
+
+export type RouterModelsInfoResponse = {
+  deployments: ModelDeploymentInfo[];
+};
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -243,6 +257,13 @@ export const api = {
     );
   },
 
+  // OAuth
+  initiateOAuth: (provider: string, accountName: string) =>
+    request<{ authorizationUrl: string; state: string }>('/api/oauth/initiate', {
+      method: 'POST',
+      body: JSON.stringify({ provider, accountName }),
+    }),
+
   // Accounts
   listAccounts: () => request<ApiAccount[]>('/api/settings/accounts'),
   createAccount: (body: {
@@ -303,4 +324,8 @@ export const api = {
     }
     return result;
   },
+
+  // Router / LiteLLM
+  getRouterModels: () => request<RouterModelsResponse>('/api/router/models'),
+  getRouterModelsInfo: () => request<RouterModelsInfoResponse>('/api/router/models/info'),
 };

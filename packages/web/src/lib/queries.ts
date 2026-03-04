@@ -24,6 +24,8 @@ export const queryKeys = {
   accounts: ['accounts'] as const,
   accountDefaults: ['account-defaults'] as const,
   projectAccounts: ['project-accounts'] as const,
+  routerModels: ['router', 'models'] as const,
+  routerModelsInfo: ['router', 'models-info'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -141,6 +143,22 @@ export function projectAccountsQuery() {
   return queryOptions({
     queryKey: queryKeys.projectAccounts,
     queryFn: api.listProjectAccounts,
+  });
+}
+
+export function routerModelsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.routerModels,
+    queryFn: api.getRouterModels,
+    staleTime: 30_000,
+  });
+}
+
+export function routerModelsInfoQuery() {
+  return queryOptions({
+    queryKey: queryKeys.routerModelsInfo,
+    queryFn: api.getRouterModelsInfo,
+    staleTime: 30_000,
   });
 }
 

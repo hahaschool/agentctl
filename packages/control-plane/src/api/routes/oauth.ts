@@ -29,19 +29,19 @@ type PendingFlow = {
 const FLOW_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
 
-// Placeholder authorization endpoints — update when Anthropic publishes OAuth docs.
+// Claude Code OAuth endpoints (PKCE public-client flow used by `claude login`).
 const OAUTH_ENDPOINTS: Record<string, { authorizeUrl: string; tokenUrl: string }> = {
   claude_max: {
-    authorizeUrl: 'https://auth.anthropic.com/oauth/authorize',
-    tokenUrl: 'https://auth.anthropic.com/oauth/token',
+    authorizeUrl: 'https://claude.ai/oauth/authorize',
+    tokenUrl: 'https://claude.ai/oauth/token',
   },
   claude_team: {
-    authorizeUrl: 'https://auth.anthropic.com/oauth/authorize',
-    tokenUrl: 'https://auth.anthropic.com/oauth/token',
+    authorizeUrl: 'https://claude.ai/oauth/authorize',
+    tokenUrl: 'https://claude.ai/oauth/token',
   },
 };
 
-const CLIENT_ID = process.env.ANTHROPIC_OAUTH_CLIENT_ID ?? 'agentctl';
+const CLIENT_ID = process.env.ANTHROPIC_OAUTH_CLIENT_ID ?? '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 const REDIRECT_PATH = '/api/oauth/callback';
 
 // ---------------------------------------------------------------------------
