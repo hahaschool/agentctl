@@ -298,16 +298,16 @@ export default function AgentDetailPage(): React.JSX.Element {
                     <th scope="col" className="pb-2 pr-4 font-medium">
                       Prompt
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
+                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
                       Duration
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
+                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
                       Cost
                     </th>
                     <th scope="col" className="pb-2 pr-4 font-medium">
                       Started
                     </th>
-                    <th scope="col" className="pb-2 font-medium">
+                    <th scope="col" className="pb-2 font-medium hidden md:table-cell">
                       Ended
                     </th>
                   </tr>
@@ -341,16 +341,16 @@ export default function AgentDetailPage(): React.JSX.Element {
                           </div>
                         )}
                       </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground hidden sm:table-cell">
                         {formatDurationMs(run.durationMs)}
                       </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground hidden sm:table-cell">
                         {formatCost(run.costUsd)}
                       </td>
                       <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
                         <LiveTimeAgo date={run.startedAt} />
                       </td>
-                      <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                      <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
                         {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : 'In progress'}
                       </td>
                     </tr>
