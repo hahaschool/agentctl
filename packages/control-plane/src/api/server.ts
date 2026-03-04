@@ -19,6 +19,7 @@ import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
+import { accountRoutes } from './routes/accounts.js';
 import { agentRoutes } from './routes/agents.js';
 import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
@@ -31,8 +32,8 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
-import { accountRoutes } from './routes/accounts.js';
 import { sessionRoutes } from './routes/sessions.js';
+import { settingsRoutes } from './routes/settings.js';
 import { streamRoutes } from './routes/stream.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { wsRoutes } from './routes/ws.js';
@@ -308,6 +309,11 @@ export async function createServer({
         encryptionKey,
       });
     }
+
+    await app.register(settingsRoutes, {
+      prefix: '/api/settings',
+      db,
+    });
   }
 
   // --- Global error handler ---
