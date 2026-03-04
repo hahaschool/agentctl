@@ -152,12 +152,25 @@ export class CliSessionManager extends EventEmitter {
    * a previous conversation.
    */
   startSession(options: StartCliSessionOptions): CliSession {
-    if (this.sessions.size >= this.maxConcurrentSessions) {
+    // Only count actively running sessions toward the concurrent limit —
+    // errored/completed sessions should not block new ones.
+    const activeSessions = [...this.sessions.values()].filter(
+      (s) => s.status === 'running' || s.status === 'starting',
+    ).length;
+
+    if (activeSessions >= this.maxConcurrentSessions) {
       throw new AgentError(
         'MAX_SESSIONS_EXCEEDED',
         `Maximum concurrent sessions (${this.maxConcurrentSessions}) exceeded`,
-        { current: this.sessions.size, max: this.maxConcurrentSessions },
+        { current: activeSessions, max: this.maxConcurrentSessions },
       );
+    }
+
+    // Clean up old finished sessions to prevent memory leaks
+    for (const [sid, s] of this.sessions) {
+      if (s.status === 'error' || s.status === 'ended') {
+        this.sessions.delete(sid);
+      }
     }
 
     this.sessionCounter++;

@@ -141,7 +141,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           });
 
           if (!response.ok) {
-            throw new Error(`Worker returned HTTP ${String(response.status)}`);
+            throw new ControlPlaneError(
+              'WORKER_HTTP_ERROR',
+              `Worker returned HTTP ${String(response.status)}`,
+              { machineId: machine.id, status: response.status },
+            );
           }
 
           const body = (await response.json()) as WorkerDiscoverResponse;
@@ -699,7 +703,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           .where(eq(apiAccounts.id, resolvedAccountId));
 
         if (account) {
-          accountCredential = decryptCredential(account.encryptedCredential, encryptionKey);
+          accountCredential = decryptCredential(
+            account.credential,
+            account.credentialIv,
+            encryptionKey,
+          );
           accountProvider = account.provider;
         }
       }
@@ -757,7 +765,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             .set({
               status: 'error',
               endedAt: new Date(),
-              metadata: { ...inserted.metadata, errorMessage: errorText },
+              metadata: { ...(inserted.metadata as Record<string, unknown>), errorMessage: errorText },
             })
             .where(eq(rcSessions.id, newSessionId));
         }
@@ -769,7 +777,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           .set({
             status: 'error',
             endedAt: new Date(),
-            metadata: { ...inserted.metadata, errorMessage: errMsg },
+            metadata: { ...(inserted.metadata as Record<string, unknown>), errorMessage: errMsg },
           })
           .where(eq(rcSessions.id, newSessionId));
       }
@@ -861,10 +869,19 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         );
 
         if (!workerResponse.ok) {
-          const errorText = await workerResponse.text().catch(() => 'Unknown error');
-          return reply.code(502).send({
-            error: 'WORKER_ERROR',
-            message: `Worker returned HTTP ${String(workerResponse.status)}: ${errorText}`,
+          let workerError: { error?: string; code?: string } = {};
+          try {
+            workerError = (await workerResponse.json()) as { error?: string; code?: string };
+          } catch {
+            /* ignore parse errors */
+          }
+
+          // Forward worker error code so the frontend can show specific messages
+          const code = workerError.code ?? 'WORKER_ERROR';
+          const msg = workerError.error ?? `Worker returned HTTP ${String(workerResponse.status)}`;
+          return reply.code(workerResponse.status === 409 ? 409 : 502).send({
+            error: code,
+            message: msg,
           });
         }
 
