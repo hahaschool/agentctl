@@ -41,13 +41,15 @@ export function SessionDetailView(): React.JSX.Element {
   const session = useQuery(sessionQuery(sessionId));
   const s = session.data;
 
-  // We need machineId to fetch content — wait for session to load
+  // We need the Claude session ID (not the RC session ID) to fetch content
+  const claudeSessionId = s?.claudeSessionId ?? '';
   const content = useQuery({
-    ...sessionContentQuery(sessionId, {
+    ...sessionContentQuery(claudeSessionId, {
       machineId: s?.machineId ?? '',
       projectPath: s?.projectPath ?? undefined,
       limit: 500,
     }),
+    enabled: !!claudeSessionId && !!s?.machineId,
     refetchInterval: s?.status === 'active' ? 3_000 : false,
     refetchOnWindowFocus: true,
   });
@@ -173,6 +175,23 @@ function SessionHeader({
           <span>Running for {formatDuration(session.startedAt)}</span>
         )}
       </div>
+
+      {/* Error details */}
+      {session.status === 'error' && (
+        <div className="mt-2 px-3 py-2 rounded-sm bg-red-950/50 border border-red-900/50 text-[12px] text-red-300">
+          <span className="font-semibold text-red-400">Error: </span>
+          {typeof session.metadata?.errorMessage === 'string'
+            ? session.metadata.errorMessage
+            : 'Session ended with an error (no details available)'}
+        </div>
+      )}
+
+      {/* Starting indicator */}
+      {session.status === 'starting' && (
+        <div className="mt-2 px-3 py-2 rounded-sm bg-yellow-950/40 border border-yellow-900/40 text-[12px] text-yellow-300 animate-pulse">
+          Waiting for worker to start session...
+        </div>
+      )}
 
       {/* Cost / Model metadata (when available) */}
       <SessionMetadataBadges metadata={session.metadata} />
