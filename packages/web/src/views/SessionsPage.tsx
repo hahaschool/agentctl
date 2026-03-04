@@ -6,6 +6,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -1123,9 +1124,9 @@ function SessionContent({
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[9px] font-semibold text-green-500">Streaming</span>
             </div>
-            <pre className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto">
+            <AnsiText className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto m-0">
               {stream.streamOutput.join('')}
-            </pre>
+            </AnsiText>
           </div>
         )}
       </div>
@@ -1166,7 +1167,7 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
           expanded && 'max-h-none overflow-visible',
         )}
       >
-        {displayContent}
+        <AnsiSpan>{displayContent}</AnsiSpan>
       </div>
       {isLong && (
         <button

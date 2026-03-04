@@ -88,7 +88,8 @@ type UseWebSocketOptions = {
 
 type UseWebSocketResult = {
   status: WsConnectionStatus;
-  send: (message: WsOutgoingMessage) => void;
+  /** Send a message. Returns `true` if sent immediately, `false` if queued. */
+  send: (message: WsOutgoingMessage) => boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,7 @@ type UseWebSocketResult = {
 const BASE_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
 const RECONNECT_JITTER = 0.3;
+const MAX_QUEUED_MESSAGES = 50;
 
 // ---------------------------------------------------------------------------
 // URL resolver
@@ -147,6 +149,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Queue for messages sent while the WebSocket is not connected.
+  const messageQueueRef = useRef<WsOutgoingMessage[]>([]);
+
   // Resolved URL (stable across renders unless `url` prop changes).
   const resolvedUrl = resolveWsUrl(url);
 
@@ -186,6 +191,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
     ws.addEventListener('open', () => {
       setStatus('connected');
       reconnectAttemptRef.current = 0;
+
+      // Flush any messages that were queued while disconnected.
+      const queued = messageQueueRef.current;
+      if (queued.length > 0) {
+        for (const msg of queued) {
+          ws.send(JSON.stringify(msg));
+        }
+        messageQueueRef.current = [];
+      }
+
       onOpenRef.current?.();
     });
 
@@ -229,6 +244,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
         reconnectTimerRef.current = null;
       }
 
+      // Discard queued messages on intentional disconnect.
+      messageQueueRef.current = [];
+
       // Close the WebSocket without triggering a reconnect.
       const ws = socketRef.current;
       if (ws) {
@@ -246,11 +264,27 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
     };
   }, [enabled, connect]);
 
-  const send = useCallback((message: WsOutgoingMessage) => {
+  const send = useCallback((message: WsOutgoingMessage): boolean => {
     const ws = socketRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message));
+      return true;
     }
+
+    // Queue the message for delivery when the connection is (re-)established.
+    const queue = messageQueueRef.current;
+    if (queue.length >= MAX_QUEUED_MESSAGES) {
+      // Drop the oldest message to make room.
+      queue.shift();
+    }
+    queue.push(message);
+
+    console.warn(
+      `[useWebSocket] Message queued (type=${message.type}, queue size=${queue.length}). ` +
+        'WebSocket is not connected — will flush on reconnect.',
+    );
+
+    return false;
   }, []);
 
   return { status, send };

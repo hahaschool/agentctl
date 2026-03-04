@@ -43,7 +43,9 @@ type UseSessionStreamResult = {
 // Hook implementation
 // ---------------------------------------------------------------------------
 
-const RECONNECT_DELAY_MS = 3_000;
+const BASE_RECONNECT_MS = 1_000;
+const MAX_RECONNECT_MS = 30_000;
+const RECONNECT_JITTER = 0.3;
 
 export function useSessionStream(options: UseSessionStreamOptions): UseSessionStreamResult {
   const { sessionId, enabled = true, onEvent } = options;
@@ -59,6 +61,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
 
   // Reset state when sessionId changes
   const resetState = useCallback(() => {
@@ -88,7 +91,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       eventSourceRef.current = es;
 
       es.onopen = () => {
-        if (!cancelled) setConnected(true);
+        if (!cancelled) {
+          setConnected(true);
+          reconnectAttemptRef.current = 0;
+        }
       };
 
       es.onerror = () => {
@@ -97,11 +103,17 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         es.close();
         eventSourceRef.current = null;
 
-        // Reconnect after delay
+        // Reconnect with exponential backoff + jitter
+        const attempt = reconnectAttemptRef.current;
+        const base = Math.min(BASE_RECONNECT_MS * 2 ** attempt, MAX_RECONNECT_MS);
+        const jitter = base * RECONNECT_JITTER * (Math.random() * 2 - 1);
+        const delay = Math.max(0, base + jitter);
+        reconnectAttemptRef.current = attempt + 1;
+
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = null;
           connect();
-        }, RECONNECT_DELAY_MS);
+        }, delay);
       };
 
       // Handle named events

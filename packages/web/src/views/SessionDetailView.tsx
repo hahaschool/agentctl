@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -220,7 +221,10 @@ function SessionHeader({
             onChange={(e) => setForkPrompt(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleFork();
-              if (e.key === 'Escape') setShowFork(false);
+              if (e.key === 'Escape') {
+                setShowFork(false);
+                setForkPrompt('');
+              }
             }}
             placeholder="Prompt for the forked session..."
             className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
@@ -429,9 +433,9 @@ function MessageList({
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[10px] font-semibold text-green-500">Streaming</span>
             </div>
-            <pre className="text-[12px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-auto">
+            <AnsiText className="text-[12px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-auto m-0">
               {streamOutput.join('')}
-            </pre>
+            </AnsiText>
           </div>
         )}
       </div>
@@ -508,7 +512,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
           isTool ? 'text-[11px] font-mono max-h-[400px] overflow-auto' : 'text-[13px]',
         )}
       >
-        {displayContent}
+        <AnsiSpan>{displayContent}</AnsiSpan>
       </div>
       {isLong && !isTool && (
         <button

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -33,6 +34,7 @@ const NAV_COMMANDS = [
 
 export function CommandPalette({ open, onClose }: Props): React.JSX.Element | null {
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
@@ -64,8 +66,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       section: 'Actions',
       shortcut: 'Theme',
       action: () => {
-        // Dispatch theme toggle event
-        document.documentElement.classList.toggle('dark');
+        setTheme(theme === 'dark' ? 'light' : 'dark');
         onClose();
       },
     });
@@ -84,7 +85,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     });
 
     return items;
-  }, [router, onClose]);
+  }, [router, onClose, theme, setTheme]);
 
   // Filter commands by query
   const filtered = useMemo(() => {
