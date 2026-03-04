@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 
 const SHORTCUTS = [
   { keys: ['1–7'], desc: 'Navigate to page' },
+  { keys: ['\u2318K'], desc: 'Command palette' },
   { keys: ['r'], desc: 'Refresh current page' },
   { keys: ['/'], desc: 'Focus search (Discover)' },
   { keys: ['Esc'], desc: 'Close panels / Cancel' },

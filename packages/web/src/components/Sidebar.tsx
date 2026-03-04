@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { useWebSocket } from '../hooks/use-websocket';
+import { CommandPalette } from './CommandPalette';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
 import { WsStatusIndicator } from './WsStatusIndicator';
 
@@ -39,6 +40,7 @@ export function Sidebar(): React.JSX.Element {
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const { status: wsStatus } = useWebSocket();
 
   useEffect(() => setMounted(true), []);
@@ -52,9 +54,16 @@ export function Sidebar(): React.JSX.Element {
     }
   });
 
-  // Keyboard shortcuts: 1-7 to navigate pages, Esc to close mobile menu
+  // Keyboard shortcuts: 1-7 to navigate pages, Cmd+K for command palette, Esc to close
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
+      // Cmd+K / Ctrl+K — command palette (works even in inputs)
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setShowCommandPalette((prev) => !prev);
+        return;
+      }
+
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
@@ -167,6 +176,9 @@ export function Sidebar(): React.JSX.Element {
             <Kbd>1</Kbd>-<Kbd>7</Kbd> Navigate
           </div>
           <div>
+            <Kbd>{'\u2318'}K</Kbd> Command palette
+          </div>
+          <div>
             <Kbd>Esc</Kbd> Close panels
           </div>
         </div>
@@ -194,6 +206,7 @@ export function Sidebar(): React.JSX.Element {
       </nav>
 
       <KeyboardHelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
+      <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
     </>
   );
 }
