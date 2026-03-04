@@ -525,20 +525,22 @@ export function SessionsPage(): React.JSX.Element {
           ) : filteredSessions.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground text-[13px]">
               {searchQuery || statusFilter !== 'all' ? (
-              <>
-                No matching sessions.{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setStatusFilter('all');
-                  }}
-                  className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px]"
-                >
-                  Clear filters
-                </button>
-              </>
-            ) : 'No sessions found'}
+                <>
+                  No matching sessions.{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                    }}
+                    className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px]"
+                  >
+                    Clear filters
+                  </button>
+                </>
+              ) : (
+                'No sessions found'
+              )}
             </div>
           ) : groupedSessions ? (
             Array.from(groupedSessions.entries()).map(([groupKey, groupItems]) => (
@@ -718,7 +720,11 @@ export function SessionsPage(): React.JSX.Element {
                 placeholder={
                   selected.status === 'active' ? 'Send message...' : 'Resume session with prompt...'
                 }
-                aria-label={selected.status === 'active' ? 'Message to send to session' : 'Prompt to resume session'}
+                aria-label={
+                  selected.status === 'active'
+                    ? 'Message to send to session'
+                    : 'Prompt to resume session'
+                }
                 className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none"
               />
               <button
@@ -965,7 +971,10 @@ function SessionContent({
         {loading && (
           <div className="p-4 space-y-3">
             {[1, 2, 3, 4].map((i) => (
-              <div key={`msg-sk-${String(i)}`} className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}>
+              <div
+                key={`msg-sk-${String(i)}`}
+                className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
+              >
                 <Skeleton className="h-3 w-16 mb-2" />
                 <Skeleton className="h-3 w-full mb-1" />
                 <Skeleton className="h-3 w-3/4" />

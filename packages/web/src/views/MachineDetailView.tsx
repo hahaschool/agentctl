@@ -198,11 +198,21 @@ export function MachineDetailView(): React.JSX.Element {
               <table className="w-full text-sm" aria-label="Agents on this machine">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th scope="col" className="pb-2 pr-4 font-medium">Name</th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">Status</th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">Type</th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">Project</th>
-                    <th scope="col" className="pb-2 font-medium">Last Run</th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Name
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Status
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Type
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Project
+                    </th>
+                    <th scope="col" className="pb-2 font-medium">
+                      Last Run
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -276,11 +286,21 @@ export function MachineDetailView(): React.JSX.Element {
               <table className="w-full text-sm" aria-label="Recent sessions on this machine">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th scope="col" className="pb-2 pr-4 font-medium">Session ID</th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">Status</th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">Agent</th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">Project</th>
-                    <th scope="col" className="pb-2 font-medium">Started</th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Session ID
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Status
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Agent
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Project
+                    </th>
+                    <th scope="col" className="pb-2 font-medium">
+                      Started
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

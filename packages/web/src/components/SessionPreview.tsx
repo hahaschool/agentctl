@@ -120,7 +120,9 @@ export function SessionPreview({
         {/* Header */}
         <div className="px-4 py-3 border-b border-border flex justify-between items-center shrink-0">
           <div className="min-w-0 flex-1">
-            <div id="session-preview-title" className="text-sm font-semibold">Session Preview</div>
+            <div id="session-preview-title" className="text-sm font-semibold">
+              Session Preview
+            </div>
             <div className="text-[11px] text-muted-foreground font-mono mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">
               {sessionId.slice(0, 32)}...
             </div>
@@ -164,7 +166,10 @@ export function SessionPreview({
           {loading && (
             <div className="p-4 space-y-3">
               {[1, 2, 3, 4].map((i) => (
-                <div key={`prev-sk-${String(i)}`} className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}>
+                <div
+                  key={`prev-sk-${String(i)}`}
+                  className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
+                >
                   <Skeleton className="h-3 w-16 mb-2" />
                   <Skeleton className="h-3 w-full mb-1" />
                   <Skeleton className="h-3 w-3/4" />

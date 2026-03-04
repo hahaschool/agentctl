@@ -213,7 +213,10 @@ export function DashboardPage(): React.JSX.Element {
           <SectionHeader title="Fleet Status" />
           <div className="border border-border rounded-lg overflow-hidden">
             {machineList.length === 0 ? (
-              <DashboardEmptyPanel loading={machines.isLoading} message="No machines registered. Run setup-machine.sh on a host to register it." />
+              <DashboardEmptyPanel
+                loading={machines.isLoading}
+                message="No machines registered. Run setup-machine.sh on a host to register it."
+              />
             ) : (
               machineList.map((machine, idx) => (
                 <div
@@ -353,9 +356,5 @@ function DashboardEmptyPanel({
       </div>
     );
   }
-  return (
-    <div className="p-8 text-center text-muted-foreground bg-card text-[13px]">
-      {message}
-    </div>
-  );
+  return <div className="p-8 text-center text-muted-foreground bg-card text-[13px]">{message}</div>;
 }

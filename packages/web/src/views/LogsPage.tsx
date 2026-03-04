@@ -223,12 +223,24 @@ export function LogsPage(): React.JSX.Element {
           <table className="w-full border-collapse text-[13px]" aria-label="Worker machines">
             <thead>
               <tr className="bg-muted text-left">
-                <th scope="col" className={TH_CLASSES}>Hostname</th>
-                <th scope="col" className={TH_CLASSES}>Status</th>
-                <th scope="col" className={cn(TH_CLASSES, 'hidden sm:table-cell')}>Tailscale IP</th>
-                <th scope="col" className={cn(TH_CLASSES, 'hidden md:table-cell')}>OS / Arch</th>
-                <th scope="col" className={cn(TH_CLASSES, 'hidden md:table-cell')}>Max Agents</th>
-                <th scope="col" className={TH_CLASSES}>Last Heartbeat</th>
+                <th scope="col" className={TH_CLASSES}>
+                  Hostname
+                </th>
+                <th scope="col" className={TH_CLASSES}>
+                  Status
+                </th>
+                <th scope="col" className={cn(TH_CLASSES, 'hidden sm:table-cell')}>
+                  Tailscale IP
+                </th>
+                <th scope="col" className={cn(TH_CLASSES, 'hidden md:table-cell')}>
+                  OS / Arch
+                </th>
+                <th scope="col" className={cn(TH_CLASSES, 'hidden md:table-cell')}>
+                  Max Agents
+                </th>
+                <th scope="col" className={TH_CLASSES}>
+                  Last Heartbeat
+                </th>
               </tr>
             </thead>
             <tbody>
