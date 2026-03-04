@@ -143,7 +143,7 @@ export function LogsPage(): React.JSX.Element {
                   <StatusBadge status={dep.status} />
                 </div>
                 <div className="text-[11px] text-muted-foreground font-mono">
-                  Latency: {dep.latencyMs.toFixed(0)}ms
+                  Latency: {dep.latencyMs?.toFixed(0) ?? '-'}ms
                 </div>
                 {dep.error && (
                   <div className="text-[11px] text-red-500 mt-1 break-all">{dep.error}</div>

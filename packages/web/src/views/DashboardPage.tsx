@@ -311,7 +311,7 @@ export function DashboardPage(): React.JSX.Element {
                 <span className="text-[13px] font-medium capitalize">{name}</span>
                 <span className="flex items-center gap-2">
                   <span className="text-[11px] text-muted-foreground font-mono">
-                    {dep.latencyMs.toFixed(0)}ms
+                    {dep.latencyMs?.toFixed(0) ?? '-'}ms
                   </span>
                   <StatusBadge status={dep.status} />
                 </span>

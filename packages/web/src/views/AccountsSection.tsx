@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -100,7 +100,6 @@ function getCredentialConfig(provider: string): CredentialFieldConfig {
 
 export function AccountsSection(): React.JSX.Element {
   const { data: accounts = [], isLoading } = useQuery(accountsQuery());
-  const queryClient = useQueryClient();
   const createAccount = useCreateAccount();
   const deleteAccount = useDeleteAccount();
   const testAccount = useTestAccount();
@@ -112,8 +111,6 @@ export function AccountsSection(): React.JSX.Element {
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; latencyMs?: number }>>(
     {},
   );
-  const [oauthLoading, setOauthLoading] = useState(false);
-
   // -- Create form state --
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('');
@@ -125,54 +122,6 @@ export function AccountsSection(): React.JSX.Element {
     setProvider('');
     setCredential('');
     setPriority('0');
-    setOauthLoading(false);
-  }
-
-  // Listen for OAuth postMessage from popup window
-  const handleOAuthMessage = useCallback(
-    (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      const data = event.data as { type?: string } | null;
-      if (!data?.type) return;
-
-      if (data.type === 'oauth_success') {
-        void queryClient.invalidateQueries({ queryKey: ['accounts'] });
-        setName('');
-        setProvider('');
-        setCredential('');
-        setPriority('0');
-        setOauthLoading(false);
-        setShowAdd(false);
-      } else if (data.type === 'oauth_error') {
-        setOauthLoading(false);
-      }
-    },
-    [queryClient],
-  );
-
-  useEffect(() => {
-    window.addEventListener('message', handleOAuthMessage);
-    return () => window.removeEventListener('message', handleOAuthMessage);
-  }, [handleOAuthMessage]);
-
-  async function handleOAuthLogin(): Promise<void> {
-    if (!name || !provider) return;
-    setOauthLoading(true);
-    try {
-      const res = await fetch('/api/oauth/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, accountName: name }),
-      });
-      if (!res.ok) {
-        setOauthLoading(false);
-        return;
-      }
-      const body = (await res.json()) as { authorizationUrl: string };
-      window.open(body.authorizationUrl, 'anthropic-oauth', 'width=600,height=700');
-    } catch {
-      setOauthLoading(false);
-    }
   }
 
   async function handleCreate(): Promise<void> {
@@ -359,14 +308,14 @@ export function AccountsSection(): React.JSX.Element {
                 <div className="space-y-2">
                   <Button
                     className="w-full"
-                    onClick={() => void handleOAuthLogin()}
-                    disabled={!name || oauthLoading}
+                    disabled
+                    variant="outline"
                   >
-                    {oauthLoading ? 'Waiting for login...' : 'Login with Anthropic'}
+                    Login with Anthropic (Coming Soon)
                   </Button>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                     <div className="flex-1 border-t" />
-                    <span>or paste manually</span>
+                    <span>paste token manually</span>
                     <div className="flex-1 border-t" />
                   </div>
                 </div>

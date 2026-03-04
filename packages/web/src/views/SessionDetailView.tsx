@@ -165,6 +165,16 @@ function SessionHeader({
           Machine: <CopyableText value={session.machineId} maxDisplay={12} />
         </span>
         {session.projectPath && <PathBadge path={session.projectPath} />}
+        {session.accountId && (
+          <span className="flex items-center gap-1">
+            Account: <CopyableText value={session.accountId} maxDisplay={12} />
+          </span>
+        )}
+        {session.model && (
+          <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm border border-border">
+            {session.model}
+          </span>
+        )}
         <span>
           Started <LiveTimeAgo date={session.startedAt} />
         </span>

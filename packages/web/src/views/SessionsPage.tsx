@@ -717,6 +717,12 @@ export function SessionsPage(): React.JSX.Element {
                 <DetailRow label="Project" value={selected.projectPath ?? '-'} mono />
                 <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
                 <DetailRow label="PID" value={selected.pid ? String(selected.pid) : '-'} mono />
+                {selected.accountId && (
+                  <DetailRow label="Account" value={selected.accountId} mono />
+                )}
+                {selected.model && (
+                  <DetailRow label="Model" value={selected.model} />
+                )}
                 <DetailRow label="Started" value={formatDateTime(selected.startedAt)} />
                 {selected.endedAt && (
                   <DetailRow label="Ended" value={formatDateTime(selected.endedAt)} />
