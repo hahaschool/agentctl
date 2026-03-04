@@ -610,8 +610,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       if (machine && machine.status !== 'offline') {
         const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
 
+        // The worker looks up sessions by its internal ID or claudeSessionId
+        const workerSessionRef = session.claudeSessionId ?? sessionId;
+
         try {
-          await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/resume`, {
+          await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/resume`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -693,9 +696,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
 
+      // The worker looks up sessions by its internal ID or claudeSessionId,
+      // NOT by the control-plane's RC session UUID. Send claudeSessionId.
+      const workerSessionRef = session.claudeSessionId ?? sessionId;
+
       try {
         const workerResponse = await fetch(
-          `${workerBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/message`,
+          `${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/message`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
