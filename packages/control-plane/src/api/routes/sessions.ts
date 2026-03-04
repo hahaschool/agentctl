@@ -942,6 +942,100 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   );
 
   // ---------------------------------------------------------------------------
+  // GET /:sessionId/stream — SSE proxy to worker's stream endpoint
+  // ---------------------------------------------------------------------------
+
+  app.get<{ Params: { sessionId: string } }>(
+    '/:sessionId/stream',
+    { schema: { tags: ['sessions'], summary: 'SSE stream of session output (proxied from worker)' } },
+    async (request, reply) => {
+      const { sessionId } = request.params;
+
+      const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
+
+      if (rows.length === 0) {
+        return reply.code(404).send({
+          error: 'SESSION_NOT_FOUND',
+          message: `Session '${sessionId}' does not exist`,
+        });
+      }
+
+      const session = rows[0];
+
+      const machine = await dbRegistry.getMachine(session.machineId);
+
+      if (!machine || machine.status === 'offline') {
+        return reply.code(503).send({
+          error: 'MACHINE_UNAVAILABLE',
+          message: `Machine '${session.machineId}' is offline`,
+        });
+      }
+
+      const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+      const workerSessionRef = session.claudeSessionId ?? sessionId;
+
+      try {
+        const workerResponse = await fetch(
+          `${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/stream`,
+        );
+
+        if (!workerResponse.ok || !workerResponse.body) {
+          const errorText = await workerResponse.text().catch(() => 'Unknown error');
+          return reply.code(502).send({
+            error: 'WORKER_ERROR',
+            message: `Worker stream returned HTTP ${String(workerResponse.status)}: ${errorText}`,
+          });
+        }
+
+        // Hijack the response for raw SSE piping
+        reply.hijack();
+        const raw = reply.raw;
+
+        raw.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        });
+
+        // Pipe worker's SSE stream to the client
+        const reader = workerResponse.body.getReader();
+        const decoder = new TextDecoder();
+
+        const pump = async (): Promise<void> => {
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done || raw.destroyed) break;
+              raw.write(decoder.decode(value, { stream: true }));
+            }
+          } catch {
+            // Worker disconnected or network error — close client stream
+          } finally {
+            if (!raw.destroyed) {
+              raw.end();
+            }
+          }
+        };
+
+        void pump();
+
+        // Cleanup on client disconnect
+        request.raw.on('close', () => {
+          reader.cancel().catch(() => {});
+        });
+      } catch (err) {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        throw new ControlPlaneError(
+          'WORKER_UNREACHABLE',
+          `Failed to connect to worker stream at ${workerBaseUrl}: ${errMessage}`,
+          { sessionId, machineId: session.machineId },
+        );
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
   // PATCH /:sessionId/status — worker reports session status changes
   //
   // This is called by the agent-worker when a CLI session ends, errors, or

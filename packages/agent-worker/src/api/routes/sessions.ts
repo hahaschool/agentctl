@@ -632,7 +632,8 @@ export async function sessionRoutes(
   app.get<{ Params: SessionIdParams }>('/:sessionId/stream', async (request, reply) => {
     const { sessionId } = request.params;
 
-    const session = sessionManager.getSession(sessionId);
+    const session =
+      sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
     if (!session) {
       throw new WorkerError('SESSION_NOT_FOUND', `Session '${sessionId}' not found`, {
         sessionId,
@@ -654,8 +655,8 @@ export async function sessionRoutes(
       raw.write(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`);
     };
 
-    // 1. Replay buffered events
-    const buf = getOrCreateBuffer(sessionId);
+    // 1. Replay buffered events — use internal session ID for buffer lookup
+    const buf = getOrCreateBuffer(session.id);
     for (const event of buf.events) {
       writeEvent(event);
     }

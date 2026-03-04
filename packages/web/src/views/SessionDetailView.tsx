@@ -18,6 +18,8 @@ import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
 import { useHotkeys } from '../hooks/use-hotkeys';
+import type { SessionStreamEvent } from '../hooks/use-session-stream';
+import { useSessionStream } from '../hooks/use-session-stream';
 import type { Session, SessionContentMessage } from '../lib/api';
 import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
@@ -60,6 +62,24 @@ export function SessionDetailView(): React.JSX.Element {
     void content.refetch();
   }, [session, content]);
 
+  // SSE streaming — connect when session is active for real-time updates
+  const isActive = s?.status === 'active' || s?.status === 'starting';
+  const stream = useSessionStream({
+    sessionId,
+    enabled: isActive ?? false,
+    onEvent: useCallback(
+      (event: SessionStreamEvent) => {
+        // When status changes (e.g., session ends), refetch the full content
+        if (event.event === 'status' || event.event === 'loop_complete') {
+          void session.refetch();
+          void content.refetch();
+        }
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [sessionId],
+    ),
+  });
+
   useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
 
   if (session.isLoading) {
@@ -79,6 +99,7 @@ export function SessionDetailView(): React.JSX.Element {
         dataUpdatedAt={content.dataUpdatedAt || session.dataUpdatedAt}
         isFetching={(content.isFetching || session.isFetching) && !content.isLoading}
         onRefresh={refetchAll}
+        streamConnected={stream.connected}
       />
 
       {/* Content area */}
@@ -89,6 +110,8 @@ export function SessionDetailView(): React.JSX.Element {
           isLoading={content.isLoading}
           error={content.error?.message}
           isActive={s.status === 'active'}
+          streamOutput={stream.streamOutput}
+          streamConnected={stream.connected}
         />
 
         {/* Input area */}
@@ -107,11 +130,13 @@ function SessionHeader({
   dataUpdatedAt,
   isFetching,
   onRefresh,
+  streamConnected,
 }: {
   session: Session;
   dataUpdatedAt: number;
   isFetching: boolean;
   onRefresh: () => void;
+  streamConnected?: boolean;
 }): React.JSX.Element {
   const toast = useToast();
   const deleteSession = useDeleteSession();
@@ -155,7 +180,12 @@ function SessionHeader({
         />
         <StatusBadge status={session.status} />
         {session.status === 'active' && (
-          <span className="text-[11px] text-green-500 animate-pulse">Live</span>
+          <span className={cn(
+            'text-[11px] animate-pulse',
+            streamConnected ? 'text-green-500' : 'text-yellow-500',
+          )}>
+            {streamConnected ? 'Streaming' : 'Live'}
+          </span>
         )}
         <div className="ml-auto flex items-center gap-2">
           <LastUpdated dataUpdatedAt={dataUpdatedAt} />
@@ -275,12 +305,16 @@ function MessageList({
   isLoading,
   error,
   isActive,
+  streamOutput,
+  streamConnected,
 }: {
   messages: SessionContentMessage[];
   totalMessages: number;
   isLoading: boolean;
   error?: string;
   isActive: boolean;
+  streamOutput?: string[];
+  streamConnected?: boolean;
 }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTools, setShowTools] = useState(false);
@@ -290,12 +324,15 @@ function MessageList({
     ? messages
     : messages.filter((m) => m.type === 'human' || m.type === 'assistant');
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages or stream output arrive
   const prevCountRef = useRef(0);
+  const prevStreamLenRef = useRef(0);
   useEffect(() => {
     const count = visibleMessages.length;
-    if (count !== prevCountRef.current) {
+    const streamLen = streamOutput?.length ?? 0;
+    if (count !== prevCountRef.current || streamLen !== prevStreamLenRef.current) {
       prevCountRef.current = count;
+      prevStreamLenRef.current = streamLen;
       if (autoScroll && scrollRef.current) {
         scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
       }
@@ -384,6 +421,19 @@ function MessageList({
         {visibleMessages.map((msg, i) => (
           <MessageBubble key={`${msg.type}-${String(i)}`} message={msg} />
         ))}
+
+        {/* Live streaming output */}
+        {streamConnected && streamOutput && streamOutput.length > 0 && (
+          <div className="rounded-lg border border-green-500/20 bg-green-950/20 p-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[10px] font-semibold text-green-500">Streaming</span>
+            </div>
+            <pre className="text-[12px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-auto">
+              {streamOutput.join('')}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   );
