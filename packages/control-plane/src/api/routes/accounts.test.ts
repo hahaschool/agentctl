@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { accountRoutes } from './accounts.js';
+import { decryptCredential } from '../../utils/credential-crypto.js';
 
 // ---------------------------------------------------------------------------
 // Test encryption key — 32 bytes (64 hex chars) for AES-256
@@ -19,7 +20,7 @@ function makeAccount(overrides: Record<string, unknown> = {}) {
   return {
     id: 'acct-001',
     name: 'Anthropic Direct',
-    provider: 'anthropic',
+    provider: 'anthropic_api',
     credential: 'encrypted-blob',
     credentialIv: 'iv-blob',
     priority: 0,
@@ -471,6 +472,141 @@ describe('Account routes — /api/settings/accounts', () => {
 
       // Restore original fetch
       globalThis.fetch = originalFetch;
+    });
+
+    // -----------------------------------------------------------------------
+    // claude_max / claude_team — session token format validation
+    // -----------------------------------------------------------------------
+
+    it('claude_max: returns ok for valid token', async () => {
+      const account = makeAccount({ provider: 'claude_max' });
+      mockDb.setRows([account]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+
+    it('claude_max: returns 400 for empty/short token', async () => {
+      const account = makeAccount({ provider: 'claude_max' });
+      mockDb.setRows([account]);
+
+      vi.mocked(decryptCredential).mockReturnValueOnce('');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
+      expect(body.message).toMatch(/too short or empty/);
+    });
+
+    // -----------------------------------------------------------------------
+    // bedrock — KEY:SECRET:REGION format validation
+    // -----------------------------------------------------------------------
+
+    it('bedrock: returns ok for valid KEY:SECRET:REGION format', async () => {
+      const account = makeAccount({ provider: 'bedrock' });
+      mockDb.setRows([account]);
+
+      vi.mocked(decryptCredential).mockReturnValueOnce('AKID:SECRET:us-west-2');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+
+    it('bedrock: returns 400 for invalid format (missing parts)', async () => {
+      const account = makeAccount({ provider: 'bedrock' });
+      mockDb.setRows([account]);
+
+      // Default mock returns 'sk-ant-api03-decrypted-key-1234' which has no colons
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
+      expect(body.message).toMatch(/ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION/);
+    });
+
+    // -----------------------------------------------------------------------
+    // vertex — JSON with client_email + private_key validation
+    // -----------------------------------------------------------------------
+
+    it('vertex: returns ok for valid JSON with required fields', async () => {
+      const account = makeAccount({ provider: 'vertex' });
+      mockDb.setRows([account]);
+
+      vi.mocked(decryptCredential).mockReturnValueOnce(
+        '{"client_email":"sa@project.iam.gserviceaccount.com","private_key":"-----BEGIN RSA PRIVATE KEY-----"}',
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+    });
+
+    it('vertex: returns 400 for invalid JSON', async () => {
+      const account = makeAccount({ provider: 'vertex' });
+      mockDb.setRows([account]);
+
+      // Default mock returns 'sk-ant-api03-decrypted-key-1234' which is not valid JSON
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
+      expect(body.message).toMatch(/not valid JSON/);
+    });
+
+    it('vertex: returns 400 for JSON missing client_email', async () => {
+      const account = makeAccount({ provider: 'vertex' });
+      mockDb.setRows([account]);
+
+      vi.mocked(decryptCredential).mockReturnValueOnce(
+        '{"private_key":"-----BEGIN RSA PRIVATE KEY-----"}',
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
+      expect(body.message).toMatch(/client_email and private_key/);
     });
   });
 });

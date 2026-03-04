@@ -187,41 +187,100 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!row) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
-    const key = decryptCredential(row.credential, row.credentialIv, encryptionKey);
-    try {
-      const start = Date.now();
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'hi' }],
-        }),
-      });
-      const latencyMs = Date.now() - start;
-      if (res.ok) {
-        return reply.send({ ok: true, latencyMs });
+    const credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
+
+    switch (row.provider) {
+      case 'anthropic_api': {
+        try {
+          const start = Date.now();
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': credential,
+              'anthropic-version': '2023-06-01',
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 1,
+              messages: [{ role: 'user', content: 'hi' }],
+            }),
+          });
+          const latencyMs = Date.now() - start;
+          if (res.ok) {
+            return reply.send({ ok: true, latencyMs });
+          }
+          return reply.code(400).send({
+            error: 'ACCOUNT_TEST_FAILED',
+            message: await extractErrorMessage(res),
+          });
+        } catch (err) {
+          return reply.code(500).send({
+            error: 'ACCOUNT_TEST_ERROR',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
-      const body = await res.json().catch(() => ({}));
-      return reply.code(400).send({
-        error: 'ACCOUNT_TEST_FAILED',
-        message:
-          (body as Record<string, unknown>).error &&
-          typeof (body as Record<string, unknown>).error === 'object'
-            ? (((body as Record<string, Record<string, unknown>>).error.message as string) ??
-              `HTTP ${String(res.status)}`)
-            : `HTTP ${String(res.status)}`,
-      });
-    } catch (err) {
-      return reply.code(500).send({
-        error: 'ACCOUNT_TEST_ERROR',
-        message: err instanceof Error ? err.message : String(err),
-      });
+
+      case 'claude_max':
+      case 'claude_team': {
+        // Session tokens cannot be API-tested — validate format only
+        if (!credential || credential.length < 10) {
+          return reply.code(400).send({
+            error: 'ACCOUNT_TEST_FAILED',
+            message: 'Session token is too short or empty',
+          });
+        }
+        return reply.send({ ok: true });
+      }
+
+      case 'bedrock': {
+        const parts = credential.split(':');
+        if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
+          return reply.code(400).send({
+            error: 'ACCOUNT_TEST_FAILED',
+            message: 'Bedrock credential must be in format ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION',
+          });
+        }
+        return reply.send({ ok: true });
+      }
+
+      case 'vertex': {
+        try {
+          const parsed = JSON.parse(credential) as Record<string, unknown>;
+          if (!parsed.client_email || !parsed.private_key) {
+            return reply.code(400).send({
+              error: 'ACCOUNT_TEST_FAILED',
+              message: 'Vertex AI service account JSON must contain client_email and private_key',
+            });
+          }
+          return reply.send({ ok: true });
+        } catch {
+          return reply.code(400).send({
+            error: 'ACCOUNT_TEST_FAILED',
+            message: 'Vertex AI credential is not valid JSON',
+          });
+        }
+      }
+
+      default:
+        return reply.code(400).send({
+          error: 'UNKNOWN_PROVIDER',
+          message: `Unknown provider type: ${row.provider}`,
+        });
     }
   });
 };
+
+async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as Record<string, unknown>;
+    if (body.error && typeof body.error === 'object') {
+      const errObj = body.error as Record<string, unknown>;
+      if (typeof errObj.message === 'string') return errObj.message;
+    }
+  } catch {
+    // Fall through to default
+  }
+  return `HTTP ${String(res.status)}`;
+}
