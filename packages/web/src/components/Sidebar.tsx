@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -37,6 +37,7 @@ for (const item of NAV_ITEMS) {
 
 export function Sidebar(): React.JSX.Element {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -74,7 +75,7 @@ export function Sidebar(): React.JSX.Element {
       prevPathRef.current = pathname;
       setMobileOpen(false);
     }
-  });
+  }, [pathname]);
 
   // Keyboard shortcuts: 1-7 to navigate pages, Cmd+K for command palette, Esc to close
   useEffect(() => {
@@ -103,13 +104,12 @@ export function Sidebar(): React.JSX.Element {
       const href = SHORTCUT_MAP[e.key];
       if (href) {
         e.preventDefault();
-        window.history.pushState(null, '', href);
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        router.push(href);
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, []);
+  }, [router]);
 
   const toggleTheme = useCallback((): void => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
