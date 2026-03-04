@@ -40,6 +40,7 @@ export function PathBadge({ path, fallback = '-', className }: Props): React.JSX
       <button
         type="button"
         onClick={handleCopy}
+        aria-label={`Copy path: ${path}`}
         className={cn(
           'font-mono text-xs text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer bg-transparent border-none p-0 text-left hover:text-foreground transition-colors',
           className,

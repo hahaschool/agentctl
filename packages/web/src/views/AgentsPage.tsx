@@ -210,6 +210,7 @@ export function AgentsPage(): React.JSX.Element {
           <button
             type="button"
             onClick={() => void agents.refetch()}
+            aria-label="Refresh agent list"
             className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
           >
             Refresh
@@ -217,6 +218,8 @@ export function AgentsPage(): React.JSX.Element {
           <button
             type="button"
             onClick={() => setShowCreateForm((prev) => !prev)}
+            aria-label={showCreateForm ? 'Cancel agent creation' : 'Show create agent form'}
+            aria-expanded={showCreateForm}
             className="px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-[13px] font-medium cursor-pointer"
           >
             {showCreateForm ? 'Cancel' : 'Create Agent'}

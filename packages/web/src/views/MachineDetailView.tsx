@@ -14,6 +14,7 @@ import { PathBadge } from '@/components/PathBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useHotkeys } from '@/hooks/use-hotkeys';
 import { formatDate } from '@/lib/format-utils';
 import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,19 @@ export function MachineDetailView(): React.JSX.Element {
   const machines = useQuery(machinesQuery());
   const agents = useQuery(agentsQuery());
   const sessions = useQuery(sessionsQuery({ machineId }));
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: () => {
+          void machines.refetch();
+          void agents.refetch();
+          void sessions.refetch();
+        },
+      }),
+      [machines, agents, sessions],
+    ),
+  );
 
   const machine = useMemo(
     () => machines.data?.find((m) => m.id === machineId) ?? null,

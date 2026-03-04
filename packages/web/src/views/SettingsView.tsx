@@ -144,6 +144,8 @@ const SHORTCUTS = [
   { keys: ['5'], desc: 'Discover' },
   { keys: ['6'], desc: 'Logs & Metrics' },
   { keys: ['7'], desc: 'Settings' },
+  { keys: ['r'], desc: 'Refresh current page' },
+  { keys: ['/'], desc: 'Focus search (Discover)' },
   { keys: ['Esc'], desc: 'Close panels / Cancel' },
 ];
 

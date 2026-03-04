@@ -307,6 +307,8 @@ export function DiscoverPage(): React.JSX.Element {
           <button
             type="button"
             onClick={() => setShowNewSession(!showNewSession)}
+            aria-label={showNewSession ? 'Cancel new session form' : 'Show new session form'}
+            aria-expanded={showNewSession}
             className={cn(
               'px-3.5 py-1.5 border border-border rounded-sm text-[13px] cursor-pointer font-medium',
               showNewSession ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
@@ -317,6 +319,7 @@ export function DiscoverPage(): React.JSX.Element {
           <button
             type="button"
             onClick={() => void refetch()}
+            aria-label="Scan all machines for sessions"
             className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
           >
             Scan All Machines
@@ -461,6 +464,7 @@ export function DiscoverPage(): React.JSX.Element {
           <button
             type="button"
             onClick={toggleAll}
+            aria-label={allExpanded ? 'Collapse all groups' : 'Expand all groups'}
             className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer whitespace-nowrap"
           >
             {allExpanded ? 'Collapse All' : 'Expand All'}

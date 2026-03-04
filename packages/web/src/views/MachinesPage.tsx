@@ -12,6 +12,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Machine } from '../lib/api';
 import { formatDate } from '../lib/format-utils';
 import { machinesQuery } from '../lib/queries';
@@ -27,6 +28,8 @@ export function MachinesPage(): React.JSX.Element {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MachineStatusFilter>('all');
+
+  useHotkeys(useMemo(() => ({ r: () => void machines.refetch() }), [machines]));
 
   const list = machines.data ?? [];
   const online = list.filter((m) => m.status === 'online').length;
@@ -71,6 +74,7 @@ export function MachinesPage(): React.JSX.Element {
         <button
           type="button"
           onClick={() => machines.refetch()}
+          aria-label="Refresh machine list"
           className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
         >
           Refresh

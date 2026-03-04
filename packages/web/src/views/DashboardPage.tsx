@@ -90,6 +90,7 @@ export function DashboardPage(): React.JSX.Element {
           <button
             type="button"
             onClick={refreshAll}
+            aria-label="Refresh dashboard"
             className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
           >
             Refresh
