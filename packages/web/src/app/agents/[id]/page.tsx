@@ -428,7 +428,55 @@ export default function AgentDetailPage(): React.JSX.Element {
               No runs recorded yet. Use the Start button above to run this agent.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile card layout */}
+            <div className="sm:hidden space-y-2">
+              {runList.map((run) => (
+                <div
+                  key={run.id}
+                  className="rounded-lg border border-border/50 p-3 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <StatusBadge status={run.status} />
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {formatDurationMs(run.durationMs)}
+                    </span>
+                  </div>
+                  <div>
+                    <span
+                      className={cn(
+                        'text-xs leading-snug',
+                        run.prompt ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                      title={run.prompt}
+                    >
+                      {run.prompt
+                        ? run.prompt.length > 80
+                          ? `${run.prompt.slice(0, 80)}...`
+                          : run.prompt
+                        : '-'}
+                    </span>
+                    {run.errorMessage && (
+                      <div
+                        className="text-[11px] text-red-400 mt-0.5 truncate"
+                        title={run.errorMessage}
+                      >
+                        {run.errorMessage}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="font-mono">{formatCost(run.costUsd)}</span>
+                    <span>
+                      {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : <LiveTimeAgo date={run.startedAt} />}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table layout */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm" aria-label="Recent agent runs">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -438,10 +486,10 @@ export default function AgentDetailPage(): React.JSX.Element {
                     <th scope="col" className="pb-2 pr-4 font-medium">
                       Prompt
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
+                    <th scope="col" className="pb-2 pr-4 font-medium">
                       Duration
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
+                    <th scope="col" className="pb-2 pr-4 font-medium">
                       Cost
                     </th>
                     <th scope="col" className="pb-2 pr-4 font-medium">
@@ -481,10 +529,10 @@ export default function AgentDetailPage(): React.JSX.Element {
                           </div>
                         )}
                       </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground hidden sm:table-cell">
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
                         {formatDurationMs(run.durationMs)}
                       </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground hidden sm:table-cell">
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
                         {formatCost(run.costUsd)}
                       </td>
                       <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
@@ -498,6 +546,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

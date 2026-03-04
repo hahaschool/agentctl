@@ -174,6 +174,7 @@ export const api = {
     name: string;
     machineId: string;
     type: string;
+    projectPath?: string;
     config?: Record<string, unknown>;
   }) =>
     request<{ ok: boolean; agentId: string }>('/api/agents/agents', {

@@ -539,6 +539,27 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
   const resumeSession = useResumeSession();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Draft persistence — survive page refreshes
+  const storageKey = `draft:${session.id}`;
+
+  // Load draft from sessionStorage on mount (or when session changes)
+  useEffect(() => {
+    const saved = sessionStorage.getItem(storageKey);
+    if (saved) setMessage(saved);
+  }, [storageKey]);
+
+  // Save draft to sessionStorage on change (debounced 300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (message) {
+        sessionStorage.setItem(storageKey, message);
+      } else {
+        sessionStorage.removeItem(storageKey);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [message, storageKey]);
+
   const isActive = session.status === 'active' || session.status === 'starting';
   const canResume =
     session.status === 'ended' || session.status === 'paused' || session.status === 'error';
@@ -555,6 +576,7 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
         {
           onSuccess: () => {
             setMessage('');
+            sessionStorage.removeItem(storageKey);
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
             });
@@ -574,6 +596,7 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
         {
           onSuccess: () => {
             setMessage('');
+            sessionStorage.removeItem(storageKey);
             toast.success('Session resumed');
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
@@ -589,6 +612,7 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     isActive,
     canResume,
     session.id,
+    storageKey,
     sendMessage,
     resumeSession,
     toast,
