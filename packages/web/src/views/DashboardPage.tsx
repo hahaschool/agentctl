@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
+import { useMemo } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { WsStatusIndicator } from '../components/WsStatusIndicator';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import { useWebSocket } from '../hooks/use-websocket';
 import { formatNumber, truncate } from '../lib/format-utils';
 import {
@@ -45,13 +47,18 @@ export function DashboardPage(): React.JSX.Element {
   const activeRuns = Number(metricsData.agentctl_agents_active ?? 0);
   const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
 
-  const refreshAll = (): void => {
-    void health.refetch();
-    void metrics.refetch();
-    void machines.refetch();
-    void agents.refetch();
-    void discovered.refetch();
-  };
+  const refreshAll = useMemo(
+    () => (): void => {
+      void health.refetch();
+      void metrics.refetch();
+      void machines.refetch();
+      void agents.refetch();
+      void discovered.refetch();
+    },
+    [health, metrics, machines, agents, discovered],
+  );
+
+  useHotkeys(useMemo(() => ({ r: refreshAll }), [refreshAll]));
 
   const anyError =
     health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error;

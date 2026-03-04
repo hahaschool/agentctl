@@ -13,8 +13,9 @@ import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { PathBadge } from '../components/PathBadge';
 import type { Session, SessionContentMessage } from '../lib/api';
-import { formatDuration, formatNumber, formatTime, shortenPath } from '../lib/format-utils';
+import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
 import {
   queryKeys,
   sessionContentQuery,
@@ -131,11 +132,7 @@ function SessionHeader({ session }: { session: Session }): React.JSX.Element {
         <span>
           Machine: <CopyableText value={session.machineId} maxDisplay={12} />
         </span>
-        {session.projectPath && (
-          <span className="font-mono" title={session.projectPath}>
-            {shortenPath(session.projectPath)}
-          </span>
-        )}
+        {session.projectPath && <PathBadge path={session.projectPath} />}
         <span>
           Started <LiveTimeAgo date={session.startedAt} />
         </span>

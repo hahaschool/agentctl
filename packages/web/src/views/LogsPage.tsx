@@ -11,6 +11,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatusBadge } from '../components/StatusBadge';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import { formatDateTime, formatNumber } from '../lib/format-utils';
 import { healthQuery, machinesQuery, metricsQuery } from '../lib/queries';
 
@@ -19,6 +20,19 @@ export function LogsPage(): React.JSX.Element {
   const health = useQuery(healthQuery());
   const metrics = useQuery(metricsQuery());
   const machines = useQuery(machinesQuery());
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: () => {
+          void health.refetch();
+          void metrics.refetch();
+          void machines.refetch();
+        },
+      }),
+      [health, metrics, machines],
+    ),
+  );
 
   const deps = health.data?.dependencies;
   const machineList = machines.data ?? [];

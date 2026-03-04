@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -11,12 +11,14 @@ import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { HighlightText } from '../components/HighlightText';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { PathBadge } from '../components/PathBadge';
 import { SessionPreview } from '../components/SessionPreview';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { useToast } from '../components/Toast';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
-import { formatNumber, recencyColor, shortenPath } from '../lib/format-utils';
+import { formatNumber, recencyColor } from '../lib/format-utils';
 import { discoverQuery, queryKeys } from '../lib/queries';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
@@ -80,6 +82,22 @@ export function DiscoverPage(): React.JSX.Element {
   const [sort, setSort] = useState<SortOption>('recent');
   const [groupMode, setGroupMode] = useState<GroupMode>('project');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Global keyboard shortcuts
+  useHotkeys(
+    useMemo(
+      () => ({
+        slash: (e) => {
+          e.preventDefault();
+          searchRef.current?.focus();
+        },
+        r: () => void refetch(),
+      }),
+      [refetch],
+    ),
+  );
 
   const allSessions = data?.sessions ?? [];
 
@@ -364,11 +382,12 @@ export function DiscoverPage(): React.JSX.Element {
       {/* Filter bar */}
       <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border rounded-lg mb-4">
         <input
+          ref={searchRef}
           id="discover-search"
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search sessions..."
+          placeholder="Search sessions... (press /)"
           aria-label="Search sessions"
           className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-[13px] outline-none"
         />
@@ -531,13 +550,13 @@ export function DiscoverPage(): React.JSX.Element {
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm leading-5">{group.projectName}</div>
-                      <SimpleTooltip content={group.projectPath}>
-                        <div className="font-mono text-[11px] text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap leading-4 cursor-default">
-                          {groupMode === 'machine'
-                            ? `${new Set(group.sessions.map((s) => s.projectPath)).size} project(s)`
-                            : shortenPath(group.projectPath)}
+                      {groupMode === 'machine' ? (
+                        <div className="font-mono text-[11px] text-muted-foreground leading-4">
+                          {new Set(group.sessions.map((s) => s.projectPath)).size} project(s)
                         </div>
-                      </SimpleTooltip>
+                      ) : (
+                        <PathBadge path={group.projectPath} className="text-[11px] leading-4" />
+                      )}
                     </div>
                     <div className="flex gap-2.5 items-center shrink-0">
                       <span className="text-[11px] text-muted-foreground whitespace-nowrap">

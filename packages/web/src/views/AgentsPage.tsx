@@ -15,6 +15,7 @@ import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import { formatCost } from '../lib/format-utils';
 import {
   agentsQuery,
@@ -56,6 +57,15 @@ export function AgentsPage(): React.JSX.Element {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<AgentStatusFilter>('all');
   const [sortOrder, setSortOrder] = useState<AgentSortOrder>('name');
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: () => void agents.refetch(),
+      }),
+      [agents],
+    ),
+  );
 
   const agentList = agents.data ?? [];
   const machineList = machines.data ?? [];

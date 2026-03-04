@@ -9,8 +9,10 @@ import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { PathBadge } from '../components/PathBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
 import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
@@ -65,6 +67,15 @@ export function SessionsPage(): React.JSX.Element {
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: () => void sessions.refetch(),
+      }),
+      [sessions],
+    ),
+  );
 
   // --- New Session form state ---
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -760,7 +771,6 @@ function SessionListItem({
   isSelected: boolean;
   onSelect: (id: string) => void;
 }): React.JSX.Element {
-  const shortPath = shortenPath(s.projectPath);
   return (
     <button
       type="button"
@@ -788,12 +798,9 @@ function SessionListItem({
         <span>{s.agentId}</span>
         <span>{s.machineId}</span>
       </div>
-      {shortPath && (
-        <div
-          title={s.projectPath ?? ''}
-          className="text-[11px] text-muted-foreground font-mono mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap cursor-default"
-        >
-          {shortPath}
+      {s.projectPath && (
+        <div className="mt-0.5">
+          <PathBadge path={s.projectPath} className="text-[11px]" />
         </div>
       )}
       <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">

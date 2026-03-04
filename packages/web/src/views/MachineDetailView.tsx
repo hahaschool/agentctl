@@ -10,10 +10,11 @@ import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
+import { PathBadge } from '@/components/PathBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatDate, shortenPath } from '@/lib/format-utils';
+import { formatDate } from '@/lib/format-utils';
 import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -232,11 +233,8 @@ export function MachineDetailView(): React.JSX.Element {
                       <td className="py-2.5 pr-4 text-xs text-muted-foreground capitalize">
                         {agent.type}
                       </td>
-                      <td
-                        className="py-2.5 pr-4 text-xs font-mono text-muted-foreground max-w-[200px] truncate"
-                        title={agent.projectPath ?? undefined}
-                      >
-                        {agent.projectPath ? shortenPath(agent.projectPath) : '-'}
+                      <td className="py-2.5 pr-4 max-w-[200px]">
+                        <PathBadge path={agent.projectPath} />
                       </td>
                       <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                         {agent.lastRunAt ? <LiveTimeAgo date={agent.lastRunAt} /> : 'Never'}
@@ -320,11 +318,8 @@ export function MachineDetailView(): React.JSX.Element {
                       <td className="py-2.5 pr-4">
                         <AgentName agentId={session.agentId} agents={agents.data ?? []} />
                       </td>
-                      <td
-                        className="py-2.5 pr-4 text-xs font-mono text-muted-foreground max-w-[200px] truncate"
-                        title={session.projectPath ?? undefined}
-                      >
-                        {session.projectPath ? shortenPath(session.projectPath) : '-'}
+                      <td className="py-2.5 pr-4 max-w-[200px]">
+                        <PathBadge path={session.projectPath} />
                       </td>
                       <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                         <LiveTimeAgo date={session.startedAt} />
