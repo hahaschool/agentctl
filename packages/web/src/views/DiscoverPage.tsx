@@ -94,8 +94,13 @@ export function DiscoverPage(): React.JSX.Element {
           searchRef.current?.focus();
         },
         r: () => void refetch(),
+        Escape: () => {
+          if (resuming) setResuming(null);
+          else if (showNewSession) setShowNewSession(false);
+          else if (selectedSessionId) setSelectedSessionId(null);
+        },
       }),
-      [refetch],
+      [refetch, resuming, showNewSession, selectedSessionId],
     ),
   );
 

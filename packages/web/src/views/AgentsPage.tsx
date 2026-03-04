@@ -62,8 +62,12 @@ export function AgentsPage(): React.JSX.Element {
     useMemo(
       () => ({
         r: () => void agents.refetch(),
+        Escape: () => {
+          if (promptAgentId) setPromptAgentId(null);
+          else if (showCreateForm) setShowCreateForm(false);
+        },
       }),
-      [agents],
+      [agents, promptAgentId, showCreateForm],
     ),
   );
 

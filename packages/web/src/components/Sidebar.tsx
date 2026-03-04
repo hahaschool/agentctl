@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { useWebSocket } from '../hooks/use-websocket';
+import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
 import { WsStatusIndicator } from './WsStatusIndicator';
 
 type NavItem = {
@@ -37,6 +38,7 @@ export function Sidebar(): React.JSX.Element {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const { status: wsStatus } = useWebSocket();
 
   useEffect(() => setMounted(true), []);
@@ -58,6 +60,12 @@ export function Sidebar(): React.JSX.Element {
 
       if (e.key === 'Escape') {
         setMobileOpen(false);
+        setShowHelp(false);
+        return;
+      }
+
+      if (e.key === '?') {
+        setShowHelp((prev) => !prev);
         return;
       }
 
@@ -184,6 +192,8 @@ export function Sidebar(): React.JSX.Element {
           )}
         </div>
       </nav>
+
+      <KeyboardHelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
     </>
   );
 }
