@@ -151,6 +151,7 @@ describe('Agent', () => {
       lastRunAt: null,
       lastCostUsd: null,
       totalCostUsd: 0,
+      accountId: null,
       createdAt: now,
     };
 
@@ -185,6 +186,7 @@ describe('Agent', () => {
       lastRunAt: new Date('2026-03-01T06:00:00Z'),
       lastCostUsd: 0.15,
       totalCostUsd: 3.5,
+      accountId: null,
       createdAt: new Date('2026-01-15T10:00:00Z'),
     };
 
@@ -210,6 +212,7 @@ describe('Agent', () => {
       lastRunAt: null,
       lastCostUsd: null,
       totalCostUsd: 0,
+      accountId: null,
       createdAt: new Date(),
     };
 
@@ -234,6 +237,7 @@ describe('Agent', () => {
       lastRunAt: new Date(),
       lastCostUsd: 0.05,
       totalCostUsd: 1.0,
+      accountId: 'acct-456',
       createdAt: new Date(),
     };
 
@@ -261,6 +265,7 @@ describe('Agent', () => {
         lastRunAt: null,
         lastCostUsd: null,
         totalCostUsd: 0,
+        accountId: null,
         createdAt: new Date(),
       };
       expect(AGENT_STATUSES).toContain(agent.status);

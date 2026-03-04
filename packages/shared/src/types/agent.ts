@@ -60,5 +60,6 @@ export type Agent = {
   lastRunAt: Date | null;
   lastCostUsd: number | null;
   totalCostUsd: number;
+  accountId: string | null;
   createdAt: Date;
 };

@@ -35,6 +35,7 @@ export type Agent = {
   lastRunAt: string | null;
   lastCostUsd: number | null;
   totalCostUsd: number;
+  accountId: string | null;
   createdAt: string;
 };
 
@@ -171,6 +172,11 @@ export const api = {
   stopAgent: (id: string) =>
     request<{ ok: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
+    }),
+  updateAgent: (id: string, body: { accountId?: string | null }) =>
+    request<Agent>(`/api/agents/agents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
     }),
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/agents/${id}/runs`),
 

@@ -17,10 +17,25 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
 import { formatCost, formatDate, formatDurationMs } from '@/lib/format-utils';
-import { agentQuery, agentRunsQuery, useStartAgent, useStopAgent } from '@/lib/queries';
+import {
+  accountsQuery,
+  agentQuery,
+  agentRunsQuery,
+  useStartAgent,
+  useStopAgent,
+  useUpdateAgent,
+} from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -33,9 +48,11 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const agent = useQuery(agentQuery(agentId));
   const runs = useQuery(agentRunsQuery(agentId));
+  const accounts = useQuery(accountsQuery());
 
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
+  const updateAgent = useUpdateAgent();
   const toast = useToast();
 
   useHotkeys(
@@ -53,7 +70,24 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [promptVisible, setPromptVisible] = useState(false);
   const [prompt, setPrompt] = useState('');
 
+  const accountList = accounts.data ?? [];
+
   // -- Handlers --
+
+  const handleAccountChange = (value: string): void => {
+    const newAccountId = value === '__none__' ? null : value;
+    updateAgent.mutate(
+      { id: agentId, accountId: newAccountId },
+      {
+        onSuccess: () => {
+          toast.success(newAccountId ? 'Account assigned' : 'Account removed');
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : String(err));
+        },
+      },
+    );
+  };
 
   const handleStart = (): void => {
     if (!prompt.trim()) return;
@@ -223,6 +257,33 @@ export default function AgentDetailPage(): React.JSX.Element {
             </InfoField>
             <InfoField label="Branch">
               <span className="font-mono text-xs">{data.worktreeBranch ?? 'Not set'}</span>
+            </InfoField>
+            <InfoField label="Account">
+              <Select
+                value={data.accountId ?? '__none__'}
+                onValueChange={handleAccountChange}
+                disabled={updateAgent.isPending}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="h-7 min-w-[140px] text-xs"
+                  aria-label="Select account"
+                >
+                  <SelectValue placeholder="No account assigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">None</span>
+                  </SelectItem>
+                  {accountList.length > 0 && <SelectSeparator />}
+                  {accountList.map((acct) => (
+                    <SelectItem key={acct.id} value={acct.id}>
+                      {acct.name}{' '}
+                      <span className="text-muted-foreground text-[10px]">({acct.provider})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </InfoField>
             <InfoField label="Created">
               <span>{formatDate(data.createdAt)}</span>

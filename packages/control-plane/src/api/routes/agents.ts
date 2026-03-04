@@ -156,6 +156,39 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     },
   );
 
+  app.patch<{ Params: { agentId: string }; Body: { accountId?: string | null } }>(
+    '/agents/:agentId',
+    { schema: { tags: ['agents'], summary: 'Update agent fields (e.g. accountId)' } },
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply
+          .code(501)
+          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
+      }
+
+      const { accountId } = request.body;
+
+      // Validate accountId is either null/undefined or a string
+      if (accountId !== undefined && accountId !== null && typeof accountId !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_ACCOUNT_ID',
+          message: 'accountId must be a string or null',
+        });
+      }
+
+      try {
+        const agent = await dbRegistry.updateAgent(request.params.agentId, { accountId });
+        return agent;
+      } catch (err) {
+        if (err instanceof ControlPlaneError && err.code === 'AGENT_NOT_FOUND') {
+          return reply.code(404).send({ error: err.code, message: err.message });
+        }
+
+        throw err;
+      }
+    },
+  );
+
   app.patch<{ Params: { agentId: string }; Body: { status: string } }>(
     '/agents/:agentId/status',
     { schema: { tags: ['agents'], summary: 'Update agent status' } },
