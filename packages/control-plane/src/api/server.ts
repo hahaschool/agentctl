@@ -29,6 +29,7 @@ import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
+import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
@@ -287,6 +288,7 @@ export async function createServer({
       db,
       dbRegistry,
       workerPort,
+      encryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY ?? '',
     });
   }
 
@@ -308,6 +310,17 @@ export async function createServer({
         db,
         encryptionKey,
       });
+
+      await app.register(oauthRoutes, {
+        prefix: '/api/oauth',
+        db,
+        encryptionKey,
+      });
+    } else {
+      logger.warn(
+        'CREDENTIAL_ENCRYPTION_KEY is not set — account management routes are disabled. ' +
+          "Generate a key with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+      );
     }
 
     await app.register(settingsRoutes, {

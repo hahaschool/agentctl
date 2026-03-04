@@ -5,8 +5,10 @@ import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
-import { rcSessions } from '../../db/schema.js';
+import { agents as agentsTable, apiAccounts, rcSessions } from '../../db/schema.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { decryptCredential } from '../../utils/credential-crypto.js';
+import { resolveAccountId } from '../../utils/resolve-account.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -46,6 +48,7 @@ export type SessionRoutesOptions = {
   db: Database;
   dbRegistry: DbAgentRegistry;
   workerPort?: number;
+  encryptionKey?: string;
 };
 
 /**
@@ -55,7 +58,7 @@ export type SessionRoutesOptions = {
  * to discover, create, resume, and interact with sessions on worker machines.
  */
 export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (app, opts) => {
-  const { db, dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
+  const { db, dbRegistry, workerPort = DEFAULT_WORKER_PORT, encryptionKey = '' } = opts;
 
   // ---------------------------------------------------------------------------
   // Stale session reaper — periodically mark stuck sessions as 'error'
@@ -375,12 +378,14 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       model?: string;
       prompt?: string;
       resumeSessionId?: string;
+      accountId?: string;
     };
   }>(
     '/',
     { schema: { tags: ['sessions'], summary: 'Create a new session' } },
     async (request, reply) => {
-      const { agentId, machineId, projectPath, model, prompt, resumeSessionId } = request.body;
+      const { agentId, machineId, projectPath, model, prompt, resumeSessionId, accountId } =
+        request.body;
 
       if (!agentId || typeof agentId !== 'string') {
         return reply.code(400).send({
@@ -432,6 +437,45 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const sessionId = crypto.randomUUID();
 
+      // Resolve the API account credential for this session
+      let accountCredential: string | null = null;
+      let accountProvider: string | null = null;
+
+      // Look up the agent's own accountId if needed
+      let agentAccountId: string | null = null;
+      if (agentId !== 'adhoc') {
+        const [agentRow] = await db
+          .select({ accountId: agentsTable.accountId })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, agentId));
+        agentAccountId = agentRow?.accountId ?? null;
+      }
+
+      const resolvedAccountId = await resolveAccountId(
+        {
+          sessionAccountId: accountId ?? null,
+          agentAccountId,
+          projectPath,
+        },
+        db,
+      );
+
+      if (resolvedAccountId && encryptionKey) {
+        const [account] = await db
+          .select()
+          .from(apiAccounts)
+          .where(eq(apiAccounts.id, resolvedAccountId));
+
+        if (account) {
+          accountCredential = decryptCredential(
+            account.credential,
+            account.credentialIv,
+            encryptionKey,
+          );
+          accountProvider = account.provider;
+        }
+      }
+
       const [inserted] = await db
         .insert(rcSessions)
         .values({
@@ -441,6 +485,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           status: 'starting',
           projectPath,
           model: model ?? null,
+          accountId: resolvedAccountId ?? null,
           metadata: { initialPrompt: prompt ?? null },
         })
         .returning();
@@ -459,6 +504,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             model: model ?? null,
             prompt: prompt ?? null,
             resumeSessionId: resumeSessionId ?? null,
+            accountCredential,
+            accountProvider,
           }),
         });
 

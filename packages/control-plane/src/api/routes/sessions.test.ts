@@ -5,6 +5,24 @@ import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { sessionRoutes } from './sessions.js';
 
 // ---------------------------------------------------------------------------
+// Module mocks for account credential resolution
+// ---------------------------------------------------------------------------
+
+vi.mock('../../utils/resolve-account.js', () => ({
+  resolveAccountId: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('../../utils/credential-crypto.js', () => ({
+  decryptCredential: vi.fn().mockReturnValue('decrypted-api-key-123'),
+  encryptCredential: vi.fn(),
+  maskCredential: vi.fn(),
+}));
+
+// Re-import so tests can configure per-test behaviour
+import { resolveAccountId } from '../../utils/resolve-account.js';
+import { decryptCredential } from '../../utils/credential-crypto.js';
+
+// ---------------------------------------------------------------------------
 // Mock helpers
 // ---------------------------------------------------------------------------
 
@@ -1149,5 +1167,190 @@ describe('Session routes — /api/sessions', () => {
 
       expect(response.statusCode).toBe(404);
     });
+  });
+});
+
+// =============================================================================
+// POST / — account credential resolution
+// =============================================================================
+
+describe('POST / — account credential resolution', () => {
+  let app: FastifyInstance;
+  let mockDb: ReturnType<typeof createMockDb>;
+  let mockDbRegistry: DbAgentRegistry;
+
+  beforeAll(async () => {
+    mockDb = createMockDb();
+    mockDbRegistry = createMockDbRegistry();
+    app = Fastify({ logger: false });
+    await app.register(sessionRoutes, {
+      prefix: '/api/sessions',
+      db: mockDb.db as never,
+      dbRegistry: mockDbRegistry,
+      workerPort: 9000,
+      encryptionKey: 'test-key-32-chars-long-enough-aa',
+    });
+    await app.ready();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.mocked(resolveAccountId).mockReset().mockResolvedValue(null);
+    vi.mocked(decryptCredential).mockReset().mockReturnValue('decrypted-api-key-123');
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('stores accountId in session when provided', async () => {
+    // resolveAccountId should echo back the session-level accountId
+    vi.mocked(resolveAccountId).mockResolvedValueOnce('acct-explicit-123');
+
+    // First call: agent lookup (agents table); Second call: account lookup (apiAccounts);
+    // Third call: insert returning; Fourth call: re-read after worker dispatch
+    const inserted = makeSession({
+      status: 'starting',
+      accountId: 'acct-explicit-123',
+    });
+    mockDb.setRows([inserted]);
+    mockFetchOk();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        projectPath: '/home/user/project',
+        accountId: 'acct-explicit-123',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+
+    const body = response.json();
+    expect(body.ok).toBe(true);
+
+    // resolveAccountId should have been called with the session-level accountId
+    expect(resolveAccountId).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionAccountId: 'acct-explicit-123',
+      }),
+      expect.anything(),
+    );
+
+    // The DB insert chain should include accountId
+    // Verify via the insert().values() call on the mock chain
+    const valuesCalls = vi.mocked(mockDb.db.values as ReturnType<typeof vi.fn>).mock.calls;
+    const lastValuesCall = valuesCalls[valuesCalls.length - 1];
+    expect(lastValuesCall[0]).toMatchObject({
+      accountId: 'acct-explicit-123',
+    });
+  });
+
+  it('resolves credentials via resolveAccountId cascade', async () => {
+    // resolveAccountId returns an account ID (from e.g. project mapping)
+    vi.mocked(resolveAccountId).mockResolvedValueOnce('acct-resolved-456');
+
+    // Mock DB will return: agent row, account row, insert result, final re-read
+    // We use setRows so every chained query returns the same rows —
+    // the route only checks first element via destructuring [row].
+    const accountRow = {
+      id: 'acct-resolved-456',
+      name: 'Prod Anthropic',
+      provider: 'anthropic',
+      credential: 'encrypted-blob',
+      credentialIv: 'iv-blob',
+      priority: 0,
+      rateLimit: {},
+      isActive: true,
+      metadata: {},
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+
+    const inserted = makeSession({
+      status: 'starting',
+      accountId: 'acct-resolved-456',
+    });
+
+    // The mock DB always returns the same rows for any query.
+    // The route makes multiple queries sequentially — we set rows to
+    // cover the "apiAccounts" lookup and the insert returning.
+    // Because the mock resolves rows via .then, we set it to the account
+    // row first (agent select returns it as well, which is fine — the
+    // route only reads accountId from agent row, and account row has it).
+    mockDb.setRows([accountRow]);
+
+    // After the account lookup + insert, the route re-reads the session
+    // We need to handle the fact that the same rows are returned for all queries.
+    // The insert().values().returning() chain also resolves with mockDb rows.
+    // We'll set rows to the account row (covers the account lookup) and the
+    // inserted session row is also returned (the route uses `inserted` from returning).
+
+    // Actually, with this mock pattern, all queries return the same rows.
+    // The route will: 1) select agent, 2) select apiAccounts, 3) insert returning, 4) select session.
+    // All resolve with [accountRow]. The route destructures [agentRow] for accountId,
+    // [account] for credential, [inserted] from returning, [updatedSession] for final read.
+    // This is acceptable since we're testing the credential resolution flow, not the row data.
+
+    mockFetchOk();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        projectPath: '/home/user/project',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+
+    // decryptCredential should have been called with the account's encrypted data
+    expect(decryptCredential).toHaveBeenCalledWith(
+      'encrypted-blob',
+      'iv-blob',
+      'test-key-32-chars-long-enough-aa',
+    );
+
+    // Worker dispatch should include the decrypted credential and provider
+    const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+    // The first fetch call is the worker dispatch POST
+    const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+    expect(workerCallBody.accountCredential).toBe('decrypted-api-key-123');
+    expect(workerCallBody.accountProvider).toBe('anthropic');
+  });
+
+  it('passes null credentials when no account resolved', async () => {
+    // resolveAccountId returns null — no account found at any level
+    vi.mocked(resolveAccountId).mockResolvedValueOnce(null);
+
+    const inserted = makeSession({ status: 'starting' });
+    mockDb.setRows([inserted]);
+    mockFetchOk();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        projectPath: '/home/user/project',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+
+    // decryptCredential should NOT have been called
+    expect(decryptCredential).not.toHaveBeenCalled();
+
+    // Worker dispatch should have null credential and provider
+    const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+    const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+    expect(workerCallBody.accountCredential).toBeNull();
+    expect(workerCallBody.accountProvider).toBeNull();
   });
 });

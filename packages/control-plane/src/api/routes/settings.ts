@@ -126,7 +126,7 @@ export const settingsRoutes: FastifyPluginAsync<SettingsRoutesOptions> = async (
       .values({ projectPath, accountId })
       .onConflictDoUpdate({
         target: projectAccountMappings.projectPath,
-        set: { accountId, createdAt: new Date() },
+        set: { accountId },
       })
       .returning();
 
