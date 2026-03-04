@@ -216,20 +216,8 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide mr-1">
             Capabilities
           </span>
-          <CapBadge
-            label="GPU"
-            enabled={m.capabilities.gpu}
-            activeColor="#14532d"
-            activeBorder="#166534"
-            activeText="#86efac"
-          />
-          <CapBadge
-            label="Docker"
-            enabled={m.capabilities.docker}
-            activeColor="#1e3a5f"
-            activeBorder="#1d4ed8"
-            activeText="#93c5fd"
-          />
+          <CapBadge label="GPU" enabled={m.capabilities.gpu} variant="green" />
+          <CapBadge label="Docker" enabled={m.capabilities.docker} variant="blue" />
           <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-sm bg-muted text-muted-foreground border border-border font-mono">
             {m.capabilities.maxConcurrentAgents} max agents
           </span>
@@ -284,34 +272,26 @@ function DetailField({
   );
 }
 
+const CAP_VARIANT_CLASSES = {
+  green: 'bg-green-950 text-green-300 border-green-800',
+  blue: 'bg-blue-950 text-blue-300 border-blue-800',
+} as const;
+
 function CapBadge({
   label,
   enabled,
-  activeColor,
-  activeBorder,
-  activeText,
+  variant,
 }: {
   label: string;
   enabled: boolean;
-  activeColor: string;
-  activeBorder: string;
-  activeText: string;
+  variant: keyof typeof CAP_VARIANT_CLASSES;
 }): React.JSX.Element {
   return (
     <span
       className={cn(
         'px-2.5 py-0.5 text-[11px] font-semibold rounded-sm uppercase tracking-[0.03em] border',
-        !enabled && 'bg-muted text-muted-foreground border-border',
+        enabled ? CAP_VARIANT_CLASSES[variant] : 'bg-muted text-muted-foreground border-border',
       )}
-      style={
-        enabled
-          ? {
-              backgroundColor: activeColor,
-              color: activeText,
-              borderColor: activeBorder,
-            }
-          : undefined
-      }
     >
       {label}
     </span>

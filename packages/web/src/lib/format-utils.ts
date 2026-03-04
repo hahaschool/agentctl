@@ -134,22 +134,6 @@ export function formatNumber(n: number | string | null | undefined): string {
 }
 
 /**
- * Recency color for activity dots.
- * - green: within 1 hour
- * - yellow: within 24 hours
- * - muted: older
- */
-export function recencyColor(dateStr: string): string {
-  if (!dateStr) return '#9ca3af';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const oneHour = 60 * 60 * 1000;
-  const oneDay = 24 * oneHour;
-  if (diff < oneHour) return '#22c55e';
-  if (diff < oneDay) return '#f59e0b';
-  return '#9ca3af';
-}
-
-/**
  * Recency Tailwind class for activity dots.
  * Returns a `bg-*` class instead of a hex color string.
  */
