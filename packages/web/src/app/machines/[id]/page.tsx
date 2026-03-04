@@ -1,11 +1,6 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const MachineDetailView = dynamic(
-  () => import('@/views/MachineDetailView').then((m) => m.MachineDetailView),
-  { ssr: false },
-);
+import { MachineDetailView } from '@/views/MachineDetailView';
 
 export default function MachineDetailPage() {
   return <MachineDetailView />;

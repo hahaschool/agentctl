@@ -1,10 +1,6 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const DashboardPage = dynamic(() => import('@/views/DashboardPage').then((m) => m.DashboardPage), {
-  ssr: false,
-});
+import { DashboardPage } from '@/views/DashboardPage';
 
 export default function Page() {
   return <DashboardPage />;

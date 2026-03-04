@@ -1,10 +1,6 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const SessionsPage = dynamic(() => import('@/views/SessionsPage').then((m) => m.SessionsPage), {
-  ssr: false,
-});
+import { SessionsPage } from '@/views/SessionsPage';
 
 export default function Page() {
   return <SessionsPage />;

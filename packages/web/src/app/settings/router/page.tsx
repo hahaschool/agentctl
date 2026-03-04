@@ -1,11 +1,6 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const RouterConfigView = dynamic(
-  () => import('@/views/RouterConfigView').then((m) => m.RouterConfigView),
-  { ssr: false },
-);
+import { RouterConfigView } from '@/views/RouterConfigView';
 
 export default function RouterConfigPage() {
   return <RouterConfigView />;
