@@ -9,8 +9,9 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Next.js surfaces errors server-side; no need to log to browser console
   useEffect(() => {
-    console.error('Unhandled error:', error);
+    // Error is available in the component for display
   }, [error]);
 
   return (

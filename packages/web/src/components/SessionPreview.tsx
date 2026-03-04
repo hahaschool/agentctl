@@ -66,12 +66,30 @@ export function SessionPreview({
     }
   }, [data]);
 
-  // Close on Escape
+  // Close on Escape and focus trap
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose();
+      // Focus trap: keep Tab within the panel
+      if (e.key === 'Tab' && panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first || !last) return;
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     document.addEventListener('keydown', handler);
+    // Auto-focus the panel on open
+    panelRef.current?.focus();
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
 
@@ -93,12 +111,16 @@ export function SessionPreview({
       />
       <div
         ref={panelRef}
-        className="fixed top-0 right-0 bottom-0 w-1/2 min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.3)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="session-preview-title"
+        tabIndex={-1}
+        className="fixed top-0 right-0 bottom-0 w-1/2 min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.3)] outline-none"
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-border flex justify-between items-center shrink-0">
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">Session Preview</div>
+            <div id="session-preview-title" className="text-sm font-semibold">Session Preview</div>
             <div className="text-[11px] text-muted-foreground font-mono mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">
               {sessionId.slice(0, 32)}...
             </div>

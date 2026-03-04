@@ -58,6 +58,7 @@ export function ConfirmButton({
     <button
       type="button"
       onClick={handleClick}
+      aria-live="polite"
       className={cn(confirming ? confirmClassName : className)}
     >
       {confirming ? confirmLabel : label}

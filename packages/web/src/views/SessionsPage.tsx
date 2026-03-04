@@ -507,6 +507,7 @@ export function SessionsPage(): React.JSX.Element {
           tabIndex={0}
           onKeyDown={handleListKeyDown}
           aria-label="Session list"
+          aria-activedescendant={selectedId ? `session-${selectedId}` : undefined}
         >
           {sessions.isLoading ? (
             <div className="p-3 space-y-1">
@@ -755,6 +756,7 @@ function SessionListItem({
     <button
       type="button"
       role="option"
+      id={`session-${s.id}`}
       aria-selected={isSelected}
       onClick={() => onSelect(s.id)}
       className={cn(
