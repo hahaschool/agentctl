@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useWebSocket } from '../hooks/use-websocket';
 import { CommandPalette } from './CommandPalette';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
+import { useToast } from './Toast';
 import { WsStatusIndicator } from './WsStatusIndicator';
 
 type NavItem = {
@@ -41,7 +42,28 @@ export function Sidebar(): React.JSX.Element {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const { status: wsStatus } = useWebSocket();
+  const toast = useToast();
+
+  // Track WS connection for reconnect/disconnect toasts (skip initial connect)
+  const wasConnectedRef = useRef(false);
+  const { status: wsStatus } = useWebSocket({
+    onOpen: () => {
+      if (wasConnectedRef.current) {
+        toast.success('Reconnected to control plane');
+      }
+      wasConnectedRef.current = true;
+    },
+    onClose: () => {
+      if (wasConnectedRef.current) {
+        toast.error('Lost connection to control plane');
+      }
+    },
+    onMessage: (msg) => {
+      if (msg.type === 'error') {
+        toast.error(msg.message);
+      }
+    },
+  });
 
   useEffect(() => setMounted(true), []);
 
