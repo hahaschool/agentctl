@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
@@ -13,8 +13,11 @@ import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
+import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
+import { RefreshButton } from '../components/RefreshButton';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Session, SessionContentMessage } from '../lib/api';
 import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
@@ -49,6 +52,13 @@ export function SessionDetailView(): React.JSX.Element {
     refetchOnWindowFocus: true,
   });
 
+  const refetchAll = useCallback(() => {
+    void session.refetch();
+    void content.refetch();
+  }, [session, content]);
+
+  useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
+
   if (session.isLoading) {
     return <LoadingState />;
   }
@@ -61,7 +71,12 @@ export function SessionDetailView(): React.JSX.Element {
     <div className="relative h-full flex flex-col">
       <FetchingBar isFetching={content.isFetching && !content.isLoading} />
       {/* Top bar */}
-      <SessionHeader session={s} />
+      <SessionHeader
+        session={s}
+        dataUpdatedAt={content.dataUpdatedAt || session.dataUpdatedAt}
+        isFetching={(content.isFetching || session.isFetching) && !content.isLoading}
+        onRefresh={refetchAll}
+      />
 
       {/* Content area */}
       <div className="flex-1 overflow-hidden flex flex-col">
@@ -84,7 +99,17 @@ export function SessionDetailView(): React.JSX.Element {
 // Header
 // ---------------------------------------------------------------------------
 
-function SessionHeader({ session }: { session: Session }): React.JSX.Element {
+function SessionHeader({
+  session,
+  dataUpdatedAt,
+  isFetching,
+  onRefresh,
+}: {
+  session: Session;
+  dataUpdatedAt: number;
+  isFetching: boolean;
+  onRefresh: () => void;
+}): React.JSX.Element {
   const toast = useToast();
   const deleteSession = useDeleteSession();
   const queryClient = useQueryClient();
@@ -109,7 +134,9 @@ function SessionHeader({ session }: { session: Session }): React.JSX.Element {
         {session.status === 'active' && (
           <span className="text-[11px] text-green-500 animate-pulse">Live</span>
         )}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          <LastUpdated dataUpdatedAt={dataUpdatedAt} />
+          <RefreshButton onClick={onRefresh} isFetching={isFetching} />
           {(session.status === 'active' || session.status === 'starting') && (
             <ConfirmButton
               label="End Session"

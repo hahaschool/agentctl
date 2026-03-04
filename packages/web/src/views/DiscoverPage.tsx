@@ -11,6 +11,7 @@ import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { HighlightText } from '../components/HighlightText';
+import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
@@ -311,7 +312,8 @@ export function DiscoverPage(): React.JSX.Element {
             )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <LastUpdated dataUpdatedAt={query.dataUpdatedAt} />
           <button
             type="button"
             onClick={() => setShowNewSession(!showNewSession)}

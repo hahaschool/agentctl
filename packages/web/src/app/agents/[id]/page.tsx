@@ -4,18 +4,21 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
+import { LastUpdated } from '@/components/LastUpdated';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
+import { RefreshButton } from '@/components/RefreshButton';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useHotkeys } from '@/hooks/use-hotkeys';
 import { formatCost, formatDate, formatDurationMs } from '@/lib/format-utils';
 import { agentQuery, agentRunsQuery, useStartAgent, useStopAgent } from '@/lib/queries';
 import { cn } from '@/lib/utils';
@@ -34,6 +37,18 @@ export default function AgentDetailPage(): React.JSX.Element {
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
   const toast = useToast();
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: () => {
+          void agent.refetch();
+          void runs.refetch();
+        },
+      }),
+      [agent, runs],
+    ),
+  );
 
   const [promptVisible, setPromptVisible] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -173,9 +188,14 @@ export default function AgentDetailPage(): React.JSX.Element {
               Start
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => void agent.refetch()}>
-            Refresh
-          </Button>
+          <LastUpdated dataUpdatedAt={agent.dataUpdatedAt} />
+          <RefreshButton
+            onClick={() => {
+              void agent.refetch();
+              void runs.refetch();
+            }}
+            isFetching={(agent.isFetching || runs.isFetching) && !agent.isLoading}
+          />
         </div>
       </div>
 

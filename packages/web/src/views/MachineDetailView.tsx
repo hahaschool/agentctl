@@ -10,8 +10,10 @@ import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
+import { LastUpdated } from '@/components/LastUpdated';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { PathBadge } from '@/components/PathBadge';
+import { RefreshButton } from '@/components/RefreshButton';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -118,6 +120,17 @@ export function MachineDetailView(): React.JSX.Element {
         <div className="flex items-center gap-3">
           <h1 className="text-[22px] font-bold">{machine.hostname}</h1>
           <StatusBadge status={machine.status} />
+        </div>
+        <div className="flex items-center gap-3">
+          <LastUpdated dataUpdatedAt={machines.dataUpdatedAt} />
+          <RefreshButton
+            onClick={() => {
+              void machines.refetch();
+              void agents.refetch();
+              void sessions.refetch();
+            }}
+            isFetching={anyFetching && !machines.isLoading}
+          />
         </div>
       </div>
 

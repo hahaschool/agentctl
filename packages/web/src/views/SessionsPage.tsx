@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
+import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
@@ -319,7 +320,8 @@ export function SessionsPage(): React.JSX.Element {
               ({filteredSessions.length})
             </span>
           </h2>
-          <div className="flex gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} />
             <button
               type="button"
               onClick={() => {

@@ -10,6 +10,7 @@ import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
+import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { RefreshButton } from '../components/RefreshButton';
 import { StatCard } from '../components/StatCard';
@@ -74,10 +75,13 @@ export function MachinesPage(): React.JSX.Element {
             Machines connected via Tailscale mesh. Auto-refreshes every 15s.
           </p>
         </div>
-        <RefreshButton
-          onClick={() => void machines.refetch()}
-          isFetching={machines.isFetching && !machines.isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <LastUpdated dataUpdatedAt={machines.dataUpdatedAt} />
+          <RefreshButton
+            onClick={() => void machines.refetch()}
+            isFetching={machines.isFetching && !machines.isLoading}
+          />
+        </div>
       </div>
 
       {/* Error banner */}
