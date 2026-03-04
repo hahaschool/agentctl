@@ -9,6 +9,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
 import { formatNumber, formatTime } from '../lib/format-utils';
+import { getMessageStyle } from '../lib/message-styles';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -206,35 +207,8 @@ export function SessionPreview({
 // Message bubble
 // ---------------------------------------------------------------------------
 
-const TYPE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
-  human: {
-    label: 'You',
-    color: '#818cf8',
-    bg: 'rgba(99, 102, 241, 0.08)',
-  },
-  assistant: {
-    label: 'Claude',
-    color: '#4ade80',
-    bg: 'rgba(34, 197, 94, 0.06)',
-  },
-  tool_use: {
-    label: 'Tool Call',
-    color: '#facc15',
-    bg: 'rgba(234, 179, 8, 0.04)',
-  },
-  tool_result: {
-    label: 'Tool Result',
-    color: '#94a3b8',
-    bg: 'rgba(148, 163, 184, 0.04)',
-  },
-};
-
 function MessageBubble({ message }: { message: SessionContentMessage }): React.JSX.Element {
-  const style = TYPE_STYLES[message.type] ?? {
-    label: message.type,
-    color: 'var(--color-muted-foreground)',
-    bg: 'var(--color-card)',
-  };
+  const style = getMessageStyle(message.type);
 
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
   const [expanded, setExpanded] = useState(!isTool);
@@ -246,10 +220,12 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="w-full flex items-center gap-2 mb-1 px-3 py-1 rounded-sm border-none cursor-pointer text-left text-foreground font-[inherit]"
-        style={{ backgroundColor: style.bg, borderLeft: `2px solid ${style.color}` }}
+        className={cn(
+          'w-full flex items-center gap-2 mb-1 px-3 py-1 rounded-sm border-none border-l-2 cursor-pointer text-left text-foreground font-[inherit]',
+          style.bubbleClass,
+        )}
       >
-        <span className="text-[10px] font-semibold shrink-0" style={{ color: style.color }}>
+        <span className={cn('text-[10px] font-semibold shrink-0', style.textClass)}>
           {style.label}
         </span>
         {message.toolName && (
@@ -264,12 +240,9 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
     !expanded && isLong ? `${message.content.slice(0, 500)}...` : message.content;
 
   return (
-    <div
-      className="mb-2 px-3 py-2 rounded-lg"
-      style={{ backgroundColor: style.bg, borderLeft: `3px solid ${style.color}` }}
-    >
+    <div className={cn('mb-2 px-3 py-2 rounded-lg border-l-[3px]', style.bubbleClass)}>
       <div className="flex justify-between items-center mb-1">
-        <span className="text-[11px] font-semibold" style={{ color: style.color }}>
+        <span className={cn('text-[11px] font-semibold', style.textClass)}>
           {style.label}
           {message.toolName && (
             <span className="ml-1.5 font-normal font-mono text-muted-foreground">

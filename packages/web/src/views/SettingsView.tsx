@@ -5,6 +5,7 @@ import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { healthQuery } from '../lib/queries';
 
@@ -99,7 +100,13 @@ function ConnectionSection(): React.JSX.Element {
                 h?.status === 'ok' ? 'text-green-500' : 'text-yellow-500',
               )}
             >
-              {health.isLoading ? 'Checking...' : h?.status === 'ok' ? 'Connected' : 'Degraded'}
+              {health.isLoading ? (
+                <Skeleton className="h-4 w-16 inline-block" />
+              ) : h?.status === 'ok' ? (
+                'Connected'
+              ) : (
+                'Degraded'
+              )}
             </span>
           </div>
 

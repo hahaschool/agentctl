@@ -16,6 +16,7 @@ import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
 import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
+import { getMessageStyle } from '../lib/message-styles';
 import { queryKeys, sessionsQuery } from '../lib/queries';
 
 const MODEL_OPTIONS = [
@@ -68,15 +69,6 @@ export function SessionsPage(): React.JSX.Element {
   const [hideEmpty, setHideEmpty] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  useHotkeys(
-    useMemo(
-      () => ({
-        r: () => void sessions.refetch(),
-      }),
-      [sessions],
-    ),
-  );
-
   // --- New Session form state ---
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -87,6 +79,19 @@ export function SessionsPage(): React.JSX.Element {
   const [formModel, setFormModel] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: () => void sessions.refetch(),
+        Escape: () => {
+          if (showCreateForm) setShowCreateForm(false);
+          else setSelectedId(null);
+        },
+      }),
+      [sessions, showCreateForm],
+    ),
+  );
 
   useEffect(() => {
     if (!showCreateForm) return;
@@ -859,13 +864,6 @@ function DetailRow({
 // Inline session content viewer
 // ---------------------------------------------------------------------------
 
-const MSG_STYLES: Record<string, { label: string; color: string; bg: string }> = {
-  human: { label: 'You', color: '#818cf8', bg: 'rgba(99, 102, 241, 0.08)' },
-  assistant: { label: 'Claude', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.06)' },
-  tool_use: { label: 'Tool', color: '#facc15', bg: 'rgba(234, 179, 8, 0.04)' },
-  tool_result: { label: 'Result', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.04)' },
-};
-
 const CONTENT_POLL_MS = 5_000;
 
 function SessionContent({
@@ -1005,26 +1003,16 @@ const TRUNCATE_THRESHOLD = 800;
 
 function InlineMessage({ message }: { message: SessionContentMessage }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
-  const msgStyle = MSG_STYLES[message.type] ?? {
-    label: message.type,
-    color: 'var(--color-muted-foreground)',
-    bg: 'var(--color-card)',
-  };
+  const msgStyle = getMessageStyle(message.type);
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
   const isLong = message.content.length > TRUNCATE_THRESHOLD;
   const displayContent =
     isLong && !expanded ? `${message.content.slice(0, TRUNCATE_THRESHOLD)}...` : message.content;
 
   return (
-    <div
-      className="mb-1.5 px-2.5 py-1.5 rounded-sm"
-      style={{
-        backgroundColor: msgStyle.bg,
-        borderLeft: `2px solid ${msgStyle.color}`,
-      }}
-    >
+    <div className={cn('mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2', msgStyle.bubbleClass)}>
       <div className="flex items-center gap-1.5 mb-0.5">
-        <span className="text-[10px] font-semibold" style={{ color: msgStyle.color }}>
+        <span className={cn('text-[10px] font-semibold', msgStyle.textClass)}>
           {msgStyle.label}
         </span>
         {message.toolName && (
