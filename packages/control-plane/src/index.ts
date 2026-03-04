@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { EnvVar } from '@agentctl/shared';
@@ -188,63 +188,80 @@ async function main(): Promise<void> {
         'SKIP_MIGRATIONS=true — skipping auto-migration (assuming migrations are run separately)',
       );
     } else {
-      // Run the initial schema migration on every startup.
-      // All DDL statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS,
+      // Run all migrations in order on every startup.
+      // All DDL statements use IF NOT EXISTS / IF NOT EXISTS patterns,
       // so this is idempotent and safe to execute against an already-migrated database.
       const __dirname = dirname(fileURLToPath(import.meta.url));
-      const MIGRATION_FILE = '0000_initial_schema.sql';
 
-      // Candidate paths in priority order:
+      // Candidate directories in priority order:
       //   1. dist/drizzle/ — production builds (postbuild copies drizzle/ into dist/)
       //   2. ../drizzle/   — dev mode (tsx runs from src/, package root is one level up)
-      const candidatePaths = [
-        join(__dirname, 'drizzle', MIGRATION_FILE),
-        join(__dirname, '..', 'drizzle', MIGRATION_FILE),
-      ];
+      const candidateDirs = [join(__dirname, 'drizzle'), join(__dirname, '..', 'drizzle')];
 
-      const migrationPath = candidatePaths.find((p) => existsSync(p));
+      const migrationDir = candidateDirs.find((d) => existsSync(d));
 
-      if (!migrationPath) {
+      if (!migrationDir) {
         logger.fatal(
-          { candidatePaths },
-          'Migration file not found — cannot start with DATABASE_URL set and no migration files. ' +
+          { candidateDirs },
+          'Migration directory not found — cannot start with DATABASE_URL set and no migration files. ' +
             'Either provide migration files or set SKIP_MIGRATIONS=true if migrations are applied separately.',
         );
         process.exit(1);
       }
 
-      const migrationSql = readFileSync(migrationPath, 'utf-8');
+      // Discover all *.sql files and sort lexicographically (0000, 0001, 0002, ...).
+      const migrationFiles = readdirSync(migrationDir)
+        .filter((f) => f.endsWith('.sql'))
+        .sort();
 
-      // Schema version check: verify the migration file contains the expected tables
+      if (migrationFiles.length === 0) {
+        logger.fatal({ migrationDir }, 'Migration directory is empty — no .sql files found.');
+        process.exit(1);
+      }
+
+      // Verify the initial schema contains required tables.
+      const initialSql = readFileSync(join(migrationDir, migrationFiles[0]), 'utf-8');
       const expectedTables = ['machines', 'agents', 'agent_runs', 'agent_actions'];
-      const missingTables = expectedTables.filter((table) => !migrationSql.includes(`"${table}"`));
+      const missingTables = expectedTables.filter((table) => !initialSql.includes(`"${table}"`));
 
       if (missingTables.length > 0) {
         logger.fatal(
-          { migrationPath, missingTables },
-          'Migration file is incomplete — expected tables not found in SQL. ' +
-            'This likely means the migration file is corrupt or outdated.',
+          { migrationFile: migrationFiles[0], missingTables },
+          'Initial migration file is incomplete — expected tables not found in SQL.',
         );
         process.exit(1);
       }
 
-      try {
-        await db.execute(sql.raw(migrationSql));
-      } catch (err: unknown) {
-        logger.fatal(
-          { err, migrationPath },
-          'Database migration failed — cannot continue with an incomplete schema. ' +
-            'Fix the migration error or set SKIP_MIGRATIONS=true if migrations are applied separately.',
+      let totalDdl = 0;
+
+      for (const file of migrationFiles) {
+        const filePath = join(migrationDir, file);
+        const migrationSql = readFileSync(filePath, 'utf-8');
+
+        try {
+          await db.execute(sql.raw(migrationSql));
+        } catch (err: unknown) {
+          logger.fatal(
+            { err, migrationFile: file },
+            `Database migration failed on '${file}' — cannot continue with an incomplete schema. ` +
+              'Fix the migration error or set SKIP_MIGRATIONS=true if migrations are applied separately.',
+          );
+          process.exit(1);
+        }
+
+        const ddlStatements =
+          migrationSql.match(/CREATE\s+(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS|ALTER\s+TABLE/gi) ?? [];
+        totalDdl += ddlStatements.length;
+
+        logger.debug(
+          { migrationFile: file, ddlStatements: ddlStatements.length },
+          'Migration applied',
         );
-        process.exit(1);
       }
 
-      // Count the number of DDL statements applied (CREATE TABLE + CREATE INDEX)
-      const ddlStatements =
-        migrationSql.match(/CREATE\s+(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS/gi) ?? [];
       logger.info(
-        { migrationPath, ddlStatements: ddlStatements.length },
-        `Database migration applied successfully (${ddlStatements.length} DDL statements, all idempotent)`,
+        { migrationDir, fileCount: migrationFiles.length, ddlStatements: totalDdl },
+        `All ${migrationFiles.length} migrations applied successfully (${totalDdl} DDL statements, all idempotent)`,
       );
     }
 
@@ -299,6 +316,7 @@ async function main(): Promise<void> {
     litellmClient: litellmClient ?? null,
     controlPlaneUrl: CONTROL_PLANE_URL,
     circuitBreaker,
+    db: db ?? null,
   });
   const repeatableJobs = createRepeatableJobManager(
     taskQueue,

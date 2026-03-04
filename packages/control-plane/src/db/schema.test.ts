@@ -184,8 +184,8 @@ describe('machines table columns', () => {
 describe('agents table columns', () => {
   const meta = getColumnMeta(agents);
 
-  it('has exactly 16 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(16);
+  it('has exactly 17 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(17);
   });
 
   it('has all expected column keys', () => {
@@ -205,6 +205,7 @@ describe('agents table columns', () => {
       'lastRunAt',
       'lastCostUsd',
       'totalCostUsd',
+      'accountId',
       'createdAt',
     ];
     expect(Object.keys(meta)).toEqual(expectedKeys);
@@ -325,6 +326,7 @@ describe('agents table columns', () => {
       'last_run_at',
       'last_cost_usd',
       'total_cost_usd',
+      'account_id',
       'created_at',
     ]);
   });
@@ -639,6 +641,7 @@ describe('Required (NOT NULL) vs nullable columns', () => {
       'lastRunAt',
       'lastCostUsd',
       'totalCostUsd',
+      'accountId',
       'createdAt',
     ]);
   });
@@ -760,17 +763,25 @@ describe('Enum compatibility with shared package types', () => {
 // ============================================================================
 
 describe('Foreign key relationships', () => {
-  it('agents.machine_id references machines.id', () => {
+  it('agents.machine_id references machines.id and agents.account_id references api_accounts.id', () => {
     const config = getTableConfig(agents);
-    expect(config.foreignKeys).toHaveLength(1);
+    expect(config.foreignKeys).toHaveLength(2);
 
-    const fk = config.foreignKeys[0];
-    const ref = fk.reference();
-    expect(ref.columns).toHaveLength(1);
-    expect(ref.columns[0].name).toBe('machine_id');
-    expect(getTableName(ref.foreignTable)).toBe('machines');
-    expect(ref.foreignColumns).toHaveLength(1);
-    expect(ref.foreignColumns[0].name).toBe('id');
+    const machineFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'machine_id',
+    );
+    expect(machineFk).toBeDefined();
+    const machineRef = machineFk!.reference();
+    expect(getTableName(machineRef.foreignTable)).toBe('machines');
+    expect(machineRef.foreignColumns[0].name).toBe('id');
+
+    const accountFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'account_id',
+    );
+    expect(accountFk).toBeDefined();
+    const accountRef = accountFk!.reference();
+    expect(getTableName(accountRef.foreignTable)).toBe('api_accounts');
+    expect(accountRef.foreignColumns[0].name).toBe('id');
   });
 
   it('agentRuns.agent_id references agents.id', () => {

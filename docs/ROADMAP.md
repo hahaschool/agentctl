@@ -210,7 +210,30 @@ Full CI/CD pipeline with 9 workflow files:
 - [x] Prompt template variables: `{{date}}`, `{{iteration}}`, `{{lastResult}}`
 - [x] Add `schedule_config` jsonb column, API endpoints
 
-### 8.2 Continuous Loop (Ralph Loop)
+### 8.2 Claude Code Remote Control Integration
+
+> Key discovery (2026-02-24): Claude Code ships a built-in **Remote Control**
+> feature that uses an outbound polling model to the Anthropic API relay.
+> AgentCTL should leverage this instead of spawning Claude Code CLI as a
+> subprocess via the Agent SDK. Benefits:
+>
+> - **No inbound ports** — the Claude Code instance polls outward, fitting
+>   AgentCTL's Tailscale mesh without extra firewall rules
+> - **Native mobile relay** — the same relay the iOS Claude app uses can be
+>   reused by AgentCTL's React Native client
+> - **Session persistence** — Remote Control sessions survive network blips;
+>   no PID management or respawn logic needed
+> - **First-class API** — tool calls, streaming output, and session lifecycle
+>   are exposed as structured events on the relay
+
+- [ ] Spike: replace Agent SDK subprocess wrapper with Remote Control relay client
+- [ ] Update `agent-worker/src/runtime/` to connect via outbound polling
+- [ ] Migrate hook system (PreToolUse/PostToolUse/Stop) to relay event filters
+- [ ] Validate loop controller + scheduled sessions work over relay
+- [ ] Remove `child_process.spawn` code path once relay path is stable
+- [ ] Document latency/reliability comparison (subprocess vs relay)
+
+### 8.3 Continuous Loop (Ralph Loop)
 
 - [x] Add `LoopConfig` type and `AgentType: 'loop'`
 - [x] Implement `LoopController` in agent-worker
@@ -221,7 +244,7 @@ Full CI/CD pipeline with 9 workflow files:
 - [x] API: `PUT/DEL /loop`, `POST /loop/stop`, `GET /loop/status`
 - [x] SSE events: `loop_iteration`, `loop_checkpoint`, `loop_complete`
 
-### 8.3 Safety & Limits
+### 8.4 Safety & Limits
 
 - [x] At least one limit required (iterations/cost/duration)
 - [x] `iterationDelayMs >= 500` enforced server-side
@@ -320,6 +343,71 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 
 ---
 
+## Phase 10 — Codex CLI Integration & Cross-Agent Session Handoff (Priority: Medium)
+
+> Goal: Support OpenAI Codex CLI as a first-class agent type alongside Claude
+> Code, enable seamless session handoff between agent types, and surface all
+> sessions in a unified iOS browser.
+
+### 10.1 Codex CLI Integration
+
+Use the same Remote Control relay pattern proven with Claude Code (Phase 8.2)
+to orchestrate Codex CLI instances across the fleet:
+
+- [ ] Define `AgentType: 'codex'` in shared types alongside existing `'claude'` and `'loop'`
+- [ ] Implement `CodexRuntime` adapter in `agent-worker/src/runtime/`
+  - Outbound polling to Codex API (mirrors Claude Code relay pattern)
+  - Map Codex tool calls to AgentCTL's hook system (PreToolUse/PostToolUse/Stop)
+  - Structured output events compatible with existing SSE stream format
+- [ ] Add Codex model routing to LiteLLM config (`infra/litellm/`)
+  - Provider failover: OpenAI Direct -> Azure OpenAI
+  - Cost tracking parity with Claude models
+- [ ] Extend PM2 ecosystem config to manage Codex worker processes
+- [ ] Registry: Codex agents register with same heartbeat/health protocol
+- [ ] Security: apply identical sandbox constraints (bubblewrap/Seatbelt, `--cap-drop=ALL`, `--network=none`)
+
+### 10.2 Cross-Agent Session Handoff (Claude Code <-> Codex)
+
+Enable seamless mid-task switching between agent types without losing context:
+
+- [ ] Define `SessionHandoff` protocol in `packages/shared/src/protocol/`
+  - Portable session snapshot: working directory state, git diff, conversation summary, active tool state
+  - Handoff reason enum: `'model-affinity'`, `'cost-optimization'`, `'rate-limit-failover'`, `'manual'`
+- [ ] Implement `HandoffController` in agent-worker
+  - Serialize outgoing agent's context (files touched, pending edits, conversation summary via LLM)
+  - Hydrate incoming agent with handoff context as system prompt preamble
+  - Preserve git worktree — both agent types operate on the same worktree
+- [ ] Control plane API:
+  - `POST /api/agents/:id/handoff` — initiate handoff to target agent type
+  - `GET /api/runs/:id/handoff-history` — view handoff chain for a run
+- [ ] Automatic handoff triggers:
+  - Rate limit hit on current provider -> failover to other agent type
+  - Cost threshold -> switch to cheaper model/provider
+  - Task-type affinity rules (e.g., prefer Codex for Python-heavy tasks)
+- [ ] Memory continuity: Mem0 context shared across agent types within a single run
+- [ ] Audit: log every handoff with source agent, target agent, reason, context size
+
+### 10.3 Unified Session Browser (iOS App)
+
+Surface all agent sessions — regardless of agent type — in one mobile view:
+
+- [ ] New `SessionBrowser` screen in `packages/mobile/src/screens/`
+  - Filterable by: agent type (Claude Code / Codex), machine, status, time range
+  - Session cards show: agent type badge, model used, cost, duration, last tool call
+  - Tap to view live SSE stream or completed session replay
+- [ ] Cross-agent run view: for runs with handoffs, show timeline of agent switches
+  - Visual handoff markers with reason and context-transfer summary
+  - Expandable diff of what each agent contributed
+- [ ] Session actions from mobile:
+  - Pause / resume / stop any session
+  - Trigger manual handoff to different agent type
+  - Fork session (create new branch from session state)
+- [ ] Push notifications for handoff events (agent switched, handoff failed, awaiting approval)
+
+**Deliverable**: Codex runtime adapter, handoff protocol + controller, unified session UI, updated API routes and DB schema
+
+---
+
 ## Target Workflow Summary
 
 ```
@@ -330,6 +418,8 @@ GitHub Release:  push ghcr.io:v*.*.* -> approval gate -> DB backup + migrate -> 
 rollback:        workflow_dispatch -> select previous tag -> deploy -> health check
 fleet deploy:    canary -> verify -> matrix deploy remaining -> per-machine health check
 nightly:         security audit agent -> structured report -> auto-create issues for high-severity
+handoff:         rate limit / cost threshold / manual -> serialize context -> hydrate target agent -> resume
+codex session:   same relay pattern as Claude Code -> outbound poll -> SSE stream -> iOS unified browser
 ```
 
 ## Timeline & Dependencies
@@ -343,8 +433,9 @@ nightly:         security audit agent -> structured report -> auto-create issues
 | Phase 5 — Prod Deploy | Phase 3 + 4 | After dev deploy stable |
 | Phase 6 — Observability | Phase 5 | After prod deploy exists |
 | Phase 7 — Fleet Deploy | Phase 5 | Post-MVP |
-| Phase 8 — Sessions & Loop | Phase 4 (DB) | Types/API can start with Phase 1-2 |
+| Phase 8 — Sessions & Loop | Phase 4 (DB) | Types/API can start with Phase 1-2; 8.2 (Remote Control) unlocks Phase 10 |
 | Phase 9 — Security Audit | Phase 2 (scan) + Phase 3 (DAST) + Phase 8 (audit agent) | SAST/SCA start with Phase 1 |
+| Phase 10 — Codex & Handoff | Phase 8.2 (Remote Control) + Phase 7 (Fleet) | Codex runtime mirrors Claude relay pattern; handoff needs fleet routing |
 
 ## References
 
@@ -357,6 +448,11 @@ nightly:         security audit agent -> structured report -> auto-create issues
 - [CI/CD for Node.js (Red Hat)](https://developers.redhat.com/articles/2023/11/01/cicd-best-practices-nodejs)
 - [DB Migration CI/CD](https://www.bytebase.com/blog/how-to-build-cicd-pipeline-for-database-schema-migration/)
 - [Drizzle ORM Migrations](https://orm.drizzle.team/docs/migrations)
+
+### Agent Runtime & Remote Control
+- [Claude Code Remote Control (Feb 2026)](https://docs.anthropic.com/en/docs/claude-code/remote-control) — Outbound polling relay; replaces subprocess spawning
+- [Claude Agent SDK](https://github.com/anthropic/claude-agent-sdk) — TypeScript SDK wrapping Claude Code CLI
+- [OpenAI Codex CLI](https://github.com/openai/codex) — Terminal-native coding agent
 
 ### Security
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)

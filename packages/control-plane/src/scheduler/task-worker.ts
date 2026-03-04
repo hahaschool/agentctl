@@ -1,9 +1,15 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import { type ConnectionOptions, type Job, Worker } from 'bullmq';
+import { eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
+
+import type { Database } from '../db/index.js';
+import { agents as agentsTable, apiAccounts } from '../db/schema.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
+import { decryptCredential } from '../utils/credential-crypto.js';
+import { resolveAccountId } from '../utils/resolve-account.js';
 import type { MachineCircuitBreaker } from './circuit-breaker.js';
 import { AGENT_TASKS_QUEUE, type AgentTaskJobData, type AgentTaskJobName } from './task-queue.js';
 
@@ -20,6 +26,8 @@ export type TaskWorkerOptions = {
   controlPlaneUrl?: string;
   /** Optional circuit breaker to prevent dispatching to flaky machines. */
   circuitBreaker?: MachineCircuitBreaker | null;
+  /** Optional database instance for account resolution during dispatch. */
+  db?: Database | null;
 };
 
 type DispatchPayload = {
@@ -33,6 +41,10 @@ type DispatchPayload = {
   projectPath: string | null;
   /** URL of the control plane, so the worker can POST completion callbacks. */
   controlPlaneUrl: string | null;
+  /** Decrypted API credential for the resolved account (if any). */
+  accountCredential: string | null;
+  /** Provider of the resolved account (e.g. "anthropic", "bedrock", "vertex"). */
+  accountProvider: string | null;
 };
 
 type DispatchResult = {
@@ -101,6 +113,7 @@ export function createTaskWorker({
   litellmClient = null,
   controlPlaneUrl,
   circuitBreaker = null,
+  db = null,
 }: TaskWorkerOptions): Worker<AgentTaskJobData, void, AgentTaskJobName> {
   const worker = new Worker<AgentTaskJobData, void, AgentTaskJobName>(
     AGENT_TASKS_QUEUE,
@@ -217,6 +230,62 @@ export function createTaskWorker({
         }
 
         // -------------------------------------------------------------------
+        // 1d. Resolve the API account for this agent dispatch
+        // -------------------------------------------------------------------
+        let accountCredential: string | null = null;
+        let accountProvider: string | null = null;
+
+        if (db) {
+          const encryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY ?? '';
+
+          // Fetch the agent's accountId from the raw DB row since the
+          // shared Agent type does not expose it.
+          const [agentRow] = await db
+            .select({ accountId: agentsTable.accountId })
+            .from(agentsTable)
+            .where(eq(agentsTable.id, agentId));
+
+          const accountId = await resolveAccountId(
+            {
+              sessionAccountId: null,
+              agentAccountId: agentRow?.accountId ?? null,
+              projectPath: agent.projectPath ?? null,
+            },
+            db,
+          );
+
+          if (accountId && encryptionKey) {
+            const [account] = await db
+              .select()
+              .from(apiAccounts)
+              .where(eq(apiAccounts.id, accountId));
+
+            if (account) {
+              accountCredential = decryptCredential(
+                account.credential,
+                account.credentialIv,
+                encryptionKey,
+              );
+              accountProvider = account.provider;
+              jobLogger.info(
+                { accountId, provider: account.provider },
+                'Resolved API account for dispatch',
+              );
+            } else {
+              jobLogger.warn(
+                { accountId },
+                'Resolved account ID does not match any api_accounts row — dispatching without credential',
+              );
+            }
+          } else if (accountId && !encryptionKey) {
+            jobLogger.warn(
+              { accountId },
+              'CREDENTIAL_ENCRYPTION_KEY not set — cannot decrypt credential for resolved account',
+            );
+          }
+        }
+
+        // -------------------------------------------------------------------
         // 1b. Validate the requested model against LiteLLM (soft check)
         // -------------------------------------------------------------------
         if (litellmClient && model) {
@@ -291,6 +360,8 @@ export function createTaskWorker({
           resumeSession: effectiveResumeSession,
           projectPath: agent.projectPath,
           controlPlaneUrl: controlPlaneUrl ?? null,
+          accountCredential,
+          accountProvider,
         };
 
         const result = await dispatchToWorker(dispatchUrl, payload, jobLogger);

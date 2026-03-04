@@ -19,6 +19,7 @@ import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
+import { accountRoutes } from './routes/accounts.js';
 import { agentRoutes } from './routes/agents.js';
 import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
@@ -28,9 +29,12 @@ import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
+import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
+import { sessionRoutes } from './routes/sessions.js';
+import { settingsRoutes } from './routes/settings.js';
 import { streamRoutes } from './routes/stream.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { wsRoutes } from './routes/ws.js';
@@ -143,6 +147,7 @@ export async function createServer({
         { name: 'audit', description: 'Action audit log and replay' },
         { name: 'dashboard', description: 'Analytics and cost dashboards' },
         { name: 'webhooks', description: 'Webhook subscription management' },
+        { name: 'sessions', description: 'Remote Control session management' },
         { name: 'stream', description: 'SSE agent output streaming' },
       ],
       components: {
@@ -276,12 +281,51 @@ export async function createServer({
     });
   }
 
+  // Register session management routes when both db and dbRegistry are available.
+  if (db && dbRegistry) {
+    await app.register(sessionRoutes, {
+      prefix: '/api/sessions',
+      db,
+      dbRegistry,
+      workerPort,
+      encryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY ?? '',
+    });
+  }
+
   // Register dashboard analytics routes when both db and dbRegistry are available.
   if (db && dbRegistry) {
     await app.register(dashboardRoutes, {
       prefix: '/api/dashboard',
       db,
       dbRegistry,
+    });
+  }
+
+  // Register account management routes when db is available.
+  if (db) {
+    const encryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY ?? '';
+    if (encryptionKey) {
+      await app.register(accountRoutes, {
+        prefix: '/api/settings/accounts',
+        db,
+        encryptionKey,
+      });
+
+      await app.register(oauthRoutes, {
+        prefix: '/api/oauth',
+        db,
+        encryptionKey,
+      });
+    } else {
+      logger.warn(
+        'CREDENTIAL_ENCRYPTION_KEY is not set — account management routes are disabled. ' +
+          "Generate a key with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+      );
+    }
+
+    await app.register(settingsRoutes, {
+      prefix: '/api/settings',
+      db,
     });
   }
 

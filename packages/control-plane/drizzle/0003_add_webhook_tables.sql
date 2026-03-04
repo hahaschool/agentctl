@@ -27,5 +27,5 @@ CREATE TABLE IF NOT EXISTS "webhook_deliveries" (
   "delivered_at" timestamptz
 );
 
-CREATE INDEX "idx_webhook_deliveries_subscription" ON "webhook_deliveries"("subscription_id");
-CREATE INDEX "idx_webhook_deliveries_status" ON "webhook_deliveries"("status");
+CREATE INDEX IF NOT EXISTS "idx_webhook_deliveries_subscription" ON "webhook_deliveries"("subscription_id");
+CREATE INDEX IF NOT EXISTS "idx_webhook_deliveries_status" ON "webhook_deliveries"("status");

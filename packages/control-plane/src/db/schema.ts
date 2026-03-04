@@ -1,6 +1,8 @@
 import {
   bigint,
   bigserial,
+  boolean,
+  index,
   inet,
   integer,
   jsonb,
@@ -41,6 +43,7 @@ export const agents = pgTable('agents', {
   lastRunAt: timestamp('last_run_at', { withTimezone: true }),
   lastCostUsd: numeric('last_cost_usd', { precision: 10, scale: 6 }),
   totalCostUsd: numeric('total_cost_usd', { precision: 12, scale: 6 }).default('0'),
+  accountId: uuid('account_id').references(() => apiAccounts.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
@@ -65,6 +68,33 @@ export const agentRuns = pgTable('agent_runs', {
   parentRunId: text('parent_run_id'),
 });
 
+export const rcSessions = pgTable(
+  'rc_sessions',
+  {
+    id: text('id').primaryKey(),
+    agentId: text('agent_id').notNull(),
+    machineId: text('machine_id')
+      .notNull()
+      .references(() => machines.id),
+    sessionUrl: text('session_url'),
+    claudeSessionId: text('claude_session_id'),
+    status: text('status').notNull().default('starting'),
+    projectPath: text('project_path'),
+    model: text('model'),
+    pid: integer('pid'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    lastHeartbeat: timestamp('last_heartbeat', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    metadata: jsonb('metadata').default({}),
+    accountId: uuid('account_id').references(() => apiAccounts.id, { onDelete: 'set null' }),
+  },
+  (table) => [
+    index('idx_rc_sessions_agent_id').on(table.agentId),
+    index('idx_rc_sessions_machine_id').on(table.machineId),
+    index('idx_rc_sessions_status').on(table.status),
+  ],
+);
+
 export const agentActions = pgTable('agent_actions', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   runId: uuid('run_id').references(() => agentRuns.id),
@@ -75,4 +105,46 @@ export const agentActions = pgTable('agent_actions', {
   toolOutputHash: text('tool_output_hash'),
   durationMs: integer('duration_ms'),
   approvedBy: text('approved_by'),
+});
+
+export const apiAccounts = pgTable(
+  'api_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    provider: text('provider').notNull(),
+    credential: text('credential').notNull(),
+    credentialIv: text('credential_iv').notNull(),
+    priority: integer('priority').notNull().default(0),
+    rateLimit: jsonb('rate_limit').default({}),
+    isActive: boolean('is_active').default(true),
+    metadata: jsonb('metadata').default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_api_accounts_provider').on(table.provider),
+    index('idx_api_accounts_is_active').on(table.isActive),
+  ],
+);
+
+export const projectAccountMappings = pgTable(
+  'project_account_mappings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectPath: text('project_path').notNull().unique(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => apiAccounts.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_project_account_mappings_account_id').on(table.accountId),
+  ],
+);
+
+export const settings = pgTable('settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

@@ -3,10 +3,12 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from '../runtime/agent-pool.js';
+import type { CliSessionManager } from '../runtime/cli-session-manager.js';
 import { agentRoutes } from './routes/agents.js';
 import { emergencyStopRoutes } from './routes/emergency-stop.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
+import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
 
 const HEALTH_CHECK_TIMEOUT_MS = 2_000;
@@ -16,6 +18,7 @@ type CreateWorkerServerOptions = {
   agentPool: AgentPool;
   machineId: string;
   controlPlaneUrl?: string;
+  sessionManager?: CliSessionManager;
 };
 
 type DependencyStatus = {
@@ -59,6 +62,7 @@ export async function createWorkerServer({
   agentPool,
   machineId,
   controlPlaneUrl,
+  sessionManager,
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
@@ -173,6 +177,16 @@ export async function createWorkerServer({
   await app.register(workerMetricsRoutes, {
     agentPool,
   });
+
+  if (sessionManager) {
+    await app.register(sessionRoutes, {
+      prefix: '/api/sessions',
+      sessionManager,
+      machineId,
+      logger,
+      controlPlaneUrl,
+    });
+  }
 
   // --- Global error handler ---
   app.setErrorHandler<FastifyError>((err, request, reply) => {

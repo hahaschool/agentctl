@@ -211,6 +211,41 @@ export class DbAgentRegistry {
     this.logger.info({ agentId, status }, 'Agent status updated');
   }
 
+  async updateAgent(agentId: string, data: { accountId?: string | null }): Promise<Agent> {
+    const setClause: Record<string, unknown> = {};
+
+    if ('accountId' in data) {
+      setClause.accountId = data.accountId ?? null;
+    }
+
+    if (Object.keys(setClause).length === 0) {
+      const existing = await this.getAgent(agentId);
+
+      if (!existing) {
+        throw new ControlPlaneError('AGENT_NOT_FOUND', `Agent '${agentId}' does not exist`, {
+          agentId,
+        });
+      }
+
+      return existing;
+    }
+
+    const result = await this.db
+      .update(agents)
+      .set(setClause)
+      .where(eq(agents.id, agentId))
+      .returning();
+
+    if (result.length === 0) {
+      throw new ControlPlaneError('AGENT_NOT_FOUND', `Agent '${agentId}' does not exist`, {
+        agentId,
+      });
+    }
+
+    this.logger.info({ agentId, ...data }, 'Agent updated');
+    return this.toAgent(result[0]);
+  }
+
   async listAgents(machineId?: string): Promise<Agent[]> {
     const query = machineId
       ? this.db.select().from(agents).where(eq(agents.machineId, machineId))
@@ -562,6 +597,7 @@ export class DbAgentRegistry {
       lastRunAt: row.lastRunAt,
       lastCostUsd: row.lastCostUsd ? Number(row.lastCostUsd) : null,
       totalCostUsd: Number(row.totalCostUsd ?? 0),
+      accountId: row.accountId ?? null,
       createdAt: row.createdAt ?? new Date(),
     };
   }
