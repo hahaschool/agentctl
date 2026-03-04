@@ -639,6 +639,156 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   );
 
   // ---------------------------------------------------------------------------
+  // POST /:sessionId/fork — fork a session (resume from a new session)
+  // ---------------------------------------------------------------------------
+
+  app.post<{
+    Params: { sessionId: string };
+    Body: { prompt: string; machineId?: string; accountId?: string };
+  }>(
+    '/:sessionId/fork',
+    { schema: { tags: ['sessions'], summary: 'Fork a session into a new one' } },
+    async (request, reply) => {
+      const { sessionId } = request.params;
+      const { prompt, machineId: overrideMachineId, accountId: overrideAccountId } = request.body;
+
+      if (!prompt || typeof prompt !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_PROMPT',
+          message: 'A non-empty "prompt" string is required to fork the session',
+        });
+      }
+
+      // Look up the parent session
+      const [parent] = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
+
+      if (!parent) {
+        return reply.code(404).send({
+          error: 'SESSION_NOT_FOUND',
+          message: `Session '${sessionId}' does not exist`,
+        });
+      }
+
+      if (!parent.claudeSessionId) {
+        return reply.code(400).send({
+          error: 'NO_CLAUDE_SESSION',
+          message: 'Parent session has no Claude session ID — cannot fork',
+        });
+      }
+
+      // Use same machine or allow override
+      const targetMachineId = overrideMachineId ?? parent.machineId;
+      const machine = await dbRegistry.getMachine(targetMachineId);
+
+      if (!machine || machine.status === 'offline') {
+        return reply.code(503).send({
+          error: 'MACHINE_UNAVAILABLE',
+          message: `Machine '${targetMachineId}' is offline or not registered`,
+        });
+      }
+
+      // Resolve credentials (same logic as session creation)
+      let accountCredential: string | null = null;
+      let accountProvider: string | null = null;
+      const resolvedAccountId = overrideAccountId ?? parent.accountId;
+
+      if (resolvedAccountId && encryptionKey) {
+        const [account] = await db
+          .select()
+          .from(apiAccounts)
+          .where(eq(apiAccounts.id, resolvedAccountId));
+
+        if (account) {
+          accountCredential = decryptCredential(account.encryptedCredential, encryptionKey);
+          accountProvider = account.provider;
+        }
+      }
+
+      // Create new session record
+      const newSessionId = crypto.randomUUID();
+
+      const [inserted] = await db
+        .insert(rcSessions)
+        .values({
+          id: newSessionId,
+          agentId: parent.agentId,
+          machineId: targetMachineId,
+          status: 'starting',
+          projectPath: parent.projectPath,
+          model: parent.model,
+          accountId: resolvedAccountId ?? null,
+          metadata: {
+            initialPrompt: prompt,
+            forkedFrom: sessionId,
+            parentClaudeSessionId: parent.claudeSessionId,
+          },
+        })
+        .returning();
+
+      // Dispatch to worker — use resumeSessionId to continue from parent
+      const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+
+      try {
+        const workerResponse = await fetch(`${workerBaseUrl}/api/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: newSessionId,
+            agentId: parent.agentId,
+            projectPath: parent.projectPath,
+            model: parent.model ?? null,
+            prompt,
+            resumeSessionId: parent.claudeSessionId,
+            accountCredential,
+            accountProvider,
+          }),
+        });
+
+        if (workerResponse.ok) {
+          await db
+            .update(rcSessions)
+            .set({ status: 'active', lastHeartbeat: new Date() })
+            .where(eq(rcSessions.id, newSessionId));
+        } else {
+          const errorText = await workerResponse.text().catch(() => 'Unknown error');
+          app.log.warn({ newSessionId, errorText }, 'Worker rejected fork session');
+          await db
+            .update(rcSessions)
+            .set({
+              status: 'error',
+              endedAt: new Date(),
+              metadata: { ...inserted.metadata, errorMessage: errorText },
+            })
+            .where(eq(rcSessions.id, newSessionId));
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        app.log.warn({ newSessionId, err: errMsg }, 'Failed to dispatch fork to worker');
+        await db
+          .update(rcSessions)
+          .set({
+            status: 'error',
+            endedAt: new Date(),
+            metadata: { ...inserted.metadata, errorMessage: errMsg },
+          })
+          .where(eq(rcSessions.id, newSessionId));
+      }
+
+      const [finalSession] = await db
+        .select()
+        .from(rcSessions)
+        .where(eq(rcSessions.id, newSessionId));
+
+      return reply.code(201).send({
+        ok: true,
+        sessionId: newSessionId,
+        session: finalSession ?? inserted,
+        forkedFrom: sessionId,
+      });
+    },
+  );
+
+  // ---------------------------------------------------------------------------
   // POST /:sessionId/message — send message to an active session
   // ---------------------------------------------------------------------------
 

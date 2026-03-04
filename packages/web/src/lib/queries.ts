@@ -227,6 +227,16 @@ export function useDeleteSession() {
   });
 }
 
+export function useForkSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.forkSession(id, prompt),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+}
+
 export function useCreateAccount() {
   const qc = useQueryClient();
   return useMutation({

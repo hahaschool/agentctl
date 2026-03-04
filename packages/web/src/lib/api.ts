@@ -216,6 +216,11 @@ export const api = {
     }),
   deleteSession: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
+  forkSession: (id: string, prompt: string) =>
+    request<{ ok: boolean; sessionId: string; session: Session; forkedFrom: string }>(
+      `/api/sessions/${id}/fork`,
+      { method: 'POST', body: JSON.stringify({ prompt }) },
+    ),
   discoverSessions: () =>
     request<{
       sessions: DiscoveredSession[];

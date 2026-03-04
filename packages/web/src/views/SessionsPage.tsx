@@ -695,6 +695,15 @@ export function SessionsPage(): React.JSX.Element {
                 >
                   Open Full View
                 </Link>
+                {selected.claudeSessionId && (
+                  <Link
+                    href={`/sessions/${selected.id}`}
+                    className="px-3.5 py-1.5 bg-blue-900/50 text-blue-300 border border-blue-800/50 rounded-sm text-xs font-medium no-underline hover:bg-blue-900"
+                    title="Fork this session in Full View"
+                  >
+                    Fork
+                  </Link>
+                )}
                 {(selected.status === 'active' || selected.status === 'starting') && (
                   <ConfirmButton
                     label="End Session"

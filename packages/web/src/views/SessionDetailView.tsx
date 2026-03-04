@@ -26,6 +26,7 @@ import {
   sessionContentQuery,
   sessionQuery,
   useDeleteSession,
+  useForkSession,
   useResumeSession,
   useSendMessage,
 } from '../lib/queries';
@@ -114,7 +115,10 @@ function SessionHeader({
 }): React.JSX.Element {
   const toast = useToast();
   const deleteSession = useDeleteSession();
+  const forkSession = useForkSession();
   const queryClient = useQueryClient();
+  const [forkPrompt, setForkPrompt] = useState('');
+  const [showFork, setShowFork] = useState(false);
 
   const handleEnd = useCallback(() => {
     deleteSession.mutate(session.id, {
@@ -125,6 +129,23 @@ function SessionHeader({
       onError: (err) => toast.error(err.message),
     });
   }, [session.id, deleteSession, toast, queryClient]);
+
+  const handleFork = useCallback(() => {
+    if (!forkPrompt.trim()) return;
+    forkSession.mutate(
+      { id: session.id, prompt: forkPrompt.trim() },
+      {
+        onSuccess: (data) => {
+          toast.success(`Forked! New session: ${data.sessionId.slice(0, 12)}...`);
+          setShowFork(false);
+          setForkPrompt('');
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    );
+  }, [session.id, forkPrompt, forkSession, toast]);
+
+  const canFork = !!session.claudeSessionId;
 
   return (
     <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
@@ -139,6 +160,15 @@ function SessionHeader({
         <div className="ml-auto flex items-center gap-2">
           <LastUpdated dataUpdatedAt={dataUpdatedAt} />
           <RefreshButton onClick={onRefresh} isFetching={isFetching} />
+          {canFork && (
+            <button
+              type="button"
+              onClick={() => setShowFork(!showFork)}
+              className="px-3 py-1 bg-blue-900/50 text-blue-300 border border-blue-800/50 rounded-sm text-xs cursor-pointer hover:bg-blue-900"
+            >
+              Fork
+            </button>
+          )}
           {(session.status === 'active' || session.status === 'starting') && (
             <ConfirmButton
               label="End Session"
@@ -150,6 +180,32 @@ function SessionHeader({
           )}
         </div>
       </div>
+
+      {/* Fork input */}
+      {showFork && (
+        <div className="mb-2 flex gap-2 items-end">
+          <input
+            type="text"
+            value={forkPrompt}
+            onChange={(e) => setForkPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleFork();
+              if (e.key === 'Escape') setShowFork(false);
+            }}
+            placeholder="Prompt for the forked session..."
+            className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={handleFork}
+            disabled={!forkPrompt.trim() || forkSession.isPending}
+            className="px-3 py-1.5 bg-blue-700 text-white rounded-sm text-xs cursor-pointer disabled:opacity-50"
+          >
+            {forkSession.isPending ? 'Forking...' : 'Fork Session'}
+          </button>
+        </div>
+      )}
 
       {/* Metadata row */}
       <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
