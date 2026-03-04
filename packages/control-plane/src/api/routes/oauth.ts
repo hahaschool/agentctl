@@ -101,6 +101,13 @@ export const oauthRoutes: FastifyPluginAsync<OAuthRoutesOptions> = async (app, o
       });
     }
 
+    if (typeof accountName === 'string' && accountName.length > 255) {
+      return reply.code(400).send({
+        error: 'ACCOUNT_NAME_TOO_LONG',
+        message: 'accountName must be under 255 characters',
+      });
+    }
+
     const endpoints = OAUTH_ENDPOINTS[provider];
     if (!endpoints) {
       return reply.code(400).send({

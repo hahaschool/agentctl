@@ -206,6 +206,27 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
             message: 'Each finding must have a non-empty "recommendation" string',
           });
         }
+
+        if (finding.title.length > 500) {
+          return reply.code(400).send({
+            error: 'TITLE_TOO_LONG',
+            message: `Finding "${finding.id}": title must be under 500 characters`,
+          });
+        }
+
+        if (finding.description.length > 10_000) {
+          return reply.code(400).send({
+            error: 'DESCRIPTION_TOO_LONG',
+            message: `Finding "${finding.id}": description must be under 10,000 characters`,
+          });
+        }
+
+        if (finding.recommendation.length > 5_000) {
+          return reply.code(400).send({
+            error: 'RECOMMENDATION_TOO_LONG',
+            message: `Finding "${finding.id}": recommendation must be under 5,000 characters`,
+          });
+        }
       }
 
       try {

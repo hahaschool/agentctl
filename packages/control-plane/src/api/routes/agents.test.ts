@@ -754,6 +754,17 @@ describe('Agent routes — start with auto-creation', () => {
         createdAt: new Date(),
       },
     ]),
+    findOnlineMachine: vi.fn().mockResolvedValue({
+      id: 'machine-1',
+      hostname: 'test-host',
+      tailscaleIp: '100.64.0.1',
+      os: 'linux',
+      arch: 'x64',
+      status: 'online',
+      lastHeartbeat: new Date(),
+      capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+      createdAt: new Date(),
+    }),
     createAgent: vi.fn().mockResolvedValue('new-agent-uuid'),
     getAgent: vi.fn(),
     updateAgentStatus: vi.fn(),
@@ -781,21 +792,19 @@ describe('Agent routes — start with auto-creation', () => {
   afterEach(() => {
     vi.mocked(mockDbRegistry.getAgent).mockReset();
     vi.mocked(mockDbRegistry.createAgent).mockReset().mockResolvedValue('new-agent-uuid');
-    vi.mocked(mockDbRegistry.listMachines)
+    vi.mocked(mockDbRegistry.findOnlineMachine)
       .mockReset()
-      .mockResolvedValue([
-        {
-          id: 'machine-1',
-          hostname: 'test-host',
-          tailscaleIp: '100.64.0.1',
-          os: 'linux',
-          arch: 'x64',
-          status: 'online',
-          lastHeartbeat: new Date(),
-          capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
-          createdAt: new Date(),
-        },
-      ] as never);
+      .mockResolvedValue({
+        id: 'machine-1',
+        hostname: 'test-host',
+        tailscaleIp: '100.64.0.1',
+        os: 'linux',
+        arch: 'x64',
+        status: 'online',
+        lastHeartbeat: new Date(),
+        capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+        createdAt: new Date(),
+      } as never);
     vi.mocked(mockTaskQueue.add).mockReset().mockResolvedValue({ id: 'job-auto-1' });
   });
 
@@ -892,12 +901,12 @@ describe('Agent routes — start with auto-creation', () => {
       type: 'adhoc',
     });
 
-    expect(mockDbRegistry.listMachines).not.toHaveBeenCalled();
+    expect(mockDbRegistry.findOnlineMachine).not.toHaveBeenCalled();
   });
 
   it('returns 503 when no online machines are available for auto-creation', async () => {
     vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce(undefined);
-    vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([]);
+    vi.mocked(mockDbRegistry.findOnlineMachine).mockResolvedValueOnce(null);
 
     const response = await app.inject({
       method: 'POST',
@@ -955,19 +964,8 @@ describe('Agent routes — start with auto-creation', () => {
 
   it('returns 503 when only offline machines exist', async () => {
     vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce(undefined);
-    vi.mocked(mockDbRegistry.listMachines).mockResolvedValueOnce([
-      {
-        id: 'offline-machine',
-        hostname: 'dead-host',
-        tailscaleIp: '100.64.0.99',
-        os: 'linux',
-        arch: 'x64',
-        status: 'offline',
-        lastHeartbeat: new Date(),
-        capabilities: { gpu: false, docker: false, maxConcurrentAgents: 1 },
-        createdAt: new Date(),
-      },
-    ] as never);
+    // findOnlineMachine returns null because the DB query filters by status='online'
+    vi.mocked(mockDbRegistry.findOnlineMachine).mockResolvedValueOnce(null);
 
     const response = await app.inject({
       method: 'POST',

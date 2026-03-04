@@ -194,6 +194,13 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
+      if (typeof name === 'string' && name.length > 256) {
+        return reply.code(400).send({
+          error: 'NAME_TOO_LONG',
+          message: 'name must be under 256 characters',
+        });
+      }
+
       // Validate machineId if provided
       if (machineId !== undefined && typeof machineId !== 'string') {
         return reply.code(400).send({
@@ -215,6 +222,13 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         return reply.code(400).send({
           error: 'INVALID_SCHEDULE',
           message: 'schedule must be a string or null',
+        });
+      }
+
+      if (typeof schedule === 'string' && schedule.length > 100) {
+        return reply.code(400).send({
+          error: 'SCHEDULE_TOO_LONG',
+          message: 'schedule must be under 100 characters',
         });
       }
 
@@ -319,6 +333,13 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       } = request.body;
       const agentId = request.params.id;
 
+      if (typeof prompt === 'string' && prompt.length > 32_000) {
+        return reply.code(400).send({
+          error: 'PROMPT_TOO_LONG',
+          message: 'Prompt must be under 32,000 characters',
+        });
+      }
+
       if (taskQueue) {
         let machineId = agentId;
 
@@ -331,8 +352,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
             let targetMachineId = requestedMachineId;
 
             if (!targetMachineId) {
-              const allMachines = await dbRegistry.listMachines();
-              const onlineMachine = allMachines.find((m) => m.status === 'online');
+              const onlineMachine = await dbRegistry.findOnlineMachine();
 
               if (!onlineMachine) {
                 return reply.code(503).send({

@@ -147,6 +147,16 @@ export class DbAgentRegistry {
     return rows.map((row) => this.toMachine(row));
   }
 
+  async findOnlineMachine(): Promise<Machine | null> {
+    const [machine] = await this.db
+      .select()
+      .from(machines)
+      .where(eq(machines.status, 'online'))
+      .limit(1);
+
+    return machine ? this.toMachine(machine) : null;
+  }
+
   async getMachine(machineId: string): Promise<Machine | undefined> {
     const rows = await this.db.select().from(machines).where(eq(machines.id, machineId));
 
