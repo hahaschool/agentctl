@@ -307,6 +307,8 @@ export function SessionsPage(): React.JSX.Element {
                 setShowCreateForm((prev) => !prev);
                 setFormError(null);
               }}
+              aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
+              aria-expanded={showCreateForm}
               className={cn(
                 'px-2.5 py-1 border border-border rounded-sm text-xs font-medium',
                 showCreateForm ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
@@ -317,6 +319,7 @@ export function SessionsPage(): React.JSX.Element {
             <button
               type="button"
               onClick={() => void sessions.refetch()}
+              aria-label="Refresh session list"
               className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs"
             >
               Refresh

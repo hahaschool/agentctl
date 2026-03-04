@@ -669,6 +669,7 @@ export function DiscoverPage(): React.JSX.Element {
                               <button
                                 type="button"
                                 onClick={() => setResuming(null)}
+                                aria-label="Cancel resume"
                                 className="py-[5px] px-2.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
                               >
                                 Cancel

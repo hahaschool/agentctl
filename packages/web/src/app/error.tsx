@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-
 export default function ErrorPage({
   error,
   reset,
@@ -9,11 +7,6 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  // Next.js surfaces errors server-side; no need to log to browser console
-  useEffect(() => {
-    // Error is available in the component for display
-  }, [error]);
-
   return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
       <div className="text-4xl mb-4 text-red-400">!</div>

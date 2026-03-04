@@ -129,6 +129,8 @@ export function SessionPreview({
             <button
               type="button"
               onClick={() => setShowTools(!showTools)}
+              aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
+              aria-pressed={showTools}
               className={cn(
                 'px-2.5 py-1 border border-border rounded-sm text-[11px] cursor-pointer',
                 showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
