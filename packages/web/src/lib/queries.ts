@@ -3,6 +3,17 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 import { api } from './api';
 
 // ---------------------------------------------------------------------------
+// Helpers — read user preferences from localStorage
+// ---------------------------------------------------------------------------
+
+function getRefetchInterval(): number | false {
+  if (typeof window === 'undefined') return 10_000;
+  const raw = localStorage.getItem('agentctl:autoRefreshInterval');
+  const ms = raw ? Number(raw) : 10_000;
+  return ms > 0 ? ms : false;
+}
+
+// ---------------------------------------------------------------------------
 // Query keys
 // ---------------------------------------------------------------------------
 
@@ -36,7 +47,7 @@ export function healthQuery() {
   return queryOptions({
     queryKey: queryKeys.health,
     queryFn: api.health,
-    refetchInterval: 15_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -45,7 +56,7 @@ export function machinesQuery() {
   return queryOptions({
     queryKey: queryKeys.machines,
     queryFn: api.listMachines,
-    refetchInterval: 15_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -54,7 +65,7 @@ export function agentsQuery() {
   return queryOptions({
     queryKey: queryKeys.agents,
     queryFn: api.listAgents,
-    refetchInterval: 10_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -64,7 +75,7 @@ export function agentQuery(id: string) {
     queryKey: queryKeys.agent(id),
     queryFn: () => api.getAgent(id),
     enabled: !!id,
-    refetchInterval: 10_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -74,7 +85,7 @@ export function agentRunsQuery(agentId: string) {
     queryKey: queryKeys.agentRuns(agentId),
     queryFn: () => api.getAgentRuns(agentId),
     enabled: !!agentId,
-    refetchInterval: 10_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -83,7 +94,7 @@ export function sessionsQuery(params?: { status?: string; machineId?: string }) 
   return queryOptions({
     queryKey: queryKeys.sessions(params),
     queryFn: () => api.listSessions(params),
-    refetchInterval: 5_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -111,7 +122,7 @@ export function discoverQuery() {
   return queryOptions({
     queryKey: queryKeys.discover,
     queryFn: api.discoverSessions,
-    refetchInterval: 30_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -120,7 +131,7 @@ export function metricsQuery() {
   return queryOptions({
     queryKey: queryKeys.metrics,
     queryFn: api.metrics,
-    refetchInterval: 15_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }

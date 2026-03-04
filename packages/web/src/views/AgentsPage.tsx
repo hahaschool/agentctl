@@ -66,7 +66,12 @@ export function AgentsPage(): React.JSX.Element {
   const [createName, setCreateName] = useState('');
   const [createMachineId, setCreateMachineId] = useState('');
   const [createType, setCreateType] = useState<string>('autonomous');
-  const [createModel, setCreateModel] = useState('claude-sonnet-4-6');
+  const [createModel, setCreateModel] = useState(
+    () =>
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? 'claude-sonnet-4-6',
+  );
   const [createProjectPath, setCreateProjectPath] = useState('');
   const [createInitialPrompt, setCreateInitialPrompt] = useState('');
 
@@ -153,7 +158,11 @@ export function AgentsPage(): React.JSX.Element {
     setCreateName('');
     setCreateMachineId('');
     setCreateType('autonomous');
-    setCreateModel('claude-sonnet-4-6');
+    setCreateModel(
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? 'claude-sonnet-4-6',
+    );
     setCreateProjectPath('');
     setCreateInitialPrompt('');
   }

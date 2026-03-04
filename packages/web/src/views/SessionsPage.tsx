@@ -63,6 +63,7 @@ function matchesSearchQuery(session: Session, query: string): boolean {
   if (session.agentId.toLowerCase().includes(q)) return true;
   if (session.projectPath?.toLowerCase().includes(q)) return true;
   if (session.machineId.toLowerCase().includes(q)) return true;
+  if (session.model?.toLowerCase().includes(q)) return true;
   return false;
 }
 
@@ -88,7 +89,12 @@ export function SessionsPage(): React.JSX.Element {
   const [formMachineId, setFormMachineId] = useState('');
   const [formProjectPath, setFormProjectPath] = useState('');
   const [formPrompt, setFormPrompt] = useState('');
-  const [formModel, setFormModel] = useState('');
+  const [formModel, setFormModel] = useState(
+    () =>
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? '',
+  );
   const [formAccountId, setFormAccountId] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -132,7 +138,11 @@ export function SessionsPage(): React.JSX.Element {
     setFormMachineId('');
     setFormProjectPath('');
     setFormPrompt('');
-    setFormModel('');
+    setFormModel(
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? '',
+    );
     setFormAccountId('');
     setFormError(null);
   }, []);
@@ -387,7 +397,7 @@ export function SessionsPage(): React.JSX.Element {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter by ID, project, agent..."
+            placeholder="Filter by ID, project, agent, model..."
             className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none box-border"
           />
         </div>

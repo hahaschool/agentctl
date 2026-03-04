@@ -35,6 +35,107 @@ import {
 } from '../lib/queries';
 
 // ---------------------------------------------------------------------------
+// Export helpers
+// ---------------------------------------------------------------------------
+
+function downloadFile(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportSessionAsJson(session: Session, messages: SessionContentMessage[]): void {
+  const data = {
+    session: {
+      id: session.id,
+      agentId: session.agentId,
+      machineId: session.machineId,
+      claudeSessionId: session.claudeSessionId,
+      status: session.status,
+      projectPath: session.projectPath,
+      model: session.model,
+      accountId: session.accountId,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      metadata: session.metadata,
+    },
+    messages: messages.map((m) => ({
+      type: m.type,
+      content: m.content,
+      timestamp: m.timestamp ?? null,
+      toolName: m.toolName ?? null,
+    })),
+    exportedAt: new Date().toISOString(),
+  };
+  const json = JSON.stringify(data, null, 2);
+  const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.json`;
+  downloadFile(json, filename, 'application/json');
+}
+
+function formatMessageLabel(type: string): string {
+  switch (type) {
+    case 'human':
+      return 'Human';
+    case 'assistant':
+      return 'Assistant';
+    case 'tool_use':
+      return 'Tool Call';
+    case 'tool_result':
+      return 'Tool Result';
+    default:
+      return type;
+  }
+}
+
+function exportSessionAsMarkdown(session: Session, messages: SessionContentMessage[]): void {
+  const lines: string[] = [];
+
+  lines.push(`# Session ${session.id}`);
+  lines.push('');
+
+  const metaParts: string[] = [];
+  metaParts.push(`**Status:** ${session.status}`);
+  if (session.model) metaParts.push(`**Model:** ${session.model}`);
+  metaParts.push(`**Started:** ${session.startedAt}`);
+  if (session.endedAt) metaParts.push(`**Ended:** ${session.endedAt}`);
+  metaParts.push(`**Machine:** ${session.machineId}`);
+  if (session.projectPath) metaParts.push(`**Project:** ${session.projectPath}`);
+  lines.push(metaParts.join(' | '));
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+  lines.push('## Messages');
+  lines.push('');
+
+  for (const msg of messages) {
+    const label = formatMessageLabel(msg.type);
+    const timestamp = msg.timestamp ? ` _(${msg.timestamp})_` : '';
+    const toolSuffix = msg.toolName ? ` \`${msg.toolName}\`` : '';
+
+    lines.push(`### ${label}${toolSuffix}${timestamp}`);
+    lines.push('');
+
+    const content = msg.content ?? '';
+    if (msg.type === 'tool_use' || msg.type === 'tool_result') {
+      lines.push('```');
+      lines.push(content);
+      lines.push('```');
+    } else {
+      lines.push(content);
+    }
+    lines.push('');
+  }
+
+  const md = lines.join('\n');
+  const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.md`;
+  downloadFile(md, filename, 'text/markdown');
+}
+
+// ---------------------------------------------------------------------------
 // Session detail view
 // ---------------------------------------------------------------------------
 
@@ -97,6 +198,7 @@ export function SessionDetailView(): React.JSX.Element {
       {/* Top bar */}
       <SessionHeader
         session={s}
+        messages={content.data?.messages ?? []}
         dataUpdatedAt={content.dataUpdatedAt || session.dataUpdatedAt}
         isFetching={(content.isFetching || session.isFetching) && !content.isLoading}
         onRefresh={refetchAll}
@@ -128,12 +230,14 @@ export function SessionDetailView(): React.JSX.Element {
 
 function SessionHeader({
   session,
+  messages,
   dataUpdatedAt,
   isFetching,
   onRefresh,
   streamConnected,
 }: {
   session: Session;
+  messages: SessionContentMessage[];
   dataUpdatedAt: number;
   isFetching: boolean;
   onRefresh: () => void;
@@ -145,6 +249,20 @@ function SessionHeader({
   const queryClient = useQueryClient();
   const [forkPrompt, setForkPrompt] = useState('');
   const [showFork, setShowFork] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    if (!showExportMenu) return;
+    function handleClickOutside(e: MouseEvent): void {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
 
   const handleEnd = useCallback(() => {
     deleteSession.mutate(session.id, {
@@ -191,6 +309,39 @@ function SessionHeader({
         <div className="ml-auto flex items-center gap-2">
           <LastUpdated dataUpdatedAt={dataUpdatedAt} />
           <RefreshButton onClick={onRefresh} isFetching={isFetching} />
+          <div className="relative" ref={exportMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
+            >
+              Export
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-sm shadow-lg min-w-[160px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportSessionAsJson(session, messages);
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent"
+                >
+                  Export as JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportSessionAsMarkdown(session, messages);
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent border-t border-t-border"
+                >
+                  Export as Markdown
+                </button>
+              </div>
+            )}
+          </div>
           {canFork && (
             <button
               type="button"
@@ -324,9 +475,16 @@ function MessageList({
   const [showTools, setShowTools] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  const visibleMessages = showTools
+  const maxDisplayMessages =
+    typeof window !== 'undefined'
+      ? Number(localStorage.getItem('agentctl:maxDisplayMessages')) || 100
+      : 100;
+
+  const filteredMessages = showTools
     ? messages
     : messages.filter((m) => m.type === 'human' || m.type === 'assistant');
+
+  const visibleMessages = filteredMessages.slice(-maxDisplayMessages);
 
   // Auto-scroll to bottom when new messages or stream output arrive
   const prevCountRef = useRef(0);
