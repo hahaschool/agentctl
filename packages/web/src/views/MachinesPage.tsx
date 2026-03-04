@@ -57,7 +57,7 @@ export function MachinesPage(): React.JSX.Element {
   }, [list, statusFilter, search]);
 
   return (
-    <div className="relative p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
       <FetchingBar isFetching={machines.isFetching && !machines.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">

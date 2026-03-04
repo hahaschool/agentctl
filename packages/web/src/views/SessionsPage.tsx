@@ -958,7 +958,7 @@ function SessionContent({
             aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
             aria-pressed={showTools}
             className={cn(
-              'px-2 py-[3px] border border-border rounded-sm text-[10px] cursor-pointer',
+              'px-2.5 py-1 border border-border rounded-sm text-[11px] cursor-pointer min-h-[28px]',
               showTools ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
             )}
           >
@@ -968,7 +968,7 @@ function SessionContent({
             type="button"
             onClick={() => void fetchContent()}
             aria-label="Refresh conversation"
-            className="px-2 py-[3px] bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer"
+            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] cursor-pointer min-h-[28px]"
           >
             Refresh
           </button>

@@ -116,7 +116,7 @@ export function SessionPreview({
         aria-modal="true"
         aria-labelledby="session-preview-title"
         tabIndex={-1}
-        className="fixed top-0 right-0 bottom-0 w-1/2 min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.3)] outline-none"
+        className="fixed top-0 right-0 bottom-0 w-full sm:w-3/4 md:w-1/2 md:min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.15)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.4)] outline-none"
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-border flex justify-between items-center shrink-0">

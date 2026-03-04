@@ -67,7 +67,7 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   if (agent.isLoading) {
     return (
-      <div className="p-6 max-w-[1000px]">
+      <div className="p-4 md:p-6 max-w-[1000px]">
         <div className="mb-5">
           <Skeleton className="h-4 w-32 mb-4" />
           <Skeleton className="h-8 w-64 mb-2" />
@@ -87,7 +87,7 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   if (agent.error) {
     return (
-      <div className="p-6 max-w-[1000px]">
+      <div className="p-4 md:p-6 max-w-[1000px]">
         <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: 'Error' }]} />
         <ErrorBanner
           message={`Failed to load agent: ${agent.error.message}`}
@@ -102,7 +102,7 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   if (!data) {
     return (
-      <div className="p-6 max-w-[1000px]">
+      <div className="p-4 md:p-6 max-w-[1000px]">
         <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: 'Error' }]} />
         <div className="mt-6 text-center text-muted-foreground text-sm py-12">Agent not found.</div>
       </div>
@@ -112,7 +112,7 @@ export default function AgentDetailPage(): React.JSX.Element {
   const runList = runs.data ?? [];
 
   return (
-    <div className="p-6 max-w-[1000px]">
+    <div className="p-4 md:p-6 max-w-[1000px]">
       <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: data.name }]} />
 
       {/* Header */}

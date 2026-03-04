@@ -484,7 +484,7 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
 
 function LoadingState(): React.JSX.Element {
   return (
-    <div className="p-6 max-w-[900px]">
+    <div className="p-4 md:p-6 max-w-[900px]">
       <Skeleton className="h-4 w-28 mb-4" />
       <div className="flex items-center gap-3 mb-6">
         <Skeleton className="h-7 w-48" />

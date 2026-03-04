@@ -65,7 +65,7 @@ export function MachineDetailView(): React.JSX.Element {
 
   if (machines.isLoading) {
     return (
-      <div className="p-6 max-w-[1000px]">
+      <div className="p-4 md:p-6 max-w-[1000px]">
         <Skeleton className="h-4 w-32 mb-4" />
         <Skeleton className="h-8 w-64 mb-2" />
         <Skeleton className="h-4 w-48 mb-6" />
@@ -83,7 +83,7 @@ export function MachineDetailView(): React.JSX.Element {
 
   if (machines.error) {
     return (
-      <div className="p-6 max-w-[1000px]">
+      <div className="p-4 md:p-6 max-w-[1000px]">
         <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: 'Error' }]} />
         <ErrorBanner
           message={`Failed to load machines: ${machines.error.message}`}
@@ -98,7 +98,7 @@ export function MachineDetailView(): React.JSX.Element {
 
   if (!machine) {
     return (
-      <div className="p-6 max-w-[1000px]">
+      <div className="p-4 md:p-6 max-w-[1000px]">
         <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: 'Not Found' }]} />
         <div className="text-center text-muted-foreground text-sm py-12">Machine not found.</div>
       </div>
@@ -106,7 +106,7 @@ export function MachineDetailView(): React.JSX.Element {
   }
 
   return (
-    <div className="p-6 max-w-[1000px]">
+    <div className="p-4 md:p-6 max-w-[1000px]">
       <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: machine.hostname }]} />
 
       {/* Header */}
