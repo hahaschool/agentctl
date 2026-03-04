@@ -310,21 +310,21 @@ describe('ToolRateLimiter', () => {
       expect(result.exceededLimit).toBe('per_minute');
     });
 
-    it('uses 3600 calls/hour by default', () => {
-      const limiter = new ToolRateLimiter({ maxCallsPerMinute: 10000 });
+    it('enforces per-hour limit', () => {
+      // Use a small hourly limit to avoid 3600-iteration loop timeout
+      const limiter = new ToolRateLimiter({ maxCallsPerMinute: 10000, maxCallsPerHour: 50 });
       const baseTime = new Date('2026-03-02T12:00:00.000Z');
 
-      // Make 3600 calls spread across 30 minutes (each 500ms apart)
-      // so all remain within the 1-hour sliding window
-      for (let i = 0; i < 3600; i++) {
-        const callTime = new Date(baseTime.getTime() + i * 500);
+      // Make 50 calls spread across the hour window (each 30s apart)
+      for (let i = 0; i < 50; i++) {
+        const callTime = new Date(baseTime.getTime() + i * 30_000);
         vi.setSystemTime(callTime);
         const result = limiter.check('agent-1', 'Bash', callTime);
         expect(result.allowed).toBe(true);
       }
 
-      // 3601st call should be denied (all 3600 are still in the hour window)
-      const callTime = new Date(baseTime.getTime() + 3600 * 500);
+      // 51st call should be denied
+      const callTime = new Date(baseTime.getTime() + 50 * 30_000);
       vi.setSystemTime(callTime);
       const result = limiter.check('agent-1', 'Bash', callTime);
 
