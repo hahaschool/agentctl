@@ -1,4 +1,12 @@
 export type {
+  AccountDefaults,
+  AccountProvider,
+  ApiAccount,
+  FailoverPolicy,
+  ProjectAccountMapping,
+} from './account.js';
+export { ACCOUNT_PROVIDERS } from './account.js';
+export type {
   Agent,
   AgentConfig,
   AgentStatus,
