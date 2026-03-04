@@ -89,6 +89,31 @@ export type AgentRun = {
   errorMessage?: string;
 };
 
+export type ApiAccount = {
+  id: string;
+  name: string;
+  provider: string;
+  credentialMasked: string;
+  priority: number;
+  rateLimit: Record<string, number>;
+  isActive: boolean;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectAccountMapping = {
+  id: string;
+  projectPath: string;
+  accountId: string;
+  createdAt: string;
+};
+
+export type AccountDefaults = {
+  defaultAccountId: string | null;
+  failoverPolicy: 'none' | 'priority' | 'round_robin';
+};
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -203,6 +228,49 @@ export const api = {
       `/api/sessions/content/${encodeURIComponent(sessionId)}?${qs}`,
     );
   },
+
+  // Accounts
+  listAccounts: () => request<ApiAccount[]>('/api/settings/accounts'),
+  createAccount: (body: {
+    name: string;
+    provider: string;
+    credential: string;
+    priority?: number;
+  }) =>
+    request<ApiAccount>('/api/settings/accounts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateAccount: (id: string, body: Record<string, unknown>) =>
+    request<ApiAccount>(`/api/settings/accounts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteAccount: (id: string) =>
+    request<{ ok: boolean }>(`/api/settings/accounts/${id}`, { method: 'DELETE' }),
+  testAccount: (id: string) =>
+    request<{ ok: boolean; latencyMs?: number }>(`/api/settings/accounts/${id}/test`, {
+      method: 'POST',
+    }),
+
+  // Settings
+  getDefaults: () => request<AccountDefaults>('/api/settings/defaults'),
+  updateDefaults: (body: Partial<AccountDefaults>) =>
+    request<AccountDefaults>('/api/settings/defaults', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  // Project account mappings
+  listProjectAccounts: () =>
+    request<ProjectAccountMapping[]>('/api/settings/project-accounts'),
+  upsertProjectAccount: (body: { projectPath: string; accountId: string }) =>
+    request<ProjectAccountMapping>('/api/settings/project-accounts', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteProjectAccount: (id: string) =>
+    request<{ ok: boolean }>(`/api/settings/project-accounts/${id}`, { method: 'DELETE' }),
 
   // Dashboard / Metrics (Prometheus text format → parsed object)
   metrics: async (): Promise<Record<string, string | number>> => {

@@ -21,6 +21,9 @@ export const queryKeys = {
   ) => ['session-content', sessionId, params] as const,
   discover: ['discovered-sessions'] as const,
   metrics: ['metrics'] as const,
+  accounts: ['accounts'] as const,
+  accountDefaults: ['account-defaults'] as const,
+  projectAccounts: ['project-accounts'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -120,6 +123,27 @@ export function metricsQuery() {
   });
 }
 
+export function accountsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.accounts,
+    queryFn: api.listAccounts,
+  });
+}
+
+export function accountDefaultsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.accountDefaults,
+    queryFn: api.getDefaults,
+  });
+}
+
+export function projectAccountsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.projectAccounts,
+    queryFn: api.listProjectAccounts,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mutation hooks
 // ---------------------------------------------------------------------------
@@ -187,6 +211,71 @@ export function useDeleteSession() {
     mutationFn: (id: string) => api.deleteSession(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+}
+
+export function useCreateAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createAccount,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.accounts });
+    },
+  });
+}
+
+export function useUpdateAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
+      api.updateAccount(id, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.accounts });
+    },
+  });
+}
+
+export function useDeleteAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.deleteAccount,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.accounts });
+    },
+  });
+}
+
+export function useTestAccount() {
+  return useMutation({ mutationFn: api.testAccount });
+}
+
+export function useUpdateDefaults() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.updateDefaults,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.accountDefaults });
+    },
+  });
+}
+
+export function useUpsertProjectAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.upsertProjectAccount,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.projectAccounts });
+    },
+  });
+}
+
+export function useDeleteProjectAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.deleteProjectAccount,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.projectAccounts });
     },
   });
 }
