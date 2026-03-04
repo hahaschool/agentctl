@@ -122,17 +122,26 @@ export const apiAccounts = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
-  (table) => [index('idx_api_accounts_provider').on(table.provider)],
+  (table) => [
+    index('idx_api_accounts_provider').on(table.provider),
+    index('idx_api_accounts_is_active').on(table.isActive),
+  ],
 );
 
-export const projectAccountMappings = pgTable('project_account_mappings', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectPath: text('project_path').notNull().unique(),
-  accountId: uuid('account_id')
-    .notNull()
-    .references(() => apiAccounts.id, { onDelete: 'cascade' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+export const projectAccountMappings = pgTable(
+  'project_account_mappings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectPath: text('project_path').notNull().unique(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => apiAccounts.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_project_account_mappings_account_id').on(table.accountId),
+  ],
+);
 
 export const settings = pgTable('settings', {
   key: text('key').primaryKey(),
