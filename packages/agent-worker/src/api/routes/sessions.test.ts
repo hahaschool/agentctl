@@ -259,6 +259,79 @@ describe('Worker session routes', () => {
     });
   });
 
+  // ── POST / — credential passthrough ─────────────────────────────
+
+  describe('POST / — credential passthrough', () => {
+    it('passes accountCredential and accountProvider to session manager', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'cp-cred-1',
+          agentId: 'agent-cred',
+          projectPath: '/tmp/cred-project',
+          prompt: 'Do work',
+          accountCredential: 'sk-ant-api03-xxxx',
+          accountProvider: 'anthropic',
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(manager.startSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountCredential: 'sk-ant-api03-xxxx',
+          accountProvider: 'anthropic',
+        }),
+      );
+    });
+
+    it('passes null credentials when not provided', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'cp-cred-2',
+          agentId: 'agent-no-cred',
+          projectPath: '/tmp/no-cred-project',
+          prompt: 'Do other work',
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+
+      const callArgs = vi.mocked(manager.startSession).mock.calls[0][0] as Record<string, unknown>;
+      expect(callArgs.accountCredential).toBeUndefined();
+      expect(callArgs.accountProvider).toBeUndefined();
+    });
+
+    it('includes all credential fields in session start options', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'cp-cred-3',
+          agentId: 'agent-full',
+          projectPath: '/home/user/full-project',
+          model: 'opus',
+          prompt: 'Build feature',
+          accountCredential: 'bedrock-profile-prod',
+          accountProvider: 'bedrock',
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(manager.startSession).toHaveBeenCalledWith({
+        agentId: 'agent-full',
+        projectPath: '/home/user/full-project',
+        prompt: 'Build feature',
+        model: 'opus',
+        resumeSessionId: undefined,
+        accountCredential: 'bedrock-profile-prod',
+        accountProvider: 'bedrock',
+      });
+    });
+  });
+
   // ── GET /api/sessions/:sessionId ───────────────────────────────
 
   describe('GET /api/sessions/:sessionId', () => {

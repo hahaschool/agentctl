@@ -86,6 +86,10 @@ export type StartCliSessionOptions = {
   extraArgs?: string[];
   /** Path to the Claude CLI binary (default: 'claude'). */
   claudePath?: string;
+  /** Decrypted credential for the resolved account. */
+  accountCredential?: string | null;
+  /** Provider type for credential injection (e.g. 'anthropic_api', 'claude_max'). */
+  accountProvider?: string | null;
 };
 
 export type CliSessionManagerOptions = {
@@ -181,10 +185,13 @@ export class CliSessionManager extends EventEmitter {
     // Build CLI arguments
     const args = this.buildCliArgs(options, model);
 
+    // Build child environment with credential injection
+    const childEnv = buildChildEnv(options.accountProvider, options.accountCredential);
+
     // Spawn the CLI process
     const child = spawn(options.claudePath ?? this.claudePath, args, {
       cwd: options.projectPath,
-      env: { ...process.env },
+      env: childEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -376,7 +383,12 @@ export class CliSessionManager extends EventEmitter {
             if (!sub.isDirectory()) {
               continue;
             }
-            this.parseSessionIndex(join(dirPath, sub.name), sub.name, projectPathFilter, discovered);
+            this.parseSessionIndex(
+              join(dirPath, sub.name),
+              sub.name,
+              projectPathFilter,
+              discovered,
+            );
           }
         } catch {
           // Can't read subdirectory — skip
@@ -439,8 +451,9 @@ export class CliSessionManager extends EventEmitter {
 
       // v1 format: { version, entries: [...], originalPath }
       if (Array.isArray(obj.entries)) {
-        const projectPath = (typeof obj.originalPath === 'string' ? obj.originalPath : null)
-          ?? decodeProjectPath(dirName);
+        const projectPath =
+          (typeof obj.originalPath === 'string' ? obj.originalPath : null) ??
+          decodeProjectPath(dirName);
 
         if (projectPathFilter && !projectPath.includes(projectPathFilter)) {
           return;
@@ -857,6 +870,49 @@ function decodeProjectPath(encoded: string): string {
  * - A string
  * - An array of content blocks: [{ type: "text", text: "..." }, ...]
  */
+/**
+ * Build a child process environment with provider-specific credential injection.
+ *
+ * - `anthropic_api` → `ANTHROPIC_API_KEY`
+ * - `claude_max` / `claude_team` → `CLAUDE_CODE_AUTH_TOKEN`
+ * - `bedrock` → `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+ * - `vertex` → `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+ */
+function buildChildEnv(
+  provider: string | null | undefined,
+  credential: string | null | undefined,
+): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+
+  if (!provider || !credential) {
+    return env;
+  }
+
+  switch (provider) {
+    case 'anthropic_api':
+      env.ANTHROPIC_API_KEY = credential;
+      break;
+    case 'claude_max':
+    case 'claude_team':
+      env.CLAUDE_CODE_AUTH_TOKEN = credential;
+      break;
+    case 'bedrock': {
+      const parts = credential.split(':');
+      if (parts.length >= 3) {
+        env.AWS_ACCESS_KEY_ID = parts[0];
+        env.AWS_SECRET_ACCESS_KEY = parts[1];
+        env.AWS_REGION = parts[2];
+      }
+      break;
+    }
+    case 'vertex':
+      env.GOOGLE_APPLICATION_CREDENTIALS_JSON = credential;
+      break;
+  }
+
+  return env;
+}
+
 function extractContentText(content: unknown): string | null {
   if (typeof content === 'string') {
     return content;

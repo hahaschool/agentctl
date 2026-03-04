@@ -38,6 +38,8 @@ type CreateSessionBody = {
   model?: string | null;
   prompt?: string | null;
   resumeSessionId?: string | null;
+  accountCredential?: string | null;
+  accountProvider?: string | null;
 };
 
 type ResumeSessionBody = {
@@ -401,6 +403,8 @@ export async function sessionRoutes(
       model,
       prompt,
       resumeSessionId,
+      accountCredential,
+      accountProvider,
     } = request.body;
 
     if (!agentId || typeof agentId !== 'string') {
@@ -424,6 +428,8 @@ export async function sessionRoutes(
         prompt: prompt ?? 'Continue working.',
         model: model ?? undefined,
         resumeSessionId: resumeSessionId ?? undefined,
+        accountCredential: accountCredential ?? undefined,
+        accountProvider: accountProvider ?? undefined,
       });
 
       // Store CP→worker session ID mapping for status callbacks

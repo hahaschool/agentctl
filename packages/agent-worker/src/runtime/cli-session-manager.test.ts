@@ -242,6 +242,100 @@ describe('CliSessionManager', () => {
 
       expect(() => mgr.startSession(defaultStartOptions())).toThrow(/Maximum concurrent sessions/);
     });
+
+    describe('credential injection via buildChildEnv', () => {
+      it('sets ANTHROPIC_API_KEY when accountProvider is anthropic_api', () => {
+        manager.startSession(
+          defaultStartOptions({
+            accountProvider: 'anthropic_api',
+            accountCredential: 'sk-test-key',
+          }),
+        );
+
+        const env = spawnSpy.mock.calls[0][2].env;
+        expect(env.ANTHROPIC_API_KEY).toBe('sk-test-key');
+      });
+
+      it('sets CLAUDE_CODE_AUTH_TOKEN when accountProvider is claude_max', () => {
+        manager.startSession(
+          defaultStartOptions({
+            accountProvider: 'claude_max',
+            accountCredential: 'session-token-xyz',
+          }),
+        );
+
+        const env = spawnSpy.mock.calls[0][2].env;
+        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBe('session-token-xyz');
+      });
+
+      it('sets CLAUDE_CODE_AUTH_TOKEN when accountProvider is claude_team', () => {
+        manager.startSession(
+          defaultStartOptions({
+            accountProvider: 'claude_team',
+            accountCredential: 'session-token-xyz',
+          }),
+        );
+
+        const env = spawnSpy.mock.calls[0][2].env;
+        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBe('session-token-xyz');
+      });
+
+      it('sets AWS credentials when accountProvider is bedrock', () => {
+        manager.startSession(
+          defaultStartOptions({
+            accountProvider: 'bedrock',
+            accountCredential: 'AKID:SECRET:us-west-2',
+          }),
+        );
+
+        const env = spawnSpy.mock.calls[0][2].env;
+        expect(env.AWS_ACCESS_KEY_ID).toBe('AKID');
+        expect(env.AWS_SECRET_ACCESS_KEY).toBe('SECRET');
+        expect(env.AWS_REGION).toBe('us-west-2');
+      });
+
+      it('sets GOOGLE_APPLICATION_CREDENTIALS_JSON when accountProvider is vertex', () => {
+        const credential = '{"client_email":"x","private_key":"y"}';
+        manager.startSession(
+          defaultStartOptions({
+            accountProvider: 'vertex',
+            accountCredential: credential,
+          }),
+        );
+
+        const env = spawnSpy.mock.calls[0][2].env;
+        expect(env.GOOGLE_APPLICATION_CREDENTIALS_JSON).toBe(credential);
+      });
+
+      it('does not inject credential keys when accountCredential is null', () => {
+        manager.startSession(
+          defaultStartOptions({
+            accountProvider: 'anthropic_api',
+            accountCredential: null,
+          }),
+        );
+
+        const env = spawnSpy.mock.calls[0][2].env;
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBeUndefined();
+        expect(env.AWS_ACCESS_KEY_ID).toBeUndefined();
+        expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+        expect(env.AWS_REGION).toBeUndefined();
+        expect(env.GOOGLE_APPLICATION_CREDENTIALS_JSON).toBeUndefined();
+      });
+
+      it('does not inject credential keys when accountCredential is undefined', () => {
+        manager.startSession(defaultStartOptions());
+
+        const env = spawnSpy.mock.calls[0][2].env;
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBeUndefined();
+        expect(env.AWS_ACCESS_KEY_ID).toBeUndefined();
+        expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+        expect(env.AWS_REGION).toBeUndefined();
+        expect(env.GOOGLE_APPLICATION_CREDENTIALS_JSON).toBeUndefined();
+      });
+    });
   });
 
   // ── Stream JSON parsing ────────────────────────────────────────────
