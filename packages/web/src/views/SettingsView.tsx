@@ -94,19 +94,35 @@ function ConnectionSection(): React.JSX.Element {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Status</span>
-            <span
-              className={cn(
-                'font-medium',
-                h?.status === 'ok' ? 'text-green-500' : 'text-yellow-500',
-              )}
-            >
-              {health.isLoading ? (
-                <Skeleton className="h-4 w-16 inline-block" />
-              ) : h?.status === 'ok' ? (
-                'Connected'
-              ) : (
-                'Degraded'
-              )}
+            <span className="flex items-center gap-2">
+              <span
+                className={cn(
+                  'font-medium',
+                  health.error
+                    ? 'text-red-500'
+                    : h?.status === 'ok'
+                      ? 'text-green-500'
+                      : 'text-yellow-500',
+                )}
+              >
+                {health.isLoading ? (
+                  <Skeleton className="h-4 w-16 inline-block" />
+                ) : health.error ? (
+                  'Unreachable'
+                ) : h?.status === 'ok' ? (
+                  'Connected'
+                ) : (
+                  'Degraded'
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => void health.refetch()}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Retry health check"
+              >
+                {'\u21BB'}
+              </button>
             </span>
           </div>
 
@@ -151,9 +167,11 @@ const SHORTCUTS = [
   { keys: ['5'], desc: 'Discover' },
   { keys: ['6'], desc: 'Logs & Metrics' },
   { keys: ['7'], desc: 'Settings' },
+  { keys: ['\u2318K'], desc: 'Command palette' },
   { keys: ['r'], desc: 'Refresh current page' },
   { keys: ['/'], desc: 'Focus search (Discover)' },
   { keys: ['Esc'], desc: 'Close panels / Cancel' },
+  { keys: ['?'], desc: 'Toggle keyboard help' },
 ];
 
 function KeyboardShortcutsSection(): React.JSX.Element {
