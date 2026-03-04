@@ -646,17 +646,19 @@ export function SessionsPage(): React.JSX.Element {
               <div className="flex gap-2 items-center shrink-0">
                 <Link
                   href={`/sessions/${selected.id}`}
-                  className="px-3.5 py-1.5 bg-primary text-primary-foreground rounded-sm text-xs font-medium no-underline"
+                  className="px-3.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs font-medium no-underline hover:bg-accent/10"
                 >
                   Open Full View
                 </Link>
-                <ConfirmButton
-                  label="End Session"
-                  confirmLabel="End Session?"
-                  onConfirm={() => void handleStop()}
-                  className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium cursor-pointer"
-                  confirmClassName="px-3.5 py-1.5 bg-red-700 text-white rounded-sm text-xs font-medium cursor-pointer animate-pulse"
-                />
+                {(selected.status === 'active' || selected.status === 'starting') && (
+                  <ConfirmButton
+                    label="End Session"
+                    confirmLabel="End Session?"
+                    onConfirm={() => void handleStop()}
+                    className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium cursor-pointer"
+                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white rounded-sm text-xs font-medium cursor-pointer animate-pulse"
+                  />
+                )}
               </div>
             </div>
 
@@ -727,41 +729,45 @@ export function SessionsPage(): React.JSX.Element {
               </div>
             )}
 
-            {/* Prompt input */}
-            <div className="px-5 py-3 border-t border-border flex gap-2">
-              <input
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void handleSend();
+            {/* Prompt input — only for active sessions or ended sessions that can be resumed */}
+            {(selected.status === 'active' || selected.status === 'ended') && (
+              <div className="px-5 py-3 border-t border-border flex gap-2">
+                <input
+                  type="text"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  placeholder={
+                    selected.status === 'active'
+                      ? 'Send message...'
+                      : 'Resume session with prompt...'
                   }
-                }}
-                placeholder={
-                  selected.status === 'active' ? 'Send message...' : 'Resume session with prompt...'
-                }
-                aria-label={
-                  selected.status === 'active'
-                    ? 'Message to send to session'
-                    : 'Prompt to resume session'
-                }
-                className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => void handleSend()}
-                disabled={sending || !prompt.trim()}
-                aria-label={selected.status === 'active' ? 'Send message' : 'Resume session'}
-                className={cn(
-                  'px-[18px] py-2 bg-primary text-white rounded-sm text-[13px] font-medium',
-                  sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
-                )}
-              >
-                {sending ? '...' : selected.status === 'active' ? 'Send' : 'Resume'}
-              </button>
-            </div>
+                  aria-label={
+                    selected.status === 'active'
+                      ? 'Message to send to session'
+                      : 'Prompt to resume session'
+                  }
+                  className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleSend()}
+                  disabled={sending || !prompt.trim()}
+                  aria-label={selected.status === 'active' ? 'Send message' : 'Resume session'}
+                  className={cn(
+                    'px-[18px] py-2 bg-primary text-white rounded-sm text-[13px] font-medium',
+                    sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
+                  )}
+                >
+                  {sending ? '...' : selected.status === 'active' ? 'Send' : 'Resume'}
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
@@ -842,7 +848,7 @@ function DetailRow({
   }, [mono, value]);
 
   return (
-    <div>
+    <div className="group">
       <span className="text-muted-foreground text-[11px]">{label}</span>
       <div className={cn('text-xs break-all flex items-start gap-1', mono && 'font-mono')}>
         <span className="flex-1">{value}</span>
@@ -855,7 +861,7 @@ function DetailRow({
               'shrink-0 px-1 py-px text-[10px] border-0 rounded-sm cursor-pointer transition-opacity duration-150',
               copied
                 ? 'text-green-500 bg-muted opacity-100'
-                : 'text-muted-foreground bg-transparent opacity-50 hover:opacity-100',
+                : 'text-muted-foreground bg-transparent opacity-0 group-hover:opacity-70 hover:!opacity-100',
             )}
           >
             {copied ? 'Copied' : 'Copy'}
