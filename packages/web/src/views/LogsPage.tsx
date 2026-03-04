@@ -8,9 +8,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
-
+import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { formatDateTime, formatNumber } from '../lib/format-utils';
@@ -57,7 +58,12 @@ export function LogsPage(): React.JSX.Element {
   }, [health.data]);
 
   return (
-    <div className="p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+      <FetchingBar
+        isFetching={
+          (health.isFetching || metrics.isFetching || machines.isFetching) && !health.isLoading
+        }
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
@@ -68,17 +74,14 @@ export function LogsPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-3">
           <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
-          <button
-            type="button"
+          <RefreshButton
             onClick={() => {
               void health.refetch();
               void metrics.refetch();
               void machines.refetch();
             }}
-            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
-          >
-            Refresh
-          </button>
+            isFetching={health.isFetching || metrics.isFetching || machines.isFetching}
+          />
         </div>
       </div>
 
