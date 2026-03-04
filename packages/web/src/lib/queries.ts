@@ -200,8 +200,18 @@ export function useStopAgent() {
 export function useUpdateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string; accountId?: string | null }) =>
-      api.updateAgent(id, body),
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    }) => api.updateAgent(id, body),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
       void queryClient.invalidateQueries({ queryKey: queryKeys.agent(variables.id) });

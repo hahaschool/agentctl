@@ -211,11 +211,41 @@ export class DbAgentRegistry {
     this.logger.info({ agentId, status }, 'Agent status updated');
   }
 
-  async updateAgent(agentId: string, data: { accountId?: string | null }): Promise<Agent> {
+  async updateAgent(
+    agentId: string,
+    data: {
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    },
+  ): Promise<Agent> {
     const setClause: Record<string, unknown> = {};
 
     if ('accountId' in data) {
       setClause.accountId = data.accountId ?? null;
+    }
+
+    if ('name' in data && data.name !== undefined) {
+      setClause.name = data.name;
+    }
+
+    if ('machineId' in data && data.machineId !== undefined) {
+      setClause.machineId = data.machineId;
+    }
+
+    if ('type' in data && data.type !== undefined) {
+      setClause.type = data.type;
+    }
+
+    if ('schedule' in data) {
+      setClause.schedule = data.schedule ?? null;
+    }
+
+    if ('config' in data && data.config !== undefined) {
+      setClause.config = data.config;
     }
 
     if (Object.keys(setClause).length === 0) {

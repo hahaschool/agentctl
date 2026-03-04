@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useWebSocket } from '../hooks/use-websocket';
 import { CommandPalette } from './CommandPalette';
+import { ConnectionBanner } from './ConnectionBanner';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
 import { useToast } from './Toast';
 import { WsStatusIndicator } from './WsStatusIndicator';
@@ -229,6 +230,7 @@ export function Sidebar(): React.JSX.Element {
 
       <KeyboardHelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
+      <ConnectionBanner status={wsStatus} />
     </>
   );
 }

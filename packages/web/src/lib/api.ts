@@ -189,7 +189,17 @@ export const api = {
     request<{ ok: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
-  updateAgent: (id: string, body: { accountId?: string | null }) =>
+  updateAgent: (
+    id: string,
+    body: {
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    },
+  ) =>
     request<Agent>(`/api/agents/agents/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),

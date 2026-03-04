@@ -156,9 +156,19 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     },
   );
 
-  app.patch<{ Params: { agentId: string }; Body: { accountId?: string | null } }>(
+  app.patch<{
+    Params: { agentId: string };
+    Body: {
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    };
+  }>(
     '/agents/:agentId',
-    { schema: { tags: ['agents'], summary: 'Update agent fields (e.g. accountId)' } },
+    { schema: { tags: ['agents'], summary: 'Update agent fields' } },
     async (request, reply) => {
       if (!dbRegistry) {
         return reply
@@ -166,7 +176,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      const { accountId } = request.body;
+      const { accountId, name, machineId, type, schedule, config } = request.body;
 
       // Validate accountId is either null/undefined or a string
       if (accountId !== undefined && accountId !== null && typeof accountId !== 'string') {
@@ -176,8 +186,55 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
+      // Validate name if provided
+      if (name !== undefined && (typeof name !== 'string' || name.trim() === '')) {
+        return reply.code(400).send({
+          error: 'INVALID_NAME',
+          message: 'name must be a non-empty string',
+        });
+      }
+
+      // Validate machineId if provided
+      if (machineId !== undefined && typeof machineId !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_MACHINE_ID',
+          message: 'machineId must be a string',
+        });
+      }
+
+      // Validate type if provided
+      if (type !== undefined && typeof type !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_TYPE',
+          message: 'type must be a string',
+        });
+      }
+
+      // Validate schedule if provided (allow null to clear)
+      if (schedule !== undefined && schedule !== null && typeof schedule !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_SCHEDULE',
+          message: 'schedule must be a string or null',
+        });
+      }
+
+      // Validate config if provided
+      if (config !== undefined && (typeof config !== 'object' || config === null)) {
+        return reply.code(400).send({
+          error: 'INVALID_CONFIG',
+          message: 'config must be an object',
+        });
+      }
+
       try {
-        const agent = await dbRegistry.updateAgent(request.params.agentId, { accountId });
+        const agent = await dbRegistry.updateAgent(request.params.agentId, {
+          accountId,
+          name,
+          machineId,
+          type,
+          schedule,
+          config,
+        });
         return agent;
       } catch (err) {
         if (err instanceof ControlPlaneError && err.code === 'AGENT_NOT_FOUND') {
