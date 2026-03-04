@@ -313,7 +313,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
 
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
   const [expanded, setExpanded] = useState(!isTool);
-  const isLong = message.content.length > 600;
+  const isLong = (message.content?.length ?? 0) > 600;
 
   if (isTool && !expanded) {
     return (
@@ -336,8 +336,8 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
     );
   }
 
-  const displayContent =
-    !expanded && isLong ? `${message.content.slice(0, 600)}...` : message.content;
+  const content = message.content ?? '';
+  const displayContent = !expanded && isLong ? `${content.slice(0, 600)}...` : content;
 
   return (
     <div className={cn('px-3 py-2 rounded-lg border-l-[3px]', style.bubbleClass)}>

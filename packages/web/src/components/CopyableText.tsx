@@ -38,7 +38,7 @@ export function CopyableText({
     [value],
   );
 
-  const display = label ?? (value.length > maxDisplay ? value.slice(0, maxDisplay) : value);
+  const display = label ?? (value && value.length > maxDisplay ? value.slice(0, maxDisplay) : value ?? '');
 
   return (
     <button

@@ -1062,9 +1062,9 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
   const [expanded, setExpanded] = useState(false);
   const msgStyle = getMessageStyle(message.type);
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
-  const isLong = message.content.length > TRUNCATE_THRESHOLD;
-  const displayContent =
-    isLong && !expanded ? `${message.content.slice(0, TRUNCATE_THRESHOLD)}...` : message.content;
+  const content = message.content ?? '';
+  const isLong = content.length > TRUNCATE_THRESHOLD;
+  const displayContent = isLong && !expanded ? `${content.slice(0, TRUNCATE_THRESHOLD)}...` : content;
 
   return (
     <div className={cn('mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2', msgStyle.bubbleClass)}>
@@ -1099,7 +1099,7 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
         >
           {expanded
             ? 'Show less'
-            : `Show all (${Math.round(message.content.length / 1000)}k chars)`}
+            : `Show all (${Math.round(content.length / 1000)}k chars)`}
         </button>
       )}
     </div>
