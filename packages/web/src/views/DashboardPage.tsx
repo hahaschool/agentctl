@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import type React from 'react';
 import { useMemo } from 'react';
 
@@ -9,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { PathBadge } from '../components/PathBadge';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
@@ -175,7 +177,7 @@ export function DashboardPage(): React.JSX.Element {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Recent Activity */}
         <div>
-          <SectionHeader title="Recent Activity" />
+          <SectionHeader title="Recent Activity" href="/discover" />
           <div className="border border-border rounded-lg overflow-hidden">
             {discoveredSessions.length === 0 ? (
               <DashboardEmptyPanel
@@ -184,9 +186,13 @@ export function DashboardPage(): React.JSX.Element {
               />
             ) : (
               discoveredSessions.slice(0, 5).map((session, idx) => (
-                <div
+                <Link
                   key={session.sessionId}
-                  className={cn('px-4 py-3 bg-card', idx > 0 && 'border-t border-border')}
+                  href="/discover"
+                  className={cn(
+                    'block px-4 py-3 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                    idx > 0 && 'border-t border-border',
+                  )}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <SimpleTooltip content={session.summary || 'Untitled session'}>
@@ -202,15 +208,15 @@ export function DashboardPage(): React.JSX.Element {
                     <span className="font-mono bg-muted px-1.5 py-px rounded">
                       {session.hostname}
                     </span>
-                    <SimpleTooltip content={session.projectPath}>
-                      <span className="font-mono">
-                        {truncate(session.projectPath.split('/').pop() ?? session.projectPath, 30)}
+                    <PathBadge path={session.projectPath} className="text-[11px]" />
+                    {session.branch && (
+                      <span className="font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm">
+                        {session.branch}
                       </span>
-                    </SimpleTooltip>
-                    {session.branch && <span className="font-mono">{session.branch}</span>}
+                    )}
                     <span>{session.messageCount} msgs</span>
                   </div>
-                </div>
+                </Link>
               ))
             )}
           </div>
@@ -218,7 +224,7 @@ export function DashboardPage(): React.JSX.Element {
 
         {/* Machine Status */}
         <div>
-          <SectionHeader title="Fleet Status" />
+          <SectionHeader title="Fleet Status" href="/machines" />
           <div className="border border-border rounded-lg overflow-hidden">
             {machineList.length === 0 ? (
               <DashboardEmptyPanel
@@ -227,10 +233,11 @@ export function DashboardPage(): React.JSX.Element {
               />
             ) : (
               machineList.map((machine, idx) => (
-                <div
+                <Link
                   key={machine.id}
+                  href={`/machines/${machine.id}`}
                   className={cn(
-                    'px-4 py-2.5 bg-card flex items-center justify-between',
+                    'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
                     idx > 0 && 'border-t border-border',
                   )}
                 >
@@ -256,7 +263,7 @@ export function DashboardPage(): React.JSX.Element {
                     )}
                     {machine.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
                   </div>
-                </div>
+                </Link>
               ))
             )}
           </div>
@@ -319,8 +326,20 @@ export function DashboardPage(): React.JSX.Element {
 // Subcomponents
 // ---------------------------------------------------------------------------
 
-function SectionHeader({ title }: { title: string }): React.JSX.Element {
-  return <h2 className="text-[15px] font-semibold text-muted-foreground mb-2.5">{title}</h2>;
+function SectionHeader({ title, href }: { title: string; href?: string }): React.JSX.Element {
+  return (
+    <div className="flex justify-between items-center mb-2.5">
+      <h2 className="text-[15px] font-semibold text-muted-foreground">{title}</h2>
+      {href && (
+        <Link
+          href={href}
+          className="text-[11px] text-primary font-medium no-underline hover:underline"
+        >
+          View All &rarr;
+        </Link>
+      )}
+    </div>
+  );
 }
 
 function ActionButton({

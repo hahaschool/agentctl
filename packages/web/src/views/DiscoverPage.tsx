@@ -18,7 +18,7 @@ import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
-import { formatNumber, recencyColor } from '../lib/format-utils';
+import { formatNumber, recencyColorClass } from '../lib/format-utils';
 import { discoverQuery, queryKeys } from '../lib/queries';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
@@ -588,7 +588,7 @@ export function DiscoverPage(): React.JSX.Element {
                     {group.sessions.map((s) => {
                       const isSelected = selectedSessionId === s.sessionId;
                       const isResuming = resuming === s.sessionId;
-                      const dotColor = recencyColor(s.lastActivity);
+                      const dotClass = recencyColorClass(s.lastActivity);
                       return (
                         <div key={`${s.machineId}-${s.sessionId}`}>
                           <button
@@ -606,8 +606,10 @@ export function DiscoverPage(): React.JSX.Element {
                           >
                             {/* Recency dot */}
                             <span
-                              className="w-[7px] h-[7px] rounded-full shrink-0 inline-block"
-                              style={{ backgroundColor: dotColor }}
+                              className={cn(
+                                'w-[7px] h-[7px] rounded-full shrink-0 inline-block',
+                                dotClass,
+                              )}
                               title={recencyTitle(s.lastActivity)}
                             />
 

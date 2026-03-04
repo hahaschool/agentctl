@@ -148,3 +148,17 @@ export function recencyColor(dateStr: string): string {
   if (diff < oneDay) return '#f59e0b';
   return '#9ca3af';
 }
+
+/**
+ * Recency Tailwind class for activity dots.
+ * Returns a `bg-*` class instead of a hex color string.
+ */
+export function recencyColorClass(dateStr: string): string {
+  if (!dateStr) return 'bg-muted-foreground';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const oneHour = 60 * 60 * 1000;
+  const oneDay = 24 * oneHour;
+  if (diff < oneHour) return 'bg-green-500';
+  if (diff < oneDay) return 'bg-yellow-500';
+  return 'bg-muted-foreground';
+}

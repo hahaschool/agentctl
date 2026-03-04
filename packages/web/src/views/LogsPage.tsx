@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 
 import { LastUpdated } from '../components/LastUpdated';
@@ -231,7 +232,11 @@ export function LogsPage(): React.JSX.Element {
           ))}
         </div>
       ) : machineList.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">No workers registered</div>
+        <EmptyState
+          icon={'\u2302'}
+          title="No workers registered"
+          description="Run setup-machine.sh on a host to register it as a worker."
+        />
       ) : (
         <div className="border border-border rounded overflow-x-auto">
           <table className="w-full border-collapse text-[13px]" aria-label="Worker machines">

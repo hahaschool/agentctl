@@ -410,8 +410,12 @@ export function SessionsPage(): React.JSX.Element {
             <option value="project">Group by Project</option>
             <option value="machine">Group by Machine</option>
           </select>
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer ml-auto py-1">
+          <label
+            htmlFor="sessions-hide-empty"
+            className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer ml-auto py-1"
+          >
             <input
+              id="sessions-hide-empty"
               type="checkbox"
               checked={hideEmpty}
               onChange={(e) => setHideEmpty(e.target.checked)}
@@ -687,7 +691,7 @@ export function SessionsPage(): React.JSX.Element {
               {/* Starting state indicator */}
               {selected.status === 'starting' && (
                 <div className="mt-2.5 px-2.5 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-sm text-yellow-400 text-xs flex items-center gap-2">
-                  <span style={{ animation: 'fadeInUp 1s ease infinite alternate' }}>&#x25CF;</span>
+                  <span className="animate-pulse">&#x25CF;</span>
                   Session is starting... Waiting for worker to respond.
                 </div>
               )}
