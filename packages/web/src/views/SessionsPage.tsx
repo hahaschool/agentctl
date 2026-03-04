@@ -16,6 +16,8 @@ import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
+import type { SessionStreamEvent } from '../hooks/use-session-stream';
+import { useSessionStream } from '../hooks/use-session-stream';
 import type {
   ApiAccount,
   Machine,
@@ -775,6 +777,7 @@ export function SessionsPage(): React.JSX.Element {
             {selected.claudeSessionId && selected.machineId && (
               <SessionContent
                 sessionId={selected.claudeSessionId}
+                rcSessionId={selected.id}
                 machineId={selected.machineId}
                 projectPath={selected.projectPath ?? undefined}
                 isActive={selected.status === 'active' || selected.status === 'starting'}
@@ -950,11 +953,13 @@ const CONTENT_POLL_MS = 3_000;
 
 function SessionContent({
   sessionId,
+  rcSessionId,
   machineId,
   projectPath,
   isActive,
 }: {
   sessionId: string;
+  rcSessionId: string;
   machineId: string;
   projectPath?: string;
   isActive?: boolean;
@@ -965,6 +970,21 @@ function SessionContent({
   const [showTools, setShowTools] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
+
+  // SSE streaming for active sessions
+  const stream = useSessionStream({
+    sessionId: rcSessionId,
+    enabled: isActive ?? false,
+    onEvent: useCallback(
+      (event: SessionStreamEvent) => {
+        // Refetch full content on status change / loop complete
+        if (event.event === 'status' || event.event === 'loop_complete') {
+          void fetchContentRef.current();
+        }
+      },
+      [],
+    ),
+  });
 
   const fetchContent = useCallback(async () => {
     try {
@@ -981,6 +1001,9 @@ function SessionContent({
       setLoading(false);
     }
   }, [sessionId, machineId, projectPath]);
+
+  const fetchContentRef = useRef(fetchContent);
+  fetchContentRef.current = fetchContent;
 
   // Initial fetch
   useEffect(() => {
@@ -1029,8 +1052,14 @@ function SessionContent({
         <span className="text-[11px] text-muted-foreground">
           {data ? `${messages.length} messages${showTools ? '' : ' (conversations only)'}` : ''}
           {isActive && (
-            <span className="text-green-500 animate-pulse" title="Auto-refreshing every 3s">
-              &#x25CF;
+            <span
+              className={cn(
+                'animate-pulse',
+                stream.connected ? 'text-green-500' : 'text-yellow-500',
+              )}
+              title={stream.connected ? 'SSE streaming live' : 'Polling every 3s'}
+            >
+              &#x25CF; {stream.connected ? 'Streaming' : 'Live'}
             </span>
           )}
         </span>
@@ -1081,6 +1110,19 @@ function SessionContent({
         {messages.map((msg, i) => (
           <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />
         ))}
+
+        {/* Live streaming output */}
+        {stream.connected && stream.streamOutput.length > 0 && (
+          <div className="rounded-sm border border-green-500/20 bg-green-950/20 px-2.5 py-1.5 mb-1.5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[9px] font-semibold text-green-500">Streaming</span>
+            </div>
+            <pre className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto">
+              {stream.streamOutput.join('')}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   );

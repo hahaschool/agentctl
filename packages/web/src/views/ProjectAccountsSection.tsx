@@ -139,7 +139,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
                   <SelectTrigger className="w-full h-8" id="new-project-account">
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper" sideOffset={4}>
                     {accounts.data?.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {a.name} ({a.provider})

@@ -923,9 +923,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       if (machine && machine.status !== 'offline') {
         const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+        const workerSessionRef = session.claudeSessionId ?? sessionId;
 
         try {
-          await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}`, {
+          await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}`, {
             method: 'DELETE',
           });
         } catch (err) {

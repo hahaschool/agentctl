@@ -271,7 +271,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 >
                   <SelectValue placeholder="No account assigned" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">None</span>
                   </SelectItem>

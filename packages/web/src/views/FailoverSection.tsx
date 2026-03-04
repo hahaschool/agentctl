@@ -80,7 +80,7 @@ export function FailoverSection(): React.JSX.Element {
                 <SelectTrigger className="w-full" id="default-account">
                   <SelectValue placeholder="No default account" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   <SelectItem value="__none__">No default</SelectItem>
                   {accounts.data?.map((a) => (
                     <SelectItem key={a.id} value={a.id}>

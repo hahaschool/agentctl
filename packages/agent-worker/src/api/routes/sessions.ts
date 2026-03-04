@@ -379,7 +379,8 @@ export async function sessionRoutes(
 
   app.get<{ Params: SessionIdParams }>('/:sessionId', async (request, reply) => {
     const { sessionId } = request.params;
-    const session = sessionManager.getSession(sessionId);
+    const session =
+      sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
 
     if (!session) {
       return reply.status(404).send({
@@ -599,7 +600,8 @@ export async function sessionRoutes(
   app.delete<{ Params: SessionIdParams }>('/:sessionId', async (request, reply) => {
     const { sessionId } = request.params;
 
-    const session = sessionManager.getSession(sessionId);
+    const session =
+      sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
     if (!session) {
       return reply.status(404).send({
         error: `Session '${sessionId}' not found`,
