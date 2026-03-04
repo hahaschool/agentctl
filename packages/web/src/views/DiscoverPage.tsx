@@ -243,14 +243,18 @@ export function DiscoverPage(): React.JSX.Element {
 
   const handleNewSession = useCallback(async () => {
     if (!newProjectPath.trim() || !newPrompt.trim()) return;
+
+    const first = allSessions[0];
+    if (!first) {
+      toast.error('No machines available. Ensure at least one machine is online and discovered.');
+      return;
+    }
+
     setNewSessionCreating(true);
     try {
-      // Use the first machine from discovered sessions, or 'mac-local' as default
-      const first = allSessions[0];
-      const machineId = first ? first.machineId : 'mac-local';
       await api.createSession({
         agentId: 'adhoc',
-        machineId,
+        machineId: first.machineId,
         projectPath: newProjectPath.trim(),
         prompt: newPrompt.trim(),
       });
@@ -258,7 +262,7 @@ export function DiscoverPage(): React.JSX.Element {
       setNewProjectPath('');
       setNewPrompt('');
       setShowNewSession(false);
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -282,7 +286,7 @@ export function DiscoverPage(): React.JSX.Element {
         toast.success(`Session resumed on ${session.hostname}`);
         setResumePrompt('');
         setResuming(null);
-        void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));

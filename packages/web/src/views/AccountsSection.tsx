@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -107,6 +108,9 @@ export function AccountsSection(): React.JSX.Element {
   const testAccount = useTestAccount();
   const updateAccount = useUpdateAccount();
 
+  const toast = useToast();
+  const oauthCleanupRef = useRef<(() => void) | null>(null);
+
   const [showAdd, setShowAdd] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -166,6 +170,18 @@ export function AccountsSection(): React.JSX.Element {
       const { authorizationUrl } = await api.initiateOAuth(provider, name);
       const popup = window.open(authorizationUrl, 'anthropic-oauth', 'width=600,height=700');
 
+      // Shared cleanup: removes listener + clears polling interval
+      let checkClosed: ReturnType<typeof setInterval> | null = null;
+
+      const cleanup = (): void => {
+        window.removeEventListener('message', handler);
+        if (checkClosed !== null) {
+          clearInterval(checkClosed);
+          checkClosed = null;
+        }
+        oauthCleanupRef.current = null;
+      };
+
       const handler = (event: MessageEvent): void => {
         if (event.origin !== window.location.origin) return;
         const data = event.data as { type?: string; error?: string };
@@ -174,21 +190,26 @@ export function AccountsSection(): React.JSX.Element {
           resetForm();
           setShowAdd(false);
         } else if (data.type === 'oauth_error') {
-          console.error('OAuth error:', data.error);
+          toast.error(data.error ?? 'OAuth login failed');
+        } else {
+          // Ignore unrelated messages
+          return;
         }
-        window.removeEventListener('message', handler);
+        cleanup();
         setOauthLoading(false);
       };
       window.addEventListener('message', handler);
 
-      // Cleanup if popup is closed without completing
-      const checkClosed = setInterval(() => {
+      // Poll for popup being closed without completing OAuth
+      checkClosed = setInterval(() => {
         if (popup?.closed) {
-          clearInterval(checkClosed);
-          window.removeEventListener('message', handler);
+          cleanup();
           setOauthLoading(false);
         }
       }, 1000);
+
+      // Store cleanup so it can be called on dialog close / unmount
+      oauthCleanupRef.current = cleanup;
     } catch {
       setOauthLoading(false);
     }
@@ -299,7 +320,15 @@ export function AccountsSection(): React.JSX.Element {
         )}
 
         {/* Add Account Dialog */}
-        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <Dialog
+          open={showAdd}
+          onOpenChange={(open) => {
+            if (!open) {
+              oauthCleanupRef.current?.();
+            }
+            setShowAdd(open);
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add Account</DialogTitle>

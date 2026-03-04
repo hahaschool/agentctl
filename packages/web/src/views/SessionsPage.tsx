@@ -147,6 +147,10 @@ export function SessionsPage(): React.JSX.Element {
       setFormError('Project path is required.');
       return;
     }
+    if (!formProjectPath.trim().startsWith('/')) {
+      setFormError('Project path must be an absolute path (start with /)');
+      return;
+    }
     if (!formPrompt.trim()) {
       setFormError('Prompt is required.');
       return;
@@ -911,14 +915,15 @@ function DetailRow({
   mono?: boolean;
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   const handleCopy = useCallback(() => {
     if (!mono || value === '-') return;
     void navigator.clipboard.writeText(value).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
-  }, [mono, value]);
+    }).catch(() => toast.error('Failed to copy'));
+  }, [mono, value, toast]);
 
   return (
     <div className="group">

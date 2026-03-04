@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
+import { useToast } from './Toast';
 
 type Props = {
   value: string;
@@ -19,6 +20,7 @@ export function CopyableText({
 }: Props): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     return () => {
@@ -33,9 +35,9 @@ export function CopyableText({
         setCopied(true);
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => setCopied(false), 1500);
-      });
+      }).catch(() => toast.error('Failed to copy'));
     },
-    [value],
+    [value, toast],
   );
 
   const display = label ?? (value && value.length > maxDisplay ? value.slice(0, maxDisplay) : value ?? '');
