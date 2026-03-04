@@ -31,6 +31,7 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { schedulerRoutes } from './routes/scheduler.js';
+import { accountRoutes } from './routes/accounts.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
 import { webhookRoutes } from './routes/webhooks.js';
@@ -295,6 +296,18 @@ export async function createServer({
       db,
       dbRegistry,
     });
+  }
+
+  // Register account management routes when db is available.
+  if (db) {
+    const encryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY ?? '';
+    if (encryptionKey) {
+      await app.register(accountRoutes, {
+        prefix: '/api/settings/accounts',
+        db,
+        encryptionKey,
+      });
+    }
   }
 
   // --- Global error handler ---
