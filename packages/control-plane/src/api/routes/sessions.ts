@@ -72,12 +72,19 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
     try {
       const cutoff = new Date(Date.now() - STALE_SESSION_TIMEOUT_MS);
 
-      // Find sessions in 'starting' that were created before the cutoff
-      // and have no heartbeat or a heartbeat older than the cutoff
+      // Find sessions in 'starting' or 'active' that have no heartbeat or a
+      // heartbeat older than the cutoff.  This catches:
+      //   - Sessions stuck in 'starting' when the worker fails to respond
+      //   - Sessions stuck in 'active' after a worker restart (heartbeats stop)
       const staleRows = await db
         .select({ id: rcSessions.id, status: rcSessions.status })
         .from(rcSessions)
-        .where(and(inArray(rcSessions.status, ['starting']), lt(rcSessions.startedAt, cutoff)));
+        .where(
+          and(
+            inArray(rcSessions.status, ['starting', 'active']),
+            lt(rcSessions.lastHeartbeat, cutoff),
+          ),
+        );
 
       if (staleRows.length > 0) {
         const ids = staleRows.map((r) => r.id);
@@ -86,13 +93,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           .set({
             status: 'error',
             endedAt: new Date(),
-            metadata: { errorMessage: 'Session timed out — no response from worker' },
+            metadata: { errorMessage: 'Session timed out — no heartbeat from worker' },
           })
           .where(inArray(rcSessions.id, ids));
 
         app.log.warn(
           { count: ids.length, sessionIds: ids },
-          'Reaped stale sessions stuck in starting state',
+          'Reaped stale sessions with no heartbeat',
         );
       }
     } catch (err) {
@@ -611,7 +618,20 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       // Dispatch resume command to the worker
       const machine = await dbRegistry.getMachine(session.machineId);
 
-      if (machine && machine.status !== 'offline') {
+      if (!machine || machine.status === 'offline') {
+        // Machine is offline — revert DB status
+        await db
+          .update(rcSessions)
+          .set({ status: session.status, endedAt: session.endedAt })
+          .where(eq(rcSessions.id, sessionId));
+
+        return reply.code(503).send({
+          error: 'MACHINE_OFFLINE',
+          message: `Machine '${session.machineId}' is offline — cannot resume session`,
+        });
+      }
+
+      {
         const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
 
         // The worker looks up sessions by its internal ID or claudeSessionId
@@ -629,6 +649,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                 projectPath: session.projectPath,
                 agentId: session.agentId,
                 model: session.model ?? null,
+                cpSessionId: sessionId,
               }),
             },
           );

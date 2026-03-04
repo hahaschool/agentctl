@@ -104,6 +104,8 @@ export function sessionQuery(id: string) {
     queryKey: queryKeys.session(id),
     queryFn: () => api.getSession(id),
     enabled: !!id,
+    refetchInterval: 5_000, // Poll session status to detect worker restarts / status changes
+    refetchOnWindowFocus: true,
   });
 }
 
