@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { healthQuery } from '../lib/queries';
 import { AccountsSection } from './AccountsSection';
 import { FailoverSection } from './FailoverSection';
+import { PreferencesSection } from './PreferencesSection';
 import { ProjectAccountsSection } from './ProjectAccountsSection';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,7 @@ export function SettingsView(): React.JSX.Element {
       <AccountsSection />
       <FailoverSection />
       <ProjectAccountsSection />
+      <PreferencesSection />
       <ThemeSection />
       <ConnectionSection />
       <KeyboardShortcutsSection />

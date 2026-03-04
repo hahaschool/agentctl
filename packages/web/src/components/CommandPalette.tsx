@@ -1,10 +1,13 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
+import { agentsQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 type CommandItem = {
@@ -13,6 +16,7 @@ type CommandItem = {
   description?: string;
   icon: string;
   shortcut?: string;
+  badge?: { text: string; variant: 'default' | 'success' | 'warning' | 'destructive' };
   action: () => void;
   section: string;
 };
@@ -23,33 +27,68 @@ type Props = {
 };
 
 const NAV_COMMANDS = [
-  { href: '/', label: 'Dashboard', icon: '\u25A0', section: 'Navigate' },
-  { href: '/machines', label: 'Machines', icon: '\u2302', section: 'Navigate' },
-  { href: '/agents', label: 'Agents', icon: '\u2699', section: 'Navigate' },
-  { href: '/sessions', label: 'Sessions', icon: '\u25B6', section: 'Navigate' },
-  { href: '/discover', label: 'Discover Sessions', icon: '\u2315', section: 'Navigate' },
-  { href: '/logs', label: 'Logs & Metrics', icon: '\u2261', section: 'Navigate' },
-  { href: '/settings', label: 'Settings', icon: '\u2630', section: 'Navigate' },
+  { href: '/', label: 'Dashboard', icon: '\u25A0', shortcut: '1', section: 'Navigate' },
+  { href: '/machines', label: 'Machines', icon: '\u2302', shortcut: '2', section: 'Navigate' },
+  { href: '/agents', label: 'Agents', icon: '\u2699', shortcut: '3', section: 'Navigate' },
+  { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4', section: 'Navigate' },
+  { href: '/discover', label: 'Discover Sessions', icon: '\u2315', shortcut: '5', section: 'Navigate' },
+  { href: '/logs', label: 'Logs & Metrics', icon: '\u2261', shortcut: '6', section: 'Navigate' },
+  { href: '/settings', label: 'Settings', icon: '\u2630', shortcut: '7', section: 'Navigate' },
 ] as const;
+
+const STATUS_BADGE_VARIANTS: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {
+  running: 'success',
+  active: 'success',
+  idle: 'default',
+  stopped: 'default',
+  error: 'destructive',
+  failed: 'destructive',
+  completed: 'default',
+  paused: 'warning',
+  starting: 'warning',
+};
+
+function badgeVariant(status: string): 'default' | 'success' | 'warning' | 'destructive' {
+  return STATUS_BADGE_VARIANTS[status.toLowerCase()] ?? 'default';
+}
+
+/** Truncate long paths to a readable suffix. */
+function shortPath(path: string | null, maxLen = 30): string {
+  if (!path) return '';
+  if (path.length <= maxLen) return path;
+  return '...' + path.slice(path.length - maxLen + 3);
+}
 
 export function CommandPalette({ open, onClose }: Props): React.JSX.Element | null {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // Fetch agents and sessions (only when palette is open)
+  const { data: agents } = useQuery({
+    ...agentsQuery(),
+    enabled: open,
+  });
+  const { data: sessions } = useQuery({
+    ...sessionsQuery(),
+    enabled: open,
+  });
+
   // Build command list
   const commands: CommandItem[] = useMemo(() => {
     const items: CommandItem[] = [];
 
-    // Navigation commands
+    // ----- Navigation commands -----
     for (const nav of NAV_COMMANDS) {
       items.push({
         id: `nav-${nav.href}`,
         label: nav.label,
         icon: nav.icon,
+        shortcut: nav.shortcut,
         section: nav.section,
         action: () => {
           router.push(nav.href);
@@ -58,7 +97,63 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       });
     }
 
-    // Action commands
+    // ----- Agents (recent, up to 8) -----
+    if (agents && agents.length > 0) {
+      const sorted = [...agents].sort(
+        (a, b) => new Date(b.lastRunAt ?? b.createdAt).getTime() - new Date(a.lastRunAt ?? a.createdAt).getTime(),
+      );
+      for (const agent of sorted.slice(0, 8)) {
+        items.push({
+          id: `agent-${agent.id}`,
+          label: agent.name || agent.id,
+          description: agent.projectPath ? shortPath(agent.projectPath) : agent.type,
+          icon: '\u2699',
+          badge: { text: agent.status, variant: badgeVariant(agent.status) },
+          section: 'Agents',
+          action: () => {
+            router.push(`/agents/${agent.id}`);
+            onClose();
+          },
+        });
+      }
+    }
+
+    // ----- Sessions (recent, up to 8) -----
+    if (sessions && sessions.length > 0) {
+      const sorted = [...sessions].sort(
+        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
+      for (const session of sorted.slice(0, 8)) {
+        const shortId = session.id.length > 12 ? session.id.slice(0, 8) + '...' : session.id;
+        items.push({
+          id: `session-${session.id}`,
+          label: shortId,
+          description: session.projectPath ? shortPath(session.projectPath) : undefined,
+          icon: '\u25B6',
+          badge: { text: session.status, variant: badgeVariant(session.status) },
+          section: 'Sessions',
+          action: () => {
+            router.push(`/sessions/${session.id}`);
+            onClose();
+          },
+        });
+      }
+    }
+
+    // ----- Action commands -----
+    items.push({
+      id: 'action-refresh',
+      label: 'Refresh All Data',
+      description: 'Invalidate all cached queries',
+      icon: '\u21BB',
+      section: 'Actions',
+      action: () => {
+        void queryClient.invalidateQueries();
+        toast.success('All data refreshed');
+        onClose();
+      },
+    });
+
     items.push({
       id: 'action-theme',
       label: 'Toggle Dark/Light Mode',
@@ -67,6 +162,18 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       shortcut: 'Theme',
       action: () => {
         setTheme(theme === 'dark' ? 'light' : 'dark');
+        onClose();
+      },
+    });
+
+    items.push({
+      id: 'action-clear-notifications',
+      label: 'Clear Notifications',
+      description: 'Dismiss all toast messages',
+      icon: '\u2715',
+      section: 'Actions',
+      action: () => {
+        toast.dismiss();
         onClose();
       },
     });
@@ -85,7 +192,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     });
 
     return items;
-  }, [router, onClose, theme, setTheme]);
+  }, [router, onClose, theme, setTheme, agents, sessions, queryClient]);
 
   // Filter commands by query
   const filtered = useMemo(() => {
@@ -95,12 +202,15 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       (cmd) =>
         cmd.label.toLowerCase().includes(q) ||
         cmd.description?.toLowerCase().includes(q) ||
-        cmd.section.toLowerCase().includes(q),
+        cmd.section.toLowerCase().includes(q) ||
+        cmd.badge?.text.toLowerCase().includes(q) ||
+        cmd.id.toLowerCase().includes(q),
     );
   }, [commands, query]);
 
-  // Group by section
+  // Group by section with stable ordering
   const sections = useMemo(() => {
+    const sectionOrder = ['Navigate', 'Agents', 'Sessions', 'Actions'];
     const map = new Map<string, CommandItem[]>();
     for (const cmd of filtered) {
       const arr = map.get(cmd.section);
@@ -110,7 +220,17 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         map.set(cmd.section, [cmd]);
       }
     }
-    return map;
+    // Return in stable order
+    const ordered = new Map<string, CommandItem[]>();
+    for (const section of sectionOrder) {
+      const items = map.get(section);
+      if (items) ordered.set(section, items);
+    }
+    // Add any remaining sections not in the predefined order
+    for (const [section, items] of map) {
+      if (!ordered.has(section)) ordered.set(section, items);
+    }
+    return ordered;
   }, [filtered]);
 
   // Reset active index when filter changes
@@ -198,7 +318,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command or search..."
+            placeholder="Type a command or search agents, sessions..."
             className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-mono bg-muted text-muted-foreground border border-border rounded-sm">
@@ -209,7 +329,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         {/* Command list */}
         <div
           ref={listRef}
-          className="max-h-[300px] overflow-auto py-1"
+          className="max-h-[360px] overflow-auto py-1"
           role="listbox"
           aria-label="Commands"
         >
@@ -244,9 +364,29 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
                     )}
                   >
                     <span className="w-5 text-center text-base shrink-0">{cmd.icon}</span>
-                    <span className="flex-1 font-medium">{cmd.label}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="font-medium">{cmd.label}</span>
+                      {cmd.description && (
+                        <span className="ml-2 text-[11px] text-muted-foreground truncate">
+                          {cmd.description}
+                        </span>
+                      )}
+                    </span>
+                    {cmd.badge && (
+                      <span
+                        className={cn(
+                          'shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-full',
+                          cmd.badge.variant === 'success' && 'bg-emerald-500/15 text-emerald-500',
+                          cmd.badge.variant === 'warning' && 'bg-amber-500/15 text-amber-500',
+                          cmd.badge.variant === 'destructive' && 'bg-red-500/15 text-red-500',
+                          cmd.badge.variant === 'default' && 'bg-muted text-muted-foreground',
+                        )}
+                      >
+                        {cmd.badge.text}
+                      </span>
+                    )}
                     {cmd.shortcut && (
-                      <kbd className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm border border-border">
+                      <kbd className="shrink-0 text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm border border-border">
                         {cmd.shortcut}
                       </kbd>
                     )}
@@ -275,6 +415,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
             <kbd className="font-mono bg-muted px-1 py-px rounded-sm border border-border">Esc</kbd>{' '}
             Close
           </span>
+          {filtered.length > 0 && (
+            <span className="ml-auto">
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
       </div>
     </div>

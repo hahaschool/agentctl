@@ -19,13 +19,14 @@ import { StatusBadge } from '../components/StatusBadge';
 import { WsStatusIndicator } from '../components/WsStatusIndicator';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { useWebSocket } from '../hooks/use-websocket';
-import { formatNumber, truncate } from '../lib/format-utils';
+import { formatCost, formatDuration, formatNumber, truncate } from '../lib/format-utils';
 import {
   agentsQuery,
   discoverQuery,
   healthQuery,
   machinesQuery,
   metricsQuery,
+  sessionsQuery,
 } from '../lib/queries';
 
 // ---------------------------------------------------------------------------
@@ -38,18 +39,45 @@ export function DashboardPage(): React.JSX.Element {
   const machines = useQuery(machinesQuery());
   const agents = useQuery(agentsQuery());
   const discovered = useQuery(discoverQuery());
+  const sessions = useQuery(sessionsQuery());
 
   const { status: wsStatus } = useWebSocket();
 
   const machineList = machines.data ?? [];
   const agentList = agents.data ?? [];
   const discoveredSessions = discovered.data?.sessions ?? [];
+  const sessionList = sessions.data ?? [];
   const metricsData = metrics.data ?? {};
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;
   const agentsRegistered = agentList.length;
   const activeRuns = Number(metricsData.agentctl_agents_active ?? 0);
   const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
+
+  // Active sessions (running or active status)
+  const activeSessions = sessionList.filter(
+    (s) => s.status === 'running' || s.status === 'active',
+  );
+  const activeSessionCount = activeSessions.length;
+
+  // Per-agent cost breakdown (top spenders)
+  const agentCostBreakdown = useMemo(() => {
+    return agentList
+      .filter((a) => a.totalCostUsd > 0)
+      .sort((a, b) => b.totalCostUsd - a.totalCostUsd)
+      .slice(0, 5);
+  }, [agentList]);
+
+  // Recent activity: combine sessions sorted by most recent activity
+  const recentActivity = useMemo(() => {
+    return [...sessionList]
+      .sort((a, b) => {
+        const dateA = a.endedAt ?? a.lastHeartbeat ?? a.startedAt;
+        const dateB = b.endedAt ?? b.lastHeartbeat ?? b.startedAt;
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      })
+      .slice(0, 8);
+  }, [sessionList]);
 
   const refreshAll = useMemo(
     () => (): void => {
@@ -58,8 +86,9 @@ export function DashboardPage(): React.JSX.Element {
       void machines.refetch();
       void agents.refetch();
       void discovered.refetch();
+      void sessions.refetch();
     },
-    [health, metrics, machines, agents, discovered],
+    [health, metrics, machines, agents, discovered, sessions],
   );
 
   useHotkeys(useMemo(() => ({ r: refreshAll }), [refreshAll]));
@@ -69,7 +98,8 @@ export function DashboardPage(): React.JSX.Element {
     metrics.isFetching ||
     machines.isFetching ||
     agents.isFetching ||
-    discovered.isFetching;
+    discovered.isFetching ||
+    sessions.isFetching;
   const anyError =
     health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error;
 
@@ -96,6 +126,18 @@ export function DashboardPage(): React.JSX.Element {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="text-[22px] font-bold">Command Center</h1>
         <div className="flex items-center gap-3">
+          <Link
+            href="/sessions"
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-xs font-medium no-underline hover:bg-primary/90 transition-colors"
+          >
+            New Session
+          </Link>
+          <Link
+            href="/agents"
+            className="px-3 py-1.5 bg-transparent text-primary border border-primary rounded text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
+          >
+            View Agents
+          </Link>
           <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
@@ -173,50 +215,70 @@ export function DashboardPage(): React.JSX.Element {
           value={formatNumber(activeRuns)}
           sublabel={`${formatNumber(totalRuns)} total`}
         />
+        <StatCard
+          label="Active Sessions"
+          value={String(activeSessionCount)}
+          sublabel={`${sessionList.length} total`}
+        />
       </div>
 
-      {/* Two-column layout: Recent Activity + Machine Status */}
+      {/* Two-column layout: Recent Sessions Activity + Machine Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Recent Activity */}
+        {/* Recent Sessions Activity */}
         <div>
-          <SectionHeader title="Recent Activity" href="/discover" />
+          <SectionHeader title="Recent Sessions" href="/sessions" />
           <div className="border border-border rounded-lg overflow-hidden">
-            {discoveredSessions.length === 0 ? (
+            {recentActivity.length === 0 ? (
               <DashboardEmptyPanel
-                loading={discovered.isLoading}
-                message="No sessions discovered yet. Click 'Discover Sessions' to scan the fleet."
+                loading={sessions.isLoading}
+                message="No sessions yet. Create a session to get started."
               />
             ) : (
-              discoveredSessions.slice(0, 5).map((session, idx) => (
+              recentActivity.map((session, idx) => (
                 <Link
-                  key={session.sessionId}
-                  href="/discover"
+                  key={session.id}
+                  href={`/sessions/${session.id}`}
                   className={cn(
                     'block px-4 py-3 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
                     idx > 0 && 'border-t border-border',
                   )}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <SimpleTooltip content={session.summary || 'Untitled session'}>
-                      <span className="text-[13px] font-medium text-foreground">
-                        {truncate(session.summary || 'Untitled session', 50)}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <ActivityIcon status={session.status} />
+                      <span className="text-[13px] font-medium text-foreground truncate">
+                        {truncate(
+                          session.claudeSessionId
+                            ? `Session ${session.claudeSessionId.slice(0, 8)}`
+                            : `Session ${session.id.slice(0, 8)}`,
+                          40,
+                        )}
                       </span>
-                    </SimpleTooltip>
-                    <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
-                      <LiveTimeAgo date={session.lastActivity} />
-                    </span>
+                    </div>
+                    <StatusBadge status={session.status} />
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span className="font-mono bg-muted px-1.5 py-px rounded">
-                      {session.hostname}
-                    </span>
-                    <PathBadge path={session.projectPath} className="text-[11px]" />
-                    {session.branch && (
-                      <span className="font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm">
-                        {session.branch}
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
+                    {session.model && (
+                      <span className="font-mono bg-muted px-1.5 py-px rounded text-[10px]">
+                        {session.model}
                       </span>
                     )}
-                    <span>{session.messageCount} msgs</span>
+                    {session.projectPath && (
+                      <PathBadge path={session.projectPath} className="text-[11px]" />
+                    )}
+                    <span className="ml-auto shrink-0">
+                      {session.endedAt ? (
+                        <SimpleTooltip content={`Duration: ${formatDuration(session.startedAt, session.endedAt)}`}>
+                          <span>
+                            ended <LiveTimeAgo date={session.endedAt} />
+                          </span>
+                        </SimpleTooltip>
+                      ) : (
+                        <span>
+                          started <LiveTimeAgo date={session.startedAt} />
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </Link>
               ))
@@ -224,78 +286,155 @@ export function DashboardPage(): React.JSX.Element {
           </div>
         </div>
 
-        {/* Machine Status */}
-        <div>
-          <SectionHeader title="Fleet Status" href="/machines" />
-          <div className="border border-border rounded-lg overflow-hidden">
-            {machineList.length === 0 ? (
-              <DashboardEmptyPanel
-                loading={machines.isLoading}
-                message="No machines registered. Run setup-machine.sh on a host to register it."
-              />
-            ) : (
-              machineList.map((machine, idx) => (
-                <Link
-                  key={machine.id}
-                  href={`/machines/${machine.id}`}
-                  className={cn(
-                    'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
-                    idx > 0 && 'border-t border-border',
-                  )}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <StatusBadge status={machine.status} />
-                    <div>
-                      <div className="text-[13px] font-medium text-foreground">
-                        {machine.hostname}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground font-mono">
-                        {machine.tailscaleIp}
+        {/* Right column: Machine Status + Discovered Sessions */}
+        <div className="space-y-5">
+          {/* Machine Status */}
+          <div>
+            <SectionHeader title="Fleet Status" href="/machines" />
+            <div className="border border-border rounded-lg overflow-hidden">
+              {machineList.length === 0 ? (
+                <DashboardEmptyPanel
+                  loading={machines.isLoading}
+                  message="No machines registered. Run setup-machine.sh on a host to register it."
+                />
+              ) : (
+                machineList.map((machine, idx) => (
+                  <Link
+                    key={machine.id}
+                    href={`/machines/${machine.id}`}
+                    className={cn(
+                      'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                      idx > 0 && 'border-t border-border',
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <StatusBadge status={machine.status} />
+                      <div>
+                        <div className="text-[13px] font-medium text-foreground">
+                          {machine.hostname}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-mono">
+                          {machine.tailscaleIp}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span>
-                      {machine.os}/{machine.arch}
-                    </span>
-                    {machine.capabilities?.gpu && (
-                      <span className="bg-muted px-1.5 py-px rounded text-[10px] font-semibold uppercase">
-                        GPU
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>
+                        {machine.os}/{machine.arch}
                       </span>
-                    )}
-                    {machine.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
-                  </div>
-                </Link>
-              ))
-            )}
+                      {machine.capabilities?.gpu && (
+                        <span className="bg-muted px-1.5 py-px rounded text-[10px] font-semibold uppercase">
+                          GPU
+                        </span>
+                      )}
+                      {machine.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
           </div>
+
+          {/* Discovered Sessions (compact) */}
+          {discoveredSessions.length > 0 && (
+            <div>
+              <SectionHeader title="Discovered Sessions" href="/discover" />
+              <div className="border border-border rounded-lg overflow-hidden">
+                {discoveredSessions.slice(0, 4).map((session, idx) => (
+                  <Link
+                    key={session.sessionId}
+                    href="/discover"
+                    className={cn(
+                      'block px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                      idx > 0 && 'border-t border-border',
+                    )}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-[12px] font-medium text-foreground truncate">
+                        {truncate(session.summary || 'Untitled session', 40)}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
+                        <LiveTimeAgo date={session.lastActivity} />
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                      <span className="font-mono bg-muted px-1.5 py-px rounded text-[10px]">
+                        {session.hostname}
+                      </span>
+                      {session.branch && (
+                        <span className="font-mono text-green-500 text-[10px]">
+                          {session.branch}
+                        </span>
+                      )}
+                      <span>{session.messageCount} msgs</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Platform summary bar */}
-      <div className="flex gap-4 mt-5 px-4 py-2.5 bg-card border border-border rounded-lg text-xs text-muted-foreground items-center flex-wrap">
-        <span className="font-medium text-muted-foreground">Platform</span>
-        <span className="flex items-center gap-1.5">
-          <span
-            className={cn(
-              'w-1.5 h-1.5 rounded-full',
-              metricsData.agentctl_control_plane_up === 1 ? 'bg-green-500' : 'bg-red-500',
-            )}
-          />
-          {metricsData.agentctl_control_plane_up === 1 ? 'Healthy' : 'Down'}
-        </span>
-        <span>
-          Cost:{' '}
-          <span className="text-foreground font-mono">
-            $
-            {typeof metricsData.agentctl_total_cost_usd === 'number'
-              ? metricsData.agentctl_total_cost_usd.toFixed(2)
-              : '0.00'}
+      <div className="mt-5 bg-card border border-border rounded-lg overflow-hidden">
+        <div className="flex gap-4 px-4 py-2.5 text-xs text-muted-foreground items-center flex-wrap">
+          <span className="font-medium text-muted-foreground">Platform</span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                'w-1.5 h-1.5 rounded-full',
+                metricsData.agentctl_control_plane_up === 1 ? 'bg-green-500' : 'bg-red-500',
+              )}
+            />
+            {metricsData.agentctl_control_plane_up === 1 ? 'Healthy' : 'Down'}
           </span>
-        </span>
-        <span>
-          Runs: <span className="text-foreground font-mono">{formatNumber(totalRuns)}</span>
-        </span>
+          <span className="h-3 w-px bg-border" />
+          <span>
+            Total Cost:{' '}
+            <span className="text-foreground font-mono">
+              {formatCost(
+                typeof metricsData.agentctl_total_cost_usd === 'number'
+                  ? metricsData.agentctl_total_cost_usd
+                  : 0,
+              )}
+            </span>
+          </span>
+          <span className="h-3 w-px bg-border" />
+          <span>
+            Runs: <span className="text-foreground font-mono">{formatNumber(totalRuns)}</span>
+          </span>
+          <span className="h-3 w-px bg-border" />
+          <span>
+            Active Sessions:{' '}
+            <span className="text-foreground font-mono">{activeSessionCount}</span>
+          </span>
+        </div>
+        {/* Cost breakdown by agent */}
+        {agentCostBreakdown.length > 0 && (
+          <div className="border-t border-border px-4 py-2.5">
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+              Cost by Agent
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+              {agentCostBreakdown.map((agent) => (
+                <Link
+                  key={agent.id}
+                  href={`/agents/${agent.id}`}
+                  className="flex items-center gap-2 text-xs text-muted-foreground no-underline hover:text-foreground transition-colors"
+                >
+                  <span className="truncate max-w-[140px]">{agent.name}</span>
+                  <span className="font-mono text-foreground">{formatCost(agent.totalCostUsd)}</span>
+                  {agent.lastCostUsd != null && agent.lastCostUsd > 0 && (
+                    <span className="text-[10px] text-muted-foreground">
+                      (last: {formatCost(agent.lastCostUsd)})
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dependencies */}
@@ -303,21 +442,73 @@ export function DashboardPage(): React.JSX.Element {
         <div className="mt-6">
           <SectionHeader title="Dependencies" />
           <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
-            {Object.entries(health.data.dependencies).map(([name, dep]) => (
-              <div
-                key={name}
-                className="px-3.5 py-2.5 bg-card border border-border rounded-lg flex justify-between items-center"
-              >
-                <span className="text-[13px] font-medium capitalize">{name}</span>
-                <span className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground font-mono">
-                    {dep.latencyMs?.toFixed(0) ?? '-'}ms
-                  </span>
-                  <StatusBadge status={dep.status} />
-                </span>
-              </div>
-            ))}
+            {Object.entries(health.data.dependencies).map(([name, dep]) => {
+              const isOk = dep.status === 'ok';
+              const isError = dep.status === 'error';
+              const latencyMs = dep.latencyMs ?? 0;
+              const isHighLatency = isOk && latencyMs > 500;
+
+              const dotClass = isError
+                ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+                : isHighLatency
+                  ? 'bg-yellow-500 shadow-[0_0_6px_rgba(234,179,8,0.4)]'
+                  : 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.4)]';
+
+              const borderClass = isError
+                ? 'border-red-500/20'
+                : isHighLatency
+                  ? 'border-yellow-500/20'
+                  : 'border-border';
+
+              return (
+                <div
+                  key={name}
+                  className={cn(
+                    'px-3.5 py-2.5 bg-card border rounded-lg flex justify-between items-center',
+                    borderClass,
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className={cn('w-2 h-2 rounded-full shrink-0', dotClass)} />
+                    <span className="text-[13px] font-medium capitalize">{name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'text-[11px] font-mono',
+                        isError
+                          ? 'text-red-500'
+                          : isHighLatency
+                            ? 'text-yellow-500'
+                            : 'text-muted-foreground',
+                      )}
+                    >
+                      {latencyMs > 0 ? `${latencyMs.toFixed(0)}ms` : '-'}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[10px] font-semibold uppercase',
+                        isError ? 'text-red-500' : isHighLatency ? 'text-yellow-500' : 'text-green-500',
+                      )}
+                    >
+                      {isError ? 'ERR' : isHighLatency ? 'SLOW' : 'OK'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+          {Object.values(health.data.dependencies).some((d) => d.error) && (
+            <div className="mt-2 px-3 py-2 bg-red-500/5 border border-red-500/20 rounded text-[12px] text-red-400">
+              {Object.entries(health.data.dependencies)
+                .filter(([, d]) => d.error)
+                .map(([name, d]) => (
+                  <div key={name}>
+                    <span className="font-medium capitalize">{name}</span>: {d.error}
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -359,6 +550,29 @@ function ActionButton({
     >
       {label}
     </button>
+  );
+}
+
+function ActivityIcon({ status }: { status: string }): React.JSX.Element {
+  const colorClass =
+    status === 'running' || status === 'active'
+      ? 'bg-green-500'
+      : status === 'error' || status === 'timeout'
+        ? 'bg-red-500'
+        : status === 'starting'
+          ? 'bg-yellow-500'
+          : 'bg-muted-foreground';
+
+  const shouldPulse = status === 'running' || status === 'active';
+
+  return (
+    <span
+      className={cn(
+        'w-2 h-2 rounded-full shrink-0',
+        colorClass,
+        shouldPulse && 'animate-pulse',
+      )}
+    />
   );
 }
 
