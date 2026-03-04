@@ -258,7 +258,7 @@ export function DashboardPage(): React.JSX.Element {
                     <span>
                       {machine.os}/{machine.arch}
                     </span>
-                    {machine.capabilities.gpu && (
+                    {machine.capabilities?.gpu && (
                       <span className="bg-muted px-1.5 py-px rounded text-[10px] font-semibold uppercase">
                         GPU
                       </span>

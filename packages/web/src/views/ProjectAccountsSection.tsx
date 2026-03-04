@@ -125,7 +125,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
                 </label>
                 <Input
                   id="new-project-path"
-                  placeholder="/home/user/my-project"
+                  placeholder="my-project"
                   value={newPath}
                   onChange={(e) => setNewPath(e.target.value)}
                   className="h-8 text-[13px]"

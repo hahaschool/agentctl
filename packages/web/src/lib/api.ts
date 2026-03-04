@@ -17,7 +17,7 @@ export type Machine = {
   arch: string;
   status: 'online' | 'offline' | 'degraded';
   lastHeartbeat: string | null;
-  capabilities: { gpu: boolean; docker: boolean; maxConcurrentAgents: number };
+  capabilities?: { gpu: boolean; docker: boolean; maxConcurrentAgents: number };
   createdAt: string;
 };
 
@@ -52,6 +52,8 @@ export type Session = {
   lastHeartbeat: string | null;
   endedAt: string | null;
   metadata: Record<string, unknown>;
+  accountId: string | null;
+  model: string | null;
 };
 
 export type DiscoveredSession = {
@@ -96,7 +98,7 @@ export type ApiAccount = {
   provider: string;
   credentialMasked: string;
   priority: number;
-  rateLimit: Record<string, number>;
+  rateLimit: { itpm?: number; otpm?: number };
   isActive: boolean;
   metadata: Record<string, unknown>;
   createdAt: string;

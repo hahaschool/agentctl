@@ -333,36 +333,38 @@ export function SessionsPage(): React.JSX.Element {
           'md:w-[340px] md:min-w-[340px]',
         )}
       >
-        <div className="px-4 pt-4 pb-3 border-b border-border flex justify-between items-center">
-          <h2 className="text-base font-semibold">
-            Sessions
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              ({filteredSessions.length})
-            </span>
-          </h2>
-          <div className="flex items-center gap-1.5">
-            <LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} />
-            <button
-              type="button"
-              onClick={() => {
-                setShowCreateForm((prev) => !prev);
-                setFormError(null);
-              }}
-              aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
-              aria-expanded={showCreateForm}
-              className={cn(
-                'px-2.5 py-1 border border-border rounded-sm text-xs font-medium',
-                showCreateForm ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
-              )}
-            >
-              {showCreateForm ? 'Cancel' : '+ New Session'}
-            </button>
-            <RefreshButton
-              onClick={() => void sessions.refetch()}
-              isFetching={sessions.isFetching && !sessions.isLoading}
-              className="px-2.5 py-1 text-xs"
-            />
+        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2">
+          <div className="flex justify-between items-center">
+            <h2 className="text-base font-semibold">
+              Sessions
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                ({filteredSessions.length})
+              </span>
+            </h2>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateForm((prev) => !prev);
+                  setFormError(null);
+                }}
+                aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
+                aria-expanded={showCreateForm}
+                className={cn(
+                  'px-2.5 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap',
+                  showCreateForm ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+                )}
+              >
+                {showCreateForm ? 'Cancel' : '+ New Session'}
+              </button>
+              <RefreshButton
+                onClick={() => void sessions.refetch()}
+                isFetching={sessions.isFetching && !sessions.isLoading}
+                className="px-2.5 py-1.5 text-xs"
+              />
+            </div>
           </div>
+          <LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} />
         </div>
 
         {/* Search / filter input */}
