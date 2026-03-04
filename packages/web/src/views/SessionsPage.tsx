@@ -16,11 +16,17 @@ import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import type { Machine, Session, SessionContentMessage, SessionContentResponse } from '../lib/api';
+import type {
+  ApiAccount,
+  Machine,
+  Session,
+  SessionContentMessage,
+  SessionContentResponse,
+} from '../lib/api';
 import { api } from '../lib/api';
 import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
-import { queryKeys, sessionsQuery } from '../lib/queries';
+import { accountsQuery, queryKeys, sessionsQuery } from '../lib/queries';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -80,8 +86,11 @@ export function SessionsPage(): React.JSX.Element {
   const [formProjectPath, setFormProjectPath] = useState('');
   const [formPrompt, setFormPrompt] = useState('');
   const [formModel, setFormModel] = useState('');
+  const [formAccountId, setFormAccountId] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const accounts = useQuery(accountsQuery());
 
   useHotkeys(
     useMemo(
@@ -121,6 +130,7 @@ export function SessionsPage(): React.JSX.Element {
     setFormProjectPath('');
     setFormPrompt('');
     setFormModel('');
+    setFormAccountId('');
     setFormError(null);
   }, []);
 
@@ -148,6 +158,7 @@ export function SessionsPage(): React.JSX.Element {
         projectPath: formProjectPath.trim(),
         prompt: formPrompt.trim(),
         model: formModel || undefined,
+        accountId: formAccountId || undefined,
       });
       toast.success(`Session created: ${result.sessionId.slice(0, 16)}...`);
       resetForm();
@@ -158,7 +169,16 @@ export function SessionsPage(): React.JSX.Element {
     } finally {
       setFormSubmitting(false);
     }
-  }, [formMachineId, formProjectPath, formPrompt, formModel, resetForm, queryClient, toast]);
+  }, [
+    formMachineId,
+    formProjectPath,
+    formPrompt,
+    formModel,
+    formAccountId,
+    resetForm,
+    queryClient,
+    toast,
+  ]);
 
   const sessionList = sessions.data ?? [];
 
@@ -500,13 +520,36 @@ export function SessionsPage(): React.JSX.Element {
               id="create-session-model"
               value={formModel}
               onChange={(e) => setFormModel(e.target.value)}
-              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-3 outline-none"
+              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-2.5 outline-none"
             >
               {MODEL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
               ))}
+            </select>
+
+            {/* Account override selector */}
+            <label
+              htmlFor="create-session-account"
+              className="block text-[11px] text-muted-foreground mb-1"
+            >
+              Account (optional)
+            </label>
+            <select
+              id="create-session-account"
+              value={formAccountId}
+              onChange={(e) => setFormAccountId(e.target.value)}
+              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-3 outline-none"
+            >
+              <option value="">Default (auto)</option>
+              {(accounts.data ?? [])
+                .filter((a: ApiAccount) => a.isActive)
+                .map((a: ApiAccount) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.provider})
+                  </option>
+                ))}
             </select>
 
             {/* Error / Success feedback */}

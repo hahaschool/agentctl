@@ -190,6 +190,7 @@ export const api = {
     prompt?: string;
     model?: string;
     resumeSessionId?: string;
+    accountId?: string;
   }) =>
     request<{ ok: boolean; sessionId: string; session: Session }>('/api/sessions', {
       method: 'POST',
@@ -262,8 +263,7 @@ export const api = {
     }),
 
   // Project account mappings
-  listProjectAccounts: () =>
-    request<ProjectAccountMapping[]>('/api/settings/project-accounts'),
+  listProjectAccounts: () => request<ProjectAccountMapping[]>('/api/settings/project-accounts'),
   upsertProjectAccount: (body: { projectPath: string; accountId: string }) =>
     request<ProjectAccountMapping>('/api/settings/project-accounts', {
       method: 'PUT',
