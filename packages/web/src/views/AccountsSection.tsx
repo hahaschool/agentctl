@@ -294,7 +294,7 @@ export function AccountsSection(): React.JSX.Element {
                   <SelectTrigger className="w-full" id="account-provider">
                     <SelectValue placeholder="Select a provider" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper" sideOffset={4}>
                     {PROVIDERS.map((p) => (
                       <SelectItem key={p.value} value={p.value}>
                         {p.label}

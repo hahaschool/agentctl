@@ -946,7 +946,7 @@ function DetailRow({
 // Inline session content viewer
 // ---------------------------------------------------------------------------
 
-const CONTENT_POLL_MS = 5_000;
+const CONTENT_POLL_MS = 3_000;
 
 function SessionContent({
   sessionId,
@@ -1028,6 +1028,11 @@ function SessionContent({
       <div className="px-5 py-1.5 border-b border-border flex justify-between items-center shrink-0">
         <span className="text-[11px] text-muted-foreground">
           {data ? `${messages.length} messages${showTools ? '' : ' (conversations only)'}` : ''}
+          {isActive && (
+            <span className="text-green-500 animate-pulse" title="Auto-refreshing every 3s">
+              &#x25CF;
+            </span>
+          )}
         </span>
         <div className="flex gap-1.5">
           <button
