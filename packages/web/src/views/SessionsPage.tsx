@@ -398,9 +398,9 @@ export function SessionsPage(): React.JSX.Element {
             aria-label="Sort order"
             className="px-2 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] min-h-[32px]"
           >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="status">By Status</option>
+            <option value="newest">{'\u2193'} Newest first</option>
+            <option value="oldest">{'\u2191'} Oldest first</option>
+            <option value="status">{'\u2191'} By status</option>
           </select>
           <select
             value={groupBy}

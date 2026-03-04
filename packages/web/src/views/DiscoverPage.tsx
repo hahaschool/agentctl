@@ -45,9 +45,9 @@ const MIN_MESSAGE_OPTIONS: { label: string; value: MinMessages }[] = [
 ];
 
 const SORT_OPTIONS: { label: string; value: SortOption }[] = [
-  { label: 'Recent activity', value: 'recent' },
-  { label: 'Most messages', value: 'messages' },
-  { label: 'Project name', value: 'project' },
+  { label: '\u2193 Recent activity', value: 'recent' },
+  { label: '\u2193 Most messages', value: 'messages' },
+  { label: '\u2191 Project name', value: 'project' },
 ];
 
 /** Compute a human-readable recency label directly from a date string. */

@@ -351,10 +351,10 @@ export function AgentsPage(): React.JSX.Element {
           aria-label="Sort order"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
         >
-          <option value="name">Sort: Name</option>
-          <option value="status">Sort: Status</option>
-          <option value="lastRun">Sort: Last run</option>
-          <option value="cost">Sort: Total cost</option>
+          <option value="name">{'\u2191'} Name (A-Z)</option>
+          <option value="status">{'\u2191'} Status</option>
+          <option value="lastRun">{'\u2193'} Last run</option>
+          <option value="cost">{'\u2193'} Total cost</option>
         </select>
         <span className="text-[11px] text-muted-foreground ml-auto">
           {filteredAgents.length}/{agentList.length} agents

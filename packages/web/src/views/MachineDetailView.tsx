@@ -236,10 +236,10 @@ export function MachineDetailView(): React.JSX.Element {
                     <th scope="col" className="pb-2 pr-4 font-medium">
                       Status
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
+                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
                       Type
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
+                    <th scope="col" className="pb-2 pr-4 font-medium hidden md:table-cell">
                       Project
                     </th>
                     <th scope="col" className="pb-2 font-medium">
@@ -261,10 +261,10 @@ export function MachineDetailView(): React.JSX.Element {
                       <td className="py-2.5 pr-4">
                         <StatusBadge status={agent.status} />
                       </td>
-                      <td className="py-2.5 pr-4 text-xs text-muted-foreground capitalize">
+                      <td className="py-2.5 pr-4 text-xs text-muted-foreground capitalize hidden sm:table-cell">
                         {agent.type}
                       </td>
-                      <td className="py-2.5 pr-4 max-w-[200px]">
+                      <td className="py-2.5 pr-4 max-w-[200px] hidden md:table-cell">
                         <PathBadge path={agent.projectPath} />
                       </td>
                       <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
@@ -321,10 +321,10 @@ export function MachineDetailView(): React.JSX.Element {
                     <th scope="col" className="pb-2 pr-4 font-medium">
                       Status
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
+                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
                       Agent
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
+                    <th scope="col" className="pb-2 pr-4 font-medium hidden md:table-cell">
                       Project
                     </th>
                     <th scope="col" className="pb-2 font-medium">
@@ -346,10 +346,10 @@ export function MachineDetailView(): React.JSX.Element {
                       <td className="py-2.5 pr-4">
                         <StatusBadge status={session.status} />
                       </td>
-                      <td className="py-2.5 pr-4">
+                      <td className="py-2.5 pr-4 hidden sm:table-cell">
                         <AgentName agentId={session.agentId} agents={agents.data ?? []} />
                       </td>
-                      <td className="py-2.5 pr-4 max-w-[200px]">
+                      <td className="py-2.5 pr-4 max-w-[200px] hidden md:table-cell">
                         <PathBadge path={session.projectPath} />
                       </td>
                       <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
