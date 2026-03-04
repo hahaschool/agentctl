@@ -25,6 +25,7 @@ Thumbs.db
 
 # Build artifacts
 *.tsbuildinfo
+.next/
 
 # Docker
 .docker/
