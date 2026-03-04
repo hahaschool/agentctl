@@ -420,7 +420,8 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const isActive = session.status === 'active' || session.status === 'starting';
-  const canResume = session.status === 'ended' || session.status === 'paused';
+  const canResume =
+    session.status === 'ended' || session.status === 'paused' || session.status === 'error';
   const canSend = isActive || canResume;
   const isSending = sendMessage.isPending || resumeSession.isPending;
 

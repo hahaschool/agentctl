@@ -775,7 +775,7 @@ export function SessionsPage(): React.JSX.Element {
             )}
 
             {/* Prompt input — only for active sessions or ended sessions that can be resumed */}
-            {(selected.status === 'active' || selected.status === 'ended') && (
+            {(selected.status === 'active' || selected.status === 'ended' || selected.status === 'error') && (
               <div className="px-5 py-3 border-t border-border flex gap-2">
                 <input
                   type="text"
