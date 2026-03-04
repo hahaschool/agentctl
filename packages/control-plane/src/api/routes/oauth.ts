@@ -19,6 +19,7 @@ type PendingFlow = {
   provider: string;
   accountName: string;
   codeVerifier: string;
+  redirectUri: string;
   createdAt: number;
 };
 
@@ -88,9 +89,10 @@ export const oauthRoutes: FastifyPluginAsync<OAuthRoutesOptions> = async (app, o
     Body: {
       provider: string;
       accountName: string;
+      redirectUri?: string;
     };
   }>('/initiate', async (request, reply) => {
-    const { provider, accountName } = request.body;
+    const { provider, accountName, redirectUri: clientRedirectUri } = request.body;
 
     if (!provider || !accountName) {
       return reply.code(400).send({
@@ -111,15 +113,18 @@ export const oauthRoutes: FastifyPluginAsync<OAuthRoutesOptions> = async (app, o
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
 
+    // Use caller-provided redirectUri (e.g. from Next.js frontend) or fall back to
+    // constructing from the Fastify request (direct access to control-plane).
+    const redirectUri =
+      clientRedirectUri ?? `${request.protocol}://${request.hostname}${REDIRECT_PATH}`;
+
     pendingFlows.set(state, {
       provider,
       accountName,
       codeVerifier,
+      redirectUri,
       createdAt: Date.now(),
     });
-
-    // Build the authorization URL with PKCE parameters
-    const redirectUri = `${request.protocol}://${request.hostname}${REDIRECT_PATH}`;
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: CLIENT_ID,
@@ -184,9 +189,10 @@ export const oauthRoutes: FastifyPluginAsync<OAuthRoutesOptions> = async (app, o
         .send(callbackHtml({ error: `No token endpoint for provider: ${flow.provider}` }));
     }
 
-    // Exchange authorization code for token
+    // Exchange authorization code for token — use the same redirectUri that was
+    // sent to the authorization server during /initiate so they match exactly.
     try {
-      const redirectUri = `${request.protocol}://${request.hostname}${REDIRECT_PATH}`;
+      const redirectUri = flow.redirectUri;
       const tokenResponse = await fetch(endpoints.tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

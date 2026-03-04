@@ -261,7 +261,11 @@ export const api = {
   initiateOAuth: (provider: string, accountName: string) =>
     request<{ authorizationUrl: string; state: string }>('/api/oauth/initiate', {
       method: 'POST',
-      body: JSON.stringify({ provider, accountName }),
+      body: JSON.stringify({
+        provider,
+        accountName,
+        redirectUri: `${window.location.origin}/api/oauth/callback`,
+      }),
     }),
 
   // Accounts

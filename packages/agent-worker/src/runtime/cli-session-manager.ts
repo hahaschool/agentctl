@@ -121,6 +121,8 @@ type CliStreamMessage = {
 const DEFAULT_CLAUDE_PATH = 'claude';
 const DEFAULT_MAX_CONCURRENT = 10;
 const DEFAULT_MODEL = 'sonnet';
+const STALE_SESSION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -133,11 +135,17 @@ export class CliSessionManager extends EventEmitter {
   private readonly processes: Map<string, ChildProcess> = new Map();
   private readonly lineBuffers: Map<string, string> = new Map();
   private sessionCounter = 0;
+  private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
   constructor(options?: CliSessionManagerOptions) {
     super();
     this.claudePath = options?.claudePath ?? DEFAULT_CLAUDE_PATH;
     this.maxConcurrentSessions = options?.maxConcurrentSessions ?? DEFAULT_MAX_CONCURRENT;
+
+    // Periodically clean up stale sessions to prevent memory leaks
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupStaleSessions();
+    }, CLEANUP_INTERVAL_MS);
   }
 
   // -----------------------------------------------------------------------
@@ -167,8 +175,11 @@ export class CliSessionManager extends EventEmitter {
     }
 
     // Clean up old finished sessions to prevent memory leaks
+    const now = Date.now();
     for (const [sid, s] of this.sessions) {
       if (s.status === 'error' || s.status === 'ended') {
+        this.sessions.delete(sid);
+      } else if (s.status === 'paused' && now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS) {
         this.sessions.delete(sid);
       }
     }
@@ -340,6 +351,13 @@ export class CliSessionManager extends EventEmitter {
   }
 
   /**
+   * Return the configured maximum number of concurrent sessions.
+   */
+  getMaxConcurrentSessions(): number {
+    return this.maxConcurrentSessions;
+  }
+
+  /**
    * List sessions filtered by status.
    */
   listSessionsByStatus(status: CliSessionStatus): CliSession[] {
@@ -352,6 +370,39 @@ export class CliSessionManager extends EventEmitter {
   async stopAll(): Promise<void> {
     const runningSessions = this.listSessionsByStatus('running');
     await Promise.all(runningSessions.map((s) => this.stopSession(s.id, false)));
+  }
+
+  /**
+   * Remove stale sessions from the in-memory map.
+   *
+   * - Sessions in `'error'` or `'ended'` status are removed immediately.
+   * - Sessions in `'paused'` status are removed if their last activity was
+   *   more than 5 minutes ago (they can still be resumed via Claude session
+   *   ID even after eviction from this map).
+   *
+   * @returns The number of sessions that were cleaned up.
+   */
+  cleanupStaleSessions(): number {
+    let cleaned = 0;
+    const now = Date.now();
+    for (const [sid, s] of this.sessions) {
+      if (s.status === 'error' || s.status === 'ended') {
+        this.sessions.delete(sid);
+        cleaned++;
+      } else if (s.status === 'paused' && now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS) {
+        this.sessions.delete(sid);
+        cleaned++;
+      }
+    }
+    return cleaned;
+  }
+
+  /**
+   * Tear down the manager — clears the periodic cleanup timer.
+   * Call this on process shutdown to avoid leaked intervals.
+   */
+  destroy(): void {
+    clearInterval(this.cleanupTimer);
   }
 
   /**

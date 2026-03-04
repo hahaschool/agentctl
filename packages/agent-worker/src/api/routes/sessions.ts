@@ -374,6 +374,33 @@ export async function sessionRoutes(
   );
 
   // -----------------------------------------------------------------------
+  // GET /stats — session count and breakdown by status
+  // -----------------------------------------------------------------------
+
+  app.get('/stats', async () => {
+    const sessions = sessionManager.listSessions();
+    const byStatus: Record<string, number> = {};
+    for (const s of sessions) {
+      byStatus[s.status] = (byStatus[s.status] ?? 0) + 1;
+    }
+    return {
+      total: sessions.length,
+      byStatus,
+      maxConcurrent: sessionManager.getMaxConcurrentSessions(),
+    };
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /cleanup — manually trigger stale session cleanup
+  // -----------------------------------------------------------------------
+
+  app.post('/cleanup', async () => {
+    const cleaned = sessionManager.cleanupStaleSessions();
+    logger.info({ cleaned, machineId }, 'Manual session cleanup executed');
+    return { ok: true, cleaned };
+  });
+
+  // -----------------------------------------------------------------------
   // GET /:sessionId — get a single session's details
   // -----------------------------------------------------------------------
 
