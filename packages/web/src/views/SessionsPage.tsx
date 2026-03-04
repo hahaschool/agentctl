@@ -8,8 +8,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
+import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
@@ -298,7 +300,8 @@ export function SessionsPage(): React.JSX.Element {
     formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim();
 
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full">
+      <FetchingBar isFetching={sessions.isFetching && !sessions.isLoading} />
       {/* Session list panel */}
       <div
         className={cn(
@@ -332,14 +335,11 @@ export function SessionsPage(): React.JSX.Element {
             >
               {showCreateForm ? 'Cancel' : '+ New Session'}
             </button>
-            <button
-              type="button"
+            <RefreshButton
               onClick={() => void sessions.refetch()}
-              aria-label="Refresh session list"
-              className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs"
-            >
-              Refresh
-            </button>
+              isFetching={sessions.isFetching && !sessions.isLoading}
+              className="px-2.5 py-1 text-xs"
+            />
           </div>
         </div>
 

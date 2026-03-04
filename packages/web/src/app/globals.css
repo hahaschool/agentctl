@@ -142,3 +142,19 @@ a:hover {
 .animate-fade-in {
   animation: fadeIn 0.2s ease-out both;
 }
+
+@keyframes fetchingBar {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-fetching-bar {
+  animation: fetchingBar 1.2s ease-in-out infinite;
+}

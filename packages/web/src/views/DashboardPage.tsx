@@ -8,9 +8,11 @@ import { useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
+import { RefreshButton } from '../components/RefreshButton';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
@@ -62,6 +64,12 @@ export function DashboardPage(): React.JSX.Element {
 
   useHotkeys(useMemo(() => ({ r: refreshAll }), [refreshAll]));
 
+  const anyFetching =
+    health.isFetching ||
+    metrics.isFetching ||
+    machines.isFetching ||
+    agents.isFetching ||
+    discovered.isFetching;
   const anyError =
     health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error;
 
@@ -82,21 +90,15 @@ export function DashboardPage(): React.JSX.Element {
   const healthLabel = healthStatus ?? 'unknown';
 
   return (
-    <div className="p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-6 max-w-[1100px] animate-fade-in">
+      <FetchingBar isFetching={anyFetching} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="text-[22px] font-bold">Command Center</h1>
         <div className="flex items-center gap-3">
           <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
           <WsStatusIndicator status={wsStatus} />
-          <button
-            type="button"
-            onClick={refreshAll}
-            aria-label="Refresh dashboard"
-            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
-          >
-            Refresh
-          </button>
+          <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>
       </div>
 

@@ -9,9 +9,11 @@ import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
 import { HighlightText } from '../components/HighlightText';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
+import { RefreshButton } from '../components/RefreshButton';
 import { SessionPreview } from '../components/SessionPreview';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { useToast } from '../components/Toast';
@@ -290,7 +292,8 @@ export function DiscoverPage(): React.JSX.Element {
   );
 
   return (
-    <div className="p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-6 max-w-[1100px] animate-fade-in">
+      <FetchingBar isFetching={query.isFetching && !query.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
@@ -321,14 +324,11 @@ export function DiscoverPage(): React.JSX.Element {
           >
             {showNewSession ? 'Cancel' : '+ New Session'}
           </button>
-          <button
-            type="button"
+          <RefreshButton
             onClick={() => void refetch()}
-            aria-label="Scan all machines for sessions"
-            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
-          >
-            Scan All Machines
-          </button>
+            isFetching={query.isFetching && !query.isLoading}
+            label="Scan All Machines"
+          />
         </div>
       </div>
 

@@ -11,7 +11,9 @@ import { ConfirmButton } from '../components/ConfirmButton';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { RefreshButton } from '../components/RefreshButton';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
@@ -192,7 +194,8 @@ export function AgentsPage(): React.JSX.Element {
   const isCreateDisabled = createLoading || !createName.trim() || !createMachineId;
 
   return (
-    <div className="p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-6 max-w-[1100px] animate-fade-in">
+      <FetchingBar isFetching={agents.isFetching && !agents.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
@@ -211,14 +214,10 @@ export function AgentsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
+          <RefreshButton
             onClick={() => void agents.refetch()}
-            aria-label="Refresh agent list"
-            className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
-          >
-            Refresh
-          </button>
+            isFetching={agents.isFetching && !agents.isLoading}
+          />
           <button
             type="button"
             onClick={() => setShowCreateForm((prev) => !prev)}

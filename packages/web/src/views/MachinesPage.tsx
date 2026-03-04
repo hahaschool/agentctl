@@ -9,7 +9,9 @@ import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { RefreshButton } from '../components/RefreshButton';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
@@ -55,7 +57,8 @@ export function MachinesPage(): React.JSX.Element {
   }, [list, statusFilter, search]);
 
   return (
-    <div className="p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-6 max-w-[1100px] animate-fade-in">
+      <FetchingBar isFetching={machines.isFetching && !machines.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
@@ -71,14 +74,10 @@ export function MachinesPage(): React.JSX.Element {
             Machines connected via Tailscale mesh. Auto-refreshes every 15s.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => machines.refetch()}
-          aria-label="Refresh machine list"
-          className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer"
-        >
-          Refresh
-        </button>
+        <RefreshButton
+          onClick={() => void machines.refetch()}
+          isFetching={machines.isFetching && !machines.isLoading}
+        />
       </div>
 
       {/* Error banner */}
