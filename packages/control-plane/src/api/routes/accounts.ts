@@ -50,12 +50,18 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
     return reply.send({
-      ...row,
-      credential: undefined,
-      credentialIv: undefined,
+      id: row.id,
+      name: row.name,
+      provider: row.provider,
       credentialMasked: maskCredential(
         decryptCredential(row.credential, row.credentialIv, encryptionKey),
       ),
+      priority: row.priority,
+      rateLimit: row.rateLimit,
+      isActive: row.isActive,
+      metadata: row.metadata,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     });
   });
 
@@ -91,10 +97,16 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       })
       .returning();
     return reply.code(201).send({
-      ...inserted,
-      credential: undefined,
-      credentialIv: undefined,
+      id: inserted.id,
+      name: inserted.name,
+      provider: inserted.provider,
       credentialMasked: maskCredential(credential),
+      priority: inserted.priority,
+      rateLimit: inserted.rateLimit,
+      isActive: inserted.isActive,
+      metadata: inserted.metadata,
+      createdAt: inserted.createdAt,
+      updatedAt: inserted.updatedAt,
     });
   });
 
@@ -110,15 +122,17 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       credential?: string;
       priority?: number;
       isActive?: boolean;
+      rateLimit?: { itpm?: number; otpm?: number };
       metadata?: Record<string, unknown>;
     };
   }>('/:id', async (request, reply) => {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
-    const { name, provider, credential, priority, isActive, metadata } = request.body;
+    const { name, provider, credential, priority, isActive, rateLimit, metadata } = request.body;
     if (name !== undefined) updates.name = name;
     if (provider !== undefined) updates.provider = provider;
     if (priority !== undefined) updates.priority = priority;
     if (isActive !== undefined) updates.isActive = isActive;
+    if (rateLimit !== undefined) updates.rateLimit = rateLimit;
     if (metadata !== undefined) updates.metadata = metadata;
     if (credential) {
       const { encrypted, iv } = encryptCredential(credential, encryptionKey);
@@ -133,7 +147,20 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!updated) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
-    return reply.send({ ...updated, credential: undefined, credentialIv: undefined });
+    return reply.send({
+      id: updated.id,
+      name: updated.name,
+      provider: updated.provider,
+      credentialMasked: maskCredential(
+        decryptCredential(updated.credential, updated.credentialIv, encryptionKey),
+      ),
+      priority: updated.priority,
+      rateLimit: updated.rateLimit,
+      isActive: updated.isActive,
+      metadata: updated.metadata,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    });
   });
 
   // ---------------------------------------------------------------------------
