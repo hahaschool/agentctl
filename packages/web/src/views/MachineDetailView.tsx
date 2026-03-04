@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { FetchingBar } from '@/components/FetchingBar';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { PathBadge } from '@/components/PathBadge';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -105,8 +106,11 @@ export function MachineDetailView(): React.JSX.Element {
     );
   }
 
+  const anyFetching = machines.isFetching || agents.isFetching || sessions.isFetching;
+
   return (
-    <div className="p-4 md:p-6 max-w-[1000px]">
+    <div className="relative p-4 md:p-6 max-w-[1000px]">
+      <FetchingBar isFetching={anyFetching && !machines.isLoading} />
       <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: machine.hostname }]} />
 
       {/* Header */}

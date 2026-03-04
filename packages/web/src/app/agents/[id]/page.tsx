@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { FetchingBar } from '@/components/FetchingBar';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -112,7 +113,8 @@ export default function AgentDetailPage(): React.JSX.Element {
   const runList = runs.data ?? [];
 
   return (
-    <div className="p-4 md:p-6 max-w-[1000px]">
+    <div className="relative p-4 md:p-6 max-w-[1000px]">
+      <FetchingBar isFetching={(agent.isFetching || runs.isFetching) && !agent.isLoading} />
       <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: data.name }]} />
 
       {/* Header */}

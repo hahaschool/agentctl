@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
 import type { Session, SessionContentMessage } from '../lib/api';
@@ -57,7 +58,8 @@ export function SessionDetailView(): React.JSX.Element {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="relative h-full flex flex-col">
+      <FetchingBar isFetching={content.isFetching && !content.isLoading} />
       {/* Top bar */}
       <SessionHeader session={s} />
 
