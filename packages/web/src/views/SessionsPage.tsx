@@ -727,10 +727,20 @@ export function SessionsPage(): React.JSX.Element {
                 <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
                 <DetailRow label="PID" value={selected.pid ? String(selected.pid) : '-'} mono />
                 {selected.accountId && (
-                  <DetailRow label="Account" value={selected.accountId} mono />
+                  <DetailRow
+                    label="Account"
+                    value={
+                      accounts.data?.find((a) => a.id === selected.accountId)?.name ??
+                      selected.accountId
+                    }
+                    mono
+                  />
                 )}
                 {selected.model && (
                   <DetailRow label="Model" value={selected.model} />
+                )}
+                {typeof selected.metadata?.forkedFrom === 'string' && (
+                  <DetailRow label="Forked From" value={selected.metadata.forkedFrom} mono />
                 )}
                 <DetailRow label="Started" value={formatDateTime(selected.startedAt)} />
                 {selected.endedAt && (

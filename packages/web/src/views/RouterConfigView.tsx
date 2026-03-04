@@ -66,7 +66,7 @@ export function RouterConfigView(): React.JSX.Element {
             {litellm && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Latency</span>
-                <span className="font-mono text-xs">{litellm.latencyMs}ms</span>
+                <span className="font-mono text-xs">{litellm.latencyMs?.toFixed(0) ?? '-'}ms</span>
               </div>
             )}
           </div>
