@@ -8,6 +8,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { healthQuery } from '../lib/queries';
+import { AccountsSection } from './AccountsSection';
+import { FailoverSection } from './FailoverSection';
+import { ProjectAccountsSection } from './ProjectAccountsSection';
 
 // ---------------------------------------------------------------------------
 // Settings view
@@ -23,6 +26,9 @@ export function SettingsView(): React.JSX.Element {
         </p>
       </div>
 
+      <AccountsSection />
+      <FailoverSection />
+      <ProjectAccountsSection />
       <ThemeSection />
       <ConnectionSection />
       <KeyboardShortcutsSection />
