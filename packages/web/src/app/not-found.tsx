@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { Button } from '@/components/ui/button';
+
 export default function NotFound() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
@@ -8,12 +10,9 @@ export default function NotFound() {
       <p className="text-sm text-muted-foreground mb-6 max-w-[360px]">
         The page you&apos;re looking for doesn&apos;t exist or has been moved.
       </p>
-      <Link
-        href="/"
-        className="px-4 py-2 bg-primary text-primary-foreground rounded-sm text-sm font-medium no-underline"
-      >
-        Back to Dashboard
-      </Link>
+      <Button asChild>
+        <Link href="/">Back to Dashboard</Link>
+      </Button>
     </div>
   );
 }
