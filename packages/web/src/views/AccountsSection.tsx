@@ -37,7 +37,8 @@ import { cn } from '@/lib/utils';
 
 const PROVIDERS = [
   { value: 'anthropic_api', label: 'Anthropic API' },
-  { value: 'claude_max', label: 'Claude Max' },
+  { value: 'claude_max', label: 'Claude Max (Pro)' },
+  { value: 'claude_team', label: 'Claude Team' },
   { value: 'bedrock', label: 'AWS Bedrock' },
   { value: 'vertex', label: 'Google Vertex AI' },
 ] as const;
@@ -45,9 +46,53 @@ const PROVIDERS = [
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic_api: 'Anthropic API',
   claude_max: 'Claude Max',
+  claude_team: 'Claude Team',
   bedrock: 'AWS Bedrock',
   vertex: 'Vertex AI',
 };
+
+/** Providers that use OAuth / session tokens from `claude login` instead of API keys. */
+const OAUTH_PROVIDERS = new Set(['claude_max', 'claude_team']);
+
+type CredentialFieldConfig = {
+  label: string;
+  placeholder: string;
+  hint: string;
+  inputType: string;
+};
+
+function getCredentialConfig(provider: string): CredentialFieldConfig {
+  if (OAUTH_PROVIDERS.has(provider)) {
+    return {
+      label: 'Session Token',
+      placeholder: 'Paste token from `claude login`',
+      hint: 'Run `claude login` in terminal, then paste the session token here. OAuth login in browser coming soon.',
+      inputType: 'password',
+    };
+  }
+  if (provider === 'bedrock') {
+    return {
+      label: 'AWS Credentials',
+      placeholder: 'ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION',
+      hint: 'Format: ACCESS_KEY_ID:SECRET_ACCESS_KEY:us-east-1 (or configure via AWS_PROFILE env var)',
+      inputType: 'password',
+    };
+  }
+  if (provider === 'vertex') {
+    return {
+      label: 'Service Account Key',
+      placeholder: 'Paste service account JSON or path',
+      hint: 'Paste the full service account JSON key, or set GOOGLE_APPLICATION_CREDENTIALS env var',
+      inputType: 'password',
+    };
+  }
+  return {
+    label: 'API Key',
+    placeholder: 'sk-ant-...',
+    hint: 'Your Anthropic API key from console.anthropic.com',
+    inputType: 'password',
+  };
+}
 
 // ---------------------------------------------------------------------------
 // AccountsSection
@@ -240,7 +285,7 @@ export function AccountsSection(): React.JSX.Element {
                 <label className="text-sm font-medium" htmlFor="account-provider">
                   Provider
                 </label>
-                <Select value={provider} onValueChange={setProvider}>
+                <Select value={provider} onValueChange={(v) => { setProvider(v); setCredential(''); }}>
                   <SelectTrigger className="w-full" id="account-provider">
                     <SelectValue placeholder="Select a provider" />
                   </SelectTrigger>
@@ -254,18 +299,23 @@ export function AccountsSection(): React.JSX.Element {
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="account-credential">
-                  API Key
-                </label>
-                <Input
-                  id="account-credential"
-                  type="password"
-                  placeholder="sk-ant-..."
-                  value={credential}
-                  onChange={(e) => setCredential(e.target.value)}
-                />
-              </div>
+              {provider && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" htmlFor="account-credential">
+                    {getCredentialConfig(provider).label}
+                  </label>
+                  <Input
+                    id="account-credential"
+                    type={getCredentialConfig(provider).inputType}
+                    placeholder={getCredentialConfig(provider).placeholder}
+                    value={credential}
+                    onChange={(e) => setCredential(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {getCredentialConfig(provider).hint}
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="account-priority">
