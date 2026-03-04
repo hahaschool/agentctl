@@ -316,6 +316,7 @@ async function main(): Promise<void> {
     litellmClient: litellmClient ?? null,
     controlPlaneUrl: CONTROL_PLANE_URL,
     circuitBreaker,
+    db: db ?? null,
   });
   const repeatableJobs = createRepeatableJobManager(
     taskQueue,
