@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { ACCOUNT_PROVIDERS } from '@agentctl/shared';
 
 import type { Database } from '../../db/index.js';
-import { apiAccounts } from '../../db/schema.js';
+import { apiAccounts, projectAccountMappings } from '../../db/schema.js';
 import {
   decryptCredential,
   encryptCredential,
@@ -232,14 +232,31 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
   // ---------------------------------------------------------------------------
 
   app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    const { id } = request.params;
+
+    // Clean up orphaned project-account mappings before deleting the account.
+    // The DB schema has ON DELETE CASCADE, but we also do it explicitly so we
+    // can log the count of removed mappings.
+    const removedMappings = await db
+      .delete(projectAccountMappings)
+      .where(eq(projectAccountMappings.accountId, id))
+      .returning();
+
+    if (removedMappings.length > 0) {
+      request.log.info(
+        { accountId: id, removedMappings: removedMappings.length },
+        'Cleaned up project-account mappings for deleted account',
+      );
+    }
+
     const [deleted] = await db
       .delete(apiAccounts)
-      .where(eq(apiAccounts.id, request.params.id))
+      .where(eq(apiAccounts.id, id))
       .returning();
     if (!deleted) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
-    return reply.send({ ok: true });
+    return reply.send({ ok: true, removedMappings: removedMappings.length });
   });
 
   // ---------------------------------------------------------------------------
