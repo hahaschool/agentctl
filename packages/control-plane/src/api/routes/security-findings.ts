@@ -464,6 +464,41 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
   );
 
   // -------------------------------------------------------------------------
+  // DELETE /findings/:id — Delete a security finding
+  // -------------------------------------------------------------------------
+
+  app.delete<{ Params: { id: string } }>(
+    '/findings/:id',
+    { schema: { tags: ['audit'], summary: 'Delete a security finding' } },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      try {
+        const existing = await db.execute(sql`SELECT id FROM security_findings WHERE id = ${id}`);
+
+        if (existing.rows.length === 0) {
+          return reply.code(404).send({
+            error: 'FINDING_NOT_FOUND',
+            message: `Security finding '${id}' not found`,
+          });
+        }
+
+        await db.execute(sql`DELETE FROM security_findings WHERE id = ${id}`);
+
+        return { ok: true };
+      } catch (error: unknown) {
+        if (error instanceof ControlPlaneError) {
+          return reply.code(502).send({ error: error.code, message: error.message });
+        }
+        return reply.code(500).send({
+          error: 'FINDING_DELETE_FAILED',
+          message: 'Failed to delete finding',
+        });
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
   // POST /findings/github-issues — Create GitHub issues for critical/high
   // -------------------------------------------------------------------------
 

@@ -25,6 +25,7 @@ import type { Session, SessionContentMessage } from '../lib/api';
 import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import {
+  accountsQuery,
   queryKeys,
   sessionContentQuery,
   sessionQuery,
@@ -247,10 +248,17 @@ function SessionHeader({
   const deleteSession = useDeleteSession();
   const forkSession = useForkSession();
   const queryClient = useQueryClient();
+  const accounts = useQuery(accountsQuery());
   const [forkPrompt, setForkPrompt] = useState('');
   const [showFork, setShowFork] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  const accountName = useMemo(() => {
+    if (!session.accountId || !accounts.data) return null;
+    const found = accounts.data.find((a) => a.id === session.accountId);
+    return found?.name ?? null;
+  }, [session.accountId, accounts.data]);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -408,7 +416,12 @@ function SessionHeader({
         {session.projectPath && <PathBadge path={session.projectPath} />}
         {session.accountId && (
           <span className="flex items-center gap-1">
-            Account: <CopyableText value={session.accountId} maxDisplay={12} />
+            Account:{' '}
+            {accountName ? (
+              <span title={session.accountId}>{accountName}</span>
+            ) : (
+              <CopyableText value={session.accountId} maxDisplay={12} />
+            )}
           </span>
         )}
         {session.model && (
@@ -505,7 +518,7 @@ function MessageList({
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
     setAutoScroll(isAtBottom);
   }, []);
 
