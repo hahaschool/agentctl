@@ -59,6 +59,48 @@ const TOKEN_PROVIDERS = new Set(['claude_max', 'claude_team']);
 /** Providers that support browser-based OAuth login. */
 const OAUTH_PROVIDERS = new Set(['claude_max', 'claude_team']);
 
+/**
+ * Client-side credential format validation (warning only, does not block submit).
+ * Returns a warning string if the format looks wrong, or null if it looks fine.
+ */
+function validateCredentialFormat(provider: string, value: string): string | null {
+  if (!value.trim()) return null; // empty handled by required check
+
+  if (provider === 'anthropic_api') {
+    if (!value.startsWith('sk-ant-')) {
+      return 'Anthropic API keys typically start with "sk-ant-". Double-check your key.';
+    }
+    return null;
+  }
+
+  if (TOKEN_PROVIDERS.has(provider)) {
+    // Session tokens just need to be non-empty, already checked above
+    return null;
+  }
+
+  if (provider === 'bedrock') {
+    const parts = value.split(':');
+    if (parts.length !== 3 || parts.some((p) => !p.trim())) {
+      return 'Expected format: ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION (3 colon-separated parts).';
+    }
+    return null;
+  }
+
+  if (provider === 'vertex') {
+    try {
+      const parsed = JSON.parse(value) as Record<string, unknown>;
+      if (!parsed.client_email || !parsed.private_key) {
+        return 'JSON is missing required fields: "client_email" and/or "private_key".';
+      }
+    } catch {
+      return 'Expected a valid JSON string with "client_email" and "private_key" fields.';
+    }
+    return null;
+  }
+
+  return null;
+}
+
 type CredentialFieldConfig = {
   label: string;
   placeholder: string;
@@ -121,6 +163,7 @@ export function AccountsSection(): React.JSX.Element {
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('');
   const [credential, setCredential] = useState('');
+  const [credentialWarning, setCredentialWarning] = useState<string | null>(null);
   const [priority, setPriority] = useState('0');
 
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -131,6 +174,7 @@ export function AccountsSection(): React.JSX.Element {
     setName('');
     setProvider('');
     setCredential('');
+    setCredentialWarning(null);
     setPriority('0');
   }, []);
 
@@ -181,6 +225,10 @@ export function AccountsSection(): React.JSX.Element {
   }
 
   async function handleCreate(): Promise<void> {
+    // Run validation on submit (warning only, does not block)
+    const warning = validateCredentialFormat(provider, credential);
+    if (warning) setCredentialWarning(warning);
+
     try {
       await createAccount.mutateAsync({
         name,
@@ -350,6 +398,7 @@ export function AccountsSection(): React.JSX.Element {
                 onValueChange={(v) => {
                   setProvider(v);
                   setCredential('');
+                  setCredentialWarning(null);
                 }}
               >
                 <SelectTrigger className="w-full" id="account-provider">
@@ -392,11 +441,20 @@ export function AccountsSection(): React.JSX.Element {
                   type={getCredentialConfig(provider).inputType}
                   placeholder={getCredentialConfig(provider).placeholder}
                   value={credential}
-                  onChange={(e) => setCredential(e.target.value)}
+                  onChange={(e) => {
+                    setCredential(e.target.value);
+                    if (credentialWarning) setCredentialWarning(null);
+                  }}
+                  onBlur={() => setCredentialWarning(validateCredentialFormat(provider, credential))}
                 />
                 <p className="text-[11px] text-muted-foreground">
                   {getCredentialConfig(provider).hint}
                 </p>
+                {credentialWarning && (
+                  <p className="text-[11px] text-amber-500">
+                    {credentialWarning}
+                  </p>
+                )}
               </div>
             )}
 

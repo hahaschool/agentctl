@@ -468,7 +468,7 @@ export function SessionsPage(): React.JSX.Element {
           </label>
           <input
             id="session-search"
-            type="text"
+            type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter by ID, project, agent, model..."

@@ -431,7 +431,7 @@ export function DiscoverPage(): React.JSX.Element {
         <input
           ref={searchRef}
           id="discover-search"
-          type="text"
+          type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search sessions... (press /)"

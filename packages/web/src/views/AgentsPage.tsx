@@ -579,7 +579,7 @@ export function AgentsPage(): React.JSX.Element {
       {/* Filter / Sort controls */}
       <div className="flex gap-2.5 items-center mb-4 flex-wrap">
         <input
-          type="text"
+          type="search"
           placeholder="Search agents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
