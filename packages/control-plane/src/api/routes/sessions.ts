@@ -636,9 +636,29 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       // 'active' once the worker confirms the CLI process is actually running)
       const [updated] = await db
         .update(rcSessions)
-        .set({ status: 'starting', endedAt: null })
+        .set({ status: 'starting', endedAt: null, lastHeartbeat: new Date() })
         .where(eq(rcSessions.id, sessionId))
         .returning();
+
+      // Resolve account credentials for the resumed session
+      let accountCredential: string | null = null;
+      let accountProvider: string | null = null;
+
+      if (session.accountId && encryptionKey) {
+        const [account] = await db
+          .select()
+          .from(apiAccounts)
+          .where(eq(apiAccounts.id, session.accountId));
+
+        if (account) {
+          accountCredential = decryptCredential(
+            account.credential,
+            account.credentialIv,
+            encryptionKey,
+          );
+          accountProvider = account.provider;
+        }
+      }
 
       // Dispatch resume command to the worker
       {
@@ -660,6 +680,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                 agentId: session.agentId,
                 model: session.model ?? null,
                 cpSessionId: sessionId,
+                accountCredential,
+                accountProvider,
               }),
             },
           );
@@ -945,6 +967,26 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
+      // Resolve account credentials for the message dispatch
+      let accountCredential: string | null = null;
+      let accountProvider: string | null = null;
+
+      if (session.accountId && encryptionKey) {
+        const [account] = await db
+          .select()
+          .from(apiAccounts)
+          .where(eq(apiAccounts.id, session.accountId));
+
+        if (account) {
+          accountCredential = decryptCredential(
+            account.credential,
+            account.credentialIv,
+            encryptionKey,
+          );
+          accountProvider = account.provider;
+        }
+      }
+
       // Forward message to the worker
       const machine = await dbRegistry.getMachine(session.machineId);
 
@@ -974,7 +1016,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message }),
+            body: JSON.stringify({ message, accountCredential, accountProvider }),
           },
         );
 

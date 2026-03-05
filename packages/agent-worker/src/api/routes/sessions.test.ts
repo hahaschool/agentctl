@@ -468,10 +468,15 @@ describe('Worker session routes', () => {
       );
     });
 
-    it('should return 409 when session is still running', async () => {
+    it('should auto-stop running session and resume with new message', async () => {
       const sessions = (manager as unknown as { _sessions: Map<string, CliSession> })._sessions;
       sessions.set('cli-busy', makeSession({ id: 'cli-busy', status: 'running' }));
       vi.mocked(manager.getSession).mockImplementation((id) => sessions.get(id) ?? null);
+      vi.mocked(manager.getSessionByClaudeId).mockReturnValue(sessions.get('cli-busy') ?? null);
+      vi.mocked(manager.stopSession).mockResolvedValue();
+      vi.mocked(manager.resumeSession).mockReturnValue(
+        makeSession({ id: 'cli-resumed', claudeSessionId: 'test-claude-id', status: 'running' }),
+      );
 
       const res = await app.inject({
         method: 'POST',
@@ -479,8 +484,9 @@ describe('Worker session routes', () => {
         payload: { message: 'hello' },
       });
 
-      expect(res.statusCode).toBe(409);
-      expect(res.json().code).toBe('SESSION_BUSY');
+      expect(res.statusCode).toBe(200);
+      expect(res.json().ok).toBe(true);
+      expect(manager.stopSession).toHaveBeenCalledWith('cli-busy', true);
     });
 
     it('should return 404 for unknown session', async () => {

@@ -128,6 +128,7 @@ const DEFAULT_MODEL = 'sonnet';
 const STALE_SESSION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
 const GRACEFUL_KILL_TIMEOUT_MS = 5_000; // Wait 5s after SIGTERM before SIGKILL
+const STARTUP_WATCHDOG_MS = 30_000; // Warn if no output within 30s of start
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -223,11 +224,13 @@ export class CliSessionManager extends EventEmitter {
     // Build child environment with credential injection
     const childEnv = buildChildEnv(options.accountProvider, options.accountCredential);
 
-    // Spawn the CLI process
+    // Spawn the CLI process.
+    // stdin is set to 'ignore' — the CLI in `-p` mode doesn't read from stdin,
+    // and keeping stdin open can cause the process to hang waiting for EOF.
     const child = spawn(options.claudePath ?? this.claudePath, args, {
       cwd: options.projectPath,
       env: childEnv,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     session.pid = child.pid ?? null;
@@ -282,6 +285,35 @@ export class CliSessionManager extends EventEmitter {
       sessionId: id,
       claudeSessionId: session.claudeSessionId,
     });
+
+    // Startup watchdog — warn if the CLI process produces no output within STARTUP_WATCHDOG_MS.
+    // This catches cases like missing credentials, rate limits, or auth prompts that cause
+    // the CLI to hang silently.
+    const watchdogTimer = setTimeout(() => {
+      const s = this.sessions.get(id);
+      if (s && s.status === 'running' && s.messageCount === 0) {
+        const hint = s.lastError
+          ? `CLI stderr: ${s.lastError.slice(0, 200)}`
+          : 'No stderr output captured — possible auth issue or rate limit';
+        this.logger?.debug(
+          { sessionId: id, pid: s.pid, lastError: s.lastError },
+          `Startup watchdog: session produced no output after ${STARTUP_WATCHDOG_MS / 1000}s`,
+        );
+        this.emitSessionEvent({
+          type: 'session_error',
+          sessionId: id,
+          error: `No output after ${STARTUP_WATCHDOG_MS / 1000}s — ${hint}`,
+        });
+      }
+    }, STARTUP_WATCHDOG_MS);
+
+    // Clear watchdog when process exits or produces first output
+    const clearWatchdog = (): void => {
+      clearTimeout(watchdogTimer);
+    };
+    child.on('close', clearWatchdog);
+    // Also clear on first stdout data (session is working)
+    child.stdout?.once('data', clearWatchdog);
 
     return session;
   }
@@ -658,6 +690,10 @@ export class CliSessionManager extends EventEmitter {
       '--model',
       model,
       '--verbose',
+      // Always bypass permissions when running as a managed worker process.
+      // Without this, the CLI may hang waiting for interactive permission
+      // confirmation when stdio is piped (no TTY).
+      '--dangerously-skip-permissions',
     ];
 
     // Resume previous session
@@ -986,9 +1022,12 @@ function buildChildEnv(
 ): NodeJS.ProcessEnv {
   const env = { ...process.env };
 
-  // Unset CLAUDECODE so the spawned CLI doesn't detect nesting and refuse to start.
-  // The worker may itself be running inside a Claude Code session.
+  // Clean all Claude Code session env vars that leak from a parent session.
+  // If the worker is running inside a Claude Code session (e.g. during development),
+  // these vars can cause the spawned CLI to hang or misbehave.
   delete env.CLAUDECODE;
+  delete env.CLAUDE_CODE_SSE_PORT;
+  delete env.CLAUDE_CODE_ENTRYPOINT;
 
   if (!provider || !credential) {
     return env;

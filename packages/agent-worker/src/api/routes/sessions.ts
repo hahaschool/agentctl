@@ -56,10 +56,14 @@ type ResumeSessionBody = {
   agentId?: string | null;
   model?: string | null;
   cpSessionId?: string | null;
+  accountCredential?: string | null;
+  accountProvider?: string | null;
 };
 
 type MessageBody = {
   message: string;
+  accountCredential?: string | null;
+  accountProvider?: string | null;
 };
 
 type SessionIdParams = {
@@ -580,6 +584,8 @@ export async function sessionRoutes(
         agentId,
         model,
         cpSessionId,
+        accountCredential,
+        accountProvider,
       } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
@@ -616,6 +622,8 @@ export async function sessionRoutes(
           projectPath: existingSession?.projectPath ?? projectPath ?? process.cwd(),
           prompt,
           model: existingSession?.model ?? model ?? undefined,
+          accountCredential: accountCredential ?? undefined,
+          accountProvider: accountProvider ?? undefined,
         });
 
         // Store CP→worker session ID mapping so status callbacks reach the control plane
@@ -727,7 +735,7 @@ export async function sessionRoutes(
     '/:sessionId/message',
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { message } = request.body;
+      const { message, accountCredential, accountProvider } = request.body;
 
       if (!message || typeof message !== 'string') {
         return reply.status(400).send({
@@ -787,6 +795,8 @@ export async function sessionRoutes(
           projectPath: existingSession.projectPath,
           prompt: message,
           model: existingSession.model,
+          accountCredential: accountCredential ?? undefined,
+          accountProvider: accountProvider ?? undefined,
         });
 
         // Use the saved CP session ID (may have been deleted by session_ended cleanup)
@@ -1089,5 +1099,6 @@ function sessionToJson(session: CliSession): Record<string, unknown> {
     startedAt: session.startedAt.toISOString(),
     lastActivity: session.lastActivity.toISOString(),
     isResumed: session.isResumed,
+    lastError: session.lastError ?? null,
   };
 }
