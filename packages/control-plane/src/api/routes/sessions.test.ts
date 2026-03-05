@@ -1243,6 +1243,7 @@ describe('POST / — account credential resolution', () => {
         sessionAccountId: 'acct-explicit-123',
       }),
       expect.anything(),
+      expect.anything(),
     );
 
     // The DB insert chain should include accountId
