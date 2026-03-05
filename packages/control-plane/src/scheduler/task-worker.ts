@@ -348,7 +348,8 @@ export function createTaskWorker({
         // 4. Dispatch to the agent worker HTTP endpoint
         // -------------------------------------------------------------------
         const workerPort = DEFAULT_WORKER_PORT;
-        const dispatchUrl = `http://${machine.tailscaleIp}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
+        const address = machine.tailscaleIp ?? machine.hostname;
+        const dispatchUrl = `http://${address}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
 
         const payload: DispatchPayload = {
           runId,

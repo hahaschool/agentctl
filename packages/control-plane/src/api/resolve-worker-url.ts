@@ -81,7 +81,8 @@ export async function resolveWorkerUrl(
       };
     }
 
-    return { ok: true, url: `http://${machine.tailscaleIp}:${String(workerPort)}` };
+    const address = machine.tailscaleIp ?? machine.hostname;
+    return { ok: true, url: `http://${address}:${String(workerPort)}` };
   }
 
   return {

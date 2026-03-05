@@ -24,6 +24,11 @@ const REAPER_INTERVAL_MS = 60 * 1000; // 60 seconds
 const RC_SESSION_STATUSES = ['starting', 'active', 'paused', 'ended', 'error'] as const;
 type RcSessionStatus = (typeof RC_SESSION_STATUSES)[number];
 
+/** Get the best address for a machine, preferring tailscaleIp with hostname fallback. */
+function machineAddress(machine: { tailscaleIp?: string | null; hostname: string }): string {
+  return machine.tailscaleIp ?? machine.hostname;
+}
+
 type DiscoveredSessionFromWorker = {
   sessionId: string;
   projectPath: string;
@@ -138,8 +143,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const settledResults = await Promise.allSettled(
         onlineMachines.map(async (machine) => {
-          const address = machine.tailscaleIp ?? machine.hostname;
-          const workerBaseUrl = `http://${address}:${String(workerPort)}`;
+          const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
           const discoverUrl = projectPath
             ? `${workerBaseUrl}/api/sessions/discover?projectPath=${encodeURIComponent(projectPath)}`
             : `${workerBaseUrl}/api/sessions/discover`;
@@ -239,7 +243,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+      const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
       const queryParams = new URLSearchParams();
 
       if (projectPath) {
@@ -505,7 +509,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .returning();
 
       // Dispatch start command to the worker machine.
-      const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+      const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
 
       try {
         const workerResponse = await fetch(`${workerBaseUrl}/api/sessions`, {
@@ -635,7 +639,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       }
 
       {
-        const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+        const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
 
         // The worker looks up sessions by its internal ID or claudeSessionId
         const workerSessionRef = session.claudeSessionId ?? sessionId;
@@ -819,7 +823,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .returning();
 
       // Dispatch to worker — use resumeSessionId to continue from parent
-      const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+      const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
 
       try {
         const workerResponse = await fetch(`${workerBaseUrl}/api/sessions`, {
@@ -937,7 +941,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+      const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
 
       // The worker looks up sessions by its internal ID or claudeSessionId,
       // NOT by the control-plane's RC session UUID. Send claudeSessionId.
@@ -1049,7 +1053,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       const machine = await dbRegistry.getMachine(session.machineId);
 
       if (machine && machine.status !== 'offline') {
-        const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+        const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
         const workerSessionRef = session.claudeSessionId ?? sessionId;
 
         try {
@@ -1099,7 +1103,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+      const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
       const workerSessionRef = session.claudeSessionId ?? sessionId;
 
       try {
