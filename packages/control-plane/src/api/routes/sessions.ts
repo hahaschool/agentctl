@@ -632,10 +632,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      // Machine is confirmed online — now update status to active
+      // Machine is confirmed online — set to 'starting' (will be promoted to
+      // 'active' once the worker confirms the CLI process is actually running)
       const [updated] = await db
         .update(rcSessions)
-        .set({ status: 'active', endedAt: null })
+        .set({ status: 'starting', endedAt: null })
         .where(eq(rcSessions.id, sessionId))
         .returning();
 

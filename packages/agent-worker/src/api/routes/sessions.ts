@@ -554,6 +554,59 @@ export async function sessionRoutes(
           cpSessionIdMap.set(newSession.id, cpSessionId);
         }
 
+        // Wait briefly to verify the CLI process didn't crash immediately
+        const startupOk = await new Promise<boolean>((resolve) => {
+          // If the process is already dead, fail fast
+          const s = sessionManager.getSession(newSession.id);
+          if (s && s.status === 'error') {
+            resolve(false);
+            return;
+          }
+
+          const timer = setTimeout(() => {
+            // After 3s the process is still alive — good enough
+            sessionManager.off('session_error', onError);
+            resolve(true);
+          }, 3000);
+
+          const onError = (evt: { sessionId: string; error?: string }): void => {
+            if (evt.sessionId === newSession.id) {
+              clearTimeout(timer);
+              sessionManager.off('session_error', onError);
+              resolve(false);
+            }
+          };
+          sessionManager.on('session_error', onError);
+
+          // Also check if process exited already
+          const onEnd = (evt: { sessionId: string }): void => {
+            if (evt.sessionId === newSession.id) {
+              clearTimeout(timer);
+              sessionManager.off('session_error', onError);
+              sessionManager.off('session_ended', onEnd);
+              const endedSession = sessionManager.getSession(newSession.id);
+              resolve(endedSession?.status === 'running' || endedSession?.status === 'starting');
+            }
+          };
+          sessionManager.on('session_ended', onEnd);
+        });
+
+        if (!startupOk) {
+          const failedSession = sessionManager.getSession(newSession.id);
+          logger.warn(
+            {
+              newSessionId: newSession.id,
+              resumedFrom: resumeId,
+              status: failedSession?.status,
+            },
+            'Resumed CLI process failed to start',
+          );
+          return reply.status(502).send({
+            error: 'CLI process exited immediately after resume. Check project path and credentials.',
+            code: 'CLI_STARTUP_FAILED',
+          });
+        }
+
         logger.info(
           {
             newSessionId: newSession.id,
