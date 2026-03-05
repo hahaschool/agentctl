@@ -156,7 +156,7 @@ export function SessionDetailView(): React.JSX.Element {
       limit: 500,
     }),
     enabled: !!claudeSessionId && !!s?.machineId,
-    refetchInterval: s?.status === 'active' || s?.status === 'starting' ? 3_000 : false,
+    refetchInterval: s?.status === 'active' || s?.status === 'starting' ? 2_000 : false,
     refetchOnWindowFocus: true,
   });
 
@@ -796,10 +796,13 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
             });
-            void queryClient.invalidateQueries({
-              queryKey: ['session-content'],
-              exact: false,
-            });
+            // Delay content invalidation to allow CLI time to write JSONL file to disk
+            setTimeout(() => {
+              void queryClient.invalidateQueries({
+                queryKey: ['session-content'],
+                exact: false,
+              });
+            }, 500);
           },
           onError: (err) => {
             if (isSessionLostError(err)) {
@@ -825,10 +828,13 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
             });
-            void queryClient.invalidateQueries({
-              queryKey: ['session-content'],
-              exact: false,
-            });
+            // Delay content invalidation to allow CLI time to write JSONL file to disk
+            setTimeout(() => {
+              void queryClient.invalidateQueries({
+                queryKey: ['session-content'],
+                exact: false,
+              });
+            }, 500);
           },
           onError: (err) => {
             if (isSessionLostError(err)) {
