@@ -200,7 +200,9 @@ export function AccountsSection(): React.JSX.Element {
     try {
       const res = await testAccount.mutateAsync(id);
       setTestResult((prev) => ({ ...prev, [id]: res }));
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to test account';
+      toast.error(msg);
       setTestResult((prev) => ({ ...prev, [id]: { ok: false } }));
     } finally {
       setTestingId(null);
