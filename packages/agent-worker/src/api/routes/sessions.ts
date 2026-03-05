@@ -1052,6 +1052,15 @@ function parseJsonlEntry(entry: unknown): ContentMessage[] {
     return [];
   }
 
+  // message.content can be a plain string (e.g. resumed sessions) or an array of blocks
+  if (typeof message.content === 'string') {
+    const text = (message.content as string).trim();
+    if (text.length > 0) {
+      return [{ type: entryType === 'user' ? 'human' : 'assistant', content: text, timestamp }];
+    }
+    return [];
+  }
+
   const contentBlocks = Array.isArray(message.content) ? message.content : [];
   if (contentBlocks.length === 0) {
     return [];

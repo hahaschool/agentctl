@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 
 import { ControlPlaneError } from '@agentctl/shared';
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
@@ -91,7 +91,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .where(
           and(
             inArray(rcSessions.status, ['starting', 'active']),
-            lt(rcSessions.lastHeartbeat, cutoff),
+            or(isNull(rcSessions.lastHeartbeat), lt(rcSessions.lastHeartbeat, cutoff)),
+            lt(rcSessions.createdAt, cutoff),
           ),
         );
 
@@ -1497,6 +1498,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                   cpSessionId: sessionId,
                   agentId: updated.agentId,
                   model: updated.model,
+                  projectPath: updated.projectPath,
+                  accountId: nextAccount.id,
                   accountCredential: nextCredential,
                   accountProvider: nextAccount.provider,
                 };

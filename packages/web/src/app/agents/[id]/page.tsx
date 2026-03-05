@@ -619,7 +619,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
                   <SelectItem value="autonomous">Autonomous</SelectItem>
-                  <SelectItem value="ad-hoc">Ad-hoc</SelectItem>
+                  <SelectItem value="adhoc">Ad-hoc</SelectItem>
                 </SelectContent>
               </Select>
             </div>

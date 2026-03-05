@@ -333,8 +333,16 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
-      await dbRegistry.updateAgentStatus(request.params.agentId, status);
-      return { ok: true };
+      try {
+        await dbRegistry.updateAgentStatus(request.params.agentId, status);
+        return { ok: true };
+      } catch (err) {
+        if (err instanceof ControlPlaneError && err.code === 'AGENT_NOT_FOUND') {
+          return reply.code(404).send({ error: err.code, message: err.message });
+        }
+
+        throw err;
+      }
     },
   );
 
