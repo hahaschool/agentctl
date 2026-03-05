@@ -25,7 +25,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 /** Delay before cleaning up session buffers after session ends, allowing late SSE consumers. */
-const SESSION_BUFFER_CLEANUP_DELAY_MS = 60_000;
+const SESSION_BUFFER_CLEANUP_DELAY_MS = Number(process.env.SESSION_BUFFER_CLEANUP_DELAY_MS) || 60_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,7 +93,7 @@ const MAX_SEARCH_DEPTH = 3;
 // SSE constants
 // ---------------------------------------------------------------------------
 
-const SSE_BUFFER_LIMIT = 100;
+const SSE_BUFFER_LIMIT = Number(process.env.SSE_BUFFER_LIMIT) || 100;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
 // ---------------------------------------------------------------------------

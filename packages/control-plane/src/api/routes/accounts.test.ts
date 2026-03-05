@@ -243,7 +243,7 @@ describe('Account routes — /api/settings/accounts', () => {
         url: '/api/settings/accounts',
         payload: {
           name: 'Anthropic Direct',
-          provider: 'anthropic',
+          provider: 'anthropic_api',
           credential: 'sk-ant-api03-my-secret-key-1234',
         },
       });

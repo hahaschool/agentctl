@@ -122,13 +122,13 @@ type CliStreamMessage = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_CLAUDE_PATH = 'claude';
-const DEFAULT_MAX_CONCURRENT = 10;
+const DEFAULT_CLAUDE_PATH = process.env.CLAUDE_BIN_PATH ?? 'claude';
+const DEFAULT_MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT_SESSIONS) || 10;
 const DEFAULT_MODEL = 'sonnet';
-const STALE_SESSION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_SESSION_THRESHOLD_MS = Number(process.env.STALE_SESSION_THRESHOLD_MS) || 5 * 60 * 1000; // 5 minutes
 const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
 const GRACEFUL_KILL_TIMEOUT_MS = 5_000; // Wait 5s after SIGTERM before SIGKILL
-const STARTUP_WATCHDOG_MS = 30_000; // Warn if no output within 30s of start
+const STARTUP_WATCHDOG_MS = Number(process.env.STARTUP_WATCHDOG_MS) || 30_000; // Warn if no output within 30s of start
 
 // ---------------------------------------------------------------------------
 // CliSessionManager

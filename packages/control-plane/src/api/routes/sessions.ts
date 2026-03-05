@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -12,7 +12,6 @@ import { resolveAccountId } from '../../utils/resolve-account.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
-const DEFAULT_WORKER_PORT = 9000;
 const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
 /** Timeout for fetch() calls that dispatch commands to worker machines. */

@@ -1,11 +1,10 @@
+import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
-
-const DEFAULT_WORKER_PORT = 9000;
 const PROXY_TIMEOUT_MS = 30_000;
 
 export type LoopRoutesOptions = {

@@ -1,4 +1,4 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import { type ConnectionOptions, type Job, Worker } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
@@ -13,7 +13,6 @@ import { resolveAccountId } from '../utils/resolve-account.js';
 import type { MachineCircuitBreaker } from './circuit-breaker.js';
 import { AGENT_TASKS_QUEUE, type AgentTaskJobData, type AgentTaskJobName } from './task-queue.js';
 
-const DEFAULT_WORKER_PORT = 9000;
 const DISPATCH_TIMEOUT_MS = 30_000;
 
 export type TaskWorkerOptions = {
