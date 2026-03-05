@@ -1249,11 +1249,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       const workerSessionRef = session.claudeSessionId ?? sessionId;
 
       try {
+        // SSE streams stay open indefinitely — do NOT use a timeout here.
+        // The 10s WORKER_REQUEST_TIMEOUT_MS is only for RPC-style requests.
         const workerResponse = await fetch(
           `${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/stream`,
-          {
-            signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-          },
         );
 
         if (!workerResponse.ok || !workerResponse.body) {
