@@ -279,6 +279,22 @@ export function SessionsPage(): React.JSX.Element {
     });
   }, []);
 
+  const cleanupSessions = useMemo(
+    () => sessionList.filter((s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error'),
+    [sessionList],
+  );
+
+  const handleCleanup = useCallback(async () => {
+    if (cleanupSessions.length === 0) return;
+    try {
+      await Promise.all(cleanupSessions.map((s) => api.deleteSession(s.id)));
+      toast.success(`Cleaned up ${cleanupSessions.length} session(s)`);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }, [cleanupSessions, queryClient, toast]);
+
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
   const handleSend = useCallback(async () => {
@@ -374,6 +390,15 @@ export function SessionsPage(): React.JSX.Element {
               >
                 {showCreateForm ? 'Cancel' : '+ New Session'}
               </button>
+              {cleanupSessions.length > 0 && (
+                <ConfirmButton
+                  label={`Clean Up (${cleanupSessions.length})`}
+                  confirmLabel={`Delete ${cleanupSessions.length}?`}
+                  onConfirm={() => void handleCleanup()}
+                  className="px-2.5 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground"
+                  confirmClassName="px-2.5 py-1.5 border border-destructive rounded-sm text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground"
+                />
+              )}
               <RefreshButton
                 onClick={() => void sessions.refetch()}
                 isFetching={sessions.isFetching && !sessions.isLoading}
