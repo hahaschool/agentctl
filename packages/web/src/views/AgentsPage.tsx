@@ -525,10 +525,14 @@ export function AgentsPage(): React.JSX.Element {
               <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
                 {agent.status === 'running' ? (
                   <ConfirmButton
-                    label="Stop"
+                    label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
                     confirmLabel="Stop Agent?"
                     onConfirm={() => handleStop(agent.id)}
-                    className="px-3.5 py-1.5 bg-red-900 text-red-300 border border-red-800 rounded-sm text-xs font-medium cursor-pointer"
+                    disabled={stopAgent.isPending}
+                    className={cn(
+                      'px-3.5 py-1.5 bg-red-900 text-red-300 border border-red-800 rounded-sm text-xs font-medium',
+                      stopAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                    )}
                     confirmClassName="px-3.5 py-1.5 bg-red-700 text-white border border-red-600 rounded-sm text-xs font-medium cursor-pointer animate-pulse"
                   />
                 ) : promptAgentId === agent.id ? (
@@ -546,21 +550,22 @@ export function AgentsPage(): React.JSX.Element {
                         }
                       }}
                       placeholder="Enter prompt..."
+                      disabled={startAgent.isPending}
                       className="flex-1 px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => handleStart(agent.id)}
-                      disabled={!prompt.trim()}
+                      disabled={!prompt.trim() || startAgent.isPending}
                       aria-label="Start agent with entered prompt"
                       className={cn(
                         'px-3 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium',
-                        prompt.trim()
-                          ? 'cursor-pointer opacity-100'
-                          : 'cursor-not-allowed opacity-50',
+                        !prompt.trim() || startAgent.isPending
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer opacity-100',
                       )}
                     >
-                      Go
+                      {startAgent.isPending ? 'Starting...' : 'Go'}
                     </button>
                     <button
                       type="button"
@@ -568,8 +573,12 @@ export function AgentsPage(): React.JSX.Element {
                         setPromptAgentId(null);
                         setPrompt('');
                       }}
+                      disabled={startAgent.isPending}
                       aria-label="Cancel agent start"
-                      className="px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
+                      className={cn(
+                        'px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs',
+                        startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      )}
                     >
                       Cancel
                     </button>
@@ -581,7 +590,11 @@ export function AgentsPage(): React.JSX.Element {
                       setPromptAgentId(agent.id);
                       setPrompt('');
                     }}
-                    className="px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium cursor-pointer"
+                    disabled={startAgent.isPending}
+                    className={cn(
+                      'px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium',
+                      startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                    )}
                   >
                     Start
                   </button>
