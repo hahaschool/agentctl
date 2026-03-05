@@ -265,7 +265,7 @@ describe('DashboardPage', () => {
 
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue([createSession()]),
+      queryFn: vi.fn().mockResolvedValue({ sessions: [createSession()], total: 1, limit: 50, offset: 0, hasMore: false }),
     });
   });
 
@@ -403,7 +403,7 @@ describe('DashboardPage', () => {
   it('shows empty state for sessions when none exist', async () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue([]),
+      queryFn: vi.fn().mockResolvedValue({ sessions: [], total: 0, limit: 50, offset: 0, hasMore: false }),
     });
     renderDashboard();
     await waitFor(() => {
@@ -419,7 +419,7 @@ describe('DashboardPage', () => {
     const session = createSession({ claudeSessionId: 'abc12345' });
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue([session]),
+      queryFn: vi.fn().mockResolvedValue({ sessions: [session], total: 1, limit: 50, offset: 0, hasMore: false }),
     });
     renderDashboard();
     await waitFor(() => {
@@ -431,7 +431,7 @@ describe('DashboardPage', () => {
     const session = createSession({ model: 'claude-3-5-sonnet-20241022' });
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue([session]),
+      queryFn: vi.fn().mockResolvedValue({ sessions: [session], total: 1, limit: 50, offset: 0, hasMore: false }),
     });
     renderDashboard();
     await waitFor(() => {
@@ -443,7 +443,7 @@ describe('DashboardPage', () => {
     const session = createSession({ projectPath: '/home/user/project' });
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue([session]),
+      queryFn: vi.fn().mockResolvedValue({ sessions: [session], total: 1, limit: 50, offset: 0, hasMore: false }),
     });
     renderDashboard();
     await waitFor(() => {
@@ -465,7 +465,7 @@ describe('DashboardPage', () => {
     });
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue([session1, session2]),
+      queryFn: vi.fn().mockResolvedValue({ sessions: [session1, session2], total: 2, limit: 50, offset: 0, hasMore: false }),
     });
     renderDashboard();
     await waitFor(() => {
@@ -840,7 +840,7 @@ describe('DashboardPage', () => {
     );
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue(sessions),
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
     });
     renderDashboard();
     await waitFor(() => {
@@ -857,7 +857,7 @@ describe('DashboardPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue(sessions),
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
     });
     renderDashboard();
     await waitFor(() => {

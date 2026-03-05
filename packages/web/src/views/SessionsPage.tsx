@@ -68,10 +68,27 @@ function matchesSearchQuery(session: Session, query: string): boolean {
   return false;
 }
 
+const PAGE_SIZE = 50;
+
 export function SessionsPage(): React.JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const sessions = useQuery(sessionsQuery());
+
+  const [offset, setOffset] = useState(0);
+  const [accumulatedSessions, setAccumulatedSessions] = useState<Session[]>([]);
+
+  const sessions = useQuery(sessionsQuery({ offset, limit: PAGE_SIZE }));
+
+  // When fresh data arrives, append to (or replace) the accumulated list.
+  // If offset is 0 it's a fresh load/reset, so we replace.
+  useEffect(() => {
+    if (!sessions.data) return;
+    const newSessions = sessions.data.sessions;
+    setAccumulatedSessions((prev) =>
+      offset === 0 ? newSessions : [...prev, ...newSessions],
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions.data]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -100,16 +117,23 @@ export function SessionsPage(): React.JSX.Element {
 
   const accounts = useQuery(accountsQuery());
 
+  // Reset pagination and invalidate all session queries so the list starts fresh.
+  const resetAndInvalidateSessions = useCallback(() => {
+    setOffset(0);
+    setAccumulatedSessions([]);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+  }, [queryClient]);
+
   useHotkeys(
     useMemo(
       () => ({
-        r: () => void sessions.refetch(),
+        r: () => resetAndInvalidateSessions(),
         Escape: () => {
           if (showCreateForm) setShowCreateForm(false);
           else setSelectedId(null);
         },
       }),
-      [sessions, showCreateForm],
+      [resetAndInvalidateSessions, showCreateForm],
     ),
   );
 
@@ -178,7 +202,7 @@ export function SessionsPage(): React.JSX.Element {
       toast.success(`Session created: ${result.sessionId.slice(0, 16)}...`);
       resetForm();
       setShowCreateForm(false);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+      resetAndInvalidateSessions();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -191,11 +215,13 @@ export function SessionsPage(): React.JSX.Element {
     formModel,
     formAccountId,
     resetForm,
-    queryClient,
+    resetAndInvalidateSessions,
     toast,
   ]);
 
-  const sessionList = sessions.data ?? [];
+  const sessionList = accumulatedSessions;
+  const hasMore = sessions.data?.hasMore ?? false;
+  const totalCount = sessions.data?.total ?? accumulatedSessions.length;
 
   const statusCounts = useMemo(() => {
     const counts: Record<StatusFilter, number> = {
@@ -297,11 +323,11 @@ export function SessionsPage(): React.JSX.Element {
       } else {
         toast.success(`Cleaned up ${cleanupSessions.length} session(s)`);
       }
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+      resetAndInvalidateSessions();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [cleanupSessions, queryClient, toast]);
+  }, [cleanupSessions, resetAndInvalidateSessions, toast]);
 
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
@@ -315,24 +341,24 @@ export function SessionsPage(): React.JSX.Element {
         await api.resumeSession(selected.id, prompt.trim());
       }
       setPrompt('');
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+      resetAndInvalidateSessions();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setSending(false);
     }
-  }, [selected, prompt, queryClient, toast]);
+  }, [selected, prompt, resetAndInvalidateSessions, toast]);
 
   const handleStop = useCallback(async () => {
     if (!selected) return;
     try {
       await api.deleteSession(selected.id);
       toast.success('Session ended');
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+      resetAndInvalidateSessions();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
-  }, [selected, queryClient, toast]);
+  }, [selected, resetAndInvalidateSessions, toast]);
 
   // Keyboard navigation: arrow up/down to move through sessions, Escape to deselect
   const handleListKeyDown = useCallback(
@@ -408,7 +434,7 @@ export function SessionsPage(): React.JSX.Element {
                 />
               )}
               <RefreshButton
-                onClick={() => void sessions.refetch()}
+                onClick={() => resetAndInvalidateSessions()}
                 isFetching={sessions.isFetching && !sessions.isLoading}
                 className="px-2 py-1.5 text-xs"
               />
@@ -706,6 +732,20 @@ export function SessionsPage(): React.JSX.Element {
                 onSelect={setSelectedId}
               />
             ))
+          )}
+          {hasMore && !sessions.isLoading && (
+            <div className="px-4 py-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
+                disabled={sessions.isFetching}
+                className="w-full px-3 py-2 bg-muted text-muted-foreground border border-border rounded-sm text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {sessions.isFetching
+                  ? 'Loading...'
+                  : `Show more (${totalCount - sessionList.length} remaining)`}
+              </button>
+            </div>
           )}
         </div>
       </div>

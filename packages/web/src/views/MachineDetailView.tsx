@@ -58,7 +58,7 @@ export function MachineDetailView(): React.JSX.Element {
   );
 
   const recentSessions = useMemo(() => {
-    const list = sessions.data ?? [];
+    const list = sessions.data?.sessions ?? [];
     return [...list].sort(
       (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
     );

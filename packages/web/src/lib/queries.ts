@@ -23,7 +23,7 @@ export const queryKeys = {
   agents: ['agents'] as const,
   agent: (id: string) => ['agents', id] as const,
   agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
-  sessions: (params?: { status?: string; machineId?: string }) =>
+  sessions: (params?: { status?: string; machineId?: string; offset?: number; limit?: number }) =>
     params ? (['sessions', params] as const) : (['sessions'] as const),
   session: (id: string) => ['sessions', id] as const,
   sessionContent: (
@@ -90,7 +90,7 @@ export function agentRunsQuery(agentId: string) {
   });
 }
 
-export function sessionsQuery(params?: { status?: string; machineId?: string }) {
+export function sessionsQuery(params?: { status?: string; machineId?: string; offset?: number; limit?: number }) {
   return queryOptions({
     queryKey: queryKeys.sessions(params),
     queryFn: () => api.listSessions(params),

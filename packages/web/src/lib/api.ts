@@ -80,6 +80,14 @@ export type SessionContentResponse = {
   totalMessages: number;
 };
 
+export type SessionsPage = {
+  sessions: Session[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
 export type AgentRun = {
   id: string;
   agentId: string;
@@ -225,12 +233,14 @@ export const api = {
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
 
   // Sessions
-  listSessions: (params?: { status?: string; machineId?: string }) => {
+  listSessions: (params?: { status?: string; machineId?: string; offset?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
     if (params?.machineId) qs.set('machineId', params.machineId);
+    if (params?.offset !== undefined) qs.set('offset', String(params.offset));
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
     const suffix = qs.toString() ? `?${qs}` : '';
-    return request<Session[]>(`/api/sessions${suffix}`);
+    return request<SessionsPage>(`/api/sessions${suffix}`);
   },
   getSession: (id: string) => request<Session>(`/api/sessions/${id}`),
   createSession: (body: {

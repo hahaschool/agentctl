@@ -127,8 +127,9 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     }
 
     // ----- Sessions (recent, up to 8) -----
-    if (sessions && sessions.length > 0) {
-      const sorted = [...sessions].sort(
+    const sessionList = sessions?.sessions ?? [];
+    if (sessionList.length > 0) {
+      const sorted = [...sessionList].sort(
         (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
       );
       for (const session of sorted.slice(0, 8)) {

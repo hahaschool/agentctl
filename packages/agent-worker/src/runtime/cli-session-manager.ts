@@ -685,10 +685,6 @@ export class CliSessionManager extends EventEmitter {
       '--model',
       model,
       '--verbose',
-      // Always bypass permissions when running as a managed worker process.
-      // Without this, the CLI may hang waiting for interactive permission
-      // confirmation when stdio is piped (no TTY).
-      '--dangerously-skip-permissions',
     ];
 
     // Resume previous session
@@ -708,6 +704,11 @@ export class CliSessionManager extends EventEmitter {
       if (mapped) {
         args.push('--permission-mode', mapped);
       }
+    } else {
+      // No explicit permissionMode configured: bypass permissions so the CLI
+      // does not hang waiting for interactive confirmation when stdio is piped
+      // (no TTY) in a managed worker process.
+      args.push('--dangerously-skip-permissions');
     }
 
     if (options.config?.allowedTools && options.config.allowedTools.length > 0) {
@@ -986,14 +987,57 @@ type SessionIndexEntryV1 = {
  *
  * Claude Code encodes project paths by replacing `/` with `-` and
  * prepending with `-`. E.g., `/Users/foo/project` → `-Users-foo-project`.
+ *
+ * The naive approach (replace all `-` with `/`) breaks for paths that contain
+ * hyphens, e.g. `/Users/foo/my-project` encodes to `-Users-foo-my-project`
+ * but naive decode gives `/Users/foo/my/project` (wrong).
+ *
+ * Instead we walk the encoded segments left-to-right. At each step we try
+ * two candidates for the next path component:
+ *   1. path + "/" + segment   — treat the `-` as a directory separator
+ *   2. path + "-" + segment   — treat the `-` as a literal hyphen (merge)
+ *
+ * We prefer the slash interpretation unless only the hyphen-merged prefix
+ * exists on disk, falling back to the slash interpretation when neither exists.
  */
 function decodeProjectPath(encoded: string): string {
-  // The encoding replaces '/' with '-', so we reverse it
-  // The leading '-' represents the root '/'
-  if (encoded.startsWith('-')) {
-    return `/${encoded.slice(1).replace(/-/g, '/')}`;
+  // Normalise: strip the leading '-' that represents the root '/'
+  const withoutLeader = encoded.startsWith('-') ? encoded.slice(1) : encoded;
+  const segments = withoutLeader.split('-');
+
+  // Start at filesystem root (leading '-' represents '/')
+  let path = encoded.startsWith('-') ? '/' : '';
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (seg === '') {
+      // Skip empty segments that arise from the leading '-' strip
+      continue;
+    }
+
+    if (path === '' || path === '/') {
+      // First real segment — only one option: append directly
+      path = path === '/' ? `/${seg}` : seg;
+    } else {
+      // Two candidates: treat the dash as a separator vs. as a literal hyphen
+      const slashCandidate = `${path}/${seg}`;
+      const hyphenCandidate = `${path}-${seg}`;
+
+      if (existsSync(slashCandidate)) {
+        // Slash interpretation is valid on disk — use it
+        path = slashCandidate;
+      } else if (existsSync(hyphenCandidate)) {
+        // Hyphen interpretation matches a real directory — merge
+        path = hyphenCandidate;
+      } else {
+        // Neither exists yet; default to slash (more segments may refine this,
+        // and it matches the naive decode behaviour as a best guess)
+        path = slashCandidate;
+      }
+    }
   }
-  return encoded.replace(/-/g, '/');
+
+  return path;
 }
 
 /**

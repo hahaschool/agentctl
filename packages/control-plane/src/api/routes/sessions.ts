@@ -347,7 +347,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         conditions.push(eq(rcSessions.status, status));
       }
 
-      const query =
+      const baseQuery =
         conditions.length > 0
           ? db
               .select()
@@ -355,9 +355,28 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               .where(and(...conditions))
           : db.select().from(rcSessions);
 
-      const rows = await query.orderBy(desc(rcSessions.startedAt)).limit(limit).offset(offset);
+      const countQuery =
+        conditions.length > 0
+          ? db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(rcSessions)
+              .where(and(...conditions))
+          : db.select({ count: sql<number>`count(*)::int` }).from(rcSessions);
 
-      return rows;
+      const [rows, countRows] = await Promise.all([
+        baseQuery.orderBy(desc(rcSessions.startedAt)).limit(limit).offset(offset),
+        countQuery,
+      ]);
+
+      const total = countRows[0]?.count ?? 0;
+
+      return {
+        sessions: rows,
+        total,
+        limit,
+        offset,
+        hasMore: offset + rows.length < total,
+      };
     },
   );
 

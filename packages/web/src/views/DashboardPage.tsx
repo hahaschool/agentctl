@@ -46,7 +46,7 @@ export function DashboardPage(): React.JSX.Element {
   const machineList = machines.data ?? [];
   const agentList = agents.data ?? [];
   const discoveredSessions = discovered.data?.sessions ?? [];
-  const sessionList = sessions.data ?? [];
+  const sessionList = sessions.data?.sessions ?? [];
   const metricsData = metrics.data ?? {};
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;

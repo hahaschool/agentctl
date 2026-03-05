@@ -205,8 +205,10 @@ describe('api.getAgentRuns', () => {
 // ---------------------------------------------------------------------------
 
 describe('api.listSessions', () => {
+  const emptyPage = { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false };
+
   it('calls GET /api/sessions with no params', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions();
 
@@ -215,7 +217,7 @@ describe('api.listSessions', () => {
   });
 
   it('appends status query param', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({ status: 'running' });
 
@@ -224,7 +226,7 @@ describe('api.listSessions', () => {
   });
 
   it('appends machineId query param', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({ machineId: 'machine-42' });
 
@@ -233,7 +235,7 @@ describe('api.listSessions', () => {
   });
 
   it('appends both status and machineId params', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({ status: 'idle', machineId: 'machine-1' });
 
@@ -244,7 +246,7 @@ describe('api.listSessions', () => {
   });
 
   it('does not append empty params', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({});
 

@@ -217,7 +217,7 @@ describe('Session routes — /api/sessions', () => {
   // ---------------------------------------------------------------------------
 
   describe('GET /api/sessions', () => {
-    it('returns 200 with an array of sessions', async () => {
+    it('returns 200 with paginated session envelope', async () => {
       const sessions = [makeSession(), makeSession({ id: 'sess-002', status: 'ended' })];
       mockDb.setRows(sessions);
 
@@ -229,11 +229,15 @@ describe('Session routes — /api/sessions', () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body).toHaveLength(2);
+      expect(body).toHaveProperty('sessions');
+      expect(Array.isArray(body.sessions)).toBe(true);
+      expect(body.sessions).toHaveLength(2);
+      expect(body).toHaveProperty('limit');
+      expect(body).toHaveProperty('offset');
+      expect(body).toHaveProperty('hasMore');
     });
 
-    it('returns empty array when no sessions exist', async () => {
+    it('returns empty sessions array when no sessions exist', async () => {
       mockDb.setRows([]);
 
       const response = await app.inject({
@@ -244,8 +248,9 @@ describe('Session routes — /api/sessions', () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body).toHaveLength(0);
+      expect(body).toHaveProperty('sessions');
+      expect(Array.isArray(body.sessions)).toBe(true);
+      expect(body.sessions).toHaveLength(0);
     });
 
     it('accepts machineId filter parameter', async () => {
