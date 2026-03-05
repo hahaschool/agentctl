@@ -145,7 +145,11 @@ export function MachineDetailView(): React.JSX.Element {
               <CopyableText value={machine.id} maxDisplay={16} />
             </InfoField>
             <InfoField label="Tailscale IP">
-              <CopyableText value={machine.tailscaleIp} label={machine.tailscaleIp} />
+              {machine.tailscaleIp ? (
+                <CopyableText value={machine.tailscaleIp} label={machine.tailscaleIp} />
+              ) : (
+                <span className="text-muted-foreground">-</span>
+              )}
             </InfoField>
             <InfoField label="OS / Architecture">
               <span>
@@ -371,9 +375,11 @@ export function MachineDetailView(): React.JSX.Element {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const STALE_HEARTBEAT_MS = 60_000;
+
 function isStaleHeartbeat(dateStr: string): boolean {
   const diffMs = Date.now() - new Date(dateStr).getTime();
-  return diffMs > 60_000;
+  return diffMs > STALE_HEARTBEAT_MS;
 }
 
 // ---------------------------------------------------------------------------

@@ -232,16 +232,6 @@ export function useUpdateAgent() {
   });
 }
 
-export function useCreateSession() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: api.createSession,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-    },
-  });
-}
-
 export function useResumeSession() {
   const queryClient = useQueryClient();
   return useMutation({

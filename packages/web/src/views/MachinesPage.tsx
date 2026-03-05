@@ -50,7 +50,7 @@ export function MachinesPage(): React.JSX.Element {
         (m) =>
           m.hostname.toLowerCase().includes(q) ||
           m.id.toLowerCase().includes(q) ||
-          m.tailscaleIp.includes(q) ||
+          (m.tailscaleIp ?? '').includes(q) ||
           m.os.toLowerCase().includes(q),
       );
     }
@@ -198,7 +198,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
 
       {/* Details grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-border">
-        <DetailField label="Tailscale IP" value={m.tailscaleIp} mono />
+        <DetailField label="Tailscale IP" value={m.tailscaleIp ?? '-'} mono />
         <DetailField label="OS / Architecture" value={`${m.os} / ${m.arch}`} />
         <DetailField
           label="Last Heartbeat"

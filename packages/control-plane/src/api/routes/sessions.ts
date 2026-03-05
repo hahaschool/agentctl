@@ -568,10 +568,14 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .from(rcSessions)
         .where(eq(rcSessions.id, sessionId));
 
-      return reply.code(201).send({
-        ok: true,
+      const finalSession = updatedSession ?? inserted;
+      const failed = finalSession.status === 'error';
+
+      return reply.code(failed ? 502 : 201).send({
+        ok: !failed,
         sessionId,
-        session: updatedSession ?? inserted,
+        session: finalSession,
+        ...(failed && { error: 'DISPATCH_FAILED', message: 'Session created but worker dispatch failed' }),
       });
     },
   );
@@ -1164,8 +1168,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               if (done || raw.destroyed) break;
               raw.write(decoder.decode(value, { stream: true }));
             }
-          } catch {
-            // Worker disconnected or network error — close client stream
+          } catch (streamErr) {
+            const msg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+            app.log.warn(
+              { sessionId, machineId: session.machineId, err: msg },
+              'SSE stream from worker disconnected',
+            );
           } finally {
             if (!raw.destroyed) {
               raw.end();

@@ -114,13 +114,14 @@ export function LogsPage(): React.JSX.Element {
           <Skeleton className="h-5 w-16 rounded-full" />
         </div>
       ) : (
-        <div className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4">
+        <div className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4" role="status" aria-live="polite">
           <span
             className={cn(
               'w-3 h-3 rounded-full shrink-0',
               statusClasses,
               health.data?.status === 'ok' && 'shadow-[0_0_6px] shadow-green-500',
             )}
+            aria-hidden="true"
           />
           <div className="flex-1">
             <div className="font-semibold text-[15px]">
@@ -208,7 +209,7 @@ export function LogsPage(): React.JSX.Element {
             label="Runs Total"
             value={formatNumber(metricsVal('agentctl_runs_total') ?? '-')}
           />
-          <MetricCard label="Machines Online" value={`${onlineMachines} / ${machineList.length}`} />
+          <MetricCard label="Machines Online" value={machines.data ? `${onlineMachines} / ${machineList.length}` : '-'} />
           <MetricCard
             label="Health Status"
             value={health.data?.status ?? '-'}
@@ -314,7 +315,7 @@ export function LogsPage(): React.JSX.Element {
                     <StatusBadge status={m.status} />
                   </td>
                   <td className={cn(TD_CLASSES, 'hidden sm:table-cell')}>
-                    <span className="font-mono text-xs">{m.tailscaleIp}</span>
+                    <span className="font-mono text-xs">{m.tailscaleIp ?? '-'}</span>
                   </td>
                   <td className={cn(TD_CLASSES, 'hidden md:table-cell')}>
                     {m.os} / {m.arch}

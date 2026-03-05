@@ -233,10 +233,18 @@ export async function sessionRoutes(
       status,
       claudeSessionId: session?.claudeSessionId ?? null,
       pid: null,
-      costUsd: session?.costUsd ?? null,
+      costUsd: session?.costUsd ?? undefined,
       errorMessage:
         status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
     });
+
+    // Clean up in-memory maps to prevent unbounded growth
+    cpSessionIdMap.delete(event.sessionId);
+    reportedClaudeIds.delete(event.sessionId);
+    // Keep sessionBuffers briefly for late SSE consumers; clean after 60s
+    setTimeout(() => {
+      sessionBuffers.delete(event.sessionId);
+    }, 60_000);
   });
 
   // Track which sessions have had their claudeSessionId reported
