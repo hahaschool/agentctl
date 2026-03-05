@@ -351,15 +351,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const baseQuery =
         conditions.length > 0
-          ? db
-              .select()
-              .from(rcSessions)
-              .leftJoin(agentsTable, eq(rcSessions.agentId, agentsTable.id))
-              .where(and(...conditions))
-          : db
-              .select()
-              .from(rcSessions)
-              .leftJoin(agentsTable, eq(rcSessions.agentId, agentsTable.id));
+          ? db.select().from(rcSessions).where(and(...conditions))
+          : db.select().from(rcSessions);
 
       const countQuery =
         conditions.length > 0
@@ -369,15 +362,27 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               .where(and(...conditions))
           : db.select({ count: sql<number>`count(*)::int` }).from(rcSessions);
 
-      const [joinedRows, countRows] = await Promise.all([
+      const [sessionRows, countRows] = await Promise.all([
         baseQuery.orderBy(desc(rcSessions.startedAt)).limit(limit).offset(offset),
         countQuery,
       ]);
 
-      // Transform joined rows back to the original shape with agentName added
-      const rows = joinedRows.map((row) => ({
-        ...row.rc_sessions,
-        agentName: row.agents?.name ?? null,
+      // Resolve agent names in a single batch query
+      const agentIds = [...new Set(sessionRows.map((s) => s.agentId).filter(Boolean))] as string[];
+      const agentNameMap = new Map<string, string>();
+      if (agentIds.length > 0) {
+        const agentRows = await db
+          .select({ id: agentsTable.id, name: agentsTable.name })
+          .from(agentsTable)
+          .where(inArray(agentsTable.id, agentIds));
+        for (const a of agentRows) {
+          agentNameMap.set(a.id, a.name);
+        }
+      }
+
+      const rows = sessionRows.map((s) => ({
+        ...s,
+        agentName: agentNameMap.get(s.agentId) ?? null,
       }));
 
       const total = countRows[0]?.count ?? 0;
@@ -405,7 +410,6 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       const rows = await db
         .select()
         .from(rcSessions)
-        .leftJoin(agentsTable, eq(rcSessions.agentId, agentsTable.id))
         .where(eq(rcSessions.id, sessionId));
 
       if (rows.length === 0) {
@@ -415,12 +419,19 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      // Return session with agentName included
-      const row = rows[0];
-      return {
-        ...row.rc_sessions,
-        agentName: row.agents?.name ?? null,
-      };
+      const session = rows[0];
+
+      // Resolve agent name
+      let agentName: string | null = null;
+      if (session.agentId) {
+        const [agentRow] = await db
+          .select({ name: agentsTable.name })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, session.agentId));
+        agentName = agentRow?.name ?? null;
+      }
+
+      return { ...session, agentName };
     },
   );
 
