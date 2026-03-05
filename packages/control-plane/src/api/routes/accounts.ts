@@ -32,20 +32,28 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
 
   app.get('/', async (_request, reply) => {
     const rows = await db.select().from(apiAccounts).orderBy(apiAccounts.priority);
-    const masked = rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      provider: r.provider,
-      credentialMasked: maskCredential(
-        decryptCredential(r.credential, r.credentialIv, encryptionKey),
-      ),
-      priority: r.priority,
-      rateLimit: r.rateLimit,
-      isActive: r.isActive,
-      metadata: r.metadata,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-    }));
+    const masked = rows.map((r) => {
+      let credentialMasked = '(decryption failed)';
+      try {
+        credentialMasked = maskCredential(
+          decryptCredential(r.credential, r.credentialIv, encryptionKey),
+        );
+      } catch {
+        // Credential couldn't be decrypted — show fallback
+      }
+      return {
+        id: r.id,
+        name: r.name,
+        provider: r.provider,
+        credentialMasked,
+        priority: r.priority,
+        rateLimit: r.rateLimit,
+        isActive: r.isActive,
+        metadata: r.metadata,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      };
+    });
     return reply.send(masked);
   });
 
@@ -58,13 +66,19 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!row) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
+    let credentialMasked = '(decryption failed)';
+    try {
+      credentialMasked = maskCredential(
+        decryptCredential(row.credential, row.credentialIv, encryptionKey),
+      );
+    } catch {
+      // Credential couldn't be decrypted — show fallback
+    }
     return reply.send({
       id: row.id,
       name: row.name,
       provider: row.provider,
-      credentialMasked: maskCredential(
-        decryptCredential(row.credential, row.credentialIv, encryptionKey),
-      ),
+      credentialMasked,
       priority: row.priority,
       rateLimit: row.rateLimit,
       isActive: row.isActive,
@@ -156,13 +170,19 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!updated) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
+    let credentialMasked = '(decryption failed)';
+    try {
+      credentialMasked = maskCredential(
+        decryptCredential(updated.credential, updated.credentialIv, encryptionKey),
+      );
+    } catch {
+      // Credential couldn't be decrypted — show fallback
+    }
     return reply.send({
       id: updated.id,
       name: updated.name,
       provider: updated.provider,
-      credentialMasked: maskCredential(
-        decryptCredential(updated.credential, updated.credentialIv, encryptionKey),
-      ),
+      credentialMasked,
       priority: updated.priority,
       rateLimit: updated.rateLimit,
       isActive: updated.isActive,
@@ -196,7 +216,15 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!row) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
-    const credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
+    let credential: string;
+    try {
+      credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'ACCOUNT_TEST_ERROR',
+        message: 'Failed to decrypt account credential',
+      });
+    }
 
     switch (row.provider) {
       case 'anthropic_api': {
