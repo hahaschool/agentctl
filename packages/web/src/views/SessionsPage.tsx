@@ -69,6 +69,40 @@ function matchesSearchQuery(session: Session, query: string): boolean {
   return false;
 }
 
+function escapeCsvValue(value: string | number | null | undefined): string {
+  if (value == null) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function exportSessionsCsv(sessions: Session[]): void {
+  const headers = ['id', 'agentName', 'machineId', 'status', 'model', 'projectPath', 'startedAt', 'endedAt', 'costUsd', 'messageCount'];
+  const rows = sessions.map((s) => [
+    s.id,
+    s.agentName ?? s.agentId,
+    s.machineId,
+    s.status,
+    s.model ?? '',
+    s.projectPath ?? '',
+    s.startedAt,
+    s.endedAt ?? '',
+    s.metadata?.costUsd ?? '',
+    s.metadata?.messageCount ?? '',
+  ].map(escapeCsvValue).join(','));
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sessions-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const PAGE_SIZE = 50;
 
 export function SessionsPage(): React.JSX.Element {
@@ -106,9 +140,27 @@ export function SessionsPage(): React.JSX.Element {
   const [hideEmpty, setHideEmpty] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Bulk selection state
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const toggleChecked = useCallback((id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   // Reset pagination when filter or search changes so we don't stay on a stale page.
+  // Also clear bulk selection when filters change.
   useEffect(() => {
     setOffset(0);
+    setCheckedIds(new Set());
   }, [statusFilter, searchQuery]);
 
   // --- New Session form state ---
@@ -141,11 +193,12 @@ export function SessionsPage(): React.JSX.Element {
         r: () => resetAndInvalidateSessions(),
         n: () => setShowCreateForm(true),
         Escape: () => {
-          if (showCreateForm) setShowCreateForm(false);
+          if (checkedIds.size > 0) setCheckedIds(new Set());
+          else if (showCreateForm) setShowCreateForm(false);
           else setSelectedId(null);
         },
       }),
-      [resetAndInvalidateSessions, showCreateForm],
+      [resetAndInvalidateSessions, showCreateForm, checkedIds.size],
     ),
   );
 
@@ -341,6 +394,27 @@ export function SessionsPage(): React.JSX.Element {
     }
   }, [cleanupSessions, resetAndInvalidateSessions, toast]);
 
+  const handleBulkDelete = useCallback(async () => {
+    if (checkedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const ids = Array.from(checkedIds);
+      const results = await Promise.allSettled(ids.map((id) => api.deleteSession(id)));
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) {
+        toast.error(`${failed} of ${ids.length} deletion(s) failed`);
+      } else {
+        toast.success(`Deleted ${ids.length} session(s)`);
+      }
+      setCheckedIds(new Set());
+      resetAndInvalidateSessions();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBulkDeleting(false);
+    }
+  }, [checkedIds, resetAndInvalidateSessions, toast]);
+
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
   const handleSend = useCallback(async () => {
@@ -448,6 +522,14 @@ export function SessionsPage(): React.JSX.Element {
                   confirmClassName="px-2 py-1.5 border border-destructive rounded-sm text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground"
                 />
               )}
+              <button
+                type="button"
+                onClick={() => exportSessionsCsv(filteredSessions)}
+                disabled={filteredSessions.length === 0}
+                className="px-2 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground disabled:opacity-50"
+              >
+                Export CSV
+              </button>
               <RefreshButton
                 onClick={() => resetAndInvalidateSessions()}
                 isFetching={sessions.isFetching && !sessions.isLoading}
@@ -505,6 +587,30 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Sort / Group / Filter controls */}
         <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 flex-wrap">
+          <label
+            htmlFor="sessions-select-all"
+            className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer py-1"
+          >
+            <input
+              id="sessions-select-all"
+              type="checkbox"
+              checked={checkedIds.size > 0 && checkedIds.size === filteredSessions.length}
+              ref={(el) => {
+                if (el) {
+                  el.indeterminate = checkedIds.size > 0 && checkedIds.size < filteredSessions.length;
+                }
+              }}
+              onChange={() => {
+                if (checkedIds.size === filteredSessions.length && filteredSessions.length > 0) {
+                  setCheckedIds(new Set());
+                } else {
+                  setCheckedIds(new Set(filteredSessions.map((s) => s.id)));
+                }
+              }}
+              className="w-3.5 h-3.5 cursor-pointer"
+            />
+            All
+          </label>
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
@@ -734,6 +840,8 @@ export function SessionsPage(): React.JSX.Element {
                       session={s}
                       isSelected={selectedId === s.id}
                       onSelect={setSelectedId}
+                      isChecked={checkedIds.has(s.id)}
+                      onToggleCheck={toggleChecked}
                     />
                   ))}
               </div>
@@ -745,6 +853,8 @@ export function SessionsPage(): React.JSX.Element {
                 session={s}
                 isSelected={selectedId === s.id}
                 onSelect={setSelectedId}
+                isChecked={checkedIds.has(s.id)}
+                onToggleCheck={toggleChecked}
               />
             ))
           )}
@@ -769,6 +879,31 @@ export function SessionsPage(): React.JSX.Element {
             </div>
           )}
         </div>
+
+        {/* Floating bulk action bar */}
+        {checkedIds.size > 0 && (
+          <div className="border-t border-border bg-card px-3 py-2 flex items-center gap-2 shrink-0">
+            <span className="text-xs font-medium tabular-nums">
+              {checkedIds.size} selected
+            </span>
+            <div className="flex-1" />
+            <button
+              type="button"
+              onClick={() => setCheckedIds(new Set())}
+              className="px-2 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] font-medium cursor-pointer"
+            >
+              Clear
+            </button>
+            <ConfirmButton
+              label={`Delete (${checkedIds.size})`}
+              confirmLabel={`Delete ${checkedIds.size} sessions?`}
+              onConfirm={() => void handleBulkDelete()}
+              disabled={bulkDeleting}
+              className="px-2 py-1 border border-destructive/50 rounded-sm text-[11px] font-medium bg-destructive/10 text-destructive-foreground cursor-pointer"
+              confirmClassName="px-2 py-1 border border-destructive rounded-sm text-[11px] font-medium bg-destructive text-destructive-foreground cursor-pointer animate-pulse"
+            />
+          </div>
+        )}
       </div>
 
       {/* Session detail panel */}
@@ -968,10 +1103,14 @@ function SessionListItem({
   session: s,
   isSelected,
   onSelect,
+  isChecked,
+  onToggleCheck,
 }: {
   session: Session;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  isChecked: boolean;
+  onToggleCheck: (id: string) => void;
 }): React.JSX.Element {
   const meta = s.metadata;
   const errorMsg = meta?.errorMessage;
@@ -979,14 +1118,12 @@ function SessionListItem({
   const messageCount = meta?.messageCount;
 
   return (
-    <button
-      type="button"
+    <div
       role="option"
       id={`session-${s.id}`}
       aria-selected={isSelected}
-      onClick={() => onSelect(s.id)}
       className={cn(
-        'block w-full text-left px-4 py-3 border-b border-border transition-colors duration-100',
+        'flex w-full text-left border-b border-border transition-colors duration-100',
         isSelected ? 'bg-accent/10' : 'bg-transparent hover:bg-accent/10',
         s.status === 'error'
           ? 'border-l-[3px] border-l-red-500'
@@ -997,6 +1134,23 @@ function SessionListItem({
               : 'border-l-[3px] border-l-transparent',
       )}
     >
+      {/* Checkbox */}
+      <div className="flex items-start pt-3.5 pl-2 shrink-0">
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={() => onToggleCheck(s.id)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Select session ${s.id.slice(0, 16)}`}
+          className="w-3.5 h-3.5 cursor-pointer"
+        />
+      </div>
+      {/* Session card content */}
+      <button
+        type="button"
+        onClick={() => onSelect(s.id)}
+        className="flex-1 text-left px-2 pr-4 py-3 bg-transparent border-0 cursor-pointer min-w-0"
+      >
       <div className="flex justify-between items-center mb-1">
         <span className="font-mono text-xs font-medium">{s.id.slice(0, 16)}...</span>
         <StatusBadge status={s.status} />
@@ -1024,7 +1178,8 @@ function SessionListItem({
           <span className="text-muted-foreground">${costUsd.toFixed(2)}</span>
         )}
       </div>
-    </button>
+      </button>
+    </div>
   );
 }
 
