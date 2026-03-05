@@ -25,7 +25,7 @@ import { TodoBlock } from '../components/TodoBlock';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
-import type { Session, SessionContentMessage } from '../lib/api';
+import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
 import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import {
@@ -491,11 +491,9 @@ function SessionHeader({
         <div className="mt-2 px-3 py-2 rounded-sm bg-red-950/50 border border-red-900/50 text-[12px] text-red-300 space-y-1">
           <div>
             <span className="font-semibold text-red-400">Error: </span>
-            {typeof session.metadata?.errorMessage === 'string'
-              ? session.metadata.errorMessage
-              : 'Session ended with an error (no details available)'}
+            {session.metadata?.errorMessage ?? 'Session ended with an error (no details available)'}
           </div>
-          {typeof session.metadata?.errorHint === 'string' && (
+          {session.metadata?.errorHint && (
             <div className="text-yellow-300/90">
               <span className="font-semibold text-yellow-400">Hint: </span>
               {session.metadata.errorHint}
@@ -1111,13 +1109,13 @@ function SessionMetadataBadges({
   metadata,
   streamCost,
 }: {
-  metadata: Record<string, unknown>;
+  metadata: SessionMetadata;
   streamCost?: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
 }): React.JSX.Element | null {
-  const model = typeof metadata.model === 'string' ? metadata.model : null;
-  const costUsd = typeof metadata.costUsd === 'number' ? metadata.costUsd : null;
-  const inputTokens = typeof metadata.inputTokens === 'number' ? metadata.inputTokens : null;
-  const outputTokens = typeof metadata.outputTokens === 'number' ? metadata.outputTokens : null;
+  const model = metadata.model ?? null;
+  const costUsd = metadata.costUsd ?? null;
+  const inputTokens = metadata.inputTokens ?? null;
+  const outputTokens = metadata.outputTokens ?? null;
 
   // Use streaming cost if available, otherwise fall back to metadata
   const displayCostUsd = streamCost?.totalCostUsd ?? costUsd;

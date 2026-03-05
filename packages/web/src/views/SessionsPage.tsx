@@ -853,7 +853,7 @@ export function SessionsPage(): React.JSX.Element {
                   />
                 )}
                 {selected.model && <DetailRow label="Model" value={selected.model} />}
-                {typeof selected.metadata?.forkedFrom === 'string' && (
+                {selected.metadata?.forkedFrom && (
                   <DetailRow label="Forked From" value={selected.metadata.forkedFrom} mono />
                 )}
                 <DetailRow label="Started" value={formatDateTime(selected.startedAt)} />
@@ -870,9 +870,7 @@ export function SessionsPage(): React.JSX.Element {
               {selected.status === 'error' && selected.metadata && (
                 <div className="mt-2.5 px-2.5 py-2 bg-red-900/30 border border-red-500/30 rounded-sm text-red-300 text-xs">
                   <span className="font-semibold">Error: </span>
-                  {(selected.metadata as Record<string, unknown>).errorMessage
-                    ? String((selected.metadata as Record<string, unknown>).errorMessage)
-                    : 'Unknown error'}
+                  {selected.metadata.errorMessage ?? 'Unknown error'}
                 </div>
               )}
 
@@ -906,7 +904,7 @@ export function SessionsPage(): React.JSX.Element {
                       : 'No conversation content available'}
                 </span>
                 {selected.status === 'error' &&
-                  typeof selected.metadata?.errorMessage === 'string' && (
+                  selected.metadata?.errorMessage && (
                     <span className="text-xs text-muted-foreground opacity-70">
                       {selected.metadata.errorMessage}
                     </span>
@@ -975,10 +973,10 @@ function SessionListItem({
   isSelected: boolean;
   onSelect: (id: string) => void;
 }): React.JSX.Element {
-  const meta = s.metadata as Record<string, unknown> | null;
-  const errorMsg = meta?.errorMessage as string | undefined;
-  const costUsd = meta?.costUsd as number | undefined;
-  const messageCount = meta?.messageCount as number | undefined;
+  const meta = s.metadata;
+  const errorMsg = meta?.errorMessage;
+  const costUsd = meta?.costUsd;
+  const messageCount = meta?.messageCount;
 
   return (
     <button

@@ -14,6 +14,13 @@ export type ShortcutEntry = {
   desc: string;
 };
 
+export type ShortcutGroup = {
+  /** Section heading */
+  title: string;
+  /** Shortcuts in this group */
+  shortcuts: ShortcutEntry[];
+};
+
 /**
  * Navigation page shortcuts (number keys 1-7).
  * Order must match the sidebar nav order.
@@ -50,4 +57,49 @@ export const ALL_SHORTCUTS: ShortcutEntry[] = [...NAV_SHORTCUTS, ...GLOBAL_SHORT
 export const CONDENSED_SHORTCUTS: ShortcutEntry[] = [
   { keys: ['1\u20137'], desc: 'Navigate to page' },
   ...GLOBAL_SHORTCUTS,
+];
+
+/**
+ * Grouped shortcuts for the help overlay — organized by context/page.
+ */
+export const SHORTCUT_GROUPS: ShortcutGroup[] = [
+  {
+    title: 'Global',
+    shortcuts: [
+      { keys: ['?'], desc: 'Show keyboard shortcuts' },
+      { keys: ['\u2318K'], desc: 'Command palette' },
+      { keys: ['1\u20137'], desc: 'Navigate to page' },
+      { keys: ['Esc'], desc: 'Close panels / Cancel' },
+      { keys: ['g', 'd'], desc: 'Go to Dashboard' },
+      { keys: ['g', 's'], desc: 'Go to Sessions' },
+      { keys: ['g', 'a'], desc: 'Go to Agents' },
+      { keys: ['g', 'm'], desc: 'Go to Machines' },
+    ],
+  },
+  {
+    title: 'Sessions',
+    shortcuts: [
+      { keys: ['r'], desc: 'Refresh' },
+      { keys: ['n'], desc: 'New session' },
+      { keys: ['\u2191', '\u2193'], desc: 'Navigate list' },
+      { keys: ['\u23CE'], desc: 'Open selected' },
+      { keys: ['Esc'], desc: 'Back' },
+    ],
+  },
+  {
+    title: 'Session Detail',
+    shortcuts: [
+      { keys: ['r'], desc: 'Refresh' },
+      { keys: ['\u2318F'], desc: 'Search messages' },
+      { keys: ['Esc'], desc: 'Close search' },
+    ],
+  },
+  {
+    title: 'Agents',
+    shortcuts: [
+      { keys: ['r'], desc: 'Refresh' },
+      { keys: ['n'], desc: 'New agent' },
+      { keys: ['Esc'], desc: 'Close dialog' },
+    ],
+  },
 ];

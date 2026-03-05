@@ -49,6 +49,19 @@ export type Agent = {
   createdAt: string;
 };
 
+export type SessionMetadata = {
+  errorMessage?: string;
+  errorHint?: string;
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  messageCount?: number;
+  model?: string;
+  forkedFrom?: string;
+  lastError?: string;
+  [key: string]: unknown;
+};
+
 export type Session = {
   id: string;
   agentId: string;
@@ -62,7 +75,7 @@ export type Session = {
   startedAt: string;
   lastHeartbeat: string | null;
   endedAt: string | null;
-  metadata: Record<string, unknown>;
+  metadata: SessionMetadata;
   accountId: string | null;
   model: string | null;
 };

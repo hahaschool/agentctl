@@ -78,6 +78,17 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [pathname]);
 
+  // Two-key sequence support: "g" followed by d/s/a/m
+  const pendingKeyRef = useRef<string | null>(null);
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const GO_MAP: Record<string, string> = {
+    d: '/',
+    s: '/sessions',
+    a: '/agents',
+    m: '/machines',
+  };
+
   // Keyboard shortcuts: 1-7 to navigate pages, Cmd+K for command palette, Esc to close
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
@@ -90,6 +101,32 @@ export function Sidebar(): React.JSX.Element {
 
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      // Handle second key of "g + X" sequence
+      if (pendingKeyRef.current === 'g') {
+        pendingKeyRef.current = null;
+        if (pendingTimerRef.current) {
+          clearTimeout(pendingTimerRef.current);
+          pendingTimerRef.current = null;
+        }
+        const goHref = GO_MAP[e.key];
+        if (goHref) {
+          e.preventDefault();
+          router.push(goHref);
+          return;
+        }
+      }
+
+      // Start "g" sequence
+      if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        pendingKeyRef.current = 'g';
+        if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = setTimeout(() => {
+          pendingKeyRef.current = null;
+          pendingTimerRef.current = null;
+        }, 500);
+        return;
+      }
 
       if (e.key === 'Escape') {
         setMobileOpen(false);
