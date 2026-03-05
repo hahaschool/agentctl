@@ -216,10 +216,10 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide mr-1">
             Capabilities
           </span>
-          <CapBadge label="GPU" enabled={m.capabilities.gpu} variant="green" />
-          <CapBadge label="Docker" enabled={m.capabilities.docker} variant="blue" />
+          <CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" />
+          <CapBadge label="Docker" enabled={m.capabilities?.docker ?? false} variant="blue" />
           <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-sm bg-muted text-muted-foreground border border-border font-mono">
-            {m.capabilities.maxConcurrentAgents} max agents
+            {m.capabilities?.maxConcurrentAgents ?? 0} max agents
           </span>
         </div>
       )}
