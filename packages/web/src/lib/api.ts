@@ -1,7 +1,17 @@
 // ---------------------------------------------------------------------------
 // API client — thin wrapper around fetch for the control plane API.
 // In dev mode, Vite proxies /api/* to localhost:8080.
+// Types are imported from @agentctl/shared to ensure consistency with DB schema.
 // ---------------------------------------------------------------------------
+
+import type {
+  AgentType,
+  AgentStatus,
+  AgentConfig,
+  MachineCapabilities,
+  MachineStatus,
+  ApiAccount as SharedApiAccount,
+} from '@agentctl/shared';
 
 export type HealthResponse = {
   status: 'ok' | 'degraded';
@@ -15,9 +25,9 @@ export type Machine = {
   tailscaleIp: string;
   os: string;
   arch: string;
-  status: 'online' | 'offline' | 'degraded';
+  status: MachineStatus;
   lastHeartbeat: string | null;
-  capabilities?: { gpu: boolean; docker: boolean; maxConcurrentAgents: number };
+  capabilities?: MachineCapabilities;
   createdAt: string;
 };
 
@@ -25,13 +35,13 @@ export type Agent = {
   id: string;
   machineId: string;
   name: string;
-  type: string;
-  status: string;
+  type: AgentType;
+  status: AgentStatus;
   schedule: string | null;
   projectPath: string | null;
   worktreeBranch: string | null;
   currentSessionId: string | null;
-  config: Record<string, unknown>;
+  config: AgentConfig;
   lastRunAt: string | null;
   lastCostUsd: number | null;
   totalCostUsd: number;
@@ -92,7 +102,6 @@ export type AgentRun = {
   id: string;
   agentId: string;
   status: string;
-  prompt?: string;
   costUsd?: number;
   durationMs?: number;
   startedAt: string;
@@ -100,18 +109,7 @@ export type AgentRun = {
   errorMessage?: string;
 };
 
-export type ApiAccount = {
-  id: string;
-  name: string;
-  provider: string;
-  credentialMasked: string;
-  priority: number;
-  rateLimit: { itpm?: number; otpm?: number };
-  isActive: boolean;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-};
+export type ApiAccount = SharedApiAccount;
 
 export type ProjectAccountMapping = {
   id: string;
