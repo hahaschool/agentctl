@@ -124,7 +124,7 @@ export function DashboardPage(): React.JSX.Element {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="text-[22px] font-bold">Command Center</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Link
             href="/sessions"
             className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-xs font-medium no-underline hover:bg-primary/90 transition-colors"
@@ -149,7 +149,7 @@ export function DashboardPage(): React.JSX.Element {
       {/* Health status card */}
       <div
         className={cn(
-          'px-5 py-4 bg-card border rounded-lg mb-5 flex items-center justify-between',
+          'px-4 sm:px-5 py-4 bg-card border rounded-lg mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3',
           healthStatus === 'ok'
             ? 'border-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.04)]'
             : 'border-border',
@@ -377,6 +377,9 @@ export function DashboardPage(): React.JSX.Element {
         </div>
       </div>
 
+      {/* Cost Overview */}
+      <CostOverview sessionList={sessionList} agentCostBreakdown={agentCostBreakdown} />
+
       {/* Platform summary bar */}
       <div className="mt-5 bg-card border border-border rounded-lg overflow-hidden">
         <div className="flex gap-4 px-4 py-2.5 text-xs text-muted-foreground items-center flex-wrap">
@@ -579,6 +582,130 @@ function ActivityIcon({ status }: { status: string }): React.JSX.Element {
     <span
       className={cn('w-2 h-2 rounded-full shrink-0', colorClass, shouldPulse && 'animate-pulse')}
     />
+  );
+}
+
+function CostOverview({
+  sessionList,
+  agentCostBreakdown,
+}: {
+  sessionList: { id: string; agentName: string | null; claudeSessionId: string | null; metadata: { costUsd?: number; [key: string]: unknown } }[];
+  agentCostBreakdown: { id: string; name: string; totalCostUsd: number }[];
+}): React.JSX.Element {
+  const totalCost = useMemo(
+    () => sessionList.reduce((sum, s) => sum + (s.metadata?.costUsd ?? 0), 0),
+    [sessionList],
+  );
+
+  const topSessions = useMemo(
+    () =>
+      [...sessionList]
+        .filter((s) => (s.metadata?.costUsd ?? 0) > 0)
+        .sort((a, b) => (b.metadata?.costUsd ?? 0) - (a.metadata?.costUsd ?? 0))
+        .slice(0, 5),
+    [sessionList],
+  );
+
+  const maxAgentCost = agentCostBreakdown.length > 0 ? (agentCostBreakdown[0]?.totalCostUsd ?? 0) : 0;
+
+  if (totalCost === 0 && agentCostBreakdown.length === 0) {
+    return <></>;
+  }
+
+  return (
+    <div className="mt-5 mb-0">
+      <SectionHeader title="Cost Overview" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total cost */}
+        <div className="border border-border rounded-lg bg-card p-4 flex flex-col justify-center">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+            Total Session Cost
+          </div>
+          <div className="text-2xl font-bold font-mono text-foreground">
+            {formatCost(totalCost)}
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            across {sessionList.filter((s) => (s.metadata?.costUsd ?? 0) > 0).length} sessions
+          </div>
+        </div>
+
+        {/* Bar chart: cost per agent */}
+        <div className="border border-border rounded-lg bg-card p-4">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
+            Cost by Agent
+          </div>
+          {agentCostBreakdown.length > 0 ? (
+            <div className="space-y-2">
+              {agentCostBreakdown.map((agent) => {
+                const pct = maxAgentCost > 0 ? (agent.totalCostUsd / maxAgentCost) * 100 : 0;
+                return (
+                  <Link
+                    key={agent.id}
+                    href={`/agents/${agent.id}`}
+                    className="block no-underline group"
+                  >
+                    <div className="flex justify-between items-center text-[11px] mb-0.5">
+                      <span className="text-foreground truncate max-w-[140px] group-hover:text-primary transition-colors">
+                        {agent.name}
+                      </span>
+                      <span className="font-mono text-muted-foreground shrink-0 ml-2">
+                        {formatCost(agent.totalCostUsd)}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500"
+                        style={{ width: `${Math.max(pct, 2)}%` }}
+                      />
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-[12px] text-muted-foreground">No agent cost data yet</div>
+          )}
+        </div>
+
+        {/* Top 5 most expensive sessions */}
+        <div className="border border-border rounded-lg bg-card p-4">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
+            Most Expensive Sessions
+          </div>
+          {topSessions.length > 0 ? (
+            <div className="space-y-1.5">
+              {topSessions.map((session, idx) => (
+                <Link
+                  key={session.id}
+                  href={`/sessions/${session.id}`}
+                  className="flex items-center justify-between no-underline hover:bg-accent/10 rounded px-1.5 py-1 -mx-1.5 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] text-muted-foreground font-mono w-4 shrink-0">
+                      #{idx + 1}
+                    </span>
+                    <span className="text-[12px] text-foreground truncate">
+                      {truncate(
+                        session.agentName
+                          ?? (session.claudeSessionId
+                            ? `Session ${session.claudeSessionId.slice(0, 8)}`
+                            : `Session ${session.id.slice(0, 8)}`),
+                        24,
+                      )}
+                    </span>
+                  </div>
+                  <span className="text-[12px] font-mono text-green-400 shrink-0 ml-2">
+                    {formatCost(session.metadata?.costUsd ?? 0)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[12px] text-muted-foreground">No session cost data yet</div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

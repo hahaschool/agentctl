@@ -160,7 +160,7 @@ export function Sidebar(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-foreground text-lg p-1"
+          className="text-foreground text-lg p-1 -ml-1"
           aria-label="Toggle navigation"
         >
           {mobileOpen ? '\u2715' : '\u2630'}
@@ -168,6 +168,9 @@ export function Sidebar(): React.JSX.Element {
         <span className="text-sm font-bold text-foreground tracking-tight">AgentCTL</span>
         <span className="text-[9px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
           BETA
+        </span>
+        <span className="ml-auto">
+          <WsStatusIndicator status={wsStatus} compact />
         </span>
       </div>
 
