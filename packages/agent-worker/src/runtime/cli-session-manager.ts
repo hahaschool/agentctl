@@ -125,6 +125,7 @@ const DEFAULT_MAX_CONCURRENT = 10;
 const DEFAULT_MODEL = 'sonnet';
 const STALE_SESSION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
+const GRACEFUL_KILL_TIMEOUT_MS = 5_000; // Wait 5s after SIGTERM before SIGKILL
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -319,7 +320,7 @@ export class CliSessionManager extends EventEmitter {
             child.kill('SIGKILL');
           }
           resolve();
-        }, 5_000);
+        }, GRACEFUL_KILL_TIMEOUT_MS);
 
         child.on('close', () => {
           clearTimeout(timer);

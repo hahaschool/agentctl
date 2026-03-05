@@ -179,10 +179,14 @@ export class AgentInstance extends EventEmitter {
           this.emitEvent(timeoutEvent);
 
           // Flush remaining audit events before notifying the control plane.
-          void this.stopAuditReporter();
+          this.stopAuditReporter().catch((err) => {
+            this.log.warn({ err }, 'Failed to stop audit reporter on timeout');
+          });
 
           // Fire-and-forget: notify the control plane that this run timed out.
-          void this.notifyRunCompletion('failure', 'Agent execution timed out');
+          this.notifyRunCompletion('failure', 'Agent execution timed out').catch((err) => {
+            this.log.error({ err }, 'Failed to notify control plane of timeout');
+          });
         }
       }, this.maxExecutionMs);
 

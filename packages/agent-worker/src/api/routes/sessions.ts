@@ -21,6 +21,13 @@ import type {
 } from '../../runtime/cli-session-manager.js';
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Delay before cleaning up session buffers after session ends, allowing late SSE consumers. */
+const SESSION_BUFFER_CLEANUP_DELAY_MS = 60_000;
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -241,10 +248,10 @@ export async function sessionRoutes(
     // Clean up in-memory maps to prevent unbounded growth
     cpSessionIdMap.delete(event.sessionId);
     reportedClaudeIds.delete(event.sessionId);
-    // Keep sessionBuffers briefly for late SSE consumers; clean after 60s
+    // Keep sessionBuffers briefly for late SSE consumers
     setTimeout(() => {
       sessionBuffers.delete(event.sessionId);
-    }, 60_000);
+    }, SESSION_BUFFER_CLEANUP_DELAY_MS);
   });
 
   // Track which sessions have had their claudeSessionId reported
