@@ -420,16 +420,18 @@ function SessionHeader({
           Machine: <CopyableText value={session.machineId} maxDisplay={12} />
         </span>
         {session.projectPath && <PathBadge path={session.projectPath} />}
-        {session.accountId && (
-          <span className="flex items-center gap-1">
-            Account:{' '}
-            {accountName ? (
+        <span className="flex items-center gap-1">
+          Account:{' '}
+          {session.accountId ? (
+            accountName ? (
               <span title={session.accountId}>{accountName}</span>
             ) : (
               <CopyableText value={session.accountId} maxDisplay={12} />
-            )}
-          </span>
-        )}
+            )
+          ) : (
+            <span className="italic text-muted-foreground/60">(default account)</span>
+          )}
+        </span>
         {session.model && (
           <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm border border-border">
             {session.model}
