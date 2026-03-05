@@ -1377,12 +1377,13 @@ describe('Security findings routes — nonexistent endpoints', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it('returns 404 for DELETE on findings (not implemented)', async () => {
+  it('DELETE on findings deletes an existing finding', async () => {
     const response = await app.inject({
       method: 'DELETE',
-      url: '/api/security/findings/some-id',
+      url: '/api/security/findings/finding-001',
     });
 
-    expect(response.statusCode).toBe(404);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().ok).toBe(true);
   });
 });
