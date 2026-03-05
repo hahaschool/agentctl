@@ -138,7 +138,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const settledResults = await Promise.allSettled(
         onlineMachines.map(async (machine) => {
-          const workerBaseUrl = `http://${machine.tailscaleIp}:${String(workerPort)}`;
+          const address = machine.tailscaleIp ?? machine.hostname;
+          const workerBaseUrl = `http://${address}:${String(workerPort)}`;
           const discoverUrl = projectPath
             ? `${workerBaseUrl}/api/sessions/discover?projectPath=${encodeURIComponent(projectPath)}`
             : `${workerBaseUrl}/api/sessions/discover`;

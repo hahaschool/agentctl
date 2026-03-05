@@ -13,7 +13,7 @@ export const settingsRoutes: FastifyPluginAsync<SettingsRoutesOptions> = async (
   const { db } = opts;
 
   // Scoped error handler — log + return structured 500 for unhandled DB errors
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: Error, request, reply) => {
     request.log.error(error, 'Settings route error');
     return reply.code(500).send({
       error: 'INTERNAL_ERROR',
