@@ -252,6 +252,7 @@ export function createTaskWorker({
               projectPath: agent.projectPath ?? null,
             },
             db,
+            jobLogger,
           );
 
           if (accountId && encryptionKey) {
