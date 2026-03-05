@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ALL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
 import { healthQuery } from '../lib/queries';
 import { AccountsSection } from './AccountsSection';
@@ -167,28 +168,13 @@ function ConnectionSection(): React.JSX.Element {
 // Keyboard shortcuts
 // ---------------------------------------------------------------------------
 
-const SHORTCUTS = [
-  { keys: ['1'], desc: 'Dashboard' },
-  { keys: ['2'], desc: 'Machines' },
-  { keys: ['3'], desc: 'Agents' },
-  { keys: ['4'], desc: 'Sessions' },
-  { keys: ['5'], desc: 'Discover' },
-  { keys: ['6'], desc: 'Logs & Metrics' },
-  { keys: ['7'], desc: 'Settings' },
-  { keys: ['\u2318K'], desc: 'Command palette' },
-  { keys: ['r'], desc: 'Refresh current page' },
-  { keys: ['/'], desc: 'Focus search (Discover)' },
-  { keys: ['Esc'], desc: 'Close panels / Cancel' },
-  { keys: ['?'], desc: 'Toggle keyboard help' },
-];
-
 function KeyboardShortcutsSection(): React.JSX.Element {
   return (
     <Card>
       <CardContent className="p-5">
         <h2 className="text-sm font-semibold mb-3">Keyboard Shortcuts</h2>
         <div className="space-y-1.5">
-          {SHORTCUTS.map((s) => (
+          {ALL_SHORTCUTS.map((s) => (
             <div key={s.desc} className="flex justify-between items-center py-0.5">
               <span className="text-[13px] text-muted-foreground">{s.desc}</span>
               <div className="flex gap-1">

@@ -104,35 +104,59 @@ export function LogsPage(): React.JSX.Element {
 
       {/* Control Plane Status */}
       <SectionHeading>Control Plane</SectionHeading>
-      <div className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4">
-        <span
-          className={cn(
-            'w-3 h-3 rounded-full shrink-0',
-            statusClasses,
-            health.data?.status === 'ok' && 'shadow-[0_0_6px] shadow-green-500',
-          )}
-        />
-        <div className="flex-1">
-          <div className="font-semibold text-[15px]">
-            {health.data?.status === 'ok'
-              ? 'All Systems Operational'
-              : health.data?.status === 'degraded'
-                ? 'Degraded Performance'
-                : health.isLoading
-                  ? 'Checking...'
-                  : 'Unavailable'}
+      {health.isLoading ? (
+        <div className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4">
+          <Skeleton className="w-3 h-3 rounded-full shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-3 w-32" />
           </div>
-          <div className="text-xs text-muted-foreground font-mono mt-0.5">
-            {health.data?.timestamp
-              ? `Last checked: ${formatDateTime(health.data.timestamp)}`
-              : 'Polling every 10s'}
-          </div>
+          <Skeleton className="h-5 w-16 rounded-full" />
         </div>
-        <StatusBadge status={health.data?.status ?? 'unknown'} />
-      </div>
+      ) : (
+        <div className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4">
+          <span
+            className={cn(
+              'w-3 h-3 rounded-full shrink-0',
+              statusClasses,
+              health.data?.status === 'ok' && 'shadow-[0_0_6px] shadow-green-500',
+            )}
+          />
+          <div className="flex-1">
+            <div className="font-semibold text-[15px]">
+              {health.data?.status === 'ok'
+                ? 'All Systems Operational'
+                : health.data?.status === 'degraded'
+                  ? 'Degraded Performance'
+                  : 'Unavailable'}
+            </div>
+            <div className="text-xs text-muted-foreground font-mono mt-0.5">
+              {health.data?.timestamp
+                ? `Last checked: ${formatDateTime(health.data.timestamp)}`
+                : 'Polling every 10s'}
+            </div>
+          </div>
+          <StatusBadge status={health.data?.status ?? 'unknown'} />
+        </div>
+      )}
 
       {/* Dependencies */}
-      {deps && Object.keys(deps).length > 0 && (
+      {health.isLoading ? (
+        <div className="mb-6">
+          <SectionHeading>Dependencies</SectionHeading>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
+            {Array.from({ length: 3 }, (_, i) => (
+              <div key={`dsk-${String(i)}`} className="px-3.5 py-3 bg-card border border-border rounded">
+                <div className="flex justify-between items-center mb-1.5">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-12 rounded-full" />
+                </div>
+                <Skeleton className="h-3 w-24" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : deps && Object.keys(deps).length > 0 ? (
         <div className="mb-6">
           <SectionHeading>Dependencies</SectionHeading>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
@@ -152,35 +176,46 @@ export function LogsPage(): React.JSX.Element {
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Metrics */}
       <SectionHeading>Metrics</SectionHeading>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-        <MetricCard
-          label="Control Plane"
-          value={metricsVal('agentctl_control_plane_up') === 1 ? 'UP' : 'DOWN'}
-          valueVariant={metricsVal('agentctl_control_plane_up') === 1 ? 'green' : 'red'}
-        />
-        <MetricCard
-          label="Agents Total"
-          value={formatNumber(metricsVal('agentctl_agents_total') ?? '-')}
-        />
-        <MetricCard
-          label="Agents Active"
-          value={formatNumber(metricsVal('agentctl_agents_active') ?? '-')}
-        />
-        <MetricCard
-          label="Runs Total"
-          value={formatNumber(metricsVal('agentctl_runs_total') ?? '-')}
-        />
-        <MetricCard label="Machines Online" value={`${onlineMachines} / ${machineList.length}`} />
-        <MetricCard
-          label="Health Status"
-          value={health.data?.status ?? '-'}
-          valueClassName={statusTextClasses}
-        />
-      </div>
+      {metrics.isLoading ? (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={`msk-${String(i)}`} className="px-[18px] py-4 bg-card border border-border rounded">
+              <Skeleton className="h-3 w-20 mb-2.5" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
+          <MetricCard
+            label="Control Plane"
+            value={metricsVal('agentctl_control_plane_up') === 1 ? 'UP' : 'DOWN'}
+            valueVariant={metricsVal('agentctl_control_plane_up') === 1 ? 'green' : 'red'}
+          />
+          <MetricCard
+            label="Agents Total"
+            value={formatNumber(metricsVal('agentctl_agents_total') ?? '-')}
+          />
+          <MetricCard
+            label="Agents Active"
+            value={formatNumber(metricsVal('agentctl_agents_active') ?? '-')}
+          />
+          <MetricCard
+            label="Runs Total"
+            value={formatNumber(metricsVal('agentctl_runs_total') ?? '-')}
+          />
+          <MetricCard label="Machines Online" value={`${onlineMachines} / ${machineList.length}`} />
+          <MetricCard
+            label="Health Status"
+            value={health.data?.status ?? '-'}
+            valueClassName={statusTextClasses}
+          />
+        </div>
+      )}
 
       {/* Raw Metrics (collapsible debug view) */}
       {metrics.data && (
