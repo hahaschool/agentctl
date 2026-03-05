@@ -428,6 +428,10 @@ function callbackHtml(
     ? JSON.stringify({ type: 'oauth_error', error: result.error })
     : JSON.stringify({ type: 'oauth_success', account: result.account });
 
+  // Inside <script>, use JSON.stringify to produce a safe JS string literal.
+  // Escape </script> sequences to prevent premature tag closure (XSS vector).
+  const safePayload = payload.replace(/<\/script>/gi, '<\\/script>');
+
   return `<!DOCTYPE html>
 <html>
 <head><title>AgentCTL OAuth</title></head>
@@ -435,7 +439,7 @@ function callbackHtml(
 <p>${result.error ? `Error: ${escapeHtml(result.error)}` : 'Login successful! This window will close.'}</p>
 <script>
   if (window.opener) {
-    window.opener.postMessage(${escapeHtml(payload)}, window.location.origin);
+    window.opener.postMessage(${safePayload}, window.location.origin);
   }
   window.close();
 </script>

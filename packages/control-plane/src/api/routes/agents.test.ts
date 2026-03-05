@@ -725,8 +725,9 @@ describe('Agent routes — with dbRegistry', () => {
         payload: { prompt: 'Do something' },
       });
 
-      // ControlPlaneError thrown → Fastify default handler returns 500
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('AGENT_NOT_FOUND');
     });
   });
 });

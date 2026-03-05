@@ -705,6 +705,8 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
 
 function MessageInput({ session }: { session: Session }): React.JSX.Element {
   const [message, setMessage] = useState('');
+  const lostKey = `lost:${session.id}`;
+  const [sessionLost, setSessionLost] = useState(() => sessionStorage.getItem(lostKey) === '1');
   const toast = useToast();
   const queryClient = useQueryClient();
   const sendMessage = useSendMessage();
@@ -735,9 +737,20 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
   const isActive = session.status === 'active';
   const isStarting = session.status === 'starting';
   const canResume =
-    session.status === 'ended' || session.status === 'paused' || session.status === 'error';
+    !sessionLost &&
+    (session.status === 'ended' || session.status === 'paused' || session.status === 'error');
   const canSend = isActive || canResume;
   const isSending = sendMessage.isPending || resumeSession.isPending;
+
+  /** Detect SESSION_LOST errors and persist the state. */
+  const markSessionLost = useCallback(() => {
+    setSessionLost(true);
+    sessionStorage.setItem(lostKey, '1');
+  }, [lostKey]);
+
+  const isSessionLostError = useCallback((err: Error): boolean => {
+    return err.message.includes('session was lost') || err.message.includes('SESSION_LOST');
+  }, []);
 
   const handleSubmit = useCallback(() => {
     const text = message.trim();
@@ -761,6 +774,9 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
             }, 1000);
           },
           onError: (err) => {
+            if (isSessionLostError(err)) {
+              markSessionLost();
+            }
             toast.error(err.message);
             // Refresh session data so the UI reflects any status change
             // (e.g. session marked as ended after worker restart)
@@ -783,6 +799,9 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
             });
           },
           onError: (err) => {
+            if (isSessionLostError(err)) {
+              markSessionLost();
+            }
             toast.error(err.message);
             // Refresh session data so the UI reflects any status change
             // (e.g. session marked as ended after worker restart)
@@ -802,6 +821,8 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     storageKey,
     sendMessage,
     resumeSession,
+    isSessionLostError,
+    markSessionLost,
     toast,
     queryClient,
   ]);
@@ -815,6 +836,20 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     },
     [handleSubmit],
   );
+
+  if (sessionLost) {
+    return (
+      <div className="px-5 py-3 border-t border-border bg-card shrink-0">
+        <div className="flex items-center gap-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-sm">
+          <span className="text-yellow-500 text-sm font-medium">!</span>
+          <div className="flex-1 text-xs text-muted-foreground">
+            This session was lost due to a worker restart. You can fork this session or create a new
+            one to continue.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isStarting) {
     return (

@@ -568,6 +568,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 placeholder="Agent name"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
+                disabled={updateAgent.isPending}
               />
             </div>
 
@@ -575,7 +576,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="edit-agent-machine">
                 Machine
               </label>
-              <Select value={editMachineId} onValueChange={setEditMachineId}>
+              <Select value={editMachineId} onValueChange={setEditMachineId} disabled={updateAgent.isPending}>
                 <SelectTrigger className="w-full" id="edit-agent-machine">
                   <SelectValue placeholder="Select a machine" />
                 </SelectTrigger>
@@ -596,7 +597,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="edit-agent-type">
                 Type
               </label>
-              <Select value={editType} onValueChange={setEditType}>
+              <Select value={editType} onValueChange={setEditType} disabled={updateAgent.isPending}>
                 <SelectTrigger className="w-full" id="edit-agent-type">
                   <SelectValue placeholder="Select agent type" />
                 </SelectTrigger>
@@ -617,6 +618,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                   placeholder="e.g. */15 * * * * (cron expression)"
                   value={editSchedule}
                   onChange={(e) => setEditSchedule(e.target.value)}
+                  disabled={updateAgent.isPending}
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Cron expression for periodic execution. Leave empty for no schedule.
@@ -633,6 +635,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 placeholder="e.g. claude-sonnet-4-20250514"
                 value={editModel}
                 onChange={(e) => setEditModel(e.target.value)}
+                disabled={updateAgent.isPending}
               />
               <p className="text-[11px] text-muted-foreground">
                 LLM model identifier. Leave empty to use the default.
@@ -650,6 +653,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 placeholder="e.g. 50"
                 value={editMaxTurns}
                 onChange={(e) => setEditMaxTurns(e.target.value)}
+                disabled={updateAgent.isPending}
               />
               <p className="text-[11px] text-muted-foreground">
                 Maximum number of conversation turns per run. Leave empty for unlimited.

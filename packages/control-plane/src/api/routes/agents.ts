@@ -594,11 +594,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       const agent = await dbRegistry.getAgent(agentId);
 
       if (!agent) {
-        throw new ControlPlaneError(
-          'AGENT_NOT_FOUND',
-          `Agent '${agentId}' does not exist in the registry`,
-          { agentId },
-        );
+        return reply.code(404).send({
+          error: 'AGENT_NOT_FOUND',
+          message: `Agent '${agentId}' does not exist in the registry`,
+        });
       }
 
       const jobData: AgentTaskJobData = {
