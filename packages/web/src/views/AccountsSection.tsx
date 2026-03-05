@@ -172,9 +172,9 @@ export function AccountsSection(): React.JSX.Element {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium">Accounts</h3>
-        <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
+      <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/30">
+        <h3 className="text-sm font-semibold">Accounts</h3>
+        <Button size="sm" variant="default" onClick={() => setShowAdd(true)}>
           Add Account
         </Button>
       </div>
@@ -194,23 +194,23 @@ export function AccountsSection(): React.JSX.Element {
           {accounts.map((account) => (
             <div
               key={account.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-[13px] transition-colors hover:bg-muted/40"
+              className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 p-3 text-[13px] transition-colors hover:bg-muted/50"
             >
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{account.name}</span>
-                  <Badge variant="secondary" className="text-[10px]">
+                  <Badge variant="secondary" className="text-[10px] bg-muted/80 border border-border/40">
                     {PROVIDER_LABELS[account.provider] ?? account.provider}
                   </Badge>
                   {account.isActive ? (
                     <Badge
                       variant="outline"
-                      className="text-[10px] text-green-500 border-green-500/30"
+                      className="text-[10px] text-green-400 border-green-500/40 bg-green-500/10"
                     >
                       Active
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/40 bg-muted/40">
                       Inactive
                     </Badge>
                   )}

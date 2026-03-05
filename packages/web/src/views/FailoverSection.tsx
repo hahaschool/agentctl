@@ -67,7 +67,9 @@ export function FailoverSection(): React.JSX.Element {
 
   return (
     <div>
-      <h3 className="text-sm font-medium mb-3">Default Account &amp; Failover</h3>
+      <div className="pb-3 mb-4 border-b border-border/30">
+        <h3 className="text-sm font-semibold">Default Account &amp; Failover</h3>
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">
@@ -109,10 +111,10 @@ export function FailoverSection(): React.JSX.Element {
                   type="button"
                   onClick={() => handleFailoverPolicyChange(p.value)}
                   className={cn(
-                    'px-3 py-2 rounded-md text-sm border transition-all text-left',
+                    'px-3 py-2 rounded-lg text-sm border transition-all text-left',
                     defaults.data?.failoverPolicy === p.value
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:border-foreground/20',
+                      ? 'bg-primary/90 text-primary-foreground border-primary shadow-sm'
+                      : 'bg-transparent border-border/60 text-muted-foreground hover:border-primary/40 hover:bg-primary/5',
                   )}
                 >
                   <div className="font-medium text-[13px]">{p.label}</div>

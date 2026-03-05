@@ -89,33 +89,33 @@ describe('api.listMachines', () => {
 // ---------------------------------------------------------------------------
 
 describe('api.listAgents', () => {
-  it('calls GET /api/agents/agents/list and unwraps paginated response', async () => {
+  it('calls GET /api/agents/list and unwraps paginated response', async () => {
     const agents = [{ id: 'a1', name: 'worker' }];
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ agents, total: 1, hasMore: false }));
 
     const result = await api.listAgents();
 
     const [url] = lastFetchCall();
-    expect(url).toBe('/api/agents/agents/list');
+    expect(url).toBe('/api/agents/list');
     expect(result).toEqual(agents);
   });
 });
 
 describe('api.getAgent', () => {
-  it('calls GET /api/agents/agents/:id', async () => {
+  it('calls GET /api/agents/:id', async () => {
     const agent = { id: 'abc', name: 'test-agent' };
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse(agent));
 
     const result = await api.getAgent('abc');
 
     const [url] = lastFetchCall();
-    expect(url).toBe('/api/agents/agents/abc');
+    expect(url).toBe('/api/agents/abc');
     expect(result).toEqual(agent);
   });
 });
 
 describe('api.createAgent', () => {
-  it('calls POST /api/agents/agents with JSON body', async () => {
+  it('calls POST /api/agents with JSON body', async () => {
     const responsePayload = { ok: true, agentId: 'new-id' };
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse(responsePayload));
 
@@ -123,7 +123,7 @@ describe('api.createAgent', () => {
     const result = await api.createAgent(body);
 
     const [url, init] = lastFetchCall();
-    expect(url).toBe('/api/agents/agents');
+    expect(url).toBe('/api/agents');
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual(body);
     expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
@@ -166,14 +166,14 @@ describe('api.stopAgent', () => {
 });
 
 describe('api.updateAgent', () => {
-  it('calls PATCH /api/agents/agents/:id with body', async () => {
+  it('calls PATCH /api/agents/:id with body', async () => {
     const updated = { id: 'a1', accountId: 'acc-1' };
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse(updated));
 
     const result = await api.updateAgent('a1', { accountId: 'acc-1' });
 
     const [url, init] = lastFetchCall();
-    expect(url).toBe('/api/agents/agents/a1');
+    expect(url).toBe('/api/agents/a1');
     expect(init?.method).toBe('PATCH');
     expect(JSON.parse(init?.body as string)).toEqual({ accountId: 'acc-1' });
     expect(result).toEqual(updated);
@@ -190,13 +190,13 @@ describe('api.updateAgent', () => {
 });
 
 describe('api.getAgentRuns', () => {
-  it('calls GET /api/agents/agents/:id/runs', async () => {
+  it('calls GET /api/agents/:id/runs', async () => {
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
 
     await api.getAgentRuns('a1');
 
     const [url] = lastFetchCall();
-    expect(url).toBe('/api/agents/agents/a1/runs');
+    expect(url).toBe('/api/agents/a1/runs');
   });
 });
 

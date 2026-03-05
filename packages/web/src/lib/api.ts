@@ -181,12 +181,12 @@ export const api = {
   // Agents
   listAgents: async (): Promise<Agent[]> => {
     const res = await request<{ agents: Agent[]; total: number; hasMore: boolean } | Agent[]>(
-      '/api/agents/agents/list',
+      '/api/agents/list',
     );
     // Handle both paginated { agents: [...] } and legacy bare array responses
     return Array.isArray(res) ? res : res.agents;
   },
-  getAgent: (id: string) => request<Agent>(`/api/agents/agents/${id}`),
+  getAgent: (id: string) => request<Agent>(`/api/agents/${id}`),
   createAgent: (body: {
     name: string;
     machineId: string;
@@ -194,7 +194,7 @@ export const api = {
     projectPath?: string;
     config?: Record<string, unknown>;
   }) =>
-    request<{ ok: boolean; agentId: string }>('/api/agents/agents', {
+    request<{ ok: boolean; agentId: string }>('/api/agents', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -218,11 +218,11 @@ export const api = {
       config?: Record<string, unknown>;
     },
   ) =>
-    request<Agent>(`/api/agents/agents/${id}`, {
+    request<Agent>(`/api/agents/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
-  getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/agents/${id}/runs`),
+  getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
 
   // Sessions
   listSessions: (params?: { status?: string; machineId?: string }) => {

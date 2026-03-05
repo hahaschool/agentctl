@@ -307,10 +307,10 @@ describe('Agent routes — /api/agents', () => {
   // -------------------------------------------------------------------------
 
   describe('DB-only routes without dbRegistry', () => {
-    it('POST /api/agents/agents returns 501', async () => {
+    it('POST /api/agents returns 501', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/api/agents/agents',
+        url: '/api/agents',
         payload: {
           machineId: 'ec2-us-east-1',
           name: 'my-agent',
@@ -324,38 +324,38 @@ describe('Agent routes — /api/agents', () => {
       expect(body.error).toBe('DATABASE_NOT_CONFIGURED');
     });
 
-    it('GET /api/agents/agents/list returns 501', async () => {
+    it('GET /api/agents/list returns 501', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/list',
+        url: '/api/agents/list',
       });
 
       expect(response.statusCode).toBe(501);
     });
 
-    it('GET /api/agents/agents/:agentId returns 501', async () => {
+    it('GET /api/agents/:agentId returns 501', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/some-agent-id',
+        url: '/api/agents/some-agent-id',
       });
 
       expect(response.statusCode).toBe(501);
     });
 
-    it('PATCH /api/agents/agents/:agentId/status returns 501', async () => {
+    it('PATCH /api/agents/:agentId/status returns 501', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/api/agents/agents/some-agent-id/status',
+        url: '/api/agents/some-agent-id/status',
         payload: { status: 'running' },
       });
 
       expect(response.statusCode).toBe(501);
     });
 
-    it('GET /api/agents/agents/:agentId/runs returns 501', async () => {
+    it('GET /api/agents/:agentId/runs returns 501', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/some-agent-id/runs',
+        url: '/api/agents/some-agent-id/runs',
       });
 
       expect(response.statusCode).toBe(501);
@@ -408,14 +408,14 @@ describe('Agent routes — with dbRegistry', () => {
   });
 
   // -------------------------------------------------------------------------
-  // POST /api/agents/agents — create agent with dbRegistry
+  // POST /api/agents — create agent with dbRegistry
   // -------------------------------------------------------------------------
 
-  describe('POST /api/agents/agents (with dbRegistry)', () => {
+  describe('POST /api/agents (with dbRegistry)', () => {
     it('creates an agent and returns the new agentId', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/api/agents/agents',
+        url: '/api/agents',
         payload: {
           machineId: 'machine-1',
           name: 'my-new-agent',
@@ -439,14 +439,14 @@ describe('Agent routes — with dbRegistry', () => {
   });
 
   // -------------------------------------------------------------------------
-  // PATCH /api/agents/agents/:agentId/status — validation
+  // PATCH /api/agents/:agentId/status — validation
   // -------------------------------------------------------------------------
 
-  describe('PATCH /api/agents/agents/:agentId/status (with dbRegistry)', () => {
+  describe('PATCH /api/agents/:agentId/status (with dbRegistry)', () => {
     it('updates agent status with a valid status', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/api/agents/agents/agent-1/status',
+        url: '/api/agents/agent-1/status',
         payload: { status: 'running' },
       });
 
@@ -460,7 +460,7 @@ describe('Agent routes — with dbRegistry', () => {
     it('returns 400 for an invalid status value', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/api/agents/agents/agent-1/status',
+        url: '/api/agents/agent-1/status',
         payload: { status: 'bogus_status' },
       });
 
@@ -473,7 +473,7 @@ describe('Agent routes — with dbRegistry', () => {
     it('returns 400 when status is empty string', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/api/agents/agents/agent-1/status',
+        url: '/api/agents/agent-1/status',
         payload: { status: '' },
       });
 
@@ -485,16 +485,16 @@ describe('Agent routes — with dbRegistry', () => {
   });
 
   // -------------------------------------------------------------------------
-  // GET /api/agents/agents/:agentId/runs — with limit parameter
+  // GET /api/agents/:agentId/runs — with limit parameter
   // -------------------------------------------------------------------------
 
-  describe('GET /api/agents/agents/:agentId/runs (with dbRegistry)', () => {
+  describe('GET /api/agents/:agentId/runs (with dbRegistry)', () => {
     it('returns runs with default limit when no limit is specified', async () => {
       vi.mocked(mockDbRegistry.getRecentRuns).mockResolvedValueOnce([]);
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/agent-1/runs',
+        url: '/api/agents/agent-1/runs',
       });
 
       expect(response.statusCode).toBe(200);
@@ -506,7 +506,7 @@ describe('Agent routes — with dbRegistry', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/agent-1/runs?limit=5',
+        url: '/api/agents/agent-1/runs?limit=5',
       });
 
       expect(response.statusCode).toBe(200);
@@ -518,7 +518,7 @@ describe('Agent routes — with dbRegistry', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/agent-1/runs?limit=abc',
+        url: '/api/agents/agent-1/runs?limit=abc',
       });
 
       expect(response.statusCode).toBe(200);
@@ -530,7 +530,7 @@ describe('Agent routes — with dbRegistry', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/agent-1/runs?limit=0',
+        url: '/api/agents/agent-1/runs?limit=0',
       });
 
       expect(response.statusCode).toBe(200);
@@ -542,7 +542,7 @@ describe('Agent routes — with dbRegistry', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/agent-1/runs?limit=-5',
+        url: '/api/agents/agent-1/runs?limit=-5',
       });
 
       expect(response.statusCode).toBe(200);
@@ -554,7 +554,7 @@ describe('Agent routes — with dbRegistry', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/agent-1/runs?limit=3.7',
+        url: '/api/agents/agent-1/runs?limit=3.7',
       });
 
       expect(response.statusCode).toBe(200);
@@ -563,14 +563,14 @@ describe('Agent routes — with dbRegistry', () => {
   });
 
   // -------------------------------------------------------------------------
-  // GET /api/agents/agents/:agentId — agent retrieval
+  // GET /api/agents/:agentId — agent retrieval
   // -------------------------------------------------------------------------
 
-  describe('GET /api/agents/agents/:agentId (with dbRegistry)', () => {
+  describe('GET /api/agents/:agentId (with dbRegistry)', () => {
     it('returns agent details when agent exists', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/agent-1',
+        url: '/api/agents/agent-1',
       });
 
       expect(response.statusCode).toBe(200);
@@ -585,7 +585,7 @@ describe('Agent routes — with dbRegistry', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/agents/agents/nonexistent-agent',
+        url: '/api/agents/nonexistent-agent',
       });
 
       expect(response.statusCode).toBe(404);

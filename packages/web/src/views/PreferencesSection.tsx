@@ -106,7 +106,9 @@ export function PreferencesSection(): React.JSX.Element {
 
   return (
     <div>
-      <h3 className="text-sm font-medium mb-3">Defaults</h3>
+      <div className="pb-3 mb-4 border-b border-border/30">
+        <h3 className="text-sm font-semibold">Defaults</h3>
+      </div>
 
       <div className="space-y-4">
         {/* Default Model */}

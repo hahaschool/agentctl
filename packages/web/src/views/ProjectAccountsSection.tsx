@@ -69,7 +69,9 @@ export function ProjectAccountsSection(): React.JSX.Element {
 
   return (
     <div>
-      <h3 className="text-sm font-medium mb-3">Project Account Overrides</h3>
+      <div className="pb-3 mb-4 border-b border-border/30">
+        <h3 className="text-sm font-semibold">Project Account Overrides</h3>
+      </div>
 
       {isLoading ? (
         <div className="space-y-2">
@@ -80,7 +82,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
         <div className="space-y-4">
           {/* Existing mappings table */}
           {mappings.data && mappings.data.length > 0 ? (
-            <div className="border border-border rounded-md overflow-hidden">
+            <div className="border border-border/50 rounded-lg overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
@@ -119,7 +121,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
               </table>
             </div>
           ) : (
-            <p className="text-[12px] text-muted-foreground italic">
+            <p className="text-[13px] text-muted-foreground italic">
               No project-specific account mappings configured.
             </p>
           )}
@@ -127,7 +129,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
           {/* Add mapping form */}
           <div className="flex gap-2 items-end flex-wrap">
             <div className="flex-1 min-w-[180px] space-y-1">
-              <label className="text-[12px] text-muted-foreground" htmlFor="new-project-path">
+              <label className="text-[11px] text-muted-foreground" htmlFor="new-project-path">
                 Project path
               </label>
               <Input
@@ -139,7 +141,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
               />
             </div>
             <div className="min-w-[160px] space-y-1">
-              <label className="text-[12px] text-muted-foreground" htmlFor="new-project-account">
+              <label className="text-[11px] text-muted-foreground" htmlFor="new-project-account">
                 Account
               </label>
               <Select value={newAccountId} onValueChange={setNewAccountId}>

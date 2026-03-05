@@ -235,13 +235,13 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       case 'claude_max':
       case 'claude_team': {
         // Session tokens cannot be API-tested — validate format only
-        if (!credential || credential.length < 10) {
+        if (!credential || credential.length < 20) {
           return reply.send({
             ok: false,
-            error: 'Session token is too short or empty',
+            error: 'Session token is too short or empty (must be at least 20 characters)',
           });
         }
-        return reply.send({ ok: true });
+        return reply.send({ ok: true, latencyMs: 0 });
       }
 
       case 'bedrock': {
@@ -252,7 +252,7 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
             error: 'Bedrock credential must be in format ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION',
           });
         }
-        return reply.send({ ok: true });
+        return reply.send({ ok: true, latencyMs: 0 });
       }
 
       case 'vertex': {
@@ -264,7 +264,7 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
               error: 'Vertex AI service account JSON must contain client_email and private_key',
             });
           }
-          return reply.send({ ok: true });
+          return reply.send({ ok: true, latencyMs: 0 });
         } catch {
           return reply.send({
             ok: false,

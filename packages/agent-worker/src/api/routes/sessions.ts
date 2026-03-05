@@ -139,6 +139,10 @@ export async function sessionRoutes(
   // Map worker-internal session IDs to control-plane session IDs
   const cpSessionIdMap = new Map<string, string>();
 
+  // Sessions that were intentionally stopped (e.g. auto-stop before message send).
+  // The session_ended handler skips error reporting for these.
+  const intentionalStops = new Set<string>();
+
   // Per-session output buffers for SSE streaming
   const sessionBuffers = new Map<string, SessionEventBuffer>();
 
@@ -233,17 +237,22 @@ export async function sessionRoutes(
       }
     }
 
-    // Report session end to the control plane
-    const session = sessionManager.getSession(event.sessionId);
-    const status = session?.status === 'error' ? 'error' : 'ended';
-    void reportStatusToControlPlane(event.sessionId, {
-      status,
-      claudeSessionId: session?.claudeSessionId ?? null,
-      pid: null,
-      costUsd: session?.costUsd ?? undefined,
-      errorMessage:
-        status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
-    });
+    // Report session end to the control plane — but skip if this was an intentional
+    // stop (e.g. auto-stop before sending a new message). The new session will report
+    // 'active' and override the state.
+    const wasIntentional = intentionalStops.delete(event.sessionId);
+    if (!wasIntentional) {
+      const session = sessionManager.getSession(event.sessionId);
+      const status = session?.status === 'error' ? 'error' : 'ended';
+      void reportStatusToControlPlane(event.sessionId, {
+        status,
+        claudeSessionId: session?.claudeSessionId ?? null,
+        pid: null,
+        costUsd: session?.costUsd ?? undefined,
+        errorMessage:
+          status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
+      });
+    }
 
     // Clean up in-memory maps to prevent unbounded growth
     cpSessionIdMap.delete(event.sessionId);
@@ -739,7 +748,14 @@ export async function sessionRoutes(
 
       // If the session is still running, auto-stop it before resuming with the new message.
       // This handles cases like rate-limit hangs where the CLI process is alive but idle.
+      // IMPORTANT: Save cpSessionId BEFORE stopping — the session_ended handler deletes it.
+      let savedCpSessionId: string | undefined;
       if (existingSession.status === 'running') {
+        // Grab the CP session ID before it gets deleted by the cleanup handler
+        savedCpSessionId = cpSessionIdMap.get(existingSession.id);
+        // Mark this session as intentionally stopped so session_ended doesn't report error
+        intentionalStops.add(existingSession.id);
+
         logger.info(
           { sessionId: existingSession.id, pid: existingSession.pid },
           'Session busy — auto-stopping before sending new message',
@@ -750,6 +766,7 @@ export async function sessionRoutes(
           await new Promise((resolve) => setTimeout(resolve, 500));
         } catch (stopErr) {
           logger.warn({ err: stopErr }, 'Failed to auto-stop busy session');
+          intentionalStops.delete(existingSession.id);
           return reply.status(409).send({
             error: 'Session is currently running and could not be stopped automatically.',
             code: 'SESSION_BUSY',
@@ -772,12 +789,12 @@ export async function sessionRoutes(
           model: existingSession.model,
         });
 
-        // Inherit CP session mapping from the existing session so status callbacks work
-        for (const [wId, cpId] of cpSessionIdMap) {
-          if (wId === existingSession.id) {
-            cpSessionIdMap.set(newSession.id, cpId);
-            break;
-          }
+        // Use the saved CP session ID (may have been deleted by session_ended cleanup)
+        const cpId = savedCpSessionId ?? cpSessionIdMap.get(existingSession.id);
+        if (cpId) {
+          cpSessionIdMap.set(newSession.id, cpId);
+          // Immediately report active to override any error from the killed process
+          void reportStatusToControlPlane(newSession.id, { status: 'active' });
         }
 
         logger.info(

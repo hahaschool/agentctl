@@ -108,7 +108,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       config?: Record<string, unknown>;
     };
   }>(
-    '/agents',
+    '/',
     { schema: { tags: ['agents'], summary: 'Create an agent' } },
     async (request, reply) => {
       if (!dbRegistry) {
@@ -146,7 +146,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   );
 
   app.get<{ Querystring: { machineId?: string; limit?: string; offset?: string } }>(
-    '/agents/list',
+    '/list',
     { schema: { tags: ['agents'], summary: 'List agents with pagination' } },
     async (request, reply) => {
       if (!dbRegistry) {
@@ -191,7 +191,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   );
 
   app.get<{ Params: { agentId: string } }>(
-    '/agents/:agentId',
+    '/:agentId',
     { schema: { tags: ['agents'], summary: 'Get agent by ID' } },
     async (request, reply) => {
       if (!dbRegistry) {
@@ -221,7 +221,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       config?: Record<string, unknown>;
     };
   }>(
-    '/agents/:agentId',
+    '/:agentId',
     { schema: { tags: ['agents'], summary: 'Update agent fields' } },
     async (request, reply) => {
       if (!dbRegistry) {
@@ -315,7 +315,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   );
 
   app.patch<{ Params: { agentId: string }; Body: { status: string } }>(
-    '/agents/:agentId/status',
+    '/:agentId/status',
     { schema: { tags: ['agents'], summary: 'Update agent status' } },
     async (request, reply) => {
       if (!dbRegistry) {
@@ -343,7 +343,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // ---------------------------------------------------------------------------
 
   app.get<{ Params: { agentId: string }; Querystring: { limit?: string } }>(
-    '/agents/:agentId/runs',
+    '/:agentId/runs',
     { schema: { tags: ['agents'], summary: 'Recent runs for agent' } },
     async (request, reply) => {
       if (!dbRegistry) {
