@@ -287,6 +287,7 @@ export function AgentsPage(): React.JSX.Element {
                 placeholder="my-agent"
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
+                disabled={createAgent.isPending}
               />
             </div>
 

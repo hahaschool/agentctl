@@ -168,7 +168,7 @@ export function SessionDetailView(): React.JSX.Element {
   const isActive = s?.status === 'active' || s?.status === 'starting';
   const stream = useSessionStream({
     sessionId,
-    enabled: isActive ?? false,
+    enabled: isActive,
     onEvent: useCallback(
       (event: SessionStreamEvent) => {
         // When status changes (e.g., session ends), refetch the full content
@@ -718,7 +718,8 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     return () => clearTimeout(timer);
   }, [message, storageKey]);
 
-  const isActive = session.status === 'active' || session.status === 'starting';
+  const isActive = session.status === 'active';
+  const isStarting = session.status === 'starting';
   const canResume =
     session.status === 'ended' || session.status === 'paused' || session.status === 'error';
   const canSend = isActive || canResume;
@@ -800,6 +801,14 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     },
     [handleSubmit],
   );
+
+  if (isStarting) {
+    return (
+      <div className="px-5 py-3 border-t border-border text-center text-xs text-muted-foreground bg-card animate-pulse">
+        Session is starting. Please wait...
+      </div>
+    );
+  }
 
   if (!canSend) {
     return (
