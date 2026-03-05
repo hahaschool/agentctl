@@ -128,6 +128,32 @@ export type AccountDefaults = {
   failoverPolicy: 'none' | 'priority' | 'round_robin';
 };
 
+export type AuditAction = {
+  id: string;
+  runId: string;
+  timestamp: string;
+  actionType: string;
+  toolName: string | null;
+  toolInput: Record<string, unknown> | null;
+  toolOutputHash: string | null;
+  durationMs: number | null;
+  approvedBy: string | null;
+  agentId: string | null;
+};
+
+export type AuditQueryResult = {
+  actions: AuditAction[];
+  total: number;
+  hasMore: boolean;
+};
+
+export type AuditSummary = {
+  totalActions: number;
+  toolBreakdown: Record<string, number>;
+  actionTypeBreakdown: Record<string, number>;
+  avgDurationMs: number | null;
+};
+
 export type RouterModelsResponse = {
   models: string[];
 };
@@ -368,6 +394,34 @@ export const api = {
       }
     }
     return result;
+  },
+
+  // Audit Trail
+  queryAudit: (params?: {
+    agentId?: string;
+    tool?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.agentId) qs.set('agentId', params.agentId);
+    if (params?.tool) qs.set('tool', params.tool);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    if (params?.offset !== undefined) qs.set('offset', String(params.offset));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<AuditQueryResult>(`/api/audit${suffix}`);
+  },
+  getAuditSummary: (params?: { agentId?: string; from?: string; to?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.agentId) qs.set('agentId', params.agentId);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<AuditSummary>(`/api/audit/summary${suffix}`);
   },
 
   // Router / LiteLLM

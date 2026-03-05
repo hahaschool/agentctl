@@ -37,6 +37,16 @@ export const queryKeys = {
   projectAccounts: ['project-accounts'] as const,
   routerModels: ['router', 'models'] as const,
   routerModelsInfo: ['router', 'models-info'] as const,
+  audit: (params?: {
+    agentId?: string;
+    tool?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+    offset?: number;
+  }) => (params ? (['audit', params] as const) : (['audit'] as const)),
+  auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
+    params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
 };
 
 // ---------------------------------------------------------------------------
@@ -156,6 +166,31 @@ export function projectAccountsQuery() {
   return queryOptions({
     queryKey: queryKeys.projectAccounts,
     queryFn: api.listProjectAccounts,
+  });
+}
+
+export function auditQuery(params?: {
+  agentId?: string;
+  tool?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return queryOptions({
+    queryKey: queryKeys.audit(params),
+    queryFn: () => api.queryAudit(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function auditSummaryQuery(params?: { agentId?: string; from?: string; to?: string }) {
+  return queryOptions({
+    queryKey: queryKeys.auditSummary(params),
+    queryFn: () => api.getAuditSummary(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
   });
 }
 
