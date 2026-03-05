@@ -504,6 +504,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           projectPath,
         },
         db,
+        app.log,
       );
 
       if (resolvedAccountId && encryptionKey) {
@@ -1099,6 +1100,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           return reply.code(workerResponse.status === 409 ? 409 : 502).send({
             error: code,
             message: msg,
+            ...(workerError.hint && { hint: workerError.hint }),
           });
         }
 
