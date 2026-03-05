@@ -21,9 +21,18 @@ type DependencyStatus = {
   error?: string;
 };
 
+type MemoryUsage = {
+  rss: number;
+  heapUsed: number;
+  heapTotal: number;
+};
+
 type HealthResponse = {
   status: 'ok' | 'degraded';
   timestamp: string;
+  uptime: number;
+  nodeVersion: string;
+  memoryUsage: MemoryUsage;
   dependencies?: {
     postgres: DependencyStatus;
     redis: DependencyStatus;
@@ -78,6 +87,13 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
     async (request) => {
       const detail = request.query.detail === 'true';
       const timestamp = new Date().toISOString();
+      const mem = process.memoryUsage();
+      const toMb = (bytes: number): number => Math.round((bytes / 1_048_576) * 100) / 100;
+      const memoryUsage: MemoryUsage = {
+        rss: toMb(mem.rss),
+        heapUsed: toMb(mem.heapUsed),
+        heapTotal: toMb(mem.heapTotal),
+      };
 
       if (!detail) {
         // Fast path for load balancer polls — no dependency checks.
@@ -124,7 +140,13 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
             r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'error'),
         );
 
-        return { status: anyError ? 'degraded' : 'ok', timestamp } satisfies HealthResponse;
+        return {
+          status: anyError ? 'degraded' : 'ok',
+          timestamp,
+          uptime: process.uptime(),
+          nodeVersion: process.version,
+          memoryUsage,
+        } satisfies HealthResponse;
       }
 
       // Detailed path — run all checks in parallel and return per-dependency results.
@@ -182,6 +204,9 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
       return {
         status: anyError ? 'degraded' : 'ok',
         timestamp,
+        uptime: process.uptime(),
+        nodeVersion: process.version,
+        memoryUsage,
         dependencies,
       } satisfies HealthResponse;
     },

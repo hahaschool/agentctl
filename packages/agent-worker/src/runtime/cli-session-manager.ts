@@ -416,6 +416,15 @@ export class CliSessionManager extends EventEmitter {
   }
 
   /**
+   * Return the count of currently active (running or starting) sessions.
+   */
+  getActiveSessionCount(): number {
+    return [...this.sessions.values()].filter(
+      (s) => s.status === 'running' || s.status === 'starting',
+    ).length;
+  }
+
+  /**
    * Return the configured maximum number of concurrent sessions.
    */
   getMaxConcurrentSessions(): number {

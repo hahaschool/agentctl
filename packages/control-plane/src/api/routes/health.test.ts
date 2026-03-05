@@ -99,6 +99,23 @@ describe('GET /health (no dependencies)', () => {
     expect(parsed.toISOString()).toBe(body.timestamp);
   });
 
+  it('returns process metrics (uptime, nodeVersion, memoryUsage)', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    const body = response.json();
+    expect(typeof body.uptime).toBe('number');
+    expect(body.uptime).toBeGreaterThan(0);
+    expect(typeof body.nodeVersion).toBe('string');
+    expect(body.nodeVersion).toMatch(/^v\d+/);
+    expect(typeof body.memoryUsage).toBe('object');
+    expect(typeof body.memoryUsage.rss).toBe('number');
+    expect(typeof body.memoryUsage.heapUsed).toBe('number');
+    expect(typeof body.memoryUsage.heapTotal).toBe('number');
+  });
+
   it('does not include dependencies in simple response', async () => {
     const response = await app.inject({
       method: 'GET',

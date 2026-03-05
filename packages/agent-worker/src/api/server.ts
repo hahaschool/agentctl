@@ -74,8 +74,13 @@ export async function createWorkerServer({
     const detail = request.query.detail === 'true';
     const timestamp = new Date().toISOString();
 
-    const rssBytes = process.memoryUsage().rss;
-    const rssMb = Math.round((rssBytes / 1_048_576) * 100) / 100;
+    const mem = process.memoryUsage();
+    const toMb = (bytes: number): number => Math.round((bytes / 1_048_576) * 100) / 100;
+    const memoryUsage = {
+      rss: toMb(mem.rss),
+      heapUsed: toMb(mem.heapUsed),
+      heapTotal: toMb(mem.heapTotal),
+    };
 
     // Run dependency checks in parallel.
     const [controlPlaneResult] = await Promise.allSettled([
@@ -111,36 +116,29 @@ export async function createWorkerServer({
     const anyError = cpStatus.status === 'error';
     const status: 'ok' | 'degraded' = anyError ? 'degraded' : 'ok';
 
-    if (!detail) {
-      return {
-        status,
-        timestamp,
-        uptime: process.uptime(),
-        activeAgents: agentPool.getRunningCount(),
-        totalAgentsStarted: agentPool.getTotalAgentsStarted(),
-        worktreesActive: agentPool.getWorktreeCount(),
-        memoryUsage: rssMb,
-        agents: {
-          running: agentPool.getRunningCount(),
-          total: agentPool.size,
-          maxConcurrent: agentPool.getMaxConcurrent(),
-        },
-      };
-    }
-
-    return {
+    const base = {
       status,
       timestamp,
       uptime: process.uptime(),
+      nodeVersion: process.version,
       activeAgents: agentPool.getRunningCount(),
+      activeSessions: sessionManager?.getActiveSessionCount() ?? 0,
       totalAgentsStarted: agentPool.getTotalAgentsStarted(),
       worktreesActive: agentPool.getWorktreeCount(),
-      memoryUsage: rssMb,
+      memoryUsage,
       agents: {
         running: agentPool.getRunningCount(),
         total: agentPool.size,
         maxConcurrent: agentPool.getMaxConcurrent(),
       },
+    };
+
+    if (!detail) {
+      return base;
+    }
+
+    return {
+      ...base,
       dependencies: {
         controlPlane: cpStatus,
       },
