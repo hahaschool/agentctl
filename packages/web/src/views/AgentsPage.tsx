@@ -68,9 +68,8 @@ export function AgentsPage(): React.JSX.Element {
   const [createType, setCreateType] = useState<string>('autonomous');
   const [createModel, setCreateModel] = useState(
     () =>
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('agentctl:defaultModel')
-        : null) ?? 'claude-sonnet-4-6',
+      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
+      'claude-sonnet-4-6',
   );
   const [createProjectPath, setCreateProjectPath] = useState('');
   const [createInitialPrompt, setCreateInitialPrompt] = useState('');
@@ -159,9 +158,8 @@ export function AgentsPage(): React.JSX.Element {
     setCreateMachineId('');
     setCreateType('autonomous');
     setCreateModel(
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('agentctl:defaultModel')
-        : null) ?? 'claude-sonnet-4-6',
+      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
+        'claude-sonnet-4-6',
     );
     setCreateProjectPath('');
     setCreateInitialPrompt('');
@@ -295,7 +293,11 @@ export function AgentsPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="create-agent-machine">
                 Machine <span className="text-destructive">*</span>
               </label>
-              <Select value={createMachineId} onValueChange={setCreateMachineId} disabled={createAgent.isPending}>
+              <Select
+                value={createMachineId}
+                onValueChange={setCreateMachineId}
+                disabled={createAgent.isPending}
+              >
                 <SelectTrigger className="w-full" id="create-agent-machine">
                   <SelectValue placeholder="Select a machine" />
                 </SelectTrigger>
@@ -313,7 +315,11 @@ export function AgentsPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="create-agent-type">
                 Type
               </label>
-              <Select value={createType} onValueChange={setCreateType} disabled={createAgent.isPending}>
+              <Select
+                value={createType}
+                onValueChange={setCreateType}
+                disabled={createAgent.isPending}
+              >
                 <SelectTrigger className="w-full" id="create-agent-type">
                   <SelectValue />
                 </SelectTrigger>

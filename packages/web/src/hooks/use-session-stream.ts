@@ -53,8 +53,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
   const [connected, setConnected] = useState(false);
   const [streamOutput, setStreamOutput] = useState<string[]>([]);
   const [latestStatus, setLatestStatus] = useState<string | null>(null);
-  const [latestCost, setLatestCost] =
-    useState<{ totalCostUsd: number; inputTokens: number; outputTokens: number } | null>(null);
+  const [latestCost, setLatestCost] = useState<{
+    totalCostUsd: number;
+    inputTokens: number;
+    outputTokens: number;
+  } | null>(null);
 
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
@@ -83,8 +86,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       if (cancelled) return;
 
       // Resolve the SSE URL — in dev, connect directly to control-plane
-      const baseUrl =
-        process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : '';
+      const baseUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : '';
       const url = `${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/stream`;
 
       const es = new EventSource(url);
@@ -133,7 +135,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
           } else if (eventType === 'status') {
             setLatestStatus((data as { status?: string }).status ?? null);
           } else if (eventType === 'cost') {
-            setLatestCost(data as { totalCostUsd: number; inputTokens: number; outputTokens: number });
+            setLatestCost(
+              data as { totalCostUsd: number; inputTokens: number; outputTokens: number },
+            );
           }
         } catch {
           // Ignore unparseable events

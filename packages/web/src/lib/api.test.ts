@@ -91,9 +91,7 @@ describe('api.listMachines', () => {
 describe('api.listAgents', () => {
   it('calls GET /api/agents/agents/list and unwraps paginated response', async () => {
     const agents = [{ id: 'a1', name: 'worker' }];
-    vi.mocked(fetch).mockResolvedValue(
-      makeFetchResponse({ agents, total: 1, hasMore: false }),
-    );
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ agents, total: 1, hasMore: false }));
 
     const result = await api.listAgents();
 
@@ -457,7 +455,12 @@ describe('api.createAccount', () => {
   it('includes optional priority field when provided', async () => {
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ id: 'acc-2' }));
 
-    await api.createAccount({ name: 'backup', provider: 'bedrock', credential: 'key', priority: 5 });
+    await api.createAccount({
+      name: 'backup',
+      provider: 'bedrock',
+      credential: 'key',
+      priority: 5,
+    });
 
     const [, init] = lastFetchCall();
     expect(JSON.parse(init?.body as string)).toMatchObject({ priority: 5 });
@@ -611,8 +614,8 @@ describe('api.metrics', () => {
 
     const [url] = lastFetchCall();
     expect(url).toBe('/metrics');
-    expect(result['agentctl_sessions_total']).toBe(42);
-    expect(result['agentctl_cost_usd']).toBe(1.23);
+    expect(result.agentctl_sessions_total).toBe(42);
+    expect(result.agentctl_cost_usd).toBe(1.23);
     // Lines with label selectors are kept as-is (key includes label portion)
     expect(result['agentctl_label{env="prod"}']).toBe(99);
     // Comment lines and empty lines must be ignored
@@ -646,7 +649,7 @@ describe('api.metrics', () => {
     } as unknown as Response);
 
     const result = await api.metrics();
-    expect(result['some_label']).toBe('NaN_value');
+    expect(result.some_label).toBe('NaN_value');
   });
 });
 
@@ -656,7 +659,9 @@ describe('api.metrics', () => {
 
 describe('request error handling', () => {
   it('falls back to UNKNOWN code when error body has no "error" field', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ message: 'Something broke' }, false, 422));
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ message: 'Something broke' }, false, 422),
+    );
 
     await expect(api.getDefaults()).rejects.toMatchObject({
       name: 'ApiError',

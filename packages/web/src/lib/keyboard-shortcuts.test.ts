@@ -65,16 +65,16 @@ describe('NAV_SHORTCUTS', () => {
   });
 
   it('each entry has exactly one key', () => {
-    NAV_SHORTCUTS.forEach((entry) => {
+    for (const entry of NAV_SHORTCUTS) {
       expect(entry.keys).toHaveLength(1);
-    });
+    }
   });
 
   it('each entry has a non-empty description', () => {
-    NAV_SHORTCUTS.forEach((entry) => {
+    for (const entry of NAV_SHORTCUTS) {
       expect(entry.desc).toBeTruthy();
       expect(entry.desc.length).toBeGreaterThan(0);
-    });
+    }
   });
 });
 
@@ -93,9 +93,7 @@ describe('GLOBAL_SHORTCUTS', () => {
   });
 
   it('contains command palette shortcut (⌘K)', () => {
-    const commandPalette = GLOBAL_SHORTCUTS.find((entry) =>
-      entry.keys[0]?.includes('⌘')
-    );
+    const commandPalette = GLOBAL_SHORTCUTS.find((entry) => entry.keys[0]?.includes('⌘'));
     expect(commandPalette).toBeDefined();
     expect(commandPalette?.desc).toBe('Command palette');
   });
@@ -113,9 +111,9 @@ describe('GLOBAL_SHORTCUTS', () => {
   });
 
   it('contains escape shortcut', () => {
-    const escape = GLOBAL_SHORTCUTS.find((entry) => entry.keys[0] === 'Esc');
-    expect(escape).toBeDefined();
-    expect(escape?.desc).toBe('Close panels / Cancel');
+    const escapeShortcut = GLOBAL_SHORTCUTS.find((entry) => entry.keys[0] === 'Esc');
+    expect(escapeShortcut).toBeDefined();
+    expect(escapeShortcut?.desc).toBe('Close panels / Cancel');
   });
 
   it('contains help toggle shortcut (?)', () => {
@@ -125,16 +123,16 @@ describe('GLOBAL_SHORTCUTS', () => {
   });
 
   it('each entry has at least one key', () => {
-    GLOBAL_SHORTCUTS.forEach((entry) => {
+    for (const entry of GLOBAL_SHORTCUTS) {
       expect(entry.keys.length).toBeGreaterThanOrEqual(1);
-    });
+    }
   });
 
   it('each entry has a non-empty description', () => {
-    GLOBAL_SHORTCUTS.forEach((entry) => {
+    for (const entry of GLOBAL_SHORTCUTS) {
       expect(entry.desc).toBeTruthy();
       expect(entry.desc.length).toBeGreaterThan(0);
-    });
+    }
   });
 });
 
@@ -178,10 +176,10 @@ describe('ALL_SHORTCUTS', () => {
   });
 
   it('each entry has a keys array and desc string', () => {
-    ALL_SHORTCUTS.forEach((entry) => {
+    for (const entry of ALL_SHORTCUTS) {
       expect(Array.isArray(entry.keys)).toBe(true);
       expect(typeof entry.desc).toBe('string');
-    });
+    }
   });
 });
 
@@ -222,18 +220,15 @@ describe('CONDENSED_SHORTCUTS', () => {
   });
 
   it('is equal to nav collapsed entry + all global shortcuts', () => {
-    const expected = [
-      { keys: ['1–7'], desc: 'Navigate to page' },
-      ...GLOBAL_SHORTCUTS,
-    ];
+    const expected = [{ keys: ['1–7'], desc: 'Navigate to page' }, ...GLOBAL_SHORTCUTS];
     expect(CONDENSED_SHORTCUTS).toEqual(expected);
   });
 
   it('each entry has a keys array and desc string', () => {
-    CONDENSED_SHORTCUTS.forEach((entry) => {
+    for (const entry of CONDENSED_SHORTCUTS) {
       expect(Array.isArray(entry.keys)).toBe(true);
       expect(typeof entry.desc).toBe('string');
-    });
+    }
   });
 
   it('is used in KeyboardHelpOverlay for compact display', () => {
@@ -254,25 +249,19 @@ describe('Shortcut relationships', () => {
 
   it('GLOBAL_SHORTCUTS appears in both ALL_SHORTCUTS and CONDENSED_SHORTCUTS', () => {
     // Extract global shortcut descriptions from both arrays
-    const allGlobalDescs = ALL_SHORTCUTS.slice(NAV_SHORTCUTS.length).map(
-      (entry) => entry.desc
-    );
-    const condensedGlobalDescs = CONDENSED_SHORTCUTS.slice(1).map(
-      (entry) => entry.desc
-    );
+    const allGlobalDescs = ALL_SHORTCUTS.slice(NAV_SHORTCUTS.length).map((entry) => entry.desc);
+    const condensedGlobalDescs = CONDENSED_SHORTCUTS.slice(1).map((entry) => entry.desc);
     expect(condensedGlobalDescs).toEqual(allGlobalDescs);
   });
 
   it('NAV_SHORTCUTS are in ALL_SHORTCUTS but not in CONDENSED_SHORTCUTS', () => {
-    const allNavDescs = ALL_SHORTCUTS.slice(0, NAV_SHORTCUTS.length).map(
-      (entry) => entry.desc
-    );
+    const allNavDescs = ALL_SHORTCUTS.slice(0, NAV_SHORTCUTS.length).map((entry) => entry.desc);
     const navDescs = NAV_SHORTCUTS.map((entry) => entry.desc);
     expect(allNavDescs).toEqual(navDescs);
 
     // CONDENSED_SHORTCUTS should not have individual nav entries
     const condensedNavDescs = CONDENSED_SHORTCUTS.slice(0, NAV_SHORTCUTS.length).map(
-      (entry) => entry.desc
+      (entry) => entry.desc,
     );
     expect(condensedNavDescs).not.toEqual(navDescs);
   });

@@ -1,8 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-
-import { accountRoutes } from './accounts.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
+import { accountRoutes } from './accounts.js';
 
 // ---------------------------------------------------------------------------
 // Test encryption key — 32 bytes (64 hex chars) for AES-256

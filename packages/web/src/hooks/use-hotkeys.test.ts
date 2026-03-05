@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useHotkeys } from './use-hotkeys';
 
@@ -50,14 +50,14 @@ describe('useHotkeys — event listener registration', () => {
   });
 
   it('removes the same function reference that was added', () => {
-    const addCalls: Function[] = [];
-    const removeCalls: Function[] = [];
+    const addCalls: ((event: KeyboardEvent) => void)[] = [];
+    const removeCalls: ((event: KeyboardEvent) => void)[] = [];
 
     vi.spyOn(document, 'addEventListener').mockImplementation((type, fn) => {
-      if (type === 'keydown') addCalls.push(fn as Function);
+      if (type === 'keydown') addCalls.push(fn as (event: KeyboardEvent) => void);
     });
     vi.spyOn(document, 'removeEventListener').mockImplementation((type, fn) => {
-      if (type === 'keydown') removeCalls.push(fn as Function);
+      if (type === 'keydown') removeCalls.push(fn as (event: KeyboardEvent) => void);
     });
 
     const { unmount } = renderHook(() => useHotkeys({ r: vi.fn() }));

@@ -25,7 +25,10 @@ export default function Loading() {
       {/* Sessions table skeleton */}
       <div className="space-y-2">
         {Array.from({ length: 5 }, (_, i) => (
-          <div key={`session-sk-${String(i)}`} className="p-4 bg-card border border-border rounded-lg">
+          <div
+            key={`session-sk-${String(i)}`}
+            className="p-4 bg-card border border-border rounded-lg"
+          >
             <div className="flex items-center gap-4">
               <Skeleton className="h-6 w-24" />
               <Skeleton className="h-6 w-32" />

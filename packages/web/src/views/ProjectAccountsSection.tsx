@@ -64,7 +64,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
   /** Resolve an account ID to its display name. */
   function accountName(accountId: string): string {
     const acct = accounts.data?.find((a) => a.id === accountId);
-    return acct ? `${acct.name} (${acct.provider})` : 'Deleted (' + accountId.slice(0, 8) + '...)';
+    return acct ? `${acct.name} (${acct.provider})` : `Deleted (${accountId.slice(0, 8)}...)`;
   }
 
   return (

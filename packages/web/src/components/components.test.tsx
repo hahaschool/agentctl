@@ -1,9 +1,8 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
-
-import { StatusBadge } from './StatusBadge';
-import { CopyableText } from './CopyableText';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ConfirmButton } from './ConfirmButton';
+import { CopyableText } from './CopyableText';
 import { EmptyState } from './EmptyState';
+import { StatusBadge } from './StatusBadge';
 
 // ---------------------------------------------------------------------------
 // Mock sonner (used by useToast inside CopyableText)

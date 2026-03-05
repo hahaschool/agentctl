@@ -19,8 +19,8 @@ export default function SessionDetailError({
           <div className="text-4xl mb-4 text-red-400">!</div>
           <h1 className="text-xl font-semibold mb-2">Failed to load session</h1>
           <p className="text-sm text-muted-foreground mb-2">
-            The session could not be loaded. It may have been deleted or the
-            server may be unavailable.
+            The session could not be loaded. It may have been deleted or the server may be
+            unavailable.
           </p>
           {error.message && (
             <p className="text-xs font-mono text-muted-foreground bg-muted px-3 py-2 rounded-sm mb-6 break-all">

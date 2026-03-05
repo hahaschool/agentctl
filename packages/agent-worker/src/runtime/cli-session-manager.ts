@@ -183,7 +183,10 @@ export class CliSessionManager extends EventEmitter {
     for (const [sid, s] of this.sessions) {
       if (s.status === 'error' || s.status === 'ended') {
         this.sessions.delete(sid);
-      } else if (s.status === 'paused' && now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS) {
+      } else if (
+        s.status === 'paused' &&
+        now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS
+      ) {
         this.sessions.delete(sid);
       }
     }
@@ -393,7 +396,10 @@ export class CliSessionManager extends EventEmitter {
       if (s.status === 'error' || s.status === 'ended') {
         this.sessions.delete(sid);
         cleaned++;
-      } else if (s.status === 'paused' && now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS) {
+      } else if (
+        s.status === 'paused' &&
+        now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS
+      ) {
         this.sessions.delete(sid);
         cleaned++;
       }

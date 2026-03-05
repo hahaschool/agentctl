@@ -55,9 +55,7 @@ export async function resolveAccountId(
     const projectName = extractProjectName(ctx.projectPath);
     if (projectName) {
       const allMappings = await db.select().from(projectAccountMappings);
-      const nameMatch = allMappings.find(
-        (m) => extractProjectName(m.projectPath) === projectName,
-      );
+      const nameMatch = allMappings.find((m) => extractProjectName(m.projectPath) === projectName);
       if (nameMatch) return nameMatch.accountId;
     }
   }

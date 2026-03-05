@@ -48,9 +48,7 @@ export const agents = pgTable(
     accountId: uuid('account_id').references(() => apiAccounts.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   },
-  (table) => [
-    index('idx_agents_machine_id').on(table.machineId),
-  ],
+  (table) => [index('idx_agents_machine_id').on(table.machineId)],
 );
 
 export const agentRuns = pgTable(
@@ -121,9 +119,7 @@ export const agentActions = pgTable(
     durationMs: integer('duration_ms'),
     approvedBy: text('approved_by'),
   },
-  (table) => [
-    index('idx_agent_actions_run_id').on(table.runId),
-  ],
+  (table) => [index('idx_agent_actions_run_id').on(table.runId)],
 );
 
 export const apiAccounts = pgTable(
@@ -157,9 +153,7 @@ export const projectAccountMappings = pgTable(
       .references(() => apiAccounts.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   },
-  (table) => [
-    index('idx_project_account_mappings_account_id').on(table.accountId),
-  ],
+  (table) => [index('idx_project_account_mappings_account_id').on(table.accountId)],
 );
 
 export const settings = pgTable('settings', {

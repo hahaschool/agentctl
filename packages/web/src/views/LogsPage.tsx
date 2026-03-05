@@ -114,7 +114,10 @@ export function LogsPage(): React.JSX.Element {
           <Skeleton className="h-5 w-16 rounded-full" />
         </div>
       ) : (
-        <div className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4" role="status" aria-live="polite">
+        <output
+          className="p-4 bg-card border border-border rounded mb-6 flex items-center gap-4"
+          aria-live="polite"
+        >
           <span
             className={cn(
               'w-3 h-3 rounded-full shrink-0',
@@ -138,7 +141,7 @@ export function LogsPage(): React.JSX.Element {
             </div>
           </div>
           <StatusBadge status={health.data?.status ?? 'unknown'} />
-        </div>
+        </output>
       )}
 
       {/* Dependencies */}
@@ -147,7 +150,10 @@ export function LogsPage(): React.JSX.Element {
           <SectionHeading>Dependencies</SectionHeading>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
             {Array.from({ length: 3 }, (_, i) => (
-              <div key={`dsk-${String(i)}`} className="px-3.5 py-3 bg-card border border-border rounded">
+              <div
+                key={`dsk-${String(i)}`}
+                className="px-3.5 py-3 bg-card border border-border rounded"
+              >
                 <div className="flex justify-between items-center mb-1.5">
                   <Skeleton className="h-4 w-20" />
                   <Skeleton className="h-5 w-12 rounded-full" />
@@ -184,7 +190,10 @@ export function LogsPage(): React.JSX.Element {
       {metrics.isLoading ? (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
           {Array.from({ length: 6 }, (_, i) => (
-            <div key={`msk-${String(i)}`} className="px-[18px] py-4 bg-card border border-border rounded">
+            <div
+              key={`msk-${String(i)}`}
+              className="px-[18px] py-4 bg-card border border-border rounded"
+            >
               <Skeleton className="h-3 w-20 mb-2.5" />
               <Skeleton className="h-7 w-16" />
             </div>
@@ -209,7 +218,10 @@ export function LogsPage(): React.JSX.Element {
             label="Runs Total"
             value={formatNumber(metricsVal('agentctl_runs_total') ?? '-')}
           />
-          <MetricCard label="Machines Online" value={machines.data ? `${onlineMachines} / ${machineList.length}` : '-'} />
+          <MetricCard
+            label="Machines Online"
+            value={machines.data ? `${onlineMachines} / ${machineList.length}` : '-'}
+          />
           <MetricCard
             label="Health Status"
             value={health.data?.status ?? '-'}

@@ -92,9 +92,7 @@ export function SessionsPage(): React.JSX.Element {
   const [formPrompt, setFormPrompt] = useState('');
   const [formModel, setFormModel] = useState(
     () =>
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('agentctl:defaultModel')
-        : null) ?? '',
+      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ?? '',
   );
   const [formAccountId, setFormAccountId] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -141,9 +139,7 @@ export function SessionsPage(): React.JSX.Element {
     setFormProjectPath('');
     setFormPrompt('');
     setFormModel(
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('agentctl:defaultModel')
-        : null) ?? '',
+      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ?? '',
     );
     setFormAccountId('');
     setFormError(null);
@@ -282,7 +278,10 @@ export function SessionsPage(): React.JSX.Element {
   }, []);
 
   const cleanupSessions = useMemo(
-    () => sessionList.filter((s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error'),
+    () =>
+      sessionList.filter(
+        (s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error',
+      ),
     [sessionList],
   );
 
@@ -785,9 +784,7 @@ export function SessionsPage(): React.JSX.Element {
                     mono
                   />
                 )}
-                {selected.model && (
-                  <DetailRow label="Model" value={selected.model} />
-                )}
+                {selected.model && <DetailRow label="Model" value={selected.model} />}
                 {typeof selected.metadata?.forkedFrom === 'string' && (
                   <DetailRow label="Forked From" value={selected.metadata.forkedFrom} mono />
                 )}
@@ -850,7 +847,9 @@ export function SessionsPage(): React.JSX.Element {
             )}
 
             {/* Prompt input — only for active sessions or ended sessions that can be resumed */}
-            {(selected.status === 'active' || selected.status === 'ended' || selected.status === 'error') && (
+            {(selected.status === 'active' ||
+              selected.status === 'ended' ||
+              selected.status === 'error') && (
               <div className="px-5 py-3 border-t border-border flex gap-2">
                 <input
                   type="text"
@@ -962,10 +961,13 @@ function DetailRow({
 
   const handleCopy = useCallback(() => {
     if (!mono || value === '-') return;
-    void navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }).catch(() => toast.error('Failed to copy'));
+    void navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => toast.error('Failed to copy'));
   }, [mono, value, toast]);
 
   return (
@@ -1023,15 +1025,12 @@ function SessionContent({
   const stream = useSessionStream({
     sessionId: rcSessionId,
     enabled: isActive ?? false,
-    onEvent: useCallback(
-      (event: SessionStreamEvent) => {
-        // Refetch full content on status change / loop complete
-        if (event.event === 'status' || event.event === 'loop_complete') {
-          void fetchContentRef.current();
-        }
-      },
-      [],
-    ),
+    onEvent: useCallback((event: SessionStreamEvent) => {
+      // Refetch full content on status change / loop complete
+      if (event.event === 'status' || event.event === 'loop_complete') {
+        void fetchContentRef.current();
+      }
+    }, []),
   });
 
   const fetchContent = useCallback(async () => {
@@ -1184,7 +1183,8 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
   const content = message.content ?? '';
   const isLong = content.length > TRUNCATE_THRESHOLD;
-  const displayContent = isLong && !expanded ? `${content.slice(0, TRUNCATE_THRESHOLD)}...` : content;
+  const displayContent =
+    isLong && !expanded ? `${content.slice(0, TRUNCATE_THRESHOLD)}...` : content;
 
   return (
     <div className={cn('mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2', msgStyle.bubbleClass)}>
@@ -1217,9 +1217,7 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
           onClick={() => setExpanded(!expanded)}
           className="mt-1 px-2 py-0.5 text-[10px] text-primary bg-transparent border-0 cursor-pointer font-medium"
         >
-          {expanded
-            ? 'Show less'
-            : `Show all (${Math.round(content.length / 1000)}k chars)`}
+          {expanded ? 'Show less' : `Show all (${Math.round(content.length / 1000)}k chars)`}
         </button>
       )}
     </div>

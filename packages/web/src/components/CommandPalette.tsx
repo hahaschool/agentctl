@@ -1,8 +1,8 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -31,7 +31,13 @@ const NAV_COMMANDS = [
   { href: '/machines', label: 'Machines', icon: '\u2302', shortcut: '2', section: 'Navigate' },
   { href: '/agents', label: 'Agents', icon: '\u2699', shortcut: '3', section: 'Navigate' },
   { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4', section: 'Navigate' },
-  { href: '/discover', label: 'Discover Sessions', icon: '\u2315', shortcut: '5', section: 'Navigate' },
+  {
+    href: '/discover',
+    label: 'Discover Sessions',
+    icon: '\u2315',
+    shortcut: '5',
+    section: 'Navigate',
+  },
   { href: '/logs', label: 'Logs & Metrics', icon: '\u2261', shortcut: '6', section: 'Navigate' },
   { href: '/settings', label: 'Settings', icon: '\u2630', shortcut: '7', section: 'Navigate' },
 ] as const;
@@ -56,7 +62,7 @@ function badgeVariant(status: string): 'default' | 'success' | 'warning' | 'dest
 function shortPath(path: string | null, maxLen = 30): string {
   if (!path) return '';
   if (path.length <= maxLen) return path;
-  return '...' + path.slice(path.length - maxLen + 3);
+  return `...${path.slice(path.length - maxLen + 3)}`;
 }
 
 export function CommandPalette({ open, onClose }: Props): React.JSX.Element | null {
@@ -100,7 +106,9 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     // ----- Agents (recent, up to 8) -----
     if (agents && agents.length > 0) {
       const sorted = [...agents].sort(
-        (a, b) => new Date(b.lastRunAt ?? b.createdAt).getTime() - new Date(a.lastRunAt ?? a.createdAt).getTime(),
+        (a, b) =>
+          new Date(b.lastRunAt ?? b.createdAt).getTime() -
+          new Date(a.lastRunAt ?? a.createdAt).getTime(),
       );
       for (const agent of sorted.slice(0, 8)) {
         items.push({
@@ -124,7 +132,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
       );
       for (const session of sorted.slice(0, 8)) {
-        const shortId = session.id.length > 12 ? session.id.slice(0, 8) + '...' : session.id;
+        const shortId = session.id.length > 12 ? `${session.id.slice(0, 8)}...` : session.id;
         items.push({
           id: `session-${session.id}`,
           label: shortId,

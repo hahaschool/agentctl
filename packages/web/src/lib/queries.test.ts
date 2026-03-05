@@ -64,12 +64,20 @@ describe('queryKeys', () => {
 
   it('sessionContent key includes sessionId and params', () => {
     const params = { machineId: 'machine-1', projectPath: '/home/user/project', limit: 100 };
-    expect(queryKeys.sessionContent('session-1', params)).toEqual(['session-content', 'session-1', params]);
+    expect(queryKeys.sessionContent('session-1', params)).toEqual([
+      'session-content',
+      'session-1',
+      params,
+    ]);
   });
 
   it('sessionContent key with minimal params', () => {
     const params = { machineId: 'machine-1' };
-    expect(queryKeys.sessionContent('session-1', params)).toEqual(['session-content', 'session-1', params]);
+    expect(queryKeys.sessionContent('session-1', params)).toEqual([
+      'session-content',
+      'session-1',
+      params,
+    ]);
   });
 
   it('discover key is correct', () => {

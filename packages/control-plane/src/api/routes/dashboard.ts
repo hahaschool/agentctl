@@ -388,7 +388,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           byProvider,
         };
       } catch (error) {
-        request.log.error(error, 'Failed to fetch cost summary for period: ' + rawPeriod);
+        request.log.error(error, `Failed to fetch cost summary for period: ${rawPeriod}`);
         return reply.code(500).send({
           error: 'DASHBOARD_COST_SUMMARY_ERROR',
           message: 'Failed to fetch cost summary',

@@ -771,7 +771,7 @@ describe('Foreign key relationships', () => {
       (fk) => fk.reference().columns[0].name === 'machine_id',
     );
     expect(machineFk).toBeDefined();
-    const machineRef = machineFk!.reference();
+    const machineRef = machineFk?.reference();
     expect(getTableName(machineRef.foreignTable)).toBe('machines');
     expect(machineRef.foreignColumns[0].name).toBe('id');
 
@@ -779,7 +779,7 @@ describe('Foreign key relationships', () => {
       (fk) => fk.reference().columns[0].name === 'account_id',
     );
     expect(accountFk).toBeDefined();
-    const accountRef = accountFk!.reference();
+    const accountRef = accountFk?.reference();
     expect(getTableName(accountRef.foreignTable)).toBe('api_accounts');
     expect(accountRef.foreignColumns[0].name).toBe('id');
   });

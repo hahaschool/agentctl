@@ -497,8 +497,14 @@ export async function sessionRoutes(
     '/:sessionId/resume',
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt, claudeSessionId: bodyClaudeId, projectPath, agentId, model, cpSessionId } =
-        request.body;
+      const {
+        prompt,
+        claudeSessionId: bodyClaudeId,
+        projectPath,
+        agentId,
+        model,
+        cpSessionId,
+      } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.status(400).send({

@@ -31,16 +31,20 @@ export function CopyableText({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      void navigator.clipboard.writeText(value).then(() => {
-        setCopied(true);
-        if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setCopied(false), 1500);
-      }).catch(() => toast.error('Failed to copy'));
+      void navigator.clipboard
+        .writeText(value)
+        .then(() => {
+          setCopied(true);
+          if (timerRef.current) clearTimeout(timerRef.current);
+          timerRef.current = setTimeout(() => setCopied(false), 1500);
+        })
+        .catch(() => toast.error('Failed to copy'));
     },
     [value, toast],
   );
 
-  const display = label ?? (value && value.length > maxDisplay ? value.slice(0, maxDisplay) : value ?? '');
+  const display =
+    label ?? (value && value.length > maxDisplay ? value.slice(0, maxDisplay) : (value ?? ''));
 
   return (
     <button

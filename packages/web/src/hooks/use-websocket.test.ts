@@ -1,8 +1,7 @@
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-
-import { useWebSocket } from './use-websocket';
 import type { WsIncomingMessage, WsOutgoingMessage } from './use-websocket';
+import { useWebSocket } from './use-websocket';
 
 // ---------------------------------------------------------------------------
 // Minimal WebSocket mock
@@ -51,21 +50,29 @@ class MockWebSocket {
   // Simulate server events:
   simulateOpen() {
     this.readyState = MockWebSocket.OPEN;
-    (this.listeners['open'] ?? []).forEach((fn) => fn());
+    for (const fn of this.listeners.open ?? []) {
+      fn();
+    }
   }
 
   simulateMessage(data: unknown) {
     const event = { data: JSON.stringify(data) } as MessageEvent;
-    (this.listeners['message'] ?? []).forEach((fn) => fn(event));
+    for (const fn of this.listeners.message ?? []) {
+      fn(event);
+    }
   }
 
   simulateClose() {
     this.readyState = MockWebSocket.CLOSED;
-    (this.listeners['close'] ?? []).forEach((fn) => fn());
+    for (const fn of this.listeners.close ?? []) {
+      fn();
+    }
   }
 
   simulateError() {
-    (this.listeners['error'] ?? []).forEach((fn) => fn());
+    for (const fn of this.listeners.error ?? []) {
+      fn();
+    }
   }
 }
 
@@ -138,9 +145,7 @@ describe('useWebSocket — connection lifecycle', () => {
   });
 
   it('closes the WebSocket on unmount', () => {
-    const { unmount } = renderHook(() =>
-      useWebSocket({ url: 'ws://localhost/api/ws' }),
-    );
+    const { unmount } = renderHook(() => useWebSocket({ url: 'ws://localhost/api/ws' }));
 
     act(() => {
       latestSocket().simulateOpen();
@@ -232,9 +237,11 @@ describe('useWebSocket — callbacks', () => {
     const sock = latestSocket();
     const badEvent = { data: 'not valid json {{{{' } as MessageEvent;
     act(() => {
-      (sock as unknown as { listeners: Record<string, WsListener[]> }).listeners['message']?.forEach(
-        (fn) => fn(badEvent),
-      );
+      const listeners =
+        (sock as unknown as { listeners: Record<string, WsListener[]> }).listeners.message ?? [];
+      for (const fn of listeners) {
+        fn(badEvent);
+      }
     });
 
     expect(onMessage).not.toHaveBeenCalled();

@@ -142,46 +142,46 @@ describe('getMessageStyle - case sensitivity', () => {
 describe('getMessageStyle - style properties', () => {
   it('all known styles have non-empty textClass', () => {
     const types = ['human', 'assistant', 'tool_use', 'tool_result'];
-    types.forEach((type) => {
+    for (const type of types) {
       const style = getMessageStyle(type);
       expect(style.textClass).toBeTruthy();
       expect(style.textClass.length).toBeGreaterThan(0);
-    });
+    }
   });
 
   it('all known styles have non-empty bubbleClass', () => {
     const types = ['human', 'assistant', 'tool_use', 'tool_result'];
-    types.forEach((type) => {
+    for (const type of types) {
       const style = getMessageStyle(type);
       expect(style.bubbleClass).toBeTruthy();
       expect(style.bubbleClass.length).toBeGreaterThan(0);
-    });
+    }
   });
 
   it('all known styles have non-empty label', () => {
     const types = ['human', 'assistant', 'tool_use', 'tool_result'];
-    types.forEach((type) => {
+    for (const type of types) {
       const style = getMessageStyle(type);
       expect(style.label).toBeTruthy();
       expect(style.label.length).toBeGreaterThan(0);
-    });
+    }
   });
 
   it('textClass contains color utility class', () => {
     const types = ['human', 'assistant', 'tool_use', 'tool_result'];
-    types.forEach((type) => {
+    for (const type of types) {
       const style = getMessageStyle(type);
       expect(style.textClass).toMatch(/text-\w+-\d+/);
-    });
+    }
   });
 
   it('bubbleClass contains bg and border-l classes', () => {
     const types = ['human', 'assistant', 'tool_use', 'tool_result'];
-    types.forEach((type) => {
+    for (const type of types) {
       const style = getMessageStyle(type);
       expect(style.bubbleClass).toMatch(/bg-/);
       expect(style.bubbleClass).toMatch(/border-l-/);
-    });
+    }
   });
 });
 

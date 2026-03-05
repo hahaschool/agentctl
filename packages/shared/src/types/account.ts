@@ -1,9 +1,4 @@
-export type AccountProvider =
-  | 'anthropic_api'
-  | 'claude_max'
-  | 'claude_team'
-  | 'bedrock'
-  | 'vertex';
+export type AccountProvider = 'anthropic_api' | 'claude_max' | 'claude_team' | 'bedrock' | 'vertex';
 
 export const ACCOUNT_PROVIDERS: AccountProvider[] = [
   'anthropic_api',

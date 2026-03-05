@@ -18,9 +18,9 @@ vi.mock('../../utils/credential-crypto.js', () => ({
   maskCredential: vi.fn(),
 }));
 
+import { decryptCredential } from '../../utils/credential-crypto.js';
 // Re-import so tests can configure per-test behaviour
 import { resolveAccountId } from '../../utils/resolve-account.js';
-import { decryptCredential } from '../../utils/credential-crypto.js';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -1270,7 +1270,7 @@ describe('POST / — account credential resolution', () => {
       updatedAt: NOW,
     };
 
-    const inserted = makeSession({
+    const _inserted = makeSession({
       status: 'starting',
       accountId: 'acct-resolved-456',
     });

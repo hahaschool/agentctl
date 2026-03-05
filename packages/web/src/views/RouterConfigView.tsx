@@ -5,10 +5,10 @@ import Link from 'next/link';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { ModelDeploymentInfo } from '../lib/api';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { RefreshButton } from '../components/RefreshButton';
+import type { ModelDeploymentInfo } from '../lib/api';
 import { healthQuery, routerModelsInfoQuery } from '../lib/queries';
 
 // ---------------------------------------------------------------------------
@@ -30,10 +30,7 @@ function extractProvider(d: ModelDeploymentInfo): string {
   return 'Anthropic';
 }
 
-function extractCost(
-  info: Record<string, unknown>,
-  key: string,
-): string | null {
+function extractCost(info: Record<string, unknown>, key: string): string | null {
   const val = info[key];
   if (typeof val === 'number') return val.toFixed(6);
   if (typeof val === 'string') return val;
@@ -50,8 +47,7 @@ export function RouterConfigView(): React.JSX.Element {
   const litellm = health.data?.dependencies?.litellm;
 
   const isFetching =
-    (health.isFetching && !health.isLoading) ||
-    (modelsInfo.isFetching && !modelsInfo.isLoading);
+    (health.isFetching && !health.isLoading) || (modelsInfo.isFetching && !modelsInfo.isLoading);
 
   const deployments = modelsInfo.data?.deployments ?? [];
 
@@ -192,8 +188,8 @@ export function RouterConfigView(): React.JSX.Element {
         <CardContent className="p-5">
           <h2 className="text-sm font-semibold mb-3">Failover Strategy</h2>
           <p className="text-[11px] text-muted-foreground mb-3">
-            Failover order is determined by the LiteLLM proxy configuration. Edit the LiteLLM
-            config to change priorities and retry behavior.
+            Failover order is determined by the LiteLLM proxy configuration. Edit the LiteLLM config
+            to change priorities and retry behavior.
           </p>
           <div className="space-y-2 text-[13px]">
             <div className="flex justify-between">

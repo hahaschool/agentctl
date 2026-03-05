@@ -430,123 +430,124 @@ export default function AgentDetailPage(): React.JSX.Element {
             </div>
           ) : (
             <>
-            {/* Mobile card layout */}
-            <div className="sm:hidden space-y-2">
-              {runList.map((run) => (
-                <div
-                  key={run.id}
-                  className="rounded-lg border border-border/50 p-3 space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <StatusBadge status={run.status} />
-                    <span className="text-xs font-mono text-muted-foreground">
-                      {formatDurationMs(run.durationMs)}
-                    </span>
-                  </div>
-                  <div>
-                    <span
-                      className={cn(
-                        'text-xs leading-snug',
-                        run.prompt ? 'text-foreground' : 'text-muted-foreground',
-                      )}
-                      title={run.prompt}
-                    >
-                      {run.prompt
-                        ? run.prompt.length > 80
-                          ? `${run.prompt.slice(0, 80)}...`
-                          : run.prompt
-                        : '-'}
-                    </span>
-                    {run.errorMessage && (
-                      <div
-                        className="text-[11px] text-red-400 mt-0.5 truncate"
-                        title={run.errorMessage}
-                      >
-                        {run.errorMessage}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span className="font-mono">{formatCost(run.costUsd)}</span>
-                    <span>
-                      {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : <LiveTimeAgo date={run.startedAt} />}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Desktop table layout */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm" aria-label="Recent agent runs">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th scope="col" className="pb-2 pr-4 font-medium">
-                      Status
-                    </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
-                      Prompt
-                    </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
-                      Duration
-                    </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
-                      Cost
-                    </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium">
-                      Started
-                    </th>
-                    <th scope="col" className="pb-2 font-medium hidden md:table-cell">
-                      Ended
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runList.map((run) => (
-                    <tr key={run.id} className="border-b border-border/50 last:border-0">
-                      <td className="py-2.5 pr-4">
-                        <StatusBadge status={run.status} />
-                      </td>
-                      <td className="py-2.5 pr-4 max-w-[200px]">
-                        <span
-                          className={cn(
-                            'text-xs',
-                            run.prompt ? 'text-foreground' : 'text-muted-foreground',
-                          )}
-                          title={run.prompt}
-                        >
-                          {run.prompt
-                            ? run.prompt.length > 50
-                              ? `${run.prompt.slice(0, 50)}...`
-                              : run.prompt
-                            : '-'}
-                        </span>
-                        {run.errorMessage && (
-                          <div
-                            className="text-[11px] text-red-400 mt-0.5 truncate max-w-[200px]"
-                            title={run.errorMessage}
-                          >
-                            {run.errorMessage}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
+              {/* Mobile card layout */}
+              <div className="sm:hidden space-y-2">
+                {runList.map((run) => (
+                  <div key={run.id} className="rounded-lg border border-border/50 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <StatusBadge status={run.status} />
+                      <span className="text-xs font-mono text-muted-foreground">
                         {formatDurationMs(run.durationMs)}
-                      </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
-                        {formatCost(run.costUsd)}
-                      </td>
-                      <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
-                        <LiveTimeAgo date={run.startedAt} />
-                      </td>
-                      <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
-                        {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : 'In progress'}
-                      </td>
+                      </span>
+                    </div>
+                    <div>
+                      <span
+                        className={cn(
+                          'text-xs leading-snug',
+                          run.prompt ? 'text-foreground' : 'text-muted-foreground',
+                        )}
+                        title={run.prompt}
+                      >
+                        {run.prompt
+                          ? run.prompt.length > 80
+                            ? `${run.prompt.slice(0, 80)}...`
+                            : run.prompt
+                          : '-'}
+                      </span>
+                      {run.errorMessage && (
+                        <div
+                          className="text-[11px] text-red-400 mt-0.5 truncate"
+                          title={run.errorMessage}
+                        >
+                          {run.errorMessage}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span className="font-mono">{formatCost(run.costUsd)}</span>
+                      <span>
+                        {run.endedAt ? (
+                          <LiveTimeAgo date={run.endedAt} />
+                        ) : (
+                          <LiveTimeAgo date={run.startedAt} />
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table layout */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm" aria-label="Recent agent runs">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                      <th scope="col" className="pb-2 pr-4 font-medium">
+                        Status
+                      </th>
+                      <th scope="col" className="pb-2 pr-4 font-medium">
+                        Prompt
+                      </th>
+                      <th scope="col" className="pb-2 pr-4 font-medium">
+                        Duration
+                      </th>
+                      <th scope="col" className="pb-2 pr-4 font-medium">
+                        Cost
+                      </th>
+                      <th scope="col" className="pb-2 pr-4 font-medium">
+                        Started
+                      </th>
+                      <th scope="col" className="pb-2 font-medium hidden md:table-cell">
+                        Ended
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {runList.map((run) => (
+                      <tr key={run.id} className="border-b border-border/50 last:border-0">
+                        <td className="py-2.5 pr-4">
+                          <StatusBadge status={run.status} />
+                        </td>
+                        <td className="py-2.5 pr-4 max-w-[200px]">
+                          <span
+                            className={cn(
+                              'text-xs',
+                              run.prompt ? 'text-foreground' : 'text-muted-foreground',
+                            )}
+                            title={run.prompt}
+                          >
+                            {run.prompt
+                              ? run.prompt.length > 50
+                                ? `${run.prompt.slice(0, 50)}...`
+                                : run.prompt
+                              : '-'}
+                          </span>
+                          {run.errorMessage && (
+                            <div
+                              className="text-[11px] text-red-400 mt-0.5 truncate max-w-[200px]"
+                              title={run.errorMessage}
+                            >
+                              {run.errorMessage}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
+                          {formatDurationMs(run.durationMs)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
+                          {formatCost(run.costUsd)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
+                          <LiveTimeAgo date={run.startedAt} />
+                        </td>
+                        <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
+                          {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : 'In progress'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </CardContent>
@@ -577,7 +578,11 @@ export default function AgentDetailPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="edit-agent-machine">
                 Machine
               </label>
-              <Select value={editMachineId} onValueChange={setEditMachineId} disabled={updateAgent.isPending}>
+              <Select
+                value={editMachineId}
+                onValueChange={setEditMachineId}
+                disabled={updateAgent.isPending}
+              >
                 <SelectTrigger className="w-full" id="edit-agent-machine">
                   <SelectValue placeholder="Select a machine" />
                 </SelectTrigger>

@@ -1,8 +1,7 @@
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-
-import { useSessionStream } from './use-session-stream';
 import type { SessionStreamEvent } from './use-session-stream';
+import { useSessionStream } from './use-session-stream';
 
 // ---------------------------------------------------------------------------
 // Minimal EventSource mock
@@ -47,7 +46,9 @@ class MockEventSource {
 
   simulateEvent(type: string, data: unknown) {
     const event = { data: JSON.stringify(data) } as MessageEvent;
-    (this.listeners[type] ?? []).forEach((fn) => fn(event));
+    for (const fn of this.listeners[type] ?? []) {
+      fn(event);
+    }
   }
 }
 
@@ -82,9 +83,7 @@ function latestEs(): MockEventSource {
 
 describe('useSessionStream — initial state', () => {
   it('starts disconnected with empty output', () => {
-    const { result } = renderHook(() =>
-      useSessionStream({ sessionId: 'sess-1' }),
-    );
+    const { result } = renderHook(() => useSessionStream({ sessionId: 'sess-1' }));
 
     expect(result.current.connected).toBe(false);
     expect(result.current.streamOutput).toEqual([]);
@@ -255,7 +254,11 @@ describe('useSessionStream — cost events', () => {
       latestEs().simulateEvent('cost', { totalCostUsd: 0.01, inputTokens: 100, outputTokens: 50 });
     });
     act(() => {
-      latestEs().simulateEvent('cost', { totalCostUsd: 0.99, inputTokens: 5000, outputTokens: 1000 });
+      latestEs().simulateEvent('cost', {
+        totalCostUsd: 0.99,
+        inputTokens: 5000,
+        outputTokens: 1000,
+      });
     });
 
     expect(result.current.latestCost?.totalCostUsd).toBe(0.99);
@@ -279,7 +282,7 @@ describe('useSessionStream — onEvent callback', () => {
     });
 
     expect(onEvent).toHaveBeenCalledOnce();
-    const received = onEvent.mock.calls[0]![0] as SessionStreamEvent;
+    const received = onEvent.mock.calls[0]?.[0] as SessionStreamEvent;
     expect(received.event).toBe('output');
     if (received.event === 'output') {
       expect(received.data.text).toBe('test output');
@@ -298,7 +301,10 @@ describe('useSessionStream — onEvent callback', () => {
     });
 
     expect(onEvent).toHaveBeenCalledOnce();
-    expect(onEvent.mock.calls[0]![0]).toMatchObject({ event: 'status', data: { status: 'running' } });
+    expect(onEvent.mock.calls[0]?.[0]).toMatchObject({
+      event: 'status',
+      data: { status: 'running' },
+    });
   });
 
   it('calls onEvent for approval_needed events', () => {
@@ -313,7 +319,7 @@ describe('useSessionStream — onEvent callback', () => {
     });
 
     expect(onEvent).toHaveBeenCalledOnce();
-    expect(onEvent.mock.calls[0]![0]).toMatchObject({ event: 'approval_needed' });
+    expect(onEvent.mock.calls[0]?.[0]).toMatchObject({ event: 'approval_needed' });
   });
 
   it('calls onEvent for loop_iteration events', () => {
@@ -360,9 +366,11 @@ describe('useSessionStream — onEvent callback', () => {
     const es = latestEs();
     const badEvent = { data: 'NOT JSON {{{{' } as MessageEvent;
     act(() => {
-      (es as unknown as { listeners: Record<string, EsListener[]> }).listeners['output']?.forEach(
-        (fn) => fn(badEvent),
-      );
+      const listeners =
+        (es as unknown as { listeners: Record<string, EsListener[]> }).listeners.output ?? [];
+      for (const fn of listeners) {
+        fn(badEvent);
+      }
     });
 
     expect(onEvent).not.toHaveBeenCalled();

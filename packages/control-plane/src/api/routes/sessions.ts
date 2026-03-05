@@ -575,7 +575,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         ok: !failed,
         sessionId,
         session: finalSession,
-        ...(failed && { error: 'DISPATCH_FAILED', message: 'Session created but worker dispatch failed' }),
+        ...(failed && {
+          error: 'DISPATCH_FAILED',
+          message: 'Session created but worker dispatch failed',
+        }),
       });
     },
   );
@@ -674,7 +677,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             }
 
             const code = workerError.code ?? 'WORKER_ERROR';
-            const msg = workerError.error ?? `Worker returned HTTP ${String(workerResponse.status)}`;
+            const msg =
+              workerError.error ?? `Worker returned HTTP ${String(workerResponse.status)}`;
 
             // If the worker lost the session (e.g. after restart) and also
             // couldn't resume via the Claude session ID, revert the DB status.
@@ -858,7 +862,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             .set({
               status: 'error',
               endedAt: new Date(),
-              metadata: { ...(inserted.metadata as Record<string, unknown>), errorMessage: errorText },
+              metadata: {
+                ...(inserted.metadata as Record<string, unknown>),
+                errorMessage: errorText,
+              },
             })
             .where(eq(rcSessions.id, newSessionId));
         }
@@ -1083,7 +1090,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
   app.get<{ Params: { sessionId: string } }>(
     '/:sessionId/stream',
-    { schema: { tags: ['sessions'], summary: 'SSE stream of session output (proxied from worker)' } },
+    {
+      schema: { tags: ['sessions'], summary: 'SSE stream of session output (proxied from worker)' },
+    },
     async (request, reply) => {
       const { sessionId } = request.params;
 

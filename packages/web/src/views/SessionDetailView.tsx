@@ -179,7 +179,7 @@ export function SessionDetailView(): React.JSX.Element {
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [sessionId],
+      [content.refetch, session.refetch],
     ),
   });
 
@@ -307,16 +307,15 @@ function SessionHeader({
         />
         <StatusBadge status={session.status} />
         {session.status === 'active' && (
-          <span
+          <output
             className={cn(
               'text-[11px] animate-pulse',
               streamConnected ? 'text-green-500' : 'text-yellow-500',
             )}
-            role="status"
             aria-live="polite"
           >
             {streamConnected ? 'Streaming' : 'Live'}
-          </span>
+          </output>
         )}
         <div className="ml-auto flex items-center gap-2">
           <LastUpdated dataUpdatedAt={dataUpdatedAt} />
@@ -391,7 +390,6 @@ function SessionHeader({
             }}
             placeholder="Prompt for the forked session..."
             className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
-            autoFocus
           />
           <button
             type="button"

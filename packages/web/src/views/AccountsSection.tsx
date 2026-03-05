@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
+import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,7 +23,6 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/components/Toast';
 import type { ApiAccount } from '@/lib/api';
 import {
   accountsQuery,
@@ -136,6 +135,13 @@ export function AccountsSection(): React.JSX.Element {
     };
   }, []);
 
+  const resetForm = useCallback((): void => {
+    setName('');
+    setProvider('');
+    setCredential('');
+    setPriority('0');
+  }, []);
+
   const handleOAuthLogin = useCallback(async () => {
     if (!name || !provider) return;
     setOauthLoading(true);
@@ -188,7 +194,7 @@ export function AccountsSection(): React.JSX.Element {
 
       // If the popup is blocked or closed before completing, clean up
       const pollTimer = window.setInterval(() => {
-        if (popup && popup.closed) {
+        if (popup?.closed) {
           window.clearInterval(pollTimer);
           if (oauthListenerRef.current === listener) {
             setOauthLoading(false);
@@ -201,14 +207,7 @@ export function AccountsSection(): React.JSX.Element {
       toast.error(err instanceof Error ? err.message : 'OAuth initiation failed');
       setOauthLoading(false);
     }
-  }, [name, provider, queryClient, toast]);
-
-  function resetForm(): void {
-    setName('');
-    setProvider('');
-    setCredential('');
-    setPriority('0');
-  }
+  }, [name, provider, queryClient, toast, resetForm]);
 
   async function handleCreate(): Promise<void> {
     try {
@@ -465,7 +464,9 @@ export function AccountsSection(): React.JSX.Element {
               </Button>
               <Button
                 onClick={() => void handleCreate()}
-                disabled={!name || !provider || !credential || createAccount.isPending || oauthLoading}
+                disabled={
+                  !name || !provider || !credential || createAccount.isPending || oauthLoading
+                }
               >
                 {createAccount.isPending ? 'Creating...' : 'Create Account'}
               </Button>

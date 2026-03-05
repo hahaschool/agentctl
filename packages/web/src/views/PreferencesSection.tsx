@@ -62,9 +62,7 @@ function writeLS(key: string, value: string): void {
 // ---------------------------------------------------------------------------
 
 export function PreferencesSection(): React.JSX.Element {
-  const [defaultModel, setDefaultModel] = useState(() =>
-    readLS(LS_DEFAULT_MODEL, DEFAULT_MODEL),
-  );
+  const [defaultModel, setDefaultModel] = useState(() => readLS(LS_DEFAULT_MODEL, DEFAULT_MODEL));
   const [autoRefresh, setAutoRefresh] = useState(() =>
     readLS(LS_AUTO_REFRESH, DEFAULT_AUTO_REFRESH),
   );
@@ -72,32 +70,26 @@ export function PreferencesSection(): React.JSX.Element {
     readLS(LS_MAX_MESSAGES, DEFAULT_MAX_MESSAGES),
   );
 
-  const handleModelChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = e.target.value;
-      setDefaultModel(v);
-      writeLS(LS_DEFAULT_MODEL, v);
-    },
-    [],
-  );
+  const handleModelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setDefaultModel(v);
+    writeLS(LS_DEFAULT_MODEL, v);
+  }, []);
 
   const handleRefreshChange = useCallback((v: string) => {
     setAutoRefresh(v);
     writeLS(LS_AUTO_REFRESH, v);
   }, []);
 
-  const handleMaxMessagesChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const raw = e.target.value;
-      // Allow the field to be empty while editing, but always persist a valid number
-      setMaxMessages(raw);
-      const n = Number(raw);
-      if (raw !== '' && Number.isFinite(n) && n >= 1) {
-        writeLS(LS_MAX_MESSAGES, String(Math.round(n)));
-      }
-    },
-    [],
-  );
+  const handleMaxMessagesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    // Allow the field to be empty while editing, but always persist a valid number
+    setMaxMessages(raw);
+    const n = Number(raw);
+    if (raw !== '' && Number.isFinite(n) && n >= 1) {
+      writeLS(LS_MAX_MESSAGES, String(Math.round(n)));
+    }
+  }, []);
 
   const handleMaxMessagesBlur = useCallback(() => {
     // On blur, normalise to a valid value so the user sees consistent state
@@ -125,10 +117,7 @@ export function PreferencesSection(): React.JSX.Element {
         <div className="space-y-4">
           {/* Default Model */}
           <div className="space-y-1.5">
-            <label
-              className="text-[13px] font-medium"
-              htmlFor="pref-default-model"
-            >
+            <label className="text-[13px] font-medium" htmlFor="pref-default-model">
               Default Model
             </label>
             <Input
@@ -144,10 +133,7 @@ export function PreferencesSection(): React.JSX.Element {
 
           {/* Auto-refresh interval */}
           <div className="space-y-1.5">
-            <label
-              className="text-[13px] font-medium"
-              htmlFor="pref-auto-refresh"
-            >
+            <label className="text-[13px] font-medium" htmlFor="pref-auto-refresh">
               Auto-Refresh Interval
             </label>
             <Select value={autoRefresh} onValueChange={handleRefreshChange}>
@@ -163,17 +149,13 @@ export function PreferencesSection(): React.JSX.Element {
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
-              How often list views poll for updates. &ldquo;Off&rdquo; disables
-              automatic polling.
+              How often list views poll for updates. &ldquo;Off&rdquo; disables automatic polling.
             </p>
           </div>
 
           {/* Maximum messages to display */}
           <div className="space-y-1.5">
-            <label
-              className="text-[13px] font-medium"
-              htmlFor="pref-max-messages"
-            >
+            <label className="text-[13px] font-medium" htmlFor="pref-max-messages">
               Max Display Messages
             </label>
             <Input

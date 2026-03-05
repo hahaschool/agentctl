@@ -55,9 +55,7 @@ export function DashboardPage(): React.JSX.Element {
   const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
 
   // Active sessions (running or active status)
-  const activeSessions = sessionList.filter(
-    (s) => s.status === 'running' || s.status === 'active',
-  );
+  const activeSessions = sessionList.filter((s) => s.status === 'running' || s.status === 'active');
   const activeSessionCount = activeSessions.length;
 
   // Per-agent cost breakdown (top spenders)
@@ -268,7 +266,9 @@ export function DashboardPage(): React.JSX.Element {
                     )}
                     <span className="ml-auto shrink-0">
                       {session.endedAt ? (
-                        <SimpleTooltip content={`Duration: ${formatDuration(session.startedAt, session.endedAt)}`}>
+                        <SimpleTooltip
+                          content={`Duration: ${formatDuration(session.startedAt, session.endedAt)}`}
+                        >
                           <span>
                             ended <LiveTimeAgo date={session.endedAt} />
                           </span>
@@ -406,8 +406,7 @@ export function DashboardPage(): React.JSX.Element {
           </span>
           <span className="h-3 w-px bg-border" />
           <span>
-            Active Sessions:{' '}
-            <span className="text-foreground font-mono">{activeSessionCount}</span>
+            Active Sessions: <span className="text-foreground font-mono">{activeSessionCount}</span>
           </span>
         </div>
         {/* Cost breakdown by agent */}
@@ -424,12 +423,16 @@ export function DashboardPage(): React.JSX.Element {
                   className="flex items-center gap-2 text-xs text-muted-foreground no-underline hover:text-foreground transition-colors"
                 >
                   <span className="truncate max-w-[140px]">{agent.name}</span>
-                  <span className="font-mono text-foreground">{formatCost(agent.totalCostUsd)}</span>
-                  {typeof agent.lastCostUsd === 'number' && Number.isFinite(agent.lastCostUsd) && agent.lastCostUsd > 0 && (
-                    <span className="text-[10px] text-muted-foreground">
-                      (last: {formatCost(agent.lastCostUsd)})
-                    </span>
-                  )}
+                  <span className="font-mono text-foreground">
+                    {formatCost(agent.totalCostUsd)}
+                  </span>
+                  {typeof agent.lastCostUsd === 'number' &&
+                    Number.isFinite(agent.lastCostUsd) &&
+                    agent.lastCostUsd > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        (last: {formatCost(agent.lastCostUsd)})
+                      </span>
+                    )}
                 </Link>
               ))}
             </div>
@@ -488,7 +491,11 @@ export function DashboardPage(): React.JSX.Element {
                     <span
                       className={cn(
                         'text-[10px] font-semibold uppercase',
-                        isError ? 'text-red-500' : isHighLatency ? 'text-yellow-500' : 'text-green-500',
+                        isError
+                          ? 'text-red-500'
+                          : isHighLatency
+                            ? 'text-yellow-500'
+                            : 'text-green-500',
                       )}
                     >
                       {isError ? 'ERR' : isHighLatency ? 'SLOW' : 'OK'}
@@ -567,11 +574,7 @@ function ActivityIcon({ status }: { status: string }): React.JSX.Element {
 
   return (
     <span
-      className={cn(
-        'w-2 h-2 rounded-full shrink-0',
-        colorClass,
-        shouldPulse && 'animate-pulse',
-      )}
+      className={cn('w-2 h-2 rounded-full shrink-0', colorClass, shouldPulse && 'animate-pulse')}
     />
   );
 }
