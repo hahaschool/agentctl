@@ -230,11 +230,10 @@ export const api = {
 
   // Agents
   listAgents: async (): Promise<Agent[]> => {
-    const res = await request<{ agents: Agent[]; total: number; hasMore: boolean } | Agent[]>(
+    const res = await request<{ agents: Agent[]; total: number; hasMore: boolean }>(
       '/api/agents/list',
     );
-    // Handle both paginated { agents: [...] } and legacy bare array responses
-    return Array.isArray(res) ? res : res.agents;
+    return res.agents;
   },
   getAgent: (id: string) => request<Agent>(`/api/agents/${id}`),
   createAgent: (body: {
