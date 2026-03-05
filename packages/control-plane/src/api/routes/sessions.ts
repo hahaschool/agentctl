@@ -17,6 +17,8 @@ const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
 /** Timeout for fetch() calls that dispatch commands to worker machines. */
 const WORKER_REQUEST_TIMEOUT_MS = 10_000;
+/** Matches a valid UUID v4 string. Used to skip non-UUID agentIds like 'adhoc'. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** How long a session can stay in 'starting' or 'active' without a heartbeat before being reaped. */
 const STALE_SESSION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -367,8 +369,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         countQuery,
       ]);
 
-      // Resolve agent names in a single batch query
-      const agentIds = [...new Set(sessionRows.map((s) => s.agentId).filter(Boolean))] as string[];
+      // Resolve agent names in a single batch query (skip non-UUID values like 'adhoc')
+      const agentIds = [
+        ...new Set(sessionRows.map((s) => s.agentId).filter((id) => id && UUID_RE.test(id))),
+      ] as string[];
       const agentNameMap = new Map<string, string>();
       if (agentIds.length > 0) {
         const agentRows = await db
@@ -421,9 +425,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const session = rows[0];
 
-      // Resolve agent name
+      // Resolve agent name (skip non-UUID values like 'adhoc')
       let agentName: string | null = null;
-      if (session.agentId) {
+      if (session.agentId && UUID_RE.test(session.agentId)) {
         const [agentRow] = await db
           .select({ name: agentsTable.name })
           .from(agentsTable)
