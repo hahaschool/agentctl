@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { api } from '@/lib/api';
 import type { ApiAccount } from '@/lib/api';
 import {
   accountsQuery,
@@ -54,6 +55,9 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 /** Providers that use OAuth tokens from `claude setup-token` instead of API keys. */
 const TOKEN_PROVIDERS = new Set(['claude_max', 'claude_team']);
+
+/** Providers that support browser-based OAuth login. */
+const OAUTH_PROVIDERS = new Set(['claude_max', 'claude_team']);
 
 type CredentialFieldConfig = {
   label: string;
@@ -119,12 +123,62 @@ export function AccountsSection(): React.JSX.Element {
   const [credential, setCredential] = useState('');
   const [priority, setPriority] = useState('0');
 
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const oauthPopupRef = useRef<Window | null>(null);
+
   const resetForm = useCallback((): void => {
     setName('');
     setProvider('');
     setCredential('');
     setPriority('0');
   }, []);
+
+  // Listen for OAuth callback postMessage from popup
+  useEffect(() => {
+    function handleMessage(event: MessageEvent): void {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; accountId?: string; error?: string } | undefined;
+      if (!data?.type) return;
+
+      if (data.type === 'oauth_success') {
+        setOauthLoading(false);
+        setShowAdd(false);
+        resetForm();
+        void queryClient.invalidateQueries({ queryKey: ['accounts'] });
+        toast.success('Account connected via OAuth');
+        oauthPopupRef.current?.close();
+      } else if (data.type === 'oauth_error') {
+        setOauthLoading(false);
+        toast.error(data.error ?? 'OAuth flow failed');
+        oauthPopupRef.current?.close();
+      }
+    }
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [queryClient, resetForm, toast]);
+
+  async function handleOAuth(): Promise<void> {
+    if (!name || !provider) return;
+    setOauthLoading(true);
+    try {
+      const { authorizationUrl } = await api.initiateOAuth(provider, name);
+      const popup = window.open(authorizationUrl, 'anthropic-oauth', 'width=600,height=700');
+      oauthPopupRef.current = popup;
+
+      // Detect popup closed without completing OAuth
+      const pollTimer = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(pollTimer);
+          setOauthLoading(false);
+        }
+      }, 1000);
+    } catch (err) {
+      setOauthLoading(false);
+      toast.error(err instanceof Error ? err.message : 'Failed to start OAuth flow');
+    }
+  }
 
   async function handleCreate(): Promise<void> {
     try {
@@ -309,6 +363,23 @@ export function AccountsSection(): React.JSX.Element {
               </Select>
             </div>
 
+            {provider && OAUTH_PROVIDERS.has(provider) && (
+              <div className="space-y-3">
+                <Button
+                  className="w-full"
+                  onClick={() => void handleOAuth()}
+                  disabled={!name || oauthLoading}
+                >
+                  {oauthLoading ? 'Waiting for authorization...' : 'Authorize with Anthropic'}
+                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t border-border/40" />
+                  <span className="text-[11px] text-muted-foreground">or paste manually</span>
+                  <div className="flex-1 border-t border-border/40" />
+                </div>
+              </div>
+            )}
+
             {provider && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="account-credential">
@@ -351,7 +422,7 @@ export function AccountsSection(): React.JSX.Element {
             </Button>
             <Button
               onClick={() => void handleCreate()}
-              disabled={!name || !provider || !credential || createAccount.isPending}
+              disabled={!name || !provider || !credential || createAccount.isPending || oauthLoading}
             >
               {createAccount.isPending ? 'Creating...' : 'Create Account'}
             </Button>
