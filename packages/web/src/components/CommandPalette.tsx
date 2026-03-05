@@ -7,7 +7,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { agentsQuery, sessionsQuery } from '@/lib/queries';
+import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 type CommandItem = {
@@ -45,13 +45,16 @@ const NAV_COMMANDS = [
 const STATUS_BADGE_VARIANTS: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {
   running: 'success',
   active: 'success',
+  online: 'success',
   idle: 'default',
   stopped: 'default',
+  offline: 'destructive',
   error: 'destructive',
   failed: 'destructive',
   completed: 'default',
   paused: 'warning',
   starting: 'warning',
+  degraded: 'warning',
 };
 
 function badgeVariant(status: string): 'default' | 'success' | 'warning' | 'destructive' {
@@ -74,9 +77,13 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Fetch agents and sessions (only when palette is open)
+  // Fetch agents, machines, and sessions (only when palette is open)
   const { data: agents } = useQuery({
     ...agentsQuery(),
+    enabled: open,
+  });
+  const { data: machines } = useQuery({
+    ...machinesQuery(),
     enabled: open,
   });
   const { data: sessions } = useQuery({
@@ -126,6 +133,29 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       }
     }
 
+    // ----- Machines (by hostname) -----
+    if (machines && machines.length > 0) {
+      const sorted = [...machines].sort(
+        (a, b) =>
+          new Date(b.lastHeartbeat ?? b.createdAt).getTime() -
+          new Date(a.lastHeartbeat ?? a.createdAt).getTime(),
+      );
+      for (const machine of sorted.slice(0, 8)) {
+        items.push({
+          id: `machine-${machine.id}`,
+          label: machine.hostname,
+          description: `${machine.os}/${machine.arch} \u2014 ${machine.tailscaleIp}`,
+          icon: '\u2302',
+          badge: { text: machine.status, variant: badgeVariant(machine.status) },
+          section: 'Machines',
+          action: () => {
+            router.push(`/machines/${machine.id}`);
+            onClose();
+          },
+        });
+      }
+    }
+
     // ----- Sessions (recent, up to 8) -----
     const sessionList = sessions?.sessions ?? [];
     if (sessionList.length > 0) {
@@ -134,9 +164,10 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       );
       for (const session of sorted.slice(0, 8)) {
         const shortId = session.id.length > 12 ? `${session.id.slice(0, 8)}...` : session.id;
+        const label = session.agentName ? `${session.agentName} \u2014 ${shortId}` : shortId;
         items.push({
           id: `session-${session.id}`,
-          label: shortId,
+          label,
           description: session.projectPath ? shortPath(session.projectPath) : undefined,
           icon: '\u25B6',
           badge: { text: session.status, variant: badgeVariant(session.status) },
@@ -201,7 +232,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     });
 
     return items;
-  }, [router, onClose, theme, setTheme, agents, sessions, queryClient]);
+  }, [router, onClose, theme, setTheme, agents, machines, sessions, queryClient]);
 
   // Filter commands by query
   const filtered = useMemo(() => {
@@ -219,7 +250,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
 
   // Group by section with stable ordering
   const sections = useMemo(() => {
-    const sectionOrder = ['Navigate', 'Agents', 'Sessions', 'Actions'];
+    const sectionOrder = ['Navigate', 'Agents', 'Machines', 'Sessions', 'Actions'];
     const map = new Map<string, CommandItem[]>();
     for (const cmd of filtered) {
       const arr = map.get(cmd.section);
@@ -327,7 +358,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command or search agents, sessions..."
+            placeholder="Type a command or search agents, machines, sessions..."
             className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-mono bg-muted text-muted-foreground border border-border rounded-sm">
