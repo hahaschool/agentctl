@@ -1,0 +1,4 @@
+.trees/
+.next/
+dist/
+node_modules/

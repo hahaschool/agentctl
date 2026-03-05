@@ -37,6 +37,11 @@
     }
   },
   "files": {
-    "includes": ["packages/**/src/**/*.ts", "packages/**/src/**/*.tsx", "scripts/**/*.ts"]
+    "includes": [
+      "!!**/.trees",
+      "packages/**/src/**/*.ts",
+      "packages/**/src/**/*.tsx",
+      "scripts/**/*.ts"
+    ]
   }
 }
