@@ -256,7 +256,7 @@ describe('CliSessionManager', () => {
         expect(env.ANTHROPIC_API_KEY).toBe('sk-test-key');
       });
 
-      it('sets CLAUDE_CODE_AUTH_TOKEN when accountProvider is claude_max', () => {
+      it('sets CLAUDE_CODE_OAUTH_TOKEN when accountProvider is claude_max', () => {
         manager.startSession(
           defaultStartOptions({
             accountProvider: 'claude_max',
@@ -265,10 +265,10 @@ describe('CliSessionManager', () => {
         );
 
         const env = spawnSpy.mock.calls[0][2].env;
-        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBe('session-token-xyz');
+        expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('session-token-xyz');
       });
 
-      it('sets CLAUDE_CODE_AUTH_TOKEN when accountProvider is claude_team', () => {
+      it('sets CLAUDE_CODE_OAUTH_TOKEN when accountProvider is claude_team', () => {
         manager.startSession(
           defaultStartOptions({
             accountProvider: 'claude_team',
@@ -277,7 +277,7 @@ describe('CliSessionManager', () => {
         );
 
         const env = spawnSpy.mock.calls[0][2].env;
-        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBe('session-token-xyz');
+        expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('session-token-xyz');
       });
 
       it('sets AWS credentials when accountProvider is bedrock', () => {
@@ -317,7 +317,7 @@ describe('CliSessionManager', () => {
 
         const env = spawnSpy.mock.calls[0][2].env;
         expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBeUndefined();
+        expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
         expect(env.AWS_ACCESS_KEY_ID).toBeUndefined();
         expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
         expect(env.AWS_REGION).toBeUndefined();
@@ -329,7 +329,7 @@ describe('CliSessionManager', () => {
 
         const env = spawnSpy.mock.calls[0][2].env;
         expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-        expect(env.CLAUDE_CODE_AUTH_TOKEN).toBeUndefined();
+        expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
         expect(env.AWS_ACCESS_KEY_ID).toBeUndefined();
         expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
         expect(env.AWS_REGION).toBeUndefined();

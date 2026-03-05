@@ -976,7 +976,7 @@ function decodeProjectPath(encoded: string): string {
  * Build a child process environment with provider-specific credential injection.
  *
  * - `anthropic_api` → `ANTHROPIC_API_KEY`
- * - `claude_max` / `claude_team` → `CLAUDE_CODE_AUTH_TOKEN`
+ * - `claude_max` / `claude_team` → `CLAUDE_CODE_OAUTH_TOKEN`
  * - `bedrock` → `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
  * - `vertex` → `GOOGLE_APPLICATION_CREDENTIALS_JSON`
  */
@@ -996,7 +996,7 @@ function buildChildEnv(
       break;
     case 'claude_max':
     case 'claude_team':
-      env.CLAUDE_CODE_AUTH_TOKEN = credential;
+      env.CLAUDE_CODE_OAUTH_TOKEN = credential;
       break;
     case 'bedrock': {
       const parts = credential.split(':');

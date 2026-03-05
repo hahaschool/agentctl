@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 
-import { Card, CardContent } from '@/components/ui/card';
+// Card removed — parent SettingsGroup provides visual grouping
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -105,75 +105,68 @@ export function PreferencesSection(): React.JSX.Element {
   }, [maxMessages]);
 
   return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="mb-4">
-          <h2 className="text-sm font-semibold">Preferences</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Defaults used when creating sessions and agents.
+    <div className="rounded-lg border border-border bg-card p-4">
+      <h3 className="text-[13px] font-medium mb-3">Defaults</h3>
+
+      <div className="space-y-4">
+        {/* Default Model */}
+        <div className="space-y-1.5">
+          <label className="text-[13px] font-medium" htmlFor="pref-default-model">
+            Default Model
+          </label>
+          <Input
+            id="pref-default-model"
+            placeholder={DEFAULT_MODEL}
+            value={defaultModel}
+            onChange={handleModelChange}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Model used when creating new sessions or agents.
           </p>
         </div>
 
-        <div className="space-y-4">
-          {/* Default Model */}
-          <div className="space-y-1.5">
-            <label className="text-[13px] font-medium" htmlFor="pref-default-model">
-              Default Model
-            </label>
-            <Input
-              id="pref-default-model"
-              placeholder={DEFAULT_MODEL}
-              value={defaultModel}
-              onChange={handleModelChange}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Model used when creating new sessions or agents.
-            </p>
-          </div>
-
-          {/* Auto-refresh interval */}
-          <div className="space-y-1.5">
-            <label className="text-[13px] font-medium" htmlFor="pref-auto-refresh">
-              Auto-Refresh Interval
-            </label>
-            <Select value={autoRefresh} onValueChange={handleRefreshChange}>
-              <SelectTrigger className="w-full" id="pref-auto-refresh">
-                <SelectValue placeholder="Select interval" />
-              </SelectTrigger>
-              <SelectContent position="popper" sideOffset={4}>
-                {REFRESH_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">
-              How often list views poll for updates. &ldquo;Off&rdquo; disables automatic polling.
-            </p>
-          </div>
-
-          {/* Maximum messages to display */}
-          <div className="space-y-1.5">
-            <label className="text-[13px] font-medium" htmlFor="pref-max-messages">
-              Max Display Messages
-            </label>
-            <Input
-              id="pref-max-messages"
-              type="number"
-              min={1}
-              max={10000}
-              placeholder={DEFAULT_MAX_MESSAGES}
-              value={maxMessages}
-              onChange={handleMaxMessagesChange}
-              onBlur={handleMaxMessagesBlur}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Maximum number of messages shown in the session detail view.
-            </p>
-          </div>
+        {/* Auto-refresh interval */}
+        <div className="space-y-1.5">
+          <label className="text-[13px] font-medium" htmlFor="pref-auto-refresh">
+            Auto-Refresh Interval
+          </label>
+          <Select value={autoRefresh} onValueChange={handleRefreshChange}>
+            <SelectTrigger className="w-full" id="pref-auto-refresh">
+              <SelectValue placeholder="Select interval" />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={4}>
+              {REFRESH_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            How often list views poll for updates. &ldquo;Off&rdquo; disables automatic polling.
+          </p>
         </div>
-      </CardContent>
-    </Card>
+
+        {/* Maximum messages to display */}
+        <div className="space-y-1.5">
+          <label className="text-[13px] font-medium" htmlFor="pref-max-messages">
+            Max Display Messages
+          </label>
+          <Input
+            id="pref-max-messages"
+            type="number"
+            min={1}
+            max={10000}
+            placeholder={DEFAULT_MAX_MESSAGES}
+            value={maxMessages}
+            onChange={handleMaxMessagesChange}
+            onBlur={handleMaxMessagesBlur}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Maximum number of messages shown in the session detail view.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
