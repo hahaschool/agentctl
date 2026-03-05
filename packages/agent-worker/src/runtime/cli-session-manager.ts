@@ -986,6 +986,10 @@ function buildChildEnv(
 ): NodeJS.ProcessEnv {
   const env = { ...process.env };
 
+  // Unset CLAUDECODE so the spawned CLI doesn't detect nesting and refuse to start.
+  // The worker may itself be running inside a Claude Code session.
+  delete env.CLAUDECODE;
+
   if (!provider || !credential) {
     return env;
   }
