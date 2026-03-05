@@ -254,7 +254,11 @@ export async function sessionRoutes(
         pid: null,
         costUsd: session?.costUsd ?? undefined,
         errorMessage:
-          status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
+          status === 'error'
+            ? session?.lastError
+              ? `CLI process exited with code ${event.exitCode}: ${session.lastError.slice(0, 500)}`
+              : `CLI process exited with code ${event.exitCode}`
+            : undefined,
       });
     }
 

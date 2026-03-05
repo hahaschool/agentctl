@@ -5,7 +5,7 @@ import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
-import { agents as agentsTable, apiAccounts, rcSessions } from '../../db/schema.js';
+import { agents as agentsTable, apiAccounts, rcSessions, settings } from '../../db/schema.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
@@ -1362,7 +1362,155 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       app.log.info({ sessionId, status, claudeSessionId, pid }, 'Session status updated by worker');
 
+      // ── Account failover ──────────────────────────────────────────
+      // When a session fails with a quota/auth error, check the failover
+      // policy and try the next active account if applicable.
+      if (
+        status === 'error' &&
+        errorMessage &&
+        updated.accountId &&
+        encryptionKey &&
+        isQuotaOrAuthError(errorMessage)
+      ) {
+        try {
+          const [policySetting] = await db
+            .select()
+            .from(settings)
+            .where(eq(settings.key, 'failover_policy'));
+          const policy = (policySetting?.value as { value?: string })?.value ?? 'none';
+
+          if (policy === 'priority' || policy === 'round_robin') {
+            // Get all active accounts sorted by priority
+            const activeAccounts = await db
+              .select()
+              .from(apiAccounts)
+              .where(eq(apiAccounts.isActive, true))
+              .orderBy(apiAccounts.priority);
+
+            // Find next account after the current one
+            const currentIdx = activeAccounts.findIndex((a) => a.id === updated.accountId);
+            const nextAccount =
+              currentIdx >= 0 && currentIdx + 1 < activeAccounts.length
+                ? activeAccounts[currentIdx + 1]
+                : null;
+
+            if (nextAccount) {
+              app.log.info(
+                {
+                  sessionId,
+                  failedAccountId: updated.accountId,
+                  nextAccountId: nextAccount.id,
+                  nextAccountName: nextAccount.name,
+                  policy,
+                },
+                'Failover: switching to next account after quota/auth error',
+              );
+
+              // Store failover metadata on the failed session
+              const failMeta = (updated.metadata ?? {}) as Record<string, unknown>;
+              failMeta.failoverTo = nextAccount.id;
+              failMeta.failoverReason = errorMessage;
+              await db
+                .update(rcSessions)
+                .set({ metadata: failMeta })
+                .where(eq(rcSessions.id, sessionId));
+
+              // Decrypt the next account's credential
+              const nextCredential = decryptCredential(
+                nextAccount.credential,
+                nextAccount.credentialIv,
+                encryptionKey,
+              );
+
+              // Re-dispatch: resume the same Claude session with the new account
+              const machine = await dbRegistry.getMachine(updated.machineId);
+              if (machine) {
+                const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
+                const resumePayload = {
+                  prompt: 'Continue from where you left off.',
+                  claudeSessionId: updated.claudeSessionId,
+                  cpSessionId: sessionId,
+                  agentId: updated.agentId,
+                  model: updated.model,
+                  accountCredential: nextCredential,
+                  accountProvider: nextAccount.provider,
+                };
+
+                const resumeResp = await fetch(
+                  `${workerBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/resume`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(resumePayload),
+                  },
+                );
+
+                if (resumeResp.ok) {
+                  // Update the session to point to the new account
+                  await db
+                    .update(rcSessions)
+                    .set({
+                      status: 'starting',
+                      endedAt: null,
+                      accountId: nextAccount.id,
+                      lastHeartbeat: new Date(),
+                    })
+                    .where(eq(rcSessions.id, sessionId));
+
+                  app.log.info(
+                    { sessionId, newAccountId: nextAccount.id },
+                    'Failover: session resumed with new account',
+                  );
+                } else {
+                  app.log.warn(
+                    { sessionId, status: resumeResp.status },
+                    'Failover: worker resume request failed',
+                  );
+                }
+              }
+            } else {
+              app.log.warn(
+                { sessionId, accountId: updated.accountId },
+                'Failover: no more active accounts available to try',
+              );
+            }
+          }
+        } catch (failoverErr) {
+          app.log.error(
+            { sessionId, error: failoverErr instanceof Error ? failoverErr.message : String(failoverErr) },
+            'Failover: unexpected error during account switch',
+          );
+        }
+      }
+
       return { ok: true, session: updated };
     },
   );
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Patterns in error messages that indicate quota exhaustion or auth failure. */
+const QUOTA_AUTH_PATTERNS = [
+  'out of extra usage',
+  'exceeded your',
+  'rate limit',
+  'quota exceeded',
+  'usage limit',
+  'too many requests',
+  '429',
+  'unauthorized',
+  'authentication',
+  'invalid api key',
+  'invalid_api_key',
+  'permission denied',
+  '401',
+  '403',
+];
+
+function isQuotaOrAuthError(errorMessage: string): boolean {
+  const lower = errorMessage.toLowerCase();
+  return QUOTA_AUTH_PATTERNS.some((pattern) => lower.includes(pattern));
+}
