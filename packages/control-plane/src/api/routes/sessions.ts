@@ -815,13 +815,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
   app.post<{
     Params: { sessionId: string };
-    Body: { prompt: string; machineId?: string; accountId?: string };
+    Body: { prompt: string; machineId?: string; accountId?: string; model?: string };
   }>(
     '/:sessionId/fork',
     { schema: { tags: ['sessions'], summary: 'Fork a session into a new one' } },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt, machineId: overrideMachineId, accountId: overrideAccountId } = request.body;
+      const { prompt, machineId: overrideMachineId, accountId: overrideAccountId, model: overrideModel } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.code(400).send({
@@ -890,7 +890,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           machineId: targetMachineId,
           status: 'starting',
           projectPath: parent.projectPath,
-          model: parent.model,
+          model: overrideModel ?? parent.model,
           accountId: resolvedAccountId ?? null,
           metadata: {
             initialPrompt: prompt,
@@ -911,7 +911,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             sessionId: newSessionId,
             agentId: parent.agentId,
             projectPath: parent.projectPath,
-            model: parent.model ?? null,
+            model: overrideModel ?? parent.model ?? null,
             prompt,
             resumeSessionId: parent.claudeSessionId,
             accountCredential,
@@ -1061,9 +1061,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         );
 
         if (!workerResponse.ok) {
-          let workerError: { error?: string; code?: string } = {};
+          let workerError: { error?: string; code?: string; hint?: string } = {};
           try {
-            workerError = (await workerResponse.json()) as { error?: string; code?: string };
+            workerError = (await workerResponse.json()) as { error?: string; code?: string; hint?: string };
           } catch {
             /* ignore parse errors */
           }
