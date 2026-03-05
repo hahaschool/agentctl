@@ -7,6 +7,7 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
@@ -253,14 +254,14 @@ export default function AgentDetailPage(): React.JSX.Element {
         </div>
         <div className="flex gap-2">
           {data.status === 'running' ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleStop}
+            <ConfirmButton
+              label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
+              confirmLabel="Confirm Stop"
+              onConfirm={handleStop}
               disabled={stopAgent.isPending}
-            >
-              {stopAgent.isPending ? 'Stopping...' : 'Stop'}
-            </Button>
+              className="px-3 py-1.5 text-sm font-medium rounded-sm bg-destructive text-destructive-foreground cursor-pointer"
+              confirmClassName="px-3 py-1.5 text-sm font-medium rounded-sm bg-red-600 text-white animate-pulse cursor-pointer"
+            />
           ) : promptVisible ? (
             <div className="flex gap-2 items-center">
               <input
