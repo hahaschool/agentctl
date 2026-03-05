@@ -103,6 +103,7 @@ export type AgentRun = {
   id: string;
   agentId: string;
   status: string;
+  prompt?: string;
   costUsd?: number;
   durationMs?: number;
   startedAt: string;

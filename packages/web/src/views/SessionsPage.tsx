@@ -134,6 +134,7 @@ export function SessionsPage(): React.JSX.Element {
     useMemo(
       () => ({
         r: () => resetAndInvalidateSessions(),
+        n: () => setShowCreateForm(true),
         Escape: () => {
           if (showCreateForm) setShowCreateForm(false);
           else setSelectedId(null);
