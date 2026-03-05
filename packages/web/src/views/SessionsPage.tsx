@@ -62,6 +62,7 @@ function matchesSearchQuery(session: Session, query: string): boolean {
   const q = query.toLowerCase();
   if (session.id.toLowerCase().includes(q)) return true;
   if (session.agentId.toLowerCase().includes(q)) return true;
+  if (session.agentName?.toLowerCase().includes(q)) return true;
   if (session.projectPath?.toLowerCase().includes(q)) return true;
   if (session.machineId.toLowerCase().includes(q)) return true;
   if (session.model?.toLowerCase().includes(q)) return true;
@@ -783,7 +784,7 @@ export function SessionsPage(): React.JSX.Element {
                   </div>
                 </div>
                 <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1">
-                  <span>Agent: {selected.agentId}</span>
+                  <span>Agent: {selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}</span>
                   <span>Machine: {selected.machineId}</span>
                   <StatusBadge status={selected.status} />
                 </div>
@@ -821,7 +822,7 @@ export function SessionsPage(): React.JSX.Element {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <DetailRow label="ID" value={selected.id} mono />
                 <DetailRow label="Status" value={selected.status} />
-                <DetailRow label="Agent" value={selected.agentId} mono />
+                <DetailRow label="Agent" value={selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)} mono />
                 <DetailRow label="Machine" value={selected.machineId} mono />
                 <DetailRow label="Project" value={selected.projectPath ?? '-'} mono />
                 <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
@@ -959,6 +960,11 @@ function SessionListItem({
   isSelected: boolean;
   onSelect: (id: string) => void;
 }): React.JSX.Element {
+  const meta = s.metadata as Record<string, unknown> | null;
+  const errorMsg = meta?.errorMessage as string | undefined;
+  const costUsd = meta?.costUsd as number | undefined;
+  const messageCount = meta?.messageCount as number | undefined;
+
   return (
     <button
       type="button"
@@ -982,8 +988,12 @@ function SessionListItem({
         <span className="font-mono text-xs font-medium">{s.id.slice(0, 16)}...</span>
         <StatusBadge status={s.status} />
       </div>
+      {/* Error message for failed sessions */}
+      {s.status === 'error' && errorMsg && (
+        <div className="text-[11px] text-red-400 mb-1 line-clamp-1">{errorMsg}</div>
+      )}
       <div className="text-xs text-muted-foreground flex gap-2">
-        <span>{s.agentId}</span>
+        <span>{s.agentName ? s.agentName : s.agentId.slice(0, 8)}</span>
         <span>{s.machineId}</span>
       </div>
       {s.projectPath && (
@@ -994,6 +1004,12 @@ function SessionListItem({
       <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
         <LiveTimeAgo date={s.startedAt} />
         <span className="text-muted-foreground">{formatDuration(s.startedAt, s.endedAt)}</span>
+        {messageCount !== undefined && (
+          <span className="text-muted-foreground">{messageCount} msgs</span>
+        )}
+        {costUsd !== undefined && (
+          <span className="text-muted-foreground">${costUsd.toFixed(2)}</span>
+        )}
       </div>
     </button>
   );
