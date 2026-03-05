@@ -140,7 +140,7 @@ describe('OAuth PKCE routes — /api/oauth', () => {
 
       // The URL should point to the Anthropic OAuth authorize endpoint
       const url = new URL(body.authorizationUrl);
-      expect(url.origin).toBe('https://auth.anthropic.com');
+      expect(url.origin).toBe('https://claude.ai');
       expect(url.pathname).toBe('/oauth/authorize');
 
       // PKCE params must be present
@@ -148,7 +148,7 @@ describe('OAuth PKCE routes — /api/oauth', () => {
       expect(url.searchParams.get('code_challenge')).toBeDefined();
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
       expect(url.searchParams.get('state')).toBe(body.state);
-      expect(url.searchParams.get('scope')).toBe('user:inference');
+      expect(url.searchParams.get('scope')).toBe('user:inference user:profile');
     });
 
     it('returns authorizationUrl and state for claude_team provider', async () => {
@@ -168,7 +168,7 @@ describe('OAuth PKCE routes — /api/oauth', () => {
       expect(body.state).toBeDefined();
 
       const url = new URL(body.authorizationUrl);
-      expect(url.origin).toBe('https://auth.anthropic.com');
+      expect(url.origin).toBe('https://claude.ai');
       expect(url.pathname).toBe('/oauth/authorize');
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     });
@@ -370,6 +370,74 @@ describe('OAuth PKCE routes — /api/oauth', () => {
       expect(html).toContain('window.opener');
       expect(html).toContain('postMessage');
       expect(html).toContain('window.close');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/oauth/refresh — refresh an OAuth token
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/oauth/refresh', () => {
+    it('returns 400 when accountId is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/refresh',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('INVALID_BODY');
+    });
+
+    it('returns 404 when account does not exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/refresh',
+        payload: { accountId: 'nonexistent-id' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toBe('ACCOUNT_NOT_FOUND');
+    });
+
+    it('returns 400 when account is not an OAuth account', async () => {
+      mockDb.setRows([
+        {
+          id: 'acc-1',
+          provider: 'anthropic_api',
+          metadata: { authMethod: 'manual' },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/refresh',
+        payload: { accountId: 'acc-1' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('NOT_OAUTH_ACCOUNT');
+    });
+
+    it('returns 400 when no refresh token is stored', async () => {
+      mockDb.setRows([
+        {
+          id: 'acc-2',
+          provider: 'claude_max',
+          metadata: { authMethod: 'oauth' },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/refresh',
+        payload: { accountId: 'acc-2' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('NO_REFRESH_TOKEN');
     });
   });
 });
