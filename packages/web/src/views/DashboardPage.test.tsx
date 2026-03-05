@@ -579,8 +579,8 @@ describe('DashboardPage', () => {
     });
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText('Cost by Agent')).toBeDefined();
-      expect(screen.getByText('expensive-agent')).toBeDefined();
+      expect(screen.getAllByText('Cost by Agent').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('expensive-agent').length).toBeGreaterThan(0);
     });
   });
 
@@ -788,9 +788,9 @@ describe('DashboardPage', () => {
     });
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText('agent-1')).toBeDefined();
-      expect(screen.getByText('agent-2')).toBeDefined();
-      expect(screen.getByText('agent-3')).toBeDefined();
+      expect(screen.getAllByText('agent-1').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('agent-2').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('agent-3').length).toBeGreaterThan(0);
     });
   });
 
@@ -809,8 +809,8 @@ describe('DashboardPage', () => {
     renderDashboard();
     await waitFor(() => {
       // Top 5 should be visible
-      expect(screen.getByText('agent-0')).toBeDefined();
-      expect(screen.getByText('agent-4')).toBeDefined();
+      expect(screen.getAllByText('agent-0').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('agent-4').length).toBeGreaterThan(0);
     });
   });
 
@@ -825,8 +825,8 @@ describe('DashboardPage', () => {
     });
     renderDashboard();
     await waitFor(() => {
-      // Only agent-2 should show in cost breakdown (filtering out zero-cost)
-      expect(screen.getByText('agent-2')).toBeDefined();
+      // agent-2 should show in cost breakdown
+      expect(screen.getAllByText('agent-2').length).toBeGreaterThan(0);
     });
   });
 

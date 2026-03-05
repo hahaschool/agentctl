@@ -308,7 +308,8 @@ describe('SessionsPage', () => {
 
   it('renders all status filter tabs', () => {
     renderSessions();
-    expect(screen.getByText('All')).toBeDefined();
+    // "All" may appear multiple times (status tab + select all checkbox)
+    expect(screen.getAllByText('All').length).toBeGreaterThan(0);
     expect(screen.getByText('Starting')).toBeDefined();
     expect(screen.getByText('Active')).toBeDefined();
     expect(screen.getByText('Ended')).toBeDefined();
@@ -332,8 +333,10 @@ describe('SessionsPage', () => {
 
     renderSessions();
     await waitFor(() => {
-      const allText = screen.getByText('All').parentElement?.textContent ?? '';
-      expect(allText).toContain('3');
+      // Find the "All" tab element (not the select-all checkbox)
+      const allElements = screen.getAllByText('All');
+      const tabText = allElements.map((el) => el.parentElement?.textContent ?? '').find((t) => t.includes('3'));
+      expect(tabText).toBeDefined();
     });
   });
 

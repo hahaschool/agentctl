@@ -79,7 +79,7 @@ type ContentQuerystring = {
   limit?: string;
 };
 
-type ContentMessage = {
+export type ContentMessage = {
   type: string;
   content: string;
   timestamp?: string;
@@ -1037,7 +1037,7 @@ function searchForJsonl(dir: string, fileName: string, currentDepth: number): st
  * Each content block becomes a separate ContentMessage so the frontend can
  * render them individually with appropriate styling.
  */
-function parseJsonlEntry(entry: unknown): ContentMessage[] {
+export function parseJsonlEntry(entry: unknown): ContentMessage[] {
   if (typeof entry !== 'object' || entry === null) {
     return [];
   }

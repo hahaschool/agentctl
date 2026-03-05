@@ -439,7 +439,8 @@ describe('Health endpoint — no controlPlaneUrl', () => {
     expect(typeof body.activeAgents).toBe('number');
     expect(typeof body.totalAgentsStarted).toBe('number');
     expect(typeof body.worktreesActive).toBe('number');
-    expect(typeof body.memoryUsage).toBe('number');
+    expect(typeof body.memoryUsage).toBe('object');
+    expect(typeof body.memoryUsage.rss).toBe('number');
     expect(body.agents).toBeDefined();
     expect(body.agents.maxConcurrent).toBe(5);
     // dependencies should not be present in simple mode

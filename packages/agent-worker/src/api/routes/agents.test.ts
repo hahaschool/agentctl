@@ -344,8 +344,8 @@ describe('Agent CRUD routes', () => {
       expect(body.totalAgentsStarted).toBe(0);
       expect(typeof body.worktreesActive).toBe('number');
       expect(body.worktreesActive).toBe(0);
-      expect(typeof body.memoryUsage).toBe('number');
-      expect(body.memoryUsage).toBeGreaterThan(0);
+      expect(typeof body.memoryUsage).toBe('object');
+      expect(typeof body.memoryUsage.rss).toBe('number');
     });
 
     it('should not include dependencies in simple response', async () => {

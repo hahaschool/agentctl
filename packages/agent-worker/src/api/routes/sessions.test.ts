@@ -10,7 +10,7 @@ import type {
   CliSessionStatus,
   DiscoveredSession,
 } from '../../runtime/cli-session-manager.js';
-import { sessionRoutes } from './sessions.js';
+import { type ContentMessage, parseJsonlEntry, sessionRoutes } from './sessions.js';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -632,7 +632,7 @@ describe('Worker session routes', () => {
     });
   });
 
-  // ── Session serialization ──────────────────────────────────────
+  // ── Session serialization ──────────────────────────────────────────
 
   describe('Session JSON serialization', () => {
     it('should serialize dates as ISO strings', async () => {
@@ -689,6 +689,569 @@ describe('Worker session routes', () => {
       for (const key of expectedKeys) {
         expect(body).toHaveProperty(key);
       }
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseJsonlEntry — direct unit tests
+// ---------------------------------------------------------------------------
+
+describe('parseJsonlEntry', () => {
+  // ── Basic / edge cases ─────────────────────────────────────────
+
+  it('should return empty array for null input', () => {
+    expect(parseJsonlEntry(null)).toEqual([]);
+  });
+
+  it('should return empty array for non-object input', () => {
+    expect(parseJsonlEntry('hello')).toEqual([]);
+    expect(parseJsonlEntry(42)).toEqual([]);
+  });
+
+  it('should return empty array for unknown entry type', () => {
+    expect(parseJsonlEntry({ type: 'system', message: { content: 'hi' } })).toEqual([]);
+    expect(parseJsonlEntry({ type: 'queue-operation' })).toEqual([]);
+  });
+
+  it('should return empty array when type is missing', () => {
+    expect(parseJsonlEntry({ message: { content: 'hi' } })).toEqual([]);
+  });
+
+  // ── Thinking blocks ────────────────────────────────────────────
+
+  describe('thinking blocks', () => {
+    it('should parse assistant entry with thinking block', () => {
+      const entry = {
+        type: 'assistant',
+        timestamp: '2026-03-06T10:00:00Z',
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'Let me reason about this problem step by step.' },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        type: 'thinking',
+        content: 'Let me reason about this problem step by step.',
+        timestamp: '2026-03-06T10:00:00Z',
+      });
+    });
+
+    it('should skip thinking block with empty text', () => {
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'thinking', thinking: '   ' }],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(0);
+    });
+
+    it('should skip thinking block with non-string thinking field', () => {
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'thinking', thinking: 123 }],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(0);
+    });
+
+    it('should parse thinking alongside text and tool_use blocks', () => {
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'I need to read the file first.' },
+            { type: 'text', text: 'Let me check the file.' },
+            { type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: '/tmp/x' } },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(3);
+      expect(results[0].type).toBe('thinking');
+      expect(results[1].type).toBe('assistant');
+      expect(results[2].type).toBe('tool_use');
+    });
+  });
+
+  // ── Progress entries ───────────────────────────────────────────
+
+  describe('progress entries', () => {
+    it('should parse agent_progress as subagent type', () => {
+      const entry = {
+        type: 'progress',
+        timestamp: '2026-03-06T10:01:00Z',
+        data: {
+          type: 'agent_progress',
+          content: 'Working on fixing the auth module',
+          agentType: 'codegen',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        type: 'subagent',
+        content: 'Working on fixing the auth module',
+        toolName: 'codegen',
+        timestamp: '2026-03-06T10:01:00Z',
+      });
+    });
+
+    it('should default agentType to "subagent" when not provided', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'agent_progress', content: 'Doing stuff' },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].toolName).toBe('subagent');
+    });
+
+    it('should skip agent_progress with empty content', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'agent_progress', content: '  ' },
+      };
+
+      expect(parseJsonlEntry(entry)).toHaveLength(0);
+    });
+
+    it('should truncate agent_progress content to 4000 chars', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'agent_progress', content: 'x'.repeat(5000) },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results[0].content).toHaveLength(4000);
+    });
+
+    it('should parse bash_progress with command and toolName "bash"', () => {
+      const entry = {
+        type: 'progress',
+        timestamp: '2026-03-06T10:02:00Z',
+        data: {
+          type: 'bash_progress',
+          command: 'npm test --coverage',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        type: 'progress',
+        content: 'npm test --coverage',
+        toolName: 'bash',
+        timestamp: '2026-03-06T10:02:00Z',
+      });
+    });
+
+    it('should skip bash_progress with empty command', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'bash_progress', command: '' },
+      };
+
+      expect(parseJsonlEntry(entry)).toHaveLength(0);
+    });
+
+    it('should parse waiting_for_task with taskDescription and taskType as toolName', () => {
+      const entry = {
+        type: 'progress',
+        timestamp: '2026-03-06T10:03:00Z',
+        data: {
+          type: 'waiting_for_task',
+          taskDescription: 'Running integration tests',
+          taskType: 'test-runner',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        type: 'progress',
+        content: 'Running integration tests',
+        toolName: 'test-runner',
+        timestamp: '2026-03-06T10:03:00Z',
+      });
+    });
+
+    it('should default toolName to "task" when taskType is not provided', () => {
+      const entry = {
+        type: 'progress',
+        data: {
+          type: 'waiting_for_task',
+          taskDescription: 'Some task',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results[0].toolName).toBe('task');
+    });
+
+    it('should skip waiting_for_task with empty description', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'waiting_for_task', taskDescription: '  ' },
+      };
+
+      expect(parseJsonlEntry(entry)).toHaveLength(0);
+    });
+
+    it('should return empty array for unknown progress type', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'something_unknown', foo: 'bar' },
+      };
+
+      expect(parseJsonlEntry(entry)).toEqual([]);
+    });
+
+    it('should return empty array when progress data is missing', () => {
+      const entry = { type: 'progress' };
+      expect(parseJsonlEntry(entry)).toEqual([]);
+    });
+
+    it('should return empty array when progress data is not an object', () => {
+      const entry = { type: 'progress', data: 'invalid' };
+      expect(parseJsonlEntry(entry)).toEqual([]);
+    });
+  });
+
+  // ── TodoWrite detection ────────────────────────────────────────
+
+  describe('TodoWrite detection', () => {
+    it('should return both tool_use and todo entries for TodoWrite with todos', () => {
+      const todos = [
+        { id: '1', content: 'Fix login', status: 'pending' },
+        { id: '2', content: 'Add tests', status: 'done' },
+      ];
+
+      const entry = {
+        type: 'assistant',
+        timestamp: '2026-03-06T10:04:00Z',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_todo_1',
+              name: 'TodoWrite',
+              input: { todos },
+            },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(2);
+
+      // First entry: tool_use
+      expect(results[0].type).toBe('tool_use');
+      expect(results[0].toolName).toBe('TodoWrite');
+      expect(results[0].toolId).toBe('toolu_todo_1');
+
+      // Second entry: todo
+      expect(results[1].type).toBe('todo');
+      expect(results[1].toolName).toBe('TodoWrite');
+      expect(results[1].content).toBe(JSON.stringify(todos));
+      expect(results[1].timestamp).toBe('2026-03-06T10:04:00Z');
+    });
+
+    it('should return only tool_use when TodoWrite has no todos array', () => {
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_todo_2',
+              name: 'TodoWrite',
+              input: { someOtherField: 'value' },
+            },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('tool_use');
+      expect(results[0].toolName).toBe('TodoWrite');
+    });
+
+    it('should return only tool_use when TodoWrite input is a string', () => {
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_todo_3',
+              name: 'TodoWrite',
+              input: 'raw string input',
+            },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('tool_use');
+    });
+  });
+
+  // ── Tool IDs ───────────────────────────────────────────────────
+
+  describe('tool IDs', () => {
+    it('should include toolId on tool_use entries', () => {
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 'toolu_abc123', name: 'Read', input: { file_path: '/tmp/x' } },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].toolId).toBe('toolu_abc123');
+    });
+
+    it('should not include toolId when id field is missing on tool_use', () => {
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Bash', input: 'ls -la' },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].toolId).toBeUndefined();
+    });
+
+    it('should include toolId on tool_result entries from tool_use_id', () => {
+      const entry = {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'toolu_def456', content: 'file contents here' },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('tool_result');
+      expect(results[0].toolId).toBe('toolu_def456');
+    });
+
+    it('should not include toolId when tool_use_id is missing on tool_result', () => {
+      const entry = {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', content: 'some result' },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].toolId).toBeUndefined();
+    });
+  });
+
+  // ── Sidechain tagging ──────────────────────────────────────────
+
+  describe('sidechain tagging', () => {
+    it('should tag all results with subagentId when isSidechain is true and agentId is set', () => {
+      const entry = {
+        type: 'assistant',
+        isSidechain: true,
+        agentId: 'subagent-42',
+        message: {
+          content: [
+            { type: 'text', text: 'Working on subtask' },
+            { type: 'tool_use', id: 'toolu_x', name: 'Write', input: { file_path: '/tmp/y', content: 'code' } },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(2);
+      for (const r of results) {
+        expect(r.subagentId).toBe('subagent-42');
+      }
+    });
+
+    it('should not set subagentId when isSidechain is false', () => {
+      const entry = {
+        type: 'assistant',
+        isSidechain: false,
+        agentId: 'subagent-42',
+        message: {
+          content: [{ type: 'text', text: 'Main thread work' }],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].subagentId).toBeUndefined();
+    });
+
+    it('should not set subagentId when isSidechain is true but agentId is missing', () => {
+      const entry = {
+        type: 'assistant',
+        isSidechain: true,
+        message: {
+          content: [{ type: 'text', text: 'No agent ID' }],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].subagentId).toBeUndefined();
+    });
+
+    it('should tag progress entries with subagentId when isSidechain', () => {
+      const entry = {
+        type: 'progress',
+        isSidechain: true,
+        agentId: 'sub-agent-7',
+        data: {
+          type: 'agent_progress',
+          content: 'Subagent running',
+          agentType: 'codegen',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].subagentId).toBe('sub-agent-7');
+    });
+
+    it('should tag bash_progress with subagentId when isSidechain', () => {
+      const entry = {
+        type: 'progress',
+        isSidechain: true,
+        agentId: 'sub-bash-1',
+        data: {
+          type: 'bash_progress',
+          command: 'make build',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].subagentId).toBe('sub-bash-1');
+    });
+
+    it('should tag waiting_for_task with subagentId when isSidechain', () => {
+      const entry = {
+        type: 'progress',
+        isSidechain: true,
+        agentId: 'sub-wait-1',
+        data: {
+          type: 'waiting_for_task',
+          taskDescription: 'Waiting for build',
+          taskType: 'build',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].subagentId).toBe('sub-wait-1');
+    });
+  });
+
+  // ── Standard message types (regression) ────────────────────────
+
+  describe('standard message types', () => {
+    it('should parse user text entry', () => {
+      const entry = {
+        type: 'user',
+        timestamp: '2026-03-06T10:00:00Z',
+        message: { content: [{ type: 'text', text: 'Fix the bug please' }] },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        type: 'human',
+        content: 'Fix the bug please',
+        timestamp: '2026-03-06T10:00:00Z',
+      });
+    });
+
+    it('should parse user string content (non-array)', () => {
+      const entry = {
+        type: 'user',
+        message: { content: 'Plain string content' },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('human');
+      expect(results[0].content).toBe('Plain string content');
+    });
+
+    it('should parse assistant text entry', () => {
+      const entry = {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'Here is the fix.' }] },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('assistant');
+      expect(results[0].content).toBe('Here is the fix.');
+    });
+
+    it('should skip system-injected user text', () => {
+      const entry = {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'text', text: '<system-reminder>Do not do X</system-reminder>' },
+          ],
+        },
+      };
+
+      expect(parseJsonlEntry(entry)).toHaveLength(0);
+    });
+
+    it('should skip empty content blocks', () => {
+      const entry = {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: '   ' }] },
+      };
+
+      expect(parseJsonlEntry(entry)).toHaveLength(0);
+    });
+
+    it('should return empty for missing message', () => {
+      expect(parseJsonlEntry({ type: 'assistant' })).toEqual([]);
+    });
+
+    it('should return empty for empty content array', () => {
+      const entry = { type: 'assistant', message: { content: [] } };
+      expect(parseJsonlEntry(entry)).toEqual([]);
     });
   });
 });
