@@ -17,6 +17,15 @@ export type AccountRoutesOptions = {
 export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (app, opts) => {
   const { db, encryptionKey } = opts;
 
+  // Scoped error handler — log + return structured 500 for unhandled DB errors
+  app.setErrorHandler((error, request, reply) => {
+    request.log.error(error, 'Accounts route error');
+    return reply.code(500).send({
+      error: 'INTERNAL_ERROR',
+      message: error.message ?? 'An unexpected error occurred',
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // GET / — list all accounts (masked credentials)
   // ---------------------------------------------------------------------------

@@ -16,6 +16,8 @@ type Props = {
   timeout?: number;
   className?: string;
   confirmClassName?: string;
+  /** Whether button is disabled (default: false) */
+  disabled?: boolean;
 };
 
 /**
@@ -30,6 +32,7 @@ export function ConfirmButton({
   timeout = 3000,
   className,
   confirmClassName,
+  disabled = false,
 }: Props): React.JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,6 +47,9 @@ export function ConfirmButton({
   useEffect(() => clearTimer, [clearTimer]);
 
   const handleClick = useCallback(() => {
+    if (disabled) {
+      return;
+    }
     if (confirming) {
       clearTimer();
       setConfirming(false);
@@ -52,14 +58,15 @@ export function ConfirmButton({
       setConfirming(true);
       timerRef.current = setTimeout(() => setConfirming(false), timeout);
     }
-  }, [confirming, onConfirm, timeout, clearTimer]);
+  }, [confirming, onConfirm, timeout, clearTimer, disabled]);
 
   return (
     <button
       type="button"
       onClick={handleClick}
       aria-live="polite"
-      className={cn(confirming ? confirmClassName : className)}
+      disabled={disabled}
+      className={cn(confirming ? confirmClassName : className, disabled && 'cursor-not-allowed')}
     >
       {confirming ? confirmLabel : label}
     </button>

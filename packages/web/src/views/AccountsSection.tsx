@@ -211,14 +211,18 @@ export function AccountsSection(): React.JSX.Element {
   }
 
   async function handleCreate(): Promise<void> {
-    await createAccount.mutateAsync({
-      name,
-      provider,
-      credential,
-      priority: Number(priority) || 0,
-    });
-    resetForm();
-    setShowAdd(false);
+    try {
+      await createAccount.mutateAsync({
+        name,
+        provider,
+        credential,
+        priority: Number(priority) || 0,
+      });
+      resetForm();
+      setShowAdd(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create account');
+    }
   }
 
   async function handleTest(id: string): Promise<void> {
@@ -234,12 +238,20 @@ export function AccountsSection(): React.JSX.Element {
   }
 
   async function handleDelete(id: string): Promise<void> {
-    await deleteAccount.mutateAsync(id);
-    setConfirmDeleteId(null);
+    try {
+      await deleteAccount.mutateAsync(id);
+      setConfirmDeleteId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete account');
+    }
   }
 
   async function handleToggleActive(account: ApiAccount): Promise<void> {
-    await updateAccount.mutateAsync({ id: account.id, isActive: !account.isActive });
+    try {
+      await updateAccount.mutateAsync({ id: account.id, isActive: !account.isActive });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update account');
+    }
   }
 
   return (
