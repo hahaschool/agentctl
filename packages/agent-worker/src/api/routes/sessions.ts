@@ -481,6 +481,62 @@ export async function sessionRoutes(
         cpSessionIdMap.set(session.id, cpSessionId);
       }
 
+      // Wait briefly to verify CLI process doesn't crash on startup
+      const startupOk = await new Promise<boolean>((resolve) => {
+        const s = sessionManager.getSession(session.id);
+        if (s && s.status === 'error') { resolve(false); return; }
+
+        const timer = setTimeout(() => {
+          sessionManager.off('session_error', onError);
+          sessionManager.off('session_ended', onEnd);
+          resolve(true);
+        }, 3000);
+
+        const onError = (evt: { sessionId: string }): void => {
+          if (evt.sessionId === session.id) {
+            clearTimeout(timer);
+            sessionManager.off('session_error', onError);
+            sessionManager.off('session_ended', onEnd);
+            resolve(false);
+          }
+        };
+        const onEnd = (evt: { sessionId: string }): void => {
+          if (evt.sessionId === session.id) {
+            clearTimeout(timer);
+            sessionManager.off('session_error', onError);
+            sessionManager.off('session_ended', onEnd);
+            const ended = sessionManager.getSession(session.id);
+            resolve(ended?.status === 'running' || ended?.status === 'starting');
+          }
+        };
+        sessionManager.on('session_error', onError);
+        sessionManager.on('session_ended', onEnd);
+      });
+
+      if (!startupOk) {
+        const failedSession = sessionManager.getSession(session.id);
+        const stderr = failedSession?.lastError?.trim() ?? '';
+
+        let hint = 'Check project path and credentials.';
+        if (stderr.includes('authentication') || stderr.includes('API key') || stderr.includes('Unauthorized') || stderr.includes('401')) {
+          hint = 'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
+        } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
+          hint = 'Project path does not exist on this machine.';
+        } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
+          hint = 'Permission denied — check file/directory permissions.';
+        }
+
+        logger.warn(
+          { sessionId: session.id, cpSessionId, stderr: stderr.slice(0, 500) },
+          'CLI session failed to start',
+        );
+        return reply.status(502).send({
+          error: stderr ? `CLI failed: ${stderr.slice(0, 300)}` : 'CLI process exited immediately.',
+          code: 'CLI_STARTUP_FAILED',
+          hint,
+        });
+      }
+
       logger.info(
         { sessionId: session.id, cpSessionId, agentId, machineId, projectPath },
         'CLI session started',
@@ -593,17 +649,31 @@ export async function sessionRoutes(
 
         if (!startupOk) {
           const failedSession = sessionManager.getSession(newSession.id);
+          const stderr = failedSession?.lastError?.trim() ?? '';
+
+          // Produce a user-friendly diagnosis from stderr
+          let hint = 'Check project path and credentials.';
+          if (stderr.includes('authentication') || stderr.includes('API key') || stderr.includes('Unauthorized') || stderr.includes('401')) {
+            hint = 'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
+          } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
+            hint = 'Project path does not exist on this machine.';
+          } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
+            hint = 'Permission denied — check file/directory permissions.';
+          }
+
           logger.warn(
             {
               newSessionId: newSession.id,
               resumedFrom: resumeId,
               status: failedSession?.status,
+              stderr: stderr.slice(0, 500),
             },
             'Resumed CLI process failed to start',
           );
           return reply.status(502).send({
-            error: 'CLI process exited immediately after resume. Check project path and credentials.',
+            error: stderr ? `CLI failed: ${stderr.slice(0, 300)}` : 'CLI process exited immediately after resume.',
             code: 'CLI_STARTUP_FAILED',
+            hint,
           });
         }
 

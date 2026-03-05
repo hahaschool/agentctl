@@ -132,13 +132,16 @@ export type RouterModelsInfoResponse = {
 };
 
 export class ApiError extends Error {
+  public hint?: string;
   constructor(
     public status: number,
     public code: string,
     message: string,
+    hint?: string,
   ) {
     super(message);
     this.name = 'ApiError';
+    this.hint = hint;
   }
 }
 
@@ -161,6 +164,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       res.status,
       (body as Record<string, string>).error ?? 'UNKNOWN',
       (body as Record<string, string>).message ?? res.statusText,
+      (body as Record<string, string>).hint,
     );
   }
 

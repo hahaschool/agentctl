@@ -665,9 +665,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           );
 
           if (!workerResponse.ok) {
-            let workerError: { error?: string; code?: string } = {};
+            let workerError: { error?: string; code?: string; hint?: string } = {};
             try {
-              workerError = (await workerResponse.json()) as { error?: string; code?: string };
+              workerError = (await workerResponse.json()) as {
+                error?: string;
+                code?: string;
+                hint?: string;
+              };
             } catch {
               /* ignore parse errors */
             }
@@ -675,6 +679,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             const code = workerError.code ?? 'WORKER_ERROR';
             const msg =
               workerError.error ?? `Worker returned HTTP ${String(workerResponse.status)}`;
+            const hint = workerError.hint;
 
             // If the worker lost the session (e.g. after restart) and also
             // couldn't resume via the Claude session ID, revert the DB status.
@@ -702,14 +707,23 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               'Worker rejected resume — reverting DB status',
             );
 
+            // Store the error details in session metadata so the UI can show them
             await db
               .update(rcSessions)
-              .set({ status: session.status, endedAt: session.endedAt })
+              .set({
+                status: session.status,
+                endedAt: session.endedAt,
+                metadata: sql`${rcSessions.metadata} || ${JSON.stringify({
+                  errorMessage: msg,
+                  ...(hint ? { errorHint: hint } : {}),
+                })}::jsonb`,
+              })
               .where(eq(rcSessions.id, sessionId));
 
             return reply.code(502).send({
               error: code,
               message: msg,
+              hint,
             });
           }
         } catch (err) {

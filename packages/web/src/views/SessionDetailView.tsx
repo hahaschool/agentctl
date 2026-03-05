@@ -444,11 +444,19 @@ function SessionHeader({
 
       {/* Error details */}
       {session.status === 'error' && (
-        <div className="mt-2 px-3 py-2 rounded-sm bg-red-950/50 border border-red-900/50 text-[12px] text-red-300">
-          <span className="font-semibold text-red-400">Error: </span>
-          {typeof session.metadata?.errorMessage === 'string'
-            ? session.metadata.errorMessage
-            : 'Session ended with an error (no details available)'}
+        <div className="mt-2 px-3 py-2 rounded-sm bg-red-950/50 border border-red-900/50 text-[12px] text-red-300 space-y-1">
+          <div>
+            <span className="font-semibold text-red-400">Error: </span>
+            {typeof session.metadata?.errorMessage === 'string'
+              ? session.metadata.errorMessage
+              : 'Session ended with an error (no details available)'}
+          </div>
+          {typeof session.metadata?.errorHint === 'string' && (
+            <div className="text-yellow-300/90">
+              <span className="font-semibold text-yellow-400">Hint: </span>
+              {session.metadata.errorHint}
+            </div>
+          )}
         </div>
       )}
 

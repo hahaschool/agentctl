@@ -52,6 +52,8 @@ export type CliSession = {
   lastActivity: Date;
   /** Whether this session was resumed from a previous one. */
   isResumed: boolean;
+  /** Last stderr output captured from the CLI process (truncated). */
+  lastError: string | null;
 };
 
 export type DiscoveredSession = {
@@ -210,6 +212,7 @@ export class CliSessionManager extends EventEmitter {
       startedAt: new Date(),
       lastActivity: new Date(),
       isResumed,
+      lastError: null,
     };
 
     this.sessions.set(id, session);
@@ -238,10 +241,14 @@ export class CliSessionManager extends EventEmitter {
       this.handleStdoutData(id, chunk);
     });
 
-    // Wire up stderr for error tracking
+    // Wire up stderr for error tracking — also store on session for diagnostics
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      // stderr often contains progress info, not always errors
+      const s = this.sessions.get(id);
+      if (s) {
+        // Keep last 2KB of stderr for error reporting
+        s.lastError = ((s.lastError ?? '') + text).slice(-2048);
+      }
       if (text.includes('Error') || text.includes('error')) {
         this.emitSessionEvent({
           type: 'session_error',
