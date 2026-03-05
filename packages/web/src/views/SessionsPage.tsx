@@ -127,7 +127,8 @@ export function SessionsPage(): React.JSX.Element {
           if (first) setFormMachineId((prev) => prev || first.id);
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        console.warn('Failed to load machines:', err);
         setMachines([]);
       })
       .finally(() => {

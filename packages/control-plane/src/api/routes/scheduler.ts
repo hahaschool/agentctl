@@ -34,7 +34,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       try {
         const jobs = await repeatableJobManager?.listRepeatableJobs();
 
-        return { jobs };
+        return { jobs: jobs ?? [] };
       } catch (error: unknown) {
         request.log.error(error, 'Failed to list repeatable jobs');
         if (error instanceof ControlPlaneError) {
