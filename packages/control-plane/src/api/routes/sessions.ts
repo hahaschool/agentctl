@@ -272,6 +272,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           return reply.code(502).send({
             error: 'WORKER_ERROR',
             message: `Worker returned HTTP ${String(workerResponse.status)}: ${errorText}`,
+            sessionId,
+            machineId,
           });
         }
 
@@ -1131,6 +1133,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           return reply.code(502).send({
             error: 'WORKER_ERROR',
             message: `Worker stream returned HTTP ${String(workerResponse.status)}: ${errorText}`,
+            sessionId,
           });
         }
 

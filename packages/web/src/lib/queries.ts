@@ -253,8 +253,12 @@ export function useResumeSession() {
 }
 
 export function useSendMessage() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, message }: { id: string; message: string }) => api.sendMessage(id, message),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.session(variables.id) });
+    },
   });
 }
 

@@ -425,7 +425,7 @@ export function DashboardPage(): React.JSX.Element {
                 >
                   <span className="truncate max-w-[140px]">{agent.name}</span>
                   <span className="font-mono text-foreground">{formatCost(agent.totalCostUsd)}</span>
-                  {agent.lastCostUsd != null && agent.lastCostUsd > 0 && (
+                  {typeof agent.lastCostUsd === 'number' && Number.isFinite(agent.lastCostUsd) && agent.lastCostUsd > 0 && (
                     <span className="text-[10px] text-muted-foreground">
                       (last: {formatCost(agent.lastCostUsd)})
                     </span>
@@ -498,9 +498,9 @@ export function DashboardPage(): React.JSX.Element {
               );
             })}
           </div>
-          {Object.values(health.data.dependencies).some((d) => d.error) && (
+          {Object.values(health.data?.dependencies ?? {}).some((d) => d.error) && (
             <div className="mt-2 px-3 py-2 bg-red-500/5 border border-red-500/20 rounded text-[12px] text-red-400">
-              {Object.entries(health.data.dependencies)
+              {Object.entries(health.data?.dependencies ?? {})
                 .filter(([, d]) => d.error)
                 .map(([name, d]) => (
                   <div key={name}>
