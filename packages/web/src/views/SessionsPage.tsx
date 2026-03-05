@@ -288,8 +288,15 @@ export function SessionsPage(): React.JSX.Element {
   const handleCleanup = useCallback(async () => {
     if (cleanupSessions.length === 0) return;
     try {
-      await Promise.all(cleanupSessions.map((s) => api.deleteSession(s.id)));
-      toast.success(`Cleaned up ${cleanupSessions.length} session(s)`);
+      const results = await Promise.allSettled(
+        cleanupSessions.map((s) => api.deleteSession(s.id)),
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) {
+        toast.error(`${failed} of ${cleanupSessions.length} cleanup(s) failed`);
+      } else {
+        toast.success(`Cleaned up ${cleanupSessions.length} session(s)`);
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));

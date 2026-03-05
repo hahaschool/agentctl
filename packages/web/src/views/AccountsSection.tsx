@@ -167,6 +167,14 @@ export function AccountsSection(): React.JSX.Element {
         window.removeEventListener('message', oauthListenerRef.current);
       }
 
+      let pollTimer: number | undefined;
+
+      const cleanup = () => {
+        if (pollTimer !== undefined) window.clearInterval(pollTimer);
+        window.removeEventListener('message', listener);
+        oauthListenerRef.current = null;
+      };
+
       const listener = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
 
@@ -179,13 +187,11 @@ export function AccountsSection(): React.JSX.Element {
           resetForm();
           toast.success('Account connected via OAuth');
           setOauthLoading(false);
-          window.removeEventListener('message', listener);
-          oauthListenerRef.current = null;
+          cleanup();
         } else if (data.type === 'oauth_error') {
           toast.error(data.error ?? 'OAuth authentication failed');
           setOauthLoading(false);
-          window.removeEventListener('message', listener);
-          oauthListenerRef.current = null;
+          cleanup();
         }
       };
 
@@ -193,14 +199,10 @@ export function AccountsSection(): React.JSX.Element {
       window.addEventListener('message', listener);
 
       // If the popup is blocked or closed before completing, clean up
-      const pollTimer = window.setInterval(() => {
+      pollTimer = window.setInterval(() => {
         if (popup?.closed) {
-          window.clearInterval(pollTimer);
-          if (oauthListenerRef.current === listener) {
-            setOauthLoading(false);
-            window.removeEventListener('message', listener);
-            oauthListenerRef.current = null;
-          }
+          setOauthLoading(false);
+          cleanup();
         }
       }, 500);
     } catch (err) {

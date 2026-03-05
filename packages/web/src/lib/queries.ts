@@ -195,7 +195,7 @@ export function useStartAgent() {
     mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.startAgent(id, prompt),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },
   });
 }
@@ -237,7 +237,7 @@ export function useResumeSession() {
   return useMutation({
     mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.resumeSession(id, prompt),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },
   });
 }
@@ -257,7 +257,7 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: (id: string) => api.deleteSession(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },
   });
 }
@@ -267,7 +267,7 @@ export function useForkSession() {
   return useMutation({
     mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.forkSession(id, prompt),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },
   });
 }
@@ -313,6 +313,7 @@ export function useUpdateDefaults() {
     mutationFn: api.updateDefaults,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.accountDefaults });
+      void qc.invalidateQueries({ queryKey: queryKeys.projectAccounts });
     },
   });
 }

@@ -772,8 +772,9 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
             setTimeout(() => {
               void queryClient.invalidateQueries({
                 queryKey: ['session-content'],
+                exact: false,
               });
-            }, 1000);
+            }, 1_000);
           },
           onError: (err) => {
             if (isSessionLostError(err)) {
