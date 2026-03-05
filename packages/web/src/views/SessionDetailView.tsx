@@ -413,29 +413,44 @@ function SessionHeader({
 
       {/* Fork input */}
       {showFork && (
-        <div className="mb-2 flex gap-2 items-end">
-          <input
-            type="text"
-            value={forkPrompt}
-            onChange={(e) => setForkPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleFork();
-              if (e.key === 'Escape') {
-                setShowFork(false);
-                setForkPrompt('');
-              }
-            }}
-            placeholder="Prompt for the forked session..."
-            className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleFork}
-            disabled={!forkPrompt.trim() || forkSession.isPending}
-            className="px-3 py-1.5 bg-blue-700 text-white rounded-sm text-xs cursor-pointer disabled:opacity-50"
-          >
-            {forkSession.isPending ? 'Forking...' : 'Fork Session'}
-          </button>
+        <div className="mb-2 space-y-2">
+          <div className="flex gap-2 items-end">
+            <input
+              type="text"
+              value={forkPrompt}
+              onChange={(e) => setForkPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleFork();
+                if (e.key === 'Escape') {
+                  setShowFork(false);
+                  setForkPrompt('');
+                }
+              }}
+              placeholder="Prompt for the forked session..."
+              className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleFork}
+              disabled={!forkPrompt.trim() || forkSession.isPending}
+              className="px-3 py-1.5 bg-blue-700 text-white rounded-sm text-xs cursor-pointer disabled:opacity-50"
+            >
+              {forkSession.isPending ? 'Forking...' : 'Fork Session'}
+            </button>
+          </div>
+          {session.status === 'error' && (() => {
+            const errMsg = (session.metadata?.errorMessage ?? '').toLowerCase();
+            const isQuotaOrAuth = /quota|rate.?limit|authentication|unauthorized|key\b/.test(errMsg);
+            return isQuotaOrAuth ? (
+              <div className="px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-sm text-[11px] text-red-300">
+                This session failed due to quota or authentication issues. Resolve the underlying issue before forking.
+              </div>
+            ) : (
+              <div className="px-3 py-2 bg-yellow-900/30 border border-yellow-700/50 rounded-sm text-[11px] text-yellow-300">
+                This session ended with an error. The forked session may also fail if the error is unresolved.
+              </div>
+            );
+          })()}
         </div>
       )}
 
