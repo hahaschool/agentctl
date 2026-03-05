@@ -737,12 +737,24 @@ export async function sessionRoutes(
         });
       }
 
-      // If the session is still running, we can't send another `-p` call
+      // If the session is still running, auto-stop it before resuming with the new message.
+      // This handles cases like rate-limit hangs where the CLI process is alive but idle.
       if (existingSession.status === 'running') {
-        return reply.status(409).send({
-          error: 'Session is currently running. Wait for it to finish or stop it first.',
-          code: 'SESSION_BUSY',
-        });
+        logger.info(
+          { sessionId: existingSession.id, pid: existingSession.pid },
+          'Session busy — auto-stopping before sending new message',
+        );
+        try {
+          await sessionManager.stopSession(existingSession.id, true);
+          // Wait briefly for process cleanup
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } catch (stopErr) {
+          logger.warn({ err: stopErr }, 'Failed to auto-stop busy session');
+          return reply.status(409).send({
+            error: 'Session is currently running and could not be stopped automatically.',
+            code: 'SESSION_BUSY',
+          });
+        }
       }
 
       if (!existingSession.claudeSessionId) {
