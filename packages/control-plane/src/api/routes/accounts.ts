@@ -214,6 +214,7 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
               max_tokens: 1,
               messages: [{ role: 'user', content: 'hi' }],
             }),
+            signal: AbortSignal.timeout(15_000),
           });
           const latencyMs = Date.now() - start;
           if (res.ok) {

@@ -163,7 +163,7 @@ export function SessionDetailView(): React.JSX.Element {
   const refetchAll = useCallback(() => {
     void session.refetch();
     void content.refetch();
-  }, [session, content]);
+  }, [session.refetch, content.refetch]);
 
   // SSE streaming — connect when session is active for real-time updates
   const isActive = s?.status === 'active' || s?.status === 'starting';
@@ -490,10 +490,13 @@ function MessageList({
   const [showTools, setShowTools] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  const maxDisplayMessages =
-    typeof window !== 'undefined'
-      ? Number(localStorage.getItem('agentctl:maxDisplayMessages')) || 100
-      : 100;
+  const maxDisplayMessages = useMemo(
+    () =>
+      typeof window !== 'undefined'
+        ? Number(localStorage.getItem('agentctl:maxDisplayMessages')) || 100
+        : 100,
+    [],
+  );
 
   const filteredMessages = showTools
     ? messages
@@ -514,7 +517,7 @@ function MessageList({
         scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
       }
     }
-  });
+  }, [visibleMessages.length, streamOutput?.length, autoScroll]);
 
   // Detect user scrolling up to pause auto-scroll
   const handleScroll = useCallback(() => {
@@ -596,7 +599,7 @@ function MessageList({
         )}
 
         {visibleMessages.map((msg, i) => (
-          <MessageBubble key={`${msg.type}-${String(i)}`} message={msg} />
+          <MessageBubble key={`${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${i}`} message={msg} />
         ))}
 
         {/* Live streaming output */}

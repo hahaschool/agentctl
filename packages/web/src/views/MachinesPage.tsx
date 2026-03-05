@@ -72,7 +72,7 @@ export function MachinesPage(): React.JSX.Element {
             )}
           </div>
           <p className="text-[13px] text-muted-foreground mt-1">
-            Machines connected via Tailscale mesh. Auto-refreshes every 15s.
+            Machines connected via Tailscale mesh. Auto-refreshes every 10s.
           </p>
         </div>
         <div className="flex items-center gap-3">

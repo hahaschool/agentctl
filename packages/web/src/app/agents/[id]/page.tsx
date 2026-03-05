@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
@@ -90,9 +90,13 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [editModel, setEditModel] = useState('');
   const [editMaxTurns, setEditMaxTurns] = useState('');
 
-  // Sync form state when the dialog opens
+  // Sync form state only when editOpen transitions from false → true, so that
+  // background refetches of agent.data do not clobber user edits mid-session.
+  const prevEditOpenRef = useRef(false);
   useEffect(() => {
-    if (editOpen && agent.data) {
+    const wasOpen = prevEditOpenRef.current;
+    prevEditOpenRef.current = editOpen;
+    if (editOpen && !wasOpen && agent.data) {
       const d = agent.data;
       setEditName(d.name);
       setEditMachineId(d.machineId);

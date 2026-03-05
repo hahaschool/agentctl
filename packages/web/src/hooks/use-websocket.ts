@@ -159,6 +159,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
   // between connect and scheduleReconnect.
   const connectRef = useRef<() => void>(() => {});
 
+  // Holds a function that removes event listeners for the current WebSocket
+  // instance. Replaced each time connect() creates a new socket.
+  const cleanupListenersRef = useRef<(() => void) | null>(null);
+
   const scheduleReconnect = useCallback(() => {
     const attempt = reconnectAttemptRef.current;
     const base = Math.min(BASE_RECONNECT_MS * 2 ** attempt, MAX_RECONNECT_MS);
@@ -188,7 +192,13 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
     const ws = new WebSocket(resolvedUrl);
     socketRef.current = ws;
 
-    ws.addEventListener('open', () => {
+    // cleanedUp is set to true by the effect cleanup so that listeners
+    // registered on this WebSocket instance do not trigger reconnects or
+    // state updates after the component has unmounted.
+    let cleanedUp = false;
+
+    const handleOpen = (): void => {
+      if (cleanedUp) return;
       setStatus('connected');
       reconnectAttemptRef.current = 0;
 
@@ -202,28 +212,45 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
       }
 
       onOpenRef.current?.();
-    });
+    };
 
-    ws.addEventListener('message', (event: MessageEvent) => {
+    const handleMessage = (event: MessageEvent): void => {
+      if (cleanedUp) return;
       try {
         const data = JSON.parse(String(event.data)) as WsIncomingMessage;
         onMessageRef.current?.(data);
       } catch {
         // Silently ignore unparseable messages.
       }
-    });
+    };
 
-    ws.addEventListener('close', () => {
+    const handleClose = (): void => {
+      if (cleanedUp) return;
       setStatus('disconnected');
       socketRef.current = null;
       onCloseRef.current?.();
       scheduleReconnect();
-    });
+    };
 
-    ws.addEventListener('error', () => {
+    const handleError = (): void => {
       // The browser fires `error` before `close` — we rely on the `close`
       // handler to update status and trigger reconnection.
-    });
+    };
+
+    ws.addEventListener('open', handleOpen);
+    ws.addEventListener('message', handleMessage);
+    ws.addEventListener('close', handleClose);
+    ws.addEventListener('error', handleError);
+
+    // Expose a cleanup function via a ref so the effect can tear down this
+    // specific WebSocket instance's listeners.
+    cleanupListenersRef.current = (): void => {
+      cleanedUp = true;
+      ws.removeEventListener('open', handleOpen);
+      ws.removeEventListener('message', handleMessage);
+      ws.removeEventListener('close', handleClose);
+      ws.removeEventListener('error', handleError);
+    };
   }, [resolvedUrl, scheduleReconnect]);
 
   connectRef.current = connect;
@@ -250,12 +277,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
       // Close the WebSocket without triggering a reconnect.
       const ws = socketRef.current;
       if (ws) {
-        // Remove listeners before closing to prevent the close handler from
-        // scheduling a reconnect.
-        ws.onclose = null;
-        ws.onerror = null;
-        ws.onmessage = null;
-        ws.onopen = null;
+        // Remove named listeners and set cleanedUp=true before closing so
+        // that the close handler does not schedule another reconnect.
+        cleanupListenersRef.current?.();
+        cleanupListenersRef.current = null;
         ws.close();
         socketRef.current = null;
       }

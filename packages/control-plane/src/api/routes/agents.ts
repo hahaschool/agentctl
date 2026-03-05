@@ -353,6 +353,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       }
 
       const DEFAULT_LIMIT = 20;
+      const MAX_RUNS_LIMIT = 500;
       const raw = request.query.limit;
       let limit = DEFAULT_LIMIT;
 
@@ -362,7 +363,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         if (!Number.isInteger(parsed) || parsed < 1) {
           limit = DEFAULT_LIMIT;
         } else {
-          limit = parsed;
+          limit = Math.min(parsed, MAX_RUNS_LIMIT);
         }
       }
 

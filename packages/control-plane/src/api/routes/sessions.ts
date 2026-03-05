@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 
 import { ControlPlaneError } from '@agentctl/shared';
-import { and, desc, eq, inArray, lt } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
@@ -98,7 +98,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           .set({
             status: 'error',
             endedAt: new Date(),
-            metadata: { errorMessage: 'Session timed out — no heartbeat from worker' },
+            metadata: sql`${rcSessions.metadata} || '{"errorMessage":"Session timed out — no heartbeat from worker"}'::jsonb`,
           })
           .where(inArray(rcSessions.id, ids));
 
@@ -622,7 +622,17 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      // Update status to active
+      // Check machine is online before making any DB changes
+      const machine = await dbRegistry.getMachine(session.machineId);
+
+      if (!machine || machine.status === 'offline') {
+        return reply.code(503).send({
+          error: 'MACHINE_OFFLINE',
+          message: `Machine '${session.machineId}' is offline — cannot resume session`,
+        });
+      }
+
+      // Machine is confirmed online — now update status to active
       const [updated] = await db
         .update(rcSessions)
         .set({ status: 'active', endedAt: null })
@@ -630,21 +640,6 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .returning();
 
       // Dispatch resume command to the worker
-      const machine = await dbRegistry.getMachine(session.machineId);
-
-      if (!machine || machine.status === 'offline') {
-        // Machine is offline — revert DB status
-        await db
-          .update(rcSessions)
-          .set({ status: session.status, endedAt: session.endedAt })
-          .where(eq(rcSessions.id, sessionId));
-
-        return reply.code(503).send({
-          error: 'MACHINE_OFFLINE',
-          message: `Machine '${session.machineId}' is offline — cannot resume session`,
-        });
-      }
-
       {
         const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
 
