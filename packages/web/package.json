@@ -7,7 +7,7 @@
     "dev": "next dev --port 5173",
     "build": "next build",
     "start": "next start --port 5173",
-    "test": "echo 'no tests yet'"
+    "test": "vitest run"
   },
   "dependencies": {
     "@agentctl/shared": "workspace:*",
@@ -30,6 +30,7 @@
     "@playwright/test": "^1.58.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   }
 }
