@@ -352,22 +352,22 @@ export function DashboardPage(): React.JSX.Element {
                   >
                     <div className="flex justify-between items-center">
                       <span className="text-[12px] font-medium text-foreground truncate">
-                        {truncate(session.summary || 'Untitled session', 40)}
+                        {truncate(session?.summary || 'Untitled session', 40)}
                       </span>
                       <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
-                        <LiveTimeAgo date={session.lastActivity} />
+                        <LiveTimeAgo date={session?.lastActivity ?? new Date().toISOString()} />
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
                       <span className="font-mono bg-muted px-1.5 py-px rounded text-[10px]">
-                        {session.hostname}
+                        {session?.hostname ?? 'unknown'}
                       </span>
-                      {session.branch && (
+                      {session?.branch && (
                         <span className="font-mono text-green-500 text-[10px]">
                           {session.branch}
                         </span>
                       )}
-                      <span>{session.messageCount} msgs</span>
+                      <span>{session?.messageCount ?? 0} msgs</span>
                     </div>
                   </Link>
                 ))}
