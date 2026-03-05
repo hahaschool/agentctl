@@ -307,10 +307,14 @@ function SessionHeader({
         />
         <StatusBadge status={session.status} />
         {session.status === 'active' && (
-          <span className={cn(
-            'text-[11px] animate-pulse',
-            streamConnected ? 'text-green-500' : 'text-yellow-500',
-          )}>
+          <span
+            className={cn(
+              'text-[11px] animate-pulse',
+              streamConnected ? 'text-green-500' : 'text-yellow-500',
+            )}
+            role="status"
+            aria-live="polite"
+          >
             {streamConnected ? 'Streaming' : 'Live'}
           </span>
         )}
