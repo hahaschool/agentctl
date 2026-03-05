@@ -161,11 +161,12 @@ export function SessionDetailView(): React.JSX.Element {
 
   // We need the Claude session ID (not the RC session ID) to fetch content
   const claudeSessionId = s?.claudeSessionId ?? '';
+  const [contentLimit, setContentLimit] = useState(500);
   const content = useQuery({
     ...sessionContentQuery(claudeSessionId, {
       machineId: s?.machineId ?? '',
       projectPath: s?.projectPath ?? undefined,
-      limit: 500,
+      limit: contentLimit,
     }),
     enabled: !!claudeSessionId && !!s?.machineId,
     refetchInterval: s?.status === 'active' || s?.status === 'starting' ? 2_000 : false,
@@ -243,6 +244,7 @@ export function SessionDetailView(): React.JSX.Element {
           streamOutput={stream.streamOutput}
           streamConnected={stream.connected}
           pendingUserMessages={stream.pendingUserMessages}
+          onLoadMore={() => setContentLimit((prev) => prev * 2)}
         />
 
         {/* Input area */}
@@ -528,6 +530,7 @@ function MessageList({
   streamOutput,
   streamConnected,
   pendingUserMessages,
+  onLoadMore,
 }: {
   messages: SessionContentMessage[];
   totalMessages: number;
@@ -537,6 +540,7 @@ function MessageList({
   streamOutput?: string[];
   streamConnected?: boolean;
   pendingUserMessages?: string[];
+  onLoadMore?: () => void;
 }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -651,7 +655,7 @@ function MessageList({
         <div className="flex items-center gap-1.5 ml-1">
           <input
             ref={searchRef}
-            type="text"
+            type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -721,8 +725,17 @@ function MessageList({
         )}
 
         {totalMessages > messages.length && (
-          <div className="py-2 text-center text-muted-foreground text-xs">
-            Showing last {formatNumber(messages.length)} of {formatNumber(totalMessages)} messages
+          <div className="py-2 text-center text-xs">
+            <button
+              type="button"
+              className="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+              onClick={onLoadMore}
+            >
+              Load older messages ({formatNumber(totalMessages - messages.length)} more)
+            </button>
+            <span className="text-muted-foreground ml-2">
+              — showing last {formatNumber(messages.length)} of {formatNumber(totalMessages)}
+            </span>
           </div>
         )}
 
