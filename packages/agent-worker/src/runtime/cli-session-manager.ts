@@ -288,6 +288,8 @@ export class CliSessionManager extends EventEmitter {
 
     // Emit the user's prompt as an SSE event so it appears immediately in the
     // UI, before Claude Code writes it to the JSONL file on disk.
+    // Increment messageCount to track each user message sent to the session.
+    session.messageCount++;
     this.emitSessionEvent({
       type: 'session_output',
       sessionId: id,

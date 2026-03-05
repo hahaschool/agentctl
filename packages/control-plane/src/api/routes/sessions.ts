@@ -1352,13 +1352,14 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       pid?: number | null;
       costUsd?: number;
       errorMessage?: string;
+      messageCount?: number;
     };
   }>(
     '/:sessionId/status',
     { schema: { tags: ['sessions'], summary: 'Worker reports session status update' } },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { status, claudeSessionId, pid, costUsd, errorMessage } = request.body;
+      const { status, claudeSessionId, pid, costUsd, errorMessage, messageCount } = request.body;
 
       const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
 
@@ -1396,8 +1397,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         updateSet.pid = pid;
       }
 
-      // Store cost and error in metadata (merge with existing)
-      if (costUsd !== undefined || errorMessage !== undefined) {
+      // Store cost, error, and messageCount in metadata (merge with existing)
+      if (costUsd !== undefined || errorMessage !== undefined || messageCount !== undefined) {
         const existingMeta = (rows[0].metadata ?? {}) as Record<string, unknown>;
         const newMeta = { ...existingMeta };
 
@@ -1406,6 +1407,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         }
         if (errorMessage !== undefined) {
           newMeta.errorMessage = errorMessage;
+        }
+        if (messageCount !== undefined) {
+          newMeta.messageCount = messageCount;
         }
 
         updateSet.metadata = newMeta;

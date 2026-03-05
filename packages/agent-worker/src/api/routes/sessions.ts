@@ -162,6 +162,7 @@ export async function sessionRoutes(
       pid?: number | null;
       costUsd?: number;
       errorMessage?: string;
+      messageCount?: number;
     },
   ): Promise<void> {
     const cpSessionId = cpSessionIdMap.get(workerSessionId);
@@ -262,6 +263,7 @@ export async function sessionRoutes(
           claudeSessionId: session?.claudeSessionId ?? null,
           pid: null,
           costUsd: session?.costUsd ?? undefined,
+          messageCount: session?.messageCount ?? undefined,
           errorMessage:
             status === 'error'
               ? session?.lastError

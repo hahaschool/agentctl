@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
@@ -258,6 +258,7 @@ function SessionHeader({
   onRefresh: () => void;
   streamConnected?: boolean;
 }): React.JSX.Element {
+  const router = useRouter();
   const toast = useToast();
   const deleteSession = useDeleteSession();
   const forkSession = useForkSession();
@@ -305,13 +306,18 @@ function SessionHeader({
           toast.success(`Forked! New session: ${data.sessionId.slice(0, 12)}...`);
           setShowFork(false);
           setForkPrompt('');
+          // Navigate to the new session after a brief delay to let the toast appear
+          setTimeout(() => {
+            router.push(`/sessions/${data.sessionId}`);
+          }, 500);
         },
         onError: (err) => toast.error(err.message),
       },
     );
-  }, [session.id, forkPrompt, forkSession, toast]);
+  }, [session.id, forkPrompt, forkSession, toast, router]);
 
-  const canFork = !!session.claudeSessionId;
+  const canFork =
+    !!session.claudeSessionId && (session.status === 'ended' || session.status === 'error' || session.status === 'paused');
 
   return (
     <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
