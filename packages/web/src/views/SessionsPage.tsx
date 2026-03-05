@@ -85,9 +85,14 @@ export function SessionsPage(): React.JSX.Element {
   useEffect(() => {
     if (!sessions.data) return;
     const newSessions = sessions.data.sessions;
-    setAccumulatedSessions((prev) =>
-      offset === 0 ? newSessions : [...prev, ...newSessions],
-    );
+    setAccumulatedSessions((prev) => {
+      if (offset === 0) {
+        return newSessions;
+      }
+      const existingIds = new Set(prev.map(s => s.id));
+      const dedupedSessions = newSessions.filter(s => !existingIds.has(s.id));
+      return [...prev, ...dedupedSessions];
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions.data]);
 
