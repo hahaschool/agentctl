@@ -539,10 +539,12 @@ function MessageList({
   pendingUserMessages?: string[];
 }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [showTools, setShowTools] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
   const [showProgress, setShowProgress] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [search, setSearch] = useState('');
 
   const maxDisplayMessages = useMemo(
     () =>
@@ -587,12 +589,29 @@ function MessageList({
     setAutoScroll(isAtBottom);
   }, []);
 
+  // Cmd+F / Ctrl+F to focus search input
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent): void {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Apply text search filter
+  const searchFiltered = search
+    ? visibleMessages.filter((m) => (m.content ?? '').toLowerCase().includes(search.toLowerCase()))
+    : visibleMessages;
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
         <span>{formatNumber(totalMessages)} total messages</span>
-        <span>{formatNumber(visibleMessages.length)} shown</span>
+        <span>{formatNumber(searchFiltered.length)} shown</span>
         <button
           type="button"
           onClick={() => setShowThinking(!showThinking)}
@@ -629,6 +648,27 @@ function MessageList({
         >
           Progress
         </button>
+        <div className="flex items-center gap-1.5 ml-1">
+          <input
+            ref={searchRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setSearch('');
+                searchRef.current?.blur();
+              }
+            }}
+            placeholder="Search messages..."
+            className="px-2 py-0.5 bg-muted text-foreground border border-border rounded-sm text-[11px] outline-none w-[140px] placeholder:text-muted-foreground/50"
+          />
+          {search && (
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              {searchFiltered.length} {searchFiltered.length === 1 ? 'match' : 'matches'}
+            </span>
+          )}
+        </div>
         {!autoScroll && isActive && (
           <button
             type="button"
@@ -672,8 +712,12 @@ function MessageList({
 
         {error && <ErrorBanner message={error} />}
 
-        {!isLoading && visibleMessages.length === 0 && (
+        {!isLoading && searchFiltered.length === 0 && !search && (
           <div className="p-8 text-center text-muted-foreground text-[13px]">No messages yet</div>
+        )}
+
+        {!isLoading && search && searchFiltered.length === 0 && (
+          <div className="p-8 text-center text-muted-foreground text-[13px]">No messages match &ldquo;{search}&rdquo;</div>
         )}
 
         {totalMessages > messages.length && (
@@ -682,7 +726,7 @@ function MessageList({
           </div>
         )}
 
-        {visibleMessages.map((msg, i) => (
+        {searchFiltered.map((msg, i) => (
           <MessageBlock key={`${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${i}`} message={msg} />
         ))}
 

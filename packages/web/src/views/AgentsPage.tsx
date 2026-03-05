@@ -36,12 +36,14 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { formatCost } from '../lib/format-utils';
+import type { Agent } from '../lib/api';
 import {
   agentsQuery,
   machinesQuery,
   useCreateAgent,
   useStartAgent,
   useStopAgent,
+  useUpdateAgent,
 } from '../lib/queries';
 
 const AGENT_TYPES = ['autonomous', 'adhoc', 'scheduled'] as const;
@@ -59,10 +61,17 @@ export function AgentsPage(): React.JSX.Element {
   const machines = useQuery(machinesQuery());
 
   const createAgent = useCreateAgent();
+  const updateAgent = useUpdateAgent();
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editMachineId, setEditMachineId] = useState('');
+  const [editType, setEditType] = useState<string>('autonomous');
+  const [editModel, setEditModel] = useState('');
+  const [editInitialPrompt, setEditInitialPrompt] = useState('');
   const [createName, setCreateName] = useState('');
   const [createMachineId, setCreateMachineId] = useState('');
   const [createType, setCreateType] = useState<string>('autonomous');
@@ -88,10 +97,11 @@ export function AgentsPage(): React.JSX.Element {
         r: () => void agents.refetch(),
         Escape: () => {
           if (promptAgentId) setPromptAgentId(null);
+          else if (editingAgent) setEditingAgent(null);
           else if (showCreateDialog) setShowCreateDialog(false);
         },
       }),
-      [agents, promptAgentId, showCreateDialog],
+      [agents, promptAgentId, editingAgent, showCreateDialog],
     ),
   );
 
@@ -164,6 +174,53 @@ export function AgentsPage(): React.JSX.Element {
     setCreateProjectPath('');
     setCreateInitialPrompt('');
   }
+
+  // -- Edit agent helpers --
+  function openEditDialog(agent: Agent): void {
+    setEditName(agent.name);
+    setEditMachineId(agent.machineId);
+    setEditType(agent.type);
+    setEditModel((agent.config as Record<string, unknown>)?.model as string ?? '');
+    setEditInitialPrompt((agent.config as Record<string, unknown>)?.initialPrompt as string ?? '');
+    setEditingAgent(agent);
+  }
+
+  const handleEdit = (): void => {
+    if (!editingAgent || !editName.trim() || !editMachineId) return;
+
+    const config: Record<string, unknown> = { ...editingAgent.config };
+    if (editModel.trim()) {
+      config.model = editModel.trim();
+    } else {
+      delete config.model;
+    }
+    if (editInitialPrompt.trim()) {
+      config.initialPrompt = editInitialPrompt.trim();
+    } else {
+      delete config.initialPrompt;
+    }
+
+    updateAgent.mutate(
+      {
+        id: editingAgent.id,
+        name: editName.trim(),
+        machineId: editMachineId,
+        type: editType,
+        ...(Object.keys(config).length > 0 ? { config } : {}),
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Agent "${editName.trim()}" updated`);
+          setEditingAgent(null);
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : String(err));
+        },
+      },
+    );
+  };
+
+  const isEditDisabled = updateAgent.isPending || !editName.trim() || !editMachineId;
 
   const handleCreate = (): void => {
     if (!createName.trim() || !createMachineId) return;
@@ -399,6 +456,126 @@ export function AgentsPage(): React.JSX.Element {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Agent Dialog */}
+      <Dialog
+        open={editingAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingAgent(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Agent</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-name">
+                Name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                id="edit-agent-name"
+                placeholder="my-agent"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                disabled={updateAgent.isPending}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-machine">
+                Machine <span className="text-destructive">*</span>
+              </label>
+              <Select
+                value={editMachineId}
+                onValueChange={setEditMachineId}
+                disabled={updateAgent.isPending}
+              >
+                <SelectTrigger className="w-full" id="edit-agent-machine">
+                  <SelectValue placeholder="Select a machine" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  {machineList.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.hostname} ({m.id})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-type">
+                Type
+              </label>
+              <Select
+                value={editType}
+                onValueChange={setEditType}
+                disabled={updateAgent.isPending}
+              >
+                <SelectTrigger className="w-full" id="edit-agent-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  {AGENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-model">
+                Model
+              </label>
+              <Input
+                id="edit-agent-model"
+                placeholder="claude-sonnet-4-6"
+                value={editModel}
+                onChange={(e) => setEditModel(e.target.value)}
+                disabled={updateAgent.isPending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                The Claude model to use for this agent.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-prompt">
+                Initial Prompt
+              </label>
+              <textarea
+                id="edit-agent-prompt"
+                rows={3}
+                placeholder="Describe what this agent should do..."
+                value={editInitialPrompt}
+                onChange={(e) => setEditInitialPrompt(e.target.value)}
+                disabled={updateAgent.isPending}
+                className={cn(
+                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  'dark:bg-input/30',
+                )}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Stored in agent config. Can be used as the default prompt when starting the agent.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingAgent(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEdit} disabled={isEditDisabled}>
+              {updateAgent.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Filter / Sort controls */}
       <div className="flex gap-2.5 items-center mb-4 flex-wrap">
         <input
@@ -523,6 +700,14 @@ export function AgentsPage(): React.JSX.Element {
 
               {/* Actions */}
               <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() => openEditDialog(agent)}
+                  aria-label={`Edit agent ${agent.name}`}
+                  className="px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs font-medium cursor-pointer hover:bg-accent transition-colors"
+                >
+                  Edit
+                </button>
                 {agent.status === 'running' ? (
                   <ConfirmButton
                     label={stopAgent.isPending ? 'Stopping...' : 'Stop'}

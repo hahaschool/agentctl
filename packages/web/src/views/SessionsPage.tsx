@@ -417,8 +417,10 @@ export function SessionsPage(): React.JSX.Element {
           <div className="flex justify-between items-center">
             <h2 className="text-base font-semibold">
               Sessions
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                ({filteredSessions.length})
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums">
+                {hasMore
+                  ? `(${sessionList.length} of ${totalCount})`
+                  : `(${filteredSessions.length})`}
               </span>
             </h2>
             <div className="flex items-center gap-1 flex-wrap">
@@ -746,18 +748,24 @@ export function SessionsPage(): React.JSX.Element {
               />
             ))
           )}
-          {hasMore && !sessions.isLoading && (
+          {!sessions.isLoading && (
             <div className="px-4 py-3 border-t border-border">
-              <button
-                type="button"
-                onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
-                disabled={sessions.isFetching}
-                className="w-full px-3 py-2 bg-muted text-muted-foreground border border-border rounded-sm text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {sessions.isFetching
-                  ? 'Loading...'
-                  : `Show more (${totalCount - sessionList.length} remaining)`}
-              </button>
+              {hasMore ? (
+                <button
+                  type="button"
+                  onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
+                  disabled={sessions.isFetching}
+                  className="w-full px-3 py-2 bg-muted text-muted-foreground border border-border rounded-sm text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sessions.isFetching
+                    ? 'Loading...'
+                    : `Load more (${totalCount - sessionList.length} remaining)`}
+                </button>
+              ) : sessionList.length > 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center">
+                  All {sessionList.length} sessions loaded
+                </p>
+              ) : null}
             </div>
           )}
         </div>

@@ -100,7 +100,7 @@ export function DashboardPage(): React.JSX.Element {
     discovered.isFetching ||
     sessions.isFetching;
   const anyError =
-    health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error;
+    health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error ?? sessions.error;
 
   // Health status — Tailwind class helpers
   const healthStatus = health.data?.status;
