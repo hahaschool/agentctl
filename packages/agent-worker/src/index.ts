@@ -80,7 +80,7 @@ const env = validateEnv(AGENT_WORKER_ENV, logger);
 
 const PORT = Number(env.WORKER_PORT);
 const HOST = env.WORKER_HOST as string;
-const CONTROL_PLANE_URL = env.CONTROL_URL || 'http://control:8080';
+const CONTROL_PLANE_URL = env.CONTROL_URL || 'http://localhost:8080';
 const MACHINE_ID = env.MACHINE_ID as string;
 const MAX_CONCURRENT_AGENTS = Number(env.MAX_CONCURRENT_AGENTS) || 3;
 const AUDIT_LOG_DIR = env.AUDIT_LOG_DIR || '.agentctl/audit';
@@ -293,10 +293,11 @@ async function main(): Promise<void> {
     {
       port: PORT,
       machineId: MACHINE_ID,
+      controlPlaneUrl: CONTROL_PLANE_URL,
       maxConcurrentAgents: MAX_CONCURRENT_AGENTS,
       ipcDir: IPC_DIR,
     },
-    'Agent worker started',
+    'Agent worker started — verify MACHINE_ID matches DB and CONTROL_URL is reachable',
   );
 
   let shuttingDown = false;

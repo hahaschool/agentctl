@@ -27,12 +27,12 @@ function SettingsGroup({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <section>
-      <div className="mb-4">
-        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
-        {description && <p className="text-[12px] text-muted-foreground mt-0.5">{description}</p>}
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        {description && <p className="text-[13px] text-muted-foreground mt-1">{description}</p>}
       </div>
-      <div className="space-y-3">{children}</div>
+      <div className="space-y-6">{children}</div>
     </section>
   );
 }
@@ -102,11 +102,11 @@ function ThemeSection(): React.JSX.Element {
   ];
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div>
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-[13px] font-medium">Theme</h3>
-          <p className="text-[11px] text-muted-foreground">Choose your preferred color scheme.</p>
+          <h3 className="text-sm font-medium">Theme</h3>
+          <p className="text-xs text-muted-foreground">Choose your preferred color scheme.</p>
         </div>
         <div className="flex rounded-md border border-border overflow-hidden">
           {themes.map((t) => (
@@ -139,9 +139,9 @@ function ConnectionSection(): React.JSX.Element {
   const h = health.data;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[13px] font-medium">Control Plane</h3>
+        <h3 className="text-sm font-medium">Control Plane</h3>
         <div className="flex items-center gap-2">
           <span
             className={cn(
@@ -215,8 +215,8 @@ function ConnectionSection(): React.JSX.Element {
 
 function KeyboardShortcutsSection(): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="text-[13px] font-medium mb-3">Keyboard Shortcuts</h3>
+    <div>
+      <h3 className="text-sm font-medium mb-3">Keyboard Shortcuts</h3>
       <div className="space-y-1">
         {ALL_SHORTCUTS.map((s) => (
           <div key={s.desc} className="flex justify-between items-center py-0.5">
@@ -251,8 +251,8 @@ function AboutSection(): React.JSX.Element {
   ];
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="text-[13px] font-medium mb-3">About AgentCTL</h3>
+    <div>
+      <h3 className="text-sm font-medium mb-3">About AgentCTL</h3>
       <div className="space-y-1.5">
         {items.map((item) => (
           <div key={item.label} className="flex justify-between items-center">

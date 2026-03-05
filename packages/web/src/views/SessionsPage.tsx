@@ -382,7 +382,7 @@ export function SessionsPage(): React.JSX.Element {
                 ({filteredSessions.length})
               </span>
             </h2>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 flex-wrap">
               <button
                 type="button"
                 onClick={() => {
@@ -392,7 +392,7 @@ export function SessionsPage(): React.JSX.Element {
                 aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
                 aria-expanded={showCreateForm}
                 className={cn(
-                  'px-2.5 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap',
+                  'px-2 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap',
                   showCreateForm ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
                 )}
               >
@@ -403,14 +403,14 @@ export function SessionsPage(): React.JSX.Element {
                   label={`Clean Up (${cleanupSessions.length})`}
                   confirmLabel={`Delete ${cleanupSessions.length}?`}
                   onConfirm={() => void handleCleanup()}
-                  className="px-2.5 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground"
-                  confirmClassName="px-2.5 py-1.5 border border-destructive rounded-sm text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground"
+                  className="px-2 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground"
+                  confirmClassName="px-2 py-1.5 border border-destructive rounded-sm text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground"
                 />
               )}
               <RefreshButton
                 onClick={() => void sessions.refetch()}
                 isFetching={sessions.isFetching && !sessions.isLoading}
-                className="px-2.5 py-1.5 text-xs"
+                className="px-2 py-1.5 text-xs"
               />
             </div>
           </div>
@@ -436,7 +436,7 @@ export function SessionsPage(): React.JSX.Element {
         </div>
 
         {/* Status filter tabs */}
-        <div className="flex border-b border-border px-2">
+        <div className="flex border-b border-border px-2 overflow-x-auto">
           {STATUS_TABS.map((tab) => (
             <button
               type="button"

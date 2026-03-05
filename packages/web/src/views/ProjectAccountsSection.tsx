@@ -68,8 +68,8 @@ export function ProjectAccountsSection(): React.JSX.Element {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="text-[13px] font-medium mb-3">Project Account Overrides</h3>
+    <div>
+      <h3 className="text-sm font-medium mb-3">Project Account Overrides</h3>
 
       {isLoading ? (
         <div className="space-y-2">

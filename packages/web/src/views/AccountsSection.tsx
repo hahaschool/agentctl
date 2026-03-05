@@ -171,9 +171,9 @@ export function AccountsSection(): React.JSX.Element {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[13px] font-medium">Accounts</h3>
+        <h3 className="text-sm font-medium">Accounts</h3>
         <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
           Add Account
         </Button>
@@ -194,7 +194,7 @@ export function AccountsSection(): React.JSX.Element {
           {accounts.map((account) => (
             <div
               key={account.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-[13px]"
+              className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-[13px] transition-colors hover:bg-muted/40"
             >
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2">

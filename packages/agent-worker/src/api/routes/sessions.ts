@@ -479,6 +479,10 @@ export async function sessionRoutes(
       // Store CP→worker session ID mapping for status callbacks
       if (cpSessionId) {
         cpSessionIdMap.set(session.id, cpSessionId);
+
+        // Immediately report active status so the control plane doesn't have
+        // to wait for the next periodic heartbeat (30s) to see this session.
+        void reportStatusToControlPlane(session.id, { status: 'active' });
       }
 
       // Wait briefly to verify CLI process doesn't crash on startup
@@ -608,6 +612,10 @@ export async function sessionRoutes(
         // Store CP→worker session ID mapping so status callbacks reach the control plane
         if (cpSessionId) {
           cpSessionIdMap.set(newSession.id, cpSessionId);
+
+          // Immediately report active status so the control plane doesn't have
+          // to wait for the next periodic heartbeat (30s) to see this session.
+          void reportStatusToControlPlane(newSession.id, { status: 'active' });
         }
 
         // Wait briefly to verify the CLI process didn't crash immediately
