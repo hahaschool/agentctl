@@ -117,6 +117,29 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
+      const { machineId, name, type } = request.body;
+
+      if (!machineId || typeof machineId !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_BODY',
+          message: 'A non-empty "machineId" string is required',
+        });
+      }
+
+      if (!name || typeof name !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_BODY',
+          message: 'A non-empty "name" string is required',
+        });
+      }
+
+      if (!type || typeof type !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_BODY',
+          message: 'A non-empty "type" string is required',
+        });
+      }
+
       const agentId = await dbRegistry.createAgent(request.body);
       return { ok: true, agentId };
     },

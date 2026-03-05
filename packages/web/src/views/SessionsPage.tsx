@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
@@ -632,10 +633,17 @@ export function SessionsPage(): React.JSX.Element {
               ))}
             </div>
           ) : filteredSessions.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-[13px]">
-              {searchQuery || statusFilter !== 'all' ? (
-                <>
-                  No matching sessions.{' '}
+            sessionList.length === 0 ? (
+              <EmptyState
+                icon={'▶'}
+                title="No sessions yet"
+                description="Create a new session using the form above to get started."
+              />
+            ) : (
+              <EmptyState
+                icon={'\u2315'}
+                title="No sessions match the filters"
+                action={
                   <button
                     type="button"
                     onClick={() => {
@@ -646,11 +654,9 @@ export function SessionsPage(): React.JSX.Element {
                   >
                     Clear filters
                   </button>
-                </>
-              ) : (
-                'No sessions found'
-              )}
-            </div>
+                }
+              />
+            )
           ) : groupedSessions ? (
             Array.from(groupedSessions.entries()).map(([groupKey, groupItems]) => (
               <div key={groupKey}>
