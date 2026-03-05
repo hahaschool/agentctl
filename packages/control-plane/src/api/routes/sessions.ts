@@ -21,9 +21,9 @@ const WORKER_REQUEST_TIMEOUT_MS = 10_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** How long a session can stay in 'starting' or 'active' without a heartbeat before being reaped. */
-const STALE_SESSION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+const STALE_SESSION_TIMEOUT_MS = Number(process.env.STALE_SESSION_TIMEOUT_MS) || 2 * 60 * 1000;
 /** How often the stale session reaper runs. */
-const REAPER_INTERVAL_MS = 60 * 1000; // 60 seconds
+const REAPER_INTERVAL_MS = Number(process.env.REAPER_INTERVAL_MS) || 60 * 1000;
 
 const RC_SESSION_STATUSES = ['starting', 'active', 'paused', 'ended', 'error'] as const;
 type RcSessionStatus = (typeof RC_SESSION_STATUSES)[number];
