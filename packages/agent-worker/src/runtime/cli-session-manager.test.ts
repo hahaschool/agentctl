@@ -226,14 +226,16 @@ describe('CliSessionManager', () => {
       expect(args).toContain('--json-schema');
     });
 
-    it('emits session_started event', () => {
+    it('emits session_started event followed by user_message', () => {
       const events: CliSessionEvent[] = [];
       manager.on('session-event', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
 
-      expect(events).toHaveLength(1);
+      expect(events).toHaveLength(2);
       expect(events[0].type).toBe('session_started');
+      // Synthetic user_message echoes the prompt immediately via SSE
+      expect(events[1].type).toBe('session_output');
     });
 
     it('throws when max concurrent sessions reached', () => {
@@ -352,9 +354,10 @@ describe('CliSessionManager', () => {
 
     it('emits assistant text as output event', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      // Subscribe AFTER startSession to skip the synthetic user_message event
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout('{"type":"assistant","content":[{"type":"text","text":"Hello!"}]}\n');
       await tick();
@@ -372,9 +375,9 @@ describe('CliSessionManager', () => {
 
     it('emits tool_use as output event', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout(
         '{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/test.ts"}}\n',
@@ -396,9 +399,9 @@ describe('CliSessionManager', () => {
 
     it('emits tool_result as output event', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout('{"type":"tool_result","content":"file contents here"}\n');
       await tick();
@@ -451,9 +454,9 @@ describe('CliSessionManager', () => {
 
     it('emits approval_needed for permission requests', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout(
         '{"type":"permission_request","tool":"Bash","input":{"command":"rm -rf /"},"timeout_seconds":60}\n',
@@ -473,9 +476,9 @@ describe('CliSessionManager', () => {
 
     it('handles multi-line buffered output', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       // Send data in chunks that split across lines
       mockChild.pushStdout('{"type":"assistant","conte');
@@ -488,9 +491,9 @@ describe('CliSessionManager', () => {
 
     it('handles non-JSON lines gracefully', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout('Some non-JSON text\n');
       await tick();

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type SessionStreamEvent =
   | { event: 'output'; data: { text: string; stream?: string } }
+  | { event: 'user_message'; data: { text: string } }
   | { event: 'status'; data: { status: string; sessionId?: string } }
   | { event: 'cost'; data: { totalCostUsd: number; inputTokens: number; outputTokens: number } }
   | { event: 'approval_needed'; data: { toolName: string; args: Record<string, unknown> } }
@@ -33,6 +34,8 @@ type UseSessionStreamResult = {
   connected: boolean;
   /** Accumulated output text from the stream. */
   streamOutput: string[];
+  /** User messages received via SSE (shown before JSONL poll catches up). */
+  pendingUserMessages: string[];
   /** Latest status event, if any. */
   latestStatus: string | null;
   /** Latest cost data, if any. */
@@ -54,6 +57,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
   const [connected, setConnected] = useState(false);
   const [streamOutput, setStreamOutput] = useState<string[]>([]);
+  const [pendingUserMessages, setPendingUserMessages] = useState<string[]>([]);
   const [latestStatus, setLatestStatus] = useState<string | null>(null);
   const [latestCost, setLatestCost] = useState<{
     totalCostUsd: number;
@@ -71,6 +75,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
   // Reset state when sessionId changes
   const resetState = useCallback(() => {
     setStreamOutput([]);
+    setPendingUserMessages([]);
     setLatestStatus(null);
     setLatestCost(null);
   }, []);
@@ -134,6 +139,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             if (text) {
               setStreamOutput((prev) => [...prev, text]);
             }
+          } else if (eventType === 'user_message') {
+            const text = (data as { text?: string }).text;
+            if (text) {
+              setPendingUserMessages((prev) => [...prev, text]);
+            }
           } else if (eventType === 'status') {
             setLatestStatus((data as { status?: string }).status ?? null);
           } else if (eventType === 'cost') {
@@ -147,6 +157,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       };
 
       es.addEventListener('output', handleEvent('output'));
+      es.addEventListener('user_message', handleEvent('user_message'));
       es.addEventListener('status', handleEvent('status'));
       es.addEventListener('cost', handleEvent('cost'));
       es.addEventListener('approval_needed', handleEvent('approval_needed'));
@@ -172,6 +183,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     };
   }, [sessionId, enabled, resetState]);
 
-  const clearStreamOutput = useCallback(() => setStreamOutput([]), []);
-  return { connected, streamOutput, latestStatus, latestCost, clearStreamOutput };
+  const clearStreamOutput = useCallback(() => {
+    setStreamOutput([]);
+    setPendingUserMessages([]);
+  }, []);
+  return { connected, streamOutput, pendingUserMessages, latestStatus, latestCost, clearStreamOutput };
 }

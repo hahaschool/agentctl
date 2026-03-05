@@ -219,6 +219,7 @@ export function SessionDetailView(): React.JSX.Element {
           isActive={s.status === 'active'}
           streamOutput={stream.streamOutput}
           streamConnected={stream.connected}
+          pendingUserMessages={stream.pendingUserMessages}
         />
 
         {/* Input area */}
@@ -488,6 +489,7 @@ function MessageList({
   isActive,
   streamOutput,
   streamConnected,
+  pendingUserMessages,
 }: {
   messages: SessionContentMessage[];
   totalMessages: number;
@@ -496,6 +498,7 @@ function MessageList({
   isActive: boolean;
   streamOutput?: string[];
   streamConnected?: boolean;
+  pendingUserMessages?: string[];
 }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTools, setShowTools] = useState(false);
@@ -612,6 +615,15 @@ function MessageList({
         {visibleMessages.map((msg, i) => (
           <MessageBubble key={`${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${i}`} message={msg} />
         ))}
+
+        {/* Pending user messages (shown immediately via SSE before JSONL poll) */}
+        {pendingUserMessages && pendingUserMessages.length > 0 &&
+          pendingUserMessages.map((text, i) => (
+            <MessageBubble
+              key={`pending-user-${String(i)}`}
+              message={{ type: 'human', content: text, timestamp: new Date().toISOString() }}
+            />
+          ))}
 
         {/* Live streaming output */}
         {streamConnected && streamOutput && streamOutput.length > 0 && (

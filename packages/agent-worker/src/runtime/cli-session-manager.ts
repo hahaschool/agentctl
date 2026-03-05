@@ -286,6 +286,17 @@ export class CliSessionManager extends EventEmitter {
       claudeSessionId: session.claudeSessionId,
     });
 
+    // Emit the user's prompt as an SSE event so it appears immediately in the
+    // UI, before Claude Code writes it to the JSONL file on disk.
+    this.emitSessionEvent({
+      type: 'session_output',
+      sessionId: id,
+      event: {
+        event: 'user_message',
+        data: { text: options.prompt },
+      },
+    });
+
     // Startup watchdog — warn if the CLI process produces no output within STARTUP_WATCHDOG_MS.
     // This catches cases like missing credentials, rate limits, or auth prompts that cause
     // the CLI to hang silently.
