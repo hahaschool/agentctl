@@ -53,6 +53,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
       try {
         const result = await dbRegistry.queryActions({
+          runId: sessionId,
           limit: MAX_LIMIT,
           offset: 0,
         });
@@ -124,6 +125,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
       try {
         const result = await dbRegistry.queryActions({
+          runId: sessionId,
           limit: MAX_LIMIT,
           offset: 0,
         });
@@ -188,6 +190,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
 
       try {
         const result = await dbRegistry.queryActions({
+          runId: sessionId,
           limit: MAX_LIMIT,
           offset: 0,
         });

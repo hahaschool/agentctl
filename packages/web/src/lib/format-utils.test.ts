@@ -1,0 +1,254 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  formatCost,
+  formatDuration,
+  formatDurationMs,
+  formatNumber,
+  recencyColorClass,
+  shortenPath,
+  timeAgo,
+  truncate,
+} from './format-utils';
+
+// ---------------------------------------------------------------------------
+// timeAgo
+// ---------------------------------------------------------------------------
+
+describe('timeAgo', () => {
+  it('returns empty string for falsy input', () => {
+    expect(timeAgo('')).toBe('');
+  });
+
+  it('returns "just now" for < 1 minute', () => {
+    const now = new Date().toISOString();
+    expect(timeAgo(now)).toBe('just now');
+  });
+
+  it('returns minutes for < 60 min', () => {
+    const date = new Date(Date.now() - 5 * 60_000).toISOString();
+    expect(timeAgo(date)).toBe('5m ago');
+  });
+
+  it('returns hours for < 24h', () => {
+    const date = new Date(Date.now() - 3 * 3600_000).toISOString();
+    expect(timeAgo(date)).toBe('3h ago');
+  });
+
+  it('returns days for < 30d', () => {
+    const date = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    expect(timeAgo(date)).toBe('7d ago');
+  });
+
+  it('returns months for >= 30d', () => {
+    const date = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    expect(timeAgo(date)).toBe('3mo ago');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatDuration
+// ---------------------------------------------------------------------------
+
+describe('formatDuration', () => {
+  it('returns seconds for short durations', () => {
+    expect(formatDuration('2026-01-01T00:00:00Z', '2026-01-01T00:00:45Z')).toBe('45s');
+  });
+
+  it('returns minutes and seconds', () => {
+    expect(formatDuration('2026-01-01T00:00:00Z', '2026-01-01T00:05:30Z')).toBe('5m 30s');
+  });
+
+  it('returns hours and minutes', () => {
+    expect(formatDuration('2026-01-01T00:00:00Z', '2026-01-01T02:15:00Z')).toBe('2h 15m');
+  });
+
+  it('returns 0s for zero diff', () => {
+    expect(formatDuration('2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')).toBe('0s');
+  });
+
+  it('returns 0s for negative diff (end before start)', () => {
+    expect(formatDuration('2026-01-01T00:01:00Z', '2026-01-01T00:00:00Z')).toBe('0s');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatDurationMs
+// ---------------------------------------------------------------------------
+
+describe('formatDurationMs', () => {
+  it('returns "-" for null', () => {
+    expect(formatDurationMs(null)).toBe('-');
+  });
+
+  it('returns "-" for undefined', () => {
+    expect(formatDurationMs(undefined)).toBe('-');
+  });
+
+  it('returns "-" for zero', () => {
+    expect(formatDurationMs(0)).toBe('-');
+  });
+
+  it('returns "-" for negative', () => {
+    expect(formatDurationMs(-1000)).toBe('-');
+  });
+
+  it('returns seconds', () => {
+    expect(formatDurationMs(45_000)).toBe('45s');
+  });
+
+  it('returns minutes and seconds', () => {
+    expect(formatDurationMs(330_000)).toBe('5m 30s');
+  });
+
+  it('returns hours and minutes', () => {
+    expect(formatDurationMs(8_100_000)).toBe('2h 15m');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// shortenPath
+// ---------------------------------------------------------------------------
+
+describe('shortenPath', () => {
+  it('returns empty string for null', () => {
+    expect(shortenPath(null)).toBe('');
+  });
+
+  it('returns empty string for undefined', () => {
+    expect(shortenPath(undefined)).toBe('');
+  });
+
+  it('returns empty string for empty string', () => {
+    expect(shortenPath('')).toBe('');
+  });
+
+  it('replaces /Users/user/ with ~/', () => {
+    expect(shortenPath('/Users/jane/projects/foo')).toBe('~/projects/foo');
+  });
+
+  it('replaces /home/user/ with ~/', () => {
+    expect(shortenPath('/home/deploy/apps/myapp')).toBe('~/apps/myapp');
+  });
+
+  it('replaces /root with ~', () => {
+    expect(shortenPath('/root/projects/foo')).toBe('~/projects/foo');
+  });
+
+  it('returns ~ for bare /Users/user (no trailing slash)', () => {
+    expect(shortenPath('/Users/jane')).toBe('~');
+  });
+
+  it('truncates long paths to last 2 segments', () => {
+    expect(shortenPath('/Users/jane/a/b/c/d')).toBe('~/.../' + 'c/d');
+  });
+
+  it('does not truncate paths with 3 or fewer segments', () => {
+    expect(shortenPath('/opt/app/data')).toBe('/opt/app/data');
+  });
+
+  it('truncates non-home long paths', () => {
+    expect(shortenPath('/var/lib/some/deep/path/here')).toBe('.../path/here');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// truncate
+// ---------------------------------------------------------------------------
+
+describe('truncate', () => {
+  it('returns string unchanged if within limit', () => {
+    expect(truncate('hello', 10)).toBe('hello');
+  });
+
+  it('returns string unchanged at exactly maxLen', () => {
+    expect(truncate('hello', 5)).toBe('hello');
+  });
+
+  it('truncates with ellipsis when over limit', () => {
+    const result = truncate('hello world', 6);
+    expect(result).toBe('hello\u2026');
+    expect(result.length).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatCost
+// ---------------------------------------------------------------------------
+
+describe('formatCost', () => {
+  it('returns $0.00 for null', () => {
+    expect(formatCost(null)).toBe('$0.00');
+  });
+
+  it('returns $0.00 for undefined', () => {
+    expect(formatCost(undefined)).toBe('$0.00');
+  });
+
+  it('formats normal values', () => {
+    expect(formatCost(1.5)).toBe('$1.50');
+  });
+
+  it('formats zero', () => {
+    expect(formatCost(0)).toBe('$0.00');
+  });
+
+  it('formats small values', () => {
+    expect(formatCost(0.003)).toBe('$0.00');
+  });
+
+  it('formats large values', () => {
+    expect(formatCost(1234.567)).toBe('$1234.57');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatNumber
+// ---------------------------------------------------------------------------
+
+describe('formatNumber', () => {
+  it('returns "0" for null', () => {
+    expect(formatNumber(null)).toBe('0');
+  });
+
+  it('returns "0" for undefined', () => {
+    expect(formatNumber(undefined)).toBe('0');
+  });
+
+  it('formats a number with commas', () => {
+    expect(formatNumber(1234567)).toBe('1,234,567');
+  });
+
+  it('handles string input', () => {
+    expect(formatNumber('42')).toBe('42');
+  });
+
+  it('returns original string for NaN input', () => {
+    expect(formatNumber('not-a-number')).toBe('not-a-number');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// recencyColorClass
+// ---------------------------------------------------------------------------
+
+describe('recencyColorClass', () => {
+  it('returns muted for empty string', () => {
+    expect(recencyColorClass('')).toBe('bg-muted-foreground');
+  });
+
+  it('returns green for very recent', () => {
+    const recent = new Date(Date.now() - 5 * 60_000).toISOString(); // 5 min ago
+    expect(recencyColorClass(recent)).toBe('bg-green-500');
+  });
+
+  it('returns yellow for a few hours ago', () => {
+    const hours = new Date(Date.now() - 5 * 3600_000).toISOString(); // 5h ago
+    expect(recencyColorClass(hours)).toBe('bg-yellow-500');
+  });
+
+  it('returns muted for old dates', () => {
+    const old = new Date(Date.now() - 48 * 3600_000).toISOString(); // 2 days ago
+    expect(recencyColorClass(old)).toBe('bg-muted-foreground');
+  });
+});

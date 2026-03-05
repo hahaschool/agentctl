@@ -76,6 +76,7 @@ export function DiscoverPage(): React.JSX.Element {
   const [showNewSession, setShowNewSession] = useState(false);
   const [newProjectPath, setNewProjectPath] = useState('');
   const [newPrompt, setNewPrompt] = useState('');
+  const [newMachineId, setNewMachineId] = useState('');
   const [newSessionCreating, setNewSessionCreating] = useState(false);
 
   // Filter state
@@ -114,6 +115,13 @@ export function DiscoverPage(): React.JSX.Element {
     const set = new Set<string>();
     for (const s of allSessions) set.add(s.hostname);
     return Array.from(set).sort();
+  }, [allSessions]);
+
+  // Unique machines for new session form
+  const machines = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of allSessions) map.set(s.machineId, s.hostname);
+    return Array.from(map.entries()).map(([id, hostname]) => ({ id, hostname }));
   }, [allSessions]);
 
   // Filtered sessions
@@ -243,11 +251,13 @@ export function DiscoverPage(): React.JSX.Element {
 
   const handleNewSession = useCallback(async () => {
     if (!newProjectPath.trim() || !newPrompt.trim()) return;
+    const machineId = newMachineId || machines[0]?.id;
+    if (!machineId) {
+      toast.error('No machines available. Ensure at least one machine is online.');
+      return;
+    }
     setNewSessionCreating(true);
     try {
-      // Use the first machine from discovered sessions, or 'mac-local' as default
-      const first = allSessions[0];
-      const machineId = first ? first.machineId : 'mac-local';
       await api.createSession({
         agentId: 'adhoc',
         machineId,
@@ -265,7 +275,7 @@ export function DiscoverPage(): React.JSX.Element {
     } finally {
       setNewSessionCreating(false);
     }
-  }, [newProjectPath, newPrompt, allSessions, queryClient, toast]);
+  }, [newProjectPath, newPrompt, newMachineId, machines, queryClient, toast]);
 
   const handleResume = useCallback(
     async (session: DiscoveredSession) => {
@@ -337,6 +347,31 @@ export function DiscoverPage(): React.JSX.Element {
       {/* Quick new session form */}
       {showNewSession && (
         <div className="p-4 bg-card border border-border rounded-lg mb-4 flex gap-3 items-end flex-wrap">
+          <div className="min-w-[120px]">
+            <label
+              htmlFor="new-session-machine"
+              className="text-[11px] text-muted-foreground mb-1 block"
+            >
+              Machine
+            </label>
+            <select
+              id="new-session-machine"
+              value={newMachineId}
+              onChange={(e) => setNewMachineId(e.target.value)}
+              disabled={newSessionCreating}
+              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
+            >
+              {machines.length === 0 ? (
+                <option value="">No machines</option>
+              ) : (
+                machines.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.hostname}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
           <div className="flex-1 min-w-[150px]">
             <label
               htmlFor="new-session-project-path"
@@ -349,6 +384,7 @@ export function DiscoverPage(): React.JSX.Element {
               type="text"
               value={newProjectPath}
               onChange={(e) => setNewProjectPath(e.target.value)}
+              disabled={newSessionCreating}
               placeholder="/Users/hahaschool/my-project"
               className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
             />
@@ -368,6 +404,7 @@ export function DiscoverPage(): React.JSX.Element {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleNewSession();
               }}
+              disabled={newSessionCreating}
               placeholder="What should Claude work on?"
               className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-xs outline-none box-border"
             />

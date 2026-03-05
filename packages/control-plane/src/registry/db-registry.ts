@@ -44,6 +44,7 @@ type InsertActionData = {
 
 export type AuditQueryFilters = {
   agentId?: string;
+  runId?: string;
   from?: string;
   to?: string;
   tool?: string;
@@ -543,6 +544,10 @@ export class DbAgentRegistry {
 
     if (filters.agentId) {
       conditions.push(eq(agentRuns.agentId, filters.agentId));
+    }
+
+    if ('runId' in filters && filters.runId) {
+      conditions.push(eq(agentActions.runId, filters.runId));
     }
 
     if (filters.from) {
