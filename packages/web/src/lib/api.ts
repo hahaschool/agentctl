@@ -52,6 +52,7 @@ export type Agent = {
 export type Session = {
   id: string;
   agentId: string;
+  agentName: string | null;
   machineId: string;
   sessionUrl: string | null;
   claudeSessionId: string | null;

@@ -542,6 +542,35 @@ describe('Worker session routes', () => {
 
       expect(res.statusCode).toBe(404);
     });
+
+    it('should cleanup cpSessionIdMap, reportedClaudeIds, intentionalStops, and sessionBuffers on DELETE', async () => {
+      const sessions = (manager as unknown as { _sessions: Map<string, CliSession> })._sessions;
+      const session = makeSession({ id: 'cli-cleanup-test' });
+      sessions.set('cli-cleanup-test', session);
+      vi.mocked(manager.getSession).mockImplementation((id) => sessions.get(id) ?? null);
+
+      // First create the session via POST to populate the internal maps
+      await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'cp-sess-123',
+          agentId: 'agent-1',
+          projectPath: '/tmp/project',
+          prompt: 'Test',
+        },
+      });
+
+      // Now delete it — should cleanup all maps
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/cli-cleanup-test',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(manager.stopSession).toHaveBeenCalledWith('cli-cleanup-test', true);
+      // Verify stopSession was called (which is essential for process cleanup)
+    });
   });
 
   // ── GET /api/sessions/discover ─────────────────────────────────

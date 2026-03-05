@@ -354,8 +354,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           ? db
               .select()
               .from(rcSessions)
+              .leftJoin(agentsTable, eq(rcSessions.agentId, agentsTable.id))
               .where(and(...conditions))
-          : db.select().from(rcSessions);
+          : db
+              .select()
+              .from(rcSessions)
+              .leftJoin(agentsTable, eq(rcSessions.agentId, agentsTable.id));
 
       const countQuery =
         conditions.length > 0
@@ -365,10 +369,16 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               .where(and(...conditions))
           : db.select({ count: sql<number>`count(*)::int` }).from(rcSessions);
 
-      const [rows, countRows] = await Promise.all([
+      const [joinedRows, countRows] = await Promise.all([
         baseQuery.orderBy(desc(rcSessions.startedAt)).limit(limit).offset(offset),
         countQuery,
       ]);
+
+      // Transform joined rows back to the original shape with agentName added
+      const rows = joinedRows.map((row) => ({
+        ...row.rc_sessions,
+        agentName: row.agents?.name ?? null,
+      }));
 
       const total = countRows[0]?.count ?? 0;
 
@@ -392,7 +402,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
     async (request, reply) => {
       const { sessionId } = request.params;
 
-      const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
+      const rows = await db
+        .select()
+        .from(rcSessions)
+        .leftJoin(agentsTable, eq(rcSessions.agentId, agentsTable.id))
+        .where(eq(rcSessions.id, sessionId));
 
       if (rows.length === 0) {
         return reply.code(404).send({
@@ -401,7 +415,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      return rows[0];
+      // Return session with agentName included
+      const row = rows[0];
+      return {
+        ...row.rc_sessions,
+        agentName: row.agents?.name ?? null,
+      };
     },
   );
 

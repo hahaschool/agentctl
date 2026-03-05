@@ -343,6 +343,10 @@ export class CliSessionManager extends EventEmitter {
 
   /**
    * Stop a running session by killing its CLI process.
+   *
+   * Cleanup is deferred to the 'close' event handler (handleProcessExit) to ensure
+   * all stream handlers have a chance to complete. However, if the process doesn't
+   * exit within the timeout, we force cleanup here.
    */
   async stopSession(sessionId: string, graceful = true): Promise<void> {
     const session = this.sessions.get(sessionId);
@@ -364,6 +368,9 @@ export class CliSessionManager extends EventEmitter {
           if (child.exitCode === null) {
             child.kill('SIGKILL');
           }
+          // Force cleanup after timeout to prevent zombie processes
+          this.processes.delete(sessionId);
+          this.lineBuffers.delete(sessionId);
           resolve();
         }, GRACEFUL_KILL_TIMEOUT_MS);
 
@@ -374,6 +381,9 @@ export class CliSessionManager extends EventEmitter {
       });
     } else {
       child.kill('SIGKILL');
+      // Force cleanup immediately for non-graceful kills
+      this.processes.delete(sessionId);
+      this.lineBuffers.delete(sessionId);
     }
   }
 

@@ -225,6 +225,11 @@ export async function sessionRoutes(
   sessionManager.on('session_ended', (event: CliSessionEvent) => {
     if (event.type !== 'session_ended') return;
 
+    // Skip if this session was already force-cleaned by DELETE endpoint
+    if (!cpSessionIdMap.has(event.sessionId) && !sessionBuffers.has(event.sessionId)) {
+      return;
+    }
+
     const buf = sessionBuffers.get(event.sessionId);
     if (buf) {
       // Emit a synthetic "ended" event to all subscribers
@@ -249,28 +254,33 @@ export async function sessionRoutes(
     const wasIntentional = intentionalStops.delete(event.sessionId);
     if (!wasIntentional) {
       const session = sessionManager.getSession(event.sessionId);
-      const status = session?.status === 'error' ? 'error' : 'ended';
-      void reportStatusToControlPlane(event.sessionId, {
-        status,
-        claudeSessionId: session?.claudeSessionId ?? null,
-        pid: null,
-        costUsd: session?.costUsd ?? undefined,
-        errorMessage:
-          status === 'error'
-            ? session?.lastError
-              ? `CLI process exited with code ${event.exitCode}: ${session.lastError.slice(0, 500)}`
-              : `CLI process exited with code ${event.exitCode}`
-            : undefined,
-      });
+      const cpSessionId = cpSessionIdMap.get(event.sessionId);
+      if (cpSessionId) {
+        const status = session?.status === 'error' ? 'error' : 'ended';
+        void reportStatusToControlPlane(event.sessionId, {
+          status,
+          claudeSessionId: session?.claudeSessionId ?? null,
+          pid: null,
+          costUsd: session?.costUsd ?? undefined,
+          errorMessage:
+            status === 'error'
+              ? session?.lastError
+                ? `CLI process exited with code ${event.exitCode}: ${session.lastError.slice(0, 500)}`
+                : `CLI process exited with code ${event.exitCode}`
+              : undefined,
+        });
+      }
     }
 
     // Clean up in-memory maps to prevent unbounded growth
     cpSessionIdMap.delete(event.sessionId);
     reportedClaudeIds.delete(event.sessionId);
-    // Keep sessionBuffers briefly for late SSE consumers
-    setTimeout(() => {
-      sessionBuffers.delete(event.sessionId);
-    }, SESSION_BUFFER_CLEANUP_DELAY_MS);
+    // Keep sessionBuffers briefly for late SSE consumers, unless already deleted by DELETE endpoint
+    if (sessionBuffers.has(event.sessionId)) {
+      setTimeout(() => {
+        sessionBuffers.delete(event.sessionId);
+      }, SESSION_BUFFER_CLEANUP_DELAY_MS);
+    }
   });
 
   // Track which sessions have had their claudeSessionId reported
@@ -852,7 +862,11 @@ export async function sessionRoutes(
     try {
       await sessionManager.stopSession(sessionId, true);
 
-      // Clean up event buffer
+      // Force-clean all cleanup maps immediately (don't wait for session_ended handler).
+      // This ensures DELETE is synchronously complete with no lingering references.
+      cpSessionIdMap.delete(sessionId);
+      reportedClaudeIds.delete(sessionId);
+      intentionalStops.delete(sessionId);
       sessionBuffers.delete(sessionId);
 
       logger.info({ sessionId, machineId }, 'CLI session stopped');

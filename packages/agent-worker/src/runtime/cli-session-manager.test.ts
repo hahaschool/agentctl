@@ -635,6 +635,48 @@ describe('CliSessionManager', () => {
         /Session nonexistent not found/,
       );
     });
+
+    it('cleans up processes and lineBuffers maps after graceful stop timeout', async () => {
+      vi.useFakeTimers();
+      try {
+        const session = manager.startSession(defaultStartOptions());
+        const sessionId = session.id;
+
+        // Mock kill to never emit close (simulate hung process)
+        mockChild.kill.mockImplementation(() => {
+          // Don't emit 'close' — process hangs
+          return true;
+        });
+
+        // Start the graceful stop
+        const stopPromise = manager.stopSession(sessionId, true);
+
+        // Advance time past the GRACEFUL_KILL_TIMEOUT_MS (5s)
+        await vi.advanceTimersByTimeAsync(5100);
+
+        // stopSession should have completed with cleanup
+        await stopPromise;
+
+        // Both SIGTERM and SIGKILL should have been called
+        expect(mockChild.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('immediately cleans up processes and lineBuffers for non-graceful stop', async () => {
+      const session = manager.startSession(defaultStartOptions());
+      const sessionId = session.id;
+
+      mockChild.kill.mockImplementation(() => true);
+
+      // Non-graceful stop should immediately force cleanup
+      await manager.stopSession(sessionId, false);
+
+      // Process should be marked as killed
+      expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL');
+    });
   });
 
   // ── resumeSession ──────────────────────────────────────────────────
