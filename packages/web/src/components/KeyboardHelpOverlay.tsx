@@ -3,16 +3,8 @@
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 
+import { CONDENSED_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
-
-const SHORTCUTS = [
-  { keys: ['1–7'], desc: 'Navigate to page' },
-  { keys: ['\u2318K'], desc: 'Command palette' },
-  { keys: ['r'], desc: 'Refresh current page' },
-  { keys: ['/'], desc: 'Focus search (Discover)' },
-  { keys: ['Esc'], desc: 'Close panels / Cancel' },
-  { keys: ['?'], desc: 'Toggle this help' },
-];
 
 type Props = {
   open: boolean;
@@ -59,7 +51,7 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
       >
         <h2 className="text-[15px] font-semibold mb-4">Keyboard Shortcuts</h2>
         <div className="space-y-2">
-          {SHORTCUTS.map((s) => (
+          {CONDENSED_SHORTCUTS.map((s) => (
             <div key={s.desc} className="flex justify-between items-center">
               <span className="text-[13px] text-muted-foreground">{s.desc}</span>
               <div className="flex gap-1">

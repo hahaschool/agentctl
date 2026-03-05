@@ -30,12 +30,13 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
   app.get(
     '/jobs',
     { schema: { tags: ['scheduler'], summary: 'List all repeatable jobs' } },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
         const jobs = await repeatableJobManager?.listRepeatableJobs();
 
         return { jobs };
       } catch (error: unknown) {
+        request.log.error(error, 'Failed to list repeatable jobs');
         if (error instanceof ControlPlaneError) {
           return reply.code(500).send({ error: error.code, message: error.message });
         }
@@ -93,6 +94,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
 
         return { ok: true, agentId, machineId, intervalMs };
       } catch (error: unknown) {
+        request.log.error(error, 'Failed to add heartbeat job');
         if (error instanceof ControlPlaneError) {
           return reply.code(500).send({ error: error.code, message: error.message });
         }
@@ -150,6 +152,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
 
         return { ok: true, agentId, machineId, pattern, model: model ?? null };
       } catch (error: unknown) {
+        request.log.error(error, 'Failed to add cron job');
         if (error instanceof ControlPlaneError) {
           return reply.code(500).send({ error: error.code, message: error.message });
         }
@@ -175,6 +178,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
 
         return { ok: true, key, removedCount };
       } catch (error: unknown) {
+        request.log.error(error, 'Failed to remove repeatable job');
         if (error instanceof ControlPlaneError) {
           return reply.code(500).send({ error: error.code, message: error.message });
         }
@@ -226,6 +230,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
 
         return { ok: true, removedCount: totalRemoved };
       } catch (error: unknown) {
+        request.log.error(error, 'Failed to remove all repeatable jobs');
         if (error instanceof ControlPlaneError) {
           return reply.code(500).send({ error: error.code, message: error.message });
         }

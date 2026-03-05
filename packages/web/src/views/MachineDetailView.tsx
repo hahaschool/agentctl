@@ -181,13 +181,13 @@ export function MachineDetailView(): React.JSX.Element {
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
               <InfoField label="GPU">
-                <CapabilityIndicator enabled={machine.capabilities.gpu} />
+                <CapabilityIndicator enabled={machine.capabilities?.gpu ?? false} />
               </InfoField>
               <InfoField label="Docker">
-                <CapabilityIndicator enabled={machine.capabilities.docker} />
+                <CapabilityIndicator enabled={machine.capabilities?.docker ?? false} />
               </InfoField>
               <InfoField label="Max Concurrent Agents">
-                <span className="font-mono">{machine.capabilities.maxConcurrentAgents}</span>
+                <span className="font-mono">{machine.capabilities?.maxConcurrentAgents ?? 0}</span>
               </InfoField>
             </div>
           </CardContent>

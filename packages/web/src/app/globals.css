@@ -13,6 +13,8 @@
   --color-primary-foreground: #ffffff;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #171717;
   --color-accent: #f0f0f0;
   --color-accent-foreground: #171717;
   --color-input: #e0e0e0;
@@ -40,6 +42,8 @@
   --color-primary-foreground: #ffffff;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
+  --color-popover: #1a1a1a;
+  --color-popover-foreground: #e5e5e5;
   --color-accent: #252525;
   --color-accent-foreground: #e5e5e5;
   --color-input: #2e2e2e;

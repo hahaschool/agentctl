@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useWebSocket } from '../hooks/use-websocket';
 import { CommandPalette } from './CommandPalette';
+import { ConnectionBanner } from './ConnectionBanner';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
 import { useToast } from './Toast';
 import { WsStatusIndicator } from './WsStatusIndicator';
@@ -168,6 +169,7 @@ export function Sidebar(): React.JSX.Element {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-2.5 px-5 py-3 md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0',
                 'border-l-[3px]',
@@ -229,6 +231,7 @@ export function Sidebar(): React.JSX.Element {
 
       <KeyboardHelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
+      <ConnectionBanner status={wsStatus} />
     </>
   );
 }

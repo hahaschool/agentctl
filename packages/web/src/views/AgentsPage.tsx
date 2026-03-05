@@ -5,6 +5,22 @@ import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
@@ -46,12 +62,18 @@ export function AgentsPage(): React.JSX.Element {
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
 
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createMachineId, setCreateMachineId] = useState('');
   const [createType, setCreateType] = useState<string>('autonomous');
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createLoading, setCreateLoading] = useState(false);
+  const [createModel, setCreateModel] = useState(
+    () =>
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? 'claude-sonnet-4-6',
+  );
+  const [createProjectPath, setCreateProjectPath] = useState('');
+  const [createInitialPrompt, setCreateInitialPrompt] = useState('');
 
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -67,10 +89,10 @@ export function AgentsPage(): React.JSX.Element {
         r: () => void agents.refetch(),
         Escape: () => {
           if (promptAgentId) setPromptAgentId(null);
-          else if (showCreateForm) setShowCreateForm(false);
+          else if (showCreateDialog) setShowCreateDialog(false);
         },
       }),
-      [agents, promptAgentId, showCreateForm],
+      [agents, promptAgentId, showCreateDialog],
     ),
   );
 
@@ -132,31 +154,42 @@ export function AgentsPage(): React.JSX.Element {
   }, [agentList, statusFilter, search, sortOrder]);
 
   // -- Create agent handler --
-  const handleCreate = (e: React.FormEvent): void => {
-    e.preventDefault();
+  function resetCreateForm(): void {
+    setCreateName('');
+    setCreateMachineId('');
+    setCreateType('autonomous');
+    setCreateModel(
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? 'claude-sonnet-4-6',
+    );
+    setCreateProjectPath('');
+    setCreateInitialPrompt('');
+  }
+
+  const handleCreate = (): void => {
     if (!createName.trim() || !createMachineId) return;
 
-    setCreateError(null);
-    setCreateLoading(true);
+    const config: Record<string, unknown> = {};
+    if (createModel.trim()) config.model = createModel.trim();
+    if (createInitialPrompt.trim()) config.initialPrompt = createInitialPrompt.trim();
+
     createAgent.mutate(
       {
         name: createName.trim(),
         machineId: createMachineId,
         type: createType,
+        ...(createProjectPath.trim() ? { projectPath: createProjectPath.trim() } : {}),
+        ...(Object.keys(config).length > 0 ? { config } : {}),
       },
       {
         onSuccess: () => {
           toast.success(`Agent "${createName.trim()}" created`);
-          setCreateName('');
-          setCreateMachineId('');
-          setCreateType('autonomous');
-          setShowCreateForm(false);
+          resetCreateForm();
+          setShowCreateDialog(false);
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : String(err));
-        },
-        onSettled: () => {
-          setCreateLoading(false);
         },
       },
     );
@@ -192,7 +225,7 @@ export function AgentsPage(): React.JSX.Element {
     });
   };
 
-  const isCreateDisabled = createLoading || !createName.trim() || !createMachineId;
+  const isCreateDisabled = createAgent.isPending || !createName.trim() || !createMachineId;
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
@@ -220,15 +253,9 @@ export function AgentsPage(): React.JSX.Element {
             onClick={() => void agents.refetch()}
             isFetching={agents.isFetching && !agents.isLoading}
           />
-          <button
-            type="button"
-            onClick={() => setShowCreateForm((prev) => !prev)}
-            aria-label={showCreateForm ? 'Cancel agent creation' : 'Show create agent form'}
-            aria-expanded={showCreateForm}
-            className="px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-[13px] font-medium cursor-pointer"
-          >
-            {showCreateForm ? 'Cancel' : 'Create Agent'}
-          </button>
+          <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+            New Agent
+          </Button>
         </div>
       </div>
 
@@ -237,91 +264,134 @@ export function AgentsPage(): React.JSX.Element {
         <ErrorBanner message={agents.error.message} onRetry={() => void agents.refetch()} />
       )}
 
-      {/* Inline create form */}
-      {showCreateForm && (
-        <form onSubmit={handleCreate} className="p-4 bg-card border border-border rounded-lg mb-5">
-          <h3 className="text-sm font-semibold mb-3">New Agent</h3>
+      {/* Create Agent Dialog */}
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(open) => {
+          if (!open) resetCreateForm();
+          setShowCreateDialog(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Agent</DialogTitle>
+          </DialogHeader>
 
-          {createError && <ErrorBanner message={createError} className="mb-3" />}
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-            <div>
-              <label
-                htmlFor="create-agent-name"
-                className="block text-[11px] text-muted-foreground uppercase tracking-[0.04em] mb-1"
-              >
-                Name
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="create-agent-name">
+                Name <span className="text-destructive">*</span>
               </label>
-              <input
+              <Input
                 id="create-agent-name"
-                type="text"
-                required
+                placeholder="my-agent"
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
-                placeholder="my-agent"
-                className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none box-border"
+                disabled={createAgent.isPending}
               />
             </div>
 
-            <div>
-              <label
-                htmlFor="create-agent-machine"
-                className="block text-[11px] text-muted-foreground uppercase tracking-[0.04em] mb-1"
-              >
-                Machine
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="create-agent-machine">
+                Machine <span className="text-destructive">*</span>
               </label>
-              <select
-                id="create-agent-machine"
-                required
-                value={createMachineId}
-                onChange={(e) => setCreateMachineId(e.target.value)}
-                className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none box-border"
-              >
-                <option value="">Select machine...</option>
-                {machineList.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.hostname} ({m.id})
-                  </option>
-                ))}
-              </select>
+              <Select value={createMachineId} onValueChange={setCreateMachineId} disabled={createAgent.isPending}>
+                <SelectTrigger className="w-full" id="create-agent-machine">
+                  <SelectValue placeholder="Select a machine" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  {machineList.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.hostname} ({m.id})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div>
-              <label
-                htmlFor="create-agent-type"
-                className="block text-[11px] text-muted-foreground uppercase tracking-[0.04em] mb-1"
-              >
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="create-agent-type">
                 Type
               </label>
-              <select
-                id="create-agent-type"
-                value={createType}
-                onChange={(e) => setCreateType(e.target.value)}
-                className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none box-border"
-              >
-                {AGENT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+              <Select value={createType} onValueChange={setCreateType} disabled={createAgent.isPending}>
+                <SelectTrigger className="w-full" id="create-agent-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  {AGENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="create-agent-model">
+                Model
+              </label>
+              <Input
+                id="create-agent-model"
+                placeholder="claude-sonnet-4-6"
+                value={createModel}
+                onChange={(e) => setCreateModel(e.target.value)}
+                disabled={createAgent.isPending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                The Claude model to use for this agent.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="create-agent-project">
+                Project Path
+              </label>
+              <Input
+                id="create-agent-project"
+                placeholder="/home/user/projects/my-app"
+                value={createProjectPath}
+                onChange={(e) => setCreateProjectPath(e.target.value)}
+                disabled={createAgent.isPending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Absolute path to the project directory on the target machine.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="create-agent-prompt">
+                Initial Prompt
+              </label>
+              <textarea
+                id="create-agent-prompt"
+                rows={3}
+                placeholder="Describe what this agent should do..."
+                value={createInitialPrompt}
+                onChange={(e) => setCreateInitialPrompt(e.target.value)}
+                disabled={createAgent.isPending}
+                className={cn(
+                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  'dark:bg-input/30',
+                )}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Stored in agent config. Can be used as the default prompt when starting the agent.
+              </p>
             </div>
           </div>
 
-          <div className="mt-3 flex justify-end">
-            <button
-              type="submit"
-              disabled={isCreateDisabled}
-              className={cn(
-                'px-5 py-2 bg-primary text-white border-none rounded-sm text-[13px] font-medium',
-                isCreateDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer opacity-100',
-              )}
-            >
-              {createLoading ? 'Creating...' : 'Create'}
-            </button>
-          </div>
-        </form>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={isCreateDisabled}>
+              {createAgent.isPending ? 'Creating...' : 'Create Agent'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Filter / Sort controls */}
       <div className="flex gap-2.5 items-center mb-4 flex-wrap">

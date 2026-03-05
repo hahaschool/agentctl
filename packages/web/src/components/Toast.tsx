@@ -25,11 +25,3 @@ export function useToast(): ToastContextValue {
     info: (message: string) => sonnerToast.info(message),
   };
 }
-
-/**
- * @deprecated No longer needed — Sonner uses <Toaster /> in layout instead.
- * Kept as a passthrough so existing <ToastProvider> wrappers don't break.
- */
-export function ToastProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <>{children}</>;
-}

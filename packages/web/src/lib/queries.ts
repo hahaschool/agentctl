@@ -3,6 +3,17 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 import { api } from './api';
 
 // ---------------------------------------------------------------------------
+// Helpers — read user preferences from localStorage
+// ---------------------------------------------------------------------------
+
+function getRefetchInterval(): number | false {
+  if (typeof window === 'undefined') return 10_000;
+  const raw = localStorage.getItem('agentctl:autoRefreshInterval');
+  const ms = raw ? Number(raw) : 10_000;
+  return ms > 0 ? ms : false;
+}
+
+// ---------------------------------------------------------------------------
 // Query keys
 // ---------------------------------------------------------------------------
 
@@ -24,6 +35,8 @@ export const queryKeys = {
   accounts: ['accounts'] as const,
   accountDefaults: ['account-defaults'] as const,
   projectAccounts: ['project-accounts'] as const,
+  routerModels: ['router', 'models'] as const,
+  routerModelsInfo: ['router', 'models-info'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -34,7 +47,7 @@ export function healthQuery() {
   return queryOptions({
     queryKey: queryKeys.health,
     queryFn: api.health,
-    refetchInterval: 15_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -43,7 +56,7 @@ export function machinesQuery() {
   return queryOptions({
     queryKey: queryKeys.machines,
     queryFn: api.listMachines,
-    refetchInterval: 15_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -52,7 +65,7 @@ export function agentsQuery() {
   return queryOptions({
     queryKey: queryKeys.agents,
     queryFn: api.listAgents,
-    refetchInterval: 10_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -62,7 +75,7 @@ export function agentQuery(id: string) {
     queryKey: queryKeys.agent(id),
     queryFn: () => api.getAgent(id),
     enabled: !!id,
-    refetchInterval: 10_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -72,7 +85,7 @@ export function agentRunsQuery(agentId: string) {
     queryKey: queryKeys.agentRuns(agentId),
     queryFn: () => api.getAgentRuns(agentId),
     enabled: !!agentId,
-    refetchInterval: 10_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -81,7 +94,7 @@ export function sessionsQuery(params?: { status?: string; machineId?: string }) 
   return queryOptions({
     queryKey: queryKeys.sessions(params),
     queryFn: () => api.listSessions(params),
-    refetchInterval: 5_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -91,6 +104,8 @@ export function sessionQuery(id: string) {
     queryKey: queryKeys.session(id),
     queryFn: () => api.getSession(id),
     enabled: !!id,
+    refetchInterval: 5_000, // Poll session status to detect worker restarts / status changes
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -109,7 +124,7 @@ export function discoverQuery() {
   return queryOptions({
     queryKey: queryKeys.discover,
     queryFn: api.discoverSessions,
-    refetchInterval: 30_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -118,7 +133,7 @@ export function metricsQuery() {
   return queryOptions({
     queryKey: queryKeys.metrics,
     queryFn: api.metrics,
-    refetchInterval: 15_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -141,6 +156,22 @@ export function projectAccountsQuery() {
   return queryOptions({
     queryKey: queryKeys.projectAccounts,
     queryFn: api.listProjectAccounts,
+  });
+}
+
+export function routerModelsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.routerModels,
+    queryFn: api.getRouterModels,
+    staleTime: 30_000,
+  });
+}
+
+export function routerModelsInfoQuery() {
+  return queryOptions({
+    queryKey: queryKeys.routerModelsInfo,
+    queryFn: api.getRouterModelsInfo,
+    staleTime: 30_000,
   });
 }
 
@@ -182,8 +213,18 @@ export function useStopAgent() {
 export function useUpdateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string; accountId?: string | null }) =>
-      api.updateAgent(id, body),
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    }) => api.updateAgent(id, body),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
       void queryClient.invalidateQueries({ queryKey: queryKeys.agent(variables.id) });
@@ -212,8 +253,12 @@ export function useResumeSession() {
 }
 
 export function useSendMessage() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, message }: { id: string; message: string }) => api.sendMessage(id, message),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.session(variables.id) });
+    },
   });
 }
 

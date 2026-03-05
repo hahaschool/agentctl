@@ -428,7 +428,7 @@ describe('Account routes — /api/settings/accounts', () => {
       globalThis.fetch = originalFetch;
     });
 
-    it('returns 400 when API responds with error', async () => {
+    it('returns ok:false when API responds with error', async () => {
       const account = makeAccount();
       mockDb.setRows([account]);
 
@@ -445,10 +445,11 @@ describe('Account routes — /api/settings/accounts', () => {
         url: '/api/settings/accounts/acct-001/test',
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
+      expect(body.ok).toBe(false);
+      expect(body.error).toMatch(/Invalid API key/);
 
       // Restore original fetch
       globalThis.fetch = originalFetch;
@@ -493,7 +494,7 @@ describe('Account routes — /api/settings/accounts', () => {
       expect(body.ok).toBe(true);
     });
 
-    it('claude_max: returns 400 for empty/short token', async () => {
+    it('claude_max: returns ok:false for empty/short token', async () => {
       const account = makeAccount({ provider: 'claude_max' });
       mockDb.setRows([account]);
 
@@ -504,11 +505,11 @@ describe('Account routes — /api/settings/accounts', () => {
         url: '/api/settings/accounts/acct-001/test',
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
-      expect(body.message).toMatch(/too short or empty/);
+      expect(body.ok).toBe(false);
+      expect(body.error).toMatch(/too short or empty/);
     });
 
     // -----------------------------------------------------------------------
@@ -532,7 +533,7 @@ describe('Account routes — /api/settings/accounts', () => {
       expect(body.ok).toBe(true);
     });
 
-    it('bedrock: returns 400 for invalid format (missing parts)', async () => {
+    it('bedrock: returns ok:false for invalid format (missing parts)', async () => {
       const account = makeAccount({ provider: 'bedrock' });
       mockDb.setRows([account]);
 
@@ -542,11 +543,11 @@ describe('Account routes — /api/settings/accounts', () => {
         url: '/api/settings/accounts/acct-001/test',
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
-      expect(body.message).toMatch(/ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION/);
+      expect(body.ok).toBe(false);
+      expect(body.error).toMatch(/ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION/);
     });
 
     // -----------------------------------------------------------------------
@@ -572,7 +573,7 @@ describe('Account routes — /api/settings/accounts', () => {
       expect(body.ok).toBe(true);
     });
 
-    it('vertex: returns 400 for invalid JSON', async () => {
+    it('vertex: returns ok:false for invalid JSON', async () => {
       const account = makeAccount({ provider: 'vertex' });
       mockDb.setRows([account]);
 
@@ -582,14 +583,14 @@ describe('Account routes — /api/settings/accounts', () => {
         url: '/api/settings/accounts/acct-001/test',
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
-      expect(body.message).toMatch(/not valid JSON/);
+      expect(body.ok).toBe(false);
+      expect(body.error).toMatch(/not valid JSON/);
     });
 
-    it('vertex: returns 400 for JSON missing client_email', async () => {
+    it('vertex: returns ok:false for JSON missing client_email', async () => {
       const account = makeAccount({ provider: 'vertex' });
       mockDb.setRows([account]);
 
@@ -602,11 +603,11 @@ describe('Account routes — /api/settings/accounts', () => {
         url: '/api/settings/accounts/acct-001/test',
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.error).toBe('ACCOUNT_TEST_FAILED');
-      expect(body.message).toMatch(/client_email and private_key/);
+      expect(body.ok).toBe(false);
+      expect(body.error).toMatch(/client_email and private_key/);
     });
   });
 });

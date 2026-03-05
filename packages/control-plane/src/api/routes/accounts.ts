@@ -17,6 +17,15 @@ export type AccountRoutesOptions = {
 export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (app, opts) => {
   const { db, encryptionKey } = opts;
 
+  // Scoped error handler — log + return structured 500 for unhandled DB errors
+  app.setErrorHandler((error: Error, request, reply) => {
+    request.log.error(error, 'Accounts route error');
+    return reply.code(500).send({
+      error: 'INTERNAL_ERROR',
+      message: error.message ?? 'An unexpected error occurred',
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // GET / — list all accounts (masked credentials)
   // ---------------------------------------------------------------------------
@@ -210,9 +219,9 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
           if (res.ok) {
             return reply.send({ ok: true, latencyMs });
           }
-          return reply.code(400).send({
-            error: 'ACCOUNT_TEST_FAILED',
-            message: await extractErrorMessage(res),
+          return reply.send({
+            ok: false,
+            error: await extractErrorMessage(res),
           });
         } catch (err) {
           return reply.code(500).send({
@@ -226,9 +235,9 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       case 'claude_team': {
         // Session tokens cannot be API-tested — validate format only
         if (!credential || credential.length < 10) {
-          return reply.code(400).send({
-            error: 'ACCOUNT_TEST_FAILED',
-            message: 'Session token is too short or empty',
+          return reply.send({
+            ok: false,
+            error: 'Session token is too short or empty',
           });
         }
         return reply.send({ ok: true });
@@ -237,9 +246,9 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       case 'bedrock': {
         const parts = credential.split(':');
         if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
-          return reply.code(400).send({
-            error: 'ACCOUNT_TEST_FAILED',
-            message: 'Bedrock credential must be in format ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION',
+          return reply.send({
+            ok: false,
+            error: 'Bedrock credential must be in format ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION',
           });
         }
         return reply.send({ ok: true });
@@ -249,16 +258,16 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
         try {
           const parsed = JSON.parse(credential) as Record<string, unknown>;
           if (!parsed.client_email || !parsed.private_key) {
-            return reply.code(400).send({
-              error: 'ACCOUNT_TEST_FAILED',
-              message: 'Vertex AI service account JSON must contain client_email and private_key',
+            return reply.send({
+              ok: false,
+              error: 'Vertex AI service account JSON must contain client_email and private_key',
             });
           }
           return reply.send({ ok: true });
         } catch {
-          return reply.code(400).send({
-            error: 'ACCOUNT_TEST_FAILED',
-            message: 'Vertex AI credential is not valid JSON',
+          return reply.send({
+            ok: false,
+            error: 'Vertex AI credential is not valid JSON',
           });
         }
       }

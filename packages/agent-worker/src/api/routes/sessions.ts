@@ -48,6 +48,7 @@ type ResumeSessionBody = {
   projectPath?: string | null;
   agentId?: string | null;
   model?: string | null;
+  cpSessionId?: string | null;
 };
 
 type MessageBody = {
@@ -232,7 +233,7 @@ export async function sessionRoutes(
       status,
       claudeSessionId: session?.claudeSessionId ?? null,
       pid: null,
-      costUsd: session?.costUsd,
+      costUsd: session?.costUsd ?? null,
       errorMessage:
         status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
     });
@@ -374,6 +375,33 @@ export async function sessionRoutes(
   );
 
   // -----------------------------------------------------------------------
+  // GET /stats — session count and breakdown by status
+  // -----------------------------------------------------------------------
+
+  app.get('/stats', async () => {
+    const sessions = sessionManager.listSessions();
+    const byStatus: Record<string, number> = {};
+    for (const s of sessions) {
+      byStatus[s.status] = (byStatus[s.status] ?? 0) + 1;
+    }
+    return {
+      total: sessions.length,
+      byStatus,
+      maxConcurrent: sessionManager.getMaxConcurrentSessions(),
+    };
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /cleanup — manually trigger stale session cleanup
+  // -----------------------------------------------------------------------
+
+  app.post('/cleanup', async () => {
+    const cleaned = sessionManager.cleanupStaleSessions();
+    logger.info({ cleaned, machineId }, 'Manual session cleanup executed');
+    return { ok: true, cleaned };
+  });
+
+  // -----------------------------------------------------------------------
   // GET /:sessionId — get a single session's details
   // -----------------------------------------------------------------------
 
@@ -461,7 +489,8 @@ export async function sessionRoutes(
     '/:sessionId/resume',
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt, claudeSessionId: bodyClaudeId, projectPath, agentId, model } = request.body;
+      const { prompt, claudeSessionId: bodyClaudeId, projectPath, agentId, model, cpSessionId } =
+        request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.status(400).send({
@@ -499,10 +528,16 @@ export async function sessionRoutes(
           model: existingSession?.model ?? model ?? undefined,
         });
 
+        // Store CP→worker session ID mapping so status callbacks reach the control plane
+        if (cpSessionId) {
+          cpSessionIdMap.set(newSession.id, cpSessionId);
+        }
+
         logger.info(
           {
             newSessionId: newSession.id,
             resumedFrom: resumeId,
+            cpSessionId,
             machineId,
           },
           'CLI session resumed',
@@ -572,6 +607,14 @@ export async function sessionRoutes(
           prompt: message,
           model: existingSession.model,
         });
+
+        // Inherit CP session mapping from the existing session so status callbacks work
+        for (const [wId, cpId] of cpSessionIdMap) {
+          if (wId === existingSession.id) {
+            cpSessionIdMap.set(newSession.id, cpId);
+            break;
+          }
+        }
 
         logger.info(
           {

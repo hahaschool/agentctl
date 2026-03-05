@@ -6,6 +6,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -62,6 +63,7 @@ function matchesSearchQuery(session: Session, query: string): boolean {
   if (session.agentId.toLowerCase().includes(q)) return true;
   if (session.projectPath?.toLowerCase().includes(q)) return true;
   if (session.machineId.toLowerCase().includes(q)) return true;
+  if (session.model?.toLowerCase().includes(q)) return true;
   return false;
 }
 
@@ -87,7 +89,12 @@ export function SessionsPage(): React.JSX.Element {
   const [formMachineId, setFormMachineId] = useState('');
   const [formProjectPath, setFormProjectPath] = useState('');
   const [formPrompt, setFormPrompt] = useState('');
-  const [formModel, setFormModel] = useState('');
+  const [formModel, setFormModel] = useState(
+    () =>
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? '',
+  );
   const [formAccountId, setFormAccountId] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -131,7 +138,11 @@ export function SessionsPage(): React.JSX.Element {
     setFormMachineId('');
     setFormProjectPath('');
     setFormPrompt('');
-    setFormModel('');
+    setFormModel(
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('agentctl:defaultModel')
+        : null) ?? '',
+    );
     setFormAccountId('');
     setFormError(null);
   }, []);
@@ -145,6 +156,10 @@ export function SessionsPage(): React.JSX.Element {
     }
     if (!formProjectPath.trim()) {
       setFormError('Project path is required.');
+      return;
+    }
+    if (!formProjectPath.trim().startsWith('/')) {
+      setFormError('Project path must be an absolute path (start with /)');
       return;
     }
     if (!formPrompt.trim()) {
@@ -264,6 +279,22 @@ export function SessionsPage(): React.JSX.Element {
     });
   }, []);
 
+  const cleanupSessions = useMemo(
+    () => sessionList.filter((s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error'),
+    [sessionList],
+  );
+
+  const handleCleanup = useCallback(async () => {
+    if (cleanupSessions.length === 0) return;
+    try {
+      await Promise.all(cleanupSessions.map((s) => api.deleteSession(s.id)));
+      toast.success(`Cleaned up ${cleanupSessions.length} session(s)`);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }, [cleanupSessions, queryClient, toast]);
+
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
   const handleSend = useCallback(async () => {
@@ -359,6 +390,15 @@ export function SessionsPage(): React.JSX.Element {
               >
                 {showCreateForm ? 'Cancel' : '+ New Session'}
               </button>
+              {cleanupSessions.length > 0 && (
+                <ConfirmButton
+                  label={`Clean Up (${cleanupSessions.length})`}
+                  confirmLabel={`Delete ${cleanupSessions.length}?`}
+                  onConfirm={() => void handleCleanup()}
+                  className="px-2.5 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground"
+                  confirmClassName="px-2.5 py-1.5 border border-destructive rounded-sm text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground"
+                />
+              )}
               <RefreshButton
                 onClick={() => void sessions.refetch()}
                 isFetching={sessions.isFetching && !sessions.isLoading}
@@ -382,7 +422,7 @@ export function SessionsPage(): React.JSX.Element {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter by ID, project, agent..."
+            placeholder="Filter by ID, project, agent, model..."
             className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none box-border"
           />
         </div>
@@ -911,14 +951,15 @@ function DetailRow({
   mono?: boolean;
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   const handleCopy = useCallback(() => {
     if (!mono || value === '-') return;
     void navigator.clipboard.writeText(value).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
-  }, [mono, value]);
+    }).catch(() => toast.error('Failed to copy'));
+  }, [mono, value, toast]);
 
   return (
     <div className="group">
@@ -1118,9 +1159,9 @@ function SessionContent({
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[9px] font-semibold text-green-500">Streaming</span>
             </div>
-            <pre className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto">
+            <AnsiText className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto m-0">
               {stream.streamOutput.join('')}
-            </pre>
+            </AnsiText>
           </div>
         )}
       </div>
@@ -1161,7 +1202,7 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
           expanded && 'max-h-none overflow-visible',
         )}
       >
-        {displayContent}
+        <AnsiSpan>{displayContent}</AnsiSpan>
       </div>
       {isLong && (
         <button

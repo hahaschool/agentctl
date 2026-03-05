@@ -206,6 +206,27 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
             message: 'Each finding must have a non-empty "recommendation" string',
           });
         }
+
+        if (finding.title.length > 500) {
+          return reply.code(400).send({
+            error: 'TITLE_TOO_LONG',
+            message: `Finding "${finding.id}": title must be under 500 characters`,
+          });
+        }
+
+        if (finding.description.length > 10_000) {
+          return reply.code(400).send({
+            error: 'DESCRIPTION_TOO_LONG',
+            message: `Finding "${finding.id}": description must be under 10,000 characters`,
+          });
+        }
+
+        if (finding.recommendation.length > 5_000) {
+          return reply.code(400).send({
+            error: 'RECOMMENDATION_TOO_LONG',
+            message: `Finding "${finding.id}": recommendation must be under 5,000 characters`,
+          });
+        }
       }
 
       try {
@@ -437,6 +458,41 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         return reply.code(500).send({
           error: 'FINDING_ACKNOWLEDGE_FAILED',
           message: 'Failed to acknowledge finding',
+        });
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // DELETE /findings/:id — Delete a security finding
+  // -------------------------------------------------------------------------
+
+  app.delete<{ Params: { id: string } }>(
+    '/findings/:id',
+    { schema: { tags: ['audit'], summary: 'Delete a security finding' } },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      try {
+        const existing = await db.execute(sql`SELECT id FROM security_findings WHERE id = ${id}`);
+
+        if (existing.rows.length === 0) {
+          return reply.code(404).send({
+            error: 'FINDING_NOT_FOUND',
+            message: `Security finding '${id}' not found`,
+          });
+        }
+
+        await db.execute(sql`DELETE FROM security_findings WHERE id = ${id}`);
+
+        return { ok: true };
+      } catch (error: unknown) {
+        if (error instanceof ControlPlaneError) {
+          return reply.code(502).send({ error: error.code, message: error.message });
+        }
+        return reply.code(500).send({
+          error: 'FINDING_DELETE_FAILED',
+          message: 'Failed to delete finding',
         });
       }
     },

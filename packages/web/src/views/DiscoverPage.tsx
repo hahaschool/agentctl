@@ -268,7 +268,7 @@ export function DiscoverPage(): React.JSX.Element {
       setNewProjectPath('');
       setNewPrompt('');
       setShowNewSession(false);
-      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -292,7 +292,7 @@ export function DiscoverPage(): React.JSX.Element {
         toast.success(`Session resumed on ${session.hostname}`);
         setResumePrompt('');
         setResuming(null);
-        void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));

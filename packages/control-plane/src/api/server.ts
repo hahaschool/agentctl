@@ -177,6 +177,21 @@ export async function createServer({
     routePrefix: '/api/docs',
   });
 
+  // --- JSON body parser that tolerates empty bodies ---
+  // By default Fastify rejects requests with Content-Type: application/json but
+  // no body.  Many HTTP clients (browsers, Playwright, curl) set this header on
+  // POST/DELETE even when there is no payload. We override the built-in parser
+  // to treat an empty body as `{}` so these requests succeed.
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    try {
+      const str = (body as string) ?? '';
+      done(null, str.length > 0 ? JSON.parse(str) : {});
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   // Register @fastify/websocket before any WebSocket route plugins.
   await app.register(fastifyWebsocket);
 

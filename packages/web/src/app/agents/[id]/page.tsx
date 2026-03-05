@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
@@ -17,6 +17,14 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -32,6 +40,7 @@ import {
   accountsQuery,
   agentQuery,
   agentRunsQuery,
+  machinesQuery,
   useStartAgent,
   useStopAgent,
   useUpdateAgent,
@@ -49,6 +58,7 @@ export default function AgentDetailPage(): React.JSX.Element {
   const agent = useQuery(agentQuery(agentId));
   const runs = useQuery(agentRunsQuery(agentId));
   const accounts = useQuery(accountsQuery());
+  const machinesList = useQuery(machinesQuery());
 
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
@@ -69,8 +79,31 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const [promptVisible, setPromptVisible] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+
+  // -- Edit form state --
+  const [editName, setEditName] = useState('');
+  const [editMachineId, setEditMachineId] = useState('');
+  const [editType, setEditType] = useState('');
+  const [editSchedule, setEditSchedule] = useState('');
+  const [editModel, setEditModel] = useState('');
+  const [editMaxTurns, setEditMaxTurns] = useState('');
+
+  // Sync form state when the dialog opens
+  useEffect(() => {
+    if (editOpen && agent.data) {
+      const d = agent.data;
+      setEditName(d.name);
+      setEditMachineId(d.machineId);
+      setEditType(d.type);
+      setEditSchedule(d.schedule ?? '');
+      setEditModel((d.config?.model as string) ?? '');
+      setEditMaxTurns(d.config?.maxTurns != null ? String(d.config.maxTurns) : '');
+    }
+  }, [editOpen, agent.data]);
 
   const accountList = accounts.data ?? [];
+  const machines = machinesList.data ?? [];
 
   // -- Handlers --
 
@@ -111,6 +144,49 @@ export default function AgentDetailPage(): React.JSX.Element {
       onSuccess: () => toast.success('Agent stopped'),
       onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
     });
+  };
+
+  const handleEditSave = (): void => {
+    if (!editName.trim()) return;
+
+    // Build config, merging new values with existing config
+    const existingConfig = (agent.data?.config ?? {}) as Record<string, unknown>;
+    const config: Record<string, unknown> = { ...existingConfig };
+
+    if (editModel.trim()) {
+      config.model = editModel.trim();
+    } else {
+      delete config.model;
+    }
+
+    if (editMaxTurns.trim()) {
+      const parsed = Number(editMaxTurns);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        config.maxTurns = parsed;
+      }
+    } else {
+      delete config.maxTurns;
+    }
+
+    updateAgent.mutate(
+      {
+        id: agentId,
+        name: editName.trim(),
+        machineId: editMachineId,
+        type: editType,
+        schedule: editSchedule.trim() || null,
+        config,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Agent updated');
+          setEditOpen(false);
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : String(err));
+        },
+      },
+    );
   };
 
   // -- Loading state --
@@ -171,6 +247,9 @@ export default function AgentDetailPage(): React.JSX.Element {
         <div className="flex items-center gap-3">
           <h1 className="text-[22px] font-bold">{data.name}</h1>
           <StatusBadge status={data.status} />
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            Edit
+          </Button>
         </div>
         <div className="flex gap-2">
           {data.status === 'running' ? (
@@ -349,7 +428,55 @@ export default function AgentDetailPage(): React.JSX.Element {
               No runs recorded yet. Use the Start button above to run this agent.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile card layout */}
+            <div className="sm:hidden space-y-2">
+              {runList.map((run) => (
+                <div
+                  key={run.id}
+                  className="rounded-lg border border-border/50 p-3 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <StatusBadge status={run.status} />
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {formatDurationMs(run.durationMs)}
+                    </span>
+                  </div>
+                  <div>
+                    <span
+                      className={cn(
+                        'text-xs leading-snug',
+                        run.prompt ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                      title={run.prompt}
+                    >
+                      {run.prompt
+                        ? run.prompt.length > 80
+                          ? `${run.prompt.slice(0, 80)}...`
+                          : run.prompt
+                        : '-'}
+                    </span>
+                    {run.errorMessage && (
+                      <div
+                        className="text-[11px] text-red-400 mt-0.5 truncate"
+                        title={run.errorMessage}
+                      >
+                        {run.errorMessage}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="font-mono">{formatCost(run.costUsd)}</span>
+                    <span>
+                      {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : <LiveTimeAgo date={run.startedAt} />}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table layout */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm" aria-label="Recent agent runs">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -359,10 +486,10 @@ export default function AgentDetailPage(): React.JSX.Element {
                     <th scope="col" className="pb-2 pr-4 font-medium">
                       Prompt
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
+                    <th scope="col" className="pb-2 pr-4 font-medium">
                       Duration
                     </th>
-                    <th scope="col" className="pb-2 pr-4 font-medium hidden sm:table-cell">
+                    <th scope="col" className="pb-2 pr-4 font-medium">
                       Cost
                     </th>
                     <th scope="col" className="pb-2 pr-4 font-medium">
@@ -402,10 +529,10 @@ export default function AgentDetailPage(): React.JSX.Element {
                           </div>
                         )}
                       </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground hidden sm:table-cell">
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
                         {formatDurationMs(run.durationMs)}
                       </td>
-                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground hidden sm:table-cell">
+                      <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
                         {formatCost(run.costUsd)}
                       </td>
                       <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
@@ -419,9 +546,131 @@ export default function AgentDetailPage(): React.JSX.Element {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Agent Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Agent</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-name">
+                Name
+              </label>
+              <Input
+                id="edit-agent-name"
+                placeholder="Agent name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                disabled={updateAgent.isPending}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-machine">
+                Machine
+              </label>
+              <Select value={editMachineId} onValueChange={setEditMachineId} disabled={updateAgent.isPending}>
+                <SelectTrigger className="w-full" id="edit-agent-machine">
+                  <SelectValue placeholder="Select a machine" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  {machines.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.hostname}{' '}
+                      <span className="text-muted-foreground text-[10px]">
+                        ({m.id.slice(0, 8)})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-type">
+                Type
+              </label>
+              <Select value={editType} onValueChange={setEditType} disabled={updateAgent.isPending}>
+                <SelectTrigger className="w-full" id="edit-agent-type">
+                  <SelectValue placeholder="Select agent type" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  <SelectItem value="autonomous">Autonomous</SelectItem>
+                  <SelectItem value="ad-hoc">Ad-hoc</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {editType === 'autonomous' && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="edit-agent-schedule">
+                  Schedule
+                </label>
+                <Input
+                  id="edit-agent-schedule"
+                  placeholder="e.g. */15 * * * * (cron expression)"
+                  value={editSchedule}
+                  onChange={(e) => setEditSchedule(e.target.value)}
+                  disabled={updateAgent.isPending}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Cron expression for periodic execution. Leave empty for no schedule.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-model">
+                Model
+              </label>
+              <Input
+                id="edit-agent-model"
+                placeholder="e.g. claude-sonnet-4-20250514"
+                value={editModel}
+                onChange={(e) => setEditModel(e.target.value)}
+                disabled={updateAgent.isPending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                LLM model identifier. Leave empty to use the default.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-max-turns">
+                Max turns
+              </label>
+              <Input
+                id="edit-agent-max-turns"
+                type="number"
+                min={1}
+                placeholder="e.g. 50"
+                value={editMaxTurns}
+                onChange={(e) => setEditMaxTurns(e.target.value)}
+                disabled={updateAgent.isPending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Maximum number of conversation turns per run. Leave empty for unlimited.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditSave} disabled={!editName.trim() || updateAgent.isPending}>
+              {updateAgent.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

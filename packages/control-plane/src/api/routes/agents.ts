@@ -122,9 +122,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     },
   );
 
-  app.get<{ Querystring: { machineId?: string } }>(
+  app.get<{ Querystring: { machineId?: string; limit?: string; offset?: string } }>(
     '/agents/list',
-    { schema: { tags: ['agents'], summary: 'List agents' } },
+    { schema: { tags: ['agents'], summary: 'List agents with pagination' } },
     async (request, reply) => {
       if (!dbRegistry) {
         return reply
@@ -132,7 +132,38 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      return await dbRegistry.listAgents(request.query.machineId);
+      const DEFAULT_LIMIT = 100;
+      const MAX_LIMIT = 500;
+
+      // Validate limit
+      let limit = DEFAULT_LIMIT;
+      if (request.query.limit !== undefined) {
+        const parsed = Number(request.query.limit);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          return reply
+            .code(400)
+            .send({ error: 'INVALID_PARAMS', message: '"limit" must be a positive integer' });
+        }
+        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+      }
+
+      // Validate offset
+      let offset = 0;
+      if (request.query.offset !== undefined) {
+        const parsed = Number(request.query.offset);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return reply
+            .code(400)
+            .send({ error: 'INVALID_PARAMS', message: '"offset" must be a non-negative integer' });
+        }
+        offset = Math.floor(parsed);
+      }
+
+      return await dbRegistry.listAgentsPaginated({
+        machineId: request.query.machineId,
+        limit,
+        offset,
+      });
     },
   );
 
@@ -156,9 +187,19 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     },
   );
 
-  app.patch<{ Params: { agentId: string }; Body: { accountId?: string | null } }>(
+  app.patch<{
+    Params: { agentId: string };
+    Body: {
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    };
+  }>(
     '/agents/:agentId',
-    { schema: { tags: ['agents'], summary: 'Update agent fields (e.g. accountId)' } },
+    { schema: { tags: ['agents'], summary: 'Update agent fields' } },
     async (request, reply) => {
       if (!dbRegistry) {
         return reply
@@ -166,7 +207,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      const { accountId } = request.body;
+      const { accountId, name, machineId, type, schedule, config } = request.body;
 
       // Validate accountId is either null/undefined or a string
       if (accountId !== undefined && accountId !== null && typeof accountId !== 'string') {
@@ -176,8 +217,69 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
+      // Validate name if provided
+      if (name !== undefined && (typeof name !== 'string' || name.trim() === '')) {
+        return reply.code(400).send({
+          error: 'INVALID_NAME',
+          message: 'name must be a non-empty string',
+        });
+      }
+
+      if (typeof name === 'string' && name.length > 256) {
+        return reply.code(400).send({
+          error: 'NAME_TOO_LONG',
+          message: 'name must be under 256 characters',
+        });
+      }
+
+      // Validate machineId if provided
+      if (machineId !== undefined && typeof machineId !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_MACHINE_ID',
+          message: 'machineId must be a string',
+        });
+      }
+
+      // Validate type if provided
+      if (type !== undefined && typeof type !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_TYPE',
+          message: 'type must be a string',
+        });
+      }
+
+      // Validate schedule if provided (allow null to clear)
+      if (schedule !== undefined && schedule !== null && typeof schedule !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_SCHEDULE',
+          message: 'schedule must be a string or null',
+        });
+      }
+
+      if (typeof schedule === 'string' && schedule.length > 100) {
+        return reply.code(400).send({
+          error: 'SCHEDULE_TOO_LONG',
+          message: 'schedule must be under 100 characters',
+        });
+      }
+
+      // Validate config if provided
+      if (config !== undefined && (typeof config !== 'object' || config === null)) {
+        return reply.code(400).send({
+          error: 'INVALID_CONFIG',
+          message: 'config must be an object',
+        });
+      }
+
       try {
-        const agent = await dbRegistry.updateAgent(request.params.agentId, { accountId });
+        const agent = await dbRegistry.updateAgent(request.params.agentId, {
+          accountId,
+          name,
+          machineId,
+          type,
+          schedule,
+          config,
+        });
         return agent;
       } catch (err) {
         if (err instanceof ControlPlaneError && err.code === 'AGENT_NOT_FOUND') {
@@ -262,6 +364,13 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       } = request.body;
       const agentId = request.params.id;
 
+      if (typeof prompt === 'string' && prompt.length > 32_000) {
+        return reply.code(400).send({
+          error: 'PROMPT_TOO_LONG',
+          message: 'Prompt must be under 32,000 characters',
+        });
+      }
+
       if (taskQueue) {
         let machineId = agentId;
 
@@ -274,8 +383,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
             let targetMachineId = requestedMachineId;
 
             if (!targetMachineId) {
-              const allMachines = await dbRegistry.listMachines();
-              const onlineMachine = allMachines.find((m) => m.status === 'online');
+              const onlineMachine = await dbRegistry.findOnlineMachine();
 
               if (!onlineMachine) {
                 return reply.code(503).send({
@@ -486,11 +594,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       const agent = await dbRegistry.getAgent(agentId);
 
       if (!agent) {
-        throw new ControlPlaneError(
-          'AGENT_NOT_FOUND',
-          `Agent '${agentId}' does not exist in the registry`,
-          { agentId },
-        );
+        return reply.code(404).send({
+          error: 'AGENT_NOT_FOUND',
+          message: `Agent '${agentId}' does not exist in the registry`,
+        });
       }
 
       const jobData: AgentTaskJobData = {

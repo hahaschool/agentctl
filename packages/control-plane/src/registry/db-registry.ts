@@ -148,6 +148,16 @@ export class DbAgentRegistry {
     return rows.map((row) => this.toMachine(row));
   }
 
+  async findOnlineMachine(): Promise<Machine | null> {
+    const [machine] = await this.db
+      .select()
+      .from(machines)
+      .where(eq(machines.status, 'online'))
+      .limit(1);
+
+    return machine ? this.toMachine(machine) : null;
+  }
+
   async getMachine(machineId: string): Promise<Machine | undefined> {
     const rows = await this.db.select().from(machines).where(eq(machines.id, machineId));
 
@@ -212,11 +222,41 @@ export class DbAgentRegistry {
     this.logger.info({ agentId, status }, 'Agent status updated');
   }
 
-  async updateAgent(agentId: string, data: { accountId?: string | null }): Promise<Agent> {
+  async updateAgent(
+    agentId: string,
+    data: {
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    },
+  ): Promise<Agent> {
     const setClause: Record<string, unknown> = {};
 
     if ('accountId' in data) {
       setClause.accountId = data.accountId ?? null;
+    }
+
+    if ('name' in data && data.name !== undefined) {
+      setClause.name = data.name;
+    }
+
+    if ('machineId' in data && data.machineId !== undefined) {
+      setClause.machineId = data.machineId;
+    }
+
+    if ('type' in data && data.type !== undefined) {
+      setClause.type = data.type;
+    }
+
+    if ('schedule' in data) {
+      setClause.schedule = data.schedule ?? null;
+    }
+
+    if ('config' in data && data.config !== undefined) {
+      setClause.config = data.config;
     }
 
     if (Object.keys(setClause).length === 0) {
@@ -254,6 +294,38 @@ export class DbAgentRegistry {
 
     const rows = await query;
     return rows.map((row) => this.toAgent(row));
+  }
+
+  async listAgentsPaginated(opts: {
+    machineId?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ agents: Agent[]; total: number; hasMore: boolean }> {
+    const condition = opts.machineId ? eq(agents.machineId, opts.machineId) : undefined;
+
+    // Count total matching rows
+    const countQuery = this.db.select({ value: count() }).from(agents);
+    if (condition) {
+      countQuery.where(condition);
+    }
+    const countResult = await countQuery;
+    const total = countResult[0]?.value ?? 0;
+
+    // Fetch the page of results
+    const dataQuery = this.db.select().from(agents);
+    if (condition) {
+      dataQuery.where(condition);
+    }
+    const rows = await dataQuery
+      .orderBy(desc(agents.createdAt))
+      .limit(opts.limit)
+      .offset(opts.offset);
+
+    return {
+      agents: rows.map((row) => this.toAgent(row)),
+      total,
+      hasMore: opts.offset + opts.limit < total,
+    };
   }
 
   // ---------------------------------------------------------------------------

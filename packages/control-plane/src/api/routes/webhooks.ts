@@ -142,6 +142,13 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
         });
       }
 
+      if (url.length > 2048) {
+        return reply.code(400).send({
+          error: 'URL_TOO_LONG',
+          message: 'URL must be under 2,048 characters',
+        });
+      }
+
       if (!isValidProvider(provider)) {
         return reply.code(400).send({
           error: 'INVALID_PROVIDER',
@@ -212,18 +219,45 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
   // GET / — List all webhook subscriptions
   // ---------------------------------------------------------------------------
 
-  app.get(
+  app.get<{ Querystring: { limit?: string; offset?: string } }>(
     '/',
     { schema: { tags: ['webhooks'], summary: 'List all webhook subscriptions' } },
-    async (_request, reply) => {
+    async (request, reply) => {
+      const DEFAULT_LIMIT = 50;
+      const MAX_LIMIT = 200;
+
+      let limit = DEFAULT_LIMIT;
+      if (request.query.limit !== undefined) {
+        const parsed = Number(request.query.limit);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          return reply.code(400).send({
+            error: 'INVALID_LIMIT',
+            message: '"limit" must be a positive integer',
+          });
+        }
+        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+      }
+
+      let offset = 0;
+      if (request.query.offset !== undefined) {
+        const parsed = Number(request.query.offset);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return reply.code(400).send({
+            error: 'INVALID_OFFSET',
+            message: '"offset" must be a non-negative integer',
+          });
+        }
+        offset = Math.floor(parsed);
+      }
+
       try {
         const result = await db.execute(
-          sql`SELECT * FROM webhook_subscriptions ORDER BY created_at DESC`,
+          sql`SELECT * FROM webhook_subscriptions ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
         );
 
         const subscriptions = extractRows<WebhookSubscriptionRow>(result).map(formatSubscription);
 
-        return { subscriptions };
+        return { subscriptions, limit, offset };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           return reply.code(502).send({ error: error.code, message: error.message });

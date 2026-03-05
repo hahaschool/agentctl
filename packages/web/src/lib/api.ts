@@ -117,6 +117,20 @@ export type AccountDefaults = {
   failoverPolicy: 'none' | 'priority' | 'round_robin';
 };
 
+export type RouterModelsResponse = {
+  models: string[];
+};
+
+export type ModelDeploymentInfo = {
+  modelName: string;
+  litellmParams: Record<string, unknown>;
+  modelInfo: Record<string, unknown>;
+};
+
+export type RouterModelsInfoResponse = {
+  deployments: ModelDeploymentInfo[];
+};
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -161,12 +175,18 @@ export const api = {
   listMachines: () => request<Machine[]>('/api/agents'),
 
   // Agents
-  listAgents: () => request<Agent[]>('/api/agents/agents/list'),
+  listAgents: async (): Promise<Agent[]> => {
+    const res = await request<{ agents: Agent[]; total: number; hasMore: boolean }>(
+      '/api/agents/agents/list',
+    );
+    return res.agents;
+  },
   getAgent: (id: string) => request<Agent>(`/api/agents/agents/${id}`),
   createAgent: (body: {
     name: string;
     machineId: string;
     type: string;
+    projectPath?: string;
     config?: Record<string, unknown>;
   }) =>
     request<{ ok: boolean; agentId: string }>('/api/agents/agents', {
@@ -182,7 +202,17 @@ export const api = {
     request<{ ok: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
-  updateAgent: (id: string, body: { accountId?: string | null }) =>
+  updateAgent: (
+    id: string,
+    body: {
+      accountId?: string | null;
+      name?: string;
+      machineId?: string;
+      type?: string;
+      schedule?: string | null;
+      config?: Record<string, unknown>;
+    },
+  ) =>
     request<Agent>(`/api/agents/agents/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -250,6 +280,17 @@ export const api = {
     );
   },
 
+  // OAuth
+  initiateOAuth: (provider: string, accountName: string) =>
+    request<{ authorizationUrl: string; state: string }>('/api/oauth/initiate', {
+      method: 'POST',
+      body: JSON.stringify({
+        provider,
+        accountName,
+        redirectUri: `${window.location.origin}/api/oauth/callback`,
+      }),
+    }),
+
   // Accounts
   listAccounts: () => request<ApiAccount[]>('/api/settings/accounts'),
   createAccount: (body: {
@@ -310,4 +351,8 @@ export const api = {
     }
     return result;
   },
+
+  // Router / LiteLLM
+  getRouterModels: () => request<RouterModelsResponse>('/api/router/models'),
+  getRouterModelsInfo: () => request<RouterModelsInfoResponse>('/api/router/models/info'),
 };

@@ -82,12 +82,13 @@ type TotalCostRow = {
 const VALID_PERIODS = ['1d', '7d', '30d', '90d'] as const;
 type Period = (typeof VALID_PERIODS)[number];
 
-function periodToInterval(period: Period): string {
-  const map: Record<Period, string> = {
-    '1d': '1 day',
-    '7d': '7 days',
-    '30d': '30 days',
-    '90d': '90 days',
+/** Return a safe SQL fragment for the given period — never uses sql.raw. */
+function periodToIntervalSql(period: Period): ReturnType<typeof sql> {
+  const map: Record<Period, ReturnType<typeof sql>> = {
+    '1d': sql`INTERVAL '1 day'`,
+    '7d': sql`INTERVAL '7 days'`,
+    '30d': sql`INTERVAL '30 days'`,
+    '90d': sql`INTERVAL '90 days'`,
   };
   return map[period];
 }
@@ -115,7 +116,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         summary: 'Get system overview with agent, run, and webhook counts',
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
         const [
           agentCountsResult,
@@ -193,7 +194,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
             timestamp: row.finished_at,
           })),
         };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch dashboard overview');
         return reply.code(500).send({
           error: 'DASHBOARD_OVERVIEW_ERROR',
           message: 'Failed to fetch dashboard overview',
@@ -209,7 +211,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
   app.get(
     '/agent-stats',
     { schema: { tags: ['dashboard'], summary: 'Get per-agent statistics and success rates' } },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
         const result = await db.execute(
           sql`SELECT
@@ -249,7 +251,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         });
 
         return { stats };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch per-agent statistics');
         return reply.code(500).send({
           error: 'DASHBOARD_AGENT_STATS_ERROR',
           message: 'Failed to fetch agent stats',
@@ -265,7 +268,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
   app.get(
     '/tool-usage',
     { schema: { tags: ['dashboard'], summary: 'Get tool usage analytics and top agents' } },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
         const [toolResult, topAgentsResult] = await Promise.all([
           db.execute(
@@ -304,7 +307,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         );
 
         return { tools, topAgentsByToolUse };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch tool usage analytics');
         return reply.code(500).send({
           error: 'DASHBOARD_TOOL_USAGE_ERROR',
           message: 'Failed to fetch tool usage',
@@ -335,21 +339,21 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         });
       }
 
-      const interval = periodToInterval(rawPeriod);
+      const intervalSql = periodToIntervalSql(rawPeriod);
 
       try {
         const [totalResult, byAgentResult, byProviderResult] = await Promise.all([
           db.execute(
             sql`SELECT COALESCE(SUM(cost_usd), 0)::numeric AS total_cost_usd
             FROM agent_runs
-            WHERE started_at >= NOW() - ${sql.raw(`INTERVAL '${interval}'`)}`,
+            WHERE started_at >= NOW() - ${intervalSql}`,
           ),
           db.execute(
             sql`SELECT
               agent_id,
               COALESCE(SUM(cost_usd), 0)::numeric AS cost_usd
             FROM agent_runs
-            WHERE started_at >= NOW() - ${sql.raw(`INTERVAL '${interval}'`)}
+            WHERE started_at >= NOW() - ${intervalSql}
             GROUP BY agent_id
             ORDER BY cost_usd DESC`,
           ),
@@ -358,7 +362,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
               COALESCE(provider, 'unknown') AS provider,
               COALESCE(SUM(cost_usd), 0)::numeric AS cost_usd
             FROM agent_runs
-            WHERE started_at >= NOW() - ${sql.raw(`INTERVAL '${interval}'`)}
+            WHERE started_at >= NOW() - ${intervalSql}
             GROUP BY provider
             ORDER BY cost_usd DESC`,
           ),
@@ -383,7 +387,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           byAgent,
           byProvider,
         };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch cost summary for period: ' + rawPeriod);
         return reply.code(500).send({
           error: 'DASHBOARD_COST_SUMMARY_ERROR',
           message: 'Failed to fetch cost summary',

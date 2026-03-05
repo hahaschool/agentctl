@@ -12,6 +12,15 @@ type FailoverPolicy = (typeof VALID_FAILOVER_POLICIES)[number];
 export const settingsRoutes: FastifyPluginAsync<SettingsRoutesOptions> = async (app, opts) => {
   const { db } = opts;
 
+  // Scoped error handler — log + return structured 500 for unhandled DB errors
+  app.setErrorHandler((error: Error, request, reply) => {
+    request.log.error(error, 'Settings route error');
+    return reply.code(500).send({
+      error: 'INTERNAL_ERROR',
+      message: error.message ?? 'An unexpected error occurred',
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // GET /defaults — retrieve default settings
   // ---------------------------------------------------------------------------

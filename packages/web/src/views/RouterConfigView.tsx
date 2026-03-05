@@ -5,10 +5,40 @@ import Link from 'next/link';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import type { ModelDeploymentInfo } from '../lib/api';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { RefreshButton } from '../components/RefreshButton';
-import { healthQuery } from '../lib/queries';
+import { healthQuery, routerModelsInfoQuery } from '../lib/queries';
+
+// ---------------------------------------------------------------------------
+// Helpers — extract display fields from a ModelDeploymentInfo
+// ---------------------------------------------------------------------------
+
+function extractProvider(d: ModelDeploymentInfo): string {
+  const customProvider = d.litellmParams?.custom_llm_provider;
+  if (typeof customProvider === 'string') return customProvider;
+
+  const model = d.litellmParams?.model;
+  if (typeof model === 'string') {
+    if (model.startsWith('bedrock/')) return 'AWS Bedrock';
+    if (model.startsWith('vertex_ai/')) return 'Google Vertex AI';
+    if (model.startsWith('azure/')) return 'Azure OpenAI';
+    if (model.startsWith('openai/')) return 'OpenAI';
+  }
+
+  return 'Anthropic';
+}
+
+function extractCost(
+  info: Record<string, unknown>,
+  key: string,
+): string | null {
+  const val = info[key];
+  if (typeof val === 'number') return val.toFixed(6);
+  if (typeof val === 'string') return val;
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Router config view — LiteLLM proxy status and model list
@@ -16,11 +46,18 @@ import { healthQuery } from '../lib/queries';
 
 export function RouterConfigView(): React.JSX.Element {
   const health = useQuery(healthQuery());
+  const modelsInfo = useQuery(routerModelsInfoQuery());
   const litellm = health.data?.dependencies?.litellm;
+
+  const isFetching =
+    (health.isFetching && !health.isLoading) ||
+    (modelsInfo.isFetching && !modelsInfo.isLoading);
+
+  const deployments = modelsInfo.data?.deployments ?? [];
 
   return (
     <div className="relative p-4 md:p-6 max-w-3xl space-y-6 animate-fade-in">
-      <FetchingBar isFetching={health.isFetching && !health.isLoading} />
+      <FetchingBar isFetching={isFetching} />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
@@ -32,8 +69,11 @@ export function RouterConfigView(): React.JSX.Element {
           <h1 className="text-[22px] font-bold">LiteLLM Router</h1>
         </div>
         <RefreshButton
-          onClick={() => void health.refetch()}
-          isFetching={health.isFetching && !health.isLoading}
+          onClick={() => {
+            void health.refetch();
+            void modelsInfo.refetch();
+          }}
+          isFetching={isFetching}
         />
       </div>
 
@@ -80,25 +120,70 @@ export function RouterConfigView(): React.JSX.Element {
           <p className="text-xs text-muted-foreground mb-4">
             Models configured in LiteLLM for multi-provider failover routing.
           </p>
-          <div className="space-y-2">
-            {MODELS.map((m) => (
-              <div
-                key={m.id}
-                className="flex items-center justify-between py-2 px-3 bg-muted rounded-sm"
-              >
-                <div>
-                  <div className="text-[13px] font-medium">{m.name}</div>
-                  <div className="text-[11px] text-muted-foreground font-mono">{m.id}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[11px] text-muted-foreground">{m.provider}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    ${m.inputCostPer1k}/1K in &middot; ${m.outputCostPer1k}/1K out
+
+          {modelsInfo.isLoading && (
+            <p className="text-xs text-muted-foreground py-4 text-center">Loading models...</p>
+          )}
+
+          {modelsInfo.error && !modelsInfo.isLoading && (
+            <div className="py-4 text-center space-y-2">
+              <p className="text-xs text-destructive">
+                {litellm?.status === 'ok'
+                  ? 'Failed to load model info from LiteLLM.'
+                  : 'LiteLLM proxy is not configured. Configure the LITELLM_BASE_URL environment variable on the control plane to enable model routing.'}
+              </p>
+              {litellm?.status === 'ok' && (
+                <button
+                  type="button"
+                  onClick={() => void modelsInfo.refetch()}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+
+          {!modelsInfo.isLoading && !modelsInfo.error && deployments.length === 0 && (
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              No models configured in LiteLLM.
+            </p>
+          )}
+
+          {deployments.length > 0 && (
+            <div className="space-y-2">
+              {deployments.map((d) => {
+                const provider = extractProvider(d);
+                const inputCost = extractCost(d.modelInfo, 'input_cost_per_token');
+                const outputCost = extractCost(d.modelInfo, 'output_cost_per_token');
+
+                return (
+                  <div
+                    key={d.modelName}
+                    className="flex items-center justify-between py-2 px-3 bg-muted rounded-sm"
+                  >
+                    <div>
+                      <div className="text-[13px] font-medium">{d.modelName}</div>
+                      {typeof d.litellmParams?.model === 'string' &&
+                        d.litellmParams.model !== d.modelName && (
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            {d.litellmParams.model}
+                          </div>
+                        )}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[11px] text-muted-foreground">{provider}</div>
+                      {inputCost && outputCost ? (
+                        <div className="text-[10px] text-muted-foreground">
+                          ${inputCost}/tok in &middot; ${outputCost}/tok out
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -106,6 +191,10 @@ export function RouterConfigView(): React.JSX.Element {
       <Card>
         <CardContent className="p-5">
           <h2 className="text-sm font-semibold mb-3">Failover Strategy</h2>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            Failover order is determined by the LiteLLM proxy configuration. Edit the LiteLLM
+            config to change priorities and retry behavior.
+          </p>
           <div className="space-y-2 text-[13px]">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Primary</span>
@@ -129,28 +218,3 @@ export function RouterConfigView(): React.JSX.Element {
     </div>
   );
 }
-
-// Static model list — in production this would come from the API
-const MODELS = [
-  {
-    id: 'claude-opus-4-6',
-    name: 'Claude Opus 4.6',
-    provider: 'Anthropic',
-    inputCostPer1k: '0.015',
-    outputCostPer1k: '0.075',
-  },
-  {
-    id: 'claude-sonnet-4-6',
-    name: 'Claude Sonnet 4.6',
-    provider: 'Anthropic',
-    inputCostPer1k: '0.003',
-    outputCostPer1k: '0.015',
-  },
-  {
-    id: 'claude-haiku-4-5',
-    name: 'Claude Haiku 4.5',
-    provider: 'Anthropic',
-    inputCostPer1k: '0.0008',
-    outputCostPer1k: '0.004',
-  },
-];

@@ -89,9 +89,11 @@ describe('api.listMachines', () => {
 // ---------------------------------------------------------------------------
 
 describe('api.listAgents', () => {
-  it('calls GET /api/agents/agents/list', async () => {
+  it('calls GET /api/agents/agents/list and unwraps paginated response', async () => {
     const agents = [{ id: 'a1', name: 'worker' }];
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(agents));
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ agents, total: 1, hasMore: false }),
+    );
 
     const result = await api.listAgents();
 

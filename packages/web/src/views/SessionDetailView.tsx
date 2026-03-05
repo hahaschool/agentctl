@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -24,6 +25,7 @@ import type { Session, SessionContentMessage } from '../lib/api';
 import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import {
+  accountsQuery,
   queryKeys,
   sessionContentQuery,
   sessionQuery,
@@ -32,6 +34,107 @@ import {
   useResumeSession,
   useSendMessage,
 } from '../lib/queries';
+
+// ---------------------------------------------------------------------------
+// Export helpers
+// ---------------------------------------------------------------------------
+
+function downloadFile(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportSessionAsJson(session: Session, messages: SessionContentMessage[]): void {
+  const data = {
+    session: {
+      id: session.id,
+      agentId: session.agentId,
+      machineId: session.machineId,
+      claudeSessionId: session.claudeSessionId,
+      status: session.status,
+      projectPath: session.projectPath,
+      model: session.model,
+      accountId: session.accountId,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      metadata: session.metadata,
+    },
+    messages: messages.map((m) => ({
+      type: m.type,
+      content: m.content,
+      timestamp: m.timestamp ?? null,
+      toolName: m.toolName ?? null,
+    })),
+    exportedAt: new Date().toISOString(),
+  };
+  const json = JSON.stringify(data, null, 2);
+  const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.json`;
+  downloadFile(json, filename, 'application/json');
+}
+
+function formatMessageLabel(type: string): string {
+  switch (type) {
+    case 'human':
+      return 'Human';
+    case 'assistant':
+      return 'Assistant';
+    case 'tool_use':
+      return 'Tool Call';
+    case 'tool_result':
+      return 'Tool Result';
+    default:
+      return type;
+  }
+}
+
+function exportSessionAsMarkdown(session: Session, messages: SessionContentMessage[]): void {
+  const lines: string[] = [];
+
+  lines.push(`# Session ${session.id}`);
+  lines.push('');
+
+  const metaParts: string[] = [];
+  metaParts.push(`**Status:** ${session.status}`);
+  if (session.model) metaParts.push(`**Model:** ${session.model}`);
+  metaParts.push(`**Started:** ${session.startedAt}`);
+  if (session.endedAt) metaParts.push(`**Ended:** ${session.endedAt}`);
+  metaParts.push(`**Machine:** ${session.machineId}`);
+  if (session.projectPath) metaParts.push(`**Project:** ${session.projectPath}`);
+  lines.push(metaParts.join(' | '));
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+  lines.push('## Messages');
+  lines.push('');
+
+  for (const msg of messages) {
+    const label = formatMessageLabel(msg.type);
+    const timestamp = msg.timestamp ? ` _(${msg.timestamp})_` : '';
+    const toolSuffix = msg.toolName ? ` \`${msg.toolName}\`` : '';
+
+    lines.push(`### ${label}${toolSuffix}${timestamp}`);
+    lines.push('');
+
+    const content = msg.content ?? '';
+    if (msg.type === 'tool_use' || msg.type === 'tool_result') {
+      lines.push('```');
+      lines.push(content);
+      lines.push('```');
+    } else {
+      lines.push(content);
+    }
+    lines.push('');
+  }
+
+  const md = lines.join('\n');
+  const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.md`;
+  downloadFile(md, filename, 'text/markdown');
+}
 
 // ---------------------------------------------------------------------------
 // Session detail view
@@ -66,7 +169,7 @@ export function SessionDetailView(): React.JSX.Element {
   const isActive = s?.status === 'active' || s?.status === 'starting';
   const stream = useSessionStream({
     sessionId,
-    enabled: isActive ?? false,
+    enabled: isActive,
     onEvent: useCallback(
       (event: SessionStreamEvent) => {
         // When status changes (e.g., session ends), refetch the full content
@@ -96,6 +199,7 @@ export function SessionDetailView(): React.JSX.Element {
       {/* Top bar */}
       <SessionHeader
         session={s}
+        messages={content.data?.messages ?? []}
         dataUpdatedAt={content.dataUpdatedAt || session.dataUpdatedAt}
         isFetching={(content.isFetching || session.isFetching) && !content.isLoading}
         onRefresh={refetchAll}
@@ -127,12 +231,14 @@ export function SessionDetailView(): React.JSX.Element {
 
 function SessionHeader({
   session,
+  messages,
   dataUpdatedAt,
   isFetching,
   onRefresh,
   streamConnected,
 }: {
   session: Session;
+  messages: SessionContentMessage[];
   dataUpdatedAt: number;
   isFetching: boolean;
   onRefresh: () => void;
@@ -142,8 +248,29 @@ function SessionHeader({
   const deleteSession = useDeleteSession();
   const forkSession = useForkSession();
   const queryClient = useQueryClient();
+  const accounts = useQuery(accountsQuery());
   const [forkPrompt, setForkPrompt] = useState('');
   const [showFork, setShowFork] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  const accountName = useMemo(() => {
+    if (!session.accountId || !accounts.data) return null;
+    const found = accounts.data.find((a) => a.id === session.accountId);
+    return found?.name ?? null;
+  }, [session.accountId, accounts.data]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    if (!showExportMenu) return;
+    function handleClickOutside(e: MouseEvent): void {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
 
   const handleEnd = useCallback(() => {
     deleteSession.mutate(session.id, {
@@ -190,6 +317,39 @@ function SessionHeader({
         <div className="ml-auto flex items-center gap-2">
           <LastUpdated dataUpdatedAt={dataUpdatedAt} />
           <RefreshButton onClick={onRefresh} isFetching={isFetching} />
+          <div className="relative" ref={exportMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
+            >
+              Export
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-sm shadow-lg min-w-[160px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportSessionAsJson(session, messages);
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent"
+                >
+                  Export as JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportSessionAsMarkdown(session, messages);
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent border-t border-t-border"
+                >
+                  Export as Markdown
+                </button>
+              </div>
+            )}
+          </div>
           {canFork && (
             <button
               type="button"
@@ -220,7 +380,10 @@ function SessionHeader({
             onChange={(e) => setForkPrompt(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleFork();
-              if (e.key === 'Escape') setShowFork(false);
+              if (e.key === 'Escape') {
+                setShowFork(false);
+                setForkPrompt('');
+              }
             }}
             placeholder="Prompt for the forked session..."
             className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
@@ -253,7 +416,12 @@ function SessionHeader({
         {session.projectPath && <PathBadge path={session.projectPath} />}
         {session.accountId && (
           <span className="flex items-center gap-1">
-            Account: <CopyableText value={session.accountId} maxDisplay={12} />
+            Account:{' '}
+            {accountName ? (
+              <span title={session.accountId}>{accountName}</span>
+            ) : (
+              <CopyableText value={session.accountId} maxDisplay={12} />
+            )}
           </span>
         )}
         {session.model && (
@@ -320,9 +488,16 @@ function MessageList({
   const [showTools, setShowTools] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  const visibleMessages = showTools
+  const maxDisplayMessages =
+    typeof window !== 'undefined'
+      ? Number(localStorage.getItem('agentctl:maxDisplayMessages')) || 100
+      : 100;
+
+  const filteredMessages = showTools
     ? messages
     : messages.filter((m) => m.type === 'human' || m.type === 'assistant');
+
+  const visibleMessages = filteredMessages.slice(-maxDisplayMessages);
 
   // Auto-scroll to bottom when new messages or stream output arrive
   const prevCountRef = useRef(0);
@@ -343,7 +518,7 @@ function MessageList({
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
     setAutoScroll(isAtBottom);
   }, []);
 
@@ -429,9 +604,9 @@ function MessageList({
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[10px] font-semibold text-green-500">Streaming</span>
             </div>
-            <pre className="text-[12px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-auto">
+            <AnsiText className="text-[12px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-auto m-0">
               {streamOutput.join('')}
-            </pre>
+            </AnsiText>
           </div>
         )}
       </div>
@@ -508,13 +683,14 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
           isTool ? 'text-[11px] font-mono max-h-[400px] overflow-auto' : 'text-[13px]',
         )}
       >
-        {displayContent}
+        <AnsiSpan>{displayContent}</AnsiSpan>
       </div>
       {isLong && !isTool && (
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
           className="mt-1 text-[11px] text-primary bg-transparent border-none p-0 cursor-pointer"
+          aria-label={expanded ? 'Collapse message' : 'Expand message'}
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>
@@ -529,17 +705,52 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
 
 function MessageInput({ session }: { session: Session }): React.JSX.Element {
   const [message, setMessage] = useState('');
+  const lostKey = `lost:${session.id}`;
+  const [sessionLost, setSessionLost] = useState(() => sessionStorage.getItem(lostKey) === '1');
   const toast = useToast();
   const queryClient = useQueryClient();
   const sendMessage = useSendMessage();
   const resumeSession = useResumeSession();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const isActive = session.status === 'active' || session.status === 'starting';
+  // Draft persistence — survive page refreshes
+  const storageKey = `draft:${session.id}`;
+
+  // Load draft from sessionStorage on mount (or when session changes)
+  useEffect(() => {
+    const saved = sessionStorage.getItem(storageKey);
+    if (saved) setMessage(saved);
+  }, [storageKey]);
+
+  // Save draft to sessionStorage on change (debounced 300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (message) {
+        sessionStorage.setItem(storageKey, message);
+      } else {
+        sessionStorage.removeItem(storageKey);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [message, storageKey]);
+
+  const isActive = session.status === 'active';
+  const isStarting = session.status === 'starting';
   const canResume =
-    session.status === 'ended' || session.status === 'paused' || session.status === 'error';
+    !sessionLost &&
+    (session.status === 'ended' || session.status === 'paused' || session.status === 'error');
   const canSend = isActive || canResume;
   const isSending = sendMessage.isPending || resumeSession.isPending;
+
+  /** Detect SESSION_LOST errors and persist the state. */
+  const markSessionLost = useCallback(() => {
+    setSessionLost(true);
+    sessionStorage.setItem(lostKey, '1');
+  }, [lostKey]);
+
+  const isSessionLostError = useCallback((err: Error): boolean => {
+    return err.message.includes('session was lost') || err.message.includes('SESSION_LOST');
+  }, []);
 
   const handleSubmit = useCallback(() => {
     const text = message.trim();
@@ -551,6 +762,7 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
         {
           onSuccess: () => {
             setMessage('');
+            sessionStorage.removeItem(storageKey);
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
             });
@@ -561,7 +773,17 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
               });
             }, 1000);
           },
-          onError: (err) => toast.error(err.message),
+          onError: (err) => {
+            if (isSessionLostError(err)) {
+              markSessionLost();
+            }
+            toast.error(err.message);
+            // Refresh session data so the UI reflects any status change
+            // (e.g. session marked as ended after worker restart)
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.session(session.id),
+            });
+          },
         },
       );
     } else if (canResume) {
@@ -570,12 +792,23 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
         {
           onSuccess: () => {
             setMessage('');
+            sessionStorage.removeItem(storageKey);
             toast.success('Session resumed');
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
             });
           },
-          onError: (err) => toast.error(err.message),
+          onError: (err) => {
+            if (isSessionLostError(err)) {
+              markSessionLost();
+            }
+            toast.error(err.message);
+            // Refresh session data so the UI reflects any status change
+            // (e.g. session marked as ended after worker restart)
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.session(session.id),
+            });
+          },
         },
       );
     }
@@ -585,8 +818,11 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     isActive,
     canResume,
     session.id,
+    storageKey,
     sendMessage,
     resumeSession,
+    isSessionLostError,
+    markSessionLost,
     toast,
     queryClient,
   ]);
@@ -600,6 +836,28 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     },
     [handleSubmit],
   );
+
+  if (sessionLost) {
+    return (
+      <div className="px-5 py-3 border-t border-border bg-card shrink-0">
+        <div className="flex items-center gap-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-sm">
+          <span className="text-yellow-500 text-sm font-medium">!</span>
+          <div className="flex-1 text-xs text-muted-foreground">
+            This session was lost due to a worker restart. You can fork this session or create a new
+            one to continue.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isStarting) {
+    return (
+      <div className="px-5 py-3 border-t border-border text-center text-xs text-muted-foreground bg-card animate-pulse">
+        Session is starting. Please wait...
+      </div>
+    );
+  }
 
   if (!canSend) {
     return (

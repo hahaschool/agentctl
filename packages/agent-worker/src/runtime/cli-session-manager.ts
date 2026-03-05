@@ -97,6 +97,8 @@ export type CliSessionManagerOptions = {
   claudePath?: string;
   /** Maximum number of concurrent sessions (default: 10). */
   maxConcurrentSessions?: number;
+  /** Optional logger for debug-level diagnostics (e.g. pino instance). */
+  logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
 };
 
 export type CliSessionEvent =
@@ -121,6 +123,8 @@ type CliStreamMessage = {
 const DEFAULT_CLAUDE_PATH = 'claude';
 const DEFAULT_MAX_CONCURRENT = 10;
 const DEFAULT_MODEL = 'sonnet';
+const STALE_SESSION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -132,12 +136,20 @@ export class CliSessionManager extends EventEmitter {
   private readonly sessions: Map<string, CliSession> = new Map();
   private readonly processes: Map<string, ChildProcess> = new Map();
   private readonly lineBuffers: Map<string, string> = new Map();
+  private readonly logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
   private sessionCounter = 0;
+  private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
   constructor(options?: CliSessionManagerOptions) {
     super();
     this.claudePath = options?.claudePath ?? DEFAULT_CLAUDE_PATH;
     this.maxConcurrentSessions = options?.maxConcurrentSessions ?? DEFAULT_MAX_CONCURRENT;
+    this.logger = options?.logger;
+
+    // Periodically clean up stale sessions to prevent memory leaks
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupStaleSessions();
+    }, CLEANUP_INTERVAL_MS);
   }
 
   // -----------------------------------------------------------------------
@@ -152,12 +164,28 @@ export class CliSessionManager extends EventEmitter {
    * a previous conversation.
    */
   startSession(options: StartCliSessionOptions): CliSession {
-    if (this.sessions.size >= this.maxConcurrentSessions) {
+    // Only count actively running sessions toward the concurrent limit —
+    // errored/completed sessions should not block new ones.
+    const activeSessions = [...this.sessions.values()].filter(
+      (s) => s.status === 'running' || s.status === 'starting',
+    ).length;
+
+    if (activeSessions >= this.maxConcurrentSessions) {
       throw new AgentError(
         'MAX_SESSIONS_EXCEEDED',
         `Maximum concurrent sessions (${this.maxConcurrentSessions}) exceeded`,
-        { current: this.sessions.size, max: this.maxConcurrentSessions },
+        { current: activeSessions, max: this.maxConcurrentSessions },
       );
+    }
+
+    // Clean up old finished sessions to prevent memory leaks
+    const now = Date.now();
+    for (const [sid, s] of this.sessions) {
+      if (s.status === 'error' || s.status === 'ended') {
+        this.sessions.delete(sid);
+      } else if (s.status === 'paused' && now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS) {
+        this.sessions.delete(sid);
+      }
     }
 
     this.sessionCounter++;
@@ -327,6 +355,13 @@ export class CliSessionManager extends EventEmitter {
   }
 
   /**
+   * Return the configured maximum number of concurrent sessions.
+   */
+  getMaxConcurrentSessions(): number {
+    return this.maxConcurrentSessions;
+  }
+
+  /**
    * List sessions filtered by status.
    */
   listSessionsByStatus(status: CliSessionStatus): CliSession[] {
@@ -339,6 +374,39 @@ export class CliSessionManager extends EventEmitter {
   async stopAll(): Promise<void> {
     const runningSessions = this.listSessionsByStatus('running');
     await Promise.all(runningSessions.map((s) => this.stopSession(s.id, false)));
+  }
+
+  /**
+   * Remove stale sessions from the in-memory map.
+   *
+   * - Sessions in `'error'` or `'ended'` status are removed immediately.
+   * - Sessions in `'paused'` status are removed if their last activity was
+   *   more than 5 minutes ago (they can still be resumed via Claude session
+   *   ID even after eviction from this map).
+   *
+   * @returns The number of sessions that were cleaned up.
+   */
+  cleanupStaleSessions(): number {
+    let cleaned = 0;
+    const now = Date.now();
+    for (const [sid, s] of this.sessions) {
+      if (s.status === 'error' || s.status === 'ended') {
+        this.sessions.delete(sid);
+        cleaned++;
+      } else if (s.status === 'paused' && now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS) {
+        this.sessions.delete(sid);
+        cleaned++;
+      }
+    }
+    return cleaned;
+  }
+
+  /**
+   * Tear down the manager — clears the periodic cleanup timer.
+   * Call this on process shutdown to avoid leaked intervals.
+   */
+  destroy(): void {
+    clearInterval(this.cleanupTimer);
   }
 
   /**
@@ -390,8 +458,13 @@ export class CliSessionManager extends EventEmitter {
               discovered,
             );
           }
-        } catch {
-          // Can't read subdirectory — skip
+        } catch (err) {
+          // Intentional: subdirectory may be unreadable due to permissions;
+          // skip gracefully so remaining directories are still discovered.
+          this.logger?.debug(
+            { error: err instanceof Error ? err.message : String(err), path: dirPath },
+            'Skipped unreadable subdirectory during session discovery',
+          );
         }
 
         // For dirs without sessions-index.json, discover from JSONL files
@@ -399,8 +472,13 @@ export class CliSessionManager extends EventEmitter {
           this.discoverFromJsonlFiles(dirPath, dir.name, projectPathFilter, discovered);
         }
       }
-    } catch {
-      // Can't read projects directory
+    } catch (err) {
+      // Intentional: the ~/.claude/projects directory itself may not exist
+      // or may be unreadable; return empty results rather than crashing.
+      this.logger?.debug(
+        { error: err instanceof Error ? err.message : String(err), path: claudeDir },
+        'Failed to read Claude projects directory during session discovery',
+      );
     }
 
     // Deduplicate by sessionId (subdirectory nesting may cause duplicates)
@@ -495,8 +573,13 @@ export class CliSessionManager extends EventEmitter {
           branch: e.gitBranch ?? null,
         });
       }
-    } catch {
-      // Skip corrupted index files
+    } catch (err) {
+      // Intentional: corrupted or malformed sessions-index.json should not
+      // prevent discovery of other valid session data.
+      this.logger?.debug(
+        { error: err instanceof Error ? err.message : String(err), path: indexPath },
+        'Skipped corrupted session index file',
+      );
     }
   }
 
@@ -538,8 +621,13 @@ export class CliSessionManager extends EventEmitter {
           branch: null,
         });
       }
-    } catch {
-      // Can't read directory
+    } catch (err) {
+      // Intentional: directory may be unreadable; skip gracefully so
+      // other project directories can still be discovered.
+      this.logger?.debug(
+        { error: err instanceof Error ? err.message : String(err), path: dirPath },
+        'Skipped unreadable directory during JSONL session discovery',
+      );
     }
   }
 

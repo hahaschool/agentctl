@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { useToast } from '../components/Toast';
 import { accountDefaultsQuery, accountsQuery, useUpdateDefaults } from '../lib/queries';
 
 // ---------------------------------------------------------------------------
@@ -40,17 +41,28 @@ export function FailoverSection(): React.JSX.Element {
   const accounts = useQuery(accountsQuery());
   const defaults = useQuery(accountDefaultsQuery());
   const updateDefaults = useUpdateDefaults();
+  const toast = useToast();
 
   const isLoading = accounts.isLoading || defaults.isLoading;
 
   function handleDefaultAccountChange(accountId: string): void {
-    updateDefaults.mutate({
-      defaultAccountId: accountId === '__none__' ? null : accountId,
-    });
+    updateDefaults.mutate(
+      { defaultAccountId: accountId === '__none__' ? null : accountId },
+      {
+        onSuccess: () => toast.success('Default account updated'),
+        onError: (err) => toast.error(`Failed to update default account: ${err.message}`),
+      },
+    );
   }
 
   function handleFailoverPolicyChange(policy: 'none' | 'priority' | 'round_robin'): void {
-    updateDefaults.mutate({ failoverPolicy: policy });
+    updateDefaults.mutate(
+      { failoverPolicy: policy },
+      {
+        onSuccess: () => toast.success('Failover policy updated'),
+        onError: (err) => toast.error(`Failed to update failover policy: ${err.message}`),
+      },
+    );
   }
 
   return (
