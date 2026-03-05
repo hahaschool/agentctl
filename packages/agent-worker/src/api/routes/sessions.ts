@@ -84,6 +84,9 @@ type ContentMessage = {
   content: string;
   timestamp?: string;
   toolName?: string;
+  toolId?: string;
+  subagentId?: string;
+  metadata?: Record<string, unknown>;
 };
 
 const DEFAULT_CONTENT_LIMIT = 100;
@@ -946,7 +949,7 @@ export async function sessionRoutes(
 // JSONL content helpers
 // ---------------------------------------------------------------------------
 
-const PREVIEW_TYPES = new Set(['user', 'assistant']);
+const PREVIEW_TYPES = new Set(['user', 'assistant', 'progress']);
 
 /**
  * Recursively search directories under `~/.claude/projects/` for a JSONL file
@@ -1028,7 +1031,8 @@ function searchForJsonl(dir: string, fileName: string, currentDepth: number): st
  * Claude Code JSONL format:
  * - type: "user"      → message.content[] has {type:"text"} and {type:"tool_result"} blocks
  * - type: "assistant"  → message.content[] has {type:"text"}, {type:"thinking"}, {type:"tool_use"} blocks
- * - type: "progress" / "queue-operation" / "file-history-snapshot" / "system" → skip
+ * - type: "progress"  → bash_progress, agent_progress, waiting_for_task
+ * - type: "queue-operation" / "file-history-snapshot" / "system" → skip
  *
  * Each content block becomes a separate ContentMessage so the frontend can
  * render them individually with appropriate styling.
@@ -1046,6 +1050,46 @@ function parseJsonlEntry(entry: unknown): ContentMessage[] {
   }
 
   const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : undefined;
+
+  const isSidechain = (obj as Record<string, unknown>).isSidechain === true;
+  const agentId = typeof (obj as Record<string, unknown>).agentId === 'string'
+    ? ((obj as Record<string, unknown>).agentId as string) : undefined;
+
+  // Handle progress entries
+  if (entryType === 'progress') {
+    const data = obj.data as Record<string, unknown> | undefined;
+    if (!data || typeof data !== 'object') return [];
+
+    const progressType = typeof data.type === 'string' ? data.type : null;
+
+    if (progressType === 'agent_progress') {
+      // Subagent dispatch
+      const content = typeof data.content === 'string' ? data.content : '';
+      const agentType = typeof data.agentType === 'string' ? data.agentType : 'subagent';
+      if (content.trim().length > 0) {
+        const msg: ContentMessage = { type: 'subagent', content: content.slice(0, 4000), toolName: agentType, timestamp };
+        if (isSidechain) msg.subagentId = agentId;
+        return [msg];
+      }
+    } else if (progressType === 'bash_progress') {
+      const command = typeof data.command === 'string' ? data.command : '';
+      if (command.trim().length > 0) {
+        const msg: ContentMessage = { type: 'progress', content: command, toolName: 'bash', timestamp };
+        if (isSidechain) msg.subagentId = agentId;
+        return [msg];
+      }
+    } else if (progressType === 'waiting_for_task') {
+      const desc = typeof data.taskDescription === 'string' ? data.taskDescription : '';
+      const taskType = typeof data.taskType === 'string' ? data.taskType : 'task';
+      if (desc.trim().length > 0) {
+        const msg: ContentMessage = { type: 'progress', content: desc, toolName: taskType, timestamp };
+        if (isSidechain) msg.subagentId = agentId;
+        return [msg];
+      }
+    }
+
+    return [];
+  }
 
   const message = obj.message as Record<string, unknown> | undefined;
   if (!message || typeof message !== 'object') {
@@ -1088,7 +1132,12 @@ function parseJsonlEntry(entry: unknown): ContentMessage[] {
           typeof b.content === 'string'
             ? b.content.slice(0, 2000)
             : JSON.stringify(b.content ?? '').slice(0, 2000);
-        results.push({ type: 'tool_result', content, timestamp });
+        results.push({
+          type: 'tool_result',
+          content,
+          toolId: typeof b.tool_use_id === 'string' ? (b.tool_use_id as string) : undefined,
+          timestamp,
+        });
       }
     }
 
@@ -1098,14 +1147,43 @@ function parseJsonlEntry(entry: unknown): ContentMessage[] {
         if (text.length > 0) {
           results.push({ type: 'assistant', content: text, timestamp });
         }
+      } else if (blockType === 'thinking' && typeof b.thinking === 'string') {
+        const text = b.thinking as string;
+        if (text.trim().length > 0) {
+          results.push({ type: 'thinking', content: text, timestamp });
+        }
       } else if (blockType === 'tool_use' && typeof b.name === 'string') {
         const input =
           typeof b.input === 'string'
-            ? b.input.slice(0, 1000)
-            : JSON.stringify(b.input ?? '', null, 2).slice(0, 1000);
-        results.push({ type: 'tool_use', content: input, toolName: b.name, timestamp });
+            ? b.input.slice(0, 4000)
+            : JSON.stringify(b.input ?? '', null, 2).slice(0, 4000);
+        results.push({
+          type: 'tool_use',
+          content: input,
+          toolName: b.name as string,
+          toolId: typeof b.id === 'string' ? (b.id as string) : undefined,
+          timestamp,
+        });
+        // Detect TodoWrite tool — extract todos as separate message
+        if (b.name === 'TodoWrite' && typeof b.input === 'object' && b.input !== null) {
+          const inp = b.input as Record<string, unknown>;
+          if (Array.isArray(inp.todos)) {
+            results.push({
+              type: 'todo',
+              content: JSON.stringify(inp.todos),
+              toolName: 'TodoWrite',
+              timestamp,
+            });
+          }
+        }
       }
-      // Skip "thinking" blocks — they are internal reasoning and too verbose
+    }
+  }
+
+  // Tag sidechain messages with their subagent ID
+  if (isSidechain && agentId) {
+    for (const r of results) {
+      r.subagentId = agentId;
     }
   }
 

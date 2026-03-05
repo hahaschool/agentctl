@@ -83,6 +83,9 @@ export type SessionContentMessage = {
   content: string;
   timestamp?: string;
   toolName?: string;
+  toolId?: string;
+  subagentId?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type SessionContentResponse = {

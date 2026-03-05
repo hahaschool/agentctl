@@ -17,7 +17,11 @@ import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
+import { ProgressIndicator } from '../components/ProgressIndicator';
 import { RefreshButton } from '../components/RefreshButton';
+import { SubagentBlock } from '../components/SubagentBlock';
+import { ThinkingBlock } from '../components/ThinkingBlock';
+import { TodoBlock } from '../components/TodoBlock';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
@@ -87,6 +91,14 @@ function formatMessageLabel(type: string): string {
       return 'Tool Call';
     case 'tool_result':
       return 'Tool Result';
+    case 'thinking':
+      return 'Thinking';
+    case 'progress':
+      return 'Progress';
+    case 'subagent':
+      return 'Subagent';
+    case 'todo':
+      return 'Tasks';
     default:
       return type;
   }
@@ -528,6 +540,8 @@ function MessageList({
 }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTools, setShowTools] = useState(false);
+  const [showThinking, setShowThinking] = useState(true);
+  const [showProgress, setShowProgress] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 
   const maxDisplayMessages = useMemo(
@@ -538,9 +552,15 @@ function MessageList({
     [],
   );
 
-  const filteredMessages = showTools
-    ? messages
-    : messages.filter((m) => m.type === 'human' || m.type === 'assistant');
+  // Always show: human, assistant, subagent, todo
+  // Toggle: tool_use/tool_result (showTools), thinking (showThinking), progress (showProgress)
+  const filteredMessages = messages.filter((m) => {
+    if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo') return true;
+    if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
+    if (m.type === 'thinking') return showThinking;
+    if (m.type === 'progress') return showProgress;
+    return false;
+  });
 
   const visibleMessages = filteredMessages.slice(-maxDisplayMessages);
 
@@ -575,15 +595,39 @@ function MessageList({
         <span>{formatNumber(visibleMessages.length)} shown</span>
         <button
           type="button"
+          onClick={() => setShowThinking(!showThinking)}
+          aria-label={showThinking ? 'Hide thinking' : 'Show thinking'}
+          aria-pressed={showThinking}
+          className={cn(
+            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
+            showThinking ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
+          )}
+        >
+          Thinking
+        </button>
+        <button
+          type="button"
           onClick={() => setShowTools(!showTools)}
           aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
           aria-pressed={showTools}
           className={cn(
             'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
-            showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+            showTools ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
-          {showTools ? 'Hide Tools' : 'Show Tools'}
+          Tools
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowProgress(!showProgress)}
+          aria-label={showProgress ? 'Hide progress' : 'Show progress'}
+          aria-pressed={showProgress}
+          className={cn(
+            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
+            showProgress ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
+          )}
+        >
+          Progress
         </button>
         {!autoScroll && isActive && (
           <button
@@ -639,7 +683,7 @@ function MessageList({
         )}
 
         {visibleMessages.map((msg, i) => (
-          <MessageBubble key={`${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${i}`} message={msg} />
+          <MessageBlock key={`${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${i}`} message={msg} />
         ))}
 
         {/* Pending user messages (shown immediately via SSE before JSONL poll) */}
@@ -666,6 +710,25 @@ function MessageList({
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Message block — routes to specialized component per type
+// ---------------------------------------------------------------------------
+
+function MessageBlock({ message }: { message: SessionContentMessage }): React.JSX.Element {
+  switch (message.type) {
+    case 'thinking':
+      return <ThinkingBlock content={message.content} timestamp={message.timestamp} />;
+    case 'progress':
+      return <ProgressIndicator content={message.content} toolName={message.toolName} timestamp={message.timestamp} />;
+    case 'subagent':
+      return <SubagentBlock content={message.content} toolName={message.toolName} subagentId={(message as Record<string, unknown>).subagentId as string | undefined} timestamp={message.timestamp} />;
+    case 'todo':
+      return <TodoBlock content={message.content} timestamp={message.timestamp} />;
+    default:
+      return <MessageBubble message={message} />;
+  }
 }
 
 // ---------------------------------------------------------------------------
