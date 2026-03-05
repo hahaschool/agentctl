@@ -353,13 +353,14 @@ export function SessionsPage(): React.JSX.Element {
         await api.resumeSession(selected.id, prompt.trim());
       }
       setPrompt('');
-      resetAndInvalidateSessions();
+      // Only invalidate queries — don't clear the session list (causes "0 sessions" flash)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setSending(false);
     }
-  }, [selected, prompt, resetAndInvalidateSessions, toast]);
+  }, [selected, prompt, queryClient, toast]);
 
   const handleStop = useCallback(async () => {
     if (!selected) return;
