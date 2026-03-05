@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ import { useHotkeys } from '../hooks/use-hotkeys';
 import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
 import { formatNumber, recencyColorClass } from '../lib/format-utils';
-import { discoverQuery, queryKeys } from '../lib/queries';
+import { discoverQuery, queryKeys, sessionsQuery } from '../lib/queries';
 
 type MinMessages = 0 | 1 | 5 | 10 | 50;
 type SortOption = 'recent' | 'messages' | 'project';
@@ -78,6 +78,20 @@ export function DiscoverPage(): React.JSX.Element {
   const [newPrompt, setNewPrompt] = useState('');
   const [newMachineId, setNewMachineId] = useState('');
   const [newSessionCreating, setNewSessionCreating] = useState(false);
+
+  // Existing sessions query — used to mark already-imported sessions
+  const existingSessionsQuery = useQuery(sessionsQuery({ limit: 1000 }));
+  const importedSessionIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of existingSessionsQuery.data?.sessions ?? []) {
+      if (s.claudeSessionId) set.add(s.claudeSessionId);
+    }
+    return set;
+  }, [existingSessionsQuery.data]);
+
+  // Selection state for bulk import
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkImporting, setBulkImporting] = useState(false);
 
   // Filter state
   const [search, setSearch] = useState('');
@@ -248,6 +262,63 @@ export function DiscoverPage(): React.JSX.Element {
       setCollapsedGroups(new Set());
     }
   }, [allExpanded, groups]);
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search, minMessages, machineFilter]);
+
+  const toggleSelect = useCallback((sessionId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAllFiltered = useCallback(() => {
+    const notImported = filtered.filter((s) => !importedSessionIds.has(s.sessionId));
+    if (selectedIds.size === notImported.length && notImported.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(notImported.map((s) => s.sessionId)));
+    }
+  }, [filtered, importedSessionIds, selectedIds.size]);
+
+  const handleBulkImport = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setBulkImporting(true);
+    const sessionsToImport = filtered.filter((s) => selectedIds.has(s.sessionId));
+    let successCount = 0;
+    let failCount = 0;
+    for (const s of sessionsToImport) {
+      try {
+        await api.createSession({
+          agentId: 'adhoc',
+          machineId: s.machineId,
+          projectPath: s.projectPath,
+          prompt: 'Imported from discover — continue previous work.',
+          resumeSessionId: s.sessionId,
+        });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    setBulkImporting(false);
+    setSelectedIds(new Set());
+    if (failCount === 0) {
+      toast.success(`Imported ${successCount} session${successCount !== 1 ? 's' : ''}`);
+    } else {
+      toast.error(`Imported ${successCount}, failed ${failCount}`);
+    }
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
+  }, [selectedIds, filtered, queryClient, toast]);
 
   const handleNewSession = useCallback(async () => {
     if (!newProjectPath.trim() || !newPrompt.trim()) return;
@@ -516,11 +587,45 @@ export function DiscoverPage(): React.JSX.Element {
         )}
       </div>
 
-      {/* Stats line */}
-      <div className="text-[13px] text-muted-foreground mb-4">
-        Showing {formatNumber(filtered.length)} of {formatNumber(allSessions.length)} sessions
-        across {projectCount} project{projectCount !== 1 ? 's' : ''} on {machineCount} machine
-        {machineCount !== 1 ? 's' : ''}
+      {/* Stats line + bulk import controls */}
+      <div className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground mb-4">
+        <div>
+          Showing {formatNumber(filtered.length)} of {formatNumber(allSessions.length)} sessions
+          across {projectCount} project{projectCount !== 1 ? 's' : ''} on {machineCount} machine
+          {machineCount !== 1 ? 's' : ''}
+          {importedSessionIds.size > 0 && (
+            <span className="ml-2 text-green-600">
+              ({filtered.filter((s) => importedSessionIds.has(s.sessionId)).length} already imported)
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={selectAllFiltered}
+            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] cursor-pointer whitespace-nowrap"
+          >
+            {selectedIds.size > 0 &&
+            selectedIds.size === filtered.filter((s) => !importedSessionIds.has(s.sessionId)).length
+              ? 'Deselect All'
+              : 'Select All'}
+          </button>
+          {selectedIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleBulkImport()}
+              disabled={bulkImporting}
+              className={cn(
+                'px-3 py-1 bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap',
+                bulkImporting && 'opacity-50',
+              )}
+            >
+              {bulkImporting
+                ? 'Importing...'
+                : `Import ${selectedIds.size} Selected`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -628,11 +733,11 @@ export function DiscoverPage(): React.JSX.Element {
                       const isSelected = selectedSessionId === s.sessionId;
                       const isResuming = resuming === s.sessionId;
                       const dotClass = recencyColorClass(s.lastActivity);
+                      const isImported = importedSessionIds.has(s.sessionId);
+                      const isChecked = selectedIds.has(s.sessionId);
                       return (
                         <div key={`${s.machineId}-${s.sessionId}`}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedSessionId(s.sessionId)}
+                          <div
                             className={cn(
                               'w-full flex items-center gap-3 border-b border-border transition-colors duration-100 text-left text-foreground font-[inherit]',
                               'border-t-0 border-r-0',
@@ -640,34 +745,66 @@ export function DiscoverPage(): React.JSX.Element {
                               isSelected
                                 ? 'bg-muted border-l-[3px] border-l-primary'
                                 : 'bg-background border-l-[3px] border-l-transparent hover:bg-accent/10',
-                              'cursor-pointer',
                             )}
                           >
-                            {/* Recency dot */}
-                            <span
+                            {/* Selection checkbox */}
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={isImported}
+                              onChange={() => toggleSelect(s.sessionId)}
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`Select session ${s.sessionId.slice(0, 8)}`}
                               className={cn(
-                                'w-[7px] h-[7px] rounded-full shrink-0 inline-block',
-                                dotClass,
+                                'shrink-0 w-3.5 h-3.5 accent-primary cursor-pointer',
+                                isImported && 'opacity-30 cursor-not-allowed',
                               )}
-                              title={recencyTitle(s.lastActivity)}
                             />
 
-                            {/* Summary */}
-                            <SimpleTooltip content={s.summary || 'Untitled'}>
-                              <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-                                <HighlightText text={s.summary || 'Untitled'} highlight={search} />
-                              </span>
-                            </SimpleTooltip>
+                            {/* Clickable session content */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSessionId(s.sessionId)}
+                              className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer bg-transparent border-none p-0 text-left text-foreground font-[inherit]"
+                            >
+                              {/* Recency dot */}
+                              <span
+                                className={cn(
+                                  'w-[7px] h-[7px] rounded-full shrink-0 inline-block',
+                                  dotClass,
+                                )}
+                                title={recencyTitle(s.lastActivity)}
+                              />
+
+                              {/* Summary */}
+                              <SimpleTooltip content={s.summary || 'Untitled'}>
+                                <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
+                                  <HighlightText text={s.summary || 'Untitled'} highlight={search} />
+                                </span>
+                              </SimpleTooltip>
+                            </button>
 
                             {/* Message count */}
                             <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
                               {formatNumber(s.messageCount)} msgs
                             </span>
 
-                            {/* Branch */}
+                            {/* Branch badge */}
                             {s.branch && (
-                              <span className="hidden sm:inline text-[11px] font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
-                                {s.branch}
+                              <SimpleTooltip content={`Branch: ${s.branch}`}>
+                                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-green-500 bg-green-500/10 border border-green-500/20 px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
+                                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                    <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" />
+                                  </svg>
+                                  {s.branch}
+                                </span>
+                              </SimpleTooltip>
+                            )}
+
+                            {/* Imported badge */}
+                            {isImported && (
+                              <span className="hidden sm:inline text-[10px] font-medium text-green-600 bg-green-600/10 border border-green-600/20 px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
+                                Imported
                               </span>
                             )}
 
@@ -701,7 +838,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 Resume
                               </button>
                             )}
-                          </button>
+                          </div>
 
                           {/* Inline resume input */}
                           {isResuming && (
