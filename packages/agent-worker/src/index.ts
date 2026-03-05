@@ -242,6 +242,7 @@ async function main(): Promise<void> {
 
   const sessionManager = new CliSessionManager({
     maxConcurrentSessions: MAX_CONCURRENT_AGENTS * 2,
+    logger: logger.child({ component: 'cli-session-manager' }),
   });
 
   const server = await createWorkerServer({

@@ -99,8 +99,8 @@ export type CliSessionManagerOptions = {
   claudePath?: string;
   /** Maximum number of concurrent sessions (default: 10). */
   maxConcurrentSessions?: number;
-  /** Optional logger for debug-level diagnostics (e.g. pino instance). */
-  logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
+  /** Optional logger for diagnostics (e.g. pino instance). */
+  logger?: { debug: (obj: Record<string, unknown>, msg: string) => void; warn: (obj: Record<string, unknown>, msg: string) => void };
 };
 
 export type CliSessionEvent =
@@ -140,7 +140,7 @@ export class CliSessionManager extends EventEmitter {
   private readonly sessions: Map<string, CliSession> = new Map();
   private readonly processes: Map<string, ChildProcess> = new Map();
   private readonly lineBuffers: Map<string, string> = new Map();
-  private readonly logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
+  private readonly logger?: { debug: (obj: Record<string, unknown>, msg: string) => void; warn: (obj: Record<string, unknown>, msg: string) => void };
   private sessionCounter = 0;
   private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
@@ -295,15 +295,10 @@ export class CliSessionManager extends EventEmitter {
         const hint = s.lastError
           ? `CLI stderr: ${s.lastError.slice(0, 200)}`
           : 'No stderr output captured — possible auth issue or rate limit';
-        this.logger?.debug(
+        this.logger?.warn(
           { sessionId: id, pid: s.pid, lastError: s.lastError },
-          `Startup watchdog: session produced no output after ${STARTUP_WATCHDOG_MS / 1000}s`,
+          `Startup watchdog: session produced no output after ${STARTUP_WATCHDOG_MS / 1000}s — ${hint}`,
         );
-        this.emitSessionEvent({
-          type: 'session_error',
-          sessionId: id,
-          error: `No output after ${STARTUP_WATCHDOG_MS / 1000}s — ${hint}`,
-        });
       }
     }, STARTUP_WATCHDOG_MS);
 
