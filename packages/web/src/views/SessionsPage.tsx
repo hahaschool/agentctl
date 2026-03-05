@@ -1099,6 +1099,30 @@ export function SessionsPage(): React.JSX.Element {
   );
 }
 
+/** Displays session duration, ticking live for active (no endedAt) sessions. */
+function LiveDuration({
+  startedAt,
+  endedAt,
+}: {
+  startedAt: string;
+  endedAt?: string | null;
+}): React.JSX.Element {
+  const [, setTick] = useState(0);
+  const isActive = !endedAt;
+
+  useEffect(() => {
+    if (!isActive) return;
+    const timer = setInterval(() => setTick((t) => t + 1), 1_000);
+    return () => clearInterval(timer);
+  }, [isActive]);
+
+  return (
+    <span className="text-muted-foreground" title={isActive ? 'Running' : 'Total duration'}>
+      {formatDuration(startedAt, endedAt)}
+    </span>
+  );
+}
+
 function SessionListItem({
   session: s,
   isSelected,
@@ -1153,7 +1177,21 @@ function SessionListItem({
       >
       <div className="flex justify-between items-center mb-1">
         <span className="font-mono text-xs font-medium">{s.id.slice(0, 16)}...</span>
-        <StatusBadge status={s.status} />
+        <span className="flex items-center gap-1.5">
+          {s.status === 'active' && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+            </span>
+          )}
+          {s.status === 'starting' && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
+            </span>
+          )}
+          <StatusBadge status={s.status} />
+        </span>
       </div>
       {/* Error message for failed sessions */}
       {s.status === 'error' && errorMsg && (
@@ -1170,7 +1208,7 @@ function SessionListItem({
       )}
       <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
         <LiveTimeAgo date={s.startedAt} />
-        <span className="text-muted-foreground">{formatDuration(s.startedAt, s.endedAt)}</span>
+        <LiveDuration startedAt={s.startedAt} endedAt={s.endedAt} />
         {messageCount !== undefined && (
           <span className="text-muted-foreground">{messageCount} msgs</span>
         )}
