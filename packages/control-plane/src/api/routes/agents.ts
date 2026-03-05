@@ -122,9 +122,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     },
   );
 
-  app.get<{ Querystring: { machineId?: string } }>(
+  app.get<{ Querystring: { machineId?: string; limit?: string; offset?: string } }>(
     '/agents/list',
-    { schema: { tags: ['agents'], summary: 'List agents' } },
+    { schema: { tags: ['agents'], summary: 'List agents with pagination' } },
     async (request, reply) => {
       if (!dbRegistry) {
         return reply
@@ -132,7 +132,38 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      return await dbRegistry.listAgents(request.query.machineId);
+      const DEFAULT_LIMIT = 100;
+      const MAX_LIMIT = 500;
+
+      // Validate limit
+      let limit = DEFAULT_LIMIT;
+      if (request.query.limit !== undefined) {
+        const parsed = Number(request.query.limit);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          return reply
+            .code(400)
+            .send({ error: 'INVALID_PARAMS', message: '"limit" must be a positive integer' });
+        }
+        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+      }
+
+      // Validate offset
+      let offset = 0;
+      if (request.query.offset !== undefined) {
+        const parsed = Number(request.query.offset);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return reply
+            .code(400)
+            .send({ error: 'INVALID_PARAMS', message: '"offset" must be a non-negative integer' });
+        }
+        offset = Math.floor(parsed);
+      }
+
+      return await dbRegistry.listAgentsPaginated({
+        machineId: request.query.machineId,
+        limit,
+        offset,
+      });
     },
   );
 

@@ -115,7 +115,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         summary: 'Get system overview with agent, run, and webhook counts',
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
         const [
           agentCountsResult,
@@ -193,7 +193,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
             timestamp: row.finished_at,
           })),
         };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch dashboard overview');
         return reply.code(500).send({
           error: 'DASHBOARD_OVERVIEW_ERROR',
           message: 'Failed to fetch dashboard overview',
@@ -209,7 +210,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
   app.get(
     '/agent-stats',
     { schema: { tags: ['dashboard'], summary: 'Get per-agent statistics and success rates' } },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
         const result = await db.execute(
           sql`SELECT
@@ -249,7 +250,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         });
 
         return { stats };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch per-agent statistics');
         return reply.code(500).send({
           error: 'DASHBOARD_AGENT_STATS_ERROR',
           message: 'Failed to fetch agent stats',
@@ -265,7 +267,7 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
   app.get(
     '/tool-usage',
     { schema: { tags: ['dashboard'], summary: 'Get tool usage analytics and top agents' } },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
         const [toolResult, topAgentsResult] = await Promise.all([
           db.execute(
@@ -304,7 +306,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
         );
 
         return { tools, topAgentsByToolUse };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch tool usage analytics');
         return reply.code(500).send({
           error: 'DASHBOARD_TOOL_USAGE_ERROR',
           message: 'Failed to fetch tool usage',
@@ -383,7 +386,8 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRoutesOptions> = async
           byAgent,
           byProvider,
         };
-      } catch {
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch cost summary for period: ' + rawPeriod);
         return reply.code(500).send({
           error: 'DASHBOARD_COST_SUMMARY_ERROR',
           message: 'Failed to fetch cost summary',

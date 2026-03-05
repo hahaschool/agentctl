@@ -175,7 +175,12 @@ export const api = {
   listMachines: () => request<Machine[]>('/api/agents'),
 
   // Agents
-  listAgents: () => request<Agent[]>('/api/agents/agents/list'),
+  listAgents: async (): Promise<Agent[]> => {
+    const res = await request<{ agents: Agent[]; total: number; hasMore: boolean }>(
+      '/api/agents/agents/list',
+    );
+    return res.agents;
+  },
   getAgent: (id: string) => request<Agent>(`/api/agents/agents/${id}`),
   createAgent: (body: {
     name: string;

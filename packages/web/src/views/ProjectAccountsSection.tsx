@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '../components/Toast';
 import {
   accountsQuery,
   projectAccountsQuery,
@@ -32,6 +33,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
   const upsert = useUpsertProjectAccount();
   const remove = useDeleteProjectAccount();
 
+  const toast = useToast();
   const [newPath, setNewPath] = useState('');
   const [newAccountId, setNewAccountId] = useState('');
 
@@ -45,13 +47,18 @@ export function ProjectAccountsSection(): React.JSX.Element {
         onSuccess: () => {
           setNewPath('');
           setNewAccountId('');
+          toast.success('Mapping added');
         },
+        onError: (err) => toast.error(`Failed to save mapping: ${err.message}`),
       },
     );
   }
 
   function handleRemove(id: string): void {
-    remove.mutate(id);
+    remove.mutate(id, {
+      onSuccess: () => toast.success('Mapping removed'),
+      onError: (err) => toast.error(`Failed to remove mapping: ${err.message}`),
+    });
   }
 
   /** Resolve an account ID to its display name. */
@@ -99,7 +106,11 @@ export function ProjectAccountsSection(): React.JSX.Element {
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            onClick={() => handleRemove(m.id)}
+                            onClick={() => {
+                              if (window.confirm(`Remove mapping for "${m.projectPath}"?`)) {
+                                handleRemove(m.id);
+                              }
+                            }}
                             disabled={remove.isPending}
                             aria-label={`Remove mapping for ${m.projectPath}`}
                           >

@@ -295,7 +295,7 @@ export function AgentsPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="create-agent-machine">
                 Machine <span className="text-destructive">*</span>
               </label>
-              <Select value={createMachineId} onValueChange={setCreateMachineId}>
+              <Select value={createMachineId} onValueChange={setCreateMachineId} disabled={createAgent.isPending}>
                 <SelectTrigger className="w-full" id="create-agent-machine">
                   <SelectValue placeholder="Select a machine" />
                 </SelectTrigger>
@@ -313,7 +313,7 @@ export function AgentsPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="create-agent-type">
                 Type
               </label>
-              <Select value={createType} onValueChange={setCreateType}>
+              <Select value={createType} onValueChange={setCreateType} disabled={createAgent.isPending}>
                 <SelectTrigger className="w-full" id="create-agent-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -336,6 +336,7 @@ export function AgentsPage(): React.JSX.Element {
                 placeholder="claude-sonnet-4-6"
                 value={createModel}
                 onChange={(e) => setCreateModel(e.target.value)}
+                disabled={createAgent.isPending}
               />
               <p className="text-[11px] text-muted-foreground">
                 The Claude model to use for this agent.
@@ -351,6 +352,7 @@ export function AgentsPage(): React.JSX.Element {
                 placeholder="/home/user/projects/my-app"
                 value={createProjectPath}
                 onChange={(e) => setCreateProjectPath(e.target.value)}
+                disabled={createAgent.isPending}
               />
               <p className="text-[11px] text-muted-foreground">
                 Absolute path to the project directory on the target machine.
@@ -367,6 +369,7 @@ export function AgentsPage(): React.JSX.Element {
                 placeholder="Describe what this agent should do..."
                 value={createInitialPrompt}
                 onChange={(e) => setCreateInitialPrompt(e.target.value)}
+                disabled={createAgent.isPending}
                 className={cn(
                   'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
                   'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',

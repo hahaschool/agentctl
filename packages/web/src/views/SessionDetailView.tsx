@@ -690,6 +690,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
           type="button"
           onClick={() => setExpanded(!expanded)}
           className="mt-1 text-[11px] text-primary bg-transparent border-none p-0 cursor-pointer"
+          aria-label={expanded ? 'Collapse message' : 'Expand message'}
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>

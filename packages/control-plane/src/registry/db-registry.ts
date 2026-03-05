@@ -295,6 +295,38 @@ export class DbAgentRegistry {
     return rows.map((row) => this.toAgent(row));
   }
 
+  async listAgentsPaginated(opts: {
+    machineId?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ agents: Agent[]; total: number; hasMore: boolean }> {
+    const condition = opts.machineId ? eq(agents.machineId, opts.machineId) : undefined;
+
+    // Count total matching rows
+    const countQuery = this.db.select({ value: count() }).from(agents);
+    if (condition) {
+      countQuery.where(condition);
+    }
+    const countResult = await countQuery;
+    const total = countResult[0]?.value ?? 0;
+
+    // Fetch the page of results
+    const dataQuery = this.db.select().from(agents);
+    if (condition) {
+      dataQuery.where(condition);
+    }
+    const rows = await dataQuery
+      .orderBy(desc(agents.createdAt))
+      .limit(opts.limit)
+      .offset(opts.offset);
+
+    return {
+      agents: rows.map((row) => this.toAgent(row)),
+      total,
+      hasMore: opts.offset + opts.limit < total,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Run tracking
   // ---------------------------------------------------------------------------

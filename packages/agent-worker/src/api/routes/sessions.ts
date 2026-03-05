@@ -233,7 +233,7 @@ export async function sessionRoutes(
       status,
       claudeSessionId: session?.claudeSessionId ?? null,
       pid: null,
-      costUsd: session?.costUsd,
+      costUsd: session?.costUsd ?? null,
       errorMessage:
         status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
     });
