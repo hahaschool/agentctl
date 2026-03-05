@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/components/Toast';
 import type { ApiAccount } from '@/lib/api';
 import {
   accountsQuery,
@@ -67,7 +69,7 @@ function getCredentialConfig(provider: string): CredentialFieldConfig {
     return {
       label: 'Session Token',
       placeholder: 'Paste token from `claude login`',
-      hint: 'Run `claude login` in terminal, then paste the session token here. OAuth login in browser coming soon.',
+      hint: 'Run `claude login` in terminal, then paste the session token here.',
       inputType: 'password',
     };
   }
@@ -105,6 +107,8 @@ export function AccountsSection(): React.JSX.Element {
   const deleteAccount = useDeleteAccount();
   const testAccount = useTestAccount();
   const updateAccount = useUpdateAccount();
+  const queryClient = useQueryClient();
+  const toast = useToast();
 
   const [showAdd, setShowAdd] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -117,6 +121,87 @@ export function AccountsSection(): React.JSX.Element {
   const [provider, setProvider] = useState('');
   const [credential, setCredential] = useState('');
   const [priority, setPriority] = useState('0');
+  const [oauthLoading, setOauthLoading] = useState(false);
+
+  // Ref to track the OAuth popup message listener for cleanup
+  const oauthListenerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
+  // Clean up the OAuth message listener on unmount
+  useEffect(() => {
+    return () => {
+      if (oauthListenerRef.current) {
+        window.removeEventListener('message', oauthListenerRef.current);
+        oauthListenerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleOAuthLogin = useCallback(async () => {
+    if (!name || !provider) return;
+    setOauthLoading(true);
+
+    try {
+      const redirectUri = `${window.location.origin}/api/oauth/callback`;
+      const res = await fetch('/api/oauth/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, accountName: name, redirectUri }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'OAuth initiation failed' }));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+
+      const { authorizationUrl } = (await res.json()) as { authorizationUrl: string };
+      const popup = window.open(authorizationUrl, 'anthropic-oauth', 'width=600,height=700');
+
+      // Remove previous listener if any
+      if (oauthListenerRef.current) {
+        window.removeEventListener('message', oauthListenerRef.current);
+      }
+
+      const listener = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+
+        const data = event.data as { type?: string; error?: string } | undefined;
+        if (!data) return;
+
+        if (data.type === 'oauth_success') {
+          void queryClient.invalidateQueries({ queryKey: ['accounts'] });
+          setShowAdd(false);
+          resetForm();
+          toast.success('Account connected via OAuth');
+          setOauthLoading(false);
+          window.removeEventListener('message', listener);
+          oauthListenerRef.current = null;
+        } else if (data.type === 'oauth_error') {
+          toast.error(data.error ?? 'OAuth authentication failed');
+          setOauthLoading(false);
+          window.removeEventListener('message', listener);
+          oauthListenerRef.current = null;
+        }
+      };
+
+      oauthListenerRef.current = listener;
+      window.addEventListener('message', listener);
+
+      // If the popup is blocked or closed before completing, clean up
+      const pollTimer = window.setInterval(() => {
+        if (popup && popup.closed) {
+          window.clearInterval(pollTimer);
+          if (oauthListenerRef.current === listener) {
+            setOauthLoading(false);
+            window.removeEventListener('message', listener);
+            oauthListenerRef.current = null;
+          }
+        }
+      }, 500);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'OAuth initiation failed');
+      setOauthLoading(false);
+    }
+  }, [name, provider, queryClient, toast]);
 
   function resetForm(): void {
     setName('');
@@ -305,9 +390,26 @@ export function AccountsSection(): React.JSX.Element {
                 </Select>
               </div>
 
-              {/* OAuth login is disabled until a registered OAuth client_id with
-                  our redirect_uri is available from Anthropic. For now, users
-                  paste the session token from `claude login` manually. */}
+              {/* OAuth login button for OAuth-capable providers */}
+              {provider && OAUTH_PROVIDERS.has(provider) && (
+                <div className="space-y-3">
+                  <Button
+                    className="w-full"
+                    onClick={() => void handleOAuthLogin()}
+                    disabled={!name || oauthLoading}
+                  >
+                    {oauthLoading ? 'Waiting for login...' : 'Login with Anthropic'}
+                  </Button>
+
+                  <div className="flex items-center gap-3">
+                    <Separator className="flex-1" />
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      or paste manually
+                    </span>
+                    <Separator className="flex-1" />
+                  </div>
+                </div>
+              )}
 
               {provider && (
                 <div className="space-y-1.5">
@@ -351,7 +453,7 @@ export function AccountsSection(): React.JSX.Element {
               </Button>
               <Button
                 onClick={() => void handleCreate()}
-                disabled={!name || !provider || !credential || createAccount.isPending}
+                disabled={!name || !provider || !credential || createAccount.isPending || oauthLoading}
               >
                 {createAccount.isPending ? 'Creating...' : 'Create Account'}
               </Button>
