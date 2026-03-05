@@ -156,7 +156,7 @@ export function SessionDetailView(): React.JSX.Element {
       limit: 500,
     }),
     enabled: !!claudeSessionId && !!s?.machineId,
-    refetchInterval: s?.status === 'active' ? 3_000 : false,
+    refetchInterval: s?.status === 'active' || s?.status === 'starting' ? 3_000 : false,
     refetchOnWindowFocus: true,
   });
 
@@ -167,21 +167,24 @@ export function SessionDetailView(): React.JSX.Element {
 
   // SSE streaming — connect when session is active for real-time updates
   const isActive = s?.status === 'active' || s?.status === 'starting';
+  const clearStreamRef = useRef<() => void>(() => {});
   const stream = useSessionStream({
     sessionId,
     enabled: isActive,
     onEvent: useCallback(
       (event: SessionStreamEvent) => {
-        // When status changes (e.g., session ends), refetch the full content
         if (event.event === 'status' || event.event === 'loop_complete') {
           void session.refetch();
           void content.refetch();
+          // Clear stream output so polled messages replace it without duplication
+          clearStreamRef.current();
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [content.refetch, session.refetch],
     ),
   });
+  clearStreamRef.current = stream.clearStreamOutput;
 
   useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
 
@@ -779,13 +782,10 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
             });
-            // Refetch content after a short delay to allow processing
-            setTimeout(() => {
-              void queryClient.invalidateQueries({
-                queryKey: ['session-content'],
-                exact: false,
-              });
-            }, 1_000);
+            void queryClient.invalidateQueries({
+              queryKey: ['session-content'],
+              exact: false,
+            });
           },
           onError: (err) => {
             if (isSessionLostError(err)) {
@@ -810,6 +810,10 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
             toast.success('Session resumed');
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ['session-content'],
+              exact: false,
             });
           },
           onError: (err) => {

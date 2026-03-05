@@ -37,6 +37,8 @@ type UseSessionStreamResult = {
   latestStatus: string | null;
   /** Latest cost data, if any. */
   latestCost: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
+  /** Clear accumulated stream output (e.g. after content refetch absorbs it). */
+  clearStreamOutput: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -170,5 +172,6 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     };
   }, [sessionId, enabled, resetState]);
 
-  return { connected, streamOutput, latestStatus, latestCost };
+  const clearStreamOutput = useCallback(() => setStreamOutput([]), []);
+  return { connected, streamOutput, latestStatus, latestCost, clearStreamOutput };
 }
