@@ -441,7 +441,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                     <div className="flex items-center justify-between">
                       <StatusBadge status={run.status} />
                       <span className="text-xs font-mono text-muted-foreground">
-                        {formatDurationMs(run.durationMs)}
+                        {formatDurationMs(run.durationMs ?? 0)}
                       </span>
                     </div>
                     <div>
@@ -468,7 +468,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                       )}
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span className="font-mono">{formatCost(run.costUsd)}</span>
+                      <span className="font-mono">{formatCost(run.costUsd ?? null)}</span>
                       <span>
                         {run.endedAt ? (
                           <LiveTimeAgo date={run.endedAt} />
@@ -536,10 +536,10 @@ export default function AgentDetailPage(): React.JSX.Element {
                           )}
                         </td>
                         <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
-                          {formatDurationMs(run.durationMs)}
+                          {formatDurationMs(run.durationMs ?? 0)}
                         </td>
                         <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
-                          {formatCost(run.costUsd)}
+                          {formatCost(run.costUsd ?? null)}
                         </td>
                         <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
                           <LiveTimeAgo date={run.startedAt} />
@@ -582,25 +582,31 @@ export default function AgentDetailPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="edit-agent-machine">
                 Machine
               </label>
-              <Select
-                value={editMachineId}
-                onValueChange={setEditMachineId}
-                disabled={updateAgent.isPending}
-              >
-                <SelectTrigger className="w-full" id="edit-agent-machine">
-                  <SelectValue placeholder="Select a machine" />
-                </SelectTrigger>
-                <SelectContent position="popper" sideOffset={4}>
-                  {machines.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.hostname}{' '}
-                      <span className="text-muted-foreground text-[10px]">
-                        ({m.id.slice(0, 8)})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {machines.length === 0 ? (
+                <div className="px-3 py-2 border border-border rounded-md text-sm text-muted-foreground">
+                  No machines available
+                </div>
+              ) : (
+                <Select
+                  value={editMachineId}
+                  onValueChange={setEditMachineId}
+                  disabled={updateAgent.isPending}
+                >
+                  <SelectTrigger className="w-full" id="edit-agent-machine">
+                    <SelectValue placeholder="Select a machine" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" sideOffset={4}>
+                    {machines.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.hostname ?? `Machine ${m.id.slice(0, 8)}`}{' '}
+                        <span className="text-muted-foreground text-[10px]">
+                          ({m.id.slice(0, 8)})
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="space-y-1.5">
