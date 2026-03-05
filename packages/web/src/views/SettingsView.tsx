@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 
@@ -75,11 +76,48 @@ export function SettingsView(): React.JSX.Element {
         {/* --- System group --- */}
         <SettingsGroup title="System">
           <ConnectionSection />
+          <RouterLink />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <KeyboardShortcutsSection />
             <AboutSection />
           </div>
         </SettingsGroup>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Router config link
+// ---------------------------------------------------------------------------
+
+function RouterLink(): React.JSX.Element {
+  const health = useQuery(healthQuery());
+  const litellm = health.data?.dependencies?.litellm;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between pb-3 mb-1 border-b border-border/30">
+        <div>
+          <h3 className="text-sm font-semibold">LLM Router</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Multi-provider failover routing via LiteLLM.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span
+            className={cn(
+              'inline-block w-2 h-2 rounded-full',
+              litellm?.status === 'ok' ? 'bg-green-500' : 'bg-muted-foreground/30',
+            )}
+          />
+          <Link
+            href="/settings/router"
+            className="text-[12px] font-medium text-primary hover:underline transition-colors"
+          >
+            Configure &rarr;
+          </Link>
+        </div>
       </div>
     </div>
   );
