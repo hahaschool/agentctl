@@ -15,6 +15,8 @@ const MAX_LIMIT = 200;
 const DEFAULT_WORKER_PORT = 9000;
 const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
+/** Timeout for fetch() calls that dispatch commands to worker machines. */
+const WORKER_REQUEST_TIMEOUT_MS = 10_000;
 
 /** How long a session can stay in 'starting' or 'active' without a heartbeat before being reaped. */
 const STALE_SESSION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -98,7 +100,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           .set({
             status: 'error',
             endedAt: new Date(),
-            metadata: sql`${rcSessions.metadata} || '{"errorMessage":"Session timed out — no heartbeat from worker"}'::jsonb`,
+            metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || '{"errorMessage":"Session timed out — no heartbeat from worker","errorHint":"Try resuming or forking this session to continue."}'::jsonb`,
           })
           .where(inArray(rcSessions.id, ids));
 
@@ -445,6 +447,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
+      if (projectPath && !projectPath.startsWith('/')) {
+        return reply.code(400).send({
+          error: 'INVALID_PROJECT_PATH',
+          message: 'projectPath must be an absolute path starting with /',
+        });
+      }
+
       // Verify the agent exists (skip for adhoc sessions)
       if (agentId !== 'adhoc') {
         const agent = await dbRegistry.getAgent(agentId);
@@ -544,6 +553,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             accountCredential,
             accountProvider,
           }),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (workerResponse.ok) {
@@ -566,7 +576,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           );
           await db
             .update(rcSessions)
-            .set({ status: 'error', endedAt: new Date() })
+            .set({
+              status: 'error',
+              endedAt: new Date(),
+              metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || ${JSON.stringify({ errorMessage: errorText, errorHint: 'Check that the worker is running and the machine is online.' })}::jsonb`,
+            })
             .where(eq(rcSessions.id, sessionId));
         }
       } catch (err) {
@@ -577,7 +591,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         );
         await db
           .update(rcSessions)
-          .set({ status: 'error', endedAt: new Date() })
+          .set({
+            status: 'error',
+            endedAt: new Date(),
+            metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || ${JSON.stringify({ errorMessage: message, errorHint: 'Check that the worker is running and the machine is online.' })}::jsonb`,
+          })
           .where(eq(rcSessions.id, sessionId));
       }
 
@@ -702,6 +720,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                 accountCredential,
                 accountProvider,
               }),
+              signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
             },
           );
 
@@ -898,6 +917,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             accountCredential,
             accountProvider,
           }),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (workerResponse.ok) {
@@ -1036,6 +1056,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message, accountCredential, accountProvider }),
+            signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
           },
         );
 
@@ -1141,6 +1162,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         try {
           await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}`, {
             method: 'DELETE',
+            signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
           });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -1193,6 +1215,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       try {
         const workerResponse = await fetch(
           `${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/stream`,
+          {
+            signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
+          },
         );
 
         if (!workerResponse.ok || !workerResponse.body) {
@@ -1442,6 +1467,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(resumePayload),
+                    signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
                   },
                 );
 

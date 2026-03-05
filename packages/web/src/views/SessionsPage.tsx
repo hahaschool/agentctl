@@ -100,6 +100,11 @@ export function SessionsPage(): React.JSX.Element {
   const [hideEmpty, setHideEmpty] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Reset pagination when filter or search changes so we don't stay on a stale page.
+  useEffect(() => {
+    setOffset(0);
+  }, [statusFilter, searchQuery]);
+
   // --- New Session form state ---
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [machines, setMachines] = useState<Machine[]>([]);
