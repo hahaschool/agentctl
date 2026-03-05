@@ -186,6 +186,16 @@ export function SessionDetailView(): React.JSX.Element {
   });
   clearStreamRef.current = stream.clearStreamOutput;
 
+  // Invalidate session query when SSE status changes (instead of waiting for poll interval)
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (stream.latestStatus) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+      // Also refetch content when status changes
+      void queryClient.invalidateQueries({ queryKey: ['session-content'] });
+    }
+  }, [stream.latestStatus, sessionId, queryClient]);
+
   useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
 
   if (session.isLoading) {

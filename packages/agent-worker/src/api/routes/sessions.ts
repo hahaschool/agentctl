@@ -228,10 +228,12 @@ export async function sessionRoutes(
     const buf = sessionBuffers.get(event.sessionId);
     if (buf) {
       // Emit a synthetic "ended" event to all subscribers
+      const session = sessionManager.getSession(event.sessionId);
+      const statusValue = session?.status === 'error' ? 'error' : 'paused';
       const endedEvent: AgentEvent = {
         event: 'status',
         data: {
-          status: 'stopped',
+          status: statusValue,
           reason: `CLI process exited with code ${String(event.exitCode)}`,
         },
       };

@@ -68,10 +68,11 @@ export function DashboardPage(): React.JSX.Element {
 
   // Recent activity: combine sessions sorted by most recent activity
   const recentActivity = useMemo(() => {
-    return [...sessionList]
+    const safeSessionList = sessionList ?? [];
+    return [...safeSessionList]
       .sort((a, b) => {
-        const dateA = a.endedAt ?? a.lastHeartbeat ?? a.startedAt;
-        const dateB = b.endedAt ?? b.lastHeartbeat ?? b.startedAt;
+        const dateA = (a?.endedAt ?? a?.lastHeartbeat ?? a?.startedAt) || new Date().toISOString();
+        const dateB = (b?.endedAt ?? b?.lastHeartbeat ?? b?.startedAt) || new Date().toISOString();
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       })
       .slice(0, 8);
@@ -203,8 +204,8 @@ export function DashboardPage(): React.JSX.Element {
           label="Agents Registered"
           value={String(agentsRegistered)}
           sublabel={
-            agentList.filter((a) => a.status === 'error').length > 0
-              ? `${agentList.filter((a) => a.status === 'error').length} in error`
+            agentList.filter((a) => a?.status === 'error').length > 0
+              ? `${agentList.filter((a) => a?.status === 'error').length} in error`
               : undefined
           }
         />
@@ -243,31 +244,31 @@ export function DashboardPage(): React.JSX.Element {
                 >
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      <ActivityIcon status={session.status} />
+                      <ActivityIcon status={session?.status ?? 'unknown'} />
                       <span className="text-[13px] font-medium text-foreground truncate">
                         {truncate(
-                          session.claudeSessionId
+                          session?.claudeSessionId
                             ? `Session ${session.claudeSessionId.slice(0, 8)}`
-                            : `Session ${session.id.slice(0, 8)}`,
+                            : `Session ${(session?.id ?? 'unknown').slice(0, 8)}`,
                           40,
                         )}
                       </span>
                     </div>
-                    <StatusBadge status={session.status} />
+                    <StatusBadge status={session?.status ?? 'unknown'} />
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
-                    {session.model && (
+                    {session?.model && (
                       <span className="font-mono bg-muted px-1.5 py-px rounded text-[10px]">
                         {session.model}
                       </span>
                     )}
-                    {session.projectPath && (
+                    {session?.projectPath && (
                       <PathBadge path={session.projectPath} className="text-[11px]" />
                     )}
                     <span className="ml-auto shrink-0">
-                      {session.endedAt ? (
+                      {session?.endedAt ? (
                         <SimpleTooltip
-                          content={`Duration: ${formatDuration(session.startedAt, session.endedAt)}`}
+                          content={`Duration: ${formatDuration(session.startedAt ?? new Date().toISOString(), session.endedAt)}`}
                         >
                           <span>
                             ended <LiveTimeAgo date={session.endedAt} />
@@ -275,7 +276,7 @@ export function DashboardPage(): React.JSX.Element {
                         </SimpleTooltip>
                       ) : (
                         <span>
-                          started <LiveTimeAgo date={session.startedAt} />
+                          started <LiveTimeAgo date={session?.startedAt ?? new Date().toISOString()} />
                         </span>
                       )}
                     </span>
@@ -320,14 +321,14 @@ export function DashboardPage(): React.JSX.Element {
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                       <span>
-                        {machine.os}/{machine.arch}
+                        {machine?.os ?? 'unknown'}/{machine?.arch ?? 'unknown'}
                       </span>
-                      {machine.capabilities?.gpu && (
+                      {machine?.capabilities?.gpu && (
                         <span className="bg-muted px-1.5 py-px rounded text-[10px] font-semibold uppercase">
                           GPU
                         </span>
                       )}
-                      {machine.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
+                      {machine?.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
                     </div>
                   </Link>
                 ))
@@ -410,11 +411,11 @@ export function DashboardPage(): React.JSX.Element {
           </span>
         </div>
         {/* Cost breakdown by agent */}
-        {agentCostBreakdown.length > 0 && (
-          <div className="border-t border-border px-4 py-2.5">
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Cost by Agent
-            </div>
+        <div className="border-t border-border px-4 py-2.5">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Cost by Agent
+          </div>
+          {agentCostBreakdown.length > 0 ? (
             <div className="flex flex-wrap gap-x-5 gap-y-1.5">
               {agentCostBreakdown.map((agent) => (
                 <Link
@@ -436,8 +437,10 @@ export function DashboardPage(): React.JSX.Element {
                 </Link>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-[12px] text-muted-foreground">No cost data recorded yet</div>
+          )}
+        </div>
       </div>
 
       {/* Dependencies */}
