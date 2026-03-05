@@ -193,7 +193,17 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           </Link>
           <CopyableText value={m.id} maxDisplay={12} />
         </div>
-        <StatusBadge status={m.status} />
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={m.status} />
+          {m.lastHeartbeat && isStaleHeartbeat(m.lastHeartbeat) && (
+            <span
+              className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.03em] rounded-sm bg-yellow-900 text-yellow-300 border border-yellow-800"
+              title="Last heartbeat was more than 60 seconds ago"
+            >
+              Offline
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Details grid */}
