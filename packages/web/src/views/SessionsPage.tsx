@@ -1693,7 +1693,7 @@ function SessionContent({
     }
   }, [allMessages.length, autoScroll]);
 
-  // Clear optimistic messages when they appear in real data (compare against latest human messages only)
+  // Clear optimistic messages when they appear in real data or after timeout
   const prevHumanCountRef = useRef(0);
   useEffect(() => {
     if (optimisticMessages.length === 0) return;
@@ -1711,6 +1711,17 @@ function SessionContent({
       prev.filter((om) => !recentHumanTexts.includes(om.text.trim())),
     );
   }, [allMessages, optimisticMessages.length]);
+
+  // Safety net: clear stale optimistic messages after 8 seconds
+  // This handles cases where text matching fails (encoding, format differences)
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return;
+    const now = Date.now();
+    const timer = setTimeout(() => {
+      setOptimisticMessages((prev) => prev.filter((om) => now - om.timestamp < 8_000));
+    }, 8_000);
+    return () => clearTimeout(timer);
+  }, [optimisticMessages]);
 
   // Scroll handler for user-scrolled-up detection + infinite scroll top
   const fetchOlderRef = useRef(fetchOlder);
