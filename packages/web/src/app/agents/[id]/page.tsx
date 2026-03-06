@@ -5,8 +5,10 @@ import { Copy, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
+import type { AgentFormEditData } from '@/components/AgentFormDialog';
+import { AgentFormDialog } from '@/components/AgentFormDialog';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
@@ -21,14 +23,6 @@ import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -38,7 +32,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import type { AgentConfig, AgentRun } from '@/lib/api';
+import type { AgentRun } from '@/lib/api';
 import { formatCost, formatDate, formatDuration, formatDurationMs } from '@/lib/format-utils';
 import {
   accountsQuery,
@@ -88,33 +82,6 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [editOpen, setEditOpen] = useState(false);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
 
-  // -- Edit form state --
-  const [editName, setEditName] = useState('');
-  const [editMachineId, setEditMachineId] = useState('');
-  const [editType, setEditType] = useState('');
-  const [editSchedule, setEditSchedule] = useState('');
-  const [editModel, setEditModel] = useState('');
-  const [editMaxTurns, setEditMaxTurns] = useState('');
-  const [editSystemPrompt, setEditSystemPrompt] = useState('');
-
-  // Sync form state only when editOpen transitions from false → true, so that
-  // background refetches of agent.data do not clobber user edits mid-session.
-  const prevEditOpenRef = useRef(false);
-  useEffect(() => {
-    const wasOpen = prevEditOpenRef.current;
-    prevEditOpenRef.current = editOpen;
-    if (editOpen && !wasOpen && agent.data) {
-      const d = agent.data;
-      setEditName(d.name);
-      setEditMachineId(d.machineId);
-      setEditType(d.type);
-      setEditSchedule(d.schedule ?? '');
-      setEditModel((d.config?.model as string) ?? '');
-      setEditMaxTurns(d.config?.maxTurns != null ? String(d.config.maxTurns) : '');
-      setEditSystemPrompt((d.config?.systemPrompt as string) ?? '');
-    }
-  }, [editOpen, agent.data]);
-
   const accountList = accounts.data ?? [];
   const machines = machinesList.data ?? [];
 
@@ -159,54 +126,30 @@ export default function AgentDetailPage(): React.JSX.Element {
     });
   };
 
-  const handleEditSave = (): void => {
-    if (!editName.trim()) return;
-
-    // Build config, merging new values with existing config
-    const existingConfig = agent.data?.config ?? {};
-    const config: AgentConfig = { ...existingConfig };
-
-    if (editModel.trim()) {
-      config.model = editModel.trim();
-    } else {
-      delete config.model;
-    }
-
-    if (editMaxTurns.trim()) {
-      const parsed = Number(editMaxTurns);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        config.maxTurns = parsed;
-      }
-    } else {
-      delete config.maxTurns;
-    }
-
-    if (editSystemPrompt.trim()) {
-      config.systemPrompt = editSystemPrompt.trim();
-    } else {
-      delete config.systemPrompt;
-    }
-
-    updateAgent.mutate(
-      {
-        id: agentId,
-        name: editName.trim(),
-        machineId: editMachineId,
-        type: editType,
-        schedule: editSchedule.trim() || null,
-        config,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Agent updated');
-          setEditOpen(false);
+  const handleEditSubmit = useCallback(
+    (data: AgentFormEditData) => {
+      updateAgent.mutate(
+        {
+          id: agentId,
+          name: data.name,
+          machineId: data.machineId,
+          type: data.type,
+          schedule: data.schedule,
+          config: data.config,
         },
-        onError: (err) => {
-          toast.error(err instanceof Error ? err.message : String(err));
+        {
+          onSuccess: () => {
+            toast.success('Agent updated');
+            setEditOpen(false);
+          },
+          onError: (err) => {
+            toast.error(err instanceof Error ? err.message : String(err));
+          },
         },
-      },
-    );
-  };
+      );
+    },
+    [agentId, updateAgent, toast],
+  );
 
   // -- Export & Duplicate handlers --
 
@@ -796,161 +739,16 @@ export default function AgentDetailPage(): React.JSX.Element {
       </Card>
 
       {/* Edit Agent Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Agent</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-agent-name">
-                Name
-              </label>
-              <Input
-                id="edit-agent-name"
-                placeholder="Agent name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                disabled={updateAgent.isPending}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-agent-machine">
-                Machine
-              </label>
-              {machines.length === 0 ? (
-                <div className="px-3 py-2 border border-border rounded-md text-sm text-muted-foreground">
-                  No machines available
-                </div>
-              ) : (
-                <Select
-                  value={editMachineId}
-                  onValueChange={setEditMachineId}
-                  disabled={updateAgent.isPending}
-                >
-                  <SelectTrigger className="w-full" id="edit-agent-machine">
-                    <SelectValue placeholder="Select a machine" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" sideOffset={4}>
-                    {machines.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.hostname ?? `Machine ${m.id.slice(0, 8)}`}{' '}
-                        <span className="text-muted-foreground text-[10px]">
-                          ({m.id.slice(0, 8)})
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-agent-type">
-                Type
-              </label>
-              <Select value={editType} onValueChange={setEditType} disabled={updateAgent.isPending}>
-                <SelectTrigger className="w-full" id="edit-agent-type">
-                  <SelectValue placeholder="Select agent type" />
-                </SelectTrigger>
-                <SelectContent position="popper" sideOffset={4}>
-                  <SelectItem value="manual">Manual</SelectItem>
-                  <SelectItem value="adhoc">Ad-hoc</SelectItem>
-                  <SelectItem value="heartbeat">Heartbeat</SelectItem>
-                  <SelectItem value="cron">Cron</SelectItem>
-                  <SelectItem value="loop">Loop</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {editType === 'cron' && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="edit-agent-schedule">
-                  Schedule
-                </label>
-                <Input
-                  id="edit-agent-schedule"
-                  placeholder="e.g. */15 * * * * (cron expression)"
-                  value={editSchedule}
-                  onChange={(e) => setEditSchedule(e.target.value)}
-                  disabled={updateAgent.isPending}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Cron expression for periodic execution. Leave empty for no schedule.
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-agent-model">
-                Model
-              </label>
-              <Input
-                id="edit-agent-model"
-                placeholder="e.g. claude-sonnet-4-20250514"
-                value={editModel}
-                onChange={(e) => setEditModel(e.target.value)}
-                disabled={updateAgent.isPending}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                LLM model identifier. Leave empty to use the default.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-agent-max-turns">
-                Max turns
-              </label>
-              <Input
-                id="edit-agent-max-turns"
-                type="number"
-                min={1}
-                placeholder="e.g. 50"
-                value={editMaxTurns}
-                onChange={(e) => setEditMaxTurns(e.target.value)}
-                disabled={updateAgent.isPending}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Maximum number of conversation turns per run. Leave empty for unlimited.
-              </p>
-            </div>
-
-            {/* System Prompt */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-agent-sysprompt">
-                System Prompt
-              </label>
-              <textarea
-                id="edit-agent-sysprompt"
-                rows={3}
-                placeholder="Custom system instructions..."
-                value={editSystemPrompt}
-                onChange={(e) => setEditSystemPrompt(e.target.value)}
-                disabled={updateAgent.isPending}
-                className={cn(
-                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
-                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                  'dark:bg-input/30',
-                )}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Custom system instructions appended to the base prompt.
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleEditSave} disabled={!editName.trim() || updateAgent.isPending}>
-              {updateAgent.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AgentFormDialog
+        mode="edit"
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSubmit={(data) => handleEditSubmit(data as AgentFormEditData)}
+        isPending={updateAgent.isPending}
+        agent={agent.data ?? null}
+        machines={machines}
+        recentProjectPaths={[]}
+      />
     </div>
   );
 }
