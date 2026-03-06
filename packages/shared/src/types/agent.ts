@@ -44,6 +44,7 @@ export type AgentConfig = {
   maxTurns?: number;
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
   systemPrompt?: string;
+  initialPrompt?: string;
 };
 
 export type Agent = {

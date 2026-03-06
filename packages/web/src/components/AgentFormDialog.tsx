@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import type { Agent, Machine } from '../lib/api';
+import type { Agent, AgentConfig, Machine } from '../lib/api';
 import { AGENT_TYPES, DEFAULT_MODEL, ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
@@ -66,7 +66,7 @@ export type AgentFormCreateData = {
   type: string;
   schedule?: string;
   projectPath?: string;
-  config?: Record<string, unknown>;
+  config?: AgentConfig;
 };
 
 export type AgentFormEditData = {
@@ -75,7 +75,7 @@ export type AgentFormEditData = {
   machineId: string;
   type: string;
   schedule: string | null;
-  config?: Record<string, unknown>;
+  config?: AgentConfig;
 };
 
 export type AgentFormDialogProps = {
@@ -173,18 +173,12 @@ export function AgentFormDialog({
     setName(a.name);
     setMachineId(a.machineId);
     setType(a.type);
-    setModel(((a.config as Record<string, unknown>)?.model as string) ?? '');
-    setInitialPrompt(((a.config as Record<string, unknown>)?.initialPrompt as string) ?? '');
+    setModel(a.config?.model ?? '');
+    setInitialPrompt(a.config?.initialPrompt ?? '');
     setSchedule(a.schedule ?? '');
-    setMaxTurns(
-      (a.config as Record<string, unknown>)?.maxTurns != null
-        ? String((a.config as Record<string, unknown>).maxTurns)
-        : '',
-    );
-    setPermissionMode(
-      ((a.config as Record<string, unknown>)?.permissionMode as string) ?? 'default',
-    );
-    setSystemPrompt(((a.config as Record<string, unknown>)?.systemPrompt as string) ?? '');
+    setMaxTurns(a.config?.maxTurns != null ? String(a.config.maxTurns) : '');
+    setPermissionMode(a.config?.permissionMode ?? 'default');
+    setSystemPrompt(a.config?.systemPrompt ?? '');
   }, []);
 
   // Close project dropdown on outside click
@@ -212,11 +206,12 @@ export function AgentFormDialog({
       if (!initialPrompt.trim() || !machineId) return;
 
       const agentName = name.trim() || slugifyPrompt(initialPrompt);
-      const config: Record<string, unknown> = {};
+      const config: AgentConfig = {};
       if (model.trim()) config.model = model.trim();
       if (initialPrompt.trim()) config.initialPrompt = initialPrompt.trim();
       if (maxTurns.trim() && Number(maxTurns) > 0) config.maxTurns = Number(maxTurns);
-      if (permissionMode && permissionMode !== 'default') config.permissionMode = permissionMode;
+      if (permissionMode && permissionMode !== 'default')
+        config.permissionMode = permissionMode as AgentConfig['permissionMode'];
       if (systemPrompt.trim()) config.systemPrompt = systemPrompt.trim();
 
       // Remember last-used machine
@@ -239,7 +234,7 @@ export function AgentFormDialog({
     } else {
       if (!agent || !name.trim() || !machineId) return;
 
-      const config: Record<string, unknown> = { ...agent.config };
+      const config: AgentConfig = { ...agent.config };
       if (model.trim()) {
         config.model = model.trim();
       } else {
@@ -256,7 +251,7 @@ export function AgentFormDialog({
         delete config.maxTurns;
       }
       if (permissionMode && permissionMode !== 'default') {
-        config.permissionMode = permissionMode;
+        config.permissionMode = permissionMode as AgentConfig['permissionMode'];
       } else {
         delete config.permissionMode;
       }

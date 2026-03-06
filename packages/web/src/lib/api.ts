@@ -14,6 +14,8 @@ import type {
   ApiAccount as SharedApiAccount,
 } from '@agentctl/shared';
 
+export type { AgentConfig };
+
 export type HealthResponse = {
   status: 'ok' | 'degraded';
   timestamp: string;
@@ -300,7 +302,7 @@ export const api = {
     type: string;
     schedule?: string;
     projectPath?: string;
-    config?: Record<string, unknown>;
+    config?: AgentConfig;
   }) =>
     request<{ ok: boolean; agentId: string }>('/api/agents', {
       method: 'POST',
@@ -323,7 +325,7 @@ export const api = {
       machineId?: string;
       type?: string;
       schedule?: string | null;
-      config?: Record<string, unknown>;
+      config?: AgentConfig;
     },
   ) =>
     request<Agent>(`/api/agents/${id}`, {
