@@ -231,6 +231,15 @@ export type FileContentResponse = {
   size: number;
 };
 
+export type TerminalInfo = {
+  id: string;
+  pid: number;
+  command: string;
+  cols: number;
+  rows: number;
+  createdAt: string;
+};
+
 export class ApiError extends Error {
   public hint?: string;
   constructor(
@@ -526,4 +535,123 @@ export const api = {
       `/api/machines/${encodeURIComponent(machineId)}/git/status?${qs}`,
     );
   },
+
+  // Terminal
+  listTerminals: (machineId: string) =>
+    request<TerminalInfo[]>(`/api/machines/${encodeURIComponent(machineId)}/terminal`),
+
+  spawnTerminal: (
+    machineId: string,
+    opts?: {
+      id?: string;
+      command?: string;
+      args?: string[];
+      cols?: number;
+      rows?: number;
+      cwd?: string;
+    },
+  ) =>
+    request<TerminalInfo>(`/api/machines/${encodeURIComponent(machineId)}/terminal`, {
+      method: 'POST',
+      body: JSON.stringify({ id: opts?.id ?? crypto.randomUUID(), ...opts }),
+    }),
+
+  killTerminal: (machineId: string, termId: string) =>
+    request<void>(
+      `/api/machines/${encodeURIComponent(machineId)}/terminal/${encodeURIComponent(termId)}`,
+      { method: 'DELETE' },
+    ),
+
+  resizeTerminal: (machineId: string, termId: string, cols: number, rows: number) =>
+    request<void>(
+      `/api/machines/${encodeURIComponent(machineId)}/terminal/${encodeURIComponent(termId)}/resize`,
+      { method: 'POST', body: JSON.stringify({ cols, rows }) },
+    ),
 };
+
+// ---------------------------------------------------------------------------
+// Attachment upload helpers
+// ---------------------------------------------------------------------------
+
+export type Attachment = {
+  name: string;
+  type: 'image' | 'file';
+  /** Base64 data URL for preview (images only). */
+  previewUrl?: string;
+  /** Size in bytes. */
+  size: number;
+  /** The text content (for text files) or base64 content (for binary). */
+  content: string;
+  /** Whether this is base64 encoded. */
+  isBase64: boolean;
+};
+
+/** Read a File object into an Attachment. */
+export function fileToAttachment(file: File): Promise<Attachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    const isImage = file.type.startsWith('image/');
+    const isText = file.type.startsWith('text/') || /\.(ts|js|json|md|py|sh|yaml|yml|toml|cfg|ini|xml|html|css|sql|csv)$/i.test(file.name);
+
+    if (isText) {
+      reader.onload = () => {
+        resolve({
+          name: file.name,
+          type: 'file',
+          size: file.size,
+          content: reader.result as string,
+          isBase64: false,
+        });
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    } else {
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1] ?? '';
+        resolve({
+          name: file.name,
+          type: isImage ? 'image' : 'file',
+          previewUrl: isImage ? (reader.result as string) : undefined,
+          size: file.size,
+          content: base64,
+          isBase64: true,
+        });
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+/** Convert a clipboard image blob into an Attachment. */
+export function clipboardImageToAttachment(blob: Blob): Promise<Attachment> {
+  const ext = blob.type.split('/')[1] ?? 'png';
+  const name = `clipboard-${Date.now()}.${ext}`;
+  const file = new File([blob], name, { type: blob.type });
+  return fileToAttachment(file);
+}
+
+/**
+ * Upload attachments to the worker machine and return the file paths.
+ * Files are saved under `<projectPath>/.agentctl-uploads/`.
+ */
+export async function uploadAttachments(
+  machineId: string,
+  projectPath: string,
+  attachments: Attachment[],
+): Promise<string[]> {
+  const uploadDir = `${projectPath}/.agentctl-uploads`;
+  const paths: string[] = [];
+
+  for (const attachment of attachments) {
+    const filePath = `${uploadDir}/${attachment.name}`;
+    const content = attachment.isBase64
+      ? `__BASE64__${attachment.content}`
+      : attachment.content;
+
+    await api.writeFile(machineId, filePath, content);
+    paths.push(filePath);
+  }
+
+  return paths;
+}

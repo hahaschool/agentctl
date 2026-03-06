@@ -31,7 +31,8 @@ import { TodoBlock } from '../components/TodoBlock';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
-import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
+import type { Attachment, Session, SessionContentMessage, SessionMetadata } from '../lib/api';
+import { clipboardImageToAttachment, fileToAttachment } from '../lib/api';
 import { formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import {
@@ -245,6 +246,33 @@ export function SessionDetailView(): React.JSX.Element {
     setOptimisticMessages((prev) => prev.filter((text) => !humanTexts.includes(text.trim())));
   }, [contentMessages, optimisticMessages.length]);
 
+  // Terminal replay — reconstruct pseudo-terminal output from JSONL content
+  // for ended/paused sessions that have no live rawOutput.
+  const replayOutput = useMemo(() => {
+    if (stream.rawOutput.length > 0 || isActive) return [];
+
+    return contentMessages
+      .map((msg) => {
+        switch (msg.type) {
+          case 'assistant':
+            return msg.content + '\n';
+          case 'tool_use':
+            return `\x1b[36m⚡ ${msg.toolName ?? 'tool'}\x1b[0m\n${msg.content}\n`;
+          case 'tool_result':
+            return `\x1b[32m✓ Result:\x1b[0m\n${(msg.content ?? '').slice(0, 500)}\n`;
+          case 'thinking':
+            return `\x1b[35m💭 Thinking...\x1b[0m\n${(msg.content ?? '').slice(0, 200)}\n`;
+          case 'human':
+            return `\x1b[33m> ${msg.content}\x1b[0m\n`;
+          case 'progress':
+            return `\x1b[2m${msg.content}\x1b[0m\n`;
+          default:
+            return '';
+        }
+      })
+      .filter(Boolean);
+  }, [contentMessages, stream.rawOutput.length, isActive]);
+
   // View mode toggle (messages vs terminal)
   const [viewMode, setViewMode] = useState<'messages' | 'terminal'>('messages');
   const toggleViewMode = useCallback(
@@ -332,7 +360,7 @@ export function SessionDetailView(): React.JSX.Element {
                 <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
               </div>
               <TerminalView
-                rawOutput={stream.rawOutput}
+                rawOutput={stream.rawOutput.length > 0 ? stream.rawOutput : replayOutput}
                 isActive={isActive}
                 className="flex-1 min-h-0"
               />
@@ -1482,6 +1510,12 @@ const RESUME_MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
 ];
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function MessageInput({
   session,
   onOptimisticSend,
@@ -1498,6 +1532,9 @@ function MessageInput({
   const sendMessage = useSendMessage();
   const resumeSession = useResumeSession();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const composingRef = useRef(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   // Draft persistence — survive page refreshes
   const storageKey = `draft:${session.id}`;
@@ -1540,17 +1577,36 @@ function MessageInput({
 
   const handleSubmit = useCallback(() => {
     const text = message.trim();
-    if (!text || isSending) return;
+    if (!text && attachments.length === 0) return;
+    if (isSending) return;
+
+    // Build final message with attachments
+    let finalMessage = text;
+    if (attachments.length > 0) {
+      const attachmentDescriptions = attachments.map((a) => {
+        if (a.type === 'image') {
+          return `[Attached image: ${a.name} (${formatFileSize(a.size)})]`;
+        }
+        if (!a.isBase64 && a.content.length < 5000) {
+          return `[Attached file: ${a.name}]\n\`\`\`\n${a.content}\n\`\`\``;
+        }
+        return `[Attached file: ${a.name} (${formatFileSize(a.size)})]`;
+      });
+      finalMessage = [text, ...attachmentDescriptions].filter(Boolean).join('\n\n');
+    }
+
+    if (!finalMessage.trim()) return;
 
     // Show optimistic message immediately
-    onOptimisticSend?.(text);
+    onOptimisticSend?.(finalMessage);
 
     if (isActive) {
       sendMessage.mutate(
-        { id: session.id, message: text },
+        { id: session.id, message: finalMessage },
         {
           onSuccess: () => {
             setMessage('');
+            setAttachments([]);
             sessionStorage.removeItem(storageKey);
             void queryClient.invalidateQueries({
               queryKey: queryKeys.session(session.id),
@@ -1578,10 +1634,11 @@ function MessageInput({
       );
     } else if (canResume) {
       resumeSession.mutate(
-        { id: session.id, prompt: text, model: resumeModel || undefined },
+        { id: session.id, prompt: finalMessage, model: resumeModel || undefined },
         {
           onSuccess: () => {
             setMessage('');
+            setAttachments([]);
             sessionStorage.removeItem(storageKey);
             toast.success('Session resumed');
             void queryClient.invalidateQueries({
@@ -1611,6 +1668,7 @@ function MessageInput({
     }
   }, [
     message,
+    attachments,
     isSending,
     isActive,
     canResume,
@@ -1625,8 +1683,11 @@ function MessageInput({
     queryClient,
   ]);
 
+  // IME composition tracking — prevent Enter from submitting during Chinese/Japanese input
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Skip if IME is composing (e.g. Chinese input confirming with Enter)
+      if (e.nativeEvent.isComposing || composingRef.current) return;
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
@@ -1634,6 +1695,55 @@ function MessageInput({
     },
     [handleSubmit],
   );
+
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      const items = e.clipboardData.items;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const blob = item.getAsFile();
+          if (blob) {
+            try {
+              const attachment = await clipboardImageToAttachment(blob);
+              setAttachments((prev) => [...prev, attachment]);
+              toast.success(`Image pasted: ${attachment.name}`);
+            } catch {
+              toast.error('Failed to read pasted image');
+            }
+          }
+          return;
+        }
+      }
+    },
+    [toast],
+  );
+
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`${file.name} is too large (max 10 MB)`);
+          continue;
+        }
+        try {
+          const attachment = await fileToAttachment(file);
+          setAttachments((prev) => [...prev, attachment]);
+        } catch {
+          toast.error(`Failed to read ${file.name}`);
+        }
+      }
+      // Reset input so the same file can be selected again
+      e.target.value = '';
+    },
+    [toast],
+  );
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   if (sessionLost) {
     return (
@@ -1686,24 +1796,96 @@ function MessageInput({
           </span>
         </div>
       )}
+      {/* Attachment previews */}
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {attachments.map((a, i) => (
+            <div
+              key={`${a.name}-${i}`}
+              className="relative group flex items-center gap-1.5 px-2 py-1 bg-muted border border-border rounded-md text-[11px]"
+            >
+              {a.type === 'image' && a.previewUrl ? (
+                <img
+                  src={a.previewUrl}
+                  alt={a.name}
+                  className="w-8 h-8 object-cover rounded-sm"
+                />
+              ) : (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-muted-foreground"
+                >
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+              )}
+              <span className="max-w-[120px] truncate">{a.name}</span>
+              <span className="text-muted-foreground/60">{formatFileSize(a.size)}</span>
+              <button
+                type="button"
+                onClick={() => removeAttachment(i)}
+                className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                aria-label={`Remove ${a.name}`}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2 items-end">
-        <textarea
-          ref={inputRef}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={isActive ? 'Send a message...' : 'Resume session with a prompt...'}
-          rows={1}
-          className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none resize-none min-h-[36px] max-h-[120px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-          disabled={isSending}
+        <div className="flex-1 relative">
+          <textarea
+            ref={inputRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => { composingRef.current = true; }}
+            onCompositionEnd={() => { composingRef.current = false; }}
+            onPaste={handlePaste}
+            placeholder={isActive ? 'Send a message... (paste images with Ctrl+V)' : 'Resume session with a prompt...'}
+            rows={1}
+            className="w-full px-3 py-2 pr-9 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none resize-none min-h-[36px] max-h-[120px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+            disabled={isSending}
+          />
+          {/* Upload button inside textarea */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute right-2 bottom-2 text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer"
+            aria-label="Attach file"
+            title="Attach file"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,.txt,.ts,.tsx,.js,.jsx,.json,.md,.py,.sh,.yaml,.yml,.toml,.csv,.sql,.html,.css,.xml"
+          onChange={handleFileSelect}
+          className="hidden"
         />
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!message.trim() || isSending}
+          disabled={(!message.trim() && attachments.length === 0) || isSending}
           className={cn(
             'px-4 py-2 rounded-md text-xs font-medium transition-colors',
-            message.trim() && !isSending
+            (message.trim() || attachments.length > 0) && !isSending
               ? 'bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90'
               : 'bg-muted text-muted-foreground cursor-not-allowed',
           )}
@@ -1712,7 +1894,7 @@ function MessageInput({
         </button>
       </div>
       <div className="mt-1 text-[10px] text-muted-foreground">
-        Press Enter to send, Shift+Enter for newline
+        Enter to send · Shift+Enter for newline · Paste images with {'\u2318'}V
       </div>
     </div>
   );

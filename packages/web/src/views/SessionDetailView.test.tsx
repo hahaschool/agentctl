@@ -730,7 +730,7 @@ describe('SessionDetailView', () => {
   it('shows send message input for active sessions', async () => {
     renderView();
     await waitFor(() => {
-      const textarea = screen.getByPlaceholderText('Send a message...');
+      const textarea = screen.getByPlaceholderText('Send a message... (paste images with Ctrl+V)');
       expect(textarea).toBeDefined();
     });
   });
@@ -773,7 +773,7 @@ describe('SessionDetailView', () => {
   it('shows enter/shift+enter hint', async () => {
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('Press Enter to send, Shift+Enter for newline')).toBeDefined();
+      expect(screen.getByText(/Enter to send/)).toBeDefined();
     });
   });
 
