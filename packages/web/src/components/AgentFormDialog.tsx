@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { Agent, Machine } from '../lib/api';
-import { AGENT_TYPES, ALL_MODELS as MODEL_OPTIONS, DEFAULT_MODEL } from '../lib/model-options';
+import { AGENT_TYPES, DEFAULT_MODEL, ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
 // ---------------------------------------------------------------------------

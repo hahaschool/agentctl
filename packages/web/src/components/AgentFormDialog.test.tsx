@@ -54,7 +54,12 @@ vi.mock('@/components/ui/select', () => ({
     const id = `mock-select-${selectIdCounter++}`;
     if (onValueChange) selectCallbacks.set(id, onValueChange);
     return (
-      <div data-testid="mock-select" data-select-id={id} data-value={value} data-disabled={String(!!disabled)}>
+      <div
+        data-testid="mock-select"
+        data-select-id={id}
+        data-value={value}
+        data-disabled={String(!!disabled)}
+      >
         {children}
       </div>
     );
@@ -66,25 +71,22 @@ vi.mock('@/components/ui/select', () => ({
     children: React.ReactNode;
     id?: string;
     className?: string;
-  }) => (
-    <span data-testid={`select-trigger${id ? `-${id}` : ''}`}>{children}</span>
-  ),
-  SelectValue: ({ placeholder, children }: { placeholder?: string; children?: React.ReactNode }) => (
-    <span data-testid="select-value">{children ?? placeholder}</span>
-  ),
+  }) => <span data-testid={`select-trigger${id ? `-${id}` : ''}`}>{children}</span>,
+  SelectValue: ({
+    placeholder,
+    children,
+  }: {
+    placeholder?: string;
+    children?: React.ReactNode;
+  }) => <span data-testid="select-value">{children ?? placeholder}</span>,
   SelectContent: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="select-content">{children}</div>
   ),
-  SelectItem: ({
-    children,
-    value,
-  }: {
-    children: React.ReactNode;
-    value: string;
-  }) => (
+  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
     <div
       data-testid={`select-item-${value}`}
       role="option"
+      tabIndex={0}
       data-value={value}
       onClick={(e: React.MouseEvent) => {
         // Walk up the DOM to find the parent mock-select and call its callback
@@ -92,12 +94,13 @@ vi.mock('@/components/ui/select', () => ({
         while (el) {
           const selectId = el.getAttribute('data-select-id');
           if (selectId && selectCallbacks.has(selectId)) {
-            selectCallbacks.get(selectId)!(value);
+            selectCallbacks.get(selectId)?.(value);
             return;
           }
           el = el.parentElement;
         }
       }}
+      onKeyDown={() => {}}
     >
       {children}
     </div>
@@ -129,7 +132,12 @@ vi.mock('@/components/ui/button', () => ({
     size?: string;
     className?: string;
   }) => (
-    <button type={type === 'submit' ? 'submit' : 'button'} onClick={onClick} disabled={disabled} {...rest}>
+    <button
+      type={type === 'submit' ? 'submit' : 'button'}
+      onClick={onClick}
+      disabled={disabled}
+      {...rest}
+    >
       {children}
     </button>
   ),
@@ -144,11 +152,10 @@ vi.mock('@/components/ui/input', () => ({
 // ---------------------------------------------------------------------------
 
 import type { Agent, Machine } from '../lib/api';
-import { DEFAULT_MODEL } from '../lib/model-options';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import {
-  AgentFormDialog,
   type AgentFormCreateData,
+  AgentFormDialog,
   type AgentFormDialogProps,
   type AgentFormEditData,
 } from './AgentFormDialog';
@@ -1126,9 +1133,7 @@ describe('AgentFormDialog', () => {
       const modelInput = screen.getByPlaceholderText('claude-sonnet-4-6');
       fireEvent.change(modelInput, { target: { value: 'custom-model' } });
 
-      const promptTextarea = screen.getByPlaceholderText(
-        'Describe what this agent should do...',
-      );
+      const promptTextarea = screen.getByPlaceholderText('Describe what this agent should do...');
       fireEvent.change(promptTextarea, { target: { value: 'New prompt' } });
 
       fireEvent.click(screen.getByText('Save Changes'));
