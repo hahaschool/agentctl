@@ -283,7 +283,7 @@ export function useUpdateAgent() {
 export function useResumeSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.resumeSession(id, prompt),
+    mutationFn: ({ id, prompt, model }: { id: string; prompt: string; model?: string }) => api.resumeSession(id, prompt, model),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },

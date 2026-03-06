@@ -666,13 +666,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
   app.post<{
     Params: { sessionId: string };
-    Body: { prompt: string };
+    Body: { prompt: string; model?: string };
   }>(
     '/:sessionId/resume',
     { schema: { tags: ['sessions'], summary: 'Resume a paused or ended session' } },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt } = request.body;
+      const { prompt, model: newModel } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.code(400).send({
@@ -713,7 +713,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       // 'active' once the worker confirms the CLI process is actually running)
       const [updated] = await db
         .update(rcSessions)
-        .set({ status: 'starting', endedAt: null, lastHeartbeat: new Date() })
+        .set({
+          status: 'starting',
+          endedAt: null,
+          lastHeartbeat: new Date(),
+          ...(newModel !== undefined ? { model: newModel || null } : {}),
+        })
         .where(eq(rcSessions.id, sessionId))
         .returning();
 
@@ -755,7 +760,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                 claudeSessionId: session.claudeSessionId,
                 projectPath: session.projectPath,
                 agentId: session.agentId,
-                model: session.model ?? null,
+                model: newModel ?? session.model ?? null,
                 cpSessionId: sessionId,
                 accountCredential,
                 accountProvider,

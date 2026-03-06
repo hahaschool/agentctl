@@ -1296,8 +1296,16 @@ function MessageBubble({ message, renderMarkdown }: { message: SessionContentMes
 // Message input
 // ---------------------------------------------------------------------------
 
+const RESUME_MODEL_OPTIONS = [
+  { value: '', label: 'Keep current model' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+];
+
 function MessageInput({ session, onOptimisticSend }: { session: Session; onOptimisticSend?: (text: string) => void }): React.JSX.Element {
   const [message, setMessage] = useState('');
+  const [resumeModel, setResumeModel] = useState('');
   const lostKey = `lost:${session.id}`;
   const [sessionLost, setSessionLost] = useState(() => sessionStorage.getItem(lostKey) === '1');
   const toast = useToast();
@@ -1385,7 +1393,7 @@ function MessageInput({ session, onOptimisticSend }: { session: Session; onOptim
       );
     } else if (canResume) {
       resumeSession.mutate(
-        { id: session.id, prompt: text },
+        { id: session.id, prompt: text, model: resumeModel || undefined },
         {
           onSuccess: () => {
             setMessage('');
@@ -1474,6 +1482,25 @@ function MessageInput({ session, onOptimisticSend }: { session: Session; onOptim
 
   return (
     <div className="px-5 py-3 border-t border-border bg-card shrink-0">
+      {canResume && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[11px] text-muted-foreground">Model:</span>
+          <select
+            value={resumeModel}
+            onChange={(e) => setResumeModel(e.target.value)}
+            className="px-2 py-1 bg-muted text-foreground border border-border rounded-sm text-[11px] outline-none"
+          >
+            {RESUME_MODEL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-[10px] text-muted-foreground/60">
+            Current: {session.model ?? 'default'}
+          </span>
+        </div>
+      )}
       <div className="flex gap-2 items-end">
         <textarea
           ref={inputRef}

@@ -349,10 +349,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  resumeSession: (id: string, prompt: string) =>
+  resumeSession: (id: string, prompt: string, model?: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/resume`, {
       method: 'POST',
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, ...(model !== undefined ? { model } : {}) }),
     }),
   sendMessage: (id: string, message: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/message`, {
