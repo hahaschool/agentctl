@@ -116,10 +116,31 @@ export type CliSessionEvent =
 // Streaming JSON message types from `claude -p --output-format stream-json`
 // ---------------------------------------------------------------------------
 
+/**
+ * Typed shape for streaming JSON messages from `claude -p --output-format stream-json`.
+ *
+ * All known properties are declared as optional so we can access them without
+ * `as` type assertions. The `type` field is the discriminant used in the
+ * `handleStreamMessage` switch statement.
+ */
 type CliStreamMessage = {
   type: string;
-  [key: string]: unknown;
+  session_id?: string;
+  content?: unknown;
+  name?: string;
+  input?: unknown;
+  result?: string;
+  total_cost_usd?: number;
+  cost_usd?: number;
+  usage?: { input_tokens?: number; output_tokens?: number };
+  tool?: string;
+  timeout_seconds?: number;
 };
+
+/** Type guard: check if a parsed JSON value is a valid CliStreamMessage. */
+function isCliStreamMessage(value: unknown): value is CliStreamMessage {
+  return isNonNullObject(value) && typeof value.type === 'string';
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -598,35 +619,34 @@ export class CliSessionManager extends EventEmitter {
 
     try {
       const raw = readFileSync(indexPath, 'utf-8');
-      const parsed = JSON.parse(raw) as unknown;
+      const parsed: unknown = JSON.parse(raw);
 
-      if (!parsed || typeof parsed !== 'object') {
+      if (!isNonNullObject(parsed)) {
         return;
       }
 
-      const obj = parsed as Record<string, unknown>;
-
       // v1 format: { version, entries: [...], originalPath }
-      if (Array.isArray(obj.entries)) {
+      if ('entries' in parsed && Array.isArray(parsed.entries)) {
+        const originalPath = 'originalPath' in parsed ? parsed.originalPath : undefined;
         const projectPath =
-          (typeof obj.originalPath === 'string' ? obj.originalPath : null) ??
+          (typeof originalPath === 'string' ? originalPath : null) ??
           decodeProjectPath(dirName);
 
         if (projectPathFilter && !projectPath.includes(projectPathFilter)) {
           return;
         }
 
-        for (const entry of obj.entries as SessionIndexEntryV1[]) {
-          if (!entry.sessionId || typeof entry.sessionId !== 'string') {
+        for (const raw_entry of parsed.entries) {
+          if (!isSessionIndexEntryV1(raw_entry)) {
             continue;
           }
           out.push({
-            sessionId: entry.sessionId,
+            sessionId: raw_entry.sessionId,
             projectPath,
-            summary: entry.summary ?? entry.firstPrompt ?? '',
-            messageCount: entry.messageCount ?? 0,
-            lastActivity: entry.modified ?? entry.created ?? '',
-            branch: entry.gitBranch ?? null,
+            summary: raw_entry.summary ?? raw_entry.firstPrompt ?? '',
+            messageCount: raw_entry.messageCount ?? 0,
+            lastActivity: raw_entry.modified ?? raw_entry.created ?? '',
+            branch: raw_entry.gitBranch ?? null,
           });
         }
         return;
@@ -638,11 +658,19 @@ export class CliSessionManager extends EventEmitter {
         return;
       }
 
-      for (const [sessionId, entry] of Object.entries(obj)) {
-        if (typeof entry !== 'object' || entry === null) {
+      for (const [sessionId, entry] of Object.entries(parsed)) {
+        if (!isNonNullObject(entry)) {
           continue;
         }
-        const e = entry as SessionIndexEntry;
+        // Access optional properties safely via 'in' checks
+        const e: SessionIndexEntry = {
+          summary: 'summary' in entry && typeof entry.summary === 'string' ? entry.summary : undefined,
+          title: 'title' in entry && typeof entry.title === 'string' ? entry.title : undefined,
+          messageCount: 'messageCount' in entry && typeof entry.messageCount === 'number' ? entry.messageCount : undefined,
+          lastActiveAt: 'lastActiveAt' in entry && typeof entry.lastActiveAt === 'string' ? entry.lastActiveAt : undefined,
+          updatedAt: 'updatedAt' in entry && typeof entry.updatedAt === 'string' ? entry.updatedAt : undefined,
+          gitBranch: 'gitBranch' in entry && typeof entry.gitBranch === 'string' ? entry.gitBranch : undefined,
+        };
         out.push({
           sessionId,
           projectPath: decodedPath,
@@ -805,8 +833,17 @@ export class CliSessionManager extends EventEmitter {
       }
 
       try {
-        const message = JSON.parse(trimmed) as CliStreamMessage;
-        this.handleStreamMessage(sessionId, session, message);
+        const parsed: unknown = JSON.parse(trimmed);
+        if (!isCliStreamMessage(parsed)) {
+          // Valid JSON but not a recognized stream message — emit as raw text
+          const textEvent: AgentEvent = {
+            event: 'output',
+            data: { type: 'text', content: trimmed },
+          };
+          this.emitSessionEvent({ type: 'session_output', sessionId, event: textEvent });
+          continue;
+        }
+        this.handleStreamMessage(sessionId, session, parsed);
       } catch {
         // Non-JSON output line — emit as raw text
         const textEvent: AgentEvent = {
@@ -844,9 +881,8 @@ export class CliSessionManager extends EventEmitter {
       case 'init':
       case 'system': {
         // Capture Claude session ID from init message
-        const claudeId = message.session_id as string | undefined;
-        if (claudeId) {
-          session.claudeSessionId = claudeId;
+        if (message.session_id) {
+          session.claudeSessionId = message.session_id;
         }
         break;
       }
@@ -866,7 +902,7 @@ export class CliSessionManager extends EventEmitter {
       }
 
       case 'tool_use': {
-        const toolName = (message.name as string) ?? 'unknown';
+        const toolName = message.name ?? 'unknown';
         const toolInput = message.input ?? {};
         const event: AgentEvent = {
           event: 'output',
@@ -891,12 +927,11 @@ export class CliSessionManager extends EventEmitter {
 
       case 'result': {
         // Final result message — session completed
-        const resultText = (message.result as string) ?? '';
-        const totalCost = (message.total_cost_usd as number) ?? 0;
-        const claudeId = message.session_id as string | undefined;
+        const resultText = message.result ?? '';
+        const totalCost = message.total_cost_usd ?? 0;
 
-        if (claudeId) {
-          session.claudeSessionId = claudeId;
+        if (message.session_id) {
+          session.claudeSessionId = message.session_id;
         }
         session.costUsd = totalCost;
 
@@ -919,9 +954,9 @@ export class CliSessionManager extends EventEmitter {
       }
 
       case 'cost': {
-        const usage = message.usage as Record<string, number> | undefined;
-        const turnCost = (message.cost_usd as number) ?? 0;
-        const totalCost = (message.total_cost_usd as number) ?? session.costUsd + turnCost;
+        const usage = message.usage;
+        const turnCost = message.cost_usd ?? 0;
+        const totalCost = message.total_cost_usd ?? session.costUsd + turnCost;
 
         session.costUsd = totalCost;
 
@@ -942,9 +977,9 @@ export class CliSessionManager extends EventEmitter {
 
       case 'permission_request':
       case 'approval_needed': {
-        const tool = (message.tool as string) ?? (message.name as string) ?? 'unknown';
+        const tool = message.tool ?? message.name ?? 'unknown';
         const input = message.input ?? {};
-        const timeout = (message.timeout_seconds as number) ?? 30;
+        const timeout = message.timeout_seconds ?? 30;
 
         const event: AgentEvent = {
           event: 'approval_needed',
@@ -997,9 +1032,6 @@ export class CliSessionManager extends EventEmitter {
 // ---------------------------------------------------------------------------
 
 /**
- * Claude Code's `sessions-index.json` entry shape.
- */
-/**
  * Legacy sessions-index.json entry (Record<sessionId, entry> format).
  */
 type SessionIndexEntry = {
@@ -1027,6 +1059,20 @@ type SessionIndexEntryV1 = {
   projectPath?: string;
   isSidechain?: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// Type guards
+// ---------------------------------------------------------------------------
+
+/** Check that a value is a non-null object (useful after JSON.parse). */
+function isNonNullObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** Validate that an unknown value has the required shape of a v1 session index entry. */
+function isSessionIndexEntryV1(value: unknown): value is SessionIndexEntryV1 {
+  return isNonNullObject(value) && 'sessionId' in value && typeof value.sessionId === 'string';
+}
 
 /**
  * Decode a Claude Code project directory name back to its filesystem path.
@@ -1153,8 +1199,8 @@ function extractContentText(content: unknown): string | null {
     for (const block of content) {
       if (typeof block === 'string') {
         texts.push(block);
-      } else if (block && typeof block === 'object' && 'text' in block) {
-        texts.push(String((block as { text: unknown }).text));
+      } else if (isNonNullObject(block) && 'text' in block) {
+        texts.push(String(block.text));
       }
     }
     return texts.length > 0 ? texts.join('\n') : null;
