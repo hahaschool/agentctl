@@ -658,22 +658,26 @@ function MessageList({
   const prevCountRef = useRef(0);
   const prevStreamLenRef = useRef(0);
   const prevPendingRef = useRef(0);
+  const prevOptimisticRef = useRef(0);
   useEffect(() => {
     const count = visibleMessages.length;
     const streamLen = streamOutput?.length ?? 0;
     const pendingLen = pendingUserMessages?.length ?? 0;
-    const changed = count !== prevCountRef.current || streamLen !== prevStreamLenRef.current || pendingLen !== prevPendingRef.current;
+    const optimisticLen = optimisticMessages?.length ?? 0;
+    const prevStreamLen = prevStreamLenRef.current;
+    const changed = count !== prevCountRef.current || streamLen !== prevStreamLen || pendingLen !== prevPendingRef.current || optimisticLen !== prevOptimisticRef.current;
     prevCountRef.current = count;
     prevStreamLenRef.current = streamLen;
     prevPendingRef.current = pendingLen;
+    prevOptimisticRef.current = optimisticLen;
     if (changed && autoScroll && scrollRef.current) {
       // Use instant for stream output (frequent updates), smooth for new messages
-      const behavior = streamLen !== prevStreamLenRef.current ? 'instant' as const : 'smooth' as const;
+      const behavior = streamLen !== prevStreamLen ? 'instant' as const : 'smooth' as const;
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior });
       });
     }
-  }, [visibleMessages.length, streamOutput?.length, pendingUserMessages?.length, autoScroll]);
+  }, [visibleMessages.length, streamOutput?.length, pendingUserMessages?.length, optimisticMessages?.length, autoScroll]);
 
   // Detect user scrolling up to pause auto-scroll
   const handleScroll = useCallback(() => {

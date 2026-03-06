@@ -322,6 +322,7 @@ export async function sessionRoutes(
           if (session && (session.status === 'running' || session.status === 'starting')) {
             void reportStatusToControlPlane(workerSessionId, {
               status: 'active',
+              pid: session.pid ?? undefined,
               costUsd: session.costUsd,
             });
           }
@@ -516,7 +517,7 @@ export async function sessionRoutes(
 
         // Immediately report active status so the control plane doesn't have
         // to wait for the next periodic heartbeat (30s) to see this session.
-        void reportStatusToControlPlane(session.id, { status: 'active' });
+        void reportStatusToControlPlane(session.id, { status: 'active', pid: session.pid ?? undefined });
       }
 
       // Wait briefly to verify CLI process doesn't crash on startup
@@ -653,7 +654,7 @@ export async function sessionRoutes(
 
           // Immediately report active status so the control plane doesn't have
           // to wait for the next periodic heartbeat (30s) to see this session.
-          void reportStatusToControlPlane(newSession.id, { status: 'active' });
+          void reportStatusToControlPlane(newSession.id, { status: 'active', pid: newSession.pid ?? undefined });
         }
 
         // Wait briefly to verify the CLI process didn't crash immediately
@@ -825,7 +826,7 @@ export async function sessionRoutes(
         if (cpId) {
           cpSessionIdMap.set(newSession.id, cpId);
           // Immediately report active to override any error from the killed process
-          void reportStatusToControlPlane(newSession.id, { status: 'active' });
+          void reportStatusToControlPlane(newSession.id, { status: 'active', pid: newSession.pid ?? undefined });
         }
 
         logger.info(
