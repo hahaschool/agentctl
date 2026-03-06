@@ -239,7 +239,7 @@ export async function sessionRoutes(
     if (buf) {
       // Emit a synthetic "ended" event to all subscribers
       const session = sessionManager.getSession(event.sessionId);
-      const statusValue = session?.status === 'error' ? 'error' : 'paused';
+      const statusValue = session?.status === 'error' ? 'error' : 'stopped';
       const endedEvent: AgentEvent = {
         event: 'status',
         data: {

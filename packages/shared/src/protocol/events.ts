@@ -65,6 +65,13 @@ export type AgentRawOutputEvent = {
   };
 };
 
+export type AgentUserMessageEvent = {
+  event: 'user_message';
+  data: {
+    text: string;
+  };
+};
+
 export type AgentEvent =
   | AgentOutputEvent
   | AgentRawOutputEvent
@@ -73,4 +80,5 @@ export type AgentEvent =
   | AgentApprovalEvent
   | AgentHeartbeatEvent
   | LoopIterationEvent
-  | LoopCompleteEvent;
+  | LoopCompleteEvent
+  | AgentUserMessageEvent;
