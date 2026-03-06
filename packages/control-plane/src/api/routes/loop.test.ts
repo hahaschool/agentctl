@@ -272,6 +272,48 @@ describe('Loop proxy routes — with dbRegistry', () => {
     expect(body.error).toBe('AGENT_NOT_FOUND');
   });
 
+  it('PUT /api/agents/:id/loop returns 400 for invalid action', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/agents/agent-1/loop',
+      payload: { action: 'invalid' },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    const body = response.json();
+    expect(body.error).toBe('INVALID_ACTION');
+    expect(body.message).toContain('invalid');
+  });
+
+  it('PUT /api/agents/:id/loop accepts pause action and proxies to worker', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/agents/agent-1/loop',
+      payload: { action: 'pause' },
+    });
+
+    // Validation passes — reaches the proxy step which returns 502 (worker not running)
+    expect(response.statusCode).toBe(502);
+
+    const body = response.json();
+    expect(body.error).toBe('WORKER_UNREACHABLE');
+  });
+
+  it('PUT /api/agents/:id/loop accepts resume action and proxies to worker', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/agents/agent-1/loop',
+      payload: { action: 'resume' },
+    });
+
+    // Validation passes — reaches the proxy step which returns 502 (worker not running)
+    expect(response.statusCode).toBe(502);
+
+    const body = response.json();
+    expect(body.error).toBe('WORKER_UNREACHABLE');
+  });
+
   it('returns 503 when machine is offline', async () => {
     vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce({
       id: 'machine-1',

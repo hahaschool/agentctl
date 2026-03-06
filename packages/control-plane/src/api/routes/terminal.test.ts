@@ -304,6 +304,60 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
   // -------------------------------------------------------------------------
 
   describe('POST /:machineId/terminal/:termId/resize', () => {
+    it('returns 400 for negative cols', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal/term-1/resize',
+        payload: { cols: -1, rows: 24 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_DIMENSIONS');
+    });
+
+    it('returns 400 for non-numeric cols', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal/term-1/resize',
+        payload: { cols: 'abc', rows: 24 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_DIMENSIONS');
+    });
+
+    it('returns 400 for zero rows', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal/term-1/resize',
+        payload: { cols: 80, rows: 0 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_DIMENSIONS');
+    });
+
+    it('proxies valid resize request to the worker', async () => {
+      const mockBody = { ok: true };
+      mockFetchOk(mockBody);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal/term-1/resize',
+        payload: { cols: 80, rows: 24 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual(mockBody);
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'http://100.64.0.1:9000/api/terminal/term-1/resize',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
     it('proxies resize request to the worker', async () => {
       const mockBody = { ok: true };
       mockFetchOk(mockBody);

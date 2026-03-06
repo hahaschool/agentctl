@@ -118,6 +118,37 @@ describe('Agent CRUD routes', () => {
       const body = response.json();
       expect(body.code).toBe('INVALID_INPUT');
     });
+
+    it('should return 400 when prompt exceeds 32,000 characters', async () => {
+      const longPrompt = 'x'.repeat(32_001);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-long/start',
+        payload: { prompt: longPrompt },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('PROMPT_TOO_LONG');
+      expect(body.message).toBe('Prompt must be under 32,000 characters');
+    });
+
+    it('should accept a prompt that is exactly 32,000 characters', async () => {
+      const exactPrompt = 'y'.repeat(32_000);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-exact/start',
+        payload: { prompt: exactPrompt },
+      });
+
+      // Should not be rejected for length — 200 means agent started successfully
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.agentId).toBe('agent-exact');
+    });
   });
 
   // ── POST /api/agents/:id/stop ───────────────────────────────────

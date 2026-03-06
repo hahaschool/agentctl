@@ -111,6 +111,13 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
         });
       }
 
+      if (prompt.length > 32_000) {
+        return reply.status(400).send({
+          error: 'PROMPT_TOO_LONG',
+          message: 'Prompt must be under 32,000 characters',
+        });
+      }
+
       try {
         // Create the agent in the pool if it doesn't exist yet.
         let instance = pool.getAgent(id);
