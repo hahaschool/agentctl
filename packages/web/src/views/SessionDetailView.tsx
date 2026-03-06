@@ -115,7 +115,7 @@ function exportSessionAsMarkdown(session: Session, messages: SessionContentMessa
 
   const metaParts: string[] = [];
   metaParts.push(`**Status:** ${session.status}`);
-  if (session.model) metaParts.push(`**Model:** ${session.model}`);
+  metaParts.push(`**Model:** ${session.model ?? '(default)'}`);
   metaParts.push(`**Started:** ${session.startedAt}`);
   if (session.endedAt) metaParts.push(`**Ended:** ${session.endedAt}`);
   metaParts.push(`**Machine:** ${session.machineId}`);
@@ -574,11 +574,9 @@ function SessionHeader({
             <span className="italic text-muted-foreground/60">(default account)</span>
           )}
         </span>
-        {session.model && (
-          <span className="font-mono bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30">
-            {session.model}
-          </span>
-        )}
+        <span className="font-mono bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30">
+          {session.model ?? '(default)'}
+        </span>
         <span>
           Started <LiveTimeAgo date={session.startedAt} />
         </span>
@@ -1532,11 +1530,9 @@ function SessionMetadataBadges({
 
   return (
     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-      {model && (
-        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
-          {model}
-        </span>
-      )}
+      <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
+        {model ?? '(default)'}
+      </span>
       {displayCostUsd !== null && (
         <span className={cn(
           'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
