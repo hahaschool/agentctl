@@ -270,6 +270,9 @@ export function SessionsPage(): React.JSX.Element {
       .catch((err: unknown) => {
         console.warn('Failed to load machines:', err);
         setMachines([]);
+        toast.error(
+          `Failed to load machines: ${err instanceof Error ? err.message : String(err)}`,
+        );
       })
       .finally(() => {
         setMachinesLoading(false);

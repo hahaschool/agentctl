@@ -376,7 +376,11 @@ export function AgentsPage(): React.JSX.Element {
 
     // Remember last-used machine
     if (typeof window !== 'undefined') {
-      localStorage.setItem('agentctl:lastMachineId', createMachineId);
+      try {
+        localStorage.setItem('agentctl:lastMachineId', createMachineId);
+      } catch {
+        // localStorage may throw in private browsing or when quota is exceeded
+      }
     }
 
     createAgent.mutate(
@@ -531,6 +535,7 @@ export function AgentsPage(): React.JSX.Element {
               <textarea
                 ref={promptTextareaRef}
                 id="create-task-prompt"
+                aria-label="Agent prompt"
                 rows={4}
                 placeholder="What do you want the agent to do?"
                 value={createPrompt}
@@ -728,6 +733,7 @@ export function AgentsPage(): React.JSX.Element {
                     </Select>
                     {!MODEL_OPTIONS.some((m) => m.value === createModel) && (
                       <Input
+                        aria-label="Custom model ID"
                         placeholder="Enter custom model ID"
                         value={createModel}
                         onChange={(e) => setCreateModel(e.target.value)}

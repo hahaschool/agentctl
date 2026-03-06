@@ -396,6 +396,14 @@ export async function sessionRoutes(
       }
 
       try {
+        const stat = statSync(jsonlPath);
+        if (stat.size > 100 * 1024 * 1024) {
+          // 100MB limit
+          return reply.status(413).send({
+            error: 'Session JSONL file too large (> 100 MB)',
+            code: 'CONTENT_TOO_LARGE',
+          });
+        }
         const raw = readFileSync(jsonlPath, 'utf-8');
         const lines = raw.split('\n').filter((line) => line.trim().length > 0);
 
@@ -1207,7 +1215,7 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
           continue;
         }
         if (text.length > 0) {
-          results.push({ type: 'human', content: text, timestamp });
+          results.push({ type: 'human', content: text.slice(0, 8000), timestamp });
         }
       } else if (blockType === 'tool_result') {
         const content =
@@ -1227,7 +1235,7 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
       if (blockType === 'text' && typeof b.text === 'string') {
         const text = b.text.trim();
         if (text.length > 0) {
-          results.push({ type: 'assistant', content: text, timestamp });
+          results.push({ type: 'assistant', content: text.slice(0, 8000), timestamp });
         }
       } else if (blockType === 'thinking' && typeof b.thinking === 'string') {
         const text = b.thinking as string;
