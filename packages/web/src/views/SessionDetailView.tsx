@@ -534,12 +534,9 @@ function SessionHeader({
                   ? 'bg-primary text-primary-foreground border-primary hover:opacity-90'
                   : 'bg-muted text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground',
               )}
-              title="Toggle file browser (F)"
+              title="Toggle file browser"
             >
-              Files{' '}
-              <kbd className="ml-1 px-1 py-0.5 text-[9px] font-mono bg-background/50 border border-border/50 rounded opacity-60">
-                F
-              </kbd>
+              Files
             </button>
           )}
           <div className="relative" ref={exportMenuRef}>
@@ -880,9 +877,6 @@ function ViewModeToggle({
           Terminal
         </button>
       </div>
-      <kbd className="px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded text-muted-foreground opacity-60">
-        T
-      </kbd>
     </div>
   );
 }
