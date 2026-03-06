@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { MarkdownContent } from '../components/MarkdownContent';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { FileBrowser } from '../components/FileBrowser';
@@ -706,6 +707,7 @@ function MessageList({
   const [showTools, setShowTools] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
   const [showProgress, setShowProgress] = useState(isActive);
+  const [renderMarkdown, setRenderMarkdown] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [search, setSearch] = useState('');
@@ -852,6 +854,18 @@ function MessageList({
         >
           Progress
         </button>
+        <button
+          type="button"
+          onClick={() => setRenderMarkdown(!renderMarkdown)}
+          aria-label={renderMarkdown ? 'Show raw text' : 'Render markdown'}
+          aria-pressed={renderMarkdown}
+          className={cn(
+            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
+            renderMarkdown ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-muted text-muted-foreground',
+          )}
+        >
+          Markdown
+        </button>
         <div className="flex items-center gap-1.5 ml-1">
           <input
             ref={searchRef}
@@ -945,7 +959,7 @@ function MessageList({
           item.kind === 'tool_pair' ? (
             <ToolPairBlock key={item.key} toolUse={item.toolUse} toolResult={item.toolResult} />
           ) : (
-            <MessageBlock key={item.key} message={item.message} />
+            <MessageBlock key={item.key} message={item.message} renderMarkdown={renderMarkdown} />
           ),
         )}
         {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} aria-hidden />}
@@ -974,6 +988,7 @@ function MessageList({
               <MessageBubble
                 key={`pending-user-${String(i)}`}
                 message={{ type: 'human', content: text, timestamp: new Date().toISOString() }}
+                renderMarkdown={renderMarkdown}
               />
             ))}
 
@@ -1171,7 +1186,7 @@ function ToolPairBlock({
 // Message block — routes to specialized component per type
 // ---------------------------------------------------------------------------
 
-function MessageBlock({ message }: { message: SessionContentMessage }): React.JSX.Element {
+function MessageBlock({ message, renderMarkdown }: { message: SessionContentMessage; renderMarkdown?: boolean }): React.JSX.Element {
   switch (message.type) {
     case 'thinking':
       return <ThinkingBlock content={message.content} timestamp={message.timestamp} />;
@@ -1182,7 +1197,7 @@ function MessageBlock({ message }: { message: SessionContentMessage }): React.JS
     case 'todo':
       return <TodoBlock content={message.content} timestamp={message.timestamp} />;
     default:
-      return <MessageBubble message={message} />;
+      return <MessageBubble message={message} renderMarkdown={renderMarkdown} />;
   }
 }
 
@@ -1190,10 +1205,11 @@ function MessageBlock({ message }: { message: SessionContentMessage }): React.JS
 // Message bubble
 // ---------------------------------------------------------------------------
 
-function MessageBubble({ message }: { message: SessionContentMessage }): React.JSX.Element {
+function MessageBubble({ message, renderMarkdown }: { message: SessionContentMessage; renderMarkdown?: boolean }): React.JSX.Element {
   const style = getMessageStyle(message.type);
 
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
+  const isRenderable = renderMarkdown && (message.type === 'assistant' || message.type === 'human');
   const [expanded, setExpanded] = useState(!isTool);
   const isLong = (message.content?.length ?? 0) > 600;
 
@@ -1251,11 +1267,16 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
       </div>
       <div
         className={cn(
-          'leading-relaxed text-foreground whitespace-pre-wrap break-words',
-          isTool ? 'text-[11px] font-mono max-h-[400px] overflow-auto' : 'text-[13px]',
+          'leading-relaxed text-foreground break-words',
+          isTool ? 'text-[11px] font-mono whitespace-pre-wrap max-h-[400px] overflow-auto' : 'text-[13px]',
+          !isTool && !isRenderable ? 'whitespace-pre-wrap' : '',
         )}
       >
-        <AnsiSpan>{displayContent}</AnsiSpan>
+        {isRenderable ? (
+          <MarkdownContent className="text-[13px] leading-relaxed">{displayContent}</MarkdownContent>
+        ) : (
+          <AnsiSpan>{displayContent}</AnsiSpan>
+        )}
       </div>
       {isLong && !isTool && (
         <button
