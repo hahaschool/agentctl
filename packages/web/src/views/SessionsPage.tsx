@@ -603,7 +603,7 @@ export function SessionsPage(): React.JSX.Element {
         </div>
 
         {/* Status tabs */}
-        <div className="flex items-center border-b border-border px-1 py-0.5 gap-px">
+        <div className="flex items-center border-b border-border overflow-x-auto">
           {STATUS_TABS.map((tab) => {
             const isActive = statusFilter === tab.key;
             const count = statusCounts[tab.key];
@@ -613,15 +613,15 @@ export function SessionsPage(): React.JSX.Element {
                 key={tab.key}
                 onClick={() => setStatusFilter(tab.key)}
                 className={cn(
-                  'flex-1 py-1 text-[10px] rounded cursor-pointer transition-colors border-0 text-center leading-none',
+                  'shrink-0 px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2 text-center whitespace-nowrap',
                   isActive
-                    ? 'font-semibold text-foreground bg-accent'
-                    : 'font-normal text-muted-foreground hover:bg-accent/50',
+                    ? 'font-medium text-foreground border-primary'
+                    : 'font-normal text-muted-foreground border-transparent hover:text-foreground/70',
                 )}
               >
                 {tab.label}
-                {(isActive || count > 0) && (
-                  <span className="ml-0.5 text-[9px] tabular-nums opacity-50">{count}</span>
+                {count > 0 && (
+                  <span className="ml-1 text-[10px] tabular-nums opacity-60">{count}</span>
                 )}
               </button>
             );
