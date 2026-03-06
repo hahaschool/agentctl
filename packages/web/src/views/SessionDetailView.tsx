@@ -22,6 +22,7 @@ import { PathBadge } from '../components/PathBadge';
 import { ProgressIndicator } from '../components/ProgressIndicator';
 import { RefreshButton } from '../components/RefreshButton';
 import { SubagentBlock } from '../components/SubagentBlock';
+import { TerminalView } from '../components/TerminalView';
 import { ThinkingBlock } from '../components/ThinkingBlock';
 import { TodoBlock } from '../components/TodoBlock';
 import { useHotkeys } from '../hooks/use-hotkeys';
@@ -243,6 +244,9 @@ export function SessionDetailView(): React.JSX.Element {
     );
   }, [contentMessages, optimisticMessages.length]);
 
+  // View mode toggle (messages vs terminal)
+  const [viewMode, setViewMode] = useState<'messages' | 'terminal'>('messages');
+
   // File browser panel toggle
   const [showFiles, setShowFiles] = useState(false);
   const toggleFiles = useCallback(() => setShowFiles((prev) => !prev), []);
@@ -275,20 +279,32 @@ export function SessionDetailView(): React.JSX.Element {
 
       {/* Content area */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Messages panel */}
+        {/* Messages / Terminal panel */}
         <div className={cn('flex-1 overflow-hidden flex flex-col', showFiles && 'w-1/2')}>
-          <MessageList
-            messages={content.data?.messages ?? []}
-            totalMessages={content.data?.totalMessages ?? 0}
-            isLoading={content.isLoading}
-            error={content.error?.message}
-            isActive={s.status === 'active'}
-            streamOutput={stream.streamOutput}
-            streamConnected={stream.connected}
-            pendingUserMessages={stream.pendingUserMessages}
-            optimisticMessages={optimisticMessages}
-            onLoadMore={() => setContentLimit((prev) => prev * 2)}
-          />
+          {viewMode === 'messages' ? (
+            <MessageList
+              messages={content.data?.messages ?? []}
+              totalMessages={content.data?.totalMessages ?? 0}
+              isLoading={content.isLoading}
+              error={content.error?.message}
+              isActive={s.status === 'active'}
+              streamOutput={stream.streamOutput}
+              streamConnected={stream.connected}
+              pendingUserMessages={stream.pendingUserMessages}
+              optimisticMessages={optimisticMessages}
+              onLoadMore={() => setContentLimit((prev) => prev * 2)}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Terminal toolbar */}
+              <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
+                <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+              </div>
+              <TerminalView rawOutput={stream.rawOutput} isActive={isActive} className="flex-1 min-h-0" />
+            </div>
+          )}
 
           {/* Input area */}
           <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
@@ -559,7 +575,7 @@ function SessionHeader({
           )}
         </span>
         {session.model && (
-          <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm border border-border">
+          <span className="font-mono bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30">
             {session.model}
           </span>
         )}
@@ -619,6 +635,47 @@ function SessionHeader({
 // Message list
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// View mode toggle (Messages / Terminal)
+// ---------------------------------------------------------------------------
+
+function ViewModeToggle({
+  viewMode,
+  onViewModeChange,
+}: {
+  viewMode: 'messages' | 'terminal';
+  onViewModeChange: (mode: 'messages' | 'terminal') => void;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center rounded-sm border border-border overflow-hidden">
+      <button
+        type="button"
+        onClick={() => onViewModeChange('messages')}
+        className={cn(
+          'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
+          viewMode === 'messages'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+        )}
+      >
+        Messages
+      </button>
+      <button
+        type="button"
+        onClick={() => onViewModeChange('terminal')}
+        className={cn(
+          'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
+          viewMode === 'terminal'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+        )}
+      >
+        Terminal
+      </button>
+    </div>
+  );
+}
+
 function MessageList({
   messages,
   totalMessages,
@@ -630,6 +687,8 @@ function MessageList({
   pendingUserMessages,
   optimisticMessages,
   onLoadMore,
+  viewMode,
+  onViewModeChange,
 }: {
   messages: SessionContentMessage[];
   totalMessages: number;
@@ -641,6 +700,8 @@ function MessageList({
   pendingUserMessages?: string[];
   optimisticMessages?: string[];
   onLoadMore?: () => void;
+  viewMode: 'messages' | 'terminal';
+  onViewModeChange: (mode: 'messages' | 'terminal') => void;
 }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -752,6 +813,7 @@ function MessageList({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
+        <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
         <span>{formatNumber(messages.length)}{messages.length < totalMessages ? ` / ${formatNumber(totalMessages)}` : ''} messages</span>
         {searchFiltered.length !== messages.length && (
           <span>{formatNumber(searchFiltered.length)} shown</span>
