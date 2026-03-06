@@ -112,21 +112,21 @@ const typeConfig: Record<ToastType, {
 }> = {
   success: {
     icon: CheckCircle2,
-    containerClass: 'border-emerald-500/30 bg-emerald-950/80',
-    iconClass: 'text-emerald-400',
-    progressClass: 'bg-emerald-400',
+    containerClass: 'border-emerald-500/30 bg-card dark:bg-emerald-950/80',
+    iconClass: 'text-emerald-600 dark:text-emerald-400',
+    progressClass: 'bg-emerald-500 dark:bg-emerald-400',
   },
   error: {
     icon: XCircle,
-    containerClass: 'border-red-500/30 bg-red-950/80',
-    iconClass: 'text-red-400',
-    progressClass: 'bg-red-400',
+    containerClass: 'border-red-500/30 bg-card dark:bg-red-950/80',
+    iconClass: 'text-red-600 dark:text-red-400',
+    progressClass: 'bg-red-500 dark:bg-red-400',
   },
   info: {
     icon: Info,
-    containerClass: 'border-blue-500/30 bg-blue-950/80',
-    iconClass: 'text-blue-400',
-    progressClass: 'bg-blue-400',
+    containerClass: 'border-blue-500/30 bg-card dark:bg-blue-950/80',
+    iconClass: 'text-blue-600 dark:text-blue-400',
+    progressClass: 'bg-blue-500 dark:bg-blue-400',
   },
 };
 
@@ -196,18 +196,18 @@ function ToastCard({ item }: { item: ToastItem }) {
       ].join(' ')}
     >
       <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${iconClass}`} />
-      <p className="flex-1 text-sm leading-snug text-zinc-100">{item.message}</p>
+      <p className="flex-1 text-sm leading-snug text-foreground">{item.message}</p>
       <button
         type="button"
         aria-label="Dismiss"
         onClick={() => dismissToast(item.id)}
-        className="shrink-0 rounded p-0.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-100"
+        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <X className="h-4 w-4" />
       </button>
 
       {/* Progress bar */}
-      <div className="absolute bottom-0 left-0 h-0.5 w-full bg-white/5">
+      <div className="absolute bottom-0 left-0 h-0.5 w-full bg-border/50">
         <div
           ref={progressRef}
           className={`h-full transition-none ${progressClass}`}
