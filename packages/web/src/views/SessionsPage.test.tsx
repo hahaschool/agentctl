@@ -615,4 +615,126 @@ describe('SessionsPage', () => {
     const listbox = screen.getByRole('listbox') as HTMLDivElement;
     expect(listbox).toBeDefined();
   });
+
+  // =========================================================================
+  // Status Tab Filtering
+  // =========================================================================
+
+  it('clicking Active tab filters sessions', async () => {
+    const sessions = [
+      createSession({ id: 's1', status: 'active', agentName: 'my-active-agent' }),
+      createSession({ id: 's2', status: 'ended', agentName: 'my-ended-agent' }),
+      createSession({ id: 's3', status: 'error', agentName: 'my-error-agent' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: 3, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('my-active-agent')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Active'));
+    await waitFor(() => {
+      expect(screen.getByText('my-active-agent')).toBeDefined();
+      expect(screen.queryByText('my-ended-agent')).toBeNull();
+      expect(screen.queryByText('my-error-agent')).toBeNull();
+    });
+  });
+
+  it('clicking Error tab filters to only error sessions', async () => {
+    const sessions = [
+      createSession({ id: 's1', status: 'active', agentName: 'my-active-agent' }),
+      createSession({ id: 's2', status: 'error', agentName: 'my-error-agent' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('my-error-agent')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Error'));
+    await waitFor(() => {
+      expect(screen.getByText('my-error-agent')).toBeDefined();
+      expect(screen.queryByText('my-active-agent')).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // Select-all checkbox
+  // =========================================================================
+
+  it('renders select-all checkbox', async () => {
+    renderSessions();
+    await waitFor(() => {
+      const checkbox = document.getElementById('sessions-select-all') as HTMLInputElement;
+      expect(checkbox).toBeDefined();
+      expect(checkbox.type).toBe('checkbox');
+    });
+  });
+
+  it('select-all toggles all session checkboxes', async () => {
+    const sessions = [
+      createSession({ id: 's1', agentId: 'a1' }),
+      createSession({ id: 's2', agentId: 'a2' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('a1')).toBeDefined();
+    });
+    const selectAll = document.getElementById('sessions-select-all') as HTMLInputElement;
+    fireEvent.click(selectAll);
+    // After selecting all, the bulk action bar should show
+    await waitFor(() => {
+      expect(screen.getByText(/2 selected/)).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // Search interaction
+  // =========================================================================
+
+  it('search input filters sessions by agentName', async () => {
+    const sessions = [
+      createSession({ id: 's1', agentName: 'deploy-agent' }),
+      createSession({ id: 's2', agentName: 'test-agent' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('deploy-agent')).toBeDefined();
+      expect(screen.getByText('test-agent')).toBeDefined();
+    });
+    const searchInput = screen.getByPlaceholderText('Search sessions...') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'deploy' } });
+    await waitFor(() => {
+      expect(screen.getByText('deploy-agent')).toBeDefined();
+      expect(screen.queryByText('test-agent')).toBeNull();
+    });
+  });
 });
