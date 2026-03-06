@@ -2,24 +2,24 @@
 
 @theme {
   /* Base design tokens — light theme (default) */
-  --color-background: #ffffff;
-  --color-foreground: #171717;
-  --color-card: #f5f5f5;
-  --color-card-foreground: #171717;
-  --color-muted: #f0f0f0;
-  --color-muted-foreground: #6b7280;
-  --color-border: #e0e0e0;
-  --color-primary: #3b82f6;
+  --color-background: #fafafa;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --color-primary: #2563eb;
   --color-primary-foreground: #ffffff;
-  --color-destructive: #ef4444;
+  --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
   --color-popover: #ffffff;
-  --color-popover-foreground: #171717;
-  --color-accent: #f0f0f0;
-  --color-accent-foreground: #171717;
-  --color-input: #e0e0e0;
-  --color-ring: #3b82f6;
-  --color-sidebar: #f8f8f8;
+  --color-popover-foreground: #0f172a;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
+  --color-input: #e2e8f0;
+  --color-ring: #2563eb;
+  --color-sidebar: #f8fafc;
 
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -85,6 +85,21 @@ textarea,
 select {
   font: inherit;
   color: inherit;
+}
+
+/* Custom select styling for dark theme */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 6px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  padding-right: 28px;
+}
+
+select option {
+  background: var(--color-popover);
+  color: var(--color-popover-foreground);
 }
 
 a {
