@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CommandPalette } from './CommandPalette';
+import { CommandPalette, fuzzyScore, levenshtein } from './CommandPalette';
 
 // ---------------------------------------------------------------------------
 // Mock next/navigation
@@ -377,5 +377,177 @@ describe('CommandPalette', () => {
     );
     const newInput = screen.getByPlaceholderText(/type a command or search/i);
     expect((newInput as HTMLInputElement).value).toBe('');
+  });
+
+  // -----------------------------------------------------------------------
+  // Fuzzy search: partial matches
+  // -----------------------------------------------------------------------
+
+  it('fuzzy matches partial query "mach" to "Machines"', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'mach' } });
+    expect(screen.getByText('Machines')).toBeDefined();
+  });
+
+  it('fuzzy matches partial query "sett" to "Settings"', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'sett' } });
+    expect(screen.getByText('Settings')).toBeDefined();
+  });
+
+  it('fuzzy matches partial query "sess" to "Sessions" and "Discover Sessions"', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'sess' } });
+    expect(screen.getByText('Sessions')).toBeDefined();
+    expect(screen.getByText('Discover Sessions')).toBeDefined();
+  });
+
+  // -----------------------------------------------------------------------
+  // Fuzzy search: typo tolerance
+  // -----------------------------------------------------------------------
+
+  it('fuzzy matches "dashbord" (typo) to "Dashboard"', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'dashbord' } });
+    expect(screen.getByText('Dashboard')).toBeDefined();
+  });
+
+  it('fuzzy matches "machnes" (typo) to "Machines"', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'machnes' } });
+    expect(screen.getByText('Machines')).toBeDefined();
+  });
+
+  it('fuzzy matches "settngs" (typo) to "Settings"', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'settngs' } });
+    expect(screen.getByText('Settings')).toBeDefined();
+  });
+
+  // -----------------------------------------------------------------------
+  // Fuzzy search: results sorted by relevance
+  // -----------------------------------------------------------------------
+
+  it('sorts results by relevance — exact match first', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    // "Log" is a substring of "Logs & Metrics" (exact substring) and also
+    // a subsequence of "Toggle Dark/Light Mode" (t-o-g-g-l-e has no 'l' before 'o'... but "Toggle" has o,g,l → subsequence "log" matches)
+    fireEvent.change(input, { target: { value: 'log' } });
+
+    // Get all option buttons in order
+    const options = screen.getAllByRole('option');
+    // "Logs & Metrics" should appear before any other match because it has an exact substring match
+    const logsIndex = options.findIndex((opt) => opt.textContent?.includes('Logs & Metrics'));
+    expect(logsIndex).toBeGreaterThanOrEqual(0);
+    // If Toggle appears, it should be ranked lower
+    const toggleIndex = options.findIndex((opt) => opt.textContent?.includes('Toggle'));
+    if (toggleIndex >= 0) {
+      expect(logsIndex).toBeLessThan(toggleIndex);
+    }
+  });
+
+  it('ranks exact substring higher than subsequence match', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'agent' } });
+
+    const options = screen.getAllByRole('option');
+    // "Agents" (exact substring on label) should come first
+    const agentsIdx = options.findIndex((opt) => opt.textContent?.includes('Agents'));
+    expect(agentsIdx).toBe(0);
+  });
+});
+
+// ===========================================================================
+// Unit tests for fuzzyScore and levenshtein
+// ===========================================================================
+
+describe('levenshtein', () => {
+  it('returns 0 for identical strings', () => {
+    expect(levenshtein('hello', 'hello')).toBe(0);
+  });
+
+  it('returns length of non-empty string when other is empty', () => {
+    expect(levenshtein('', 'abc')).toBe(3);
+    expect(levenshtein('abc', '')).toBe(3);
+  });
+
+  it('returns 1 for single substitution', () => {
+    expect(levenshtein('cat', 'car')).toBe(1);
+  });
+
+  it('returns 1 for single deletion', () => {
+    expect(levenshtein('cat', 'ca')).toBe(1);
+  });
+
+  it('returns 1 for single insertion', () => {
+    expect(levenshtein('ca', 'cat')).toBe(1);
+  });
+
+  it('computes correct distance for "kitten" vs "sitting"', () => {
+    expect(levenshtein('kitten', 'sitting')).toBe(3);
+  });
+});
+
+describe('fuzzyScore', () => {
+  // Exact substring
+  it('returns high score for exact substring match', () => {
+    const score = fuzzyScore('mach', 'Machines');
+    expect(score).not.toBeNull();
+    expect(score!).toBeGreaterThanOrEqual(100);
+  });
+
+  it('gives starts-with higher score than mid-string match', () => {
+    const startScore = fuzzyScore('dash', 'Dashboard');
+    const midScore = fuzzyScore('board', 'Dashboard');
+    expect(startScore).not.toBeNull();
+    expect(midScore).not.toBeNull();
+    expect(startScore!).toBeGreaterThan(midScore!);
+  });
+
+  // Subsequence
+  it('matches subsequence characters in order', () => {
+    // "dbd" is a subsequence of "Dashboard" (d-a-s-h-b-o-a-r-d → d(0), b(4), d(8))
+    const score = fuzzyScore('dbd', 'Dashboard');
+    expect(score).not.toBeNull();
+    expect(score!).toBeGreaterThanOrEqual(10);
+    expect(score!).toBeLessThan(100);
+  });
+
+  // Typo tolerance via Levenshtein
+  it('matches "dashbord" (one missing char) to "dashboard"', () => {
+    const score = fuzzyScore('dashbord', 'Dashboard');
+    expect(score).not.toBeNull();
+    expect(score!).toBeGreaterThanOrEqual(1);
+  });
+
+  it('matches "settngs" (one missing char) to "settings"', () => {
+    const score = fuzzyScore('settngs', 'Settings');
+    expect(score).not.toBeNull();
+  });
+
+  // No match
+  it('returns null for completely unrelated strings', () => {
+    expect(fuzzyScore('xyz', 'Dashboard')).toBeNull();
+  });
+
+  it('returns null for short queries with too many edits', () => {
+    expect(fuzzyScore('zzz', 'abc')).toBeNull();
+  });
+
+  // Case insensitivity
+  it('is case insensitive', () => {
+    const score1 = fuzzyScore('MACH', 'machines');
+    const score2 = fuzzyScore('mach', 'MACHINES');
+    expect(score1).not.toBeNull();
+    expect(score2).not.toBeNull();
+    expect(score1).toBe(score2);
   });
 });
