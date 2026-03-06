@@ -73,7 +73,7 @@ function makeAccount(overrides: Partial<ApiAccount> = {}): ApiAccount {
   return {
     id: 'acct-1',
     name: 'My Anthropic',
-    provider: 'anthropic',
+    provider: 'anthropic_api',
     credentialMasked: 'sk-ant-...abcd',
     priority: 1,
     rateLimit: { itpm: 100000 },
@@ -96,7 +96,7 @@ const MIXED_MACHINES = [
 ];
 
 const ACTIVE_ACCOUNTS: ApiAccount[] = [
-  makeAccount({ id: 'acct-1', name: 'Primary', provider: 'anthropic', isActive: true }),
+  makeAccount({ id: 'acct-1', name: 'Primary', provider: 'anthropic_api', isActive: true }),
   makeAccount({ id: 'acct-2', name: 'Backup', provider: 'bedrock', isActive: true }),
   makeAccount({ id: 'acct-3', name: 'Disabled', provider: 'vertex', isActive: false }),
 ];
@@ -196,7 +196,7 @@ describe('CreateSessionForm', () => {
 
     it('shows only active accounts in account select', () => {
       renderForm({ accounts: ACTIVE_ACCOUNTS });
-      expect(screen.getByText('Primary (anthropic)')).toBeDefined();
+      expect(screen.getByText('Primary (anthropic_api)')).toBeDefined();
       expect(screen.getByText('Backup (bedrock)')).toBeDefined();
       expect(screen.queryByText('Disabled (vertex)')).toBeNull();
     });
