@@ -3,13 +3,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
+import { useHotkeys } from '../hooks/use-hotkeys';
+import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
+import { formatNumber } from '../lib/format-utils';
+import { accountsQuery, queryKeys, useDeleteSession, useForkSession } from '../lib/queries';
 import { ConfirmButton } from './ConfirmButton';
 import { GitStatusBadge } from './GitStatusBadge';
 import { LastUpdated } from './LastUpdated';
@@ -17,15 +22,6 @@ import { LiveDuration } from './LiveDuration';
 import { LiveTimeAgo } from './LiveTimeAgo';
 import { PathBadge } from './PathBadge';
 import { RefreshButton } from './RefreshButton';
-import { useHotkeys } from '../hooks/use-hotkeys';
-import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
-import { formatNumber } from '../lib/format-utils';
-import {
-  accountsQuery,
-  queryKeys,
-  useDeleteSession,
-  useForkSession,
-} from '../lib/queries';
 
 // Re-use the helpers from SessionDetailView — they are file-local there,
 // so we duplicate the minimal signatures needed for the export menu callbacks.

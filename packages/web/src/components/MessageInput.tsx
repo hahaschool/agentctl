@@ -1,7 +1,8 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
@@ -34,10 +35,7 @@ export type MessageInputProps = {
 // Component
 // ---------------------------------------------------------------------------
 
-export function MessageInput({
-  session,
-  onOptimisticSend,
-}: MessageInputProps): React.JSX.Element {
+export function MessageInput({ session, onOptimisticSend }: MessageInputProps): React.JSX.Element {
   const [message, setMessage] = useState('');
   const [resumeModel, setResumeModel] = useState('');
   const lostKey = `lost:${session.id}`;

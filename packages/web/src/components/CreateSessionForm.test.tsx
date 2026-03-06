@@ -40,7 +40,9 @@ vi.mock('./ErrorBanner', () => ({
 }));
 
 vi.mock('lucide-react', () => ({
-  AlertCircle: (props: Record<string, unknown>) => <svg data-testid="icon-alert-circle" {...props} />,
+  AlertCircle: (props: Record<string, unknown>) => (
+    <svg data-testid="icon-alert-circle" {...props} />
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -129,7 +131,11 @@ async function fillValidForm() {
 
 beforeEach(() => {
   mockListMachines.mockResolvedValue(ONLINE_MACHINES);
-  mockCreateSession.mockResolvedValue({ ok: true, sessionId: 'sess-0123456789abcdef01234567', session: {} });
+  mockCreateSession.mockResolvedValue({
+    ok: true,
+    sessionId: 'sess-0123456789abcdef01234567',
+    session: {},
+  });
   localStorage.clear();
 });
 
@@ -349,7 +355,9 @@ describe('CreateSessionForm', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('error-banner')).toBeDefined();
-        expect(screen.getByText('Project path must be an absolute path (start with /)')).toBeDefined();
+        expect(
+          screen.getByText('Project path must be an absolute path (start with /)'),
+        ).toBeDefined();
       });
     });
 
