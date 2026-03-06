@@ -33,6 +33,78 @@ function formatModified(iso?: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function getFileExtension(path: string): string {
+  const name = path.split('/').pop() ?? '';
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+/** Basic syntax-highlighted line rendering for common file types */
+function highlightLine(line: string, ext: string): React.JSX.Element {
+  // Comment lines
+  if (/^\s*(\/\/|#|--|;)/.test(line)) {
+    return <span className="text-green-500/70">{line}</span>;
+  }
+
+  // For markdown: headers
+  if ((ext === 'md' || ext === 'mdx') && /^#{1,6}\s/.test(line)) {
+    return <span className="text-blue-400 font-semibold">{line}</span>;
+  }
+
+  // For code files: apply keyword + string highlighting
+  const codeExts = new Set(['ts', 'tsx', 'js', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'sh', 'bash', 'zsh']);
+  if (codeExts.has(ext)) {
+    // Highlight strings, keywords, and numbers
+    const parts = line.split(/('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)/g);
+    return (
+      <>
+        {parts.map((part, i) => {
+          // String literals
+          if (/^['"`]/.test(part)) {
+            return <span key={i} className="text-amber-400">{part}</span>;
+          }
+          // Keywords
+          const highlighted = part.replace(
+            /\b(const|let|var|function|async|await|return|if|else|for|while|import|export|from|class|interface|type|enum|extends|implements|new|throw|try|catch|finally|switch|case|break|continue|default|yield|of|in|as|def|self|None|True|False|fn|pub|mod|use|struct|impl|trait|match|mut|ref|super|this|null|undefined|true|false|void|number|string|boolean|readonly)\b/g,
+            '\x00KW\x01$1\x00KW\x02',
+          );
+          if (!highlighted.includes('\x00KW')) {
+            return <span key={i}>{part}</span>;
+          }
+          const kParts = highlighted.split(/\x00KW[\x01\x02]/g);
+          return (
+            <span key={i}>
+              {kParts.map((kp, ki) =>
+                ki % 2 === 1 ? (
+                  <span key={ki} className="text-purple-400">{kp}</span>
+                ) : (
+                  <span key={ki}>{kp}</span>
+                ),
+              )}
+            </span>
+          );
+        })}
+      </>
+    );
+  }
+
+  // JSON: highlight keys and values
+  if (ext === 'json' || ext === 'jsonl') {
+    const keyMatch = line.match(/^(\s*)"([^"]+)"(\s*:\s*)/);
+    if (keyMatch) {
+      const [full, indent, key, colon] = keyMatch;
+      const rest = line.slice(full.length);
+      return (
+        <>
+          {indent}<span className="text-blue-400">&quot;{key}&quot;</span>{colon}<span className="text-amber-400">{rest}</span>
+        </>
+      );
+    }
+  }
+
+  return <>{line}</>;
+}
+
 function pathSegments(path: string): { label: string; path: string }[] {
   const parts = path.split('/').filter(Boolean);
   const segments: { label: string; path: string }[] = [{ label: '/', path: '/' }];
@@ -302,20 +374,51 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
               {fileError && (
                 <div className="p-4 text-xs text-red-400">{fileError}</div>
               )}
-              {openFile && !editing && (
-                <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground leading-5 m-0">
-                  {openFile.content}
-                </pre>
-              )}
-              {editing && (
-                <textarea
-                  ref={textareaRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-full p-3 text-xs font-mono whitespace-pre bg-background text-foreground border-none outline-none resize-none leading-5"
-                  spellCheck={false}
-                />
-              )}
+              {openFile && !editing && (() => {
+                const ext = getFileExtension(openFile.path);
+                const lines = openFile.content.split('\n');
+                const gutterWidth = String(lines.length).length;
+                return (
+                  <div className="flex text-[12px] font-mono leading-5 m-0">
+                    {/* Line numbers gutter */}
+                    <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
+                      {lines.map((_, i) => (
+                        <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>{i + 1}</div>
+                      ))}
+                    </div>
+                    {/* Code content */}
+                    <div className="flex-1 py-3 pl-3 pr-3 overflow-x-auto">
+                      {lines.map((line, i) => (
+                        <div key={i} className="whitespace-pre hover:bg-accent/30">
+                          {highlightLine(line, ext)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {editing && (() => {
+                const lines = editContent.split('\n');
+                const gutterWidth = String(lines.length).length;
+                return (
+                  <div className="flex h-full text-[12px] font-mono leading-5">
+                    {/* Line numbers gutter */}
+                    <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
+                      {lines.map((_, i) => (
+                        <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>{i + 1}</div>
+                      ))}
+                    </div>
+                    {/* Editor textarea */}
+                    <textarea
+                      ref={textareaRef}
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="flex-1 py-3 pl-3 pr-3 font-mono text-[12px] whitespace-pre bg-transparent text-foreground border-none outline-none resize-none leading-5"
+                      spellCheck={false}
+                    />
+                  </div>
+                );
+              })()}
             </div>
 
             {/* File info */}
