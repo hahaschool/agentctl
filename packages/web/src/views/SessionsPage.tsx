@@ -17,11 +17,10 @@ import { FetchingBar } from '../components/FetchingBar';
 import { ForkContextPicker } from '../components/ForkContextPicker';
 import { GitStatusBadge } from '../components/GitStatusBadge';
 import { LastUpdated } from '../components/LastUpdated';
-import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { MarkdownContent } from '../components/MarkdownContent';
-import { PathBadge } from '../components/PathBadge';
 import { ProgressIndicator } from '../components/ProgressIndicator';
 import { RefreshButton } from '../components/RefreshButton';
+import { SessionListItem } from '../components/SessionListItem';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatusBadge } from '../components/StatusBadge';
 import { SubagentBlock } from '../components/SubagentBlock';
@@ -1273,148 +1272,6 @@ export function SessionsPage(): React.JSX.Element {
           isSubmitting={createAgent.isPending}
         />
       )}
-    </div>
-  );
-}
-
-/** Displays session duration, ticking live for active (no endedAt) sessions. */
-function LiveDuration({
-  startedAt,
-  endedAt,
-}: {
-  startedAt: string;
-  endedAt?: string | null;
-}): React.JSX.Element {
-  const [, setTick] = useState(0);
-  const isActive = !endedAt;
-
-  useEffect(() => {
-    if (!isActive) return;
-    const timer = setInterval(() => setTick((t) => t + 1), 1_000);
-    return () => clearInterval(timer);
-  }, [isActive]);
-
-  const formatted = formatDuration(startedAt, endedAt);
-
-  return (
-    <span
-      className="text-[11px] text-muted-foreground"
-      title={isActive ? 'Running' : 'Total duration'}
-    >
-      {isActive ? `Running for ${formatted}` : `Duration: ${formatted}`}
-    </span>
-  );
-}
-
-function SessionListItem({
-  session: s,
-  isSelected,
-  isFocused,
-  onSelect,
-  isChecked,
-  onToggleCheck,
-}: {
-  session: Session;
-  isSelected: boolean;
-  isFocused: boolean;
-  onSelect: (id: string) => void;
-  isChecked: boolean;
-  onToggleCheck: (id: string) => void;
-}): React.JSX.Element {
-  const meta = s.metadata;
-  const errorMsg = meta?.errorMessage;
-  const costUsd = meta?.costUsd;
-  const messageCount = meta?.messageCount;
-
-  return (
-    <div
-      role="option"
-      id={`session-${s.id}`}
-      tabIndex={isFocused ? 0 : -1}
-      aria-selected={isSelected}
-      className={cn(
-        'group flex w-full text-left border-b border-border transition-all duration-200 hover:border-border/80',
-        isSelected
-          ? 'bg-accent/15'
-          : isFocused
-            ? 'bg-accent/10 ring-1 ring-inset ring-primary/40'
-            : 'bg-transparent hover:bg-accent/8',
-        s.status === 'error'
-          ? 'border-l-[3px] border-l-red-500'
-          : s.status === 'starting'
-            ? 'border-l-[3px] border-l-yellow-500'
-            : s.status === 'active'
-              ? 'border-l-[3px] border-l-green-500'
-              : 'border-l-[3px] border-l-transparent',
-      )}
-    >
-      {/* Checkbox */}
-      <div className="flex items-start pt-4 pl-2.5 shrink-0">
-        <input
-          type="checkbox"
-          checked={isChecked}
-          onChange={() => onToggleCheck(s.id)}
-          onClick={(e) => e.stopPropagation()}
-          aria-label={`Select session ${s.id.slice(0, 16)}`}
-          className="w-3.5 h-3.5 cursor-pointer"
-        />
-      </div>
-      {/* Session card content */}
-      <button
-        type="button"
-        onClick={() => onSelect(s.id)}
-        className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
-      >
-        <div className="flex justify-between items-center mb-1.5">
-          <CopyableText
-            value={s.id}
-            maxDisplay={16}
-            className="font-mono text-xs font-medium text-foreground/90"
-          />
-          <span className="flex items-center gap-2">
-            {s.status === 'active' && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-              </span>
-            )}
-            {s.status === 'starting' && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
-              </span>
-            )}
-            <StatusBadge status={s.status} />
-          </span>
-        </div>
-        {/* Error message for failed sessions */}
-        {s.status === 'error' && errorMsg && (
-          <div className="text-[11px] text-red-600 dark:text-red-400 mb-1.5 line-clamp-1">
-            {errorMsg}
-          </div>
-        )}
-        <div className="text-xs text-muted-foreground flex gap-2 items-center">
-          <span className="font-medium text-foreground/70">
-            {s.agentName ? s.agentName : s.agentId.slice(0, 8)}
-          </span>
-          <span className="text-muted-foreground/50">|</span>
-          <span>{s.machineId}</span>
-          <span className="text-purple-600/70 dark:text-purple-400/70 text-[11px]">
-            {s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}
-          </span>
-        </div>
-        {s.projectPath && (
-          <div className="mt-1">
-            <PathBadge path={s.projectPath} className="text-[11px]" />
-          </div>
-        )}
-        <div className="text-[11px] text-muted-foreground/70 mt-1 flex gap-2.5 items-center">
-          <LiveTimeAgo date={s.startedAt} />
-          <LiveDuration startedAt={s.startedAt} endedAt={s.endedAt} />
-          {messageCount !== undefined && <span>{messageCount} msgs</span>}
-          {costUsd !== undefined && <span className="tabular-nums">${costUsd.toFixed(2)}</span>}
-        </div>
-      </button>
     </div>
   );
 }
