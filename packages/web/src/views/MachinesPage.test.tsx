@@ -102,6 +102,12 @@ vi.mock('@/components/EmptyState', () => ({
   ),
 }));
 
+vi.mock('@/components/SimpleTooltip', () => ({
+  SimpleTooltip: ({ children }: { children: React.ReactNode; content?: string }) => (
+    <span data-testid="simple-tooltip">{children}</span>
+  ),
+}));
+
 vi.mock('@/lib/queries', () => ({
   machinesQuery: () => mockMachinesQuery(),
 }));

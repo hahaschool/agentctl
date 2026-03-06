@@ -14,6 +14,7 @@ import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { RefreshButton } from '../components/RefreshButton';
+import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
@@ -32,6 +33,8 @@ export function MachinesPage(): React.JSX.Element {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MachineStatusFilter>('all');
+  const [sortOrder, setSortOrder] = useState<'name' | 'status' | 'lastHeartbeat' | 'os'>('name');
+  const [compact, setCompact] = useState(false);
 
   useHotkeys(useMemo(() => ({ r: () => void machines.refetch() }), [machines]));
 
@@ -55,8 +58,25 @@ export function MachinesPage(): React.JSX.Element {
           m.os.toLowerCase().includes(q),
       );
     }
+    result = [...result].sort((a, b) => {
+      switch (sortOrder) {
+        case 'name':
+          return a.hostname.localeCompare(b.hostname);
+        case 'status':
+          return a.status.localeCompare(b.status);
+        case 'lastHeartbeat': {
+          const ta = a.lastHeartbeat ? new Date(a.lastHeartbeat).getTime() : 0;
+          const tb = b.lastHeartbeat ? new Date(b.lastHeartbeat).getTime() : 0;
+          return tb - ta; // newest first
+        }
+        case 'os':
+          return a.os.localeCompare(b.os);
+        default:
+          return 0;
+      }
+    });
     return result;
-  }, [list, statusFilter, search]);
+  }, [list, statusFilter, search, sortOrder]);
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
@@ -111,9 +131,65 @@ export function MachinesPage(): React.JSX.Element {
           <option value="offline">Offline</option>
           <option value="degraded">Degraded</option>
         </select>
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as 'name' | 'status' | 'lastHeartbeat' | 'os')}
+          aria-label="Sort by"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+        >
+          <option value="name">Name (A-Z)</option>
+          <option value="status">Status</option>
+          <option value="lastHeartbeat">Last Heartbeat</option>
+          <option value="os">OS</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => setCompact((v) => !v)}
+          aria-label={compact ? 'Switch to detailed view' : 'Switch to compact view'}
+          className={cn(
+            'px-2.5 py-1.5 text-[12px] font-medium border rounded-md transition-colors whitespace-nowrap',
+            compact
+              ? 'bg-primary/10 text-primary border-primary/30'
+              : 'bg-muted text-muted-foreground border-border hover:text-foreground hover:bg-accent',
+          )}
+        >
+          {compact ? 'Detailed' : 'Compact'}
+        </button>
         <span className="text-[11px] text-muted-foreground ml-auto">
           {filteredList.length}/{list.length} machines
         </span>
+        <button
+          type="button"
+          onClick={() => {
+            if (filteredList.length === 0) return;
+            const header = 'hostname,id,status,os,arch,tailscaleIp,lastHeartbeat\n';
+            const rows = filteredList.map((m) =>
+              [
+                m.hostname,
+                m.id,
+                m.status,
+                m.os,
+                m.arch,
+                m.tailscaleIp ?? '',
+                m.lastHeartbeat ?? '',
+              ]
+                .map((v) => `"${v.replace(/"/g, '""')}"`)
+                .join(','),
+            );
+            const csv = header + rows.join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `machines-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          disabled={filteredList.length === 0}
+          className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
+        >
+          Export CSV
+        </button>
       </div>
 
       {/* Summary stats */}
@@ -168,7 +244,7 @@ export function MachinesPage(): React.JSX.Element {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
           {filteredList.map((m) => (
-            <MachineCard key={m.id} machine={m} />
+            <MachineCard key={m.id} machine={m} compact={compact} />
           ))}
         </div>
       )}
@@ -180,8 +256,35 @@ export function MachinesPage(): React.JSX.Element {
 // Machine card
 // ---------------------------------------------------------------------------
 
-function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
+function MachineCard({ machine, compact }: { machine: Machine; compact?: boolean }): React.JSX.Element {
   const m = machine;
+
+  if (compact) {
+    return (
+      <div className="p-3 bg-card border border-border/50 rounded-lg flex items-center gap-3 transition-colors hover:border-border">
+        <Link
+          href={`/machines/${m.id}`}
+          className="text-[14px] font-semibold text-foreground hover:text-primary transition-colors no-underline truncate"
+        >
+          {m.hostname}
+        </Link>
+        <span className="text-[11px] text-muted-foreground font-mono truncate">{m.os}</span>
+        <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          <StatusBadge status={m.status} />
+          {m.lastHeartbeat && isStaleHeartbeat(m.lastHeartbeat) && (
+            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-800">
+              Offline
+            </span>
+          )}
+          {m.lastHeartbeat && !isStaleHeartbeat(m.lastHeartbeat) && (
+            <span className="text-[10px] text-muted-foreground">
+              <LiveTimeAgo date={m.lastHeartbeat} />
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5 transition-colors hover:border-border">
@@ -229,11 +332,17 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           <span className="text-[10px] text-muted-foreground mr-1">
             Capabilities
           </span>
-          <CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" />
-          <CapBadge label="Docker" enabled={m.capabilities?.docker ?? false} variant="blue" />
-          <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-md bg-muted text-muted-foreground border border-border font-mono">
-            {m.capabilities?.maxConcurrentAgents ?? 0} max agents
-          </span>
+          <SimpleTooltip content="GPU acceleration available for compute-intensive tasks">
+            <span><CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" /></span>
+          </SimpleTooltip>
+          <SimpleTooltip content="Docker container runtime for sandboxed agent execution">
+            <span><CapBadge label="Docker" enabled={m.capabilities?.docker ?? false} variant="blue" /></span>
+          </SimpleTooltip>
+          <SimpleTooltip content="Maximum agents that can run concurrently on this machine">
+            <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-md bg-muted text-muted-foreground border border-border font-mono">
+              {m.capabilities?.maxConcurrentAgents ?? 0} max agents
+            </span>
+          </SimpleTooltip>
         </div>
       )}
     </div>
