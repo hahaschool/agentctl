@@ -8,6 +8,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
+import { DashboardActionButton } from '../components/DashboardActionButton';
+import { DashboardActivityIcon } from '../components/DashboardActivityIcon';
+import { DashboardCostOverview } from '../components/DashboardCostOverview';
+import { DashboardEmptyPanel } from '../components/DashboardEmptyPanel';
+import { DashboardSectionHeader } from '../components/DashboardSectionHeader';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
@@ -235,8 +240,11 @@ export function DashboardPage(): React.JSX.Element {
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
-          <ActionButton label="Discover Sessions" onClick={() => void discovered.refetch()} />
-          <ActionButton label="Refresh All" onClick={refreshAll} />
+          <DashboardActionButton
+            label="Discover Sessions"
+            onClick={() => void discovered.refetch()}
+          />
+          <DashboardActionButton label="Refresh All" onClick={refreshAll} />
         </div>
       </div>
 
@@ -313,7 +321,7 @@ export function DashboardPage(): React.JSX.Element {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Recent Sessions Activity */}
         <div>
-          <SectionHeader title="Recent Sessions" href="/sessions" />
+          <DashboardSectionHeader title="Recent Sessions" href="/sessions" />
           <div className="border border-border/50 rounded-lg overflow-hidden">
             {sessions.isLoading ? (
               <div className="p-4 bg-card space-y-2" data-testid="recent-sessions-skeleton">
@@ -338,7 +346,7 @@ export function DashboardPage(): React.JSX.Element {
                 >
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      <ActivityIcon status={session?.status ?? 'unknown'} />
+                      <DashboardActivityIcon status={session?.status ?? 'unknown'} />
                       <span className="text-[13px] font-medium text-foreground truncate">
                         {truncate(
                           session?.claudeSessionId
@@ -386,7 +394,7 @@ export function DashboardPage(): React.JSX.Element {
         <div className="space-y-5">
           {/* Machine Status */}
           <div>
-            <SectionHeader title="Fleet Status" href="/machines" />
+            <DashboardSectionHeader title="Fleet Status" href="/machines" />
             <div className="border border-border/50 rounded-lg overflow-hidden">
               {machines.isLoading ? (
                 <div className="p-4 bg-card space-y-2" data-testid="fleet-status-skeleton">
@@ -439,7 +447,7 @@ export function DashboardPage(): React.JSX.Element {
 
           {/* Discovered Sessions (compact) */}
           <div>
-            <SectionHeader title="Discovered Sessions" href="/discover" />
+            <DashboardSectionHeader title="Discovered Sessions" href="/discover" />
             <div className="border border-border/50 rounded-lg overflow-hidden">
               {discoveredSessions.length === 0 ? (
                 <div className="p-6 text-center bg-card">
@@ -491,7 +499,7 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Cost Overview */}
-      <CostOverview
+      <DashboardCostOverview
         sessionList={sessionList}
         agentCostBreakdown={agentCostBreakdown}
         isLoading={sessions.isLoading || agents.isLoading}
@@ -564,7 +572,7 @@ export function DashboardPage(): React.JSX.Element {
       {/* Dependencies */}
       {health.isLoading && (
         <div className="mt-6" data-testid="dependencies-skeleton">
-          <SectionHeader title="Dependencies" />
+          <DashboardSectionHeader title="Dependencies" />
           <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
             {Array.from({ length: 3 }, (_, i) => (
               <Skeleton key={i} className="h-12 rounded-lg" />
@@ -574,7 +582,7 @@ export function DashboardPage(): React.JSX.Element {
       )}
       {!health.isLoading && health.data?.dependencies && (
         <div className="mt-6">
-          <SectionHeader title="Dependencies" />
+          <DashboardSectionHeader title="Dependencies" />
           <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
             {Object.entries(health.data.dependencies).map(([name, dep]) => {
               const isOk = dep.status === 'ok';
@@ -651,230 +659,4 @@ export function DashboardPage(): React.JSX.Element {
       )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Subcomponents
-// ---------------------------------------------------------------------------
-
-function SectionHeader({ title, href }: { title: string; href?: string }): React.JSX.Element {
-  return (
-    <div className="flex justify-between items-center mb-2.5">
-      <h2 className="text-[15px] font-semibold text-muted-foreground">{title}</h2>
-      {href && (
-        <Link
-          href={href}
-          className="text-[11px] text-primary font-medium no-underline hover:underline"
-        >
-          View All &rarr;
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function ActionButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium cursor-pointer hover:bg-primary/10 transition-colors"
-    >
-      {label}
-    </button>
-  );
-}
-
-function ActivityIcon({ status }: { status: string }): React.JSX.Element {
-  const colorClass =
-    status === 'running' || status === 'active'
-      ? 'bg-green-500'
-      : status === 'error' || status === 'timeout'
-        ? 'bg-red-500'
-        : status === 'starting'
-          ? 'bg-yellow-500'
-          : 'bg-muted-foreground';
-
-  const shouldPulse = status === 'running' || status === 'active';
-
-  return (
-    <span
-      className={cn('w-2 h-2 rounded-full shrink-0', colorClass, shouldPulse && 'animate-pulse')}
-    />
-  );
-}
-
-function CostOverview({
-  sessionList,
-  agentCostBreakdown,
-  isLoading,
-}: {
-  sessionList: {
-    id: string;
-    agentName: string | null;
-    claudeSessionId: string | null;
-    metadata: { costUsd?: number; [key: string]: unknown };
-  }[];
-  agentCostBreakdown: { id: string; name: string; totalCostUsd: number }[];
-  isLoading: boolean;
-}): React.ReactNode {
-  const totalCost = useMemo(
-    () => sessionList.reduce((sum, s) => sum + (s.metadata?.costUsd ?? 0), 0),
-    [sessionList],
-  );
-
-  const topSessions = useMemo(
-    () =>
-      [...sessionList]
-        .filter((s) => (s.metadata?.costUsd ?? 0) > 0)
-        .sort((a, b) => (b.metadata?.costUsd ?? 0) - (a.metadata?.costUsd ?? 0))
-        .slice(0, 5),
-    [sessionList],
-  );
-
-  const maxAgentCost =
-    agentCostBreakdown.length > 0 ? (agentCostBreakdown[0]?.totalCostUsd ?? 0) : 0;
-
-  if (isLoading) {
-    return (
-      <div className="mt-5 mb-0" data-testid="cost-overview-skeleton">
-        <SectionHeader title="Cost Overview" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-32 rounded-lg" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (totalCost === 0 && agentCostBreakdown.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mt-5 mb-0">
-      <SectionHeader title="Cost Overview" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Total cost */}
-        <div className="border border-border/50 rounded-lg bg-card p-4 transition-all duration-200 hover:border-border/80 hover:shadow-sm flex flex-col justify-center">
-          <div className="text-[11px] font-medium text-muted-foreground mb-1">
-            Total Session Cost
-          </div>
-          <div className="text-2xl font-semibold font-mono text-foreground">
-            {formatCost(totalCost)}
-          </div>
-          <div className="text-[11px] text-muted-foreground mt-1">
-            across {sessionList.filter((s) => (s.metadata?.costUsd ?? 0) > 0).length} sessions
-          </div>
-        </div>
-
-        {/* Bar chart: cost per agent */}
-        <div className="border border-border/50 rounded-lg bg-card p-4 transition-all duration-200 hover:border-border/80 hover:shadow-sm">
-          <div className="text-[11px] font-medium text-muted-foreground mb-3">Cost by Agent</div>
-          {agentCostBreakdown.length > 0 ? (
-            <div className="space-y-2">
-              {agentCostBreakdown.map((agent) => {
-                const pct = maxAgentCost > 0 ? (agent.totalCostUsd / maxAgentCost) * 100 : 0;
-                return (
-                  <Link
-                    key={agent.id}
-                    href={`/agents/${agent.id}`}
-                    className="block no-underline group"
-                  >
-                    <div className="flex justify-between items-center text-[11px] mb-0.5">
-                      <span className="text-foreground truncate max-w-[140px] group-hover:text-primary transition-colors">
-                        {agent.name}
-                      </span>
-                      <span className="font-mono text-muted-foreground shrink-0 ml-2">
-                        {formatCost(agent.totalCostUsd)}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500"
-                        style={{ width: `${Math.max(pct, 2)}%` }}
-                      />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-[12px] text-muted-foreground">No agent cost data yet</div>
-          )}
-        </div>
-
-        {/* Top 5 most expensive sessions */}
-        <div className="border border-border/50 rounded-lg bg-card p-4 transition-all duration-200 hover:border-border/80 hover:shadow-sm">
-          <div className="text-[11px] font-medium text-muted-foreground mb-3">
-            Most Expensive Sessions
-          </div>
-          {topSessions.length > 0 ? (
-            <div className="space-y-1.5">
-              {topSessions.map((session, idx) => (
-                <Link
-                  key={session.id}
-                  href={`/sessions/${session.id}`}
-                  className="flex items-center justify-between no-underline hover:bg-accent/10 rounded px-1.5 py-1 -mx-1.5 transition-colors"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[10px] text-muted-foreground font-mono w-4 shrink-0">
-                      #{idx + 1}
-                    </span>
-                    <span className="text-[12px] text-foreground truncate">
-                      {truncate(
-                        session.agentName ??
-                          (session.claudeSessionId
-                            ? `Session ${session.claudeSessionId.slice(0, 8)}`
-                            : `Session ${session.id.slice(0, 8)}`),
-                        24,
-                      )}
-                    </span>
-                  </div>
-                  <span className="text-[12px] font-mono text-green-600 dark:text-green-400 shrink-0 ml-2">
-                    {formatCost(session.metadata?.costUsd ?? 0)}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="text-[12px] text-muted-foreground">No session cost data yet</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DashboardEmptyPanel({
-  loading,
-  message,
-}: {
-  loading: boolean;
-  message: string;
-}): React.JSX.Element {
-  if (loading) {
-    return (
-      <div className="p-4 bg-card space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={`sk-${String(i)}`} className="flex items-center gap-3">
-            <Skeleton className="h-3 w-3 rounded-full shrink-0" />
-            <div className="flex-1 space-y-1.5">
-              <Skeleton className="h-3 w-3/4" />
-              <Skeleton className="h-2.5 w-1/2" />
-            </div>
-            <Skeleton className="h-3 w-12 shrink-0" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return <div className="p-8 text-center text-muted-foreground bg-card text-[13px]">{message}</div>;
 }
