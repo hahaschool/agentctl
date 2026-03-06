@@ -866,6 +866,12 @@ function MessageList({
         >
           Markdown
         </button>
+        {isActive && autoScroll && !userScrolledUp && (
+          <span className="flex items-center gap-1 text-[10px] text-green-400 ml-1" aria-label="Auto-scroll active">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            Following
+          </span>
+        )}
         <div className="flex items-center gap-1.5 ml-1">
           <input
             ref={searchRef}

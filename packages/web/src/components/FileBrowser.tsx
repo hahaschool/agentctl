@@ -283,12 +283,12 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
             type="text"
             value={pathInput}
             onChange={(e) => setPathInput(e.target.value)}
-            className="flex-1 px-2 py-1 bg-muted text-foreground border border-border rounded-sm text-xs font-mono outline-none focus:border-primary"
+            className="flex-1 px-2 py-1 bg-muted text-foreground border border-border rounded-md text-xs font-mono outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             placeholder="Absolute path..."
           />
           <button
             type="submit"
-            className="px-2 py-1 bg-primary text-primary-foreground rounded-sm text-xs cursor-pointer hover:opacity-90"
+            className="px-2 py-1 bg-primary text-primary-foreground rounded-md text-xs cursor-pointer hover:opacity-90"
           >
             Go
           </button>
@@ -328,7 +328,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
                 <button
                   type="button"
                   onClick={startEditing}
-                  className="px-2 py-0.5 bg-primary text-primary-foreground rounded-sm text-[11px] cursor-pointer hover:opacity-90"
+                  className="px-2 py-0.5 bg-primary text-primary-foreground rounded-md text-[11px] cursor-pointer hover:opacity-90"
                 >
                   Edit
                 </button>
@@ -339,14 +339,14 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
                     type="button"
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-2 py-0.5 bg-green-700 text-white rounded-sm text-[11px] cursor-pointer hover:bg-green-600 disabled:opacity-50"
+                    className="px-2 py-0.5 bg-green-700 text-white rounded-md text-[11px] cursor-pointer hover:bg-green-600 disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : 'Save'}
                   </button>
                   <button
                     type="button"
                     onClick={cancelEditing}
-                    className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] cursor-pointer hover:bg-accent"
+                    className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-md text-[11px] cursor-pointer hover:bg-accent"
                   >
                     Cancel
                   </button>
