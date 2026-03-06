@@ -7,6 +7,7 @@ import {
   Menu,
   MessageSquare,
   Moon,
+  Plus,
   ScrollText,
   Server,
   Settings,
@@ -229,29 +230,46 @@ export function Sidebar(): React.JSX.Element {
           const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0',
-                'border-l-[3px]',
-                isActive
-                  ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
-                  : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
-              )}
-            >
-              <Icon size={16} className="shrink-0" />
-              <span className="flex-1 hidden lg:inline">{item.label}</span>
-              <span
+            <div key={item.href} className="relative flex items-center group/nav">
+              <Link
+                href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm hidden lg:inline',
-                  isActive ? 'opacity-80' : 'opacity-50',
+                  'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0 flex-1',
+                  'border-l-[3px]',
+                  isActive
+                    ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
+                    : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
                 )}
               >
-                {item.shortcut}
-              </span>
-            </Link>
+                <Icon size={16} className="shrink-0" />
+                <span className="flex-1 hidden lg:inline">{item.label}</span>
+                <span
+                  className={cn(
+                    'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm hidden lg:inline',
+                    isActive ? 'opacity-80' : 'opacity-50',
+                  )}
+                >
+                  {item.shortcut}
+                </span>
+              </Link>
+              {item.href === '/sessions' && (
+                <button
+                  type="button"
+                  aria-label="Quick session"
+                  title="Quick session"
+                  onClick={() => router.push('/sessions?create=true')}
+                  className={cn(
+                    'absolute right-2 p-0.5 rounded-md transition-all duration-150',
+                    'text-muted-foreground/60 hover:text-primary hover:bg-primary/10',
+                    'opacity-0 group-hover/nav:opacity-100 focus:opacity-100',
+                    'hidden lg:flex items-center justify-center',
+                  )}
+                >
+                  <Plus size={14} />
+                </button>
+              )}
+            </div>
           );
         })}
 

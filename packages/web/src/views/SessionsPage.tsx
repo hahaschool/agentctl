@@ -199,7 +199,23 @@ export function SessionsPage(): React.JSX.Element {
   }, [statusFilter, searchQuery]);
 
   // --- New Session form state ---
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('create') === 'true';
+  });
+
+  // Clean up ?create=true from the URL after reading it
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('create') === 'true') {
+      params.delete('create');
+      const newUrl = params.toString()
+        ? `${window.location.pathname}?${params.toString()}`
+        : window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, []);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [formMachineId, setFormMachineId] = useState('');
