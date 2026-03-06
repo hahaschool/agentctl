@@ -777,8 +777,16 @@ export class CliSessionManager extends EventEmitter {
       return;
     }
 
+    // Emit raw output for terminal view consumers
+    const rawText = chunk.toString();
+    this.emitSessionEvent({
+      type: 'session_output',
+      sessionId,
+      event: { event: 'raw_output', data: { text: rawText } },
+    });
+
     const existing = this.lineBuffers.get(sessionId) ?? '';
-    const combined = existing + chunk.toString();
+    const combined = existing + rawText;
     const lines = combined.split('\n');
 
     // Keep the last incomplete line in the buffer

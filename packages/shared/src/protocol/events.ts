@@ -58,8 +58,16 @@ export type LoopCompleteEvent = {
   };
 };
 
+export type AgentRawOutputEvent = {
+  event: 'raw_output';
+  data: {
+    text: string;
+  };
+};
+
 export type AgentEvent =
   | AgentOutputEvent
+  | AgentRawOutputEvent
   | AgentStatusEvent
   | AgentCostEvent
   | AgentApprovalEvent

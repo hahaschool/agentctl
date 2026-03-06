@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { TerminalView } from '../components/TerminalView';
 import { ProgressIndicator } from '../components/ProgressIndicator';
 import { SubagentBlock } from '../components/SubagentBlock';
 import { ThinkingBlock } from '../components/ThinkingBlock';
@@ -1410,6 +1411,7 @@ function SessionContent({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [viewMode, setViewMode] = useState<'messages' | 'terminal'>('messages');
   const [showTools, setShowTools] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const [showProgress, setShowProgress] = useState(isActive ?? false);
@@ -1615,163 +1617,196 @@ function SessionContent({
     <div className="flex-1 flex flex-col min-h-0">
       {/* Controls */}
       <div className="px-5 py-1.5 border-b border-border flex justify-between items-center shrink-0">
-        <span className="text-[11px] text-muted-foreground">
-          {allMessages.length > 0 ? `${messages.length}${hasMore ? ` / ${totalMessages}` : ''} messages` : ''}
-          {isActive && (
-            <span
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex rounded-sm border border-border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode('messages')}
               className={cn(
-                'animate-pulse',
-                stream.connected ? 'text-green-500' : 'text-yellow-500',
+                'px-2 py-0.5 text-[10px] cursor-pointer transition-colors min-h-[28px] border-0',
+                viewMode === 'messages' ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
               )}
-              title={stream.connected ? 'SSE streaming live' : 'Polling every 3s'}
             >
-              &#x25CF; {stream.connected ? 'Streaming' : 'Live'}
-            </span>
-          )}
-        </span>
+              Messages
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('terminal')}
+              className={cn(
+                'px-2 py-0.5 text-[10px] cursor-pointer transition-colors min-h-[28px] border-0 border-l border-border',
+                viewMode === 'terminal' ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+              )}
+            >
+              Terminal
+            </button>
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            {viewMode === 'messages' && allMessages.length > 0 ? `${messages.length}${hasMore ? ` / ${totalMessages}` : ''} messages` : ''}
+            {isActive && (
+              <span
+                className={cn(
+                  'animate-pulse',
+                  stream.connected ? 'text-green-500' : 'text-yellow-500',
+                )}
+                title={stream.connected ? 'SSE streaming live' : 'Polling every 3s'}
+              >
+                &#x25CF; {stream.connected ? 'Streaming' : 'Live'}
+              </span>
+            )}
+          </span>
+        </div>
         <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => setShowThinking(!showThinking)}
-            aria-label={showThinking ? 'Hide thinking' : 'Show thinking'}
-            aria-pressed={showThinking}
-            className={cn(
-              'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
-              showThinking ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
-            )}
-          >
-            Thinking
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowTools(!showTools)}
-            aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
-            aria-pressed={showTools}
-            className={cn(
-              'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
-              showTools ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
-            )}
-          >
-            Tools
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowProgress(!showProgress)}
-            aria-label={showProgress ? 'Hide progress' : 'Show progress'}
-            aria-pressed={showProgress}
-            className={cn(
-              'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
-              showProgress ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
-            )}
-          >
-            Progress
-          </button>
-          <button
-            type="button"
-            onClick={() => void fetchLatest()}
-            aria-label="Refresh conversation"
-            className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer transition-colors min-h-[28px]"
-          >
-            Refresh
-          </button>
+          {viewMode === 'messages' && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowThinking(!showThinking)}
+                aria-label={showThinking ? 'Hide thinking' : 'Show thinking'}
+                aria-pressed={showThinking}
+                className={cn(
+                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
+                  showThinking ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
+                )}
+              >
+                Thinking
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTools(!showTools)}
+                aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
+                aria-pressed={showTools}
+                className={cn(
+                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
+                  showTools ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
+                )}
+              >
+                Tools
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProgress(!showProgress)}
+                aria-label={showProgress ? 'Hide progress' : 'Show progress'}
+                aria-pressed={showProgress}
+                className={cn(
+                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
+                  showProgress ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
+                )}
+              >
+                Progress
+              </button>
+              <button
+                type="button"
+                onClick={() => void fetchLatest()}
+                aria-label="Refresh conversation"
+                className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer transition-colors min-h-[28px]"
+              >
+                Refresh
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Content */}
-      <div className="relative flex-1 min-h-0">
-        <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-auto px-5 py-2">
-          {loading && (
-            <div className="p-4 space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={`msg-sk-${String(i)}`}
-                  className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
+      {viewMode === 'terminal' ? (
+        <TerminalView rawOutput={stream.rawOutput} isActive={isActive} />
+      ) : (
+        <div className="relative flex-1 min-h-0">
+          <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-auto px-5 py-2">
+            {loading && (
+              <div className="p-4 space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={`msg-sk-${String(i)}`}
+                    className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
+                  >
+                    <Skeleton className="h-3 w-16 mb-2" />
+                    <Skeleton className="h-3 w-full mb-1" />
+                    <Skeleton className="h-3 w-3/4" />
+                  </div>
+                ))}
+              </div>
+            )}
+            {error && <ErrorBanner message={error} onRetry={() => void fetchLatest()} />}
+            {allMessages.length > 0 && messages.length === 0 && !loading && (
+              <div className="p-5 text-center text-muted-foreground text-xs">No messages match current filters</div>
+            )}
+            {allMessages.length === 0 && !loading && !error && (
+              <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
+            )}
+            {/* Load older messages button */}
+            {hasMore && !loading && (
+              <div className="py-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => void fetchOlder()}
+                  disabled={loadingOlder}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline cursor-pointer disabled:opacity-50 bg-transparent border-none"
                 >
-                  <Skeleton className="h-3 w-16 mb-2" />
-                  <Skeleton className="h-3 w-full mb-1" />
-                  <Skeleton className="h-3 w-3/4" />
-                </div>
-              ))}
-            </div>
-          )}
-          {error && <ErrorBanner message={error} onRetry={() => void fetchLatest()} />}
-          {allMessages.length > 0 && messages.length === 0 && !loading && (
-            <div className="p-5 text-center text-muted-foreground text-xs">No messages match current filters</div>
-          )}
-          {allMessages.length === 0 && !loading && !error && (
-            <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
-          )}
-          {/* Load older messages button */}
-          {hasMore && !loading && (
-            <div className="py-2 text-center">
-              <button
-                type="button"
-                onClick={() => void fetchOlder()}
-                disabled={loadingOlder}
-                className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline cursor-pointer disabled:opacity-50 bg-transparent border-none"
+                  {loadingOlder
+                    ? 'Loading...'
+                    : `Load older messages (${totalMessages - allMessages.length} more)`}
+                </button>
+              </div>
+            )}
+            {messages.map((msg, i) => {
+              switch (msg.type) {
+                case 'thinking':
+                  return <ThinkingBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
+                case 'progress':
+                  return <ProgressIndicator key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} timestamp={msg.timestamp} />;
+                case 'subagent':
+                  return <SubagentBlock key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} subagentId={(msg as Record<string, unknown>).subagentId as string | undefined} timestamp={msg.timestamp} />;
+                case 'todo':
+                  return <TodoBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
+                default:
+                  return <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />;
+              }
+            })}
+
+            {/* Optimistic messages */}
+            {optimisticMessages.map((om) => (
+              <div
+                key={om.id}
+                className="mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2 border-blue-500/50 bg-blue-500/10"
               >
-                {loadingOlder
-                  ? 'Loading...'
-                  : `Load older messages (${totalMessages - allMessages.length} more)`}
-              </button>
-            </div>
-          )}
-          {messages.map((msg, i) => {
-            switch (msg.type) {
-              case 'thinking':
-                return <ThinkingBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
-              case 'progress':
-                return <ProgressIndicator key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} timestamp={msg.timestamp} />;
-              case 'subagent':
-                return <SubagentBlock key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} subagentId={(msg as Record<string, unknown>).subagentId as string | undefined} timestamp={msg.timestamp} />;
-              case 'todo':
-                return <TodoBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
-              default:
-                return <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />;
-            }
-          })}
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-[10px] font-semibold text-blue-400">You</span>
+                  <span className="text-[9px] text-blue-400/70 animate-pulse">sending...</span>
+                </div>
+                <div className="text-xs text-foreground whitespace-pre-wrap break-words">
+                  {om.text}
+                </div>
+              </div>
+            ))}
 
-          {/* Optimistic messages */}
-          {optimisticMessages.map((om) => (
-            <div
-              key={om.id}
-              className="mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2 border-blue-500/50 bg-blue-500/10"
+            {/* Live streaming output */}
+            {stream.connected && stream.streamOutput.length > 0 && (
+              <div className="rounded-sm border border-green-500/20 bg-green-950/20 px-2.5 py-1.5 mb-1.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[9px] font-semibold text-green-500">Streaming</span>
+                </div>
+                <AnsiText className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto m-0">
+                  {stream.streamOutput.join('')}
+                </AnsiText>
+              </div>
+            )}
+          </div>
+
+          {/* Floating scroll-to-bottom button */}
+          {userScrolledUp && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              className="absolute bottom-3 right-5 px-3 py-1.5 bg-primary text-white text-[11px] rounded-full shadow-lg cursor-pointer opacity-90 hover:opacity-100 transition-opacity z-10"
             >
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-[10px] font-semibold text-blue-400">You</span>
-                <span className="text-[9px] text-blue-400/70 animate-pulse">sending...</span>
-              </div>
-              <div className="text-xs text-foreground whitespace-pre-wrap break-words">
-                {om.text}
-              </div>
-            </div>
-          ))}
-
-          {/* Live streaming output */}
-          {stream.connected && stream.streamOutput.length > 0 && (
-            <div className="rounded-sm border border-green-500/20 bg-green-950/20 px-2.5 py-1.5 mb-1.5">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-[9px] font-semibold text-green-500">Streaming</span>
-              </div>
-              <AnsiText className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto m-0">
-                {stream.streamOutput.join('')}
-              </AnsiText>
-            </div>
+              Scroll to bottom
+            </button>
           )}
         </div>
-
-        {/* Floating scroll-to-bottom button */}
-        {userScrolledUp && (
-          <button
-            type="button"
-            onClick={scrollToBottom}
-            className="absolute bottom-3 right-5 px-3 py-1.5 bg-primary text-white text-[11px] rounded-full shadow-lg cursor-pointer opacity-90 hover:opacity-100 transition-opacity z-10"
-          >
-            Scroll to bottom
-          </button>
-        )}
-      </div>
+      )}
     </div>
   );
 }

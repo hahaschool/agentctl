@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type SessionStreamEvent =
   | { event: 'output'; data: { text: string; stream?: string } }
+  | { event: 'raw_output'; data: { text: string } }
   | { event: 'user_message'; data: { text: string } }
   | { event: 'status'; data: { status: string; sessionId?: string } }
   | { event: 'cost'; data: { totalCostUsd: number; inputTokens: number; outputTokens: number } }
@@ -34,6 +35,8 @@ type UseSessionStreamResult = {
   connected: boolean;
   /** Accumulated output text from the stream. */
   streamOutput: string[];
+  /** Raw CLI output chunks for terminal view. */
+  rawOutput: string[];
   /** User messages received via SSE (shown before JSONL poll catches up). */
   pendingUserMessages: string[];
   /** Latest status event, if any. */
@@ -59,6 +62,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
   const [connected, setConnected] = useState(false);
   const [streamOutput, setStreamOutput] = useState<string[]>([]);
+  const [rawOutput, setRawOutput] = useState<string[]>([]);
   const [pendingUserMessages, setPendingUserMessages] = useState<string[]>([]);
   const [latestStatus, setLatestStatus] = useState<string | null>(null);
   const [latestCost, setLatestCost] = useState<{
@@ -77,6 +81,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
   // Reset state when sessionId changes
   const resetState = useCallback(() => {
     setStreamOutput([]);
+    setRawOutput([]);
     setPendingUserMessages([]);
     setLatestStatus(null);
     setLatestCost(null);
@@ -136,7 +141,12 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
           onEventRef.current?.(event);
 
-          if (eventType === 'output') {
+          if (eventType === 'raw_output') {
+            const text = (data as { text?: string }).text;
+            if (text) {
+              setRawOutput((prev) => [...prev, text]);
+            }
+          } else if (eventType === 'output') {
             const text = (data as { text?: string }).text;
             if (text) {
               setStreamOutput((prev) => [...prev, text]);
@@ -159,6 +169,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       };
 
       es.addEventListener('output', handleEvent('output'));
+      es.addEventListener('raw_output', handleEvent('raw_output'));
       es.addEventListener('user_message', handleEvent('user_message'));
       es.addEventListener('status', handleEvent('status'));
       es.addEventListener('cost', handleEvent('cost'));
@@ -195,5 +206,5 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     setPendingUserMessages([]);
   }, []);
 
-  return { connected, streamOutput, pendingUserMessages, latestStatus, latestCost, clearStreamOutput, clearPendingMessages };
+  return { connected, streamOutput, rawOutput, pendingUserMessages, latestStatus, latestCost, clearStreamOutput, clearPendingMessages };
 }
