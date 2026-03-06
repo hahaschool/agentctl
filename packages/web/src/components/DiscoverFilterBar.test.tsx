@@ -197,7 +197,7 @@ describe('DiscoverFilterBar', () => {
     );
     const machineSelect = screen.getByText('Machine:').parentElement?.querySelector('select');
     expect(machineSelect).not.toBeNull();
-    fireEvent.change(machineSelect!, { target: { value: 'a' } });
+    if (machineSelect) fireEvent.change(machineSelect, { target: { value: 'a' } });
     expect(onMachineFilterChange).toHaveBeenCalledWith('a');
   });
 

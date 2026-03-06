@@ -206,7 +206,7 @@ describe('DiscoverSessionGroup', () => {
     // The header is a button
     const headerBtn = screen.getByText('project').closest('button');
     expect(headerBtn).not.toBeNull();
-    fireEvent.click(headerBtn!);
+    if (headerBtn) fireEvent.click(headerBtn);
     expect(onToggleGroup).toHaveBeenCalledWith('/home/user/project');
   });
 

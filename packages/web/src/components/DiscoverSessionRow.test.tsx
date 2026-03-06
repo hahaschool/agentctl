@@ -130,7 +130,7 @@ describe('DiscoverSessionRow', () => {
   // Branch badge
   // -------------------------------------------------------------------------
   it('does not render branch badge when branch is null', () => {
-    const { container } = render(
+    render(
       <DiscoverSessionRow {...defaultProps({ session: makeSession({ branch: null }) })} />,
     );
     const tooltips = screen.getAllByTestId('simple-tooltip');
