@@ -362,13 +362,15 @@ describe('CliSessionManager', () => {
       mockChild.pushStdout('{"type":"assistant","content":[{"type":"text","text":"Hello!"}]}\n');
       await tick();
 
-      expect(events).toHaveLength(1);
-      expect(events[0].type).toBe('session_output');
-      if (events[0].type === 'session_output') {
-        expect(events[0].event.event).toBe('output');
-        if (events[0].event.event === 'output') {
-          expect(events[0].event.data.type).toBe('text');
-          expect(events[0].event.data.content).toBe('Hello!');
+      // Filter out raw_output events (emitted for terminal view)
+      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].type).toBe('session_output');
+      if (parsed[0].type === 'session_output') {
+        expect(parsed[0].event.event).toBe('output');
+        if (parsed[0].event.event === 'output') {
+          expect(parsed[0].event.data.type).toBe('text');
+          expect(parsed[0].event.data.content).toBe('Hello!');
         }
       }
     });
@@ -384,15 +386,16 @@ describe('CliSessionManager', () => {
       );
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         expect(agentEvent.event).toBe('output');
         if (agentEvent.event === 'output') {
           expect(agentEvent.data.type).toBe('tool_use');
-          const parsed = JSON.parse(agentEvent.data.content);
-          expect(parsed.tool).toBe('Read');
-          expect(parsed.input.file_path).toBe('/tmp/test.ts');
+          const toolData = JSON.parse(agentEvent.data.content);
+          expect(toolData.tool).toBe('Read');
+          expect(toolData.input.file_path).toBe('/tmp/test.ts');
         }
       }
     });
@@ -406,9 +409,10 @@ describe('CliSessionManager', () => {
       mockChild.pushStdout('{"type":"tool_result","content":"file contents here"}\n');
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         if (agentEvent.event === 'output') {
           expect(agentEvent.data.type).toBe('tool_result');
           expect(agentEvent.data.content).toBe('file contents here');
@@ -463,9 +467,10 @@ describe('CliSessionManager', () => {
       );
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         expect(agentEvent.event).toBe('approval_needed');
         if (agentEvent.event === 'approval_needed') {
           expect(agentEvent.data.tool).toBe('Bash');
@@ -486,7 +491,9 @@ describe('CliSessionManager', () => {
       mockChild.pushStdout('nt":"Hello"}\n{"type":"assistant","content":"World"}\n');
       await tick();
 
-      expect(events).toHaveLength(2);
+      // Filter out raw_output events (emitted for terminal view)
+      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      expect(parsed).toHaveLength(2);
     });
 
     it('handles non-JSON lines gracefully', async () => {
@@ -498,9 +505,10 @@ describe('CliSessionManager', () => {
       mockChild.pushStdout('Some non-JSON text\n');
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         if (agentEvent.event === 'output') {
           expect(agentEvent.data.content).toBe('Some non-JSON text');
         }
