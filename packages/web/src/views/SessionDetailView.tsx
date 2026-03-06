@@ -461,6 +461,11 @@ function SessionHeader({
           items={[{ label: 'Sessions', href: '/sessions' }, { label: session.id.slice(0, 12) }]}
         />
         <StatusBadge status={session.status} />
+        {session.agentName && (
+          <span className="text-[11px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-sm border border-border">
+            {session.agentName}
+          </span>
+        )}
         {session.status === 'active' && (
           <output
             className={cn(
@@ -638,9 +643,9 @@ function SessionHeader({
             <LiveDuration startedAt={session.startedAt} />
           </span>
         )}
-        {streamCost && (
+        {(streamCost || session.metadata?.costUsd) && (
           <span className="font-mono bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-sm border border-amber-500/30">
-            ${streamCost.totalCostUsd.toFixed(4)}
+            ${(streamCost?.totalCostUsd ?? session.metadata?.costUsd ?? 0).toFixed(4)}
           </span>
         )}
       </div>

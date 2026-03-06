@@ -135,10 +135,17 @@ export function TerminalView({ rawOutput, isActive, className }: TerminalViewPro
         ref={containerRef}
         className="absolute inset-0 bg-[#0a0a0a]"
       />
-      {isActive && (
+      {isActive && rawOutput.length > 0 && (
         <div className="absolute top-2 right-3 flex items-center gap-1.5 z-10">
           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           <span className="text-[9px] font-semibold text-green-500">Live</span>
+        </div>
+      )}
+      {rawOutput.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <span className={cn('text-[12px] text-zinc-500', isActive && 'animate-pulse')}>
+            {isActive ? 'Waiting for terminal output...' : 'No terminal output'}
+          </span>
         </div>
       )}
     </div>

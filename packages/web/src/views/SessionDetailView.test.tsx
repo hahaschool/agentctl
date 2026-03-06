@@ -920,7 +920,8 @@ describe('SessionDetailView', () => {
 
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('$0.0523')).toBeDefined();
+      // Cost may appear in both the header and metadata badges
+      expect(screen.getAllByText('$0.0523').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText(/5,000 in/)).toBeDefined();
       expect(screen.getByText(/2,000 out/)).toBeDefined();
     });
