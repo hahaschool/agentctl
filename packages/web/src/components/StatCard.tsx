@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react';
+import React from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -21,7 +22,7 @@ const ACCENT_CLASSES: Record<string, string> = {
   purple: 'border-l-purple-500/60',
 };
 
-export function StatCard({ label, value, sublabel, accent, tooltip }: Props): React.JSX.Element {
+function StatCardBase({ label, value, sublabel, accent, tooltip }: Props): React.JSX.Element {
   return (
     <div
       data-testid={`stat-card-${label}`}
@@ -60,3 +61,5 @@ export function StatCard({ label, value, sublabel, accent, tooltip }: Props): Re
     </div>
   );
 }
+
+export const StatCard = React.memo(StatCardBase);

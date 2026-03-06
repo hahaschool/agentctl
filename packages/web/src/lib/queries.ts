@@ -346,8 +346,12 @@ export function useCreateAccount() {
 export function useUpdateAccount() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string } & Partial<Pick<import('./api').ApiAccount, 'name' | 'priority' | 'isActive'>>) =>
-      api.updateAccount(id, body),
+    mutationFn: ({
+      id,
+      ...body
+    }: { id: string } & Partial<
+      Pick<import('./api').ApiAccount, 'name' | 'priority' | 'isActive'>
+    >) => api.updateAccount(id, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.accounts });
     },

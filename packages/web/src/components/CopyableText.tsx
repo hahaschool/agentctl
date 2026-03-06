@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Copy } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { useToast } from './Toast';
@@ -13,12 +13,7 @@ type Props = {
   className?: string;
 };
 
-export function CopyableText({
-  value,
-  maxDisplay = 8,
-  label,
-  className,
-}: Props): React.JSX.Element {
+function CopyableTextBase({ value, maxDisplay = 8, label, className }: Props): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useToast();
@@ -71,3 +66,5 @@ export function CopyableText({
     </button>
   );
 }
+
+export const CopyableText = React.memo(CopyableTextBase);

@@ -1,5 +1,4 @@
-import type React from 'react';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { Session } from '../lib/api';
@@ -58,7 +57,7 @@ function LiveDuration({
 // SessionListItem
 // ---------------------------------------------------------------------------
 
-export function SessionListItem({
+function SessionListItemBase({
   session: s,
   isSelected,
   isFocused,
@@ -163,3 +162,5 @@ export function SessionListItem({
     </div>
   );
 }
+
+export const SessionListItem = React.memo(SessionListItemBase);

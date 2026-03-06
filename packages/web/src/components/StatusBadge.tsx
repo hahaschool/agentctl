@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +28,7 @@ const STATUS_VARIANTS: Record<string, string> = {
 
 const PULSE_STATUSES = new Set(['running', 'active', 'starting', 'online', 'restarting']);
 
-export function StatusBadge({ status }: { status: string }): React.JSX.Element {
+function StatusBadgeBase({ status }: { status: string }): React.JSX.Element {
   const variant = STATUS_VARIANTS[status] ?? 'bg-muted text-muted-foreground';
   const shouldPulse = PULSE_STATUSES.has(status);
 
@@ -42,3 +44,5 @@ export function StatusBadge({ status }: { status: string }): React.JSX.Element {
     </Badge>
   );
 }
+
+export const StatusBadge = React.memo(StatusBadgeBase);
