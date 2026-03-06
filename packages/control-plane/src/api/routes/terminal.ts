@@ -72,12 +72,66 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
 
   app.post<{
     Params: { machineId: string };
-    Body: Record<string, unknown>;
+    Body: {
+      id?: unknown;
+      command?: unknown;
+      args?: unknown;
+      cols?: unknown;
+      rows?: unknown;
+      cwd?: unknown;
+    };
   }>(
     '/:machineId/terminal',
     { schema: { tags: ['terminal'], summary: 'Spawn a terminal on a worker machine' } },
     async (request, reply) => {
       const { machineId } = request.params;
+      const body = request.body ?? {};
+
+      // --- input validation ---
+      if (!body.id || typeof body.id !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_TERMINAL_ID',
+          message: 'Request body must include a non-empty "id" string field',
+        });
+      }
+
+      if (body.command !== undefined && typeof body.command !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_COMMAND',
+          message: '"command" must be a string',
+        });
+      }
+
+      if (body.args !== undefined) {
+        if (!Array.isArray(body.args) || body.args.some((a: unknown) => typeof a !== 'string')) {
+          return reply.status(400).send({
+            error: 'INVALID_ARGS',
+            message: '"args" must be an array of strings',
+          });
+        }
+      }
+
+      if (body.cols !== undefined && (typeof body.cols !== 'number' || body.cols < 1)) {
+        return reply.status(400).send({
+          error: 'INVALID_DIMENSIONS',
+          message: '"cols" must be a positive number',
+        });
+      }
+
+      if (body.rows !== undefined && (typeof body.rows !== 'number' || body.rows < 1)) {
+        return reply.status(400).send({
+          error: 'INVALID_DIMENSIONS',
+          message: '"rows" must be a positive number',
+        });
+      }
+
+      if (body.cwd !== undefined && typeof body.cwd !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_CWD',
+          message: '"cwd" must be a string',
+        });
+      }
+
       const workerBaseUrl = await resolveWorker(machineId);
       const url = `${workerBaseUrl}/api/terminal`;
 

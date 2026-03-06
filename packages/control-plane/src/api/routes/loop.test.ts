@@ -272,6 +272,61 @@ describe('Loop proxy routes — with dbRegistry', () => {
     expect(body.error).toBe('AGENT_NOT_FOUND');
   });
 
+  it('POST /api/agents/:id/loop returns 400 when prompt is missing', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { config: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_PROMPT');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when prompt is empty', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: '', config: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_PROMPT');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when prompt exceeds 32000 chars', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: 'x'.repeat(32_001), config: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('PROMPT_TOO_LONG');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when config is not an object', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: 'Do work', config: 'not-an-object' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_CONFIG');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when config is an array', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: 'Do work', config: [1, 2, 3] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_CONFIG');
+  });
+
   it('PUT /api/agents/:id/loop returns 400 for invalid action', async () => {
     const response = await app.inject({
       method: 'PUT',

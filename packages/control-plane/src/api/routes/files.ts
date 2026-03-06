@@ -13,6 +13,7 @@ import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 const FILE_REQUEST_TIMEOUT_MS = 10_000;
+const MAX_FILE_CONTENT_LENGTH = 5_000_000; // 5 MB
 
 export type FileProxyRoutesOptions = {
   dbRegistry: DbAgentRegistry;
@@ -133,7 +134,10 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
     Body: { path?: string; content?: string };
   }>(
     '/:machineId/files/content',
-    { schema: { tags: ['files'], summary: 'Write file content on a worker machine' } },
+    {
+      schema: { tags: ['files'], summary: 'Write file content on a worker machine' },
+      bodyLimit: MAX_FILE_CONTENT_LENGTH + 1_000_000, // allow JSON overhead above the content limit
+    },
     async (request, reply) => {
       const { machineId } = request.params;
       const body = request.body ?? {};
@@ -149,6 +153,13 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
         return reply.code(400).send({
           error: 'INVALID_CONTENT',
           message: 'Request body must include a "content" string field',
+        });
+      }
+
+      if (body.content.length > MAX_FILE_CONTENT_LENGTH) {
+        return reply.code(400).send({
+          error: 'CONTENT_TOO_LARGE',
+          message: `File content length ${body.content.length} exceeds maximum of ${MAX_FILE_CONTENT_LENGTH} bytes`,
         });
       }
 

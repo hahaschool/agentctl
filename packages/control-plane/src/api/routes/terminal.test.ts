@@ -186,7 +186,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/machines/machine-1/terminal',
-        payload: { shell: '/bin/zsh', cols: 120, rows: 40 },
+        payload: { id: 'term-new', command: '/bin/zsh', cols: 120, rows: 40 },
       });
 
       expect(res.statusCode).toBe(200);
@@ -200,13 +200,90 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       );
     });
 
+    it('returns 400 when id is missing', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal',
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_TERMINAL_ID');
+    });
+
+    it('returns 400 when id is empty string', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal',
+        payload: { id: '' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_TERMINAL_ID');
+    });
+
+    it('returns 400 when command is not a string', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal',
+        payload: { id: 'term-1', command: 123 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_COMMAND');
+    });
+
+    it('returns 400 when args contains non-string values', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal',
+        payload: { id: 'term-1', args: [1, 2] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_ARGS');
+    });
+
+    it('returns 400 when cols is not a positive number', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal',
+        payload: { id: 'term-1', cols: -5 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_DIMENSIONS');
+    });
+
+    it('returns 400 when rows is not a positive number', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal',
+        payload: { id: 'term-1', rows: 0 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_DIMENSIONS');
+    });
+
+    it('returns 400 when cwd is not a string', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/machines/machine-1/terminal',
+        payload: { id: 'term-1', cwd: 42 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_CWD');
+    });
+
     it('returns 500 when machine is not found', async () => {
       vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce(undefined as never);
 
       const res = await app.inject({
         method: 'POST',
         url: '/api/machines/unknown/terminal',
-        payload: {},
+        payload: { id: 'term-1' },
       });
 
       expect(res.statusCode).toBe(500);
@@ -219,7 +296,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/machines/machine-1/terminal',
-        payload: { shell: '/bin/invalid' },
+        payload: { id: 'term-1', command: '/bin/invalid' },
       });
 
       expect(res.statusCode).toBe(400);
@@ -232,7 +309,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/machines/machine-1/terminal',
-        payload: {},
+        payload: { id: 'term-1' },
       });
 
       expect(res.statusCode).toBe(500);

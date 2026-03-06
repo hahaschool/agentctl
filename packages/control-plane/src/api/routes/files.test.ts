@@ -270,6 +270,16 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
       expect(res.json().error).toBe('INVALID_CONTENT');
     });
 
+    it('returns 400 when content exceeds 5 MB', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/machines/machine-1/files/content',
+        payload: { path: '/tmp/test.ts', content: 'x'.repeat(5_000_001) },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('CONTENT_TOO_LARGE');
+    });
+
     it('proxies file write to worker', async () => {
       const mockBody = { ok: true };
       mockFetchOk(mockBody);

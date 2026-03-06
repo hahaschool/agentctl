@@ -25,13 +25,35 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
   // POST /api/agents/:id/loop — Start a loop (proxy to worker)
   app.post<{
     Params: { id: string };
-    Body: { prompt: string; config: Record<string, unknown> };
+    Body: { prompt?: unknown; config?: unknown };
     Querystring: { workerUrl?: string; machineId?: string };
   }>(
     '/:id/loop',
     { schema: { tags: ['agents'], summary: 'Start an agent loop' } },
     async (request, reply) => {
       const agentId = request.params.id;
+      const body = request.body ?? {};
+
+      if (!body.prompt || typeof body.prompt !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_PROMPT',
+          message: 'Request body must include a non-empty "prompt" string',
+        });
+      }
+
+      if ((body.prompt as string).length > 32_000) {
+        return reply.status(400).send({
+          error: 'PROMPT_TOO_LONG',
+          message: `Prompt length ${(body.prompt as string).length} exceeds maximum of 32000 characters`,
+        });
+      }
+
+      if (body.config !== undefined && (typeof body.config !== 'object' || body.config === null || Array.isArray(body.config))) {
+        return reply.status(400).send({
+          error: 'INVALID_CONFIG',
+          message: '"config" must be a plain object',
+        });
+      }
 
       const resolved = await resolveWorkerUrl(agentId, request.query, {
         registry,
