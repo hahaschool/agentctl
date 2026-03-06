@@ -37,6 +37,7 @@ import { api } from '../lib/api';
 import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
+import { STORAGE_KEYS } from '../lib/storage-keys';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -223,7 +224,7 @@ export function SessionsPage(): React.JSX.Element {
   const [formPrompt, setFormPrompt] = useState('');
   const [formModel, setFormModel] = useState(
     () =>
-      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ?? '',
+      (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DEFAULT_MODEL) : null) ?? '',
   );
   const [formAccountId, setFormAccountId] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -268,7 +269,6 @@ export function SessionsPage(): React.JSX.Element {
         }
       })
       .catch((err: unknown) => {
-        console.warn('Failed to load machines:', err);
         setMachines([]);
         toast.error(`Failed to load machines: ${err instanceof Error ? err.message : String(err)}`);
       })
@@ -282,7 +282,7 @@ export function SessionsPage(): React.JSX.Element {
     setFormProjectPath('');
     setFormPrompt('');
     setFormModel(
-      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ?? '',
+      (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DEFAULT_MODEL) : null) ?? '',
     );
     setFormAccountId('');
     setFormError(null);

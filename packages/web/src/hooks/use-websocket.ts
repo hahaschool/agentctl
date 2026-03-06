@@ -304,11 +304,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
     }
     queue.push(message);
 
-    console.warn(
-      `[useWebSocket] Message queued (type=${message.type}, queue size=${queue.length}). ` +
-        'WebSocket is not connected — will flush on reconnect.',
-    );
-
     return false;
   }, []);
 

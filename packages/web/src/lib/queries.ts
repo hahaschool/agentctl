@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './api';
+import { STORAGE_KEYS } from './storage-keys';
 
 // ---------------------------------------------------------------------------
 // Helpers — read user preferences from localStorage
@@ -8,7 +9,7 @@ import { api } from './api';
 
 function getRefetchInterval(): number | false {
   if (typeof window === 'undefined') return 10_000;
-  const raw = localStorage.getItem('agentctl:autoRefreshInterval');
+  const raw = localStorage.getItem(STORAGE_KEYS.AUTO_REFRESH_INTERVAL);
   const ms = raw ? Number(raw) : 10_000;
   return ms > 0 ? ms : false;
 }

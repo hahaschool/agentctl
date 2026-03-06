@@ -12,13 +12,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import { STORAGE_KEYS } from '../lib/storage-keys';
+
 // ---------------------------------------------------------------------------
 // localStorage keys & defaults
 // ---------------------------------------------------------------------------
 
-const LS_DEFAULT_MODEL = 'agentctl:defaultModel';
-const LS_AUTO_REFRESH = 'agentctl:autoRefreshInterval';
-const LS_MAX_MESSAGES = 'agentctl:maxDisplayMessages';
+const LS_DEFAULT_MODEL = STORAGE_KEYS.DEFAULT_MODEL;
+const LS_AUTO_REFRESH = STORAGE_KEYS.AUTO_REFRESH_INTERVAL;
+const LS_MAX_MESSAGES = STORAGE_KEYS.MAX_DISPLAY_MESSAGES;
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const MODEL_OPTIONS = [

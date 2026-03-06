@@ -47,6 +47,7 @@ import {
   useStopAgent,
   useUpdateAgent,
 } from '../lib/queries';
+import { STORAGE_KEYS } from '../lib/storage-keys';
 
 const AGENT_TYPES = [
   { value: 'adhoc', label: 'Ad-hoc', desc: 'One-shot task, runs once then stops' },
@@ -91,7 +92,7 @@ function shortPath(fullPath: string): string {
 /** Pick the first online machine, or fallback to last-used, or first available */
 function pickDefaultMachine(machines: Machine[]): string {
   const lastUsed =
-    typeof window !== 'undefined' ? localStorage.getItem('agentctl:lastMachineId') : null;
+    typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.LAST_MACHINE_ID) : null;
   const online = machines.filter((m) => m.status === 'online');
   if (lastUsed && machines.some((m) => m.id === lastUsed)) return lastUsed;
   if (online.length > 0) return online[0]!.id;
@@ -134,7 +135,7 @@ export function AgentsPage(): React.JSX.Element {
   const [createType, setCreateType] = useState<string>('adhoc');
   const [createModel, setCreateModel] = useState(
     () =>
-      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
+      (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DEFAULT_MODEL) : null) ??
       DEFAULT_MODEL,
   );
   const [createSchedule, setCreateSchedule] = useState('');
@@ -273,7 +274,7 @@ export function AgentsPage(): React.JSX.Element {
     setCreateMachineId('');
     setCreateType('adhoc');
     setCreateModel(
-      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
+      (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DEFAULT_MODEL) : null) ??
         DEFAULT_MODEL,
     );
     setCreateProjectPath('');
@@ -377,7 +378,7 @@ export function AgentsPage(): React.JSX.Element {
     // Remember last-used machine
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('agentctl:lastMachineId', createMachineId);
+        localStorage.setItem(STORAGE_KEYS.LAST_MACHINE_ID, createMachineId);
       } catch {
         // localStorage may throw in private browsing or when quota is exceeded
       }
