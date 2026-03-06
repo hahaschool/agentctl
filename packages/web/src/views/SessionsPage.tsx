@@ -600,7 +600,7 @@ export function SessionsPage(): React.JSX.Element {
           // Mobile: full width, hidden when a session is selected
           selected ? 'hidden md:flex' : 'flex w-full',
           // Desktop: fixed sidebar width
-          'md:w-[340px] md:min-w-[340px]',
+          'md:w-[340px] md:min-w-[340px] md:max-w-[340px] overflow-hidden',
         )}
       >
         <div className="px-3 pt-3 pb-2 border-b border-border">
@@ -1680,7 +1680,14 @@ function SessionContent({
     if (allMessages.length > 0 && scrollRef.current && !prependingRef.current) {
       const newCount = allMessages.length;
       if (newCount > prevMsgCountRef.current && autoScroll) {
-        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+        const isInitialLoad = prevMsgCountRef.current === 0;
+        // Use instant scroll on initial load so user sees the latest messages immediately
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollTo({
+            top: scrollRef.current?.scrollHeight ?? 0,
+            behavior: isInitialLoad ? 'instant' : 'smooth',
+          });
+        });
       }
       prevMsgCountRef.current = newCount;
     }

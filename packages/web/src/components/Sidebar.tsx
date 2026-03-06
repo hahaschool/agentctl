@@ -251,51 +251,48 @@ export function Sidebar(): React.JSX.Element {
 
         <div className="flex-1" />
 
-        <div className="px-5 py-2 text-[11px] text-muted-foreground leading-relaxed hidden md:block">
-          <div className="mb-0.5 font-medium text-[10px] text-muted-foreground/70">Shortcuts</div>
-          <div>
-            <Kbd>1</Kbd>-<Kbd>7</Kbd> Navigate
+        {/* Bottom section */}
+        <div className="hidden md:block border-t border-border px-4 py-3 space-y-2.5">
+          {/* Connection + Notifications row */}
+          <div className="flex items-center gap-3">
+            <WsStatusIndicator status={wsStatus} compact />
+            <div className="flex-1" />
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkRead={markRead}
+              onMarkAllRead={markAllRead}
+              onClearAll={clearAll}
+            />
+            {unreadCount > 0 && (
+              <span className="text-[10px] text-primary font-medium">{unreadCount}</span>
+            )}
           </div>
-          <div>
-            <Kbd>{'\u2318'}K</Kbd> Command palette
+
+          {/* Keyboard hints */}
+          <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex flex-wrap gap-x-3 gap-y-0.5">
+            <span><Kbd>1</Kbd>-<Kbd>7</Kbd> Nav</span>
+            <span><Kbd>{'\u2318'}K</Kbd> Search</span>
+            <span><Kbd>?</Kbd> Help</span>
           </div>
-          <div>
-            <Kbd>Esc</Kbd> Close panels
+
+          {/* Version + theme */}
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground/50">v0.1.0</span>
+            {mounted ? (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="text-muted-foreground/60 hover:text-foreground transition-colors p-1 rounded-sm hover:bg-muted"
+                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              >
+                {theme === 'dark' ? <Moon size={13} /> : <Sun size={13} />}
+              </button>
+            ) : (
+              <span className="w-6 h-5" />
+            )}
           </div>
-        </div>
-
-        <div className="px-5 py-1.5 border-t border-border hidden md:flex items-center gap-2">
-          <WsStatusIndicator status={wsStatus} compact />
-        </div>
-
-        <div className="px-5 py-1.5 border-t border-border hidden md:flex items-center">
-          <NotificationBell
-            notifications={notifications}
-            unreadCount={unreadCount}
-            onMarkRead={markRead}
-            onMarkAllRead={markAllRead}
-            onClearAll={clearAll}
-          />
-          <span className="ml-2 text-[11px] text-muted-foreground">
-            {unreadCount > 0 ? `${unreadCount} new` : 'Notifications'}
-          </span>
-        </div>
-
-        <div className="px-5 py-2.5 border-t border-border flex items-center justify-between">
-          <span className="text-[11px] text-muted-foreground">AgentCTL v0.1.0</span>
-          {mounted ? (
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="text-muted-foreground hover:text-foreground transition-colors duration-150 p-1 rounded-sm hover:bg-muted"
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            >
-              {theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
-            </button>
-          ) : (
-            <span className="w-6 h-5" />
-          )}
         </div>
       </nav>
 
