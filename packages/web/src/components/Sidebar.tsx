@@ -37,6 +37,13 @@ type NavItem = {
   shortcut: string;
 };
 
+const SIDEBAR_SIDEBAR_GO_MAP: Record<string, string> = {
+  d: '/',
+  s: '/sessions',
+  a: '/agents',
+  m: '/machines',
+};
+
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1' },
   { href: '/machines', label: 'Machines', icon: Server, shortcut: '2' },
@@ -99,12 +106,6 @@ export function Sidebar(): React.JSX.Element {
   const pendingKeyRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const GO_MAP: Record<string, string> = {
-    d: '/',
-    s: '/sessions',
-    a: '/agents',
-    m: '/machines',
-  };
 
   // Keyboard shortcuts: 1-7 to navigate pages, Cmd+K for command palette, Esc to close
   useEffect(() => {
@@ -126,7 +127,7 @@ export function Sidebar(): React.JSX.Element {
           clearTimeout(pendingTimerRef.current);
           pendingTimerRef.current = null;
         }
-        const goHref = GO_MAP[e.key];
+        const goHref = SIDEBAR_GO_MAP[e.key];
         if (goHref) {
           e.preventDefault();
           router.push(goHref);

@@ -188,10 +188,10 @@ export const FileBrowser = React.memo(function FileBrowser({ machineId, initialP
     [machineId],
   );
 
-  // Load initial directory
+  // Load initial directory — intentionally only runs on machineId change (not on currentPath/loadDirectory changes)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initial load only
   useEffect(() => {
     void loadDirectory(currentPath);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [machineId]);
 
   // -------------------------------------------------------------------------

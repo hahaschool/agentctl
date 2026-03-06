@@ -257,7 +257,7 @@ export function SessionDetailView(): React.JSX.Element {
       .map((msg) => {
         switch (msg.type) {
           case 'assistant':
-            return msg.content + '\n';
+            return `${msg.content}\n`;
           case 'tool_use':
             return `\x1b[36m⚡ ${msg.toolName ?? 'tool'}\x1b[0m\n${msg.content}\n`;
           case 'tool_result':
@@ -1912,6 +1912,7 @@ function MessageInput({
     onOptimisticSend,
     isSessionLostError,
     markSessionLost,
+    resumeModel,
     toast,
     queryClient,
   ]);
@@ -2039,6 +2040,7 @@ function MessageInput({
               className="relative group flex items-center gap-1.5 px-2 py-1 bg-muted border border-border rounded-md text-[11px]"
             >
               {a.type === 'image' && a.previewUrl ? (
+                // biome-ignore lint/performance/noImgElement: dynamic blob URL preview, not suitable for next/image
                 <img src={a.previewUrl} alt={a.name} className="w-8 h-8 object-cover rounded-sm" />
               ) : (
                 <svg

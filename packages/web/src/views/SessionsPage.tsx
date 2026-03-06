@@ -125,8 +125,8 @@ export function SessionsPage(): React.JSX.Element {
       const dedupedSessions = newSessions.filter((s) => !existingIds.has(s.id));
       return [...prev, ...dedupedSessions];
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions.data]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: offset is intentionally read from state inside setter callback context
+  }, [sessions.data, offset]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -170,6 +170,7 @@ export function SessionsPage(): React.JSX.Element {
 
   // Reset pagination when filter or search changes so we don't stay on a stale page.
   // Also clear bulk selection when filters change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional trigger values
   useEffect(() => {
     setOffset(0);
     setCheckedIds(new Set());
@@ -251,7 +252,7 @@ export function SessionsPage(): React.JSX.Element {
       .finally(() => {
         setMachinesLoading(false);
       });
-  }, [showCreateForm]);
+  }, [showCreateForm, toast]);
 
   const resetForm = useCallback(() => {
     setFormMachineId('');
@@ -403,6 +404,7 @@ export function SessionsPage(): React.JSX.Element {
   }, [filteredSessions, groupBy]);
 
   // Reset keyboard focus when the visible list changes (filter/search/sort)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional trigger values
   useEffect(() => {
     setFocusedIndex(-1);
   }, [statusFilter, searchQuery, sortOrder, hideEmpty, groupBy]);

@@ -292,7 +292,8 @@ export function DiscoverPage(): React.JSX.Element {
     }
   }, [allExpanded, groups]);
 
-  // Clear selection when filters change
+  // Clear selection when filters change — deps are intentionally the filter values, not setSelectedIds
+  // biome-ignore lint/correctness/useExhaustiveDependencies: effect intentionally tracks filter values
   useEffect(() => {
     setSelectedIds(new Set());
   }, [search, minMessages, machineFilter]);

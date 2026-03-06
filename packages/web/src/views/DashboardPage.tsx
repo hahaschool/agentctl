@@ -755,7 +755,7 @@ function CostOverview({
   }
 
   if (totalCost === 0 && agentCostBreakdown.length === 0) {
-    return <></>;
+    return null;
   }
 
   return (
