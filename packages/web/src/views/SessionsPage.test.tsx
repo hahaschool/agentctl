@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiAccount, Machine, Session } from '@/lib/api';
@@ -227,6 +227,17 @@ function renderSessions() {
       <SessionsPage />
     </QueryClientProvider>,
   );
+}
+
+/** Return session list items scoped to the listbox (excludes select option elements). */
+function getSessionItems() {
+  const listbox = screen.getByRole('listbox');
+  return within(listbox).getAllByRole('option');
+}
+
+function querySessionItems() {
+  const listbox = screen.getByRole('listbox');
+  return within(listbox).queryAllByRole('option');
 }
 
 // ---------------------------------------------------------------------------
@@ -736,5 +747,419 @@ describe('SessionsPage', () => {
       expect(screen.getByText('deploy-agent')).toBeDefined();
       expect(screen.queryByText('test-agent')).toBeNull();
     });
+  });
+
+  // =========================================================================
+  // Select All — deselect
+  // =========================================================================
+
+  it('select all checkbox deselects all when clicked twice', async () => {
+    const sessions = [
+      createSession({ id: 'sa-1', status: 'active' }),
+      createSession({ id: 'sa-2', status: 'ended' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(2);
+    });
+    const selectAll = document.getElementById('sessions-select-all') as HTMLInputElement;
+    fireEvent.click(selectAll);
+    await waitFor(() => {
+      expect(screen.getByText('2 selected')).toBeDefined();
+    });
+    fireEvent.click(selectAll);
+    await waitFor(() => {
+      expect(screen.queryByText('2 selected')).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // Bulk bar — Clear button
+  // =========================================================================
+
+  it('Clear button in bulk bar deselects all checked sessions', async () => {
+    const sessions = [createSession({ id: 'cb-1', status: 'active' })];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: 1, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(1);
+    });
+    const selectAll = document.getElementById('sessions-select-all') as HTMLInputElement;
+    fireEvent.click(selectAll);
+    await waitFor(() => {
+      expect(screen.getByText('1 selected')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Clear'));
+    await waitFor(() => {
+      expect(screen.queryByText('1 selected')).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // CSV Export Button
+  // =========================================================================
+
+  it('CSV button is disabled when no sessions exist', async () => {
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions: [], total: 0, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    const csvButton = screen.getByText('CSV') as HTMLButtonElement;
+    expect(csvButton.disabled).toBe(true);
+  });
+
+  it('CSV button is enabled when sessions exist', async () => {
+    renderSessions();
+    await waitFor(() => {
+      const csvButton = screen.getByText('CSV') as HTMLButtonElement;
+      expect(csvButton.disabled).toBe(false);
+    });
+  });
+
+  // =========================================================================
+  // Status Tab — Ended (includes paused)
+  // =========================================================================
+
+  it('clicking Ended tab filters to ended and paused sessions', async () => {
+    const sessions = [
+      createSession({ id: 'ef-1', status: 'active', agentName: 'agt-active-ef' }),
+      createSession({ id: 'ef-2', status: 'ended', agentName: 'agt-ended-ef' }),
+      createSession({ id: 'ef-3', status: 'paused', agentName: 'agt-paused-ef' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('agt-ended-ef')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Ended'));
+    await waitFor(() => {
+      expect(screen.getByText('agt-ended-ef')).toBeDefined();
+      expect(screen.getByText('agt-paused-ef')).toBeDefined();
+      expect(screen.queryByText('agt-active-ef')).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // Status Tab — All restores full list
+  // =========================================================================
+
+  it('clicking All tab restores full list after filtering', async () => {
+    const sessions = [
+      createSession({ id: 'at-1', status: 'active', agentName: 'agt-active-at' }),
+      createSession({ id: 'at-2', status: 'ended', agentName: 'agt-ended-at' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('agt-active-at')).toBeDefined();
+      expect(screen.getByText('agt-ended-at')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Active'));
+    await waitFor(() => {
+      expect(screen.queryByText('agt-ended-at')).toBeNull();
+    });
+    const allButtons = screen.getAllByText('All');
+    const allTab = allButtons.find((el) => el.closest('button')?.className.includes('border-b-2'));
+    fireEvent.click(allTab!);
+    await waitFor(() => {
+      expect(screen.getByText('agt-active-at')).toBeDefined();
+      expect(screen.getByText('agt-ended-at')).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // Search — by project path
+  // =========================================================================
+
+  it('search filters sessions by project path', async () => {
+    const sessions = [
+      createSession({ id: 'sp-1', agentName: 'agt-sp-1', projectPath: '/home/user/web-app' }),
+      createSession({ id: 'sp-2', agentName: 'agt-sp-2', projectPath: '/home/user/api-server' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('agt-sp-1')).toBeDefined();
+      expect(screen.getByText('agt-sp-2')).toBeDefined();
+    });
+    const searchInput = screen.getByPlaceholderText('Search sessions...') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'api-server' } });
+    await waitFor(() => {
+      expect(screen.getByText('agt-sp-2')).toBeDefined();
+      expect(screen.queryByText('agt-sp-1')).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // Search — by model
+  // =========================================================================
+
+  it('search filters sessions by model name', async () => {
+    const sessions = [
+      createSession({ id: 'sm-1', agentName: 'agt-sm-1', model: 'claude-opus-4-6' }),
+      createSession({ id: 'sm-2', agentName: 'agt-sm-2', model: 'claude-haiku-4-5' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText('agt-sm-1')).toBeDefined();
+      expect(screen.getByText('agt-sm-2')).toBeDefined();
+    });
+    const searchInput = screen.getByPlaceholderText('Search sessions...') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'haiku' } });
+    await waitFor(() => {
+      expect(screen.getByText('agt-sm-2')).toBeDefined();
+      expect(screen.queryByText('agt-sm-1')).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // Search — no results
+  // =========================================================================
+
+  it('search with no matches hides all session items', async () => {
+    renderSessions();
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(1);
+    });
+    const searchInput = screen.getByPlaceholderText('Search sessions...') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'nonexistent-query-xyz' } });
+    await waitFor(() => {
+      expect(querySessionItems().length).toBe(0);
+    });
+  });
+
+  // =========================================================================
+  // GroupBy Dropdown
+  // =========================================================================
+
+  it('changing group by to project preserves session items', async () => {
+    const sessions = [
+      createSession({ id: 'gp-1', agentName: 'agt-gp-1', projectPath: '/home/user/proj-a' }),
+      createSession({ id: 'gp-2', agentName: 'agt-gp-2', projectPath: '/home/user/proj-b' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(2);
+    });
+    const groupSelect = screen.getByLabelText('Group by') as HTMLSelectElement;
+    fireEvent.change(groupSelect, { target: { value: 'project' } });
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(2);
+      expect(groupSelect.value).toBe('project');
+    });
+  });
+
+  it('changing group by to machine preserves session items', async () => {
+    const sessions = [
+      createSession({ id: 'gm-1', agentName: 'agt-gm-1', machineId: 'machine-a' }),
+      createSession({ id: 'gm-2', agentName: 'agt-gm-2', machineId: 'machine-b' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(2);
+    });
+    const groupSelect = screen.getByLabelText('Group by') as HTMLSelectElement;
+    fireEvent.change(groupSelect, { target: { value: 'machine' } });
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(2);
+      expect(groupSelect.value).toBe('machine');
+    });
+  });
+
+  it('group by dropdown has all three options', () => {
+    renderSessions();
+    const groupSelect = screen.getByLabelText('Group by') as HTMLSelectElement;
+    const opts = Array.from(groupSelect.options).map((o) => o.value);
+    expect(opts).toEqual(['none', 'project', 'machine']);
+  });
+
+  // =========================================================================
+  // Sort Order Changes
+  // =========================================================================
+
+  it('sort order dropdown has all three options', () => {
+    renderSessions();
+    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const opts = Array.from(sortSelect.options).map((o) => o.value);
+    expect(opts).toEqual(['newest', 'oldest', 'status']);
+  });
+
+  it('changing sort to oldest reverses session order', async () => {
+    const sessions = [
+      createSession({ id: 'so-old', agentName: 'agt-old-so', startedAt: '2025-01-01T00:00:00Z' }),
+      createSession({ id: 'so-new', agentName: 'agt-new-so', startedAt: '2026-01-01T00:00:00Z' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(getSessionItems().length).toBe(2);
+    });
+    let items = getSessionItems();
+    expect(items[0].textContent).toContain('agt-new-so');
+    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    fireEvent.change(sortSelect, { target: { value: 'oldest' } });
+    await waitFor(() => {
+      items = getSessionItems();
+      expect(items[0].textContent).toContain('agt-old-so');
+    });
+  });
+
+  it('changing sort to status puts active before error', async () => {
+    const sessions = [
+      createSession({ id: 'ss-err', agentName: 'agt-error-ss', status: 'error', startedAt: '2026-01-01T00:00:00Z' }),
+      createSession({ id: 'ss-act', agentName: 'agt-active-ss', status: 'active', startedAt: '2025-01-01T00:00:00Z' }),
+    ];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    fireEvent.change(sortSelect, { target: { value: 'status' } });
+    await waitFor(() => {
+      const items = getSessionItems();
+      expect(items[0].textContent).toContain('agt-active-ss');
+      expect(items[1].textContent).toContain('agt-error-ss');
+    });
+  });
+
+  // =========================================================================
+  // Pagination (Load more)
+  // =========================================================================
+
+  it('shows Load more button when hasMore is true', async () => {
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions: [createSession()], total: 75, limit: 50, offset: 0, hasMore: true }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText(/Load more/)).toBeDefined();
+    });
+  });
+
+  it('shows remaining count in Load more button', async () => {
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions: [createSession()], total: 75, limit: 50, offset: 0, hasMore: true }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText(/74 remaining/)).toBeDefined();
+    });
+  });
+
+  it('shows All N sessions loaded when hasMore is false', async () => {
+    const sessions = [createSession({ id: 'pg-1' }), createSession({ id: 'pg-2' })];
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    await waitFor(() => {
+      expect(screen.getByText(/All 2 sessions loaded/)).toBeDefined();
+    });
+  });
+
+  it('does not show pagination footer when loading', async () => {
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
+      dataUpdatedAt: Date.now(),
+      isLoading: true,
+      isFetching: true,
+      refetch: vi.fn(),
+    });
+    renderSessions();
+    expect(screen.queryByText(/Load more/)).toBeNull();
+    expect(screen.queryByText(/sessions loaded/)).toBeNull();
   });
 });
