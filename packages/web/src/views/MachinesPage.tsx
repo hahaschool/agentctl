@@ -64,7 +64,7 @@ export function MachinesPage(): React.JSX.Element {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[22px] font-bold">Fleet Machines</h1>
+            <h1 className="text-[22px] font-semibold tracking-tight">Fleet Machines</h1>
             {list.length > 0 && (
               <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-sm">
                 {list.length}
@@ -137,7 +137,7 @@ export function MachinesPage(): React.JSX.Element {
           {Array.from({ length: 3 }, (_, i) => (
             <div
               key={`sk-${String(i)}`}
-              className="p-5 bg-card border border-border rounded-lg space-y-3"
+              className="p-5 bg-card border border-border/50 rounded-lg space-y-3"
             >
               <div className="flex justify-between items-center">
                 <Skeleton className="h-5 w-40" />
@@ -181,7 +181,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
   const m = machine;
 
   return (
-    <div className="p-5 bg-card border border-border rounded-lg flex flex-col gap-3.5">
+    <div className="p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5">
       {/* Top row: hostname + status */}
       <div className="flex justify-between items-start">
         <div>
@@ -197,7 +197,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           <StatusBadge status={m.status} />
           {m.lastHeartbeat && isStaleHeartbeat(m.lastHeartbeat) && (
             <span
-              className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.03em] rounded-sm bg-yellow-900 text-yellow-300 border border-yellow-800"
+              className="px-1.5 py-0.5 text-[10px] font-semibold rounded-sm bg-yellow-900 text-yellow-300 border border-yellow-800"
               title="Last heartbeat was more than 60 seconds ago"
             >
               Offline
@@ -223,7 +223,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
       {/* Capabilities row */}
       {m.capabilities && (
         <div className="flex items-center gap-2 flex-wrap pt-2.5 border-t border-border">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wide mr-1">
+          <span className="text-[10px] text-muted-foreground mr-1">
             Capabilities
           </span>
           <CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" />
@@ -263,7 +263,7 @@ function DetailField({
 }): React.JSX.Element {
   return (
     <div>
-      <div className="text-[10px] text-muted-foreground uppercase tracking-[0.04em] mb-0.5">
+      <div className="text-[10px] text-muted-foreground mb-0.5">
         {label}
       </div>
       <div
@@ -299,7 +299,7 @@ function CapBadge({
   return (
     <span
       className={cn(
-        'px-2.5 py-0.5 text-[11px] font-semibold rounded-sm uppercase tracking-[0.03em] border',
+        'px-2.5 py-0.5 text-[11px] font-semibold rounded-sm border',
         enabled ? CAP_VARIANT_CLASSES[variant] : 'bg-muted text-muted-foreground border-border',
       )}
     >

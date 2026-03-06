@@ -196,7 +196,7 @@ export function ForkContextPicker({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className={cn('text-[10px] font-medium uppercase tracking-wide', style.textClass)}>
+                        <span className={cn('text-[10px] font-medium', style.textClass)}>
                           {style.label}
                         </span>
                         {msg.toolName && (

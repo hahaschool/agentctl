@@ -435,7 +435,7 @@ export function AgentsPage(): React.JSX.Element {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
-          <h1 className="text-[22px] font-bold">Agents</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">Agents</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
             {agentList.length} agent{agentList.length !== 1 ? 's' : ''} registered
             {Object.keys(statusCounts).length > 0 && (
@@ -1079,7 +1079,7 @@ export function AgentsPage(): React.JSX.Element {
           {Array.from({ length: 4 }, (_, i) => (
             <div
               key={`sk-${String(i)}`}
-              className="p-4 bg-card border border-border rounded-lg space-y-3"
+              className="p-4 bg-card border border-border/50 rounded-lg space-y-3"
             >
               <div className="flex justify-between items-center">
                 <Skeleton className="h-5 w-32" />
@@ -1108,7 +1108,7 @@ export function AgentsPage(): React.JSX.Element {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           {filteredAgents.map((agent) => (
-            <div key={agent.id} className="p-4 bg-card border border-border rounded-lg">
+            <div key={agent.id} className="p-4 bg-card border border-border/50 rounded-lg">
               {/* Card header: name + status */}
               <div className="flex justify-between items-center mb-3">
                 <Link
@@ -1257,7 +1257,7 @@ function Info({
 }): React.JSX.Element {
   return (
     <div>
-      <span className="text-[10px] text-muted-foreground uppercase tracking-[0.04em]">{label}</span>
+      <span className="text-[10px] text-muted-foreground">{label}</span>
       <div className={cn('mt-px text-xs break-all', mono && 'font-mono')}>
         {copyable ? <CopyableText value={value} maxDisplay={12} /> : value}
       </div>

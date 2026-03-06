@@ -62,7 +62,7 @@ export function RouterConfigView(): React.JSX.Element {
           >
             &larr; Settings
           </Link>
-          <h1 className="text-[22px] font-bold">LiteLLM Router</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">LiteLLM Router</h1>
         </div>
         <RefreshButton
           onClick={() => {

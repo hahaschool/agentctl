@@ -252,7 +252,7 @@ export default function AgentDetailPage(): React.JSX.Element {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-[22px] font-bold">{data.name}</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">{data.name}</h1>
           <StatusBadge status={data.status} />
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             Edit
@@ -754,7 +754,7 @@ function InfoField({
 }): React.JSX.Element {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground mb-1">
+      <div className="text-[11px] font-medium text-muted-foreground mb-1">
         {label}
       </div>
       <div className="text-foreground">{children}</div>

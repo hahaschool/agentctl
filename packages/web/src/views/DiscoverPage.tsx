@@ -405,7 +405,7 @@ export function DiscoverPage(): React.JSX.Element {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
-          <h1 className="text-[22px] font-bold">Discover Sessions</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">Discover Sessions</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
             Browse Claude Code sessions across all fleet machines.
             {data && (
@@ -443,7 +443,7 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Quick new session form */}
       {showNewSession && (
-        <div className="p-4 bg-card border border-border rounded-lg mb-4 flex gap-3 items-end flex-wrap">
+        <div className="p-4 bg-card border border-border/50 rounded-lg mb-4 flex gap-3 items-end flex-wrap">
           <div className="min-w-[120px]">
             <label
               htmlFor="new-session-machine"
@@ -524,7 +524,7 @@ export function DiscoverPage(): React.JSX.Element {
       {error && <ErrorBanner message={error.message} onRetry={() => void query.refetch()} />}
 
       {/* Filter bar */}
-      <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border rounded-lg mb-4">
+      <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border/50 rounded-lg mb-4">
         <input
           ref={searchRef}
           id="discover-search"
@@ -660,7 +660,7 @@ export function DiscoverPage(): React.JSX.Element {
           {Array.from({ length: 3 }, (_, gi) => (
             <div
               key={`gsk-${String(gi)}`}
-              className="border border-border rounded-lg overflow-hidden"
+              className="border border-border/50 rounded-lg overflow-hidden"
             >
               <div className="px-4 py-2.5 bg-card flex items-center gap-3">
                 <Skeleton className="w-4 h-4 shrink-0" />
@@ -706,7 +706,7 @@ export function DiscoverPage(): React.JSX.Element {
             return (
               <div
                 key={group.projectPath}
-                className="border border-border rounded-lg overflow-hidden"
+                className="border border-border/50 rounded-lg overflow-hidden"
               >
                 {/* Group header (hidden in flat mode) */}
                 {!isFlat && (

@@ -137,10 +137,10 @@ export function MachineDetailView(): React.JSX.Element {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-[22px] font-bold">{machine.hostname}</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">{machine.hostname}</h1>
           <StatusBadge status={machine.status} />
           {heartbeatStale && (
-            <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.03em] rounded-sm bg-yellow-900 text-yellow-300 border border-yellow-800">
+            <span className="px-2 py-0.5 text-[11px] font-semibold rounded-sm bg-yellow-900 text-yellow-300 border border-yellow-800">
               Unresponsive
             </span>
           )}
@@ -419,7 +419,7 @@ function InfoField({
 }): React.JSX.Element {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground mb-1">
+      <div className="text-[11px] font-medium text-muted-foreground mb-1">
         {label}
       </div>
       <div className="text-foreground">{children}</div>

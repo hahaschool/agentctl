@@ -239,7 +239,7 @@ export function DashboardPage(): React.JSX.Element {
         {/* Recent Sessions Activity */}
         <div>
           <SectionHeader title="Recent Sessions" href="/sessions" />
-          <div className="border border-border rounded-lg overflow-hidden">
+          <div className="border border-border/50 rounded-lg overflow-hidden">
             {recentActivity.length === 0 ? (
               <DashboardEmptyPanel
                 loading={sessions.isLoading}
@@ -305,7 +305,7 @@ export function DashboardPage(): React.JSX.Element {
           {/* Machine Status */}
           <div>
             <SectionHeader title="Fleet Status" href="/machines" />
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="border border-border/50 rounded-lg overflow-hidden">
               {machineList.length === 0 ? (
                 <DashboardEmptyPanel
                   loading={machines.isLoading}
@@ -353,7 +353,7 @@ export function DashboardPage(): React.JSX.Element {
           {discoveredSessions.length > 0 && (
             <div>
               <SectionHeader title="Discovered Sessions" href="/discover" />
-              <div className="border border-border rounded-lg overflow-hidden">
+              <div className="border border-border/50 rounded-lg overflow-hidden">
                 {discoveredSessions.slice(0, 4).map((session, idx) => (
                   <Link
                     key={session.sessionId}
@@ -394,7 +394,7 @@ export function DashboardPage(): React.JSX.Element {
       <CostOverview sessionList={sessionList} agentCostBreakdown={agentCostBreakdown} />
 
       {/* Platform summary bar */}
-      <div className="mt-5 bg-card border border-border rounded-lg overflow-hidden">
+      <div className="mt-5 bg-card border border-border/50 rounded-lg overflow-hidden">
         <div className="flex gap-4 px-4 py-2.5 text-xs text-muted-foreground items-center flex-wrap">
           <span className="font-medium text-muted-foreground">Platform</span>
           <span className="flex items-center gap-1.5">
@@ -630,7 +630,7 @@ function CostOverview({
       <SectionHeader title="Cost Overview" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total cost */}
-        <div className="border border-border rounded-lg bg-card p-4 flex flex-col justify-center">
+        <div className="border border-border/50 rounded-lg bg-card p-4 flex flex-col justify-center">
           <div className="text-[11px] font-medium text-muted-foreground mb-1">
             Total Session Cost
           </div>
@@ -643,7 +643,7 @@ function CostOverview({
         </div>
 
         {/* Bar chart: cost per agent */}
-        <div className="border border-border rounded-lg bg-card p-4">
+        <div className="border border-border/50 rounded-lg bg-card p-4">
           <div className="text-[11px] font-medium text-muted-foreground mb-3">
             Cost by Agent
           </div>
@@ -681,7 +681,7 @@ function CostOverview({
         </div>
 
         {/* Top 5 most expensive sessions */}
-        <div className="border border-border rounded-lg bg-card p-4">
+        <div className="border border-border/50 rounded-lg bg-card p-4">
           <div className="text-[11px] font-medium text-muted-foreground mb-3">
             Most Expensive Sessions
           </div>

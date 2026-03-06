@@ -16,6 +16,7 @@ import { ThinkingBlock } from '../components/ThinkingBlock';
 import { TodoBlock } from '../components/TodoBlock';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { ForkContextPicker } from '../components/ForkContextPicker';
 import { GitStatusBadge } from '../components/GitStatusBadge';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
@@ -155,6 +156,11 @@ export function SessionsPage(): React.JSX.Element {
   const [convertType, setConvertType] = useState('autonomous');
   const createAgent = useCreateAgent();
 
+  // ForkContextPicker modal state
+  const [showForkPicker, setShowForkPicker] = useState(false);
+  const [forkPickerMessages, setForkPickerMessages] = useState<SessionContentMessage[]>([]);
+  const [forkPickerLoading, setForkPickerLoading] = useState(false);
+
   // Bulk selection state
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -225,8 +231,10 @@ export function SessionsPage(): React.JSX.Element {
       .then((list) => {
         setMachines(list);
         if (list.length > 0) {
-          const first = list[0];
-          if (first) setFormMachineId((prev) => prev || first.id);
+          // Prefer the first online machine as the default selection
+          const firstOnline = list.find((m) => m.status === 'online');
+          const fallback = firstOnline ?? list[0];
+          if (fallback) setFormMachineId((prev) => prev || fallback.id);
         }
       })
       .catch((err: unknown) => {
@@ -254,6 +262,11 @@ export function SessionsPage(): React.JSX.Element {
 
     if (!formMachineId) {
       setFormError('Please select a machine.');
+      return;
+    }
+    const selectedMachine = machines.find((m) => m.id === formMachineId);
+    if (selectedMachine?.status === 'offline') {
+      setFormError('Selected machine is offline. Please choose an online machine.');
       return;
     }
     if (!formProjectPath.trim()) {
@@ -294,6 +307,7 @@ export function SessionsPage(): React.JSX.Element {
     formPrompt,
     formModel,
     formAccountId,
+    machines,
     resetForm,
     resetAndInvalidateSessions,
     toast,
@@ -492,6 +506,62 @@ export function SessionsPage(): React.JSX.Element {
       },
     );
   }, [selected, convertName, convertType, createAgent, toast]);
+
+  const openForkPicker = useCallback(async () => {
+    if (!selected?.claudeSessionId || !selected.machineId) return;
+    setForkPickerLoading(true);
+    try {
+      const result = await api.getSessionContent(selected.claudeSessionId, {
+        machineId: selected.machineId,
+        limit: 200,
+        projectPath: selected.projectPath ?? undefined,
+      });
+      setForkPickerMessages(result.messages);
+      setShowForkPicker(true);
+    } catch (err) {
+      toast.error(`Failed to load messages: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setForkPickerLoading(false);
+    }
+  }, [selected, toast]);
+
+  const handleForkSubmit = useCallback(
+    (config: { name: string; type: string; model?: string; systemPrompt?: string; selectedMessageIds: number[] }) => {
+      if (!selected) return;
+      const agentConfig: Record<string, unknown> = {};
+      if (config.model) agentConfig.model = config.model;
+      if (config.systemPrompt) agentConfig.systemPrompt = config.systemPrompt;
+
+      // Build context from selected messages
+      const contextMessages = config.selectedMessageIds
+        .map((idx) => forkPickerMessages[idx])
+        .filter((msg): msg is SessionContentMessage => msg != null)
+        .map((msg) => `[${msg.type}] ${msg.content}`)
+        .join('\n\n');
+      if (contextMessages) agentConfig.context = contextMessages;
+
+      createAgent.mutate(
+        {
+          name: config.name,
+          machineId: selected.machineId,
+          type: config.type,
+          ...(selected.projectPath ? { projectPath: selected.projectPath } : {}),
+          ...(Object.keys(agentConfig).length > 0 ? { config: agentConfig } : {}),
+        },
+        {
+          onSuccess: () => {
+            toast.success(`Agent "${config.name}" created from session`);
+            setShowForkPicker(false);
+            setForkPickerMessages([]);
+          },
+          onError: (err) => {
+            toast.error(err instanceof Error ? err.message : String(err));
+          },
+        },
+      );
+    },
+    [selected, forkPickerMessages, createAgent, toast],
+  );
 
   // Keyboard navigation: arrow up/down to move through sessions, Escape to deselect
   const handleListKeyDown = useCallback(
@@ -712,11 +782,14 @@ export function SessionsPage(): React.JSX.Element {
               {!machinesLoading && machines.length === 0 && (
                 <option value="">No machines available</option>
               )}
-              {machines.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.hostname} ({m.status})
-                </option>
-              ))}
+              {machines.map((m) => {
+                const isOffline = m.status === 'offline';
+                return (
+                  <option key={m.id} value={m.id} disabled={isOffline}>
+                    {m.hostname}{isOffline ? ' (offline)' : m.status === 'degraded' ? ' (degraded)' : ''}
+                  </option>
+                );
+              })}
             </select>
 
             {/* Project path */}
@@ -1006,12 +1079,17 @@ export function SessionsPage(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => {
-                    setConvertName(selected.agentName ?? `agent-from-${selected.id.slice(0, 8)}`);
-                    setShowConvertDialog(true);
+                    if (selected.claudeSessionId && selected.machineId) {
+                      void openForkPicker();
+                    } else {
+                      setConvertName(selected.agentName ?? `agent-from-${selected.id.slice(0, 8)}`);
+                      setShowConvertDialog(true);
+                    }
                   }}
-                  className="h-8 px-3.5 bg-emerald-900/40 text-emerald-300 border border-emerald-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-emerald-900/70"
+                  disabled={forkPickerLoading}
+                  className="h-8 px-3.5 bg-emerald-900/40 text-emerald-300 border border-emerald-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-emerald-900/70 disabled:opacity-50"
                 >
-                  Create Agent
+                  {forkPickerLoading ? 'Loading...' : 'Create Agent'}
                 </button>
                 {(selected.status === 'active' || selected.status === 'starting') && (
                   <ConfirmButton
@@ -1232,6 +1310,21 @@ export function SessionsPage(): React.JSX.Element {
           </div>
         )}
       </div>
+
+      {/* ForkContextPicker modal */}
+      {selected && (
+        <ForkContextPicker
+          session={selected}
+          messages={forkPickerMessages}
+          open={showForkPicker}
+          onClose={() => {
+            setShowForkPicker(false);
+            setForkPickerMessages([]);
+          }}
+          onSubmit={handleForkSubmit}
+          isSubmitting={createAgent.isPending}
+        />
+      )}
     </div>
   );
 }

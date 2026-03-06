@@ -27,7 +27,7 @@ export default function Loading() {
       {/* Summary stat cards */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={`stat-sk-${String(i)}`} className="p-4 bg-card border border-border rounded-lg">
+          <div key={`stat-sk-${String(i)}`} className="p-4 bg-card border border-border/50 rounded-lg">
             <Skeleton className="h-3 w-24 mb-2" />
             <Skeleton className="h-6 w-12" />
           </div>
@@ -39,7 +39,7 @@ export default function Loading() {
         {Array.from({ length: 3 }, (_, i) => (
           <div
             key={`machine-sk-${String(i)}`}
-            className="p-5 bg-card border border-border rounded-lg space-y-3"
+            className="p-5 bg-card border border-border/50 rounded-lg space-y-3"
           >
             <div className="flex justify-between items-start">
               <div className="flex-1">

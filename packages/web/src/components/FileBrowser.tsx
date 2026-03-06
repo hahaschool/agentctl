@@ -441,7 +441,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
           {!dirLoading && !dirError && (
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider">
+                <tr className="border-b border-border text-[10px] text-muted-foreground">
                   <th className="text-left px-3 py-1.5 font-medium">Name</th>
                   <th className="text-right px-3 py-1.5 font-medium w-20">Size</th>
                   <th className="text-right px-3 py-1.5 font-medium w-32">Modified</th>
