@@ -279,7 +279,7 @@ describe('MachineDetailView', () => {
     await waitFor(() => {
       const machinesLink = screen.getByTestId('breadcrumb-Machines').querySelector('a');
       expect(machinesLink).not.toBeNull();
-      expect(machinesLink!.getAttribute('href')).toBe('/machines');
+      expect(machinesLink?.getAttribute('href')).toBe('/machines');
     });
   });
 
@@ -576,7 +576,7 @@ describe('MachineDetailView', () => {
       const heading = screen.getByText('Recent Sessions');
       const badge = heading.parentElement?.querySelector('span');
       expect(badge).not.toBeNull();
-      expect(badge!.textContent).toBe('(1)');
+      expect(badge?.textContent).toBe('(1)');
     });
   });
 
@@ -718,7 +718,7 @@ describe('MachineDetailView', () => {
       const heading = screen.getByText('Agents on this Machine');
       const badge = heading.parentElement?.querySelector('span');
       expect(badge).not.toBeNull();
-      expect(badge!.textContent).toBe('(1)');
+      expect(badge?.textContent).toBe('(1)');
     });
   });
 

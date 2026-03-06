@@ -1381,7 +1381,8 @@ describe('AgentDetailPage', () => {
     });
     // Click Cancel in the dialog footer
     const cancelButtons = screen.getAllByText('Cancel');
-    fireEvent.click(cancelButtons[cancelButtons.length - 1]);
+    const lastCancel = cancelButtons[cancelButtons.length - 1];
+    if (lastCancel) fireEvent.click(lastCancel);
     await waitFor(() => {
       expect(screen.queryByTestId('dialog')).toBeNull();
     });

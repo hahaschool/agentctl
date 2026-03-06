@@ -197,16 +197,16 @@ describe('CONDENSED_SHORTCUTS', () => {
   });
 
   it('collapses nav keys 1-7 into a single entry', () => {
-    const firstEntry = CONDENSED_SHORTCUTS[0]!;
-    expect(firstEntry.desc).toBe('Navigate to page');
-    expect(firstEntry.keys[0]).toContain('1');
-    expect(firstEntry.keys[0]).toContain('7');
+    const firstEntry = CONDENSED_SHORTCUTS[0];
+    expect(firstEntry?.desc).toBe('Navigate to page');
+    expect(firstEntry?.keys[0]).toContain('1');
+    expect(firstEntry?.keys[0]).toContain('7');
   });
 
   it('uses "1–7" (en-dash) for nav range', () => {
-    const firstEntry = CONDENSED_SHORTCUTS[0]!;
+    const firstEntry = CONDENSED_SHORTCUTS[0];
     // The character U+2013 is the en-dash (–)
-    expect(firstEntry.keys[0]).toContain('–');
+    expect(firstEntry?.keys[0]).toContain('–');
   });
 
   it('contains all global shortcuts after nav entry', () => {

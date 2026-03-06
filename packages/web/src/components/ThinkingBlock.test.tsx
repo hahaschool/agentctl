@@ -69,7 +69,7 @@ describe('ThinkingBlock', () => {
       );
       fireEvent.click(screen.getByRole('button'));
       const contentDiv = container.querySelector('.whitespace-pre-wrap');
-      expect(contentDiv!.textContent).toBe('First line\nSecond line\nThird line');
+      expect(contentDiv?.textContent).toBe('First line\nSecond line\nThird line');
       expect(screen.queryByText('click to expand')).toBeNull();
       expect(screen.getByText('collapse')).toBeDefined();
     });
@@ -122,7 +122,7 @@ describe('ThinkingBlock', () => {
       const { container } = render(<ThinkingBlock content={multiline} />);
       fireEvent.click(screen.getByRole('button'));
       const contentDiv = container.querySelector('.whitespace-pre-wrap');
-      expect(contentDiv!.textContent).toBe(multiline);
+      expect(contentDiv?.textContent).toBe(multiline);
     });
 
     it('renders content in a monospace font container', () => {
@@ -130,7 +130,7 @@ describe('ThinkingBlock', () => {
       fireEvent.click(screen.getByRole('button'));
       const monoDiv = container.querySelector('.font-mono');
       expect(monoDiv).not.toBeNull();
-      expect(monoDiv!.textContent).toBe('mono content');
+      expect(monoDiv?.textContent).toBe('mono content');
     });
 
     it('has a max-height with overflow scroll for long content', () => {

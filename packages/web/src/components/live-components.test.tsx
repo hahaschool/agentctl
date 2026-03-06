@@ -136,7 +136,7 @@ describe('LiveTimeAgo', () => {
     render(<LiveTimeAgo date="2026-03-06T10:00:00Z" />);
     const span = screen.getByText('5m ago');
     expect(span.getAttribute('title')).toBeDefined();
-    expect(span.getAttribute('title')!.length).toBeGreaterThan(0);
+    expect((span.getAttribute('title') ?? '').length).toBeGreaterThan(0);
   });
 
   it('handles future dates gracefully (shows "just now")', () => {

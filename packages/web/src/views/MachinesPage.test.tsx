@@ -206,7 +206,7 @@ describe('MachinesPage', () => {
       const heading = screen.getByText('Fleet Machines');
       const badge = heading.parentElement?.querySelector('span');
       expect(badge).toBeDefined();
-      expect(badge!.textContent).toBe('2');
+      expect(badge?.textContent).toBe('2');
     });
   });
 

@@ -282,14 +282,14 @@ describe('HighlightText', () => {
     const { container } = render(<HighlightText text="Hello world" highlight="world" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('world');
+    expect(marks[0]?.textContent).toBe('world');
   });
 
   it('highlights case-insensitively', () => {
     const { container } = render(<HighlightText text="Hello World" highlight="hello" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('Hello');
+    expect(marks[0]?.textContent).toBe('Hello');
   });
 
   it('highlights multiple occurrences', () => {
@@ -308,7 +308,7 @@ describe('HighlightText', () => {
     const { container } = render(<HighlightText text="price is $100.00" highlight="$100.00" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('$100.00');
+    expect(marks[0]?.textContent).toBe('$100.00');
   });
 
   it('applies className to the outer span', () => {

@@ -112,8 +112,8 @@ describe('TodoBlock', () => {
       const { container } = render(<TodoBlock content={content} />);
       const strikeEl = container.querySelector('.line-through');
       expect(strikeEl).not.toBeNull();
-      expect(strikeEl!.textContent).toBe('Finished');
-      expect(strikeEl!.className).toContain('text-muted-foreground');
+      expect(strikeEl?.textContent).toBe('Finished');
+      expect(strikeEl?.className).toContain('text-muted-foreground');
     });
 
     it('applies normal foreground style to pending items', () => {
@@ -137,8 +137,8 @@ describe('TodoBlock', () => {
       const { container } = render(<TodoBlock content={content} />);
       const todoRows = container.querySelectorAll('.flex.items-start.gap-2');
       expect(todoRows.length).toBe(1);
-      const svg = todoRows[0]!.querySelector('svg');
-      expect(svg!.className.baseVal || svg!.getAttribute('class') || '').toContain(
+      const svg = todoRows[0]?.querySelector('svg');
+      expect(svg?.className.baseVal || svg?.getAttribute('class') || '').toContain(
         'text-muted-foreground',
       );
     });

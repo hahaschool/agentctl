@@ -327,7 +327,8 @@ export function DiscoverPage(): React.JSX.Element {
     let successCount = 0;
     let failCount = 0;
     for (let i = 0; i < sessionsToImport.length; i++) {
-      const s = sessionsToImport[i]!;
+      const s = sessionsToImport[i];
+      if (!s) continue;
       try {
         await api.createSession({
           agentId: 'adhoc',

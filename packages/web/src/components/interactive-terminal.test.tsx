@@ -351,7 +351,7 @@ describe('InteractiveTerminal', () => {
         expect(mockOnResize).toHaveBeenCalled();
       });
 
-      const resizeCallback = mockOnResize.mock.calls[0]![0] as (size: {
+      const resizeCallback = mockOnResize.mock.calls[0]?.[0] as (size: {
         cols: number;
         rows: number;
       }) => void;
@@ -374,7 +374,7 @@ describe('InteractiveTerminal', () => {
         expect(mockOnResize).toHaveBeenCalled();
       });
 
-      const resizeCallback = mockOnResize.mock.calls[0]![0] as (size: {
+      const resizeCallback = mockOnResize.mock.calls[0]?.[0] as (size: {
         cols: number;
         rows: number;
       }) => void;
@@ -422,7 +422,7 @@ describe('InteractiveTerminal', () => {
         expect(mockOnData).toHaveBeenCalled();
       });
 
-      const dataCallback = mockOnData.mock.calls[0]![0] as (data: string) => void;
+      const dataCallback = mockOnData.mock.calls[0]?.[0] as (data: string) => void;
 
       ws.send.mockClear();
       dataCallback('ls -la\r');
@@ -442,7 +442,7 @@ describe('InteractiveTerminal', () => {
         expect(mockOnData).toHaveBeenCalled();
       });
 
-      const dataCallback = mockOnData.mock.calls[0]![0] as (data: string) => void;
+      const dataCallback = mockOnData.mock.calls[0]?.[0] as (data: string) => void;
 
       const ws = getWs();
       ws.send.mockClear();
@@ -465,7 +465,7 @@ describe('InteractiveTerminal', () => {
         expect(mockOnData).toHaveBeenCalled();
       });
 
-      const dataCallback = mockOnData.mock.calls[0]![0] as (data: string) => void;
+      const dataCallback = mockOnData.mock.calls[0]?.[0] as (data: string) => void;
 
       ws.simulateClose();
       ws.send.mockClear();
@@ -488,7 +488,7 @@ describe('InteractiveTerminal', () => {
         expect(mockOnData).toHaveBeenCalled();
       });
 
-      const dataCallback = mockOnData.mock.calls[0]![0] as (data: string) => void;
+      const dataCallback = mockOnData.mock.calls[0]?.[0] as (data: string) => void;
 
       ws.send.mockClear();
       dataCallback('a');

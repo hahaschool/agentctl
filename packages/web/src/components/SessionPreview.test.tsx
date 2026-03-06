@@ -238,18 +238,18 @@ describe('SessionPreview', () => {
     );
     expect(focusableElements.length).toBeGreaterThan(0);
 
-    const firstFocusable = focusableElements[0]!;
-    const lastFocusable = focusableElements[focusableElements.length - 1]!;
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
 
     // Focus the last element and press Tab — should wrap to first
-    lastFocusable.focus();
+    lastFocusable?.focus();
     const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
     const preventSpy = vi.spyOn(tabEvent, 'preventDefault');
     document.dispatchEvent(tabEvent);
     expect(preventSpy).toHaveBeenCalled();
 
     // Focus the first element and press Shift+Tab — should wrap to last
-    firstFocusable.focus();
+    firstFocusable?.focus();
     const shiftTabEvent = new KeyboardEvent('keydown', {
       key: 'Tab',
       shiftKey: true,

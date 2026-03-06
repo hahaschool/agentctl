@@ -526,8 +526,9 @@ describe('DiscoverPage', () => {
       expect(screen.getByText('Import')).toBeDefined();
     });
 
-    const importBtn = screen.getAllByText('Import')[0]!;
-    fireEvent.click(importBtn);
+    const importBtn = screen.getAllByText('Import')[0];
+    expect(importBtn).toBeDefined();
+    if (importBtn) fireEvent.click(importBtn);
 
     await waitFor(() => {
       expect(mockToastSuccess).toHaveBeenCalledWith(
@@ -545,8 +546,9 @@ describe('DiscoverPage', () => {
       expect(screen.getByText('Import')).toBeDefined();
     });
 
-    const importBtn = screen.getAllByText('Import')[0]!;
-    fireEvent.click(importBtn);
+    const importBtn = screen.getAllByText('Import')[0];
+    expect(importBtn).toBeDefined();
+    if (importBtn) fireEvent.click(importBtn);
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith('Network error');
@@ -603,8 +605,10 @@ describe('DiscoverPage', () => {
 
     // Select individual sessions via checkboxes
     const checkboxes = screen.getAllByRole('checkbox');
-    fireEvent.click(checkboxes[0]!);
-    fireEvent.click(checkboxes[1]!);
+    const cb0 = checkboxes[0];
+    const cb1 = checkboxes[1];
+    if (cb0) fireEvent.click(cb0);
+    if (cb1) fireEvent.click(cb1);
 
     await waitFor(() => {
       expect(screen.getByText('Import 2 Selected')).toBeDefined();

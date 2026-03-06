@@ -652,8 +652,9 @@ describe('LogsPage', () => {
     });
 
     // Click on the action row to expand it
-    const actionRow = screen.getByText('tool_use').closest('button')!;
-    fireEvent.click(actionRow);
+    const actionRow = screen.getByText('tool_use').closest('button');
+    expect(actionRow).not.toBeNull();
+    if (actionRow) fireEvent.click(actionRow);
 
     await waitFor(() => {
       // DetailRow renders labels with ":" suffix
@@ -673,8 +674,9 @@ describe('LogsPage', () => {
       expect(screen.getByText('tool_use')).toBeDefined();
     });
 
-    const actionRow = screen.getByText('tool_use').closest('button')!;
-    fireEvent.click(actionRow);
+    const actionRow = screen.getByText('tool_use').closest('button');
+    expect(actionRow).not.toBeNull();
+    if (actionRow) fireEvent.click(actionRow);
 
     await waitFor(() => {
       expect(screen.getByText('Tool Input:')).toBeDefined();
@@ -691,16 +693,17 @@ describe('LogsPage', () => {
       expect(screen.getByText('tool_use')).toBeDefined();
     });
 
-    const actionRow = screen.getByText('tool_use').closest('button')!;
+    const actionRow = screen.getByText('tool_use').closest('button');
+    expect(actionRow).not.toBeNull();
 
     // Expand
-    fireEvent.click(actionRow);
+    if (actionRow) fireEvent.click(actionRow);
     await waitFor(() => {
       expect(screen.getByText('Tool Input:')).toBeDefined();
     });
 
     // Collapse
-    fireEvent.click(actionRow);
+    if (actionRow) fireEvent.click(actionRow);
     await waitFor(() => {
       expect(screen.queryByText('Tool Input:')).toBeNull();
     });
@@ -714,8 +717,9 @@ describe('LogsPage', () => {
       expect(screen.getByText('tool_use')).toBeDefined();
     });
 
-    const actionRow = screen.getByText('tool_use').closest('button')!;
-    fireEvent.click(actionRow);
+    const actionRow = screen.getByText('tool_use').closest('button');
+    expect(actionRow).not.toBeNull();
+    if (actionRow) fireEvent.click(actionRow);
 
     await waitFor(() => {
       expect(screen.getByText('Output Hash:')).toBeDefined();
@@ -896,8 +900,9 @@ describe('LogsPage', () => {
       expect(screen.getByText('Raw Metrics')).toBeDefined();
     });
 
-    const rawMetricsButton = screen.getByText('Raw Metrics').closest('button')!;
-    fireEvent.click(rawMetricsButton);
+    const rawMetricsButton = screen.getByText('Raw Metrics').closest('button');
+    expect(rawMetricsButton).not.toBeNull();
+    if (rawMetricsButton) fireEvent.click(rawMetricsButton);
 
     await waitFor(() => {
       expect(screen.getByText(/agentctl_control_plane_up/)).toBeDefined();

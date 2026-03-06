@@ -116,7 +116,7 @@ describe('Sidebar', () => {
         // getAllByRole('link') returns <a> elements; filter by text
         const links = screen.getAllByRole('link', { name: new RegExp(item.label) });
         expect(links.length).toBeGreaterThanOrEqual(1);
-        expect(links[0]!.getAttribute('href')).toBe(item.href);
+        expect(links[0]?.getAttribute('href')).toBe(item.href);
       }
     });
   });
@@ -130,51 +130,51 @@ describe('Sidebar', () => {
       mockPathname.mockReturnValue('/');
       render(<Sidebar />);
       const links = screen.getAllByRole('link', { name: /Dashboard/ });
-      expect(links[0]!.getAttribute('aria-current')).toBe('page');
+      expect(links[0]?.getAttribute('aria-current')).toBe('page');
     });
 
     it('marks Machines as active when pathname starts with "/machines"', () => {
       mockPathname.mockReturnValue('/machines/abc-123');
       render(<Sidebar />);
       const links = screen.getAllByRole('link', { name: /Machines/ });
-      expect(links[0]!.getAttribute('aria-current')).toBe('page');
+      expect(links[0]?.getAttribute('aria-current')).toBe('page');
     });
 
     it('marks Sessions as active when pathname is "/sessions"', () => {
       mockPathname.mockReturnValue('/sessions');
       render(<Sidebar />);
       const links = screen.getAllByRole('link', { name: /Sessions/ });
-      expect(links[0]!.getAttribute('aria-current')).toBe('page');
+      expect(links[0]?.getAttribute('aria-current')).toBe('page');
     });
 
     it('does not mark Dashboard as active when on another page', () => {
       mockPathname.mockReturnValue('/agents');
       render(<Sidebar />);
       const links = screen.getAllByRole('link', { name: /Dashboard/ });
-      expect(links[0]!.getAttribute('aria-current')).toBeNull();
+      expect(links[0]?.getAttribute('aria-current')).toBeNull();
     });
 
     it('does not mark Machines as active when on "/sessions"', () => {
       mockPathname.mockReturnValue('/sessions');
       render(<Sidebar />);
       const links = screen.getAllByRole('link', { name: /Machines/ });
-      expect(links[0]!.getAttribute('aria-current')).toBeNull();
+      expect(links[0]?.getAttribute('aria-current')).toBeNull();
     });
 
     it('applies active CSS classes to the current route link', () => {
       mockPathname.mockReturnValue('/agents');
       render(<Sidebar />);
       const links = screen.getAllByRole('link', { name: /Agents/ });
-      expect(links[0]!.className).toContain('font-semibold');
-      expect(links[0]!.className).toContain('border-l-primary');
+      expect(links[0]?.className).toContain('font-semibold');
+      expect(links[0]?.className).toContain('border-l-primary');
     });
 
     it('applies inactive CSS classes to non-current route links', () => {
       mockPathname.mockReturnValue('/agents');
       render(<Sidebar />);
       const links = screen.getAllByRole('link', { name: /Dashboard/ });
-      expect(links[0]!.className).toContain('font-normal');
-      expect(links[0]!.className).toContain('border-l-transparent');
+      expect(links[0]?.className).toContain('font-normal');
+      expect(links[0]?.className).toContain('border-l-transparent');
     });
   });
 

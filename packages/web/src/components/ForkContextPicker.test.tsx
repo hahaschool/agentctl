@@ -271,7 +271,8 @@ describe('ForkContextPicker', () => {
 
     // Uncheck the first message
     const checkboxes = screen.getAllByRole('checkbox');
-    fireEvent.click(checkboxes[0]);
+    const firstCheckbox = checkboxes[0];
+    if (firstCheckbox) fireEvent.click(firstCheckbox);
 
     fireEvent.click(screen.getByText('Create Agent'));
     const call = onSubmit.mock.calls[0]?.[0];

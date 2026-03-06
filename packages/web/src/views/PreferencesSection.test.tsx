@@ -125,6 +125,6 @@ describe('PreferencesSection', () => {
     render(<PreferencesSection />);
     const selects = screen.getAllByTestId('select');
     // First select is the model select
-    expect(selects[0]!.getAttribute('data-value')).toBe('claude-sonnet-4-6');
+    expect(selects[0]?.getAttribute('data-value')).toBe('claude-sonnet-4-6');
   });
 });

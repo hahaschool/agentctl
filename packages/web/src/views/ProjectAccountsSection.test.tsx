@@ -248,7 +248,7 @@ describe('ProjectAccountsSection', () => {
     const accountElements = screen.getAllByText('Account');
     expect(accountElements.length).toBeGreaterThanOrEqual(1);
     // The first one is the table header (th)
-    expect(accountElements[0]!.tagName).toBe('TH');
+    expect(accountElements[0]?.tagName).toBe('TH');
   });
 
   it('shows project paths in table rows', async () => {

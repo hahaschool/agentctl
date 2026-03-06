@@ -308,8 +308,9 @@ describe('AccountsSection', () => {
       mockTestAccount.mutateAsync.mockResolvedValue({ ok: true, latencyMs: 42 });
       renderComponent();
       await screen.findByText('My Anthropic Key');
-      const testButtons = screen.getAllByText('Test');
-      fireEvent.click(testButtons[0]!);
+      const testBtn = screen.getAllByText('Test')[0];
+      expect(testBtn).toBeDefined();
+      if (testBtn) fireEvent.click(testBtn);
       expect(mockTestAccount.mutateAsync).toHaveBeenCalledWith('acc-1');
     });
 
@@ -318,8 +319,9 @@ describe('AccountsSection', () => {
       mockTestAccount.mutateAsync.mockImplementation(() => new Promise(() => {}));
       renderComponent();
       await screen.findByText('My Anthropic Key');
-      const testButtons = screen.getAllByText('Test');
-      fireEvent.click(testButtons[0]!);
+      const testBtn = screen.getAllByText('Test')[0];
+      expect(testBtn).toBeDefined();
+      if (testBtn) fireEvent.click(testBtn);
       // After clicking, the button for that account should say "Testing..."
       expect(await screen.findByText('Testing...')).toBeDefined();
     });
@@ -428,8 +430,9 @@ describe('AccountsSection', () => {
     it('clicking Delete on an account shows confirmation dialog', async () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
-      const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]!);
+      const delBtn = screen.getAllByText('Delete')[0];
+      expect(delBtn).toBeDefined();
+      if (delBtn) fireEvent.click(delBtn);
       expect(screen.getByText('Delete Account')).toBeDefined();
       expect(
         screen.getByText(
@@ -441,35 +444,44 @@ describe('AccountsSection', () => {
     it('confirmation dialog has Delete destructive button and Cancel button', async () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
-      const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]!);
+      const delBtn = screen.getAllByText('Delete')[0];
+      expect(delBtn).toBeDefined();
+      if (delBtn) fireEvent.click(delBtn);
       const dialogs = screen.getAllByTestId('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1]!;
-      expect(within(confirmDialog).getByText('Cancel')).toBeDefined();
-      const confirmDeleteBtns = within(confirmDialog).getAllByText('Delete');
-      expect(confirmDeleteBtns.length).toBeGreaterThanOrEqual(1);
+      const confirmDialog = dialogs[dialogs.length - 1];
+      expect(confirmDialog).toBeDefined();
+      if (confirmDialog) {
+        expect(within(confirmDialog).getByText('Cancel')).toBeDefined();
+        const confirmDeleteBtns = within(confirmDialog).getAllByText('Delete');
+        expect(confirmDeleteBtns.length).toBeGreaterThanOrEqual(1);
+      }
     });
 
     it('clicking confirm Delete calls deleteAccount.mutateAsync', async () => {
       mockDeleteAccount.mutateAsync.mockResolvedValue({});
       renderComponent();
       await screen.findByText('My Anthropic Key');
-      const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]!);
+      const delBtn = screen.getAllByText('Delete')[0];
+      expect(delBtn).toBeDefined();
+      if (delBtn) fireEvent.click(delBtn);
       const dialogs = screen.getAllByTestId('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1]!;
-      const confirmDeleteBtns = within(confirmDialog).getAllByText('Delete');
-      // Find the button element (not the h2 title)
-      const confirmBtn = confirmDeleteBtns.find((el) => el.tagName === 'BUTTON');
-      if (confirmBtn) fireEvent.click(confirmBtn);
+      const confirmDialog = dialogs[dialogs.length - 1];
+      expect(confirmDialog).toBeDefined();
+      if (confirmDialog) {
+        const confirmDeleteBtns = within(confirmDialog).getAllByText('Delete');
+        // Find the button element (not the h2 title)
+        const confirmBtn = confirmDeleteBtns.find((el) => el.tagName === 'BUTTON');
+        if (confirmBtn) fireEvent.click(confirmBtn);
+      }
       expect(mockDeleteAccount.mutateAsync).toHaveBeenCalledWith('acc-1');
     });
 
     it('Cancel in confirmation dialog closes it', async () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
-      const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]!);
+      const delBtn = screen.getAllByText('Delete')[0];
+      expect(delBtn).toBeDefined();
+      if (delBtn) fireEvent.click(delBtn);
       // Confirm dialog is shown
       expect(
         screen.getByText(
@@ -478,8 +490,11 @@ describe('AccountsSection', () => {
       ).toBeDefined();
       // Click Cancel
       const dialogs = screen.getAllByTestId('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1]!;
-      fireEvent.click(within(confirmDialog).getByText('Cancel'));
+      const confirmDialog = dialogs[dialogs.length - 1];
+      expect(confirmDialog).toBeDefined();
+      if (confirmDialog) {
+        fireEvent.click(within(confirmDialog).getByText('Cancel'));
+      }
       // Confirmation text should be gone
       expect(
         screen.queryByText(

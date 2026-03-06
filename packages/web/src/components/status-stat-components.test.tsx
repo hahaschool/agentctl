@@ -85,7 +85,7 @@ describe('StatusBadge', () => {
     const badge = container.firstElementChild as HTMLElement;
     const dot = badge.querySelector('span');
     expect(dot).toBeDefined();
-    expect(dot!.className).toContain('animate-pulse');
+    expect(dot?.className).toContain('animate-pulse');
   });
 
   const noPulseStatuses = ['offline', 'error', 'paused', 'stopped', 'completed'];
@@ -94,7 +94,7 @@ describe('StatusBadge', () => {
     const badge = container.firstElementChild as HTMLElement;
     const dot = badge.querySelector('span');
     expect(dot).toBeDefined();
-    expect(dot!.className).not.toContain('animate-pulse');
+    expect(dot?.className).not.toContain('animate-pulse');
   });
 
   // -- Capitalize class is applied ------------------------------------------

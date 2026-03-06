@@ -1012,7 +1012,8 @@ describe('SessionDetailView', () => {
 
     // Switch back — there are multiple "Messages" buttons (in both toolbars), click the first
     const messagesButtons = screen.getAllByText('Messages');
-    fireEvent.click(messagesButtons[0]!);
+    const msgBtn = messagesButtons[0];
+    if (msgBtn) fireEvent.click(msgBtn);
 
     await waitFor(() => {
       // Messages view should be back, no terminal-view

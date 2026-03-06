@@ -509,7 +509,7 @@ describe('fuzzyScore', () => {
     const midScore = fuzzyScore('board', 'Dashboard');
     expect(startScore).not.toBeNull();
     expect(midScore).not.toBeNull();
-    expect(startScore).toBeGreaterThan(midScore);
+    expect(startScore).toBeGreaterThan(midScore as number);
   });
 
   // Subsequence

@@ -89,7 +89,7 @@ describe('SubagentBlock', () => {
       const multiline = 'Line 1\nLine 2\nLine 3';
       const { container } = render(<SubagentBlock content={multiline} />);
       const contentDiv = container.querySelector('.whitespace-pre-wrap');
-      expect(contentDiv!.textContent).toBe(multiline);
+      expect(contentDiv?.textContent).toBe(multiline);
     });
 
     it('has max-height with overflow for long content', () => {
@@ -114,7 +114,7 @@ describe('SubagentBlock', () => {
       expect(screen.getByText('deadbeef')).toBeDefined();
       expect(screen.getByText('16:45:30')).toBeDefined();
       const contentDiv = container.querySelector('.whitespace-pre-wrap');
-      expect(contentDiv!.textContent).toBe('Full output');
+      expect(contentDiv?.textContent).toBe('Full output');
     });
   });
 });

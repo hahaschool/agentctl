@@ -1389,14 +1389,14 @@ describe('DashboardPage', () => {
     it('registers ? hotkey via useHotkeys', () => {
       renderDashboard();
       expect(mockUseHotkeys).toHaveBeenCalled();
-      const hotkeyMap = mockUseHotkeys.mock.calls[0]![0];
+      const hotkeyMap = mockUseHotkeys.mock.calls[0]?.[0];
       expect(hotkeyMap).toHaveProperty('?');
       expect(typeof hotkeyMap['?']).toBe('function');
     });
 
     it('registers r hotkey for refresh via useHotkeys', () => {
       renderDashboard();
-      const hotkeyMap = mockUseHotkeys.mock.calls[0]![0];
+      const hotkeyMap = mockUseHotkeys.mock.calls[0]?.[0];
       expect(hotkeyMap).toHaveProperty('r');
       expect(typeof hotkeyMap.r).toBe('function');
     });

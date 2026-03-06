@@ -95,8 +95,8 @@ function pickDefaultMachine(machines: Machine[]): string {
     typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.LAST_MACHINE_ID) : null;
   const online = machines.filter((m) => m.status === 'online');
   if (lastUsed && machines.some((m) => m.id === lastUsed)) return lastUsed;
-  if (online.length > 0) return online[0]!.id;
-  return machines.length > 0 ? machines[0]!.id : '';
+  if (online.length > 0) return online[0]?.id ?? '';
+  return machines.length > 0 ? machines[0]?.id ?? '' : '';
 }
 
 // ---------------------------------------------------------------------------

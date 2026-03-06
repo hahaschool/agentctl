@@ -17,12 +17,12 @@ describe('useNotifications', () => {
     });
 
     expect(result.current.notifications).toHaveLength(1);
-    const n = result.current.notifications[0]!;
-    expect(n.message).toBe('Hello');
-    expect(n.type).toBe('info');
-    expect(n.read).toBe(false);
-    expect(n.id).toMatch(/^notif-/);
-    expect(n.timestamp).toBeGreaterThan(0);
+    const n = result.current.notifications[0];
+    expect(n?.message).toBe('Hello');
+    expect(n?.type).toBe('info');
+    expect(n?.read).toBe(false);
+    expect(n?.id).toMatch(/^notif-/);
+    expect(n?.timestamp).toBeGreaterThan(0);
   });
 
   it('increments unreadCount when notifications are added', () => {
@@ -46,8 +46,8 @@ describe('useNotifications', () => {
       result.current.addNotification({ type: 'info', message: 'Second' });
     });
 
-    expect(result.current.notifications[0]!.message).toBe('Second');
-    expect(result.current.notifications[1]!.message).toBe('First');
+    expect(result.current.notifications[0]?.message).toBe('Second');
+    expect(result.current.notifications[1]?.message).toBe('First');
   });
 
   it('includes optional sessionId', () => {
@@ -61,7 +61,7 @@ describe('useNotifications', () => {
       });
     });
 
-    expect(result.current.notifications[0]!.sessionId).toBe('ses-123');
+    expect(result.current.notifications[0]?.sessionId).toBe('ses-123');
   });
 
   it('markRead marks a single notification as read', () => {
@@ -72,13 +72,13 @@ describe('useNotifications', () => {
       result.current.addNotification({ type: 'info', message: 'B' });
     });
 
-    const idToMark = result.current.notifications[0]!.id;
+    const idToMark = result.current.notifications[0]?.id ?? '';
 
     act(() => {
       result.current.markRead(idToMark);
     });
 
-    expect(result.current.notifications.find((n) => n.id === idToMark)!.read).toBe(true);
+    expect(result.current.notifications.find((n) => n.id === idToMark)?.read).toBe(true);
     expect(result.current.unreadCount).toBe(1);
   });
 
