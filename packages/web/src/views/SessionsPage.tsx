@@ -533,108 +533,96 @@ export function SessionsPage(): React.JSX.Element {
           'md:w-[340px] md:min-w-[340px]',
         )}
       >
-        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2.5">
-          <div className="flex justify-between items-center">
-            <h2 className="text-base font-semibold tracking-tight">
+        <div className="px-3 pt-3 pb-2 border-b border-border">
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-sm font-semibold tracking-tight flex-1 min-w-0">
               Sessions
-              <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
+              <span className="ml-1.5 text-[11px] font-normal text-muted-foreground tabular-nums">
                 {hasMore
-                  ? `(${sessionList.length} of ${totalCount})`
-                  : `(${filteredSessions.length})`}
+                  ? `${sessionList.length}/${totalCount}`
+                  : String(filteredSessions.length)}
               </span>
             </h2>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateForm((prev) => !prev);
-                  setFormError(null);
-                }}
-                aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
-                aria-expanded={showCreateForm}
-                className={cn(
-                  'h-8 px-3 border rounded-md text-xs font-medium whitespace-nowrap transition-all duration-200',
-                  showCreateForm
-                    ? 'bg-primary text-white border-primary hover:bg-primary/90'
-                    : 'bg-muted text-muted-foreground border-border hover:bg-accent hover:text-foreground',
-                )}
-              >
-                {showCreateForm ? 'Cancel' : '+ New Session'}
-              </button>
-              {cleanupSessions.length > 0 && (
-                <ConfirmButton
-                  label={`Clean Up (${cleanupSessions.length})`}
-                  confirmLabel={`Delete ${cleanupSessions.length}?`}
-                  onConfirm={() => void handleCleanup()}
-                  className="h-8 px-3 border border-border rounded-md text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground"
-                  confirmClassName="h-8 px-3 border border-destructive rounded-md text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground transition-all duration-200"
-                />
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateForm((prev) => !prev);
+                setFormError(null);
+              }}
+              aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
+              aria-expanded={showCreateForm}
+              className={cn(
+                'h-7 px-2.5 rounded-md text-[11px] font-medium whitespace-nowrap transition-all duration-200',
+                showCreateForm
+                  ? 'bg-primary text-white hover:bg-primary/90'
+                  : 'bg-primary/10 text-primary hover:bg-primary/20',
               )}
-              <button
-                type="button"
-                onClick={() => exportSessionsCsv(filteredSessions)}
-                disabled={filteredSessions.length === 0}
-                className="h-8 px-3 border border-border rounded-md text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground disabled:opacity-50 transition-all duration-200 hover:bg-accent hover:text-foreground"
-              >
-                Export CSV
-              </button>
-              <RefreshButton
-                onClick={() => resetAndInvalidateSessions()}
-                isFetching={sessions.isFetching && !sessions.isLoading}
-                className="h-8 px-2 text-xs"
-              />
-            </div>
+            >
+              {showCreateForm ? 'Cancel' : '+ New'}
+            </button>
+            <RefreshButton
+              onClick={() => resetAndInvalidateSessions()}
+              isFetching={sessions.isFetching && !sessions.isLoading}
+              className="h-7 w-7 p-0 text-[11px]"
+            />
           </div>
-          <LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} />
+          <div className="flex items-center gap-1.5 text-[10px]">
+            <LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} />
+            <span className="flex-1" />
+            {cleanupSessions.length > 0 && (
+              <ConfirmButton
+                label={`Clean ${cleanupSessions.length}`}
+                confirmLabel={`Delete ${cleanupSessions.length}?`}
+                onConfirm={() => void handleCleanup()}
+                className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                confirmClassName="h-6 px-2 rounded text-[10px] font-medium bg-destructive text-destructive-foreground cursor-pointer"
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => exportSessionsCsv(filteredSessions)}
+              disabled={filteredSessions.length === 0}
+              className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+            >
+              CSV
+            </button>
+          </div>
         </div>
 
-        {/* Search / filter input */}
-        <div className="px-4 py-2 border-b border-border">
-          <label
-            htmlFor="session-search"
-            className="absolute w-px h-px overflow-hidden [clip:rect(0,0,0,0)]"
-          >
-            Search sessions
-          </label>
+        {/* Search */}
+        <div className="px-3 py-1.5 border-b border-border">
           <input
             id="session-search"
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter by ID, project, agent, model..."
-            className="w-full px-3 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/60"
+            placeholder="Search sessions..."
+            aria-label="Search sessions"
+            className="w-full h-7 px-2.5 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
           />
         </div>
 
-        {/* Status filter tabs */}
-        <div className="flex border-b border-border px-3 py-1.5 gap-1 overflow-x-auto">
+        {/* Status tabs */}
+        <div className="flex items-center border-b border-border px-2 py-1 gap-0.5">
           {STATUS_TABS.map((tab) => (
             <button
               type="button"
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
               className={cn(
-                'flex-1 py-1.5 px-2 text-[11px] rounded-md cursor-pointer transition-all duration-200 border-0',
+                'flex-1 py-1 text-[10px] rounded cursor-pointer transition-all duration-150 border-0 text-center',
                 statusFilter === tab.key
-                  ? 'font-semibold text-foreground bg-accent shadow-sm'
-                  : 'font-normal text-muted-foreground bg-transparent hover:bg-accent/50 hover:text-foreground',
+                  ? 'font-semibold text-foreground bg-accent'
+                  : 'font-normal text-muted-foreground hover:bg-accent/50',
               )}
             >
-              {tab.label}
-              <span
-                className={cn(
-                  'ml-1 text-[10px] tabular-nums',
-                  statusFilter === tab.key ? 'text-foreground/70' : 'text-muted-foreground/60',
-                )}
-              >
-                {statusCounts[tab.key]}
-              </span>
+              {tab.label}<span className="ml-0.5 tabular-nums opacity-60">{statusCounts[tab.key]}</span>
             </button>
           ))}
         </div>
 
-        {/* Sort / Group / Filter controls */}
-        <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 flex-wrap">
+        {/* Sort / Bulk / Group controls */}
+        <div className="px-2 py-1 border-b border-border flex items-center gap-1">
           <label
             htmlFor="sessions-select-all"
             className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer py-1"
@@ -655,40 +643,40 @@ export function SessionsPage(): React.JSX.Element {
                   setCheckedIds(new Set(filteredSessions.map((s) => s.id)));
                 }
               }}
-              className="w-3.5 h-3.5 cursor-pointer"
+              className="w-3 h-3 cursor-pointer"
             />
-            All
           </label>
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
             aria-label="Sort order"
-            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] h-7 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            className="h-5 px-1 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer"
           >
-            <option value="newest">{'\u2193'} Newest first</option>
-            <option value="oldest">{'\u2191'} Oldest first</option>
-            <option value="status">{'\u2191'} By status</option>
+            <option value="newest">New</option>
+            <option value="oldest">Old</option>
+            <option value="status">Status</option>
           </select>
           <select
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
             aria-label="Group by"
-            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] h-7 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            className="h-6 px-1.5 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer"
           >
-            <option value="none">No grouping</option>
-            <option value="project">Group by Project</option>
-            <option value="machine">Group by Machine</option>
+            <option value="none">Flat</option>
+            <option value="project">By Project</option>
+            <option value="machine">By Machine</option>
           </select>
+          <span className="flex-1" />
           <label
             htmlFor="sessions-hide-empty"
-            className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer ml-auto py-1"
+            className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer"
           >
             <input
               id="sessions-hide-empty"
               type="checkbox"
               checked={hideEmpty}
               onChange={(e) => setHideEmpty(e.target.checked)}
-              className="w-3.5 h-3.5 cursor-pointer"
+              className="w-3 h-3 cursor-pointer"
             />
             Hide empty
           </label>
