@@ -660,7 +660,7 @@ describe('MachineDetailView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('unknown-agen...')).toBeDefined();
+      expect(screen.getByText('unknown-agen')).toBeDefined();
     });
   });
 
