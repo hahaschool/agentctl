@@ -120,7 +120,7 @@ vi.mock('@/components/ui/select', () => ({
   SelectTrigger: ({ children, ...rest }: { children: React.ReactNode; [k: string]: unknown }) => (
     <div
       data-testid="select-trigger"
-      {...(rest['aria-label'] ? { 'aria-label': rest['aria-label'] } : {})}
+      {...(rest['aria-label'] ? { 'aria-label': rest['aria-label'] as string } : {})}
     >
       {children}
     </div>
@@ -260,7 +260,7 @@ function createAgent(overrides?: Partial<Agent>): Agent {
     id: 'agent-1',
     machineId: 'machine-1',
     name: 'test-agent',
-    type: 'autonomous',
+    type: 'autonomous' as Agent['type'],
     status: 'registered',
     schedule: '*/15 * * * *',
     projectPath: '/home/user/project',
@@ -315,13 +315,14 @@ function createAccount(overrides?: Partial<ApiAccount>): ApiAccount {
   return {
     id: 'account-1',
     name: 'Main Account',
-    provider: 'anthropic',
+    provider: 'anthropic_api',
     credentialMasked: 'sk-...abcd',
     priority: 1,
     rateLimit: { itpm: 100000, otpm: 50000 },
     isActive: true,
     metadata: {},
     createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   };
 }
@@ -1332,7 +1333,7 @@ describe('AgentDetailPage', () => {
     });
     // Click Cancel in the dialog footer
     const cancelButtons = screen.getAllByText('Cancel');
-    fireEvent.click(cancelButtons[cancelButtons.length - 1]);
+    fireEvent.click(cancelButtons[cancelButtons.length - 1]!);
     await waitFor(() => {
       expect(screen.queryByTestId('dialog')).toBeNull();
     });
@@ -1395,7 +1396,7 @@ describe('AgentDetailPage', () => {
     const modelInput = await waitFor(() => screen.getByDisplayValue('claude-sonnet-4-20250514'));
     fireEvent.change(modelInput, { target: { value: '' } });
     fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0][0];
+    const callArgs = mutateFn.mock.calls[0]![0];
     expect(callArgs.config.model).toBeUndefined();
   });
 
@@ -1410,7 +1411,7 @@ describe('AgentDetailPage', () => {
     const maxTurnsInput = await waitFor(() => screen.getByDisplayValue('50'));
     fireEvent.change(maxTurnsInput, { target: { value: '' } });
     fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0][0];
+    const callArgs = mutateFn.mock.calls[0]![0];
     expect(callArgs.config.maxTurns).toBeUndefined();
   });
 

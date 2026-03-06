@@ -63,7 +63,7 @@ vi.mock('@/components/ui/input', () => ({
 }));
 
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ children, value, onValueChange }: any) => (
+  Select: ({ children, value, onValueChange: _onValueChange }: any) => (
     <div data-testid="select" data-value={value}>
       {children}
     </div>
@@ -309,7 +309,7 @@ describe('AccountsSection', () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
       const testButtons = screen.getAllByText('Test');
-      fireEvent.click(testButtons[0]);
+      fireEvent.click(testButtons[0]!);
       expect(mockTestAccount.mutateAsync).toHaveBeenCalledWith('acc-1');
     });
 
@@ -319,7 +319,7 @@ describe('AccountsSection', () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
       const testButtons = screen.getAllByText('Test');
-      fireEvent.click(testButtons[0]);
+      fireEvent.click(testButtons[0]!);
       // After clicking, the button for that account should say "Testing..."
       expect(await screen.findByText('Testing...')).toBeDefined();
     });
@@ -429,7 +429,7 @@ describe('AccountsSection', () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
       const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]);
+      fireEvent.click(deleteButtons[0]!);
       expect(screen.getByText('Delete Account')).toBeDefined();
       expect(
         screen.getByText(
@@ -442,9 +442,9 @@ describe('AccountsSection', () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
       const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]);
+      fireEvent.click(deleteButtons[0]!);
       const dialogs = screen.getAllByTestId('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1];
+      const confirmDialog = dialogs[dialogs.length - 1]!;
       expect(within(confirmDialog).getByText('Cancel')).toBeDefined();
       const confirmDeleteBtns = within(confirmDialog).getAllByText('Delete');
       expect(confirmDeleteBtns.length).toBeGreaterThanOrEqual(1);
@@ -455,9 +455,9 @@ describe('AccountsSection', () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
       const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]);
+      fireEvent.click(deleteButtons[0]!);
       const dialogs = screen.getAllByTestId('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1];
+      const confirmDialog = dialogs[dialogs.length - 1]!;
       const confirmDeleteBtns = within(confirmDialog).getAllByText('Delete');
       // Find the button element (not the h2 title)
       const confirmBtn = confirmDeleteBtns.find((el) => el.tagName === 'BUTTON');
@@ -469,7 +469,7 @@ describe('AccountsSection', () => {
       renderComponent();
       await screen.findByText('My Anthropic Key');
       const deleteButtons = screen.getAllByText('Delete');
-      fireEvent.click(deleteButtons[0]);
+      fireEvent.click(deleteButtons[0]!);
       // Confirm dialog is shown
       expect(
         screen.getByText(
@@ -478,7 +478,7 @@ describe('AccountsSection', () => {
       ).toBeDefined();
       // Click Cancel
       const dialogs = screen.getAllByTestId('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1];
+      const confirmDialog = dialogs[dialogs.length - 1]!;
       fireEvent.click(within(confirmDialog).getByText('Cancel'));
       // Confirmation text should be gone
       expect(

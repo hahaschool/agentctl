@@ -1,12 +1,12 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mock dependencies — BEFORE component import
 // ---------------------------------------------------------------------------
 
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ children, value, onValueChange }: any) => (
+  Select: ({ children, value, onValueChange: _onValueChange }: any) => (
     <div data-testid="select" data-value={value}>
       {children}
     </div>
@@ -125,6 +125,6 @@ describe('PreferencesSection', () => {
     render(<PreferencesSection />);
     const selects = screen.getAllByTestId('select');
     // First select is the model select
-    expect(selects[0].getAttribute('data-value')).toBe('claude-sonnet-4-6');
+    expect(selects[0]!.getAttribute('data-value')).toBe('claude-sonnet-4-6');
   });
 });

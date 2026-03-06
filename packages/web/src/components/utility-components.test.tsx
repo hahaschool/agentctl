@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mock Toast module (used by useToast)
