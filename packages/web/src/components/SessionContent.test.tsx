@@ -78,7 +78,11 @@ vi.mock('./ProgressIndicator', () => ({
   ProgressIndicator: ({
     content,
     toolName,
-  }: { content?: string; toolName?: string; timestamp?: string }) => (
+  }: {
+    content?: string;
+    toolName?: string;
+    timestamp?: string;
+  }) => (
     <div data-testid="progress-indicator">
       {content}
       {toolName && <span>{toolName}</span>}
@@ -90,7 +94,12 @@ vi.mock('./SubagentBlock', () => ({
   SubagentBlock: ({
     content,
     subagentId,
-  }: { content?: string; toolName?: string; subagentId?: string; timestamp?: string }) => (
+  }: {
+    content?: string;
+    toolName?: string;
+    subagentId?: string;
+    timestamp?: string;
+  }) => (
     <div data-testid="subagent-block">
       {content}
       {subagentId && <span>{subagentId}</span>}
@@ -105,10 +114,7 @@ vi.mock('./TodoBlock', () => ({
 }));
 
 vi.mock('./TerminalView', () => ({
-  TerminalView: ({
-    rawOutput,
-    isActive,
-  }: { rawOutput: string[]; isActive?: boolean }) => (
+  TerminalView: ({ rawOutput, isActive }: { rawOutput: string[]; isActive?: boolean }) => (
     <div data-testid="terminal-view">
       Terminal ({rawOutput.length} chunks) {isActive ? 'active' : 'inactive'}
     </div>
@@ -116,10 +122,7 @@ vi.mock('./TerminalView', () => ({
 }));
 
 vi.mock('./MarkdownContent', () => ({
-  MarkdownContent: ({
-    children,
-    className,
-  }: { children?: string; className?: string }) => (
+  MarkdownContent: ({ children, className }: { children?: string; className?: string }) => (
     <div data-testid="markdown-content" className={className}>
       {children}
     </div>
@@ -636,9 +639,7 @@ describe('SessionContent', () => {
 
       // Second call should include offset
       const secondCall = mockGetSessionContent.mock.calls[1] as unknown[];
-      expect(secondCall?.[1]).toEqual(
-        expect.objectContaining({ offset: 1 }),
-      );
+      expect(secondCall?.[1]).toEqual(expect.objectContaining({ offset: 1 }));
     });
   });
 
@@ -674,9 +675,7 @@ describe('SessionContent', () => {
       renderSessionContent();
 
       await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /refresh/i }),
-        ).toBeDefined();
+        expect(screen.getByRole('button', { name: /refresh/i })).toBeDefined();
       });
     });
 
@@ -738,9 +737,7 @@ describe('SessionContent', () => {
         sessionId: 'sess-123',
         totalMessages: 0,
       });
-      const { rerender } = render(
-        <SessionContent {...defaultProps} lastSentMessage={null} />,
-      );
+      const { rerender } = render(<SessionContent {...defaultProps} lastSentMessage={null} />);
 
       await waitFor(() => {
         expect(screen.getByText('No messages yet')).toBeDefined();
@@ -765,9 +762,7 @@ describe('SessionContent', () => {
         sessionId: 'sess-123',
         totalMessages: 0,
       });
-      const { rerender } = render(
-        <SessionContent {...defaultProps} lastSentMessage={null} />,
-      );
+      const { rerender } = render(<SessionContent {...defaultProps} lastSentMessage={null} />);
 
       await waitFor(() => {
         expect(screen.getByText('No messages yet')).toBeDefined();

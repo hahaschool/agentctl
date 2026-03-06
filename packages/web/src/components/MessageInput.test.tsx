@@ -123,9 +123,7 @@ function renderInput(
   onOptimisticSend?: (text: string) => void,
 ) {
   const session = makeSession(sessionOverrides);
-  const result = render(
-    <MessageInput session={session} onOptimisticSend={onOptimisticSend} />,
-  );
+  const result = render(<MessageInput session={session} onOptimisticSend={onOptimisticSend} />);
   return { ...result, session };
 }
 
@@ -914,7 +912,12 @@ describe('MessageInput', () => {
 
   describe('edge cases', () => {
     it('can send with only attachments (no text)', async () => {
-      const attachment = makeAttachment({ name: 'solo.txt', size: 50, content: 'hi', isBase64: false });
+      const attachment = makeAttachment({
+        name: 'solo.txt',
+        size: 50,
+        content: 'hi',
+        isBase64: false,
+      });
       mockFileToAttachment.mockResolvedValue(attachment);
 
       renderInput();
@@ -929,7 +932,8 @@ describe('MessageInput', () => {
       fireEvent.click(getSendButton());
 
       expect(mockSendMessageMutate).toHaveBeenCalledTimes(1);
-      const sentMessage = (mockSendMessageMutate.mock.calls[0] as Array<{ message: string }>)?.[0]?.message;
+      const sentMessage = (mockSendMessageMutate.mock.calls[0] as Array<{ message: string }>)?.[0]
+        ?.message;
       expect(sentMessage).toContain('[Attached file: solo.txt]');
     });
 
@@ -956,7 +960,8 @@ describe('MessageInput', () => {
       fireEvent.change(textarea, { target: { value: 'See image' } });
       fireEvent.click(getSendButton());
 
-      const sentMessage = (mockSendMessageMutate.mock.calls[0] as Array<{ message: string }>)?.[0]?.message;
+      const sentMessage = (mockSendMessageMutate.mock.calls[0] as Array<{ message: string }>)?.[0]
+        ?.message;
       expect(sentMessage).toContain('[Attached image: screenshot.png');
     });
 

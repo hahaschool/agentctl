@@ -33,9 +33,7 @@ vi.mock('./CopyableText', () => ({
 }));
 
 vi.mock('./LiveTimeAgo', () => ({
-  LiveTimeAgo: ({ date }: { date: string }) => (
-    <span data-testid="live-time-ago">{date}</span>
-  ),
+  LiveTimeAgo: ({ date }: { date: string }) => <span data-testid="live-time-ago">{date}</span>,
 }));
 
 vi.mock('./PathBadge', () => ({
@@ -47,9 +45,7 @@ vi.mock('./PathBadge', () => ({
 }));
 
 vi.mock('./StatusBadge', () => ({
-  StatusBadge: ({ status }: { status: string }) => (
-    <span data-testid="status-badge">{status}</span>
-  ),
+  StatusBadge: ({ status }: { status: string }) => <span data-testid="status-badge">{status}</span>,
 }));
 
 // ---------------------------------------------------------------------------

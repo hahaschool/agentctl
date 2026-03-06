@@ -33,16 +33,12 @@ vi.mock('@/components/Breadcrumb', () => ({
 
 vi.mock('@/components/CopyableText', () => ({
   CopyableText: ({ value, maxDisplay }: { value: string; maxDisplay?: number }) => (
-    <span data-testid="copyable-text">
-      {maxDisplay ? value.slice(0, maxDisplay) : value}
-    </span>
+    <span data-testid="copyable-text">{maxDisplay ? value.slice(0, maxDisplay) : value}</span>
   ),
 }));
 
 vi.mock('@/components/StatusBadge', () => ({
-  StatusBadge: ({ status }: { status: string }) => (
-    <span data-testid="status-badge">{status}</span>
-  ),
+  StatusBadge: ({ status }: { status: string }) => <span data-testid="status-badge">{status}</span>,
 }));
 
 vi.mock('./ConfirmButton', () => ({
@@ -61,13 +57,7 @@ vi.mock('./ConfirmButton', () => ({
 }));
 
 vi.mock('./GitStatusBadge', () => ({
-  GitStatusBadge: ({
-    machineId,
-    projectPath,
-  }: {
-    machineId: string;
-    projectPath: string;
-  }) => (
+  GitStatusBadge: ({ machineId, projectPath }: { machineId: string; projectPath: string }) => (
     <div data-testid="git-status-badge">
       {machineId}:{projectPath}
     </div>
@@ -81,13 +71,7 @@ vi.mock('./LastUpdated', () => ({
 }));
 
 vi.mock('./LiveDuration', () => ({
-  LiveDuration: ({
-    startedAt,
-    endedAt,
-  }: {
-    startedAt: string;
-    endedAt?: string;
-  }) => (
+  LiveDuration: ({ startedAt, endedAt }: { startedAt: string; endedAt?: string }) => (
     <span data-testid="live-duration">
       {startedAt}-{endedAt ?? 'now'}
     </span>
@@ -95,31 +79,16 @@ vi.mock('./LiveDuration', () => ({
 }));
 
 vi.mock('./LiveTimeAgo', () => ({
-  LiveTimeAgo: ({ date }: { date: string }) => (
-    <span data-testid="live-time-ago">{date}</span>
-  ),
+  LiveTimeAgo: ({ date }: { date: string }) => <span data-testid="live-time-ago">{date}</span>,
 }));
 
 vi.mock('./PathBadge', () => ({
-  PathBadge: ({ path }: { path: string }) => (
-    <span data-testid="path-badge">{path}</span>
-  ),
+  PathBadge: ({ path }: { path: string }) => <span data-testid="path-badge">{path}</span>,
 }));
 
 vi.mock('./RefreshButton', () => ({
-  RefreshButton: ({
-    onClick,
-    isFetching,
-  }: {
-    onClick: () => void;
-    isFetching: boolean;
-  }) => (
-    <button
-      type="button"
-      data-testid="refresh-button"
-      onClick={onClick}
-      aria-busy={isFetching}
-    >
+  RefreshButton: ({ onClick, isFetching }: { onClick: () => void; isFetching: boolean }) => (
+    <button type="button" data-testid="refresh-button" onClick={onClick} aria-busy={isFetching}>
       Refresh
     </button>
   ),
@@ -295,9 +264,7 @@ describe('SessionHeader', () => {
     it('renders the session id in copyable text', () => {
       renderHeader();
       const copyableTexts = screen.getAllByTestId('copyable-text');
-      const sessionIdCopyable = copyableTexts.find(
-        (el) => el.textContent === 'sess-1234567',
-      );
+      const sessionIdCopyable = copyableTexts.find((el) => el.textContent === 'sess-1234567');
       expect(sessionIdCopyable).toBeDefined();
     });
 
@@ -395,9 +362,7 @@ describe('SessionHeader', () => {
         }),
       });
       const durations = screen.getAllByTestId('live-duration');
-      const completed = durations.find((el) =>
-        el.textContent?.includes('2026-03-06T01:30:00Z'),
-      );
+      const completed = durations.find((el) => el.textContent?.includes('2026-03-06T01:30:00Z'));
       expect(completed).toBeDefined();
     });
 
@@ -585,9 +550,7 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      expect(
-        screen.getByPlaceholderText('Prompt for the forked session...'),
-      ).toBeDefined();
+      expect(screen.getByPlaceholderText('Prompt for the forked session...')).toBeDefined();
       expect(screen.getByText('Fork Session')).toBeDefined();
     });
 
@@ -600,9 +563,7 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      const input = screen.getByPlaceholderText(
-        'Prompt for the forked session...',
-      );
+      const input = screen.getByPlaceholderText('Prompt for the forked session...');
       fireEvent.change(input, { target: { value: 'Continue the work' } });
       fireEvent.click(screen.getByText('Fork Session'));
 
@@ -636,9 +597,7 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      const input = screen.getByPlaceholderText(
-        'Prompt for the forked session...',
-      );
+      const input = screen.getByPlaceholderText('Prompt for the forked session...');
       fireEvent.change(input, { target: { value: '   ' } });
       fireEvent.click(screen.getByText('Fork Session'));
 
@@ -726,9 +685,7 @@ describe('SessionHeader', () => {
           metadata: {},
         }),
       });
-      expect(
-        screen.getByText('Session ended with an error (no details available)'),
-      ).toBeDefined();
+      expect(screen.getByText('Session ended with an error (no details available)')).toBeDefined();
     });
 
     it('shows exit reason when different from error message', () => {
@@ -886,9 +843,7 @@ describe('SessionHeader', () => {
     });
 
     it('shows account name when account is found in accounts query', () => {
-      mockAccountsData.push(
-        { id: 'acct-matched', name: 'My Anthropic' },
-      );
+      mockAccountsData.push({ id: 'acct-matched', name: 'My Anthropic' });
       renderHeader({
         session: makeSession({ accountId: 'acct-matched' }),
       });
@@ -933,16 +888,12 @@ describe('SessionHeader', () => {
       renderHeader({
         session: makeSession({ status: 'starting' }),
       });
-      expect(
-        screen.getByText('Waiting for worker to start session...'),
-      ).toBeDefined();
+      expect(screen.getByText('Waiting for worker to start session...')).toBeDefined();
     });
 
     it('does not show starting indicator for active sessions', () => {
       renderHeader({ session: makeSession({ status: 'active' }) });
-      expect(
-        screen.queryByText('Waiting for worker to start session...'),
-      ).toBeNull();
+      expect(screen.queryByText('Waiting for worker to start session...')).toBeNull();
     });
   });
 
@@ -1046,9 +997,7 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      expect(
-        screen.getByText(/quota or authentication issues/),
-      ).toBeDefined();
+      expect(screen.getByText(/quota or authentication issues/)).toBeDefined();
     });
 
     it('shows general error warning for error sessions with non-quota errors', () => {
@@ -1061,9 +1010,7 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      expect(
-        screen.getByText(/ended with an error.*forked session may also fail/),
-      ).toBeDefined();
+      expect(screen.getByText(/ended with an error.*forked session may also fail/)).toBeDefined();
     });
 
     it('does not show error warning for ended (non-error) sessions', () => {
@@ -1094,9 +1041,7 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      const input = screen.getByPlaceholderText(
-        'Prompt for the forked session...',
-      );
+      const input = screen.getByPlaceholderText('Prompt for the forked session...');
       fireEvent.change(input, { target: { value: 'Continue work' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -1112,18 +1057,12 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      expect(
-        screen.getByPlaceholderText('Prompt for the forked session...'),
-      ).toBeDefined();
+      expect(screen.getByPlaceholderText('Prompt for the forked session...')).toBeDefined();
 
-      const input = screen.getByPlaceholderText(
-        'Prompt for the forked session...',
-      );
+      const input = screen.getByPlaceholderText('Prompt for the forked session...');
       fireEvent.keyDown(input, { key: 'Escape' });
 
-      expect(
-        screen.queryByPlaceholderText('Prompt for the forked session...'),
-      ).toBeNull();
+      expect(screen.queryByPlaceholderText('Prompt for the forked session...')).toBeNull();
     });
   });
 });
