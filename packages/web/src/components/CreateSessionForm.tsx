@@ -6,16 +6,10 @@ import { cn } from '@/lib/utils';
 
 import type { ApiAccount, Machine } from '../lib/api';
 import { api } from '../lib/api';
+import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '../lib/model-options';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { ErrorBanner } from './ErrorBanner';
 import { useToast } from './Toast';
-
-const MODEL_OPTIONS = [
-  { value: '', label: 'Default' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-];
 
 type CreateSessionFormProps = {
   accounts: ApiAccount[];

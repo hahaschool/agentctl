@@ -15,12 +15,7 @@ import { queryKeys, useResumeSession, useSendMessage } from '../lib/queries';
 // Constants
 // ---------------------------------------------------------------------------
 
-const RESUME_MODEL_OPTIONS = [
-  { value: '', label: 'Keep current model' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-];
+import { RESUME_MODEL_OPTIONS } from '../lib/model-options';
 
 // ---------------------------------------------------------------------------
 // Props

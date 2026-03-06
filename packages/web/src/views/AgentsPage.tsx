@@ -58,14 +58,7 @@ const AGENT_TYPES = [
 ] as const;
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
-const MODEL_OPTIONS = [
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6', tier: 'flagship' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', tier: 'balanced' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', tier: 'fast' },
-  { value: 'claude-sonnet-4-5-20250514', label: 'Claude Sonnet 4.5', tier: 'balanced' },
-  { value: 'claude-opus-4-0-20250514', label: 'Claude Opus 4', tier: 'flagship' },
-  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', tier: 'balanced' },
-] as const;
+import { ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';

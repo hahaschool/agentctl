@@ -26,14 +26,8 @@ import { useHotkeys } from '../hooks/use-hotkeys';
 import type { ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import { downloadCsv, formatDateTime, formatDuration, shortenPath } from '../lib/format-utils';
+import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '../lib/model-options';
 import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
-
-const MODEL_OPTIONS = [
-  { value: '', label: 'Default' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-];
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
 type SortOrder = 'newest' | 'oldest' | 'status' | 'cost' | 'duration';

@@ -23,14 +23,8 @@ const LS_AUTO_REFRESH = STORAGE_KEYS.AUTO_REFRESH_INTERVAL;
 const LS_MAX_MESSAGES = STORAGE_KEYS.MAX_DISPLAY_MESSAGES;
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
-const MODEL_OPTIONS = [
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-  { value: 'claude-sonnet-4-5-20250514', label: 'Claude Sonnet 4.5' },
-  { value: 'claude-opus-4-0-20250514', label: 'Claude Opus 4' },
-  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
-] as const;
+
+import { ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
 
 const DEFAULT_AUTO_REFRESH = '10000';
 const DEFAULT_MAX_MESSAGES = '100';

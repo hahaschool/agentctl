@@ -3,14 +3,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Session, SessionContentMessage } from '@/lib/api';
 import { getMessageStyle } from '@/lib/message-styles';
+import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '@/lib/model-options';
 import { cn } from '@/lib/utils';
-
-const MODEL_OPTIONS = [
-  { value: '', label: 'Default' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-];
 
 const AGENT_TYPES = [
   { value: 'adhoc', label: 'Ad-hoc', desc: 'One-shot task' },
