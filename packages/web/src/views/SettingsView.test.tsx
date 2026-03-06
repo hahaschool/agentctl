@@ -369,4 +369,129 @@ describe('SettingsView', () => {
       ),
     ).toBeDefined();
   });
+
+  // =========================================================================
+  // Theme Section — interaction
+  // =========================================================================
+
+  it('renders three theme buttons that are clickable', () => {
+    renderSettings();
+    const buttons = screen.getAllByRole('button');
+    const themeButtons = buttons.filter(
+      (b) =>
+        b.textContent === 'System' ||
+        b.textContent === 'Light' ||
+        b.textContent === 'Dark',
+    );
+    expect(themeButtons.length).toBe(3);
+    // Each button should be of type="button"
+    for (const btn of themeButtons) {
+      expect(btn.getAttribute('type')).toBe('button');
+    }
+  });
+
+  // =========================================================================
+  // Keyboard Shortcuts — specific shortcut descriptions
+  // =========================================================================
+
+  it('renders navigation shortcut descriptions', () => {
+    renderSettings();
+    expect(screen.getByText('Dashboard')).toBeDefined();
+    expect(screen.getByText('Machines')).toBeDefined();
+    expect(screen.getByText('Agents')).toBeDefined();
+    expect(screen.getByText('Sessions')).toBeDefined();
+    // "Settings" appears as both h1 and shortcut desc — use getAllByText
+    const settingsEls = screen.getAllByText('Settings');
+    expect(settingsEls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders global shortcut descriptions', () => {
+    renderSettings();
+    expect(screen.getByText('Command palette')).toBeDefined();
+    expect(screen.getByText('Refresh current page')).toBeDefined();
+    expect(screen.getByText('Toggle keyboard help')).toBeDefined();
+  });
+
+  it('renders the correct number of kbd elements for all shortcuts', () => {
+    renderSettings();
+    const kbdElements = document.querySelectorAll('kbd');
+    // ALL_SHORTCUTS has 12 entries, each with 1 key = 12 kbd elements
+    expect(kbdElements.length).toBe(12);
+  });
+
+  it('renders specific shortcut key labels', () => {
+    renderSettings();
+    const kbdElements = Array.from(document.querySelectorAll('kbd'));
+    const keyTexts = kbdElements.map((el) => el.textContent);
+    expect(keyTexts).toContain('1');
+    expect(keyTexts).toContain('r');
+    expect(keyTexts).toContain('?');
+    expect(keyTexts).toContain('Esc');
+  });
+
+  // =========================================================================
+  // Connection Section — dependency error display
+  // =========================================================================
+
+  it('shows Error for unhealthy dependencies', async () => {
+    mockHealthQuery.mockReturnValue({
+      queryKey: ['health'],
+      queryFn: vi.fn().mockResolvedValue({
+        status: 'degraded',
+        timestamp: new Date().toISOString(),
+        dependencies: {
+          postgres: { status: 'ok', latencyMs: 10 },
+          redis: { status: 'error', latencyMs: null },
+        },
+      }),
+    });
+
+    renderSettings();
+    await waitFor(() => {
+      expect(screen.getByText('Error')).toBeDefined();
+      expect(screen.getByText('10ms')).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // Router Link — status indicator
+  // =========================================================================
+
+  it('renders router link description text', () => {
+    renderSettings();
+    expect(
+      screen.getByText('Multi-provider failover routing via LiteLLM.'),
+    ).toBeDefined();
+  });
+
+  it('renders Configure link text', () => {
+    renderSettings();
+    // The link contains "Configure →" (HTML entity &rarr; renders as →)
+    const link = screen.getByTestId('link-/settings/router');
+    expect(link.textContent).toContain('Configure');
+  });
+
+  // =========================================================================
+  // Structure — section separators and group containers
+  // =========================================================================
+
+  it('renders three SettingsGroup sections with h2 headings', () => {
+    renderSettings();
+    const h2s = screen.getAllByRole('heading', { level: 2 });
+    expect(h2s.length).toBe(3);
+    expect(h2s[0].textContent).toBe('API Accounts');
+    expect(h2s[1].textContent).toBe('Appearance & Preferences');
+    expect(h2s[2].textContent).toBe('System');
+  });
+
+  it('renders h3 sub-section headings', () => {
+    renderSettings();
+    const h3s = screen.getAllByRole('heading', { level: 3 });
+    const h3Texts = h3s.map((h) => h.textContent);
+    expect(h3Texts).toContain('Theme');
+    expect(h3Texts).toContain('Control Plane');
+    expect(h3Texts).toContain('Keyboard Shortcuts');
+    expect(h3Texts).toContain('About AgentCTL');
+    expect(h3Texts).toContain('LLM Router');
+  });
 });
