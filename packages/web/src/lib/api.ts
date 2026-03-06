@@ -8,6 +8,7 @@ import type {
   AgentConfig,
   AgentStatus,
   AgentType,
+  ContentMessage,
   MachineCapabilities,
   MachineStatus,
   ApiAccount as SharedApiAccount,
@@ -93,15 +94,11 @@ export type DiscoveredSession = {
   hostname: string;
 };
 
-export type SessionContentMessage = {
-  type: string;
-  content: string;
-  timestamp?: string;
-  toolName?: string;
-  toolId?: string;
-  subagentId?: string;
-  metadata?: Record<string, unknown>;
-};
+/**
+ * Alias for ContentMessage from @agentctl/shared.
+ * Kept as `SessionContentMessage` for backward compatibility with existing web imports.
+ */
+export type SessionContentMessage = ContentMessage;
 
 export type SessionContentResponse = {
   messages: SessionContentMessage[];
