@@ -952,7 +952,7 @@ export function SessionsPage(): React.JSX.Element {
       {/* Session detail panel */}
       <div
         className={cn(
-          'flex-1 flex flex-col',
+          'flex-1 flex flex-col min-w-0 overflow-hidden',
           // Mobile: hidden when no session selected, full width when selected
           selected ? 'flex' : 'hidden md:flex',
         )}
@@ -973,8 +973,8 @@ export function SessionsPage(): React.JSX.Element {
                     {'\u2190'}
                   </button>
                   <div className="flex items-center gap-2.5">
-                    <span className="font-mono text-[13px] font-semibold text-foreground/90 truncate" title={selected.id}>
-                      {selected.id.slice(0, 20)}...
+                    <span className="font-mono text-[13px] font-semibold text-foreground/90 truncate max-w-[200px]" title={selected.id}>
+                      {selected.id.slice(0, 16)}…
                     </span>
                     <StatusBadge status={selected.status} />
                   </div>
@@ -987,7 +987,7 @@ export function SessionsPage(): React.JSX.Element {
                   <span className="text-purple-400/80">{selected.model ?? 'default'}</span>
                 </div>
               </div>
-              <div className="flex gap-2 items-center shrink-0">
+              <div className="flex gap-2 items-center shrink-0 flex-wrap">
                 <Link
                   href={`/sessions/${selected.id}`}
                   className="h-8 px-3.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-accent hover:text-foreground inline-flex items-center"
