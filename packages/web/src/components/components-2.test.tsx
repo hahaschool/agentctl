@@ -9,14 +9,23 @@ import { PathBadge } from './PathBadge';
 import { WsStatusIndicator } from './WsStatusIndicator';
 
 // ---------------------------------------------------------------------------
-// Mock sonner (used by useToast inside PathBadge)
+// Mock Toast module (used by useToast inside PathBadge)
 // ---------------------------------------------------------------------------
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
+const mockToast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  dismiss: vi.fn(),
+}));
+vi.mock('@/components/Toast', () => ({
+  toast: mockToast,
+  useToast: () => ({
+    toast: (type: string, msg: string) => mockToast[type as 'success' | 'error' | 'info']?.(msg),
+    success: mockToast.success,
+    error: mockToast.error,
+    info: mockToast.info,
+  }),
+  ToastContainer: () => null,
 }));
 
 // ---------------------------------------------------------------------------
@@ -108,7 +117,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    const tryAgainBtn = screen.getByRole('button', { name: 'Try Again' });
+    const tryAgainBtn = screen.getByRole('button', { name: /Try again/i });
     expect(tryAgainBtn).toBeDefined();
   });
 
@@ -132,7 +141,7 @@ describe('ErrorBoundary', () => {
 
     shouldThrow = false;
 
-    const tryAgainBtn = screen.getByRole('button', { name: 'Try Again' });
+    const tryAgainBtn = screen.getByRole('button', { name: /Try again/i });
     fireEvent.click(tryAgainBtn);
 
     rerender(
@@ -158,7 +167,7 @@ describe('ErrorBoundary', () => {
     // Verify the error UI structure
     expect(screen.getByText('Something went wrong')).toBeDefined();
     expect(screen.getByText('Something failed')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Try Again' })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Try again/i })).toBeDefined();
   });
 
   it('applies the expected CSS classes to the error container', () => {
@@ -362,7 +371,7 @@ describe('PathBadge', () => {
   });
 
   it('shows success toast on successful copy', async () => {
-    const { toast } = await import('sonner');
+    const { toast } = await import('@/components/Toast');
     vi.mocked(navigator.clipboard.writeText).mockResolvedValueOnce(undefined);
 
     render(<PathBadge path="/users/john/file.ts" />);
@@ -378,7 +387,7 @@ describe('PathBadge', () => {
   });
 
   it('shows error toast on failed copy', async () => {
-    const { toast } = await import('sonner');
+    const { toast } = await import('@/components/Toast');
     vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('Copy failed'));
 
     render(<PathBadge path="/users/john/file.ts" />);

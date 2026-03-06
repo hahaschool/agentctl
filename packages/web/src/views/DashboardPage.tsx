@@ -189,6 +189,7 @@ export function DashboardPage(): React.JSX.Element {
         <StatCard
           label="Machines Online"
           value={`${machinesOnline} / ${machineList.length}`}
+          accent={machinesOnline > 0 ? 'green' : undefined}
           sublabel={
             machineList.length > 0
               ? `${machineList.filter((m) => m.status === 'offline').length} offline`
@@ -198,6 +199,7 @@ export function DashboardPage(): React.JSX.Element {
         <StatCard
           label="Sessions Discovered"
           value={formatNumber(discovered.data?.count ?? 0)}
+          accent="blue"
           sublabel={
             discovered.data
               ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
@@ -207,6 +209,7 @@ export function DashboardPage(): React.JSX.Element {
         <StatCard
           label="Agents Registered"
           value={String(agentsRegistered)}
+          accent={agentList.filter((a) => a?.status === 'error').length > 0 ? 'red' : 'blue'}
           sublabel={
             agentList.filter((a) => a?.status === 'error').length > 0
               ? `${agentList.filter((a) => a?.status === 'error').length} in error`
@@ -216,16 +219,19 @@ export function DashboardPage(): React.JSX.Element {
         <StatCard
           label="Active Runs"
           value={formatNumber(activeRuns)}
+          accent={activeRuns > 0 ? 'green' : undefined}
           sublabel={`${formatNumber(totalRuns)} total`}
         />
         <StatCard
           label="Active Sessions"
           value={String(activeSessionCount)}
+          accent={activeSessionCount > 0 ? 'green' : undefined}
           sublabel={`${sessionList.length} total`}
         />
         <StatCard
           label="Total Cost"
           value={formatCost(totalAgentCost)}
+          accent="purple"
           sublabel={
             agentCostBreakdown.length > 0
               ? `top: ${agentCostBreakdown[0]?.name ?? 'N/A'}`

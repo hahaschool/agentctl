@@ -3,9 +3,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
-import { Toaster } from 'sonner';
-
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ToastContainer } from '@/components/Toast';
 import { NotificationProvider } from '@/contexts/notification-context';
 import { ApiError } from '@/lib/api';
 
@@ -36,13 +35,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <NotificationProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </NotificationProvider>
-        <Toaster
-          position="bottom-right"
-          theme="dark"
-          toastOptions={{
-            className: 'text-sm',
-          }}
-        />
+        <ToastContainer />
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/components/Toast';
 
 import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';

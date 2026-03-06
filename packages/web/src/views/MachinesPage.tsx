@@ -97,13 +97,13 @@ export function MachinesPage(): React.JSX.Element {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search machines"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as MachineStatusFilter)}
           aria-label="Filter by status"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
           <option value="all">All statuses</option>
           <option value="online">Online</option>
@@ -117,16 +117,18 @@ export function MachinesPage(): React.JSX.Element {
 
       {/* Summary stats */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-        <StatCard label="Total Machines" value={String(list.length)} />
-        <StatCard label="Online" value={String(online)} />
+        <StatCard label="Total Machines" value={String(list.length)} accent="blue" />
+        <StatCard label="Online" value={String(online)} accent={online > 0 ? 'green' : undefined} />
         <StatCard
           label="Offline"
           value={String(offline)}
+          accent={offline > 0 ? 'red' : undefined}
           sublabel={offline > 0 ? 'Needs attention' : 'All clear'}
         />
         <StatCard
           label="Degraded"
           value={String(degraded)}
+          accent={degraded > 0 ? 'yellow' : undefined}
           sublabel={degraded > 0 ? 'Partial issues' : 'Healthy'}
         />
       </div>
@@ -181,13 +183,13 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
   const m = machine;
 
   return (
-    <div className="p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5">
+    <div className="p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5 transition-colors hover:border-border">
       {/* Top row: hostname + status */}
       <div className="flex justify-between items-start">
         <div>
           <Link
             href={`/machines/${m.id}`}
-            className="text-[17px] font-bold text-foreground hover:text-primary transition-colors no-underline"
+            className="text-[17px] font-semibold text-foreground hover:text-primary transition-colors no-underline"
           >
             {m.hostname}
           </Link>

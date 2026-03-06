@@ -1,5 +1,6 @@
 'use client';
 
+import { RefreshCw } from 'lucide-react';
 import type React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -11,10 +12,6 @@ type Props = {
   className?: string;
 };
 
-/**
- * A refresh button that shows a spinning animation while data is being fetched.
- * Use with TanStack Query's `isFetching` state for visual feedback.
- */
 export function RefreshButton({
   onClick,
   isFetching,
@@ -25,22 +22,22 @@ export function RefreshButton({
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
+      aria-label={label || 'Refresh'}
+      data-testid="refresh-button"
       disabled={isFetching}
       className={cn(
-        'px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer inline-flex items-center gap-1.5',
+        'px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-[13px] cursor-pointer inline-flex items-center gap-1.5 transition-colors hover:bg-accent hover:text-foreground',
         isFetching && 'opacity-70 cursor-wait',
         className,
       )}
     >
-      <span
+      <RefreshCw
+        size={12}
         className={cn(
-          'inline-block text-[11px] transition-transform duration-300',
+          'transition-transform duration-300',
           isFetching && 'animate-spin',
         )}
-      >
-        {'\u21BB'}
-      </span>
+      />
       {label}
     </button>
   );

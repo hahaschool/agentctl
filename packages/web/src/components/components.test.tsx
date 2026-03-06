@@ -5,14 +5,23 @@ import { EmptyState } from './EmptyState';
 import { StatusBadge } from './StatusBadge';
 
 // ---------------------------------------------------------------------------
-// Mock sonner (used by useToast inside CopyableText)
+// Mock Toast module (used by useToast inside CopyableText)
 // ---------------------------------------------------------------------------
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
+const mockToast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  dismiss: vi.fn(),
+}));
+vi.mock('@/components/Toast', () => ({
+  toast: mockToast,
+  useToast: () => ({
+    toast: (type: string, msg: string) => mockToast[type as 'success' | 'error' | 'info']?.(msg),
+    success: mockToast.success,
+    error: mockToast.error,
+    info: mockToast.info,
+  }),
+  ToastContainer: () => null,
 }));
 
 // ---------------------------------------------------------------------------
