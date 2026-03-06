@@ -52,7 +52,7 @@ export function RouterConfigView(): React.JSX.Element {
   const deployments = modelsInfo.data?.deployments ?? [];
 
   return (
-    <div className="relative p-4 md:p-6 max-w-3xl space-y-6 animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-3xl space-y-6 animate-page-enter">
       <FetchingBar isFetching={isFetching} />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">

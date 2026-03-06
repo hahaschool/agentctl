@@ -112,7 +112,7 @@ export function MachineDetailView(): React.JSX.Element {
   const heartbeatStale = machine.lastHeartbeat ? isStaleHeartbeat(machine.lastHeartbeat) : false;
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1000px]">
+    <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
       <FetchingBar isFetching={anyFetching && !machines.isLoading} />
       <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: machine.hostname }]} />
 

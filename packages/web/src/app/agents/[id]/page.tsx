@@ -245,15 +245,20 @@ export default function AgentDetailPage(): React.JSX.Element {
   const runList = runs.data ?? [];
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1000px]">
+    <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
       <FetchingBar isFetching={(agent.isFetching || runs.isFetching) && !agent.isLoading} />
       <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: data.name }]} />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-[22px] font-semibold tracking-tight">{data.name}</h1>
           <StatusBadge status={data.status} />
+          {(data.config?.model as string | undefined) && (
+            <span className="font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30 text-[11px]">
+              {data.config?.model as string}
+            </span>
+          )}
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             Edit
           </Button>
@@ -329,8 +334,20 @@ export default function AgentDetailPage(): React.JSX.Element {
             <InfoField label="ID">
               <CopyableText value={data.id} maxDisplay={16} />
             </InfoField>
-            <InfoField label="Machine ID">
-              <CopyableText value={data.machineId} maxDisplay={16} />
+            <InfoField label="Machine">
+              {(() => {
+                const m = machines.find((machine) => machine.id === data.machineId);
+                return m ? (
+                  <Link
+                    href={`/machines/${data.machineId}`}
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 underline underline-offset-2 text-xs"
+                  >
+                    {m.hostname}
+                  </Link>
+                ) : (
+                  <CopyableText value={data.machineId} maxDisplay={16} />
+                );
+              })()}
             </InfoField>
             <InfoField label="Type">
               <span className="capitalize">{data.type}</span>
@@ -416,7 +433,14 @@ export default function AgentDetailPage(): React.JSX.Element {
       {/* Sessions for this agent */}
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle className="text-sm">Sessions</CardTitle>
+          <CardTitle className="text-sm flex items-center gap-2">
+            Sessions
+            {(agentSessions.data?.sessions ?? []).length > 0 && (
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">
+                {agentSessions.data?.sessions.length}
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {agentSessions.isLoading ? (
@@ -446,6 +470,11 @@ export default function AgentDetailPage(): React.JSX.Element {
                   <span className="text-xs font-mono text-muted-foreground">
                     {sess.id.slice(0, 12)}
                   </span>
+                  {sess.model && (
+                    <span className="text-[10px] font-mono text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1 py-0.5 rounded-sm">
+                      {sess.model}
+                    </span>
+                  )}
                   {sess.startedAt && sess.endedAt && (
                     <span className="text-[11px] text-muted-foreground">
                       {formatDuration(sess.startedAt, sess.endedAt)}
@@ -464,7 +493,14 @@ export default function AgentDetailPage(): React.JSX.Element {
       {/* Recent runs */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Recent Runs</CardTitle>
+          <CardTitle className="text-sm flex items-center gap-2">
+            Recent Runs
+            {runList.length > 0 && (
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">
+                {runList.length}
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {runs.isLoading ? (
