@@ -46,7 +46,7 @@ export function SettingsView(): React.JSX.Element {
   return (
     <div className="p-4 md:p-6 max-w-3xl animate-fade-in">
       <div className="mb-8">
-        <h1 className="text-[22px] font-bold tracking-tight">Settings</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight">Settings</h1>
         <p className="text-[13px] text-muted-foreground mt-1">
           Configure accounts, preferences, and system connections.
         </p>
