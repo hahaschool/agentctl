@@ -1443,13 +1443,23 @@ function SessionContent({
     );
   }, [allMessages, optimisticMessages.length]);
 
-  // Scroll handler for user-scrolled-up detection
+  // Scroll handler for user-scrolled-up detection + infinite scroll top
+  const fetchOlderRef = useRef(fetchOlder);
+  fetchOlderRef.current = fetchOlder;
+  const hasMoreRef = useRef(false);
+  hasMoreRef.current = allMessages.length < totalMessages;
+
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
     setUserScrolledUp(!atBottom);
     setAutoScroll(atBottom);
+
+    // Trigger lazy load when near the top
+    if (el.scrollTop < 150 && hasMoreRef.current) {
+      void fetchOlderRef.current();
+    }
   }, []);
 
   const scrollToBottom = useCallback(() => {
