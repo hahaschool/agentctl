@@ -156,7 +156,7 @@ export function RouterConfigView(): React.JSX.Element {
                 return (
                   <div
                     key={d.modelName}
-                    className="flex items-center justify-between py-2 px-3 bg-muted rounded-sm"
+                    className="flex items-center justify-between py-2 px-3 bg-muted rounded-md"
                   >
                     <div>
                       <div className="text-[13px] font-medium">{d.modelName}</div>
