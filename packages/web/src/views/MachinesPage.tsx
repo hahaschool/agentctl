@@ -1,12 +1,12 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Filter, Server } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Filter, Server } from 'lucide-react';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -133,7 +133,9 @@ export function MachinesPage(): React.JSX.Element {
         </select>
         <select
           value={sortOrder}
-          onChange={(e) => setSortOrder(e.target.value as 'name' | 'status' | 'lastHeartbeat' | 'os')}
+          onChange={(e) =>
+            setSortOrder(e.target.value as 'name' | 'status' | 'lastHeartbeat' | 'os')
+          }
           aria-label="Sort by"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
@@ -164,15 +166,7 @@ export function MachinesPage(): React.JSX.Element {
             if (filteredList.length === 0) return;
             const header = 'hostname,id,status,os,arch,tailscaleIp,lastHeartbeat\n';
             const rows = filteredList.map((m) =>
-              [
-                m.hostname,
-                m.id,
-                m.status,
-                m.os,
-                m.arch,
-                m.tailscaleIp ?? '',
-                m.lastHeartbeat ?? '',
-              ]
+              [m.hostname, m.id, m.status, m.os, m.arch, m.tailscaleIp ?? '', m.lastHeartbeat ?? '']
                 .map((v) => `"${v.replace(/"/g, '""')}"`)
                 .join(','),
             );
@@ -256,7 +250,13 @@ export function MachinesPage(): React.JSX.Element {
 // Machine card
 // ---------------------------------------------------------------------------
 
-function MachineCard({ machine, compact }: { machine: Machine; compact?: boolean }): React.JSX.Element {
+function MachineCard({
+  machine,
+  compact,
+}: {
+  machine: Machine;
+  compact?: boolean;
+}): React.JSX.Element {
   const m = machine;
 
   if (compact) {
@@ -329,14 +329,16 @@ function MachineCard({ machine, compact }: { machine: Machine; compact?: boolean
       {/* Capabilities row */}
       {m.capabilities && (
         <div className="flex items-center gap-2 flex-wrap pt-2.5 border-t border-border">
-          <span className="text-[10px] text-muted-foreground mr-1">
-            Capabilities
-          </span>
+          <span className="text-[10px] text-muted-foreground mr-1">Capabilities</span>
           <SimpleTooltip content="GPU acceleration available for compute-intensive tasks">
-            <span><CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" /></span>
+            <span>
+              <CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" />
+            </span>
           </SimpleTooltip>
           <SimpleTooltip content="Docker container runtime for sandboxed agent execution">
-            <span><CapBadge label="Docker" enabled={m.capabilities?.docker ?? false} variant="blue" /></span>
+            <span>
+              <CapBadge label="Docker" enabled={m.capabilities?.docker ?? false} variant="blue" />
+            </span>
           </SimpleTooltip>
           <SimpleTooltip content="Maximum agents that can run concurrently on this machine">
             <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-md bg-muted text-muted-foreground border border-border font-mono">
@@ -375,9 +377,7 @@ function DetailField({
 }): React.JSX.Element {
   return (
     <div>
-      <div className="text-[10px] text-muted-foreground mb-0.5">
-        {label}
-      </div>
+      <div className="text-[10px] text-muted-foreground mb-0.5">{label}</div>
       <div
         className={cn(
           'text-[13px] break-all',
@@ -395,7 +395,8 @@ function DetailField({
 }
 
 const CAP_VARIANT_CLASSES = {
-  green: 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-300 dark:border-green-800',
+  green:
+    'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-300 dark:border-green-800',
   blue: 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800',
 } as const;
 

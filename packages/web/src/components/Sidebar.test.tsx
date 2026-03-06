@@ -18,7 +18,15 @@ vi.mock('next-themes', () => ({
 
 vi.mock('next/link', () => ({
   __esModule: true,
-  default: ({ href, children, ...props }: { href: string; children: React.ReactNode; [k: string]: unknown }) => (
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string;
+    children: React.ReactNode;
+    [k: string]: unknown;
+  }) => (
     <a href={href} {...props}>
       {children}
     </a>

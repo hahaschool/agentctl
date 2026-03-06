@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-
 import { RefreshCw, WifiOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { WsConnectionStatus } from '../hooks/use-websocket';
 

@@ -52,7 +52,7 @@ describe('SubagentBlock', () => {
   });
 
   it('renders multiline content preserving whitespace', () => {
-    const multiline = "Line 1\nLine 2\nLine 3";
+    const multiline = 'Line 1\nLine 2\nLine 3';
     const { container } = render(<SubagentBlock content={multiline} />);
     const contentDiv = container.querySelector('.whitespace-pre-wrap');
     expect(contentDiv?.textContent).toBe(multiline);

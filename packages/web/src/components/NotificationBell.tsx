@@ -145,13 +145,22 @@ export function NotificationBell({
                 >
                   {(() => {
                     const Icon = TYPE_ICONS[n.type];
-                    return <Icon size={14} className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])} />;
+                    return (
+                      <Icon size={14} className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])} />
+                    );
                   })()}
                   <div className="flex-1 min-w-0">
-                    <p className={cn('text-sm leading-snug', !n.read ? 'text-foreground' : 'text-muted-foreground')}>
+                    <p
+                      className={cn(
+                        'text-sm leading-snug',
+                        !n.read ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                    >
                       {n.message}
                     </p>
-                    <span className="text-[10px] text-muted-foreground">{formatTimeAgo(n.timestamp)}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {formatTimeAgo(n.timestamp)}
+                    </span>
                   </div>
                   <button
                     type="button"

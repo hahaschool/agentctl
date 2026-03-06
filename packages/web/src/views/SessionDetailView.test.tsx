@@ -148,8 +148,12 @@ vi.mock('@/components/ConfirmButton', () => ({
 }));
 
 vi.mock('@/components/AnsiText', () => ({
-  AnsiText: ({ children }: { children: React.ReactNode }) => <div data-testid="ansi-text">{children}</div>,
-  AnsiSpan: ({ children }: { children: React.ReactNode }) => <span data-testid="ansi-span">{children}</span>,
+  AnsiText: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="ansi-text">{children}</div>
+  ),
+  AnsiSpan: ({ children }: { children: React.ReactNode }) => (
+    <span data-testid="ansi-span">{children}</span>
+  ),
 }));
 
 vi.mock('@/components/MarkdownContent', () => ({
@@ -202,9 +206,7 @@ vi.mock('@/components/SubagentBlock', () => ({
 }));
 
 vi.mock('@/components/TodoBlock', () => ({
-  TodoBlock: ({ content }: { content: string }) => (
-    <div data-testid="todo-block">{content}</div>
-  ),
+  TodoBlock: ({ content }: { content: string }) => <div data-testid="todo-block">{content}</div>,
 }));
 
 vi.mock('@/components/ForkContextPicker', () => ({
@@ -327,7 +329,18 @@ describe('SessionDetailView', () => {
     mockAccountsQuery.mockReturnValue({
       queryKey: ['accounts'],
       queryFn: vi.fn().mockResolvedValue([
-        { id: 'account-1', name: 'Test Account', provider: 'anthropic_api', credentialMasked: '****', priority: 1, rateLimit: {}, isActive: true, metadata: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        {
+          id: 'account-1',
+          name: 'Test Account',
+          provider: 'anthropic_api',
+          credentialMasked: '****',
+          priority: 1,
+          rateLimit: {},
+          isActive: true,
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
       ]),
     });
 
@@ -442,9 +455,9 @@ describe('SessionDetailView', () => {
   it('renders duration when session has endedAt', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString() }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(createSession({ status: 'ended', endedAt: new Date().toISOString() })),
     });
 
     renderView();
@@ -499,8 +512,18 @@ describe('SessionDetailView', () => {
       queryKey: ['session-content', 'claude-ses-abc'],
       queryFn: vi.fn().mockResolvedValue({
         messages: [
-          createMessage({ type: 'tool_use', content: 'read file.txt', toolName: 'Read', toolId: 'tool-1' }),
-          createMessage({ type: 'tool_result', content: 'file contents here', toolName: 'Read', toolId: 'tool-1' }),
+          createMessage({
+            type: 'tool_use',
+            content: 'read file.txt',
+            toolName: 'Read',
+            toolId: 'tool-1',
+          }),
+          createMessage({
+            type: 'tool_result',
+            content: 'file contents here',
+            toolName: 'Read',
+            toolId: 'tool-1',
+          }),
           createMessage({ type: 'assistant', content: 'Done' }),
         ],
         sessionId: 'claude-ses-abc',
@@ -629,9 +652,9 @@ describe('SessionDetailView', () => {
   it('does not show End Session button for ended sessions', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString() }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(createSession({ status: 'ended', endedAt: new Date().toISOString() })),
     });
 
     renderView();
@@ -660,9 +683,9 @@ describe('SessionDetailView', () => {
   it('shows resume input for ended sessions', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString() }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(createSession({ status: 'ended', endedAt: new Date().toISOString() })),
     });
 
     renderView();
@@ -675,9 +698,9 @@ describe('SessionDetailView', () => {
   it('shows Resume button label for ended sessions', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString() }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(createSession({ status: 'ended', endedAt: new Date().toISOString() })),
     });
 
     renderView();
@@ -689,9 +712,9 @@ describe('SessionDetailView', () => {
   it('shows model selector for resumable sessions', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString() }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(createSession({ status: 'ended', endedAt: new Date().toISOString() })),
     });
 
     renderView();
@@ -722,9 +745,11 @@ describe('SessionDetailView', () => {
   it('shows "cannot send messages" for completed sessions without resume ability', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'completed', endedAt: new Date().toISOString() }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(
+          createSession({ status: 'completed', endedAt: new Date().toISOString() }),
+        ),
     });
 
     renderView();
@@ -785,7 +810,11 @@ describe('SessionDetailView', () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
       queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString(), claudeSessionId: 'claude-ses-abc' }),
+        createSession({
+          status: 'ended',
+          endedAt: new Date().toISOString(),
+          claudeSessionId: 'claude-ses-abc',
+        }),
       ),
     });
 
@@ -807,7 +836,11 @@ describe('SessionDetailView', () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
       queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString(), claudeSessionId: 'claude-ses-abc' }),
+        createSession({
+          status: 'ended',
+          endedAt: new Date().toISOString(),
+          claudeSessionId: 'claude-ses-abc',
+        }),
       ),
     });
 
@@ -827,9 +860,9 @@ describe('SessionDetailView', () => {
   it('shows Fork for error sessions', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'error', claudeSessionId: 'claude-ses-abc' }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(createSession({ status: 'error', claudeSessionId: 'claude-ses-abc' })),
     });
 
     renderView();
@@ -865,9 +898,7 @@ describe('SessionDetailView', () => {
 
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'error', metadata }),
-      ),
+      queryFn: vi.fn().mockResolvedValue(createSession({ status: 'error', metadata })),
     });
 
     renderView();
@@ -998,8 +1029,18 @@ describe('SessionDetailView', () => {
       queryKey: ['session-content', 'claude-ses-abc'],
       queryFn: vi.fn().mockResolvedValue({
         messages: [
-          createMessage({ type: 'tool_use', content: 'cat foo.txt', toolName: 'Bash', toolId: 'tool-42' }),
-          createMessage({ type: 'tool_result', content: 'Hello world', toolName: 'Bash', toolId: 'tool-42' }),
+          createMessage({
+            type: 'tool_use',
+            content: 'cat foo.txt',
+            toolName: 'Bash',
+            toolId: 'tool-42',
+          }),
+          createMessage({
+            type: 'tool_result',
+            content: 'Hello world',
+            toolName: 'Bash',
+            toolId: 'tool-42',
+          }),
         ],
         sessionId: 'claude-ses-abc',
         totalMessages: 2,
@@ -1027,8 +1068,18 @@ describe('SessionDetailView', () => {
       queryKey: ['session-content', 'claude-ses-abc'],
       queryFn: vi.fn().mockResolvedValue({
         messages: [
-          createMessage({ type: 'tool_use', content: 'cat foo.txt', toolName: 'Bash', toolId: 'tool-42' }),
-          createMessage({ type: 'tool_result', content: 'Hello world', toolName: 'Bash', toolId: 'tool-42' }),
+          createMessage({
+            type: 'tool_use',
+            content: 'cat foo.txt',
+            toolName: 'Bash',
+            toolId: 'tool-42',
+          }),
+          createMessage({
+            type: 'tool_result',
+            content: 'Hello world',
+            toolName: 'Bash',
+            toolId: 'tool-42',
+          }),
         ],
         sessionId: 'claude-ses-abc',
         totalMessages: 2,
@@ -1077,9 +1128,9 @@ describe('SessionDetailView', () => {
   it('does not show Following indicator for ended sessions', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({ status: 'ended', endedAt: new Date().toISOString() }),
-      ),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue(createSession({ status: 'ended', endedAt: new Date().toISOString() })),
     });
 
     renderView();
@@ -1104,9 +1155,7 @@ describe('SessionDetailView', () => {
     mockSessionContentQuery.mockReturnValue({
       queryKey: ['session-content', 'claude-ses-abc'],
       queryFn: vi.fn().mockResolvedValue({
-        messages: [
-          createMessage({ type: 'assistant', content: 'Latest message' }),
-        ],
+        messages: [createMessage({ type: 'assistant', content: 'Latest message' })],
         sessionId: 'claude-ses-abc',
         totalMessages: 50,
       }),
@@ -1208,9 +1257,7 @@ describe('SessionDetailView', () => {
     fireEvent.click(screen.getByText('Fork'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Resolve the underlying issue before forking/),
-      ).toBeDefined();
+      expect(screen.getByText(/Resolve the underlying issue before forking/)).toBeDefined();
     });
   });
 
@@ -1234,9 +1281,7 @@ describe('SessionDetailView', () => {
     fireEvent.click(screen.getByText('Fork'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/The forked session may also fail/),
-      ).toBeDefined();
+      expect(screen.getByText(/The forked session may also fail/)).toBeDefined();
     });
   });
 

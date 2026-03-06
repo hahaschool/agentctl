@@ -350,9 +350,7 @@ describe('ForkContextPicker', () => {
   });
 
   it('formats character count with k suffix for large values', () => {
-    const msgs: SessionContentMessage[] = [
-      { type: 'human', content: 'x'.repeat(1500) },
-    ];
+    const msgs: SessionContentMessage[] = [{ type: 'human', content: 'x'.repeat(1500) }];
     renderPicker({ messages: msgs });
     expect(screen.getByText('~1.5k')).toBeDefined();
   });
@@ -407,9 +405,7 @@ describe('ForkContextPicker', () => {
 
   it('truncates long messages in the list', () => {
     const longContent = 'A'.repeat(200);
-    const msgs: SessionContentMessage[] = [
-      { type: 'human', content: longContent },
-    ];
+    const msgs: SessionContentMessage[] = [{ type: 'human', content: longContent }];
     renderPicker({ messages: msgs });
     // Should be truncated to 120 chars + "..."
     const truncated = screen.getByText(/^A+\.\.\.$/);

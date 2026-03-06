@@ -97,7 +97,9 @@ export function ConfirmButton({
           {confirmLabel}
           <span className="ml-1 text-xs opacity-70">({secondsLeft}s)</span>
         </>
-      ) : label}
+      ) : (
+        label
+      )}
     </button>
   );
 }

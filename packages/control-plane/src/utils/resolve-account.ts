@@ -63,7 +63,11 @@ export async function resolveAccountId(
       .where(eq(projectAccountMappings.projectPath, ctx.projectPath));
     if (exactMapping) {
       logger?.info(
-        { accountId: exactMapping.accountId, projectPath: ctx.projectPath, source: 'exact_path_match' },
+        {
+          accountId: exactMapping.accountId,
+          projectPath: ctx.projectPath,
+          source: 'exact_path_match',
+        },
         'Account resolved from project mapping (exact path)',
       );
       return exactMapping.accountId;
@@ -89,10 +93,7 @@ export async function resolveAccountId(
   const defaultAccountId = (setting?.value as { value?: string })?.value ?? null;
 
   if (defaultAccountId) {
-    logger?.info(
-      { accountId: defaultAccountId },
-      'Account resolved from global default',
-    );
+    logger?.info({ accountId: defaultAccountId }, 'Account resolved from global default');
     return defaultAccountId;
   }
 

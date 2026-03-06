@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -9,9 +9,7 @@ vi.mock('@/lib/utils', () => ({
 }));
 
 vi.mock('lucide-react', () => ({
-  RefreshCw: (props: Record<string, unknown>) => (
-    <svg data-testid="refresh-icon" {...props} />
-  ),
+  RefreshCw: (props: Record<string, unknown>) => <svg data-testid="refresh-icon" {...props} />,
 }));
 
 import { LastUpdated } from './LastUpdated';

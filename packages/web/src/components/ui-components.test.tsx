@@ -157,7 +157,9 @@ describe('EmptyState', () => {
   });
 
   it('uses smaller icon container (w-10 h-10) in compact variant with component icon', () => {
-    const { container } = render(<EmptyState title="No data" icon={AlertCircle} variant="compact" />);
+    const { container } = render(
+      <EmptyState title="No data" icon={AlertCircle} variant="compact" />,
+    );
     const iconWrapper = container.querySelector('.rounded-full');
     expect(iconWrapper?.className).toContain('w-10');
     expect(iconWrapper?.className).toContain('h-10');

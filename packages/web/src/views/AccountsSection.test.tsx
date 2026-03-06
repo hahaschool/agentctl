@@ -51,8 +51,7 @@ vi.mock('@/components/ui/button', () => ({
 }));
 
 vi.mock('@/components/ui/dialog', () => ({
-  Dialog: ({ children, open }: any) =>
-    open ? <div data-testid="dialog">{children}</div> : null,
+  Dialog: ({ children, open }: any) => (open ? <div data-testid="dialog">{children}</div> : null),
   DialogContent: ({ children }: any) => <div>{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
   DialogTitle: ({ children }: any) => <h2>{children}</h2>,
@@ -69,13 +68,9 @@ vi.mock('@/components/ui/select', () => ({
       {children}
     </div>
   ),
-  SelectTrigger: ({ children, ...props }: any) => (
-    <button {...props}>{children}</button>
-  ),
+  SelectTrigger: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   SelectContent: ({ children }: any) => <div>{children}</div>,
-  SelectItem: ({ children, value }: any) => (
-    <option value={value}>{children}</option>
-  ),
+  SelectItem: ({ children, value }: any) => <option value={value}>{children}</option>,
   SelectValue: ({ placeholder }: any) => <span>{placeholder}</span>,
 }));
 
@@ -320,9 +315,7 @@ describe('AccountsSection', () => {
 
     it('Test button shows "Testing..." when testing that account', async () => {
       // Make mutateAsync hang so we can observe the intermediate state
-      mockTestAccount.mutateAsync.mockImplementation(
-        () => new Promise(() => {}),
-      );
+      mockTestAccount.mutateAsync.mockImplementation(() => new Promise(() => {}));
       renderComponent();
       await screen.findByText('My Anthropic Key');
       const testButtons = screen.getAllByText('Test');
@@ -467,9 +460,7 @@ describe('AccountsSection', () => {
       const confirmDialog = dialogs[dialogs.length - 1];
       const confirmDeleteBtns = within(confirmDialog).getAllByText('Delete');
       // Find the button element (not the h2 title)
-      const confirmBtn = confirmDeleteBtns.find(
-        (el) => el.tagName === 'BUTTON',
-      );
+      const confirmBtn = confirmDeleteBtns.find((el) => el.tagName === 'BUTTON');
       if (confirmBtn) fireEvent.click(confirmBtn);
       expect(mockDeleteAccount.mutateAsync).toHaveBeenCalledWith('acc-1');
     });

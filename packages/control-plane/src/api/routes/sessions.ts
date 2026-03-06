@@ -358,7 +358,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const baseQuery =
         conditions.length > 0
-          ? db.select().from(rcSessions).where(and(...conditions))
+          ? db
+              .select()
+              .from(rcSessions)
+              .where(and(...conditions))
           : db.select().from(rcSessions);
 
       const countQuery =
@@ -416,10 +419,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
     async (request, reply) => {
       const { sessionId } = request.params;
 
-      const rows = await db
-        .select()
-        .from(rcSessions)
-        .where(eq(rcSessions.id, sessionId));
+      const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
 
       if (rows.length === 0) {
         return reply.code(404).send({
@@ -866,7 +866,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
     { schema: { tags: ['sessions'], summary: 'Fork a session into a new one' } },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt, machineId: overrideMachineId, accountId: overrideAccountId, model: overrideModel } = request.body;
+      const {
+        prompt,
+        machineId: overrideMachineId,
+        accountId: overrideAccountId,
+        model: overrideModel,
+      } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.code(400).send({
@@ -1108,7 +1113,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         if (!workerResponse.ok) {
           let workerError: { error?: string; code?: string; hint?: string } = {};
           try {
-            workerError = (await workerResponse.json()) as { error?: string; code?: string; hint?: string };
+            workerError = (await workerResponse.json()) as {
+              error?: string;
+              code?: string;
+              hint?: string;
+            };
           } catch {
             /* ignore parse errors */
           }
@@ -1554,7 +1563,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           }
         } catch (failoverErr) {
           app.log.error(
-            { sessionId, error: failoverErr instanceof Error ? failoverErr.message : String(failoverErr) },
+            {
+              sessionId,
+              error: failoverErr instanceof Error ? failoverErr.message : String(failoverErr),
+            },
             'Failover: unexpected error during account switch',
           );
         }

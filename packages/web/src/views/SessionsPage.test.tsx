@@ -251,11 +251,19 @@ describe('SessionsPage', () => {
     // Default successful responses
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions: [createSession()], total: 1, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [createSession()],
+        total: 1,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions: [createSession()], total: 1, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions: [createSession()], total: 1, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     mockAccountsQuery.mockReturnValue({
@@ -304,11 +312,15 @@ describe('SessionsPage', () => {
   it('displays empty state when no sessions exist', async () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions: [], total: 0, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions: [], total: 0, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     renderSessions();
@@ -339,18 +351,28 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     renderSessions();
     await waitFor(() => {
       // Find the "All" tab element (not the select-all checkbox)
       const allElements = screen.getAllByText('All');
-      const tabText = allElements.map((el) => el.parentElement?.textContent ?? '').find((t) => t.includes('3'));
+      const tabText = allElements
+        .map((el) => el.parentElement?.textContent ?? '')
+        .find((t) => t.includes('3'));
       expect(tabText).toBeDefined();
     });
   });
@@ -361,9 +383,7 @@ describe('SessionsPage', () => {
 
   it('renders search input', () => {
     renderSessions();
-    const searchInput = screen.getByPlaceholderText(
-      'Search sessions...',
-    ) as HTMLInputElement;
+    const searchInput = screen.getByPlaceholderText('Search sessions...') as HTMLInputElement;
     expect(searchInput).toBeDefined();
   });
 
@@ -399,11 +419,19 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     renderSessions();
@@ -417,11 +445,15 @@ describe('SessionsPage', () => {
     const sessions = [createSession({ id: 'session-1', agentId: 'agent-1' })];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: 1, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions, total: 1, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: 1, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi
+        .fn()
+        .mockResolvedValue({ data: { sessions, total: 1, limit: 50, offset: 0, hasMore: false } }),
     });
 
     renderSessions();
@@ -479,11 +511,19 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     renderSessions();
@@ -496,11 +536,15 @@ describe('SessionsPage', () => {
     const sessions = [createSession({ id: 'session-1', status: 'active' })];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: 1, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions, total: 1, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: 1, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi
+        .fn()
+        .mockResolvedValue({ data: { sessions, total: 1, limit: 50, offset: 0, hasMore: false } }),
     });
 
     renderSessions();
@@ -523,7 +567,13 @@ describe('SessionsPage', () => {
     const now = Date.now();
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions: [createSession()], total: 1, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [createSession()],
+        total: 1,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: now,
       isLoading: false,
       isFetching: false,
@@ -547,11 +597,19 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     renderSessions();
@@ -568,11 +626,19 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     renderSessions();
@@ -589,11 +655,19 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn().mockResolvedValue({ data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false } }),
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false },
+      }),
     });
 
     renderSessions();
@@ -613,9 +687,7 @@ describe('SessionsPage', () => {
 
   it('changes search query input', async () => {
     renderSessions();
-    const searchInput = screen.getByPlaceholderText(
-      'Search sessions...',
-    ) as HTMLInputElement;
+    const searchInput = screen.getByPlaceholderText('Search sessions...') as HTMLInputElement;
     expect(searchInput.value).toBe('');
     fireEvent.change(searchInput, { target: { value: 'test-search' } });
     expect(searchInput.value).toBe('test-search');
@@ -639,7 +711,9 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: 3, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions, total: 3, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -664,7 +738,9 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -701,7 +777,9 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -730,7 +808,9 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions, total: 2, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -760,7 +840,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -789,7 +875,9 @@ describe('SessionsPage', () => {
     const sessions = [createSession({ id: 'cb-1', status: 'active' })];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: 1, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions, total: 1, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -817,7 +905,9 @@ describe('SessionsPage', () => {
   it('CSV button is disabled when no sessions exist', async () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions: [], total: 0, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions: [], total: 0, limit: 50, offset: 0, hasMore: false }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -848,7 +938,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -877,7 +973,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -912,7 +1014,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -942,7 +1050,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -988,7 +1102,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -1013,7 +1133,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -1056,7 +1182,13 @@ describe('SessionsPage', () => {
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -1078,12 +1210,28 @@ describe('SessionsPage', () => {
 
   it('changing sort to status puts active before error', async () => {
     const sessions = [
-      createSession({ id: 'ss-err', agentName: 'agt-error-ss', status: 'error', startedAt: '2026-01-01T00:00:00Z' }),
-      createSession({ id: 'ss-act', agentName: 'agt-active-ss', status: 'active', startedAt: '2025-01-01T00:00:00Z' }),
+      createSession({
+        id: 'ss-err',
+        agentName: 'agt-error-ss',
+        status: 'error',
+        startedAt: '2026-01-01T00:00:00Z',
+      }),
+      createSession({
+        id: 'ss-act',
+        agentName: 'agt-active-ss',
+        status: 'active',
+        startedAt: '2025-01-01T00:00:00Z',
+      }),
     ];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -1106,7 +1254,13 @@ describe('SessionsPage', () => {
   it('shows Load more button when hasMore is true', async () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions: [createSession()], total: 75, limit: 50, offset: 0, hasMore: true }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [createSession()],
+        total: 75,
+        limit: 50,
+        offset: 0,
+        hasMore: true,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -1121,7 +1275,13 @@ describe('SessionsPage', () => {
   it('shows remaining count in Load more button', async () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions: [createSession()], total: 75, limit: 50, offset: 0, hasMore: true }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [createSession()],
+        total: 75,
+        limit: 50,
+        offset: 0,
+        hasMore: true,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,
@@ -1137,7 +1297,13 @@ describe('SessionsPage', () => {
     const sessions = [createSession({ id: 'pg-1' }), createSession({ id: 'pg-2' })];
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions, total: sessions.length, limit: 50, offset: 0, hasMore: false }),
+      queryFn: vi.fn().mockResolvedValue({
+        sessions,
+        total: sessions.length,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
       dataUpdatedAt: Date.now(),
       isLoading: false,
       isFetching: false,

@@ -363,7 +363,9 @@ describe('CliSessionManager', () => {
       await tick();
 
       // Filter out raw_output events (emitted for terminal view)
-      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
       expect(parsed).toHaveLength(1);
       expect(parsed[0].type).toBe('session_output');
       if (parsed[0].type === 'session_output') {
@@ -386,7 +388,9 @@ describe('CliSessionManager', () => {
       );
       await tick();
 
-      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
       expect(parsed).toHaveLength(1);
       if (parsed[0].type === 'session_output') {
         const agentEvent = parsed[0].event as AgentEvent;
@@ -409,7 +413,9 @@ describe('CliSessionManager', () => {
       mockChild.pushStdout('{"type":"tool_result","content":"file contents here"}\n');
       await tick();
 
-      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
       expect(parsed).toHaveLength(1);
       if (parsed[0].type === 'session_output') {
         const agentEvent = parsed[0].event as AgentEvent;
@@ -467,7 +473,9 @@ describe('CliSessionManager', () => {
       );
       await tick();
 
-      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
       expect(parsed).toHaveLength(1);
       if (parsed[0].type === 'session_output') {
         const agentEvent = parsed[0].event as AgentEvent;
@@ -492,7 +500,9 @@ describe('CliSessionManager', () => {
       await tick();
 
       // Filter out raw_output events (emitted for terminal view)
-      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
       expect(parsed).toHaveLength(2);
     });
 
@@ -505,7 +515,9 @@ describe('CliSessionManager', () => {
       mockChild.pushStdout('Some non-JSON text\n');
       await tick();
 
-      const parsed = events.filter((e) => e.type === 'session_output' && e.event.event !== 'raw_output');
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
       expect(parsed).toHaveLength(1);
       if (parsed[0].type === 'session_output') {
         const agentEvent = parsed[0].event as AgentEvent;

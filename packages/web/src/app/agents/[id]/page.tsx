@@ -415,14 +415,14 @@ export default function AgentDetailPage(): React.JSX.Element {
             <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
               Last Run Cost
             </div>
-            <div className="text-2xl font-semibold text-foreground">{formatCost(data.lastCostUsd)}</div>
+            <div className="text-2xl font-semibold text-foreground">
+              {formatCost(data.lastCostUsd)}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
-              Total Cost
-            </div>
+            <div className="text-[11px] font-medium text-muted-foreground mb-1.5">Total Cost</div>
             <div className="text-2xl font-semibold text-foreground">
               {formatCost(data.totalCostUsd)}
             </div>
@@ -523,7 +523,10 @@ export default function AgentDetailPage(): React.JSX.Element {
               {/* Mobile card layout */}
               <div className="sm:hidden space-y-2">
                 {runList.map((run) => (
-                  <div key={run.id} className="rounded-lg border border-border/50 p-3 space-y-1.5 transition-colors hover:border-border">
+                  <div
+                    key={run.id}
+                    className="rounded-lg border border-border/50 p-3 space-y-1.5 transition-colors hover:border-border"
+                  >
                     <div className="flex items-center justify-between">
                       <StatusBadge status={run.status} />
                       <span className="text-xs font-mono text-muted-foreground">
@@ -790,9 +793,7 @@ function InfoField({
 }): React.JSX.Element {
   return (
     <div>
-      <div className="text-[11px] font-medium text-muted-foreground mb-1">
-        {label}
-      </div>
+      <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
       <div className="text-foreground">{children}</div>
     </div>
   );

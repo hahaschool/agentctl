@@ -72,7 +72,9 @@ async function runGit(args: string[], cwd: string): Promise<string> {
   return stdout.trim();
 }
 
-function parseStatusCounts(porcelain: string): Pick<GitFileStatus, 'staged' | 'modified' | 'untracked'> {
+function parseStatusCounts(
+  porcelain: string,
+): Pick<GitFileStatus, 'staged' | 'modified' | 'untracked'> {
   let staged = 0;
   let modified = 0;
   let untracked = 0;
@@ -159,10 +161,7 @@ function parseWorktreeList(output: string): GitWorktreeEntry[] {
 // Plugin
 // ---------------------------------------------------------------------------
 
-export async function gitRoutes(
-  app: FastifyInstance,
-  options: GitRouteOptions,
-): Promise<void> {
+export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions): Promise<void> {
   const { logger } = options;
 
   // GET /api/git/status?path=<absolute-path>
@@ -230,28 +229,22 @@ export async function gitRoutes(
           runGit(['rev-parse', '--show-toplevel'], dirPath),
           runGit(['status', '--porcelain'], dirPath),
           runGit(['status', '--branch', '--porcelain'], dirPath),
-          runGit(
-            ['log', '-1', '--format=%H%n%s%n%an%n%aI'],
-            dirPath,
-          ),
+          runGit(['log', '-1', '--format=%H%n%s%n%an%n%aI'], dirPath),
           runGit(['worktree', 'list', '--porcelain'], dirPath),
           runGit(['rev-parse', '--git-common-dir'], dirPath),
         ]);
 
-        const branch =
-          branchResult.status === 'fulfilled' ? branchResult.value : 'HEAD';
-        const worktreePath =
-          toplevelResult.status === 'fulfilled' ? toplevelResult.value : dirPath;
+        const branch = branchResult.status === 'fulfilled' ? branchResult.value : 'HEAD';
+        const worktreePath = toplevelResult.status === 'fulfilled' ? toplevelResult.value : dirPath;
 
         // Parse file status
-        const porcelain =
-          statusResult.status === 'fulfilled' ? statusResult.value : '';
+        const porcelain = statusResult.status === 'fulfilled' ? statusResult.value : '';
         const { staged, modified, untracked } = parseStatusCounts(porcelain);
 
         // Parse ahead/behind
         const branchStatusLine =
           statusBranchResult.status === 'fulfilled'
-            ? statusBranchResult.value.split('\n')[0] ?? ''
+            ? (statusBranchResult.value.split('\n')[0] ?? '')
             : '';
         const { ahead, behind } = parseAheadBehind(branchStatusLine);
 
@@ -280,15 +273,11 @@ export async function gitRoutes(
 
         // Parse worktree list
         const worktrees =
-          worktreeResult.status === 'fulfilled'
-            ? parseWorktreeList(worktreeResult.value)
-            : [];
+          worktreeResult.status === 'fulfilled' ? parseWorktreeList(worktreeResult.value) : [];
 
         // Detect if current dir is a worktree (not the main working tree)
         const gitCommonDir =
-          gitCommonDirResult.status === 'fulfilled'
-            ? gitCommonDirResult.value
-            : '';
+          gitCommonDirResult.status === 'fulfilled' ? gitCommonDirResult.value : '';
         const isWorktree = gitCommonDir.includes('/worktrees/') || gitCommonDir.includes('/.bare/');
 
         // Detect bare repo path

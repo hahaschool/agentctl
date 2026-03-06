@@ -107,43 +107,39 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       worktreeBranch?: string;
       config?: Record<string, unknown>;
     };
-  }>(
-    '/',
-    { schema: { tags: ['agents'], summary: 'Create an agent' } },
-    async (request, reply) => {
-      if (!dbRegistry) {
-        return reply
-          .code(501)
-          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
-      }
+  }>('/', { schema: { tags: ['agents'], summary: 'Create an agent' } }, async (request, reply) => {
+    if (!dbRegistry) {
+      return reply
+        .code(501)
+        .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
+    }
 
-      const { machineId, name, type } = request.body;
+    const { machineId, name, type } = request.body;
 
-      if (!machineId || typeof machineId !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_BODY',
-          message: 'A non-empty "machineId" string is required',
-        });
-      }
+    if (!machineId || typeof machineId !== 'string') {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: 'A non-empty "machineId" string is required',
+      });
+    }
 
-      if (!name || typeof name !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_BODY',
-          message: 'A non-empty "name" string is required',
-        });
-      }
+    if (!name || typeof name !== 'string') {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: 'A non-empty "name" string is required',
+      });
+    }
 
-      if (!type || typeof type !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_BODY',
-          message: 'A non-empty "type" string is required',
-        });
-      }
+    if (!type || typeof type !== 'string') {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: 'A non-empty "type" string is required',
+      });
+    }
 
-      const agentId = await dbRegistry.createAgent(request.body);
-      return { ok: true, agentId };
-    },
-  );
+    const agentId = await dbRegistry.createAgent(request.body);
+    return { ok: true, agentId };
+  });
 
   app.get<{ Querystring: { machineId?: string; limit?: string; offset?: string } }>(
     '/list',

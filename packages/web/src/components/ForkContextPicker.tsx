@@ -1,10 +1,9 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-
-import { cn } from '@/lib/utils';
 import type { Session, SessionContentMessage } from '@/lib/api';
 import { getMessageStyle } from '@/lib/message-styles';
+import { cn } from '@/lib/utils';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -55,7 +54,9 @@ export function ForkContextPicker({
   onSubmit,
   isSubmitting = false,
 }: ForkContextPickerProps): React.ReactNode {
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set(messages.map((_, i) => i)));
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(
+    () => new Set(messages.map((_, i) => i)),
+  );
   const [name, setName] = useState(`${session.agentName ?? 'agent'}-fork`);
   const [type, setType] = useState('adhoc');
   const [model, setModel] = useState(session.model ?? '');
@@ -137,8 +138,19 @@ export function ForkContextPicker({
             className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors cursor-pointer"
             aria-label="Close"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M1 1L13 13M1 13L13 1"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
           </button>
         </div>
@@ -225,7 +237,10 @@ export function ForkContextPicker({
             <div className="p-4 space-y-3.5">
               {/* Agent Name */}
               <div>
-                <label htmlFor="fork-name" className="block text-[11px] font-medium text-muted-foreground mb-1">
+                <label
+                  htmlFor="fork-name"
+                  className="block text-[11px] font-medium text-muted-foreground mb-1"
+                >
                   Agent Name
                 </label>
                 <input
@@ -240,7 +255,10 @@ export function ForkContextPicker({
 
               {/* Agent Type */}
               <div>
-                <label htmlFor="fork-type" className="block text-[11px] font-medium text-muted-foreground mb-1">
+                <label
+                  htmlFor="fork-type"
+                  className="block text-[11px] font-medium text-muted-foreground mb-1"
+                >
                   Agent Type
                 </label>
                 <select
@@ -259,7 +277,10 @@ export function ForkContextPicker({
 
               {/* Model */}
               <div>
-                <label htmlFor="fork-model" className="block text-[11px] font-medium text-muted-foreground mb-1">
+                <label
+                  htmlFor="fork-model"
+                  className="block text-[11px] font-medium text-muted-foreground mb-1"
+                >
                   Model
                 </label>
                 <select
@@ -278,7 +299,10 @@ export function ForkContextPicker({
 
               {/* System Prompt */}
               <div>
-                <label htmlFor="fork-prompt" className="block text-[11px] font-medium text-muted-foreground mb-1">
+                <label
+                  htmlFor="fork-prompt"
+                  className="block text-[11px] font-medium text-muted-foreground mb-1"
+                >
                   System Prompt (optional)
                 </label>
                 <textarea
@@ -310,11 +334,13 @@ export function ForkContextPicker({
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-muted/20">
           <div className="text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">{contextStats.count}</span>
-            {' '}message{contextStats.count !== 1 ? 's' : ''} selected
+            <span className="font-medium text-foreground">{contextStats.count}</span> message
+            {contextStats.count !== 1 ? 's' : ''} selected
             <span className="mx-1.5 text-border">|</span>
-            <span className="font-medium text-foreground">{formatCharCount(contextStats.totalChars)}</span>
-            {' '}chars
+            <span className="font-medium text-foreground">
+              {formatCharCount(contextStats.totalChars)}
+            </span>{' '}
+            chars
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -1,10 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Bot, Filter } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,7 +23,6 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Bot, Filter } from 'lucide-react';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
@@ -36,8 +35,8 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import { formatCost } from '../lib/format-utils';
 import type { Agent, Machine } from '../lib/api';
+import { formatCost } from '../lib/format-utils';
 import {
   agentsQuery,
   machinesQuery,
@@ -71,13 +70,15 @@ type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
 
 /** Slugify the first ~30 chars of a prompt into a name like "fix-auth-bug-in-login" */
 function slugifyPrompt(prompt: string): string {
-  return prompt
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .slice(0, 40)
-    .replace(/-+$/, '') || 'new-task';
+  return (
+    prompt
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .slice(0, 40)
+      .replace(/-+$/, '') || 'new-task'
+  );
 }
 
 /** Show last 2 path segments for compact display */
@@ -88,9 +89,8 @@ function shortPath(fullPath: string): string {
 
 /** Pick the first online machine, or fallback to last-used, or first available */
 function pickDefaultMachine(machines: Machine[]): string {
-  const lastUsed = typeof window !== 'undefined'
-    ? localStorage.getItem('agentctl:lastMachineId')
-    : null;
+  const lastUsed =
+    typeof window !== 'undefined' ? localStorage.getItem('agentctl:lastMachineId') : null;
   const online = machines.filter((m) => m.status === 'online');
   if (lastUsed && machines.some((m) => m.id === lastUsed)) return lastUsed;
   if (online.length > 0) return online[0]!.id;
@@ -290,8 +290,10 @@ export function AgentsPage(): React.JSX.Element {
     setEditName(agent.name);
     setEditMachineId(agent.machineId);
     setEditType(agent.type);
-    setEditModel((agent.config as Record<string, unknown>)?.model as string ?? '');
-    setEditInitialPrompt((agent.config as Record<string, unknown>)?.initialPrompt as string ?? '');
+    setEditModel(((agent.config as Record<string, unknown>)?.model as string) ?? '');
+    setEditInitialPrompt(
+      ((agent.config as Record<string, unknown>)?.initialPrompt as string) ?? '',
+    );
     setEditSchedule(agent.schedule ?? '');
     setEditMaxTurns(
       (agent.config as Record<string, unknown>)?.maxTurns != null
@@ -301,9 +303,7 @@ export function AgentsPage(): React.JSX.Element {
     setEditPermissionMode(
       ((agent.config as Record<string, unknown>)?.permissionMode as string) ?? 'default',
     );
-    setEditSystemPrompt(
-      ((agent.config as Record<string, unknown>)?.systemPrompt as string) ?? '',
-    );
+    setEditSystemPrompt(((agent.config as Record<string, unknown>)?.systemPrompt as string) ?? '');
     setEditingAgent(agent);
   }
 
@@ -367,8 +367,10 @@ export function AgentsPage(): React.JSX.Element {
     const config: Record<string, unknown> = {};
     if (createModel.trim()) config.model = createModel.trim();
     if (createPrompt.trim()) config.initialPrompt = createPrompt.trim();
-    if (createMaxTurns.trim() && Number(createMaxTurns) > 0) config.maxTurns = Number(createMaxTurns);
-    if (createPermissionMode && createPermissionMode !== 'default') config.permissionMode = createPermissionMode;
+    if (createMaxTurns.trim() && Number(createMaxTurns) > 0)
+      config.maxTurns = Number(createMaxTurns);
+    if (createPermissionMode && createPermissionMode !== 'default')
+      config.permissionMode = createPermissionMode;
     if (createSystemPrompt.trim()) config.systemPrompt = createSystemPrompt.trim();
 
     // Remember last-used machine
@@ -381,7 +383,9 @@ export function AgentsPage(): React.JSX.Element {
         name: agentName,
         machineId: createMachineId,
         type: createType,
-        ...(createType === 'cron' && createSchedule.trim() ? { schedule: createSchedule.trim() } : {}),
+        ...(createType === 'cron' && createSchedule.trim()
+          ? { schedule: createSchedule.trim() }
+          : {}),
         ...(createProjectPath.trim() ? { projectPath: createProjectPath.trim() } : {}),
         ...(Object.keys(config).length > 0 ? { config } : {}),
       },
@@ -454,7 +458,9 @@ export function AgentsPage(): React.JSX.Element {
           errors++;
           if (completed + errors === runningAgents.length) {
             setStoppingAll(false);
-            toast.error(`Stopped ${completed}, failed ${errors}: ${err instanceof Error ? err.message : String(err)}`);
+            toast.error(
+              `Stopped ${completed}, failed ${errors}: ${err instanceof Error ? err.message : String(err)}`,
+            );
           }
         },
       });
@@ -555,7 +561,11 @@ export function AgentsPage(): React.JSX.Element {
                 <Input
                   ref={projectInputRef}
                   id="create-task-project"
-                  placeholder={recentProjectPaths.length > 0 ? 'Select or type a project path...' : '/path/to/project'}
+                  placeholder={
+                    recentProjectPaths.length > 0
+                      ? 'Select or type a project path...'
+                      : '/path/to/project'
+                  }
                   value={createProjectPath}
                   onChange={(e) => {
                     setCreateProjectPath(e.target.value);
@@ -588,7 +598,9 @@ export function AgentsPage(): React.JSX.Element {
                         }}
                       >
                         <span className="font-medium">{shortPath(p)}</span>
-                        <span className="text-[11px] text-muted-foreground ml-2 font-mono">{p}</span>
+                        <span className="text-[11px] text-muted-foreground ml-2 font-mono">
+                          {p}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -637,7 +649,13 @@ export function AgentsPage(): React.JSX.Element {
               >
                 <span className="text-xs">{createAdvancedOpen ? '\u25BE' : '\u25B8'}</span>
                 Advanced
-                {(createName.trim() || createModel !== DEFAULT_MODEL || createType !== 'adhoc' || createSchedule.trim() || createMaxTurns.trim() || createPermissionMode !== 'default' || createSystemPrompt.trim()) && (
+                {(createName.trim() ||
+                  createModel !== DEFAULT_MODEL ||
+                  createType !== 'adhoc' ||
+                  createSchedule.trim() ||
+                  createMaxTurns.trim() ||
+                  createPermissionMode !== 'default' ||
+                  createSystemPrompt.trim()) && (
                   <span className="text-[10px] text-primary">(customized)</span>
                 )}
               </button>
@@ -650,7 +668,11 @@ export function AgentsPage(): React.JSX.Element {
                     </label>
                     <Input
                       id="create-task-name"
-                      placeholder={createPrompt.trim() ? slugifyPrompt(createPrompt) : 'auto-generated from prompt'}
+                      placeholder={
+                        createPrompt.trim()
+                          ? slugifyPrompt(createPrompt)
+                          : 'auto-generated from prompt'
+                      }
                       value={createName}
                       onChange={(e) => setCreateName(e.target.value)}
                       disabled={createAgent.isPending}
@@ -665,7 +687,11 @@ export function AgentsPage(): React.JSX.Element {
                       Model
                     </label>
                     <Select
-                      value={MODEL_OPTIONS.some((m) => m.value === createModel) ? createModel : '__custom__'}
+                      value={
+                        MODEL_OPTIONS.some((m) => m.value === createModel)
+                          ? createModel
+                          : '__custom__'
+                      }
                       onValueChange={(v) => {
                         if (v !== '__custom__') setCreateModel(v);
                       }}
@@ -680,10 +706,16 @@ export function AgentsPage(): React.JSX.Element {
                         {MODEL_OPTIONS.map((m) => (
                           <SelectItem key={m.value} value={m.value}>
                             <span className="font-medium">{m.label}</span>
-                            <span className={cn(
-                              'ml-2 text-[10px]',
-                              m.tier === 'flagship' ? 'text-amber-600 dark:text-amber-400' : m.tier === 'fast' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400',
-                            )}>
+                            <span
+                              className={cn(
+                                'ml-2 text-[10px]',
+                                m.tier === 'flagship'
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : m.tier === 'fast'
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-blue-600 dark:text-blue-400',
+                              )}
+                            >
                               {m.tier}
                             </span>
                           </SelectItem>
@@ -741,9 +773,9 @@ export function AgentsPage(): React.JSX.Element {
                         disabled={createAgent.isPending}
                       />
                       <p className="text-[11px] text-muted-foreground">
-                        Cron expression. Examples: <code className="text-[10px]">*/30 * * * *</code> (every 30 min),{' '}
-                        <code className="text-[10px]">0 9 * * 1-5</code> (weekdays 9am),{' '}
-                        <code className="text-[10px]">0 */6 * * *</code> (every 6h)
+                        Cron expression. Examples: <code className="text-[10px]">*/30 * * * *</code>{' '}
+                        (every 30 min), <code className="text-[10px]">0 9 * * 1-5</code> (weekdays
+                        9am), <code className="text-[10px]">0 */6 * * *</code> (every 6h)
                       </p>
                     </div>
                   )}
@@ -783,19 +815,27 @@ export function AgentsPage(): React.JSX.Element {
                       <SelectContent position="popper" sideOffset={4}>
                         <SelectItem value="default">
                           <span className="font-medium">Default</span>
-                          <span className="ml-2 text-muted-foreground text-[10px]">Ask before risky actions</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">
+                            Ask before risky actions
+                          </span>
                         </SelectItem>
                         <SelectItem value="acceptEdits">
                           <span className="font-medium">Accept Edits</span>
-                          <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve file edits</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">
+                            Auto-approve file edits
+                          </span>
                         </SelectItem>
                         <SelectItem value="plan">
                           <span className="font-medium">Plan Only</span>
-                          <span className="ml-2 text-muted-foreground text-[10px]">No file changes, planning mode</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">
+                            No file changes, planning mode
+                          </span>
                         </SelectItem>
                         <SelectItem value="bypassPermissions">
                           <span className="font-medium">Bypass Permissions</span>
-                          <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve everything</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">
+                            Auto-approve everything
+                          </span>
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -891,11 +931,7 @@ export function AgentsPage(): React.JSX.Element {
               <label className="text-sm font-medium" htmlFor="edit-agent-type">
                 Type
               </label>
-              <Select
-                value={editType}
-                onValueChange={setEditType}
-                disabled={updateAgent.isPending}
-              >
+              <Select value={editType} onValueChange={setEditType} disabled={updateAgent.isPending}>
                 <SelectTrigger className="w-full" id="edit-agent-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -962,8 +998,8 @@ export function AgentsPage(): React.JSX.Element {
                   disabled={updateAgent.isPending}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Cron expression. Examples: <code className="text-[10px]">*/30 * * * *</code> (every 30 min),{' '}
-                  <code className="text-[10px]">0 9 * * 1-5</code> (weekdays 9am),{' '}
+                  Cron expression. Examples: <code className="text-[10px]">*/30 * * * *</code>{' '}
+                  (every 30 min), <code className="text-[10px]">0 9 * * 1-5</code> (weekdays 9am),{' '}
                   <code className="text-[10px]">0 */6 * * *</code> (every 6h)
                 </p>
               </div>
@@ -1004,19 +1040,27 @@ export function AgentsPage(): React.JSX.Element {
                 <SelectContent position="popper" sideOffset={4}>
                   <SelectItem value="default">
                     <span className="font-medium">Default</span>
-                    <span className="ml-2 text-muted-foreground text-[10px]">Ask before risky actions</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">
+                      Ask before risky actions
+                    </span>
                   </SelectItem>
                   <SelectItem value="acceptEdits">
                     <span className="font-medium">Accept Edits</span>
-                    <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve file edits</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">
+                      Auto-approve file edits
+                    </span>
                   </SelectItem>
                   <SelectItem value="plan">
                     <span className="font-medium">Plan Only</span>
-                    <span className="ml-2 text-muted-foreground text-[10px]">No file changes, planning mode</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">
+                      No file changes, planning mode
+                    </span>
                   </SelectItem>
                   <SelectItem value="bypassPermissions">
                     <span className="font-medium">Bypass Permissions</span>
-                    <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve everything</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">
+                      Auto-approve everything
+                    </span>
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1132,7 +1176,9 @@ export function AgentsPage(): React.JSX.Element {
             disabled={stoppingAll}
             className={cn(
               'px-2.5 py-1.5 text-[12px] font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md transition-colors whitespace-nowrap',
-              stoppingAll ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/60',
+              stoppingAll
+                ? 'cursor-not-allowed opacity-50'
+                : 'cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/60',
             )}
             confirmClassName="px-2.5 py-1.5 text-[12px] font-medium bg-red-700 text-white border border-red-600 rounded-md cursor-pointer animate-pulse whitespace-nowrap"
           />
@@ -1196,9 +1242,17 @@ export function AgentsPage(): React.JSX.Element {
           <EmptyState icon={Filter} title="No agents match the current filters" />
         )
       ) : (
-        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 transition-opacity duration-200', agents.isFetching && !agents.isLoading && 'opacity-60')}>
+        <div
+          className={cn(
+            'grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 transition-opacity duration-200',
+            agents.isFetching && !agents.isLoading && 'opacity-60',
+          )}
+        >
           {filteredAgents.map((agent) => (
-            <div key={agent.id} className="p-4 bg-card border border-border/50 rounded-lg transition-colors hover:border-border">
+            <div
+              key={agent.id}
+              className="p-4 bg-card border border-border/50 rounded-lg transition-colors hover:border-border"
+            >
               {/* Card header: name + status */}
               <div className="flex justify-between items-center mb-3">
                 <Link

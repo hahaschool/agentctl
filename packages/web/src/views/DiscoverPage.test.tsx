@@ -94,14 +94,7 @@ vi.mock('@/components/SimpleTooltip', () => ({
 }));
 
 vi.mock('@/components/EmptyState', () => ({
-  EmptyState: ({
-    title,
-    description,
-  }: {
-    title: string;
-    description?: string;
-    icon?: unknown;
-  }) => (
+  EmptyState: ({ title, description }: { title: string; description?: string; icon?: unknown }) => (
     <div data-testid="empty-state">
       <div>{title}</div>
       {description && <div>{description}</div>}
@@ -677,9 +670,7 @@ describe('DiscoverPage', () => {
   });
 
   it('switches to flat list mode (no group headers)', async () => {
-    setupDefaultMocks([
-      createDiscoveredSession({ sessionId: 's1', summary: 'Flat session' }),
-    ]);
+    setupDefaultMocks([createDiscoveredSession({ sessionId: 's1', summary: 'Flat session' })]);
     renderDiscover();
 
     const groupSelect = screen.getByLabelText('Group by') as HTMLSelectElement;

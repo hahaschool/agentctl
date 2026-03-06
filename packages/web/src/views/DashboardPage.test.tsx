@@ -261,8 +261,19 @@ function setupDefaultMocks(overrides?: {
   metricsData?: unknown;
   machinesData?: Machine[];
   agentsData?: Agent[];
-  discoverData?: { sessions: DiscoveredSession[]; count: number; machinesQueried: number; machinesFailed: number };
-  sessionsData?: { sessions: Session[]; total: number; limit: number; offset: number; hasMore: boolean };
+  discoverData?: {
+    sessions: DiscoveredSession[];
+    count: number;
+    machinesQueried: number;
+    machinesFailed: number;
+  };
+  sessionsData?: {
+    sessions: Session[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
   wsStatus?: string;
   neverResolve?: ('health' | 'metrics' | 'machines' | 'agents' | 'discover' | 'sessions')[];
 }) {
@@ -722,9 +733,7 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-sublabel-Total Cost').textContent).toBe(
-          'top: big-spender',
-        );
+        expect(screen.getByTestId('stat-sublabel-Total Cost').textContent).toBe('top: big-spender');
       });
     });
 
@@ -852,9 +861,7 @@ describe('DashboardPage', () => {
     it('shows "ended" text for sessions with endedAt', async () => {
       setupDefaultMocks({
         sessionsData: {
-          sessions: [
-            createSession({ endedAt: new Date().toISOString() }),
-          ],
+          sessions: [createSession({ endedAt: new Date().toISOString() })],
           total: 1,
           limit: 50,
           offset: 0,
@@ -1027,7 +1034,10 @@ describe('DashboardPage', () => {
     it('shows "unknown/unknown" for missing OS/arch', async () => {
       setupDefaultMocks({
         machinesData: [
-          createMachine({ os: undefined as unknown as string, arch: undefined as unknown as string }),
+          createMachine({
+            os: undefined as unknown as string,
+            arch: undefined as unknown as string,
+          }),
         ],
       });
       renderDashboard();
@@ -1250,9 +1260,7 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(
-          screen.getByText('No sessions yet. Create a session to get started.'),
-        ).toBeDefined();
+        expect(screen.getByText('No sessions yet. Create a session to get started.')).toBeDefined();
       });
     });
 
@@ -1534,9 +1542,7 @@ describe('DashboardPage', () => {
 
     it('renders agent cost links pointing to agent detail', async () => {
       setupDefaultMocks({
-        agentsData: [
-          createAgent({ id: 'agent-42', name: 'my-agent', totalCostUsd: 5.0 }),
-        ],
+        agentsData: [createAgent({ id: 'agent-42', name: 'my-agent', totalCostUsd: 5.0 })],
       });
       renderDashboard();
       await waitFor(() => {

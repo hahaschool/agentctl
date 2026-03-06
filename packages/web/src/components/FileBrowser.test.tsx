@@ -69,9 +69,7 @@ const MOCK_MD_CONTENT = {
 // ---------------------------------------------------------------------------
 
 function renderBrowser(props?: { initialPath?: string }) {
-  return render(
-    <FileBrowser machineId={MACHINE_ID} initialPath={props?.initialPath} />,
-  );
+  return render(<FileBrowser machineId={MACHINE_ID} initialPath={props?.initialPath} />);
 }
 
 /** Set up mockListFiles to resolve with standard entries for the given path */
@@ -174,9 +172,7 @@ describe('FileBrowser', () => {
       });
 
       // Set up response for the sub-directory
-      const subEntries = [
-        { name: 'index.ts', type: 'file' as const, size: 48 },
-      ];
+      const subEntries = [{ name: 'index.ts', type: 'file' as const, size: 48 }];
       mockListFiles.mockResolvedValue({ entries: subEntries, path: '/src' });
 
       fireEvent.click(screen.getByText('src'));

@@ -6,14 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockAccountsQuery, mockDefaultsQuery, mockUpdateDefaults, mockToast } = vi.hoisted(
-  () => ({
-    mockAccountsQuery: vi.fn(),
-    mockDefaultsQuery: vi.fn(),
-    mockUpdateDefaults: vi.fn(),
-    mockToast: { success: vi.fn(), error: vi.fn() },
-  }),
-);
+const { mockAccountsQuery, mockDefaultsQuery, mockUpdateDefaults, mockToast } = vi.hoisted(() => ({
+  mockAccountsQuery: vi.fn(),
+  mockDefaultsQuery: vi.fn(),
+  mockUpdateDefaults: vi.fn(),
+  mockToast: { success: vi.fn(), error: vi.fn() },
+}));
 
 // ---------------------------------------------------------------------------
 // Mock dependencies — BEFORE component import
@@ -129,8 +127,14 @@ describe('FailoverSection', () => {
   // -- Loading state -------------------------------------------------------
 
   it('shows loading skeletons when accounts are loading', () => {
-    mockAccountsQuery.mockReturnValue({ queryKey: ['accounts'], queryFn: () => new Promise(() => {}) });
-    mockDefaultsQuery.mockReturnValue({ queryKey: ['account-defaults'], queryFn: () => new Promise(() => {}) });
+    mockAccountsQuery.mockReturnValue({
+      queryKey: ['accounts'],
+      queryFn: () => new Promise(() => {}),
+    });
+    mockDefaultsQuery.mockReturnValue({
+      queryKey: ['account-defaults'],
+      queryFn: () => new Promise(() => {}),
+    });
 
     renderFailover();
     const skeletons = screen.getAllByTestId('skeleton');
@@ -253,9 +257,7 @@ describe('FailoverSection', () => {
     });
 
     renderFailover();
-    expect(
-      screen.getByText('Try next active account by priority on rate limit'),
-    ).toBeDefined();
+    expect(screen.getByText('Try next active account by priority on rate limit')).toBeDefined();
   });
 
   it('shows "Distribute across all active accounts" description for Round Robin policy', () => {

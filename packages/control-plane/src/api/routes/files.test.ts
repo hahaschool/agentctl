@@ -105,7 +105,12 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
     });
 
     it('proxies directory listing to the worker', async () => {
-      const mockBody = { entries: [{ name: 'src', isDirectory: true }, { name: 'README.md', isDirectory: false }] };
+      const mockBody = {
+        entries: [
+          { name: 'src', isDirectory: true },
+          { name: 'README.md', isDirectory: false },
+        ],
+      };
       mockFetchOk(mockBody);
 
       const res = await app.inject({

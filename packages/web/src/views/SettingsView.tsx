@@ -33,7 +33,9 @@ function SettingsGroup({
         <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         {description && <p className="text-[13px] text-muted-foreground mt-1">{description}</p>}
       </div>
-      <div className="rounded-lg border border-border/50 bg-card/50 p-5 space-y-6 transition-colors hover:border-border">{children}</div>
+      <div className="rounded-lg border border-border/50 bg-card/50 p-5 space-y-6 transition-colors hover:border-border">
+        {children}
+      </div>
     </section>
   );
 }
@@ -144,7 +146,10 @@ function ThemePreview({
   accent: string;
 }): React.JSX.Element {
   return (
-    <div className="w-full aspect-[4/3] rounded-md overflow-hidden border border-black/10" style={{ background: bg }}>
+    <div
+      className="w-full aspect-[4/3] rounded-md overflow-hidden border border-black/10"
+      style={{ background: bg }}
+    >
       {/* Sidebar */}
       <div className="flex h-full">
         <div className="w-[28%] h-full p-1 flex flex-col gap-0.5" style={{ background: sidebar }}>
@@ -215,7 +220,9 @@ function ThemeSection(): React.JSX.Element {
     <div>
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Theme</h3>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Choose your preferred color scheme.</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Choose your preferred color scheme.
+        </p>
       </div>
       <div className="grid grid-cols-3 gap-3">
         {THEME_OPTIONS.map((t) => {

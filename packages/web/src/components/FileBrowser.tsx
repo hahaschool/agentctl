@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
 import type { FileContentResponse, FileEntry, FileListResponse } from '../lib/api';
-import { api, ApiError } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,7 +30,12 @@ function formatFileSize(bytes?: number): string {
 function formatModified(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function getFileExtension(path: string): string {
@@ -52,7 +57,21 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
   }
 
   // For code files: apply keyword + string highlighting
-  const codeExts = new Set(['ts', 'tsx', 'js', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'sh', 'bash', 'zsh']);
+  const codeExts = new Set([
+    'ts',
+    'tsx',
+    'js',
+    'jsx',
+    'py',
+    'go',
+    'rs',
+    'java',
+    'c',
+    'cpp',
+    'sh',
+    'bash',
+    'zsh',
+  ]);
   if (codeExts.has(ext)) {
     // Highlight strings, keywords, and numbers
     const parts = line.split(/('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)/g);
@@ -61,7 +80,11 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
         {parts.map((part, i) => {
           // String literals
           if (/^['"`]/.test(part)) {
-            return <span key={i} className="text-amber-600 dark:text-amber-400">{part}</span>;
+            return (
+              <span key={i} className="text-amber-600 dark:text-amber-400">
+                {part}
+              </span>
+            );
           }
           // Keywords
           const highlighted = part.replace(
@@ -76,7 +99,9 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
             <span key={i}>
               {kParts.map((kp, ki) =>
                 ki % 2 === 1 ? (
-                  <span key={ki} className="text-purple-600 dark:text-purple-400">{kp}</span>
+                  <span key={ki} className="text-purple-600 dark:text-purple-400">
+                    {kp}
+                  </span>
                 ) : (
                   <span key={ki}>{kp}</span>
                 ),
@@ -96,7 +121,10 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
       const rest = line.slice(full.length);
       return (
         <>
-          {indent}<span className="text-blue-600 dark:text-blue-400">&quot;{key}&quot;</span>{colon}<span className="text-amber-600 dark:text-amber-400">{rest}</span>
+          {indent}
+          <span className="text-blue-600 dark:text-blue-400">&quot;{key}&quot;</span>
+          {colon}
+          <span className="text-amber-600 dark:text-amber-400">{rest}</span>
         </>
       );
     }
@@ -371,56 +399,65 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
             {/* File content */}
             <div className="flex-1 overflow-auto min-h-0">
               {fileLoading && (
-                <div className="p-4 text-xs text-muted-foreground animate-pulse">Loading file...</div>
+                <div className="p-4 text-xs text-muted-foreground animate-pulse">
+                  Loading file...
+                </div>
               )}
               {fileError && (
                 <div className="p-4 text-xs text-red-600 dark:text-red-400">{fileError}</div>
               )}
-              {openFile && !editing && (() => {
-                const ext = getFileExtension(openFile.path);
-                const lines = openFile.content.split('\n');
-                const gutterWidth = String(lines.length).length;
-                return (
-                  <div className="flex text-[12px] font-mono leading-5 m-0">
-                    {/* Line numbers gutter */}
-                    <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
-                      {lines.map((_, i) => (
-                        <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>{i + 1}</div>
-                      ))}
+              {openFile &&
+                !editing &&
+                (() => {
+                  const ext = getFileExtension(openFile.path);
+                  const lines = openFile.content.split('\n');
+                  const gutterWidth = String(lines.length).length;
+                  return (
+                    <div className="flex text-[12px] font-mono leading-5 m-0">
+                      {/* Line numbers gutter */}
+                      <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
+                        {lines.map((_, i) => (
+                          <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>
+                            {i + 1}
+                          </div>
+                        ))}
+                      </div>
+                      {/* Code content */}
+                      <div className="flex-1 py-3 pl-3 pr-3 overflow-x-auto">
+                        {lines.map((line, i) => (
+                          <div key={i} className="whitespace-pre hover:bg-accent/30">
+                            {highlightLine(line, ext)}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    {/* Code content */}
-                    <div className="flex-1 py-3 pl-3 pr-3 overflow-x-auto">
-                      {lines.map((line, i) => (
-                        <div key={i} className="whitespace-pre hover:bg-accent/30">
-                          {highlightLine(line, ext)}
-                        </div>
-                      ))}
+                  );
+                })()}
+              {editing &&
+                (() => {
+                  const lines = editContent.split('\n');
+                  const gutterWidth = String(lines.length).length;
+                  return (
+                    <div className="flex h-full text-[12px] font-mono leading-5">
+                      {/* Line numbers gutter */}
+                      <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
+                        {lines.map((_, i) => (
+                          <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>
+                            {i + 1}
+                          </div>
+                        ))}
+                      </div>
+                      {/* Editor textarea */}
+                      <textarea
+                        ref={textareaRef}
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="flex-1 py-3 pl-3 pr-3 font-mono text-[12px] whitespace-pre bg-transparent text-foreground border-none outline-none resize-none leading-5"
+                        spellCheck={false}
+                      />
                     </div>
-                  </div>
-                );
-              })()}
-              {editing && (() => {
-                const lines = editContent.split('\n');
-                const gutterWidth = String(lines.length).length;
-                return (
-                  <div className="flex h-full text-[12px] font-mono leading-5">
-                    {/* Line numbers gutter */}
-                    <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
-                      {lines.map((_, i) => (
-                        <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>{i + 1}</div>
-                      ))}
-                    </div>
-                    {/* Editor textarea */}
-                    <textarea
-                      ref={textareaRef}
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="flex-1 py-3 pl-3 pr-3 font-mono text-[12px] whitespace-pre bg-transparent text-foreground border-none outline-none resize-none leading-5"
-                      spellCheck={false}
-                    />
-                  </div>
-                );
-              })()}
+                  );
+                })()}
             </div>
 
             {/* File info */}
@@ -433,13 +470,18 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
         )}
 
         {/* Directory listing */}
-        <div className={cn('overflow-auto', openFile || fileLoading || fileError ? 'max-h-[200px]' : 'flex-1')}>
+        <div
+          className={cn(
+            'overflow-auto',
+            openFile || fileLoading || fileError ? 'max-h-[200px]' : 'flex-1',
+          )}
+        >
           {dirLoading && (
-            <div className="p-4 text-xs text-muted-foreground animate-pulse">Loading directory...</div>
+            <div className="p-4 text-xs text-muted-foreground animate-pulse">
+              Loading directory...
+            </div>
           )}
-          {dirError && (
-            <div className="p-4 text-xs text-red-600 dark:text-red-400">{dirError}</div>
-          )}
+          {dirError && <div className="p-4 text-xs text-red-600 dark:text-red-400">{dirError}</div>}
           {!dirLoading && !dirError && (
             <table className="w-full text-xs">
               <thead>
@@ -474,7 +516,13 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
                       <span className="mr-1.5">
                         {entry.type === 'directory' ? '\u{1F4C1}' : '\u{1F4C4}'}
                       </span>
-                      <span className={entry.type === 'directory' ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}>
+                      <span
+                        className={
+                          entry.type === 'directory'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-foreground'
+                        }
+                      >
                         {entry.name}
                       </span>
                     </td>

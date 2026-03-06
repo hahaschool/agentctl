@@ -100,7 +100,10 @@ export type CliSessionManagerOptions = {
   /** Maximum number of concurrent sessions (default: 10). */
   maxConcurrentSessions?: number;
   /** Optional logger for diagnostics (e.g. pino instance). */
-  logger?: { debug: (obj: Record<string, unknown>, msg: string) => void; warn: (obj: Record<string, unknown>, msg: string) => void };
+  logger?: {
+    debug: (obj: Record<string, unknown>, msg: string) => void;
+    warn: (obj: Record<string, unknown>, msg: string) => void;
+  };
 };
 
 export type CliSessionEvent =
@@ -140,7 +143,10 @@ export class CliSessionManager extends EventEmitter {
   private readonly sessions: Map<string, CliSession> = new Map();
   private readonly processes: Map<string, ChildProcess> = new Map();
   private readonly lineBuffers: Map<string, string> = new Map();
-  private readonly logger?: { debug: (obj: Record<string, unknown>, msg: string) => void; warn: (obj: Record<string, unknown>, msg: string) => void };
+  private readonly logger?: {
+    debug: (obj: Record<string, unknown>, msg: string) => void;
+    warn: (obj: Record<string, unknown>, msg: string) => void;
+  };
   private sessionCounter = 0;
   private readonly cleanupTimer: ReturnType<typeof setInterval>;
 

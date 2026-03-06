@@ -193,10 +193,12 @@ describe('MachinesPage', () => {
   it('renders total count badge next to heading', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1' }),
-        createMachine({ id: 'machine-2' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1' }),
+          createMachine({ id: 'machine-2' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -247,11 +249,13 @@ describe('MachinesPage', () => {
   it('renders multiple machine cards', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', hostname: 'host-alpha' }),
-        createMachine({ id: 'machine-2', hostname: 'host-beta' }),
-        createMachine({ id: 'machine-3', hostname: 'host-gamma' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', hostname: 'host-alpha' }),
+          createMachine({ id: 'machine-2', hostname: 'host-beta' }),
+          createMachine({ id: 'machine-3', hostname: 'host-gamma' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -275,9 +279,7 @@ describe('MachinesPage', () => {
   it('renders Tailscale IP in machine card', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ tailscaleIp: '100.64.1.5' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ tailscaleIp: '100.64.1.5' })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -288,9 +290,7 @@ describe('MachinesPage', () => {
   it('renders OS and architecture', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ os: 'darwin', arch: 'arm64' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ os: 'darwin', arch: 'arm64' })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -327,10 +327,12 @@ describe('MachinesPage', () => {
   it('shows Total Machines stat card', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'online' }),
-        createMachine({ id: 'machine-2', status: 'offline' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', status: 'online' }),
+          createMachine({ id: 'machine-2', status: 'offline' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -342,11 +344,13 @@ describe('MachinesPage', () => {
   it('shows Online stat card with correct count', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'online' }),
-        createMachine({ id: 'machine-2', status: 'online' }),
-        createMachine({ id: 'machine-3', status: 'offline' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', status: 'online' }),
+          createMachine({ id: 'machine-2', status: 'online' }),
+          createMachine({ id: 'machine-3', status: 'offline' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -358,11 +362,13 @@ describe('MachinesPage', () => {
   it('shows Offline stat card with correct count', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'online' }),
-        createMachine({ id: 'machine-2', status: 'offline' }),
-        createMachine({ id: 'machine-3', status: 'offline' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', status: 'online' }),
+          createMachine({ id: 'machine-2', status: 'offline' }),
+          createMachine({ id: 'machine-3', status: 'offline' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -374,9 +380,7 @@ describe('MachinesPage', () => {
   it('shows "Needs attention" sublabel when offline machines exist', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'offline' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ id: 'machine-1', status: 'offline' })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -388,9 +392,7 @@ describe('MachinesPage', () => {
   it('shows "All clear" sublabel when no offline machines', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'online' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ id: 'machine-1', status: 'online' })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -402,10 +404,12 @@ describe('MachinesPage', () => {
   it('shows Degraded stat card with correct count', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'degraded' }),
-        createMachine({ id: 'machine-2', status: 'online' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', status: 'degraded' }),
+          createMachine({ id: 'machine-2', status: 'online' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -417,9 +421,7 @@ describe('MachinesPage', () => {
   it('shows "Partial issues" sublabel when degraded machines exist', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'degraded' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ id: 'machine-1', status: 'degraded' })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -431,9 +433,7 @@ describe('MachinesPage', () => {
   it('shows "Healthy" sublabel when no degraded machines', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', status: 'online' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ id: 'machine-1', status: 'online' })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -463,10 +463,12 @@ describe('MachinesPage', () => {
   it('filters machines by search text (hostname)', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', hostname: 'prod-server' }),
-        createMachine({ id: 'machine-2', hostname: 'dev-laptop' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', hostname: 'prod-server' }),
+          createMachine({ id: 'machine-2', hostname: 'dev-laptop' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -486,10 +488,12 @@ describe('MachinesPage', () => {
   it('filters machines by search text (OS)', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', hostname: 'mac-mini', os: 'darwin' }),
-        createMachine({ id: 'machine-2', hostname: 'ec2-box', os: 'linux' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', hostname: 'mac-mini', os: 'darwin' }),
+          createMachine({ id: 'machine-2', hostname: 'ec2-box', os: 'linux' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -509,10 +513,12 @@ describe('MachinesPage', () => {
   it('filters machines by status dropdown', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', hostname: 'online-host', status: 'online' }),
-        createMachine({ id: 'machine-2', hostname: 'offline-host', status: 'offline' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', hostname: 'online-host', status: 'online' }),
+          createMachine({ id: 'machine-2', hostname: 'offline-host', status: 'offline' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -532,11 +538,13 @@ describe('MachinesPage', () => {
   it('displays filtered/total machine count', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', hostname: 'prod-1', status: 'online' }),
-        createMachine({ id: 'machine-2', hostname: 'prod-2', status: 'offline' }),
-        createMachine({ id: 'machine-3', hostname: 'dev-1', status: 'online' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', hostname: 'prod-1', status: 'online' }),
+          createMachine({ id: 'machine-2', hostname: 'prod-2', status: 'offline' }),
+          createMachine({ id: 'machine-3', hostname: 'dev-1', status: 'online' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -554,9 +562,11 @@ describe('MachinesPage', () => {
   it('shows filter empty state when no machines match filter', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', hostname: 'prod', status: 'online' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', hostname: 'prod', status: 'online' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -735,9 +745,7 @@ describe('MachinesPage', () => {
   it('does not render capabilities section when capabilities is undefined', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ capabilities: undefined }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ capabilities: undefined })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -753,9 +761,7 @@ describe('MachinesPage', () => {
   it('shows "Never" when lastHeartbeat is null', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ lastHeartbeat: null }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ lastHeartbeat: null })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -766,9 +772,9 @@ describe('MachinesPage', () => {
   it('shows dash for missing tailscaleIp', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ tailscaleIp: undefined as unknown as string }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([createMachine({ tailscaleIp: undefined as unknown as string })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -825,9 +831,7 @@ describe('MachinesPage', () => {
   it('hides detail fields in compact mode', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ tailscaleIp: '100.64.0.1' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createMachine({ tailscaleIp: '100.64.0.1' })]),
     });
     renderMachines();
     await waitFor(() => {
@@ -856,10 +860,12 @@ describe('MachinesPage', () => {
   it('sorts machines by hostname when Name sort is selected', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'm1', hostname: 'zebra' }),
-        createMachine({ id: 'm2', hostname: 'alpha' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'm1', hostname: 'zebra' }),
+          createMachine({ id: 'm2', hostname: 'alpha' }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {
@@ -878,9 +884,11 @@ describe('MachinesPage', () => {
   it('wraps capability badges with SimpleTooltip', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ capabilities: { gpu: true, docker: true, maxConcurrentAgents: 8 } }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ capabilities: { gpu: true, docker: true, maxConcurrentAgents: 8 } }),
+        ]),
     });
     renderMachines();
     await waitFor(() => {

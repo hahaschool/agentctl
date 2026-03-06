@@ -23,8 +23,13 @@ export const queryKeys = {
   agents: ['agents'] as const,
   agent: (id: string) => ['agents', id] as const,
   agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
-  sessions: (params?: { status?: string; machineId?: string; agentId?: string; offset?: number; limit?: number }) =>
-    params ? (['sessions', params] as const) : (['sessions'] as const),
+  sessions: (params?: {
+    status?: string;
+    machineId?: string;
+    agentId?: string;
+    offset?: number;
+    limit?: number;
+  }) => (params ? (['sessions', params] as const) : (['sessions'] as const)),
   session: (id: string) => ['sessions', id] as const,
   sessionContent: (
     sessionId: string,
@@ -47,8 +52,7 @@ export const queryKeys = {
   }) => (params ? (['audit', params] as const) : (['audit'] as const)),
   auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
     params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
-  gitStatus: (machineId: string, path: string) =>
-    ['git-status', machineId, path] as const,
+  gitStatus: (machineId: string, path: string) => ['git-status', machineId, path] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -102,7 +106,13 @@ export function agentRunsQuery(agentId: string) {
   });
 }
 
-export function sessionsQuery(params?: { status?: string; machineId?: string; agentId?: string; offset?: number; limit?: number }) {
+export function sessionsQuery(params?: {
+  status?: string;
+  machineId?: string;
+  agentId?: string;
+  offset?: number;
+  limit?: number;
+}) {
   return queryOptions({
     queryKey: queryKeys.sessions(params),
     queryFn: () => api.listSessions(params),
@@ -283,7 +293,8 @@ export function useUpdateAgent() {
 export function useResumeSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, prompt, model }: { id: string; prompt: string; model?: string }) => api.resumeSession(id, prompt, model),
+    mutationFn: ({ id, prompt, model }: { id: string; prompt: string; model?: string }) =>
+      api.resumeSession(id, prompt, model),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },

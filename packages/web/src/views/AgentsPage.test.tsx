@@ -60,14 +60,24 @@ vi.mock('@/components/ui/dialog', () => ({
 }));
 
 vi.mock('@/components/ui/input', () => ({
-  Input: (props: React.InputHTMLAttributes<HTMLInputElement> & { ref?: React.Ref<HTMLInputElement> }) => {
+  Input: (
+    props: React.InputHTMLAttributes<HTMLInputElement> & { ref?: React.Ref<HTMLInputElement> },
+  ) => {
     const { ref: _ref, ...rest } = props;
     return <input {...rest} />;
   },
 }));
 
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ children, value, onValueChange }: { children: React.ReactNode; value?: string; onValueChange?: (v: string) => void }) => (
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children: React.ReactNode;
+    value?: string;
+    onValueChange?: (v: string) => void;
+  }) => (
     <div data-testid="select" data-value={value} onClick={() => onValueChange?.('')}>
       {children}
     </div>
@@ -77,13 +87,22 @@ vi.mock('@/components/ui/select', () => ({
   SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
     <div data-testid={`select-item-${value}`}>{children}</div>
   ),
-  SelectValue: ({ children, placeholder }: { children?: React.ReactNode; placeholder?: string }) => (
-    <span>{children ?? placeholder}</span>
-  ),
+  SelectValue: ({
+    children,
+    placeholder,
+  }: {
+    children?: React.ReactNode;
+    placeholder?: string;
+  }) => <span>{children ?? placeholder}</span>,
 }));
 
 vi.mock('@/components/ui/button', () => ({
-  Button: ({ children, onClick, disabled, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+  Button: ({
+    children,
+    onClick,
+    disabled,
+    ...rest
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button type="button" onClick={onClick} disabled={disabled} {...rest}>
       {children}
     </button>
@@ -143,7 +162,15 @@ vi.mock('@/components/StatusBadge', () => ({
 }));
 
 vi.mock('@/components/ConfirmButton', () => ({
-  ConfirmButton: ({ label, onConfirm, disabled }: { label: string; onConfirm: () => void; disabled?: boolean }) => (
+  ConfirmButton: ({
+    label,
+    onConfirm,
+    disabled,
+  }: {
+    label: string;
+    onConfirm: () => void;
+    disabled?: boolean;
+  }) => (
     <button type="button" data-testid="confirm-button" onClick={onConfirm} disabled={disabled}>
       {label}
     </button>
@@ -275,7 +302,9 @@ describe('AgentsPage', () => {
 
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
-      queryFn: vi.fn().mockResolvedValue({ sessions: [], total: 0, limit: 100, offset: 0, hasMore: false }),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue({ sessions: [], total: 0, limit: 100, offset: 0, hasMore: false }),
     });
 
     mockCreateAgent.mockReturnValue(makeMutationHook());
@@ -307,10 +336,12 @@ describe('AgentsPage', () => {
   it('renders pluralized description for multiple agents', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'agent-1', name: 'agent-1' }),
-        createAgent({ id: 'agent-2', name: 'agent-2' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'agent-1', name: 'agent-1' }),
+          createAgent({ id: 'agent-2', name: 'agent-2' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -435,9 +466,7 @@ describe('AgentsPage', () => {
   it('renders schedule when present', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ schedule: '*/30 * * * *' }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createAgent({ schedule: '*/30 * * * *' })]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -448,11 +477,13 @@ describe('AgentsPage', () => {
   it('renders multiple agent cards', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'agent-1', name: 'alpha-agent' }),
-        createAgent({ id: 'agent-2', name: 'beta-agent' }),
-        createAgent({ id: 'agent-3', name: 'gamma-agent' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'agent-1', name: 'alpha-agent' }),
+          createAgent({ id: 'agent-2', name: 'beta-agent' }),
+          createAgent({ id: 'agent-3', name: 'gamma-agent' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -616,11 +647,13 @@ describe('AgentsPage', () => {
   it('renders mixed status badges', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'a1', name: 'a1', status: 'running' }),
-        createAgent({ id: 'a2', name: 'a2', status: 'error' }),
-        createAgent({ id: 'a3', name: 'a3', status: 'registered' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'a1', name: 'a1', status: 'running' }),
+          createAgent({ id: 'a2', name: 'a2', status: 'error' }),
+          createAgent({ id: 'a3', name: 'a3', status: 'registered' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -734,10 +767,12 @@ describe('AgentsPage', () => {
   it('filters agents by search text', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'agent-1', name: 'alpha-agent' }),
-        createAgent({ id: 'agent-2', name: 'beta-agent' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'agent-1', name: 'alpha-agent' }),
+          createAgent({ id: 'agent-2', name: 'beta-agent' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -755,10 +790,12 @@ describe('AgentsPage', () => {
   it('filters agents by status', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'agent-1', name: 'running-agent', status: 'running' }),
-        createAgent({ id: 'agent-2', name: 'stopped-agent', status: 'stopped' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'agent-1', name: 'running-agent', status: 'running' }),
+          createAgent({ id: 'agent-2', name: 'stopped-agent', status: 'stopped' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -776,11 +813,13 @@ describe('AgentsPage', () => {
   it('shows agent count after filtering', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'agent-1', name: 'alpha' }),
-        createAgent({ id: 'agent-2', name: 'beta' }),
-        createAgent({ id: 'agent-3', name: 'gamma' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'agent-1', name: 'alpha' }),
+          createAgent({ id: 'agent-2', name: 'beta' }),
+          createAgent({ id: 'agent-3', name: 'gamma' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -815,11 +854,13 @@ describe('AgentsPage', () => {
   it('renders per-status stat cards', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'a1', status: 'running' }),
-        createAgent({ id: 'a2', status: 'running' }),
-        createAgent({ id: 'a3', status: 'error' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'a1', status: 'running' }),
+          createAgent({ id: 'a2', status: 'running' }),
+          createAgent({ id: 'a3', status: 'error' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -848,9 +889,11 @@ describe('AgentsPage', () => {
   it('shows filter empty state when filters match nothing', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'agent-1', name: 'test-agent', status: 'registered' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'agent-1', name: 'test-agent', status: 'registered' }),
+        ]),
     });
     renderAgentsPage();
     const filterSelect = screen.getByLabelText('Filter by status');
@@ -896,10 +939,12 @@ describe('AgentsPage', () => {
   it('shows Stop All button when there are running agents', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'a1', name: 'runner-1', status: 'running' }),
-        createAgent({ id: 'a2', name: 'runner-2', status: 'running' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'a1', name: 'runner-1', status: 'running' }),
+          createAgent({ id: 'a2', name: 'runner-2', status: 'running' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -910,10 +955,12 @@ describe('AgentsPage', () => {
   it('does not show Stop All button when no agents are running', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'a1', name: 'idle-1', status: 'registered' }),
-        createAgent({ id: 'a2', name: 'idle-2', status: 'stopped' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'a1', name: 'idle-1', status: 'registered' }),
+          createAgent({ id: 'a2', name: 'idle-2', status: 'stopped' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -925,12 +972,14 @@ describe('AgentsPage', () => {
   it('shows correct running agent count in Stop All button', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'a1', name: 'runner-1', status: 'running' }),
-        createAgent({ id: 'a2', name: 'idle-1', status: 'registered' }),
-        createAgent({ id: 'a3', name: 'runner-2', status: 'running' }),
-        createAgent({ id: 'a4', name: 'runner-3', status: 'running' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'a1', name: 'runner-1', status: 'running' }),
+          createAgent({ id: 'a2', name: 'idle-1', status: 'registered' }),
+          createAgent({ id: 'a3', name: 'runner-2', status: 'running' }),
+          createAgent({ id: 'a4', name: 'runner-3', status: 'running' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {
@@ -945,11 +994,13 @@ describe('AgentsPage', () => {
   it('shows status counts in description', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'a1', status: 'running' }),
-        createAgent({ id: 'a2', status: 'running' }),
-        createAgent({ id: 'a3', status: 'error' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'a1', status: 'running' }),
+          createAgent({ id: 'a2', status: 'running' }),
+          createAgent({ id: 'a3', status: 'error' }),
+        ]),
     });
     renderAgentsPage();
     await waitFor(() => {

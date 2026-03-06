@@ -202,10 +202,7 @@ describe('SettingsView', () => {
     const buttons = screen.getAllByRole('button');
     // At least 3 theme buttons + retry button
     const themeButtons = buttons.filter(
-      (b) =>
-        b.textContent === 'System' ||
-        b.textContent === 'Light' ||
-        b.textContent === 'Dark',
+      (b) => b.textContent === 'System' || b.textContent === 'Light' || b.textContent === 'Dark',
     );
     expect(themeButtons.length).toBe(3);
   });
@@ -221,9 +218,7 @@ describe('SettingsView', () => {
 
   it('renders the router description', () => {
     renderSettings();
-    expect(
-      screen.getByText('Multi-provider failover routing via LiteLLM.'),
-    ).toBeDefined();
+    expect(screen.getByText('Multi-provider failover routing via LiteLLM.')).toBeDefined();
   });
 
   it('renders a link to /settings/router', () => {
@@ -378,10 +373,7 @@ describe('SettingsView', () => {
     renderSettings();
     const buttons = screen.getAllByRole('button');
     const themeButtons = buttons.filter(
-      (b) =>
-        b.textContent === 'System' ||
-        b.textContent === 'Light' ||
-        b.textContent === 'Dark',
+      (b) => b.textContent === 'System' || b.textContent === 'Light' || b.textContent === 'Dark',
     );
     expect(themeButtons.length).toBe(3);
     // Each button should be of type="button"
@@ -459,9 +451,7 @@ describe('SettingsView', () => {
 
   it('renders router link description text', () => {
     renderSettings();
-    expect(
-      screen.getByText('Multi-provider failover routing via LiteLLM.'),
-    ).toBeDefined();
+    expect(screen.getByText('Multi-provider failover routing via LiteLLM.')).toBeDefined();
   });
 
   it('renders Configure link text', () => {

@@ -23,7 +23,12 @@ export function GitStatusBadge({
 
   if (isLoading) {
     return (
-      <span className={cn('inline-flex items-center gap-1 text-[11px] text-muted-foreground', className)}>
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 text-[11px] text-muted-foreground',
+          className,
+        )}
+      >
         <span className="animate-pulse">git: loading...</span>
       </span>
     );
@@ -64,7 +69,13 @@ export function GitStatusBadge({
               status.clean ? 'bg-green-500' : 'bg-yellow-500',
             )}
           />
-          <span className={cn(status.clean ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400')}>
+          <span
+            className={cn(
+              status.clean
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-yellow-600 dark:text-yellow-400',
+            )}
+          >
             {statusSummary}
           </span>
         </span>
@@ -133,9 +144,7 @@ function WorktreeRow({
         isCurrent ? 'bg-accent/50 border border-border' : 'text-muted-foreground',
       )}
     >
-      {isCurrent && (
-        <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
-      )}
+      {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />}
       <span className="font-mono">{worktree.branch ?? '(detached)'}</span>
       {worktree.isMain && (
         <span className="text-[9px] px-1 py-0 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-sm border border-blue-500/20">

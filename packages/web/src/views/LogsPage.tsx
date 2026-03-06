@@ -1,12 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Info, ScrollText, Server } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Info, ScrollText, Server } from 'lucide-react';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -83,7 +82,10 @@ export function LogsPage(): React.JSX.Element {
     }),
     [auditAgentFilter, auditToolFilter, auditOffset],
   );
-  const audit = useQuery({ ...auditQuery(auditParams), refetchInterval: autoRefresh ? 10_000 : false });
+  const audit = useQuery({
+    ...auditQuery(auditParams),
+    refetchInterval: autoRefresh ? 10_000 : false,
+  });
   const auditSummary = useQuery({
     ...auditSummaryQuery({ agentId: auditAgentFilter || undefined }),
     refetchInterval: autoRefresh ? 30_000 : false,
@@ -186,7 +188,11 @@ export function LogsPage(): React.JSX.Element {
                 ? 'bg-green-500/10 text-green-500 border-green-500/30'
                 : 'bg-muted text-muted-foreground border-border',
             )}
-            title={autoRefresh ? 'Auto-refresh ON (click to pause)' : 'Auto-refresh OFF (click to resume)'}
+            title={
+              autoRefresh
+                ? 'Auto-refresh ON (click to pause)'
+                : 'Auto-refresh OFF (click to resume)'
+            }
           >
             <span
               className={cn(
@@ -446,7 +452,11 @@ export function LogsPage(): React.JSX.Element {
                       <td className={TD_CLASSES}>
                         <span className="font-medium">{m.hostname}</span>
                         <br />
-                        <CopyableText value={m.id} maxDisplay={12} className="text-[11px] text-muted-foreground font-mono" />
+                        <CopyableText
+                          value={m.id}
+                          maxDisplay={12}
+                          className="text-[11px] text-muted-foreground font-mono"
+                        />
                       </td>
                       <td className={TD_CLASSES}>
                         <StatusBadge status={m.status} />
@@ -518,7 +528,9 @@ export function LogsPage(): React.JSX.Element {
                 &#x2315;
               </span>
               {!auditSearch && (
-                <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">/</kbd>
+                <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">
+                  /
+                </kbd>
               )}
             </div>
 
@@ -557,13 +569,20 @@ export function LogsPage(): React.JSX.Element {
             </select>
 
             {/* Export CSV */}
-            <SimpleTooltip content={filteredActions.length === 0 ? 'No actions to export' : 'Download filtered actions as CSV'}>
+            <SimpleTooltip
+              content={
+                filteredActions.length === 0
+                  ? 'No actions to export'
+                  : 'Download filtered actions as CSV'
+              }
+            >
               <button
                 type="button"
                 onClick={() => {
                   const actions = filteredActions;
                   if (actions.length === 0) return;
-                  const header = 'timestamp,actionType,toolName,agentId,runId,durationMs,approvedBy\n';
+                  const header =
+                    'timestamp,actionType,toolName,agentId,runId,durationMs,approvedBy\n';
                   const rows = actions.map((a) =>
                     [
                       a.timestamp ?? '',
@@ -668,8 +687,9 @@ export function LogsPage(): React.JSX.Element {
           {audit.data && audit.data.total > AUDIT_PAGE_SIZE && (
             <div className="flex items-center justify-between mt-4">
               <span className="text-[11px] text-muted-foreground">
-                Showing {auditOffset + 1}–{Math.min(auditOffset + AUDIT_PAGE_SIZE, audit.data.total)}{' '}
-                of {formatNumber(audit.data.total)}
+                Showing {auditOffset + 1}–
+                {Math.min(auditOffset + AUDIT_PAGE_SIZE, audit.data.total)} of{' '}
+                {formatNumber(audit.data.total)}
               </span>
               <div className="flex gap-2">
                 <button
@@ -699,37 +719,36 @@ export function LogsPage(): React.JSX.Element {
           )}
 
           {/* Tool Breakdown (collapsible) */}
-          {auditSummary.data &&
-            Object.keys(auditSummary.data.toolBreakdown ?? {}).length > 0 && (
-              <div className="mt-6">
-                <SectionHeading>Tool Usage Breakdown</SectionHeading>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
-                  {Object.entries(auditSummary.data.toolBreakdown)
-                    .sort(([, a], [, b]) => (b as number) - (a as number))
-                    .map(([tool, count]) => (
-                      <button
-                        key={tool}
-                        type="button"
-                        onClick={() => {
-                          setAuditToolFilter(auditToolFilter === tool ? '' : tool);
-                          setAuditOffset(0);
-                        }}
-                        className={cn(
-                          'px-3 py-2 bg-card border rounded-md text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20',
-                          auditToolFilter === tool
-                            ? 'border-foreground'
-                            : 'border-border/50 hover:border-border',
-                        )}
-                      >
-                        <div className="text-[12px] font-medium font-mono truncate">{tool}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {formatNumber(count)} calls
-                        </div>
-                      </button>
-                    ))}
-                </div>
+          {auditSummary.data && Object.keys(auditSummary.data.toolBreakdown ?? {}).length > 0 && (
+            <div className="mt-6">
+              <SectionHeading>Tool Usage Breakdown</SectionHeading>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
+                {Object.entries(auditSummary.data.toolBreakdown)
+                  .sort(([, a], [, b]) => (b as number) - (a as number))
+                  .map(([tool, count]) => (
+                    <button
+                      key={tool}
+                      type="button"
+                      onClick={() => {
+                        setAuditToolFilter(auditToolFilter === tool ? '' : tool);
+                        setAuditOffset(0);
+                      }}
+                      className={cn(
+                        'px-3 py-2 bg-card border rounded-md text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20',
+                        auditToolFilter === tool
+                          ? 'border-foreground'
+                          : 'border-border/50 hover:border-border',
+                      )}
+                    >
+                      <div className="text-[12px] font-medium font-mono truncate">{tool}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {formatNumber(count)} calls
+                      </div>
+                    </button>
+                  ))}
               </div>
-            )}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -774,9 +793,7 @@ function CollapsibleSection({
           &#x25BC;
         </span>
         <span className="text-[15px] font-semibold text-muted-foreground">{title}</span>
-        {badge && (
-          <span className="text-[11px] text-muted-foreground font-normal">({badge})</span>
-        )}
+        {badge && <span className="text-[11px] text-muted-foreground font-normal">({badge})</span>}
       </button>
       {open && children}
     </>
@@ -814,11 +831,13 @@ function MetricCard({
   tooltip?: string;
 }): React.JSX.Element {
   return (
-    <div className={cn(
-      'px-[18px] py-4 bg-card border border-border/50 rounded transition-colors hover:border-border',
-      accent && 'border-l-[3px]',
-      accent && METRIC_ACCENT_CLASSES[accent],
-    )}>
+    <div
+      className={cn(
+        'px-[18px] py-4 bg-card border border-border/50 rounded transition-colors hover:border-border',
+        accent && 'border-l-[3px]',
+        accent && METRIC_ACCENT_CLASSES[accent],
+      )}
+    >
       <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1">
         {tooltip ? (
           <SimpleTooltip content={tooltip}>
@@ -961,7 +980,11 @@ function AuditActionRow({
 
         {/* Agent ID (short) */}
         {action.agentId && (
-          <CopyableText value={action.agentId} maxDisplay={8} className="text-[11px] text-muted-foreground font-mono hidden sm:inline" />
+          <CopyableText
+            value={action.agentId}
+            maxDisplay={8}
+            className="text-[11px] text-muted-foreground font-mono hidden sm:inline"
+          />
         )}
 
         {/* Duration */}
@@ -969,9 +992,7 @@ function AuditActionRow({
           <span
             className={cn(
               'text-[11px] font-mono hidden md:inline',
-              action.durationMs > 5000
-                ? 'text-yellow-500'
-                : 'text-muted-foreground',
+              action.durationMs > 5000 ? 'text-yellow-500' : 'text-muted-foreground',
             )}
           >
             {formatDurationMs(action.durationMs)}
@@ -1069,7 +1090,6 @@ function highlightMatch(text: string, query: string): React.ReactNode {
 // Table class strings
 // ---------------------------------------------------------------------------
 
-const TH_CLASSES =
-  'px-3.5 py-2.5 text-[11px] font-semibold text-muted-foreground';
+const TH_CLASSES = 'px-3.5 py-2.5 text-[11px] font-semibold text-muted-foreground';
 
 const TD_CLASSES = 'px-3.5 py-2.5';

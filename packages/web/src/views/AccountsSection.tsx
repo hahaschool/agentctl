@@ -22,8 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { api } from '@/lib/api';
 import type { ApiAccount } from '@/lib/api';
+import { api } from '@/lib/api';
 import {
   accountsQuery,
   useCreateAccount,
@@ -303,7 +303,10 @@ export function AccountsSection(): React.JSX.Element {
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{account.name}</span>
-                  <Badge variant="secondary" className="text-[10px] bg-muted/80 border border-border/40">
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] bg-muted/80 border border-border/40"
+                  >
                     {PROVIDER_LABELS[account.provider] ?? account.provider}
                   </Badge>
                   {account.isActive ? (
@@ -314,7 +317,10 @@ export function AccountsSection(): React.JSX.Element {
                       Active
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/40 bg-muted/40">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] text-muted-foreground border-border/40 bg-muted/40"
+                    >
                       Inactive
                     </Badge>
                   )}
@@ -445,15 +451,15 @@ export function AccountsSection(): React.JSX.Element {
                     setCredential(e.target.value);
                     if (credentialWarning) setCredentialWarning(null);
                   }}
-                  onBlur={() => setCredentialWarning(validateCredentialFormat(provider, credential))}
+                  onBlur={() =>
+                    setCredentialWarning(validateCredentialFormat(provider, credential))
+                  }
                 />
                 <p className="text-[11px] text-muted-foreground">
                   {getCredentialConfig(provider).hint}
                 </p>
                 {credentialWarning && (
-                  <p className="text-[11px] text-amber-500">
-                    {credentialWarning}
-                  </p>
+                  <p className="text-[11px] text-amber-500">{credentialWarning}</p>
                 )}
               </div>
             )}
@@ -482,7 +488,9 @@ export function AccountsSection(): React.JSX.Element {
             </Button>
             <Button
               onClick={() => void handleCreate()}
-              disabled={!name || !provider || !credential || createAccount.isPending || oauthLoading}
+              disabled={
+                !name || !provider || !credential || createAccount.isPending || oauthLoading
+              }
             >
               {createAccount.isPending ? 'Creating...' : 'Create Account'}
             </Button>

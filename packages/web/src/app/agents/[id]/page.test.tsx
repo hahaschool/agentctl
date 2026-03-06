@@ -61,7 +61,9 @@ vi.mock('@/components/ui/skeleton', () => ({
 
 vi.mock('@/components/ui/card', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <div data-testid="card" className={className}>{children}</div>
+    <div data-testid="card" className={className}>
+      {children}
+    </div>
   ),
   CardContent: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div className={className}>{children}</div>
@@ -86,7 +88,9 @@ vi.mock('@/components/ui/dialog', () => ({
 }));
 
 vi.mock('@/components/ui/input', () => ({
-  Input: (props: React.InputHTMLAttributes<HTMLInputElement> & { ref?: React.Ref<HTMLInputElement> }) => {
+  Input: (
+    props: React.InputHTMLAttributes<HTMLInputElement> & { ref?: React.Ref<HTMLInputElement> },
+  ) => {
     const { ref: _ref, ...rest } = props;
     return <input {...rest} />;
   },
@@ -104,25 +108,44 @@ vi.mock('@/components/ui/select', () => ({
     onValueChange?: (v: string) => void;
     disabled?: boolean;
   }) => (
-    <div data-testid="select" data-value={value} data-disabled={disabled} onClick={() => onValueChange?.('')}>
+    <div
+      data-testid="select"
+      data-value={value}
+      data-disabled={disabled}
+      onClick={() => onValueChange?.('')}
+    >
       {children}
     </div>
   ),
   SelectTrigger: ({ children, ...rest }: { children: React.ReactNode; [k: string]: unknown }) => (
-    <div data-testid="select-trigger" {...(rest['aria-label'] ? { 'aria-label': rest['aria-label'] } : {})}>{children}</div>
+    <div
+      data-testid="select-trigger"
+      {...(rest['aria-label'] ? { 'aria-label': rest['aria-label'] } : {})}
+    >
+      {children}
+    </div>
   ),
   SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
     <div data-testid={`select-item-${value}`}>{children}</div>
   ),
-  SelectValue: ({ children, placeholder }: { children?: React.ReactNode; placeholder?: string }) => (
-    <span>{children ?? placeholder}</span>
-  ),
+  SelectValue: ({
+    children,
+    placeholder,
+  }: {
+    children?: React.ReactNode;
+    placeholder?: string;
+  }) => <span>{children ?? placeholder}</span>,
   SelectSeparator: () => <hr data-testid="select-separator" />,
 }));
 
 vi.mock('@/components/ui/button', () => ({
-  Button: ({ children, onClick, disabled, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+  Button: ({
+    children,
+    onClick,
+    disabled,
+    ...rest
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button type="button" onClick={onClick} disabled={disabled} {...rest}>
       {children}
     </button>
@@ -189,7 +212,15 @@ vi.mock('@/components/CopyableText', () => ({
 }));
 
 vi.mock('@/components/ConfirmButton', () => ({
-  ConfirmButton: ({ label, onConfirm, disabled }: { label: string; onConfirm: () => void; disabled?: boolean }) => (
+  ConfirmButton: ({
+    label,
+    onConfirm,
+    disabled,
+  }: {
+    label: string;
+    onConfirm: () => void;
+    disabled?: boolean;
+  }) => (
     <button type="button" data-testid="confirm-button" onClick={onConfirm} disabled={disabled}>
       {label}
     </button>
@@ -413,9 +444,11 @@ describe('AgentDetailPage', () => {
   // =========================================================================
 
   it('shows loading skeletons when agent data is loading', async () => {
-    mockAgentQuery.mockReturnValue(makeQueryResult('agent', null, {
-      queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
-    }));
+    mockAgentQuery.mockReturnValue(
+      makeQueryResult('agent', null, {
+        queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
+      }),
+    );
     renderPage();
     await waitFor(() => {
       const skeletons = screen.getAllByTestId('skeleton');
@@ -424,9 +457,11 @@ describe('AgentDetailPage', () => {
   });
 
   it('does not render agent name while loading', async () => {
-    mockAgentQuery.mockReturnValue(makeQueryResult('agent', null, {
-      queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
-    }));
+    mockAgentQuery.mockReturnValue(
+      makeQueryResult('agent', null, {
+        queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
+      }),
+    );
     renderPage();
     await waitFor(() => {
       expect(screen.getAllByTestId('skeleton').length).toBeGreaterThan(0);
@@ -1430,9 +1465,11 @@ describe('AgentDetailPage', () => {
   // =========================================================================
 
   it('shows run skeletons when runs are loading', async () => {
-    mockAgentRunsQuery.mockReturnValue(makeQueryResult('agent-runs', null, {
-      queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
-    }));
+    mockAgentRunsQuery.mockReturnValue(
+      makeQueryResult('agent-runs', null, {
+        queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
+      }),
+    );
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('Recent Runs')).toBeDefined();
@@ -1442,9 +1479,11 @@ describe('AgentDetailPage', () => {
   });
 
   it('shows session skeletons when sessions are loading', async () => {
-    mockSessionsQuery.mockReturnValue(makeQueryResult('sessions', null, {
-      queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
-    }));
+    mockSessionsQuery.mockReturnValue(
+      makeQueryResult('sessions', null, {
+        queryFn: vi.fn().mockReturnValue(new Promise(() => {})),
+      }),
+    );
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('Sessions')).toBeDefined();

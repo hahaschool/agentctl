@@ -11,10 +11,17 @@ type Props = {
 
 export function Breadcrumb({ items }: Props): React.JSX.Element {
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4"
+    >
       {items.map((item, i) => (
         <span key={item.label} className="flex items-center gap-1.5">
-          {i > 0 && <span className="text-muted-foreground/50" aria-hidden="true">/</span>}
+          {i > 0 && (
+            <span className="text-muted-foreground/50" aria-hidden="true">
+              /
+            </span>
+          )}
           {item.href ? (
             <Link href={item.href} className="hover:text-foreground transition-colors no-underline">
               {item.label}

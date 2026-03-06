@@ -62,7 +62,11 @@ export function CopyableText({
         className,
       )}
     >
-      {copied ? <Check size={10} className="text-green-500" /> : <Copy size={10} className="opacity-40" />}
+      {copied ? (
+        <Check size={10} className="text-green-500" />
+      ) : (
+        <Copy size={10} className="opacity-40" />
+      )}
       {copied ? 'Copied!' : display}
     </button>
   );

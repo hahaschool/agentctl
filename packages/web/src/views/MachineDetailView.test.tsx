@@ -89,7 +89,15 @@ vi.mock('@/components/StatusBadge', () => ({
 }));
 
 vi.mock('@/components/CopyableText', () => ({
-  CopyableText: ({ value, label, maxDisplay }: { value: string; label?: string; maxDisplay?: number }) => (
+  CopyableText: ({
+    value,
+    label,
+    maxDisplay,
+  }: {
+    value: string;
+    label?: string;
+    maxDisplay?: number;
+  }) => (
     <span data-testid="copyable-text">{label ?? value.slice(0, maxDisplay ?? value.length)}</span>
   ),
 }));
@@ -351,9 +359,9 @@ describe('MachineDetailView', () => {
   it('displays dash when tailscaleIp is missing', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ tailscaleIp: undefined as unknown as string }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([createMachine({ tailscaleIp: undefined as unknown as string })]),
     });
     renderView();
     await waitFor(() => {
@@ -670,8 +678,14 @@ describe('MachineDetailView', () => {
       queryKey: ['sessions', { machineId: 'machine-1' }],
       queryFn: vi.fn().mockResolvedValue({
         sessions: [
-          createSession({ id: 'session-old-12345', startedAt: new Date(now - 120_000).toISOString() }),
-          createSession({ id: 'session-new-12345', startedAt: new Date(now - 10_000).toISOString() }),
+          createSession({
+            id: 'session-old-12345',
+            startedAt: new Date(now - 120_000).toISOString(),
+          }),
+          createSession({
+            id: 'session-new-12345',
+            startedAt: new Date(now - 10_000).toISOString(),
+          }),
         ],
         total: 2,
         limit: 50,
@@ -750,10 +764,12 @@ describe('MachineDetailView', () => {
   it('only shows agents belonging to this machine', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ id: 'agent-1', machineId: 'machine-1', name: 'my-agent' }),
-        createAgent({ id: 'agent-2', machineId: 'machine-other', name: 'other-agent' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createAgent({ id: 'agent-1', machineId: 'machine-1', name: 'my-agent' }),
+          createAgent({ id: 'agent-2', machineId: 'machine-other', name: 'other-agent' }),
+        ]),
     });
     renderView();
     await waitFor(() => {
@@ -780,9 +796,7 @@ describe('MachineDetailView', () => {
     const runAt = new Date().toISOString();
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        createAgent({ lastRunAt: runAt }),
-      ]),
+      queryFn: vi.fn().mockResolvedValue([createAgent({ lastRunAt: runAt })]),
     });
     renderView();
     await waitFor(() => {

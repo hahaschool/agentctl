@@ -33,11 +33,9 @@ export const gitProxyRoutes: FastifyPluginAsync<GitProxyRoutesOptions> = async (
     const machine = await dbRegistry.getMachine(machineId);
 
     if (!machine) {
-      throw new ControlPlaneError(
-        'MACHINE_NOT_FOUND',
-        `Machine '${machineId}' is not registered`,
-        { machineId },
-      );
+      throw new ControlPlaneError('MACHINE_NOT_FOUND', `Machine '${machineId}' is not registered`, {
+        machineId,
+      });
     }
 
     if (machine.status === 'offline') {
@@ -82,7 +80,9 @@ export const gitProxyRoutes: FastifyPluginAsync<GitProxyRoutesOptions> = async (
         });
 
         if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
+          const body = await res
+            .json()
+            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
           return reply.code(res.status).send(body);
         }
 

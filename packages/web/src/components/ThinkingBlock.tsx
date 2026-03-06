@@ -23,7 +23,9 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
       >
         <ChevronRight size={12} className="text-purple-600 dark:text-purple-400 shrink-0" />
         <Brain size={12} className="text-purple-600 dark:text-purple-400 shrink-0" />
-        <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 shrink-0">Thinking</span>
+        <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 shrink-0">
+          Thinking
+        </span>
         <span className="text-[11px] text-muted-foreground truncate">{firstLine}</span>
         <span className="text-[10px] text-muted-foreground ml-auto shrink-0">click to expand</span>
       </button>
@@ -39,9 +41,7 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
           Thinking
         </span>
         <div className="flex gap-2 items-center">
-          {timestamp && (
-            <span className="text-[10px] text-muted-foreground">{timestamp}</span>
-          )}
+          {timestamp && <span className="text-[10px] text-muted-foreground">{timestamp}</span>}
           <button
             type="button"
             onClick={() => setExpanded(false)}

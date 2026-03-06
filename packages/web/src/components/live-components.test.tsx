@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LiveDuration } from './LiveDuration';
@@ -14,12 +14,7 @@ describe('LiveDuration', () => {
   });
 
   it('renders static duration from startedAt to endedAt', () => {
-    render(
-      <LiveDuration
-        startedAt="2026-03-06T10:00:00Z"
-        endedAt="2026-03-06T10:05:30Z"
-      />,
-    );
+    render(<LiveDuration startedAt="2026-03-06T10:00:00Z" endedAt="2026-03-06T10:05:30Z" />);
     expect(screen.getByText('5m 30s')).toBeDefined();
   });
 
@@ -43,12 +38,7 @@ describe('LiveDuration', () => {
 
   it('stops ticking when endedAt is provided', () => {
     vi.setSystemTime(new Date('2026-03-06T10:00:00Z'));
-    render(
-      <LiveDuration
-        startedAt="2026-03-06T10:00:00Z"
-        endedAt="2026-03-06T10:02:00Z"
-      />,
-    );
+    render(<LiveDuration startedAt="2026-03-06T10:00:00Z" endedAt="2026-03-06T10:02:00Z" />);
     expect(screen.getByText('2m 0s')).toBeDefined();
 
     // Advancing time should not change the displayed text
@@ -59,12 +49,7 @@ describe('LiveDuration', () => {
   });
 
   it('renders hours for long durations', () => {
-    render(
-      <LiveDuration
-        startedAt="2026-03-06T10:00:00Z"
-        endedAt="2026-03-06T12:30:00Z"
-      />,
-    );
+    render(<LiveDuration startedAt="2026-03-06T10:00:00Z" endedAt="2026-03-06T12:30:00Z" />);
     expect(screen.getByText('2h 30m')).toBeDefined();
   });
 

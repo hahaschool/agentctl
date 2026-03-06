@@ -25,7 +25,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 /** Delay before cleaning up session buffers after session ends, allowing late SSE consumers. */
-const SESSION_BUFFER_CLEANUP_DELAY_MS = Number(process.env.SESSION_BUFFER_CLEANUP_DELAY_MS) || 60_000;
+const SESSION_BUFFER_CLEANUP_DELAY_MS =
+  Number(process.env.SESSION_BUFFER_CLEANUP_DELAY_MS) || 60_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -530,13 +531,19 @@ export async function sessionRoutes(
 
         // Immediately report active status so the control plane doesn't have
         // to wait for the next periodic heartbeat (30s) to see this session.
-        void reportStatusToControlPlane(session.id, { status: 'active', pid: session.pid ?? undefined });
+        void reportStatusToControlPlane(session.id, {
+          status: 'active',
+          pid: session.pid ?? undefined,
+        });
       }
 
       // Wait briefly to verify CLI process doesn't crash on startup
       const startupOk = await new Promise<boolean>((resolve) => {
         const s = sessionManager.getSession(session.id);
-        if (s && s.status === 'error') { resolve(false); return; }
+        if (s && s.status === 'error') {
+          resolve(false);
+          return;
+        }
 
         const timer = setTimeout(() => {
           sessionManager.off('session_error', onError);
@@ -570,8 +577,14 @@ export async function sessionRoutes(
         const stderr = failedSession?.lastError?.trim() ?? '';
 
         let hint = 'Check project path and credentials.';
-        if (stderr.includes('authentication') || stderr.includes('API key') || stderr.includes('Unauthorized') || stderr.includes('401')) {
-          hint = 'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
+        if (
+          stderr.includes('authentication') ||
+          stderr.includes('API key') ||
+          stderr.includes('Unauthorized') ||
+          stderr.includes('401')
+        ) {
+          hint =
+            'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
         } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
           hint = 'Project path does not exist on this machine.';
         } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
@@ -667,7 +680,10 @@ export async function sessionRoutes(
 
           // Immediately report active status so the control plane doesn't have
           // to wait for the next periodic heartbeat (30s) to see this session.
-          void reportStatusToControlPlane(newSession.id, { status: 'active', pid: newSession.pid ?? undefined });
+          void reportStatusToControlPlane(newSession.id, {
+            status: 'active',
+            pid: newSession.pid ?? undefined,
+          });
         }
 
         // Wait briefly to verify the CLI process didn't crash immediately
@@ -713,8 +729,14 @@ export async function sessionRoutes(
 
           // Produce a user-friendly diagnosis from stderr
           let hint = 'Check project path and credentials.';
-          if (stderr.includes('authentication') || stderr.includes('API key') || stderr.includes('Unauthorized') || stderr.includes('401')) {
-            hint = 'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
+          if (
+            stderr.includes('authentication') ||
+            stderr.includes('API key') ||
+            stderr.includes('Unauthorized') ||
+            stderr.includes('401')
+          ) {
+            hint =
+              'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
           } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
             hint = 'Project path does not exist on this machine.';
           } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
@@ -731,7 +753,9 @@ export async function sessionRoutes(
             'Resumed CLI process failed to start',
           );
           return reply.status(502).send({
-            error: stderr ? `CLI failed: ${stderr.slice(0, 300)}` : 'CLI process exited immediately after resume.',
+            error: stderr
+              ? `CLI failed: ${stderr.slice(0, 300)}`
+              : 'CLI process exited immediately after resume.',
             code: 'CLI_STARTUP_FAILED',
             hint,
           });
@@ -839,7 +863,10 @@ export async function sessionRoutes(
         if (cpId) {
           cpSessionIdMap.set(newSession.id, cpId);
           // Immediately report active to override any error from the killed process
-          void reportStatusToControlPlane(newSession.id, { status: 'active', pid: newSession.pid ?? undefined });
+          void reportStatusToControlPlane(newSession.id, {
+            status: 'active',
+            pid: newSession.pid ?? undefined,
+          });
         }
 
         logger.info(
@@ -1066,8 +1093,10 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
   const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : undefined;
 
   const isSidechain = (obj as Record<string, unknown>).isSidechain === true;
-  const agentId = typeof (obj as Record<string, unknown>).agentId === 'string'
-    ? ((obj as Record<string, unknown>).agentId as string) : undefined;
+  const agentId =
+    typeof (obj as Record<string, unknown>).agentId === 'string'
+      ? ((obj as Record<string, unknown>).agentId as string)
+      : undefined;
 
   // Handle progress entries
   if (entryType === 'progress') {
@@ -1078,12 +1107,21 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
 
     if (progressType === 'agent_progress') {
       // Subagent dispatch — real data uses `data.prompt`, SDK docs say `data.content`
-      const content = typeof data.prompt === 'string' ? data.prompt
-        : typeof data.content === 'string' ? data.content : '';
+      const content =
+        typeof data.prompt === 'string'
+          ? data.prompt
+          : typeof data.content === 'string'
+            ? data.content
+            : '';
       const subAgentId = typeof data.agentId === 'string' ? data.agentId : undefined;
       const agentType = typeof data.agentType === 'string' ? data.agentType : 'subagent';
       if (content.trim().length > 0) {
-        const msg: ContentMessage = { type: 'subagent', content: content.slice(0, 4000), toolName: agentType, timestamp };
+        const msg: ContentMessage = {
+          type: 'subagent',
+          content: content.slice(0, 4000),
+          toolName: agentType,
+          timestamp,
+        };
         if (subAgentId) msg.subagentId = subAgentId;
         else if (isSidechain) msg.subagentId = agentId;
         return [msg];
@@ -1091,7 +1129,12 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
     } else if (progressType === 'bash_progress') {
       const command = typeof data.command === 'string' ? data.command : '';
       if (command.trim().length > 0) {
-        const msg: ContentMessage = { type: 'progress', content: command, toolName: 'bash', timestamp };
+        const msg: ContentMessage = {
+          type: 'progress',
+          content: command,
+          toolName: 'bash',
+          timestamp,
+        };
         if (isSidechain) msg.subagentId = agentId;
         return [msg];
       }
@@ -1099,7 +1142,12 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
       const desc = typeof data.taskDescription === 'string' ? data.taskDescription : '';
       const taskType = typeof data.taskType === 'string' ? data.taskType : 'task';
       if (desc.trim().length > 0) {
-        const msg: ContentMessage = { type: 'progress', content: desc, toolName: taskType, timestamp };
+        const msg: ContentMessage = {
+          type: 'progress',
+          content: desc,
+          toolName: taskType,
+          timestamp,
+        };
         if (isSidechain) msg.subagentId = agentId;
         return [msg];
       }

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock xterm Terminal class
 const mockWrite = vi.fn();
@@ -72,9 +72,7 @@ describe('TerminalView', () => {
   });
 
   it('applies custom className to outer wrapper', () => {
-    const { container } = render(
-      <TerminalView rawOutput={[]} className="my-custom-class" />,
-    );
+    const { container } = render(<TerminalView rawOutput={[]} className="my-custom-class" />);
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.className).toContain('my-custom-class');
   });

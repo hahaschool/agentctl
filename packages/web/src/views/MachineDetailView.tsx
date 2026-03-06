@@ -125,10 +125,15 @@ export function MachineDetailView(): React.JSX.Element {
           <div>
             <div className="text-[13px] font-medium">
               Machine appears offline — last heartbeat was{' '}
-              {machine.lastHeartbeat ? <LiveTimeAgo date={machine.lastHeartbeat} /> : 'never received'}
+              {machine.lastHeartbeat ? (
+                <LiveTimeAgo date={machine.lastHeartbeat} />
+              ) : (
+                'never received'
+              )}
             </div>
             <div className="text-[12px] text-yellow-600 dark:text-yellow-400 mt-1">
-              The machine has not sent a heartbeat in over 60 seconds. It may be unreachable or the worker process may have stopped.
+              The machine has not sent a heartbeat in over 60 seconds. It may be unreachable or the
+              worker process may have stopped.
             </div>
           </div>
         </div>
@@ -370,7 +375,12 @@ export function MachineDetailView(): React.JSX.Element {
                         >
                           {session.id.slice(0, 12)}...
                         </Link>
-                        <CopyableText value={session.id} maxDisplay={0} label="" className="text-[11px] px-0.5" />
+                        <CopyableText
+                          value={session.id}
+                          maxDisplay={0}
+                          label=""
+                          className="text-[11px] px-0.5"
+                        />
                       </td>
                       <td className="py-2.5 pr-4">
                         <StatusBadge status={session.status} />
@@ -420,9 +430,7 @@ function InfoField({
 }): React.JSX.Element {
   return (
     <div>
-      <div className="text-[11px] font-medium text-muted-foreground mb-1">
-        {label}
-      </div>
+      <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
       <div className="text-foreground">{children}</div>
     </div>
   );
@@ -467,5 +475,11 @@ function AgentName({
     );
   }
 
-  return <CopyableText value={agentId} maxDisplay={12} className="text-xs font-mono text-muted-foreground" />;
+  return (
+    <CopyableText
+      value={agentId}
+      maxDisplay={12}
+      className="text-xs font-mono text-muted-foreground"
+    />
+  );
 }

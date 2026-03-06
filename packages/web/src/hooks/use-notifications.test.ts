@@ -54,7 +54,11 @@ describe('useNotifications', () => {
     const { result } = renderHook(() => useNotifications());
 
     act(() => {
-      result.current.addNotification({ type: 'warning', message: 'Session ended', sessionId: 'ses-123' });
+      result.current.addNotification({
+        type: 'warning',
+        message: 'Session ended',
+        sessionId: 'ses-123',
+      });
     });
 
     expect(result.current.notifications[0]!.sessionId).toBe('ses-123');

@@ -1,13 +1,12 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
-
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Keyboard } from 'lucide-react';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -109,7 +108,12 @@ export function DashboardPage(): React.JSX.Element {
     discovered.isFetching ||
     sessions.isFetching;
   const anyError =
-    health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error ?? sessions.error;
+    health.error ??
+    metrics.error ??
+    machines.error ??
+    agents.error ??
+    discovered.error ??
+    sessions.error;
 
   // Health status — Tailwind class helpers
   const healthStatus = health.data?.status;
@@ -135,7 +139,8 @@ export function DashboardPage(): React.JSX.Element {
     else parts.push('CP unknown');
     if (wsStatus === 'connected') parts.push('WS connected');
     else parts.push(`WS ${wsStatus}`);
-    if (machinesOnline > 0) parts.push(`${machinesOnline} machine${machinesOnline > 1 ? 's' : ''} online`);
+    if (machinesOnline > 0)
+      parts.push(`${machinesOnline} machine${machinesOnline > 1 ? 's' : ''} online`);
     else parts.push('no machines');
     return parts.join(' · ');
   }, [healthStatus, wsStatus, machinesOnline]);
@@ -211,7 +216,10 @@ export function DashboardPage(): React.JSX.Element {
                   systemHealthOk ? 'bg-green-500' : 'bg-yellow-500',
                 )}
               />
-              <span className="text-[11px] text-muted-foreground" data-testid="system-health-summary">
+              <span
+                className="text-[11px] text-muted-foreground"
+                data-testid="system-health-summary"
+              >
                 {systemHealthLabel}
               </span>
             </div>
@@ -341,7 +349,8 @@ export function DashboardPage(): React.JSX.Element {
                         </SimpleTooltip>
                       ) : (
                         <span>
-                          started <LiveTimeAgo date={session?.startedAt ?? new Date().toISOString()} />
+                          started{' '}
+                          <LiveTimeAgo date={session?.startedAt ?? new Date().toISOString()} />
                         </span>
                       )}
                     </span>
@@ -480,9 +489,7 @@ export function DashboardPage(): React.JSX.Element {
         </div>
         {/* Cost breakdown by agent */}
         <div className="border-t border-border px-4 py-2.5">
-          <div className="text-[11px] font-medium text-muted-foreground mb-2">
-            Cost by Agent
-          </div>
+          <div className="text-[11px] font-medium text-muted-foreground mb-2">Cost by Agent</div>
           {agentCostBreakdown.length > 0 ? (
             <div className="flex flex-wrap gap-x-5 gap-y-1.5">
               {agentCostBreakdown.map((agent) => (
@@ -654,7 +661,12 @@ function CostOverview({
   sessionList,
   agentCostBreakdown,
 }: {
-  sessionList: { id: string; agentName: string | null; claudeSessionId: string | null; metadata: { costUsd?: number; [key: string]: unknown } }[];
+  sessionList: {
+    id: string;
+    agentName: string | null;
+    claudeSessionId: string | null;
+    metadata: { costUsd?: number; [key: string]: unknown };
+  }[];
   agentCostBreakdown: { id: string; name: string; totalCostUsd: number }[];
 }): React.JSX.Element {
   const totalCost = useMemo(
@@ -671,7 +683,8 @@ function CostOverview({
     [sessionList],
   );
 
-  const maxAgentCost = agentCostBreakdown.length > 0 ? (agentCostBreakdown[0]?.totalCostUsd ?? 0) : 0;
+  const maxAgentCost =
+    agentCostBreakdown.length > 0 ? (agentCostBreakdown[0]?.totalCostUsd ?? 0) : 0;
 
   if (totalCost === 0 && agentCostBreakdown.length === 0) {
     return <></>;
@@ -696,9 +709,7 @@ function CostOverview({
 
         {/* Bar chart: cost per agent */}
         <div className="border border-border/50 rounded-lg bg-card p-4 transition-colors hover:border-border">
-          <div className="text-[11px] font-medium text-muted-foreground mb-3">
-            Cost by Agent
-          </div>
+          <div className="text-[11px] font-medium text-muted-foreground mb-3">Cost by Agent</div>
           {agentCostBreakdown.length > 0 ? (
             <div className="space-y-2">
               {agentCostBreakdown.map((agent) => {
@@ -751,8 +762,8 @@ function CostOverview({
                     </span>
                     <span className="text-[12px] text-foreground truncate">
                       {truncate(
-                        session.agentName
-                          ?? (session.claudeSessionId
+                        session.agentName ??
+                          (session.claudeSessionId
                             ? `Session ${session.claudeSessionId.slice(0, 8)}`
                             : `Session ${session.id.slice(0, 8)}`),
                         24,

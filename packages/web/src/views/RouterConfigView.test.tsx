@@ -423,9 +423,7 @@ describe('RouterConfigView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(
-        screen.getByText(/LiteLLM proxy is not configured/),
-      ).toBeDefined();
+      expect(screen.getByText(/LiteLLM proxy is not configured/)).toBeDefined();
     });
   });
 
@@ -436,9 +434,7 @@ describe('RouterConfigView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(
-        screen.getByText('Failed to load model info from LiteLLM.'),
-      ).toBeDefined();
+      expect(screen.getByText('Failed to load model info from LiteLLM.')).toBeDefined();
     });
   });
 

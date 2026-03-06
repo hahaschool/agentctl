@@ -34,11 +34,9 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
     const machine = await dbRegistry.getMachine(machineId);
 
     if (!machine) {
-      throw new ControlPlaneError(
-        'MACHINE_NOT_FOUND',
-        `Machine '${machineId}' is not registered`,
-        { machineId },
-      );
+      throw new ControlPlaneError('MACHINE_NOT_FOUND', `Machine '${machineId}' is not registered`, {
+        machineId,
+      });
     }
 
     if (machine.status === 'offline') {
@@ -83,7 +81,9 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
         });
 
         if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
+          const body = await res
+            .json()
+            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
           return reply.code(res.status).send(body);
         }
 
@@ -130,7 +130,9 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
         });
 
         if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
+          const body = await res
+            .json()
+            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
           return reply.code(res.status).send(body);
         }
 
@@ -186,7 +188,9 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
         });
 
         if (!res.ok) {
-          const resBody = await res.json().catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
+          const resBody = await res
+            .json()
+            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
           return reply.code(res.status).send(resBody);
         }
 

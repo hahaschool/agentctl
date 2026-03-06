@@ -1,7 +1,6 @@
+import { ACCOUNT_PROVIDERS } from '@agentctl/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
-
-import { ACCOUNT_PROVIDERS } from '@agentctl/shared';
 
 import type { Database } from '../../db/index.js';
 import { apiAccounts, projectAccountMappings } from '../../db/schema.js';
@@ -105,10 +104,14 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
   }>('/', async (request, reply) => {
     const { name, provider, credential, priority = 0, metadata = {} } = request.body;
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: 'name must be a non-empty string' });
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'name must be a non-empty string' });
     }
     if (name.length > 100) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: 'name must be 100 characters or fewer' });
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'name must be 100 characters or fewer' });
     }
     if (!provider || !(ACCOUNT_PROVIDERS as readonly string[]).includes(provider)) {
       return reply.code(400).send({
@@ -117,10 +120,14 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       });
     }
     if (!credential || typeof credential !== 'string' || credential.trim().length === 0) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: 'credential must be a non-empty string' });
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'credential must be a non-empty string' });
     }
     if (priority !== 0 && (!Number.isInteger(priority) || priority < 0)) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: 'priority must be a non-negative integer' });
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'priority must be a non-negative integer' });
     }
     const { encrypted, iv } = encryptCredential(credential, encryptionKey);
     const [inserted] = await db
@@ -168,10 +175,14 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     const { name, provider, credential, priority, isActive, rateLimit, metadata } = request.body;
     if (name !== undefined) {
       if (typeof name !== 'string' || name.trim().length === 0) {
-        return reply.code(400).send({ error: 'INVALID_BODY', message: 'name must be a non-empty string' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_BODY', message: 'name must be a non-empty string' });
       }
       if (name.length > 100) {
-        return reply.code(400).send({ error: 'INVALID_BODY', message: 'name must be 100 characters or fewer' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_BODY', message: 'name must be 100 characters or fewer' });
       }
     }
     if (provider !== undefined && !(ACCOUNT_PROVIDERS as readonly string[]).includes(provider)) {
@@ -180,11 +191,18 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
         message: `provider must be one of: ${ACCOUNT_PROVIDERS.join(', ')}`,
       });
     }
-    if (credential !== undefined && (typeof credential !== 'string' || credential.trim().length === 0)) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: 'credential must be a non-empty string' });
+    if (
+      credential !== undefined &&
+      (typeof credential !== 'string' || credential.trim().length === 0)
+    ) {
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'credential must be a non-empty string' });
     }
     if (priority !== undefined && (!Number.isInteger(priority) || priority < 0)) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: 'priority must be a non-negative integer' });
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'priority must be a non-negative integer' });
     }
     if (name !== undefined) updates.name = name;
     if (provider !== undefined) updates.provider = provider;
@@ -249,10 +267,7 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       );
     }
 
-    const [deleted] = await db
-      .delete(apiAccounts)
-      .where(eq(apiAccounts.id, id))
-      .returning();
+    const [deleted] = await db.delete(apiAccounts).where(eq(apiAccounts.id, id)).returning();
     if (!deleted) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }

@@ -72,16 +72,12 @@ describe('PreferencesSection', () => {
 
   it('shows model description text', () => {
     render(<PreferencesSection />);
-    expect(
-      screen.getByText('Model used when creating new sessions or agents.'),
-    ).toBeDefined();
+    expect(screen.getByText('Model used when creating new sessions or agents.')).toBeDefined();
   });
 
   it('shows refresh description text', () => {
     render(<PreferencesSection />);
-    expect(
-      screen.getByText(/How often list views poll for updates/),
-    ).toBeDefined();
+    expect(screen.getByText(/How often list views poll for updates/)).toBeDefined();
   });
 
   it('shows max messages description text', () => {

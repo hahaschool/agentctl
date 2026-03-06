@@ -1,8 +1,7 @@
+import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { WorkerError } from '@agentctl/shared';
 import { fileRoutes } from './files.js';
 
 // ---------------------------------------------------------------------------
@@ -23,14 +22,7 @@ vi.mock('node:os', () => ({
   homedir: () => '/Users/testuser',
 }));
 
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -70,12 +62,14 @@ async function buildApp(): Promise<FastifyInstance> {
   return app;
 }
 
-function makeStat(overrides: Partial<{
-  isDirectory: boolean;
-  isFile: boolean;
-  size: number;
-  mtime: Date;
-}> = {}): ReturnType<typeof statSync> {
+function makeStat(
+  overrides: Partial<{
+    isDirectory: boolean;
+    isFile: boolean;
+    size: number;
+    mtime: Date;
+  }> = {},
+): ReturnType<typeof statSync> {
   return {
     isDirectory: () => overrides.isDirectory ?? false,
     isFile: () => overrides.isFile ?? true,
@@ -385,10 +379,9 @@ describe('File routes', () => {
       });
 
       expect(res.statusCode).toBe(200);
-      expect(mkdirSync).toHaveBeenCalledWith(
-        '/Users/testuser/project/deep/nested',
-        { recursive: true },
-      );
+      expect(mkdirSync).toHaveBeenCalledWith('/Users/testuser/project/deep/nested', {
+        recursive: true,
+      });
       expect(writeFileSync).toHaveBeenCalled();
     });
 

@@ -50,7 +50,10 @@ export function StatCard({ label, value, sublabel, accent, tooltip }: Props): Re
         {value}
       </div>
       {sublabel && (
-        <div data-testid={`stat-sublabel-${label}`} className="mt-1 text-[11px] text-muted-foreground">
+        <div
+          data-testid={`stat-sublabel-${label}`}
+          className="mt-1 text-[11px] text-muted-foreground"
+        >
           {sublabel}
         </div>
       )}

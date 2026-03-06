@@ -26,7 +26,10 @@ export default function Loading() {
       {/* Summary stat cards */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-6">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={`stat-sk-${String(i)}`} className="p-4 bg-card border border-border/50 rounded-lg">
+          <div
+            key={`stat-sk-${String(i)}`}
+            className="p-4 bg-card border border-border/50 rounded-lg"
+          >
             <Skeleton className="h-3 w-20 mb-2" />
             <Skeleton className="h-6 w-12" />
           </div>

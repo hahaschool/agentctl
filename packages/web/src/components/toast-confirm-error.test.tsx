@@ -17,7 +17,7 @@ vi.mock('@/lib/utils', () => ({
 
 import { ConfirmButton } from './ConfirmButton';
 import { ErrorBoundary } from './ErrorBoundary';
-import { toast, ToastContainer, useToast } from './Toast';
+import { ToastContainer, toast, useToast } from './Toast';
 
 // Suppress console.error from ErrorBoundary.componentDidCatch during tests
 const originalConsoleError = console.error;
@@ -338,9 +338,7 @@ describe('ConfirmButton — complementary', () => {
   });
 
   it('uses custom confirmLabel text', () => {
-    render(
-      <ConfirmButton label="Delete" confirmLabel="Really delete?" onConfirm={() => {}} />,
-    );
+    render(<ConfirmButton label="Delete" confirmLabel="Really delete?" onConfirm={() => {}} />);
     fireEvent.click(screen.getByRole('button'));
     expect(screen.getByText('Really delete?')).toBeDefined();
   });

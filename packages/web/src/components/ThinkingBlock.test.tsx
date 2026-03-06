@@ -4,7 +4,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 
 describe('ThinkingBlock', () => {
   it('renders collapsed by default with first line preview', () => {
-    render(<ThinkingBlock content={"First line of thought\nSecond line"} />);
+    render(<ThinkingBlock content={'First line of thought\nSecond line'} />);
     expect(screen.getByText('First line of thought')).toBeDefined();
     expect(screen.queryByText('Second line')).toBeNull();
   });
@@ -20,12 +20,12 @@ describe('ThinkingBlock', () => {
   });
 
   it('expands on click showing full content', () => {
-    const { container } = render(<ThinkingBlock content={"First line\nSecond line\nThird line"} />);
+    const { container } = render(<ThinkingBlock content={'First line\nSecond line\nThird line'} />);
     // Click the collapsed button to expand
     fireEvent.click(screen.getByRole('button'));
     // Full content should now be visible in the pre-wrap div
     const contentDiv = container.querySelector('.whitespace-pre-wrap');
-    expect(contentDiv?.textContent).toBe("First line\nSecond line\nThird line");
+    expect(contentDiv?.textContent).toBe('First line\nSecond line\nThird line');
     // "click to expand" should be gone
     expect(screen.queryByText('click to expand')).toBeNull();
     // "collapse" button should appear
@@ -33,7 +33,7 @@ describe('ThinkingBlock', () => {
   });
 
   it('collapses again when collapse button is clicked', () => {
-    render(<ThinkingBlock content={"Line 1\nLine 2"} />);
+    render(<ThinkingBlock content={'Line 1\nLine 2'} />);
     // Expand
     fireEvent.click(screen.getByRole('button'));
     expect(screen.getByText('collapse')).toBeDefined();

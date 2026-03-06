@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -64,7 +64,11 @@ vi.mock('@/components/ui/select', () => ({
       {children}
     </div>
   ),
-  SelectTrigger: ({ children, ...props }: any) => <div data-testid="select-trigger" {...(props.id ? { id: props.id } : {})}>{children}</div>,
+  SelectTrigger: ({ children, ...props }: any) => (
+    <div data-testid="select-trigger" {...(props.id ? { id: props.id } : {})}>
+      {children}
+    </div>
+  ),
   SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
     <div data-testid={`select-item-${value}`}>{children}</div>
@@ -108,8 +112,22 @@ import { ProjectAccountsSection } from './ProjectAccountsSection';
 // ---------------------------------------------------------------------------
 
 const MOCK_ACCOUNTS = [
-  { id: 'acc-1', name: 'Primary Key', provider: 'anthropic_api', isActive: true, priority: 0, credentialMasked: '****' },
-  { id: 'acc-2', name: 'Backup Key', provider: 'bedrock', isActive: true, priority: 1, credentialMasked: '****' },
+  {
+    id: 'acc-1',
+    name: 'Primary Key',
+    provider: 'anthropic_api',
+    isActive: true,
+    priority: 0,
+    credentialMasked: '****',
+  },
+  {
+    id: 'acc-2',
+    name: 'Backup Key',
+    provider: 'bedrock',
+    isActive: true,
+    priority: 1,
+    credentialMasked: '****',
+  },
 ];
 
 const MOCK_MAPPINGS = [
@@ -212,9 +230,7 @@ describe('ProjectAccountsSection', () => {
 
     renderComponent();
     await waitFor(() => {
-      expect(
-        screen.getByText('No project-specific account mappings configured.'),
-      ).toBeDefined();
+      expect(screen.getByText('No project-specific account mappings configured.')).toBeDefined();
     });
   });
 
@@ -259,13 +275,9 @@ describe('ProjectAccountsSection', () => {
   it('shows delete button for each mapping with aria-label', async () => {
     renderComponent();
     await waitFor(() => {
-      expect(
-        screen.getByLabelText('Remove mapping for /home/user/project-a'),
-      ).toBeDefined();
+      expect(screen.getByLabelText('Remove mapping for /home/user/project-a')).toBeDefined();
     });
-    expect(
-      screen.getByLabelText('Remove mapping for /home/user/project-b'),
-    ).toBeDefined();
+    expect(screen.getByLabelText('Remove mapping for /home/user/project-b')).toBeDefined();
   });
 
   it('renders trash icons for delete buttons', async () => {
@@ -352,9 +364,11 @@ describe('ProjectAccountsSection', () => {
   it('shows "Deleted (acc-xxx...)" for mappings referencing deleted accounts', async () => {
     mockMappingsQuery.mockReturnValue({
       queryKey: ['project-accounts'],
-      queryFn: vi.fn().mockResolvedValue([
-        { id: 'map-3', projectPath: '/home/user/orphan', accountId: 'acc-deleted-99' },
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'map-3', projectPath: '/home/user/orphan', accountId: 'acc-deleted-99' },
+        ]),
     });
 
     renderComponent();
@@ -423,7 +437,9 @@ describe('ProjectAccountsSection', () => {
 
     renderComponent();
     await waitFor(() => {
-      const deleteBtn = screen.getByLabelText('Remove mapping for /home/user/project-a') as HTMLButtonElement;
+      const deleteBtn = screen.getByLabelText(
+        'Remove mapping for /home/user/project-a',
+      ) as HTMLButtonElement;
       expect(deleteBtn.disabled).toBe(true);
     });
   });

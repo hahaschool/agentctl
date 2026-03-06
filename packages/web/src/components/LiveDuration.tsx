@@ -16,11 +16,7 @@ type Props = {
  * Renders a live-updating duration counter (e.g. "12m 34s") that ticks every second
  * while the session is active. For ended sessions, shows the final duration.
  */
-export function LiveDuration({
-  startedAt,
-  endedAt,
-  className,
-}: Props): React.JSX.Element {
+export function LiveDuration({ startedAt, endedAt, className }: Props): React.JSX.Element {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -30,9 +26,5 @@ export function LiveDuration({
     return () => clearInterval(timer);
   }, [endedAt]);
 
-  return (
-    <span className={className}>
-      {formatDuration(startedAt, endedAt)}
-    </span>
-  );
+  return <span className={className}>{formatDuration(startedAt, endedAt)}</span>;
 }

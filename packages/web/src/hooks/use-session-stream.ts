@@ -206,5 +206,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     setPendingUserMessages([]);
   }, []);
 
-  return { connected, streamOutput, rawOutput, pendingUserMessages, latestStatus, latestCost, clearStreamOutput, clearPendingMessages };
+  return {
+    connected,
+    streamOutput,
+    rawOutput,
+    pendingUserMessages,
+    latestStatus,
+    latestCost,
+    clearStreamOutput,
+    clearPendingMessages,
+  };
 }

@@ -16,7 +16,8 @@ vi.mock('../lib/queries', () => ({
 
 const mockUseQuery = vi.fn();
 vi.mock('@tanstack/react-query', async () => {
-  const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
   return {
     ...actual,
     useQuery: (...args: unknown[]) => mockUseQuery(...args),
@@ -180,7 +181,12 @@ describe('GitStatusBadge', () => {
         branch: 'main',
         status: { clean: true, staged: 0, modified: 0, untracked: 0, ahead: 0, behind: 0 },
         isWorktree: false,
-        lastCommit: { hash: 'abc1234', message: 'fix: resolve bug', author: 'dev', date: '2026-01-01' },
+        lastCommit: {
+          hash: 'abc1234',
+          message: 'fix: resolve bug',
+          author: 'dev',
+          date: '2026-01-01',
+        },
         worktrees: [],
       },
       isLoading: false,

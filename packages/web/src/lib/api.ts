@@ -5,9 +5,9 @@
 // ---------------------------------------------------------------------------
 
 import type {
-  AgentType,
-  AgentStatus,
   AgentConfig,
+  AgentStatus,
+  AgentType,
   MachineCapabilities,
   MachineStatus,
   ApiAccount as SharedApiAccount,
@@ -325,7 +325,13 @@ export const api = {
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
 
   // Sessions
-  listSessions: (params?: { status?: string; machineId?: string; agentId?: string; offset?: number; limit?: number }) => {
+  listSessions: (params?: {
+    status?: string;
+    machineId?: string;
+    agentId?: string;
+    offset?: number;
+    limit?: number;
+  }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
     if (params?.machineId) qs.set('machineId', params.machineId);
@@ -500,7 +506,9 @@ export const api = {
   },
   readFile: (machineId: string, path: string) => {
     const qs = new URLSearchParams({ path });
-    return request<FileContentResponse>(`/api/machines/${encodeURIComponent(machineId)}/files/content?${qs}`);
+    return request<FileContentResponse>(
+      `/api/machines/${encodeURIComponent(machineId)}/files/content?${qs}`,
+    );
   },
   writeFile: (machineId: string, path: string, content: string) =>
     request<{ success: boolean; path: string }>(

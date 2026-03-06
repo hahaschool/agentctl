@@ -1111,9 +1111,7 @@ describe('parseJsonlEntry', () => {
       const entry = {
         type: 'assistant',
         message: {
-          content: [
-            { type: 'tool_use', name: 'Bash', input: 'ls -la' },
-          ],
+          content: [{ type: 'tool_use', name: 'Bash', input: 'ls -la' }],
         },
       };
 
@@ -1142,9 +1140,7 @@ describe('parseJsonlEntry', () => {
       const entry = {
         type: 'user',
         message: {
-          content: [
-            { type: 'tool_result', content: 'some result' },
-          ],
+          content: [{ type: 'tool_result', content: 'some result' }],
         },
       };
 
@@ -1165,7 +1161,12 @@ describe('parseJsonlEntry', () => {
         message: {
           content: [
             { type: 'text', text: 'Working on subtask' },
-            { type: 'tool_use', id: 'toolu_x', name: 'Write', input: { file_path: '/tmp/y', content: 'code' } },
+            {
+              type: 'tool_use',
+              id: 'toolu_x',
+              name: 'Write',
+              input: { file_path: '/tmp/y', content: 'code' },
+            },
           ],
         },
       };
@@ -1338,9 +1339,7 @@ describe('parseJsonlEntry', () => {
       const entry = {
         type: 'user',
         message: {
-          content: [
-            { type: 'text', text: '<system-reminder>Do not do X</system-reminder>' },
-          ],
+          content: [{ type: 'text', text: '<system-reminder>Do not do X</system-reminder>' }],
         },
       };
 

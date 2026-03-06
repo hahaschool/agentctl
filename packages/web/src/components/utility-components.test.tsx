@@ -59,8 +59,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-import { StatCard } from './StatCard';
 import { ConnectionBanner } from './ConnectionBanner';
+import { StatCard } from './StatCard';
 
 // ===========================================================================
 // StatCard (not covered in any existing test file)

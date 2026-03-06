@@ -12,7 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
-import { MarkdownContent } from '../components/MarkdownContent';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { FileBrowser } from '../components/FileBrowser';
@@ -20,6 +19,7 @@ import { GitStatusBadge } from '../components/GitStatusBadge';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveDuration } from '../components/LiveDuration';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { MarkdownContent } from '../components/MarkdownContent';
 import { PathBadge } from '../components/PathBadge';
 import { ProgressIndicator } from '../components/ProgressIndicator';
 import { RefreshButton } from '../components/RefreshButton';
@@ -241,9 +241,7 @@ export function SessionDetailView(): React.JSX.Element {
     const humanTexts = contentMessages
       .filter((m) => m.type === 'human')
       .map((m) => m.content?.trim());
-    setOptimisticMessages((prev) =>
-      prev.filter((text) => !humanTexts.includes(text.trim())),
-    );
+    setOptimisticMessages((prev) => prev.filter((text) => !humanTexts.includes(text.trim())));
   }, [contentMessages, optimisticMessages.length]);
 
   // View mode toggle (messages vs terminal)
@@ -332,7 +330,11 @@ export function SessionDetailView(): React.JSX.Element {
               <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
                 <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
               </div>
-              <TerminalView rawOutput={stream.rawOutput} isActive={isActive} className="flex-1 min-h-0" />
+              <TerminalView
+                rawOutput={stream.rawOutput}
+                isActive={isActive}
+                className="flex-1 min-h-0"
+              />
             </div>
           )}
 
@@ -343,10 +345,7 @@ export function SessionDetailView(): React.JSX.Element {
         {/* File browser panel */}
         {showFiles && (
           <div className="w-1/2 overflow-hidden">
-            <FileBrowser
-              machineId={s.machineId}
-              initialPath={s.projectPath ?? undefined}
-            />
+            <FileBrowser machineId={s.machineId} initialPath={s.projectPath ?? undefined} />
           </div>
         )}
       </div>
@@ -452,7 +451,8 @@ function SessionHeader({
   }, [session.id, forkPrompt, forkSession, toast, router]);
 
   const canFork =
-    !!session.claudeSessionId && (session.status === 'ended' || session.status === 'error' || session.status === 'paused');
+    !!session.claudeSessionId &&
+    (session.status === 'ended' || session.status === 'error' || session.status === 'paused');
 
   return (
     <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
@@ -492,7 +492,10 @@ function SessionHeader({
               )}
               title="Toggle file browser (F)"
             >
-              Files <kbd className="ml-1 px-1 py-0.5 text-[9px] font-mono bg-background/50 border border-border/50 rounded opacity-60">F</kbd>
+              Files{' '}
+              <kbd className="ml-1 px-1 py-0.5 text-[9px] font-mono bg-background/50 border border-border/50 rounded opacity-60">
+                F
+              </kbd>
             </button>
           )}
           <div className="relative" ref={exportMenuRef}>
@@ -515,7 +518,9 @@ function SessionHeader({
                   className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent flex items-center justify-between"
                 >
                   Export as JSON
-                  <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">E</kbd>
+                  <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">
+                    E
+                  </kbd>
                 </button>
                 <button
                   type="button"
@@ -526,7 +531,9 @@ function SessionHeader({
                   className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent border-t border-t-border flex items-center justify-between"
                 >
                   Export as Markdown
-                  <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">M</kbd>
+                  <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">
+                    M
+                  </kbd>
                 </button>
               </div>
             )}
@@ -579,19 +586,24 @@ function SessionHeader({
               {forkSession.isPending ? 'Forking...' : 'Fork Session'}
             </button>
           </div>
-          {session.status === 'error' && (() => {
-            const errMsg = (session.metadata?.errorMessage ?? '').toLowerCase();
-            const isQuotaOrAuth = /quota|rate.?limit|authentication|unauthorized|key\b/.test(errMsg);
-            return isQuotaOrAuth ? (
-              <div className="px-3 py-2 bg-red-100/30 dark:bg-red-900/30 border border-red-300/50 dark:border-red-700/50 rounded-md text-[11px] text-red-700 dark:text-red-300">
-                This session failed due to quota or authentication issues. Resolve the underlying issue before forking.
-              </div>
-            ) : (
-              <div className="px-3 py-2 bg-yellow-100/30 dark:bg-yellow-900/30 border border-yellow-300/50 dark:border-yellow-700/50 rounded-md text-[11px] text-yellow-700 dark:text-yellow-300">
-                This session ended with an error. The forked session may also fail if the error is unresolved.
-              </div>
-            );
-          })()}
+          {session.status === 'error' &&
+            (() => {
+              const errMsg = (session.metadata?.errorMessage ?? '').toLowerCase();
+              const isQuotaOrAuth = /quota|rate.?limit|authentication|unauthorized|key\b/.test(
+                errMsg,
+              );
+              return isQuotaOrAuth ? (
+                <div className="px-3 py-2 bg-red-100/30 dark:bg-red-900/30 border border-red-300/50 dark:border-red-700/50 rounded-md text-[11px] text-red-700 dark:text-red-300">
+                  This session failed due to quota or authentication issues. Resolve the underlying
+                  issue before forking.
+                </div>
+              ) : (
+                <div className="px-3 py-2 bg-yellow-100/30 dark:bg-yellow-900/30 border border-yellow-300/50 dark:border-yellow-700/50 rounded-md text-[11px] text-yellow-700 dark:text-yellow-300">
+                  This session ended with an error. The forked session may also fail if the error is
+                  unresolved.
+                </div>
+              );
+            })()}
         </div>
       )}
 
@@ -639,7 +651,18 @@ function SessionHeader({
         )}
         {!session.endedAt && session.status === 'active' && (
           <span className="flex items-center gap-1">
-            <svg className="w-3 h-3 text-green-600 dark:text-green-400 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+            <svg
+              className="w-3 h-3 text-green-600 dark:text-green-400 animate-pulse"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
             <LiveDuration startedAt={session.startedAt} />
           </span>
         )}
@@ -729,7 +752,9 @@ function ViewModeToggle({
           Terminal
         </button>
       </div>
-      <kbd className="px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded text-muted-foreground opacity-60">T</kbd>
+      <kbd className="px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded text-muted-foreground opacity-60">
+        T
+      </kbd>
     </div>
   );
 }
@@ -774,7 +799,8 @@ function MessageList({
   // Always show: human, assistant, subagent, todo
   // Toggle: tool_use/tool_result (showTools), thinking (showThinking), progress (showProgress)
   const visibleMessages = messages.filter((m) => {
-    if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo') return true;
+    if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo')
+      return true;
     if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
     if (m.type === 'thinking') return showThinking;
     if (m.type === 'progress') return showProgress;
@@ -810,7 +836,10 @@ function MessageList({
       if (!el) return;
       const scrollRatio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
       const centerIndex = Math.floor(scrollRatio * searchFiltered.length);
-      const newEnd = Math.min(searchFiltered.length, centerIndex + Math.floor(WINDOW_SIZE / 2) + OVERSCAN);
+      const newEnd = Math.min(
+        searchFiltered.length,
+        centerIndex + Math.floor(WINDOW_SIZE / 2) + OVERSCAN,
+      );
       setWindowEnd(newEnd);
     }, 200);
   }, [shouldWindow, searchFiltered.length]);
@@ -832,19 +861,29 @@ function MessageList({
     const pendingLen = pendingUserMessages?.length ?? 0;
     const optimisticLen = optimisticMessages?.length ?? 0;
     const prevStreamLen = prevStreamLenRef.current;
-    const changed = count !== prevCountRef.current || streamLen !== prevStreamLen || pendingLen !== prevPendingRef.current || optimisticLen !== prevOptimisticRef.current;
+    const changed =
+      count !== prevCountRef.current ||
+      streamLen !== prevStreamLen ||
+      pendingLen !== prevPendingRef.current ||
+      optimisticLen !== prevOptimisticRef.current;
     prevCountRef.current = count;
     prevStreamLenRef.current = streamLen;
     prevPendingRef.current = pendingLen;
     prevOptimisticRef.current = optimisticLen;
     if (changed && autoScroll && scrollRef.current) {
       // Use instant for stream output (frequent updates), smooth for new messages
-      const behavior = streamLen !== prevStreamLen ? 'instant' as const : 'smooth' as const;
+      const behavior = streamLen !== prevStreamLen ? ('instant' as const) : ('smooth' as const);
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior });
       });
     }
-  }, [visibleMessages.length, streamOutput?.length, pendingUserMessages?.length, optimisticMessages?.length, autoScroll]);
+  }, [
+    visibleMessages.length,
+    streamOutput?.length,
+    pendingUserMessages?.length,
+    optimisticMessages?.length,
+    autoScroll,
+  ]);
 
   // Detect user scrolling up to pause auto-scroll
   const handleScroll = useCallback(() => {
@@ -873,7 +912,10 @@ function MessageList({
       {/* Toolbar */}
       <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
         <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
-        <span>{formatNumber(messages.length)}{messages.length < totalMessages ? ` / ${formatNumber(totalMessages)}` : ''} messages</span>
+        <span>
+          {formatNumber(messages.length)}
+          {messages.length < totalMessages ? ` / ${formatNumber(totalMessages)}` : ''} messages
+        </span>
         {searchFiltered.length !== messages.length && (
           <span>{formatNumber(searchFiltered.length)} shown</span>
         )}
@@ -884,7 +926,9 @@ function MessageList({
           aria-pressed={showThinking}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            showThinking ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
+            showThinking
+              ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30'
+              : 'bg-muted text-muted-foreground',
           )}
         >
           Thinking
@@ -896,7 +940,9 @@ function MessageList({
           aria-pressed={showTools}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            showTools ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
+            showTools
+              ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30'
+              : 'bg-muted text-muted-foreground',
           )}
         >
           Tools
@@ -908,7 +954,9 @@ function MessageList({
           aria-pressed={showProgress}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            showProgress ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
+            showProgress
+              ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border-cyan-500/30'
+              : 'bg-muted text-muted-foreground',
           )}
         >
           Progress
@@ -920,13 +968,18 @@ function MessageList({
           aria-pressed={renderMarkdown}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            renderMarkdown ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30' : 'bg-muted text-muted-foreground',
+            renderMarkdown
+              ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30'
+              : 'bg-muted text-muted-foreground',
           )}
         >
           Markdown
         </button>
         {isActive && autoScroll && !userScrolledUp && (
-          <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 ml-1" aria-label="Auto-scroll active">
+          <span
+            className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 ml-1"
+            aria-label="Auto-scroll active"
+          >
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             Following
           </span>
@@ -1001,7 +1054,9 @@ function MessageList({
         )}
 
         {!isLoading && search && searchFiltered.length === 0 && (
-          <div className="p-8 text-center text-muted-foreground text-[13px]">No messages match &ldquo;{search}&rdquo;</div>
+          <div className="p-8 text-center text-muted-foreground text-[13px]">
+            No messages match &ldquo;{search}&rdquo;
+          </div>
         )}
 
         {totalMessages > messages.length && (
@@ -1030,13 +1085,18 @@ function MessageList({
         {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} aria-hidden />}
 
         {/* Optimistic user messages (shown instantly on send, before any SSE/JSONL) */}
-        {optimisticMessages && optimisticMessages.length > 0 &&
+        {optimisticMessages &&
+          optimisticMessages.length > 0 &&
           optimisticMessages.map((text, i) => (
             <div key={`optimistic-${String(i)}`} className="relative">
               <div className="px-3 py-2 rounded-lg border-l-[3px] bg-blue-500/[0.06] border-l-blue-400 opacity-80">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">You</span>
-                  <span className="text-[9px] text-muted-foreground/60 animate-pulse">sending...</span>
+                  <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                    You
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/60 animate-pulse">
+                    sending...
+                  </span>
                 </div>
                 <div className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap break-words">
                   {text}
@@ -1046,7 +1106,8 @@ function MessageList({
           ))}
 
         {/* Pending user messages from SSE (shown before JSONL poll catches up) */}
-        {pendingUserMessages && pendingUserMessages.length > 0 &&
+        {pendingUserMessages &&
+          pendingUserMessages.length > 0 &&
           pendingUserMessages
             .filter((text) => !(optimisticMessages ?? []).includes(text))
             .map((text, i) => (
@@ -1079,7 +1140,10 @@ function MessageList({
             setAutoScroll(true);
             setUserScrolledUp(false);
             if (scrollRef.current) {
-              scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+              scrollRef.current.scrollTo({
+                top: scrollRef.current.scrollHeight,
+                behavior: 'smooth',
+              });
             }
           }}
           className="absolute bottom-4 right-6 z-10 px-3 py-2 bg-primary text-primary-foreground rounded-full shadow-lg text-xs font-medium cursor-pointer hover:bg-primary/90 transition-opacity"
@@ -1098,7 +1162,12 @@ function MessageList({
 
 type RenderedItem =
   | { kind: 'message'; message: SessionContentMessage; key: string }
-  | { kind: 'tool_pair'; toolUse: SessionContentMessage; toolResult: SessionContentMessage; key: string };
+  | {
+      kind: 'tool_pair';
+      toolUse: SessionContentMessage;
+      toolResult: SessionContentMessage;
+      key: string;
+    };
 
 function groupToolPairs(messages: SessionContentMessage[], startIndex: number): RenderedItem[] {
   // Build a map of toolId -> tool_result for quick lookup
@@ -1164,7 +1233,8 @@ function ToolPairBlock({
   const toolName = toolUse.toolName ?? 'Tool';
   const inputContent = toolUse.content ?? '';
   const outputContent = toolResult.content ?? '';
-  const summary = inputContent.replace(/\n/g, ' ').slice(0, 80) + (inputContent.length > 80 ? '...' : '');
+  const summary =
+    inputContent.replace(/\n/g, ' ').slice(0, 80) + (inputContent.length > 80 ? '...' : '');
 
   const handleCopyOutput = useCallback(() => {
     void navigator.clipboard.writeText(outputContent).then(() => {
@@ -1183,7 +1253,9 @@ function ToolPairBlock({
           'bg-yellow-500/[0.04] border-l-yellow-400',
         )}
       >
-        <span className="text-[10px] font-semibold shrink-0 text-yellow-600 dark:text-yellow-400">Tool</span>
+        <span className="text-[10px] font-semibold shrink-0 text-yellow-600 dark:text-yellow-400">
+          Tool
+        </span>
         <span className="text-[11px] font-mono text-muted-foreground shrink-0">{toolName}</span>
         <span className="text-[10px] text-muted-foreground/60 truncate">{summary}</span>
         <span className="text-[10px] text-muted-foreground ml-auto shrink-0">click to expand</span>
@@ -1192,7 +1264,12 @@ function ToolPairBlock({
   }
 
   return (
-    <div className={cn('px-3 py-2 rounded-lg border-l-[3px]', 'bg-yellow-500/[0.04] border-l-yellow-400')}>
+    <div
+      className={cn(
+        'px-3 py-2 rounded-lg border-l-[3px]',
+        'bg-yellow-500/[0.04] border-l-yellow-400',
+      )}
+    >
       {/* Header */}
       <div className="flex justify-between items-center mb-1">
         <span className="text-[11px] font-semibold text-yellow-600 dark:text-yellow-400">
@@ -1201,12 +1278,16 @@ function ToolPairBlock({
         </span>
         <div className="flex gap-2 items-center">
           {toolUse.timestamp && (
-            <span className="text-[10px] text-muted-foreground">{formatTime(toolUse.timestamp)}</span>
+            <span className="text-[10px] text-muted-foreground">
+              {formatTime(toolUse.timestamp)}
+            </span>
           )}
           {toolResult.timestamp && toolResult.timestamp !== toolUse.timestamp && (
             <>
               <span className="text-[10px] text-muted-foreground/40">-</span>
-              <span className="text-[10px] text-muted-foreground">{formatTime(toolResult.timestamp)}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {formatTime(toolResult.timestamp)}
+              </span>
             </>
           )}
           <button
@@ -1251,14 +1332,33 @@ function ToolPairBlock({
 // Message block — routes to specialized component per type
 // ---------------------------------------------------------------------------
 
-function MessageBlock({ message, renderMarkdown }: { message: SessionContentMessage; renderMarkdown?: boolean }): React.JSX.Element {
+function MessageBlock({
+  message,
+  renderMarkdown,
+}: {
+  message: SessionContentMessage;
+  renderMarkdown?: boolean;
+}): React.JSX.Element {
   switch (message.type) {
     case 'thinking':
       return <ThinkingBlock content={message.content} timestamp={message.timestamp} />;
     case 'progress':
-      return <ProgressIndicator content={message.content} toolName={message.toolName} timestamp={message.timestamp} />;
+      return (
+        <ProgressIndicator
+          content={message.content}
+          toolName={message.toolName}
+          timestamp={message.timestamp}
+        />
+      );
     case 'subagent':
-      return <SubagentBlock content={message.content} toolName={message.toolName} subagentId={(message as Record<string, unknown>).subagentId as string | undefined} timestamp={message.timestamp} />;
+      return (
+        <SubagentBlock
+          content={message.content}
+          toolName={message.toolName}
+          subagentId={(message as Record<string, unknown>).subagentId as string | undefined}
+          timestamp={message.timestamp}
+        />
+      );
     case 'todo':
       return <TodoBlock content={message.content} timestamp={message.timestamp} />;
     default:
@@ -1270,7 +1370,13 @@ function MessageBlock({ message, renderMarkdown }: { message: SessionContentMess
 // Message bubble
 // ---------------------------------------------------------------------------
 
-function MessageBubble({ message, renderMarkdown }: { message: SessionContentMessage; renderMarkdown?: boolean }): React.JSX.Element {
+function MessageBubble({
+  message,
+  renderMarkdown,
+}: {
+  message: SessionContentMessage;
+  renderMarkdown?: boolean;
+}): React.JSX.Element {
   const style = getMessageStyle(message.type);
 
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
@@ -1333,12 +1439,16 @@ function MessageBubble({ message, renderMarkdown }: { message: SessionContentMes
       <div
         className={cn(
           'leading-relaxed text-foreground break-words',
-          isTool ? 'text-[11px] font-mono whitespace-pre-wrap max-h-[400px] overflow-auto' : 'text-[13px]',
+          isTool
+            ? 'text-[11px] font-mono whitespace-pre-wrap max-h-[400px] overflow-auto'
+            : 'text-[13px]',
           !isTool && !isRenderable ? 'whitespace-pre-wrap' : '',
         )}
       >
         {isRenderable ? (
-          <MarkdownContent className="text-[13px] leading-relaxed">{displayContent}</MarkdownContent>
+          <MarkdownContent className="text-[13px] leading-relaxed">
+            {displayContent}
+          </MarkdownContent>
         ) : (
           <AnsiSpan>{displayContent}</AnsiSpan>
         )}
@@ -1368,7 +1478,13 @@ const RESUME_MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
 ];
 
-function MessageInput({ session, onOptimisticSend }: { session: Session; onOptimisticSend?: (text: string) => void }): React.JSX.Element {
+function MessageInput({
+  session,
+  onOptimisticSend,
+}: {
+  session: Session;
+  onOptimisticSend?: (text: string) => void;
+}): React.JSX.Element {
   const [message, setMessage] = useState('');
   const [resumeModel, setResumeModel] = useState('');
   const lostKey = `lost:${session.id}`;
@@ -1682,9 +1798,10 @@ function LoadingState(): React.JSX.Element {
                   key={`sk-line-${String(i)}-${String(j)}`}
                   className="h-3"
                   style={{
-                    width: j === bubble.lines - 1
-                      ? `${40 + ((i * 17 + j * 23) % 35)}%`
-                      : `${75 + ((i * 13 + j * 7) % 20)}%`,
+                    width:
+                      j === bubble.lines - 1
+                        ? `${40 + ((i * 17 + j * 23) % 35)}%`
+                        : `${75 + ((i * 13 + j * 7) % 20)}%`,
                   }}
                 />
               ))}
@@ -1726,32 +1843,38 @@ function SessionMetadataBadges({
         {model ?? '(default)'}
       </span>
       {displayCostUsd !== null && (
-        <span className={cn(
-          'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
-          streamCost?.totalCostUsd !== undefined
-            ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-            : 'bg-muted text-muted-foreground border-border'
-        )}>
+        <span
+          className={cn(
+            'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
+            streamCost?.totalCostUsd !== undefined
+              ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+              : 'bg-muted text-muted-foreground border-border',
+          )}
+        >
           ${typeof displayCostUsd === 'number' ? displayCostUsd.toFixed(4) : '0.0000'}
         </span>
       )}
       {displayInputTokens !== null && (
-        <span className={cn(
-          'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
-          streamCost?.inputTokens !== undefined
-            ? 'bg-blue-500/10 text-blue-600 border-blue-500/30'
-            : 'bg-muted text-muted-foreground border-border'
-        )}>
+        <span
+          className={cn(
+            'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
+            streamCost?.inputTokens !== undefined
+              ? 'bg-blue-500/10 text-blue-600 border-blue-500/30'
+              : 'bg-muted text-muted-foreground border-border',
+          )}
+        >
           {formatNumber(displayInputTokens)} in
         </span>
       )}
       {displayOutputTokens !== null && (
-        <span className={cn(
-          'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
-          streamCost?.outputTokens !== undefined
-            ? 'bg-green-500/10 text-green-600 border-green-500/30'
-            : 'bg-muted text-muted-foreground border-border'
-        )}>
+        <span
+          className={cn(
+            'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
+            streamCost?.outputTokens !== undefined
+              ? 'bg-green-500/10 text-green-600 border-green-500/30'
+              : 'bg-muted text-muted-foreground border-border',
+          )}
+        >
           {formatNumber(displayOutputTokens)} out
         </span>
       )}

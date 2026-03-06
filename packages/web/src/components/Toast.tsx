@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,9 +94,15 @@ export function useToast(): ToastContextValue {
     toast(type, message) {
       addToast(type, message, type === 'error' ? 8000 : 5000);
     },
-    success: (message: string) => { addToast('success', message); },
-    error: (message: string) => { addToast('error', message, 8000); },
-    info: (message: string) => { addToast('info', message); },
+    success: (message: string) => {
+      addToast('success', message);
+    },
+    error: (message: string) => {
+      addToast('error', message, 8000);
+    },
+    info: (message: string) => {
+      addToast('info', message);
+    },
   };
 }
 
@@ -104,12 +110,15 @@ export function useToast(): ToastContextValue {
 // Visual config per type
 // ---------------------------------------------------------------------------
 
-const typeConfig: Record<ToastType, {
-  icon: typeof CheckCircle2;
-  containerClass: string;
-  iconClass: string;
-  progressClass: string;
-}> = {
+const typeConfig: Record<
+  ToastType,
+  {
+    icon: typeof CheckCircle2;
+    containerClass: string;
+    iconClass: string;
+    progressClass: string;
+  }
+> = {
   success: {
     icon: CheckCircle2,
     containerClass: 'border-emerald-500/30 bg-card dark:bg-emerald-950/80',
@@ -190,9 +199,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       className={[
         'pointer-events-auto relative flex w-80 items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg backdrop-blur-sm',
         containerClass,
-        item.dismissing
-          ? 'animate-toast-out'
-          : 'animate-toast-in',
+        item.dismissing ? 'animate-toast-out' : 'animate-toast-in',
       ].join(' ')}
     >
       <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${iconClass}`} />

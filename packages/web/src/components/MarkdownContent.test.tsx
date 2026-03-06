@@ -97,9 +97,7 @@ describe('MarkdownContent', () => {
   });
 
   it('renders inline code with proper styling classes', () => {
-    const { container } = render(
-      <MarkdownContent>Use the `console.log` function</MarkdownContent>,
-    );
+    const { container } = render(<MarkdownContent>Use the `console.log` function</MarkdownContent>);
     const code = container.querySelector('code');
     expect(code).toBeDefined();
     expect(code?.textContent).toBe('console.log');
@@ -109,9 +107,7 @@ describe('MarkdownContent', () => {
   });
 
   it('renders fenced code blocks with proper styling', () => {
-    const { container } = render(
-      <MarkdownContent>{'```js\nconst x = 1;\n```'}</MarkdownContent>,
-    );
+    const { container } = render(<MarkdownContent>{'```js\nconst x = 1;\n```'}</MarkdownContent>);
     const pre = container.querySelector('pre');
     expect(pre).toBeDefined();
     const code = pre?.querySelector('code');

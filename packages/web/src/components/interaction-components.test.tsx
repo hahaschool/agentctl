@@ -118,9 +118,7 @@ describe('NotificationBell', () => {
       makeNotification({ id: 'n-1', message: 'Session completed', type: 'success' }),
       makeNotification({ id: 'n-2', message: 'Agent error occurred', type: 'error' }),
     ];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={2} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={2} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.getByText('Session completed')).toBeDefined();
     expect(screen.getByText('Agent error occurred')).toBeDefined();
@@ -128,27 +126,21 @@ describe('NotificationBell', () => {
 
   it('shows "Mark all read" button only when there are unread notifications', () => {
     const notifications = [makeNotification({ id: 'n-1', read: false })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.getByText('Mark all read')).toBeDefined();
   });
 
   it('does NOT show "Mark all read" when unreadCount is 0', () => {
     const notifications = [makeNotification({ id: 'n-1', read: true })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={0} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={0} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.queryByText('Mark all read')).toBeNull();
   });
 
   it('calls onMarkAllRead when "Mark all read" is clicked', () => {
     const notifications = [makeNotification({ id: 'n-1', read: false })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     fireEvent.click(screen.getByText('Mark all read'));
     expect(baseProps.onMarkAllRead).toHaveBeenCalledTimes(1);
@@ -156,9 +148,7 @@ describe('NotificationBell', () => {
 
   it('shows "Clear" button when there are notifications', () => {
     const notifications = [makeNotification({ id: 'n-1' })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.getByText('Clear')).toBeDefined();
   });
@@ -171,9 +161,7 @@ describe('NotificationBell', () => {
 
   it('calls onClearAll when "Clear" is clicked', () => {
     const notifications = [makeNotification({ id: 'n-1' })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={0} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={0} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     fireEvent.click(screen.getByText('Clear'));
     expect(baseProps.onClearAll).toHaveBeenCalledTimes(1);
@@ -181,9 +169,7 @@ describe('NotificationBell', () => {
 
   it('calls onMarkRead with notification id when dismiss button is clicked', () => {
     const notifications = [makeNotification({ id: 'n-42', message: 'Alert!' })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     const dismissBtn = screen.getByRole('button', { name: /Dismiss notification/i });
     fireEvent.click(dismissBtn);
@@ -215,9 +201,7 @@ describe('NotificationBell', () => {
 
   it('applies unread highlight class to unread notifications', () => {
     const notifications = [makeNotification({ id: 'n-1', read: false })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     // The notification row should have bg-accent/10 for unread
     const messageEl = screen.getByText('Test notification');
@@ -227,9 +211,7 @@ describe('NotificationBell', () => {
 
   it('does NOT apply unread highlight class to read notifications', () => {
     const notifications = [makeNotification({ id: 'n-1', read: true })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={0} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={0} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     const messageEl = screen.getByText('Test notification');
     const row = messageEl.closest('[class*="border-b"]');
@@ -238,18 +220,14 @@ describe('NotificationBell', () => {
 
   it('displays relative timestamp for notifications', () => {
     const notifications = [makeNotification({ id: 'n-1', timestamp: Date.now() - 5 * 60_000 })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.getByText('5m ago')).toBeDefined();
   });
 
   it('displays "just now" for very recent notifications', () => {
     const notifications = [makeNotification({ id: 'n-1', timestamp: Date.now() - 10_000 })];
-    render(
-      <NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />,
-    );
+    render(<NotificationBell {...baseProps} notifications={notifications} unreadCount={1} />);
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.getByText('just now')).toBeDefined();
   });

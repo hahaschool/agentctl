@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mock Toast module
@@ -33,14 +33,18 @@ vi.mock('@/lib/utils', () => ({
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children }: { children: React.ReactNode }) => <div data-testid="tooltip-content">{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
 }));
 
 // ---------------------------------------------------------------------------
 // Mock ansi-to-react — render ANSI codes as spans with data attributes
 // ---------------------------------------------------------------------------
 vi.mock('ansi-to-react', () => ({
-  default: ({ children }: { children: string }) => <span data-testid="ansi-output">{children}</span>,
+  default: ({ children }: { children: string }) => (
+    <span data-testid="ansi-output">{children}</span>
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -101,14 +105,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+import { AnsiSpan, AnsiText } from './AnsiText';
+import { CopyableText } from './CopyableText';
+import { GitStatusBadge } from './GitStatusBadge';
+import { HighlightText } from './HighlightText';
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 import { PathBadge } from './PathBadge';
-import { AnsiText, AnsiSpan } from './AnsiText';
-import { HighlightText } from './HighlightText';
-import { GitStatusBadge } from './GitStatusBadge';
-import { CopyableText } from './CopyableText';
 
 // ===========================================================================
 // PathBadge
@@ -173,7 +177,9 @@ describe('PathBadge', () => {
   });
 
   it('shows error toast when clipboard fails', async () => {
-    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('denied'));
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('denied'),
+    );
     render(<PathBadge path="/some/path" />);
     const button = screen.getByRole('button');
 
@@ -307,9 +313,7 @@ describe('HighlightText', () => {
   });
 
   it('applies className to the outer span', () => {
-    const { container } = render(
-      <HighlightText text="test" highlight="" className="my-class" />,
-    );
+    const { container } = render(<HighlightText text="test" highlight="" className="my-class" />);
     const span = container.firstElementChild;
     expect(span?.className).toContain('my-class');
   });
@@ -452,7 +456,12 @@ describe('GitStatusBadge', () => {
       isWorktree: false,
       bareRepo: null,
       status: { clean: true, staged: 0, modified: 0, untracked: 0, ahead: 0, behind: 0 },
-      lastCommit: { hash: 'abc1234', message: 'fix: broken tests', author: 'dev', date: '2026-03-01' },
+      lastCommit: {
+        hash: 'abc1234',
+        message: 'fix: broken tests',
+        author: 'dev',
+        date: '2026-03-01',
+      },
       worktrees: [],
     };
     render(<GitStatusBadge machineId="m1" projectPath="/project" />);
@@ -629,7 +638,9 @@ describe('CopyableText', () => {
   });
 
   it('shows error toast when clipboard fails', async () => {
-    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('denied'));
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('denied'),
+    );
     render(<CopyableText value="test" />);
     const button = screen.getByRole('button');
 

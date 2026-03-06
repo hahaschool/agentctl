@@ -1,8 +1,7 @@
+import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { WorkerError } from '@agentctl/shared';
 import { gitRoutes } from './git.js';
 
 // ---------------------------------------------------------------------------
@@ -17,8 +16,8 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
 
-import { statSync } from 'node:fs';
 import { execFile } from 'node:child_process';
+import { statSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -142,9 +141,12 @@ describe('Git routes', () => {
         'rev-parse --abbrev-ref HEAD': 'feat/awesome',
         'rev-parse --show-toplevel': '/Users/testuser/project',
         'status --porcelain': 'M  src/index.ts\n?? newfile.ts',
-        'status --branch --porcelain': '## feat/awesome...origin/feat/awesome [ahead 2, behind 1]\n M src/index.ts',
-        'log -1 --format=%H%n%s%n%an%n%aI': 'abc1234567890\nfix: something\nJohn Doe\n2026-03-06T10:00:00+00:00',
-        'worktree list --porcelain': 'worktree /Users/testuser/project\nbranch refs/heads/feat/awesome\n',
+        'status --branch --porcelain':
+          '## feat/awesome...origin/feat/awesome [ahead 2, behind 1]\n M src/index.ts',
+        'log -1 --format=%H%n%s%n%an%n%aI':
+          'abc1234567890\nfix: something\nJohn Doe\n2026-03-06T10:00:00+00:00',
+        'worktree list --porcelain':
+          'worktree /Users/testuser/project\nbranch refs/heads/feat/awesome\n',
         'rev-parse --git-common-dir': '.git',
       });
 
@@ -185,7 +187,8 @@ describe('Git routes', () => {
         'rev-parse --show-toplevel': '/Users/testuser/project',
         'status --porcelain': '',
         'status --branch --porcelain': '## main...origin/main',
-        'log -1 --format=%H%n%s%n%an%n%aI': 'def4567890123\ninitial commit\nJane\n2026-03-01T09:00:00Z',
+        'log -1 --format=%H%n%s%n%an%n%aI':
+          'def4567890123\ninitial commit\nJane\n2026-03-01T09:00:00Z',
         'worktree list --porcelain': 'worktree /Users/testuser/project\nbranch refs/heads/main\n',
         'rev-parse --git-common-dir': '.git',
       });
@@ -217,7 +220,8 @@ describe('Git routes', () => {
         'status --porcelain': '',
         'status --branch --porcelain': '## feature-1',
         'log -1 --format=%H%n%s%n%an%n%aI': 'aaa1111222233\nwip\nDev\n2026-03-06T11:00:00Z',
-        'worktree list --porcelain': 'worktree /Users/testuser/repo\nbare\n\nworktree /Users/testuser/repo/.trees/feature-1\nbranch refs/heads/feature-1\n',
+        'worktree list --porcelain':
+          'worktree /Users/testuser/repo\nbare\n\nworktree /Users/testuser/repo/.trees/feature-1\nbranch refs/heads/feature-1\n',
         // The git-common-dir for a linked worktree under a bare repo includes
         // both /.bare/ and /worktrees/ in the path
         'rev-parse --git-common-dir': '/Users/testuser/repo/.bare/worktrees/feature-1',
@@ -349,7 +353,8 @@ describe('Git routes', () => {
         'status --porcelain': '',
         'status --branch --porcelain': '## main',
         'log -1 --format=%H%n%s%n%an%n%aI': 'abc1234567890\ninit\nDev\n2026-03-06T10:00:00Z',
-        'worktree list --porcelain': 'worktree /Users/testuser/project\nbranch refs/heads/main\n\nworktree /Users/testuser/project/.trees/feat\nbranch refs/heads/feat\n',
+        'worktree list --porcelain':
+          'worktree /Users/testuser/project\nbranch refs/heads/main\n\nworktree /Users/testuser/project/.trees/feat\nbranch refs/heads/feat\n',
         'rev-parse --git-common-dir': '.git',
       });
 

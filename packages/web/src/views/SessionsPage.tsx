@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Filter, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -8,35 +9,29 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
-import { MarkdownContent } from '../components/MarkdownContent';
-import { TerminalView } from '../components/TerminalView';
-import { ProgressIndicator } from '../components/ProgressIndicator';
-import { SubagentBlock } from '../components/SubagentBlock';
-import { ThinkingBlock } from '../components/ThinkingBlock';
-import { TodoBlock } from '../components/TodoBlock';
-import { Filter, MessageSquare } from 'lucide-react';
+import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { FetchingBar } from '../components/FetchingBar';
 import { ForkContextPicker } from '../components/ForkContextPicker';
 import { GitStatusBadge } from '../components/GitStatusBadge';
-import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { MarkdownContent } from '../components/MarkdownContent';
 import { PathBadge } from '../components/PathBadge';
+import { ProgressIndicator } from '../components/ProgressIndicator';
 import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
+import { SubagentBlock } from '../components/SubagentBlock';
+import { TerminalView } from '../components/TerminalView';
+import { ThinkingBlock } from '../components/ThinkingBlock';
 import { useToast } from '../components/Toast';
-import { CopyableText } from '../components/CopyableText';
+import { TodoBlock } from '../components/TodoBlock';
 import { useNotificationContext } from '../contexts/notification-context';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
-import type {
-  ApiAccount,
-  Machine,
-  Session,
-  SessionContentMessage,
-} from '../lib/api';
+import type { ApiAccount, Machine, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
@@ -89,19 +84,34 @@ function escapeCsvValue(value: string | number | null | undefined): string {
 }
 
 function exportSessionsCsv(sessions: Session[]): void {
-  const headers = ['id', 'agentName', 'machineId', 'status', 'model', 'projectPath', 'startedAt', 'endedAt', 'costUsd', 'messageCount'];
-  const rows = sessions.map((s) => [
-    s.id,
-    s.agentName ?? s.agentId,
-    s.machineId,
-    s.status,
-    s.model ?? '',
-    s.projectPath ?? '',
-    s.startedAt,
-    s.endedAt ?? '',
-    s.metadata?.costUsd ?? '',
-    s.metadata?.messageCount ?? '',
-  ].map(escapeCsvValue).join(','));
+  const headers = [
+    'id',
+    'agentName',
+    'machineId',
+    'status',
+    'model',
+    'projectPath',
+    'startedAt',
+    'endedAt',
+    'costUsd',
+    'messageCount',
+  ];
+  const rows = sessions.map((s) =>
+    [
+      s.id,
+      s.agentName ?? s.agentId,
+      s.machineId,
+      s.status,
+      s.model ?? '',
+      s.projectPath ?? '',
+      s.startedAt,
+      s.endedAt ?? '',
+      s.metadata?.costUsd ?? '',
+      s.metadata?.messageCount ?? '',
+    ]
+      .map(escapeCsvValue)
+      .join(','),
+  );
 
   const csv = [headers.join(','), ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -133,11 +143,11 @@ export function SessionsPage(): React.JSX.Element {
       if (offset === 0) {
         return newSessions;
       }
-      const existingIds = new Set(prev.map(s => s.id));
-      const dedupedSessions = newSessions.filter(s => !existingIds.has(s.id));
+      const existingIds = new Set(prev.map((s) => s.id));
+      const dedupedSessions = newSessions.filter((s) => !existingIds.has(s.id));
       return [...prev, ...dedupedSessions];
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions.data]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -416,9 +426,7 @@ export function SessionsPage(): React.JSX.Element {
   const handleCleanup = useCallback(async () => {
     if (cleanupSessions.length === 0) return;
     try {
-      const results = await Promise.allSettled(
-        cleanupSessions.map((s) => api.deleteSession(s.id)),
-      );
+      const results = await Promise.allSettled(cleanupSessions.map((s) => api.deleteSession(s.id)));
       const failed = results.filter((r) => r.status === 'rejected').length;
       if (failed > 0) {
         toast.error(`${failed} of ${cleanupSessions.length} cleanup(s) failed`);
@@ -535,7 +543,13 @@ export function SessionsPage(): React.JSX.Element {
   }, [selected, toast]);
 
   const handleForkSubmit = useCallback(
-    (config: { name: string; type: string; model?: string; systemPrompt?: string; selectedMessageIds: number[] }) => {
+    (config: {
+      name: string;
+      type: string;
+      model?: string;
+      systemPrompt?: string;
+      selectedMessageIds: number[];
+    }) => {
       if (!selected) return;
       const agentConfig: Record<string, unknown> = {};
       if (config.model) agentConfig.model = config.model;
@@ -632,9 +646,7 @@ export function SessionsPage(): React.JSX.Element {
             <h2 className="text-sm font-semibold tracking-tight flex-1 min-w-0">
               Sessions
               <span className="ml-1.5 text-[11px] font-normal text-muted-foreground tabular-nums">
-                {hasMore
-                  ? `${sessionList.length}/${totalCount}`
-                  : String(filteredSessions.length)}
+                {hasMore ? `${sessionList.length}/${totalCount}` : String(filteredSessions.length)}
               </span>
             </h2>
             <button
@@ -662,7 +674,9 @@ export function SessionsPage(): React.JSX.Element {
             />
           </div>
           <div className="flex items-center gap-1.5 text-[10px]">
-            <span className="truncate min-w-0"><LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} /></span>
+            <span className="truncate min-w-0">
+              <LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} />
+            </span>
             <span className="flex-1" />
             {cleanupSessions.length > 0 && (
               <ConfirmButton
@@ -697,7 +711,9 @@ export function SessionsPage(): React.JSX.Element {
               className="w-full h-7 px-2.5 pr-12 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
             />
             {!searchQuery && (
-              <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">/</kbd>
+              <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">
+                /
+              </kbd>
             )}
           </div>
         </div>
@@ -774,7 +790,8 @@ export function SessionsPage(): React.JSX.Element {
               checked={checkedIds.size > 0 && checkedIds.size === filteredSessions.length}
               ref={(el) => {
                 if (el) {
-                  el.indeterminate = checkedIds.size > 0 && checkedIds.size < filteredSessions.length;
+                  el.indeterminate =
+                    checkedIds.size > 0 && checkedIds.size < filteredSessions.length;
                 }
               }}
               onChange={() => {
@@ -850,7 +867,8 @@ export function SessionsPage(): React.JSX.Element {
                 const isOffline = m.status === 'offline';
                 return (
                   <option key={m.id} value={m.id} disabled={isOffline}>
-                    {m.hostname}{isOffline ? ' (offline)' : m.status === 'degraded' ? ' (degraded)' : ''}
+                    {m.hostname}
+                    {isOffline ? ' (offline)' : m.status === 'degraded' ? ' (degraded)' : ''}
                   </option>
                 );
               })}
@@ -940,7 +958,9 @@ export function SessionsPage(): React.JSX.Element {
               disabled={isFormDisabled}
               className={cn(
                 'w-full h-9 px-3.5 bg-primary text-white rounded-md text-xs font-medium transition-all duration-200',
-                isFormDisabled ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer hover:bg-primary/90',
+                isFormDisabled
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'opacity-100 cursor-pointer hover:bg-primary/90',
               )}
             >
               {formSubmitting ? 'Creating...' : 'Create Session'}
@@ -949,12 +969,21 @@ export function SessionsPage(): React.JSX.Element {
         )}
 
         <div
-          className={cn('flex-1 overflow-auto transition-opacity duration-200', sessions.isFetching && !sessions.isLoading && 'opacity-60')}
+          className={cn(
+            'flex-1 overflow-auto transition-opacity duration-200',
+            sessions.isFetching && !sessions.isLoading && 'opacity-60',
+          )}
           role="listbox"
           tabIndex={0}
           onKeyDown={handleListKeyDown}
           aria-label="Session list"
-          aria-activedescendant={focusedIndex >= 0 && filteredSessions[focusedIndex] ? `session-${filteredSessions[focusedIndex].id}` : selectedId ? `session-${selectedId}` : undefined}
+          aria-activedescendant={
+            focusedIndex >= 0 && filteredSessions[focusedIndex]
+              ? `session-${filteredSessions[focusedIndex].id}`
+              : selectedId
+                ? `session-${selectedId}`
+                : undefined
+          }
         >
           {sessions.isLoading ? (
             <div className="p-3 space-y-1">
@@ -1112,16 +1141,24 @@ export function SessionsPage(): React.JSX.Element {
                     {'\u2190'}
                   </button>
                   <div className="flex items-center gap-2.5">
-                    <CopyableText value={selected.id} maxDisplay={16} className="font-mono text-[13px] font-semibold text-foreground/90" />
+                    <CopyableText
+                      value={selected.id}
+                      maxDisplay={16}
+                      className="font-mono text-[13px] font-semibold text-foreground/90"
+                    />
                     <StatusBadge status={selected.status} />
                   </div>
                 </div>
                 <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1.5 items-center">
-                  <span className="font-medium text-foreground/70">{selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}</span>
+                  <span className="font-medium text-foreground/70">
+                    {selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}
+                  </span>
                   <span className="text-muted-foreground/40">|</span>
                   <span>{selected.machineId}</span>
                   <span className="text-muted-foreground/40">|</span>
-                  <span className="text-purple-600/80 dark:text-purple-400/80">{selected.model ?? 'default'}</span>
+                  <span className="text-purple-600/80 dark:text-purple-400/80">
+                    {selected.model ?? 'default'}
+                  </span>
                 </div>
               </div>
               <div className="flex gap-2 items-center shrink-0 flex-wrap">
@@ -1172,7 +1209,11 @@ export function SessionsPage(): React.JSX.Element {
               <div className="bg-card rounded-lg p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <DetailRow label="ID" value={selected.id} mono />
                 <DetailRow label="Status" value={selected.status} />
-                <DetailRow label="Agent" value={selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)} mono />
+                <DetailRow
+                  label="Agent"
+                  value={selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}
+                  mono
+                />
                 <DetailRow label="Machine" value={selected.machineId} mono />
                 <DetailRow label="Project" value={selected.projectPath ?? '-'} mono />
                 <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
@@ -1204,7 +1245,10 @@ export function SessionsPage(): React.JSX.Element {
               {/* Git status */}
               {selected.projectPath && selected.machineId && (
                 <div className="mt-2.5 col-span-full">
-                  <GitStatusBadge machineId={selected.machineId} projectPath={selected.projectPath} />
+                  <GitStatusBadge
+                    machineId={selected.machineId}
+                    projectPath={selected.projectPath}
+                  />
                 </div>
               )}
 
@@ -1228,10 +1272,14 @@ export function SessionsPage(): React.JSX.Element {
             {/* Convert to Agent dialog */}
             {showConvertDialog && (
               <div className="px-5 py-4 border-b border-border bg-emerald-950/15">
-                <div className="text-xs font-semibold text-emerald-400 mb-3 tracking-tight">Create Agent from Session</div>
+                <div className="text-xs font-semibold text-emerald-400 mb-3 tracking-tight">
+                  Create Agent from Session
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
                   <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">Agent Name</label>
+                    <label className="text-[11px] text-muted-foreground block mb-1">
+                      Agent Name
+                    </label>
                     <input
                       type="text"
                       value={convertName}
@@ -1241,7 +1289,9 @@ export function SessionsPage(): React.JSX.Element {
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">Agent Type</label>
+                    <label className="text-[11px] text-muted-foreground block mb-1">
+                      Agent Type
+                    </label>
                     <select
                       value={convertType}
                       onChange={(e) => setConvertType(e.target.value)}
@@ -1253,9 +1303,20 @@ export function SessionsPage(): React.JSX.Element {
                   </div>
                 </div>
                 <div className="text-[11px] text-muted-foreground mb-3 space-y-0.5">
-                  <div>Machine: <span className="text-foreground font-mono">{selected.machineId}</span></div>
-                  {selected.projectPath && <div>Project: <span className="text-foreground font-mono">{selected.projectPath}</span></div>}
-                  {selected.model && <div>Model: <span className="text-foreground">{selected.model}</span></div>}
+                  <div>
+                    Machine: <span className="text-foreground font-mono">{selected.machineId}</span>
+                  </div>
+                  {selected.projectPath && (
+                    <div>
+                      Project:{' '}
+                      <span className="text-foreground font-mono">{selected.projectPath}</span>
+                    </div>
+                  )}
+                  {selected.model && (
+                    <div>
+                      Model: <span className="text-foreground">{selected.model}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1298,12 +1359,11 @@ export function SessionsPage(): React.JSX.Element {
                       ? 'Waiting for CLI to initialize...'
                       : 'No conversation content available'}
                 </span>
-                {selected.status === 'error' &&
-                  selected.metadata?.errorMessage && (
-                    <span className="text-xs text-muted-foreground opacity-70">
-                      {selected.metadata.errorMessage}
-                    </span>
-                  )}
+                {selected.status === 'error' && selected.metadata?.errorMessage && (
+                  <span className="text-xs text-muted-foreground opacity-70">
+                    {selected.metadata.errorMessage}
+                  </span>
+                )}
               </div>
             )}
 
@@ -1329,40 +1389,40 @@ export function SessionsPage(): React.JSX.Element {
                   </div>
                 )}
                 <div className="flex gap-2.5">
-                <input
-                  type="text"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSend();
+                  <input
+                    type="text"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void handleSend();
+                      }
+                    }}
+                    placeholder={
+                      selected.status === 'active'
+                        ? 'Send message...'
+                        : 'Resume session with prompt...'
                     }
-                  }}
-                  placeholder={
-                    selected.status === 'active'
-                      ? 'Send message...'
-                      : 'Resume session with prompt...'
-                  }
-                  aria-label={
-                    selected.status === 'active'
-                      ? 'Message to send to session'
-                      : 'Prompt to resume session'
-                  }
-                  className="flex-1 px-3.5 h-9 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleSend()}
-                  disabled={sending || !prompt.trim()}
-                  aria-label={selected.status === 'active' ? 'Send message' : 'Resume session'}
-                  className={cn(
-                    'h-9 px-5 bg-primary text-white rounded-md text-[13px] font-medium transition-all duration-200 hover:bg-primary/90',
-                    sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
-                  )}
-                >
-                  {sending ? '...' : selected.status === 'active' ? 'Send' : 'Resume'}
-                </button>
+                    aria-label={
+                      selected.status === 'active'
+                        ? 'Message to send to session'
+                        : 'Prompt to resume session'
+                    }
+                    className="flex-1 px-3.5 h-9 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={sending || !prompt.trim()}
+                    aria-label={selected.status === 'active' ? 'Send message' : 'Resume session'}
+                    className={cn(
+                      'h-9 px-5 bg-primary text-white rounded-md text-[13px] font-medium transition-all duration-200 hover:bg-primary/90',
+                      sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
+                    )}
+                  >
+                    {sending ? '...' : selected.status === 'active' ? 'Send' : 'Resume'}
+                  </button>
                 </div>
               </div>
             )}
@@ -1370,7 +1430,9 @@ export function SessionsPage(): React.JSX.Element {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             <span className="text-sm">Select a session to view details</span>
-            <span className="text-xs text-muted-foreground/50">Use arrow keys to navigate the list</span>
+            <span className="text-xs text-muted-foreground/50">
+              Use arrow keys to navigate the list
+            </span>
           </div>
         )}
       </div>
@@ -1444,7 +1506,11 @@ function SessionListItem({
       aria-selected={isSelected}
       className={cn(
         'flex w-full text-left border-b border-border transition-colors hover:border-border',
-        isSelected ? 'bg-accent/15' : isFocused ? 'bg-accent/10 ring-1 ring-inset ring-primary/40' : 'bg-transparent hover:bg-accent/8',
+        isSelected
+          ? 'bg-accent/15'
+          : isFocused
+            ? 'bg-accent/10 ring-1 ring-inset ring-primary/40'
+            : 'bg-transparent hover:bg-accent/8',
         s.status === 'error'
           ? 'border-l-[3px] border-l-red-500'
           : s.status === 'starting'
@@ -1471,49 +1537,55 @@ function SessionListItem({
         onClick={() => onSelect(s.id)}
         className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
       >
-      <div className="flex justify-between items-center mb-1.5">
-        <CopyableText value={s.id} maxDisplay={16} className="font-mono text-xs font-medium text-foreground/90" />
-        <span className="flex items-center gap-2">
-          {s.status === 'active' && (
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-            </span>
-          )}
-          {s.status === 'starting' && (
-            <span className="relative flex h-2 w-2">
-              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
-            </span>
-          )}
-          <StatusBadge status={s.status} />
-        </span>
-      </div>
-      {/* Error message for failed sessions */}
-      {s.status === 'error' && errorMsg && (
-        <div className="text-[11px] text-red-600 dark:text-red-400 mb-1.5 line-clamp-1">{errorMsg}</div>
-      )}
-      <div className="text-xs text-muted-foreground flex gap-2 items-center">
-        <span className="font-medium text-foreground/70">{s.agentName ? s.agentName : s.agentId.slice(0, 8)}</span>
-        <span className="text-muted-foreground/50">|</span>
-        <span>{s.machineId}</span>
-        <span className="text-purple-600/70 dark:text-purple-400/70 text-[11px]">{s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}</span>
-      </div>
-      {s.projectPath && (
-        <div className="mt-1">
-          <PathBadge path={s.projectPath} className="text-[11px]" />
+        <div className="flex justify-between items-center mb-1.5">
+          <CopyableText
+            value={s.id}
+            maxDisplay={16}
+            className="font-mono text-xs font-medium text-foreground/90"
+          />
+          <span className="flex items-center gap-2">
+            {s.status === 'active' && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              </span>
+            )}
+            {s.status === 'starting' && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
+              </span>
+            )}
+            <StatusBadge status={s.status} />
+          </span>
         </div>
-      )}
-      <div className="text-[11px] text-muted-foreground/70 mt-1 flex gap-2.5 items-center">
-        <LiveTimeAgo date={s.startedAt} />
-        <LiveDuration startedAt={s.startedAt} endedAt={s.endedAt} />
-        {messageCount !== undefined && (
-          <span>{messageCount} msgs</span>
+        {/* Error message for failed sessions */}
+        {s.status === 'error' && errorMsg && (
+          <div className="text-[11px] text-red-600 dark:text-red-400 mb-1.5 line-clamp-1">
+            {errorMsg}
+          </div>
         )}
-        {costUsd !== undefined && (
-          <span className="tabular-nums">${costUsd.toFixed(2)}</span>
+        <div className="text-xs text-muted-foreground flex gap-2 items-center">
+          <span className="font-medium text-foreground/70">
+            {s.agentName ? s.agentName : s.agentId.slice(0, 8)}
+          </span>
+          <span className="text-muted-foreground/50">|</span>
+          <span>{s.machineId}</span>
+          <span className="text-purple-600/70 dark:text-purple-400/70 text-[11px]">
+            {s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}
+          </span>
+        </div>
+        {s.projectPath && (
+          <div className="mt-1">
+            <PathBadge path={s.projectPath} className="text-[11px]" />
+          </div>
         )}
-      </div>
+        <div className="text-[11px] text-muted-foreground/70 mt-1 flex gap-2.5 items-center">
+          <LiveTimeAgo date={s.startedAt} />
+          <LiveDuration startedAt={s.startedAt} endedAt={s.endedAt} />
+          {messageCount !== undefined && <span>{messageCount} msgs</span>}
+          {costUsd !== undefined && <span className="tabular-nums">${costUsd.toFixed(2)}</span>}
+        </div>
       </button>
     </div>
   );
@@ -1545,7 +1617,12 @@ function DetailRow({
   return (
     <div className="group py-0.5">
       <span className="text-muted-foreground/70 text-[10px] font-medium">{label}</span>
-      <div className={cn('text-xs break-all flex items-start gap-1 mt-0.5 text-foreground/90', mono && 'font-mono')}>
+      <div
+        className={cn(
+          'text-xs break-all flex items-start gap-1 mt-0.5 text-foreground/90',
+          mono && 'font-mono',
+        )}
+      >
         <span className="flex-1">{value}</span>
         {mono && value !== '-' && (
           <button
@@ -1617,37 +1694,40 @@ function SessionContent({
   const stream = useSessionStream({
     sessionId: rcSessionId,
     enabled: isActive ?? false,
-    onEvent: useCallback((event: SessionStreamEvent) => {
-      // Refetch latest content on status change / loop complete
-      if (event.event === 'status' || event.event === 'loop_complete') {
-        void fetchLatestRef.current();
-      }
-      // Fire notifications for session lifecycle events
-      if (event.event === 'status') {
-        const status = (event.data as { status?: string }).status;
-        if (status === 'ended') {
+    onEvent: useCallback(
+      (event: SessionStreamEvent) => {
+        // Refetch latest content on status change / loop complete
+        if (event.event === 'status' || event.event === 'loop_complete') {
+          void fetchLatestRef.current();
+        }
+        // Fire notifications for session lifecycle events
+        if (event.event === 'status') {
+          const status = (event.data as { status?: string }).status;
+          if (status === 'ended') {
+            addNotificationRef.current({
+              type: 'success',
+              message: `Session ${rcSessionId.slice(0, 8)} completed`,
+              sessionId: rcSessionId,
+            });
+          } else if (status === 'error') {
+            addNotificationRef.current({
+              type: 'error',
+              message: `Session ${rcSessionId.slice(0, 8)} encountered an error`,
+              sessionId: rcSessionId,
+            });
+          }
+        }
+        if (event.event === 'approval_needed') {
+          const toolName = (event.data as { toolName?: string }).toolName ?? 'unknown';
           addNotificationRef.current({
-            type: 'success',
-            message: `Session ${rcSessionId.slice(0, 8)} completed`,
-            sessionId: rcSessionId,
-          });
-        } else if (status === 'error') {
-          addNotificationRef.current({
-            type: 'error',
-            message: `Session ${rcSessionId.slice(0, 8)} encountered an error`,
+            type: 'warning',
+            message: `Session ${rcSessionId.slice(0, 8)} needs approval for ${toolName}`,
             sessionId: rcSessionId,
           });
         }
-      }
-      if (event.event === 'approval_needed') {
-        const toolName = (event.data as { toolName?: string }).toolName ?? 'unknown';
-        addNotificationRef.current({
-          type: 'warning',
-          message: `Session ${rcSessionId.slice(0, 8)} needs approval for ${toolName}`,
-          sessionId: rcSessionId,
-        });
-      }
-    }, [rcSessionId]),
+      },
+      [rcSessionId],
+    ),
   });
 
   // Fetch latest messages (offset=0, replaces tail of loaded messages)
@@ -1821,13 +1901,20 @@ function SessionContent({
     lastSentRef.current = lastSentMessage.ts;
     setOptimisticMessages((prev) => [
       ...prev,
-      { id: `opt-${lastSentMessage.ts}`, text: lastSentMessage.text, timestamp: lastSentMessage.ts },
+      {
+        id: `opt-${lastSentMessage.ts}`,
+        text: lastSentMessage.text,
+        timestamp: lastSentMessage.ts,
+      },
     ]);
     // Auto-scroll when user sends
     setAutoScroll(true);
     setUserScrolledUp(false);
     setTimeout(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current?.scrollHeight ?? 0, behavior: 'smooth' });
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current?.scrollHeight ?? 0,
+        behavior: 'smooth',
+      });
     }, 50);
   }, [lastSentMessage]);
 
@@ -1835,7 +1922,8 @@ function SessionContent({
 
   const messages = allMessages.filter((m) => {
     // Always show these types
-    if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo') return true;
+    if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo')
+      return true;
     // Toggle-controlled types
     if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
     if (m.type === 'thinking') return showThinking;
@@ -1856,7 +1944,9 @@ function SessionContent({
               onClick={() => setViewMode('messages')}
               className={cn(
                 'px-3 py-0.5 text-[11px] cursor-pointer transition-all duration-200 h-7 border-0',
-                viewMode === 'messages' ? 'bg-primary text-white font-medium' : 'bg-muted text-muted-foreground hover:bg-accent',
+                viewMode === 'messages'
+                  ? 'bg-primary text-white font-medium'
+                  : 'bg-muted text-muted-foreground hover:bg-accent',
               )}
             >
               Messages
@@ -1866,14 +1956,18 @@ function SessionContent({
               onClick={() => setViewMode('terminal')}
               className={cn(
                 'px-3 py-0.5 text-[11px] cursor-pointer transition-all duration-200 h-7 border-0 border-l border-border',
-                viewMode === 'terminal' ? 'bg-primary text-white font-medium' : 'bg-muted text-muted-foreground hover:bg-accent',
+                viewMode === 'terminal'
+                  ? 'bg-primary text-white font-medium'
+                  : 'bg-muted text-muted-foreground hover:bg-accent',
               )}
             >
               Terminal
             </button>
           </div>
           <span className="text-[11px] text-muted-foreground">
-            {viewMode === 'messages' && allMessages.length > 0 ? `${messages.length}${hasMore ? ` / ${totalMessages}` : ''} messages` : ''}
+            {viewMode === 'messages' && allMessages.length > 0
+              ? `${messages.length}${hasMore ? ` / ${totalMessages}` : ''} messages`
+              : ''}
             {isActive && (
               <span
                 className={cn(
@@ -1897,7 +1991,9 @@ function SessionContent({
                 aria-pressed={showThinking}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  showThinking ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  showThinking
+                    ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/25 font-medium'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Thinking
@@ -1909,7 +2005,9 @@ function SessionContent({
                 aria-pressed={showTools}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  showTools ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  showTools
+                    ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/25 font-medium'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Tools
@@ -1921,7 +2019,9 @@ function SessionContent({
                 aria-pressed={showProgress}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  showProgress ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  showProgress
+                    ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/25 font-medium'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Progress
@@ -1933,7 +2033,9 @@ function SessionContent({
                 aria-pressed={renderMarkdown}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  renderMarkdown ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  renderMarkdown
+                    ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25 font-medium'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Markdown
@@ -1956,7 +2058,11 @@ function SessionContent({
         <TerminalView rawOutput={stream.rawOutput} isActive={isActive} />
       ) : (
         <div className="relative flex-1 min-h-0">
-          <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-auto px-5 py-2">
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="absolute inset-0 overflow-auto px-5 py-2"
+          >
             {loading && (
               <div className="p-4 space-y-3">
                 {[1, 2, 3, 4].map((i) => (
@@ -1973,7 +2079,9 @@ function SessionContent({
             )}
             {error && <ErrorBanner message={error} onRetry={() => void fetchLatest()} />}
             {allMessages.length > 0 && messages.length === 0 && !loading && (
-              <div className="p-5 text-center text-muted-foreground text-xs">No messages match current filters</div>
+              <div className="p-5 text-center text-muted-foreground text-xs">
+                No messages match current filters
+              </div>
             )}
             {allMessages.length === 0 && !loading && !error && (
               <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
@@ -1996,15 +2104,48 @@ function SessionContent({
             {messages.map((msg, i) => {
               switch (msg.type) {
                 case 'thinking':
-                  return <ThinkingBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
+                  return (
+                    <ThinkingBlock
+                      key={`${msg.type}-${String(i)}`}
+                      content={msg.content}
+                      timestamp={msg.timestamp}
+                    />
+                  );
                 case 'progress':
-                  return <ProgressIndicator key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} timestamp={msg.timestamp} />;
+                  return (
+                    <ProgressIndicator
+                      key={`${msg.type}-${String(i)}`}
+                      content={msg.content}
+                      toolName={msg.toolName}
+                      timestamp={msg.timestamp}
+                    />
+                  );
                 case 'subagent':
-                  return <SubagentBlock key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} subagentId={(msg as Record<string, unknown>).subagentId as string | undefined} timestamp={msg.timestamp} />;
+                  return (
+                    <SubagentBlock
+                      key={`${msg.type}-${String(i)}`}
+                      content={msg.content}
+                      toolName={msg.toolName}
+                      subagentId={(msg as Record<string, unknown>).subagentId as string | undefined}
+                      timestamp={msg.timestamp}
+                    />
+                  );
                 case 'todo':
-                  return <TodoBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
+                  return (
+                    <TodoBlock
+                      key={`${msg.type}-${String(i)}`}
+                      content={msg.content}
+                      timestamp={msg.timestamp}
+                    />
+                  );
                 default:
-                  return <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} renderMarkdown={renderMarkdown} />;
+                  return (
+                    <InlineMessage
+                      key={`${msg.type}-${String(i)}`}
+                      message={msg}
+                      renderMarkdown={renderMarkdown}
+                    />
+                  );
               }
             })}
 
@@ -2015,8 +2156,12 @@ function SessionContent({
                 className="mb-1.5 px-2.5 py-1.5 rounded-md border-l-2 border-blue-500/50 bg-blue-500/10"
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">You</span>
-                  <span className="text-[9px] text-blue-600/70 dark:text-blue-400/70 animate-pulse">sending...</span>
+                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                    You
+                  </span>
+                  <span className="text-[9px] text-blue-600/70 dark:text-blue-400/70 animate-pulse">
+                    sending...
+                  </span>
                 </div>
                 <div className="text-xs text-foreground whitespace-pre-wrap break-words">
                   {om.text}
@@ -2056,7 +2201,13 @@ function SessionContent({
 
 const TRUNCATE_THRESHOLD = 800;
 
-function InlineMessage({ message, renderMarkdown }: { message: SessionContentMessage; renderMarkdown?: boolean }): React.JSX.Element {
+function InlineMessage({
+  message,
+  renderMarkdown,
+}: {
+  message: SessionContentMessage;
+  renderMarkdown?: boolean;
+}): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const msgStyle = getMessageStyle(message.type);
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';

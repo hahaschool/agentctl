@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import '@xterm/xterm/css/xterm.css';
 
@@ -16,7 +16,11 @@ type TerminalViewProps = {
   className?: string;
 };
 
-export function TerminalView({ rawOutput, isActive, className }: TerminalViewProps): React.JSX.Element {
+export function TerminalView({
+  rawOutput,
+  isActive,
+  className,
+}: TerminalViewProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
@@ -131,10 +135,7 @@ export function TerminalView({ rawOutput, isActive, className }: TerminalViewPro
 
   return (
     <div className={cn('relative flex-1 min-h-0', className)}>
-      <div
-        ref={containerRef}
-        className="absolute inset-0 bg-[#0a0a0a]"
-      />
+      <div ref={containerRef} className="absolute inset-0 bg-[#0a0a0a]" />
       {isActive && rawOutput.length > 0 && (
         <div className="absolute top-2 right-3 flex items-center gap-1.5 z-10">
           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />

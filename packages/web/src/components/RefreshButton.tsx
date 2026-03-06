@@ -33,10 +33,7 @@ export function RefreshButton({
     >
       <RefreshCw
         size={12}
-        className={cn(
-          'transition-transform duration-300',
-          isFetching && 'animate-spin',
-        )}
+        className={cn('transition-transform duration-300', isFetching && 'animate-spin')}
       />
       {label}
     </button>

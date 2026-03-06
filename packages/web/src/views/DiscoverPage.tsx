@@ -1,12 +1,11 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Compass, Filter } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Compass, Filter } from 'lucide-react';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -540,7 +539,9 @@ export function DiscoverPage(): React.JSX.Element {
             className="w-full px-2.5 py-1.5 pr-10 bg-background text-foreground border border-border rounded-md text-[13px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           />
           {!search && (
-            <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-muted border border-border/50 rounded pointer-events-none">/</kbd>
+            <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-muted border border-border/50 rounded pointer-events-none">
+              /
+            </kbd>
           )}
         </div>
         <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
@@ -629,7 +630,8 @@ export function DiscoverPage(): React.JSX.Element {
           {machineCount !== 1 ? 's' : ''}
           {importedSessionIds.size > 0 && (
             <span className="ml-2 text-green-600 dark:text-green-400">
-              ({filtered.filter((s) => importedSessionIds.has(s.sessionId)).length} already imported)
+              ({filtered.filter((s) => importedSessionIds.has(s.sessionId)).length} already
+              imported)
             </span>
           )}
         </div>
@@ -654,9 +656,7 @@ export function DiscoverPage(): React.JSX.Element {
                 bulkImporting && 'opacity-50',
               )}
             >
-              {bulkImporting
-                ? 'Importing...'
-                : `Import ${selectedIds.size} Selected`}
+              {bulkImporting ? 'Importing...' : `Import ${selectedIds.size} Selected`}
             </button>
           )}
         </div>
@@ -813,7 +813,10 @@ export function DiscoverPage(): React.JSX.Element {
                               {/* Summary */}
                               <SimpleTooltip content={s.summary || 'Untitled'}>
                                 <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-                                  <HighlightText text={s.summary || 'Untitled'} highlight={search} />
+                                  <HighlightText
+                                    text={s.summary || 'Untitled'}
+                                    highlight={search}
+                                  />
                                 </span>
                               </SimpleTooltip>
                             </button>
@@ -827,7 +830,12 @@ export function DiscoverPage(): React.JSX.Element {
                             {s.branch && (
                               <SimpleTooltip content={`Branch: ${s.branch}`}>
                                 <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-green-500 bg-green-500/10 border border-green-500/20 px-1.5 py-px rounded-md whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
-                                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                  <svg
+                                    className="w-3 h-3 shrink-0"
+                                    viewBox="0 0 16 16"
+                                    fill="currentColor"
+                                    aria-hidden="true"
+                                  >
                                     <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" />
                                   </svg>
                                   {s.branch}
@@ -869,7 +877,8 @@ export function DiscoverPage(): React.JSX.Element {
                                 aria-label={`Import session ${s.sessionId.slice(0, 8)}`}
                                 className={cn(
                                   'px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0 transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
-                                  importingSessionId === s.sessionId && 'opacity-50 cursor-not-allowed',
+                                  importingSessionId === s.sessionId &&
+                                    'opacity-50 cursor-not-allowed',
                                 )}
                               >
                                 {importingSessionId === s.sessionId ? 'Importing...' : 'Import'}

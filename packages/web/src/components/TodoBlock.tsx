@@ -56,21 +56,32 @@ export function TodoBlock({ content, timestamp }: TodoBlockProps): React.JSX.Ele
         {todos.map((todo, i) => (
           <div key={todo.id ?? String(i)} className="flex items-start gap-2 text-[12px]">
             {todo.status === 'completed' ? (
-              <CheckCircle2 size={13} className="shrink-0 mt-0.5 text-green-600 dark:text-green-400" />
+              <CheckCircle2
+                size={13}
+                className="shrink-0 mt-0.5 text-green-600 dark:text-green-400"
+              />
             ) : (
               <Circle size={13} className="shrink-0 mt-0.5 text-muted-foreground" />
             )}
-            <span className={cn(
-              'leading-relaxed',
-              todo.status === 'completed' ? 'text-muted-foreground line-through' : 'text-foreground/90',
-            )}>
+            <span
+              className={cn(
+                'leading-relaxed',
+                todo.status === 'completed'
+                  ? 'text-muted-foreground line-through'
+                  : 'text-foreground/90',
+              )}
+            >
               {todo.content}
             </span>
             {todo.priority && todo.priority !== 'medium' && (
-              <span className={cn(
-                'text-[9px] shrink-0 px-1 py-0.5 rounded',
-                todo.priority === 'high' ? 'text-red-600 dark:text-red-400 bg-red-400/10' : 'text-muted-foreground bg-muted',
-              )}>
+              <span
+                className={cn(
+                  'text-[9px] shrink-0 px-1 py-0.5 rounded',
+                  todo.priority === 'high'
+                    ? 'text-red-600 dark:text-red-400 bg-red-400/10'
+                    : 'text-muted-foreground bg-muted',
+                )}
+              >
                 {todo.priority}
               </span>
             )}

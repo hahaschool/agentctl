@@ -1,16 +1,16 @@
 'use client';
 
 import {
-  Gauge,
-  Server,
   Bot,
-  MessageSquare,
   Compass,
-  ScrollText,
-  Settings,
-  Moon,
-  Sun,
+  Gauge,
   Menu,
+  MessageSquare,
+  Moon,
+  ScrollText,
+  Server,
+  Settings,
+  Sun,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -215,7 +215,9 @@ export function Sidebar(): React.JSX.Element {
       >
         {/* Logo (desktop only, mobile has it in the top bar) */}
         <div className="px-5 pb-5 items-center gap-2 hidden md:flex md:justify-center lg:justify-start">
-          <span className="text-lg font-bold text-foreground tracking-tight hidden lg:inline">AgentCTL</span>
+          <span className="text-lg font-bold text-foreground tracking-tight hidden lg:inline">
+            AgentCTL
+          </span>
           <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider hidden lg:inline">
             BETA
           </span>
@@ -269,15 +271,23 @@ export function Sidebar(): React.JSX.Element {
               onClearAll={clearAll}
             />
             {unreadCount > 0 && (
-              <span className="text-[10px] text-primary font-medium hidden lg:inline">{unreadCount}</span>
+              <span className="text-[10px] text-primary font-medium hidden lg:inline">
+                {unreadCount}
+              </span>
             )}
           </div>
 
           {/* Keyboard hints (hidden on medium, shown on large) */}
           <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex-wrap gap-x-3 gap-y-0.5 hidden lg:flex">
-            <span><Kbd>1</Kbd>-<Kbd>7</Kbd> Nav</span>
-            <span><Kbd>{'\u2318'}K</Kbd> Search</span>
-            <span><Kbd>?</Kbd> Help</span>
+            <span>
+              <Kbd>1</Kbd>-<Kbd>7</Kbd> Nav
+            </span>
+            <span>
+              <Kbd>{'\u2318'}K</Kbd> Search
+            </span>
+            <span>
+              <Kbd>?</Kbd> Help
+            </span>
           </div>
 
           {/* Version + theme */}

@@ -216,9 +216,7 @@ describe('LogsPage', () => {
 
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([
-        { id: 'agent-1', name: 'test-agent' },
-      ]),
+      queryFn: vi.fn().mockResolvedValue([{ id: 'agent-1', name: 'test-agent' }]),
     });
 
     mockAuditQuery.mockReturnValue({
@@ -440,10 +438,12 @@ describe('LogsPage', () => {
   it('displays multiple machines in worker table', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        createMachine({ id: 'machine-1', hostname: 'host-alpha' }),
-        createMachine({ id: 'machine-2', hostname: 'host-beta', status: 'offline' }),
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([
+          createMachine({ id: 'machine-1', hostname: 'host-alpha' }),
+          createMachine({ id: 'machine-2', hostname: 'host-beta', status: 'offline' }),
+        ]),
     });
 
     renderLogsPage();
@@ -539,7 +539,9 @@ describe('LogsPage', () => {
     fireEvent.click(screen.getByText(/Audit Trail/));
 
     await waitFor(() => {
-      const searchInput = screen.getByPlaceholderText('Search actions, tools, agents...') as HTMLInputElement;
+      const searchInput = screen.getByPlaceholderText(
+        'Search actions, tools, agents...',
+      ) as HTMLInputElement;
       expect(searchInput).toBeDefined();
     });
   });
@@ -566,7 +568,9 @@ describe('LogsPage', () => {
       expect(screen.getByText('Compile')).toBeDefined();
     });
 
-    const searchInput = screen.getByPlaceholderText('Search actions, tools, agents...') as HTMLInputElement;
+    const searchInput = screen.getByPlaceholderText(
+      'Search actions, tools, agents...',
+    ) as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: 'Compile' } });
 
     await waitFor(() => {
@@ -584,7 +588,9 @@ describe('LogsPage', () => {
       expect(screen.getByPlaceholderText('Search actions, tools, agents...')).toBeDefined();
     });
 
-    const searchInput = screen.getByPlaceholderText('Search actions, tools, agents...') as HTMLInputElement;
+    const searchInput = screen.getByPlaceholderText(
+      'Search actions, tools, agents...',
+    ) as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: 'nonexistenttool' } });
 
     await waitFor(() => {

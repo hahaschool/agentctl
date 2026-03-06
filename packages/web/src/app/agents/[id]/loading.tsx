@@ -31,7 +31,10 @@ export default function Loading() {
       {/* Cost cards */}
       <div className="grid grid-cols-2 gap-4 mb-4">
         {Array.from({ length: 2 }, (_, i) => (
-          <div key={`cost-sk-${String(i)}`} className="p-4 bg-card border border-border/50 rounded-lg">
+          <div
+            key={`cost-sk-${String(i)}`}
+            className="p-4 bg-card border border-border/50 rounded-lg"
+          >
             <Skeleton className="h-3 w-20 mb-2" />
             <Skeleton className="h-7 w-16" />
           </div>
