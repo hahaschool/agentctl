@@ -157,6 +157,7 @@ export function MachineDetailView(): React.JSX.Element {
             className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md text-foreground hover:bg-accent transition-colors no-underline inline-flex items-center gap-1.5"
           >
             <svg
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 24 24"

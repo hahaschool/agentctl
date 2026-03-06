@@ -55,7 +55,7 @@ describe('HighlightText', () => {
     const { container } = render(<HighlightText text="Hello world" highlight="world" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('world');
+    expect(marks[0]?.textContent).toBe('world');
   });
 
   it('preserves non-matching text around the highlight', () => {
@@ -87,8 +87,8 @@ describe('HighlightText', () => {
   it('preserves original casing in highlighted text', () => {
     const { container } = render(<HighlightText text="Hello HELLO" highlight="hello" />);
     const marks = container.querySelectorAll('mark');
-    expect(marks[0]!.textContent).toBe('Hello');
-    expect(marks[1]!.textContent).toBe('HELLO');
+    expect(marks[0]?.textContent).toBe('Hello');
+    expect(marks[1]?.textContent).toBe('HELLO');
   });
 
   // -------------------------------------------------------------------------
@@ -101,35 +101,35 @@ describe('HighlightText', () => {
     const marks = container.querySelectorAll('mark');
     // Should match only the literal "file.txt", not "filetxt"
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('file.txt');
+    expect(marks[0]?.textContent).toBe('file.txt');
   });
 
   it('handles regex special characters in the query (parentheses)', () => {
     const { container } = render(<HighlightText text="call fn() now" highlight="fn()" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('fn()');
+    expect(marks[0]?.textContent).toBe('fn()');
   });
 
   it('handles regex special characters in the query (brackets)', () => {
     const { container } = render(<HighlightText text="array[0] is first" highlight="[0]" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('[0]');
+    expect(marks[0]?.textContent).toBe('[0]');
   });
 
   it('handles asterisk in query', () => {
     const { container } = render(<HighlightText text="a * b = c" highlight="*" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('*');
+    expect(marks[0]?.textContent).toBe('*');
   });
 
   it('handles plus sign in query', () => {
     const { container } = render(<HighlightText text="a + b = c" highlight="+" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('+');
+    expect(marks[0]?.textContent).toBe('+');
   });
 
   // -------------------------------------------------------------------------
@@ -167,7 +167,7 @@ describe('HighlightText', () => {
     const { container } = render(<HighlightText text="exact" highlight="exact" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
-    expect(marks[0]!.textContent).toBe('exact');
+    expect(marks[0]?.textContent).toBe('exact');
     expect(container.textContent).toBe('exact');
   });
 

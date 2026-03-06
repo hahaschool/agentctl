@@ -56,7 +56,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
 function makeMessages(count = 3): SessionContentMessage[] {
   const types = ['human', 'assistant', 'tool_use', 'thinking'];
   return Array.from({ length: count }, (_, i) => ({
-    type: types[i % types.length]!,
+    type: types[i % types.length] ?? 'human',
     content: `Message content ${i + 1}`,
     timestamp: `2026-03-06T00:0${i}:00Z`,
     toolName: types[i % types.length] === 'tool_use' ? 'Read' : undefined,
@@ -202,7 +202,7 @@ describe('ForkContextPicker', () => {
   it('toggles individual message checkbox', () => {
     renderPicker();
     const checkboxes = screen.getAllByRole('checkbox');
-    const firstCheckbox = checkboxes[0]! as HTMLInputElement;
+    const firstCheckbox = checkboxes[0] as HTMLInputElement;
 
     expect(firstCheckbox.checked).toBe(true);
     fireEvent.click(firstCheckbox);
@@ -226,7 +226,7 @@ describe('ForkContextPicker', () => {
       expect((cb as HTMLInputElement).checked).toBe(false);
     }
     // Footer should show 0 messages selected
-    const footerText = screen.getByText(/messages selected/).parentElement!.textContent!;
+    const footerText = screen.getByText(/messages selected/).parentElement?.textContent ?? '';
     expect(footerText).toContain('0 messages selected');
   });
 
@@ -258,7 +258,7 @@ describe('ForkContextPicker', () => {
     fireEvent.click(screen.getByText('Create Agent'));
     expect(onSubmit).toHaveBeenCalledTimes(1);
 
-    const call = onSubmit.mock.calls[0]![0]!;
+    const call = onSubmit.mock.calls[0]?.[0];
     expect(call.name).toBe('test-agent-fork');
     expect(call.type).toBe('adhoc');
     expect(call.model).toBe('claude-sonnet-4-6');
@@ -271,10 +271,10 @@ describe('ForkContextPicker', () => {
 
     // Uncheck the first message
     const checkboxes = screen.getAllByRole('checkbox');
-    fireEvent.click(checkboxes[0]!);
+    fireEvent.click(checkboxes[0]);
 
     fireEvent.click(screen.getByText('Create Agent'));
-    const call = onSubmit.mock.calls[0]![0]!;
+    const call = onSubmit.mock.calls[0]?.[0];
     expect(call.selectedMessageIds).toEqual([1, 2]);
   });
 
@@ -395,7 +395,7 @@ describe('ForkContextPicker', () => {
     renderPicker({ onSubmit, session: makeSession({ model: null }) });
 
     fireEvent.click(screen.getByText('Create Agent'));
-    const call = onSubmit.mock.calls[0]![0]!;
+    const call = onSubmit.mock.calls[0]?.[0];
     expect(call.model).toBeUndefined();
   });
 

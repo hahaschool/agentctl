@@ -56,7 +56,7 @@ describe('PathBadge', () => {
       // shortenPath replaces /Users/john/ with ~/ and truncates
       const button = screen.getByRole('button');
       expect(button.textContent).toBeDefined();
-      expect(button.textContent!.length).toBeGreaterThan(0);
+      expect(button.textContent?.length).toBeGreaterThan(0);
     });
 
     it('renders the full path in the tooltip', () => {

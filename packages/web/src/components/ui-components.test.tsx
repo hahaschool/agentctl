@@ -106,6 +106,7 @@ describe('CopyableText', () => {
     const parentClick = vi.fn();
     render(
       // biome-ignore lint/a11y/useKeyWithClickEvents: test-only wrapper
+      // biome-ignore lint/a11y/noStaticElementInteractions: test-only wrapper
       <div onClick={parentClick}>
         <CopyableText value="val" />
       </div>,

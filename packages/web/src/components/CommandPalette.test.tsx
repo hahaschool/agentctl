@@ -501,7 +501,7 @@ describe('fuzzyScore', () => {
   it('returns high score for exact substring match', () => {
     const score = fuzzyScore('mach', 'Machines');
     expect(score).not.toBeNull();
-    expect(score!).toBeGreaterThanOrEqual(100);
+    expect(score).toBeGreaterThanOrEqual(100);
   });
 
   it('gives starts-with higher score than mid-string match', () => {
@@ -509,7 +509,7 @@ describe('fuzzyScore', () => {
     const midScore = fuzzyScore('board', 'Dashboard');
     expect(startScore).not.toBeNull();
     expect(midScore).not.toBeNull();
-    expect(startScore!).toBeGreaterThan(midScore!);
+    expect(startScore).toBeGreaterThan(midScore);
   });
 
   // Subsequence
@@ -517,15 +517,15 @@ describe('fuzzyScore', () => {
     // "dbd" is a subsequence of "Dashboard" (d-a-s-h-b-o-a-r-d → d(0), b(4), d(8))
     const score = fuzzyScore('dbd', 'Dashboard');
     expect(score).not.toBeNull();
-    expect(score!).toBeGreaterThanOrEqual(10);
-    expect(score!).toBeLessThan(100);
+    expect(score).toBeGreaterThanOrEqual(10);
+    expect(score).toBeLessThan(100);
   });
 
   // Typo tolerance via Levenshtein
   it('matches "dashbord" (one missing char) to "dashboard"', () => {
     const score = fuzzyScore('dashbord', 'Dashboard');
     expect(score).not.toBeNull();
-    expect(score!).toBeGreaterThanOrEqual(1);
+    expect(score).toBeGreaterThanOrEqual(1);
   });
 
   it('matches "settngs" (one missing char) to "settings"', () => {

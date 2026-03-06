@@ -259,10 +259,10 @@ describe('useToast hook', () => {
     const t = useToast();
     return (
       <div>
-        <button onClick={() => t.success('hook success')}>Success</button>
-        <button onClick={() => t.error('hook error')}>Error</button>
-        <button onClick={() => t.info('hook info')}>Info</button>
-        <button onClick={() => t.toast('success', 'hook toast')}>Toast</button>
+        <button type="button" onClick={() => t.success('hook success')}>Success</button>
+        <button type="button" onClick={() => t.error('hook error')}>Error</button>
+        <button type="button" onClick={() => t.info('hook info')}>Info</button>
+        <button type="button" onClick={() => t.toast('success', 'hook toast')}>Toast</button>
       </div>
     );
   }

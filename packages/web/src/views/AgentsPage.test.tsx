@@ -79,7 +79,8 @@ vi.mock('@/components/ui/select', () => ({
     value?: string;
     onValueChange?: (v: string) => void;
   }) => (
-    <div data-testid="select" data-value={value} onClick={() => onValueChange?.('')}>
+    // biome-ignore lint/a11y/useKeyWithClickEvents: test-only mock
+    <div role="listbox" data-testid="select" data-value={value} onClick={() => onValueChange?.('')}>
       {children}
     </div>
   ),

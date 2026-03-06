@@ -108,7 +108,9 @@ vi.mock('@/components/ui/select', () => ({
     onValueChange?: (v: string) => void;
     disabled?: boolean;
   }) => (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: test-only mock
     <div
+      role="listbox"
       data-testid="select"
       data-value={value}
       data-disabled={disabled}
@@ -446,7 +448,7 @@ describe('AgentDetailPage', () => {
     await waitFor(() => {
       const agentsLink = screen.getByTestId('breadcrumb-Agents').querySelector('a');
       expect(agentsLink).not.toBeNull();
-      expect(agentsLink!.getAttribute('href')).toBe('/agents');
+      expect(agentsLink?.getAttribute('href')).toBe('/agents');
     });
   });
 
@@ -1379,7 +1381,7 @@ describe('AgentDetailPage', () => {
     });
     // Click Cancel in the dialog footer
     const cancelButtons = screen.getAllByText('Cancel');
-    fireEvent.click(cancelButtons[cancelButtons.length - 1]!);
+    fireEvent.click(cancelButtons[cancelButtons.length - 1]);
     await waitFor(() => {
       expect(screen.queryByTestId('dialog')).toBeNull();
     });
@@ -1442,7 +1444,7 @@ describe('AgentDetailPage', () => {
     const modelInput = await waitFor(() => screen.getByDisplayValue('claude-sonnet-4-20250514'));
     fireEvent.change(modelInput, { target: { value: '' } });
     fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]![0];
+    const callArgs = mutateFn.mock.calls[0]?.[0];
     expect(callArgs.config.model).toBeUndefined();
   });
 
@@ -1457,7 +1459,7 @@ describe('AgentDetailPage', () => {
     const maxTurnsInput = await waitFor(() => screen.getByDisplayValue('50'));
     fireEvent.change(maxTurnsInput, { target: { value: '' } });
     fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]![0];
+    const callArgs = mutateFn.mock.calls[0]?.[0];
     expect(callArgs.config.maxTurns).toBeUndefined();
   });
 
@@ -1478,7 +1480,7 @@ describe('AgentDetailPage', () => {
       expect(screen.getByDisplayValue('Be helpful')).toBeDefined();
     });
     fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]![0] as { config: Record<string, unknown> };
+    const callArgs = mutateFn.mock.calls[0]?.[0] as { config: Record<string, unknown> };
     expect(callArgs.config.systemPrompt).toBe('Be helpful');
   });
 
@@ -1498,7 +1500,7 @@ describe('AgentDetailPage', () => {
     const textarea = await waitFor(() => screen.getByDisplayValue('Old prompt'));
     fireEvent.change(textarea, { target: { value: '' } });
     fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]![0] as { config: Record<string, unknown> };
+    const callArgs = mutateFn.mock.calls[0]?.[0] as { config: Record<string, unknown> };
     expect(callArgs.config.systemPrompt).toBeUndefined();
   });
 
