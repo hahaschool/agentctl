@@ -1171,11 +1171,11 @@ describe('SessionsPage', () => {
   // Sort Order Changes
   // =========================================================================
 
-  it('sort order dropdown has all three options', () => {
+  it('sort order dropdown has all sort options', () => {
     renderSessions();
     const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
     const opts = Array.from(sortSelect.options).map((o) => o.value);
-    expect(opts).toEqual(['newest', 'oldest', 'status']);
+    expect(opts).toEqual(['newest', 'oldest', 'status', 'cost', 'duration']);
   });
 
   it('changing sort to oldest reverses session order', async () => {

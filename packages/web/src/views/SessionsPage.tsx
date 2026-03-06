@@ -46,7 +46,7 @@ const MODEL_OPTIONS = [
 ];
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
-type SortOrder = 'newest' | 'oldest' | 'status';
+type SortOrder = 'newest' | 'oldest' | 'status' | 'cost' | 'duration';
 type GroupBy = 'none' | 'project' | 'machine';
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
@@ -396,6 +396,18 @@ export function SessionsPage(): React.JSX.Element {
       result = [...result].sort(
         (a, b) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5),
       );
+    } else if (sortOrder === 'cost') {
+      result = [...result].sort(
+        (a, b) => (b.metadata?.costUsd ?? 0) - (a.metadata?.costUsd ?? 0),
+      );
+    } else if (sortOrder === 'duration') {
+      result = [...result].sort((a, b) => {
+        const endA = a.endedAt ?? a.lastHeartbeat ?? new Date().toISOString();
+        const endB = b.endedAt ?? b.lastHeartbeat ?? new Date().toISOString();
+        const durA = new Date(endA).getTime() - new Date(a.startedAt).getTime();
+        const durB = new Date(endB).getTime() - new Date(b.startedAt).getTime();
+        return durB - durA;
+      });
     }
 
     return result;
@@ -840,6 +852,8 @@ export function SessionsPage(): React.JSX.Element {
             <option value="newest">New</option>
             <option value="oldest">Old</option>
             <option value="status">Status</option>
+            <option value="cost">Cost</option>
+            <option value="duration">Duration</option>
           </select>
           <select
             value={groupBy}
