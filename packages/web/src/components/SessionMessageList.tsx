@@ -815,7 +815,7 @@ const MessageBlock = React.memo(function MessageBlock({
         <SubagentBlock
           content={message.content}
           toolName={message.toolName}
-          subagentId={(message as Record<string, unknown>).subagentId as string | undefined}
+          subagentId={message.subagentId}
           timestamp={message.timestamp}
         />
       );

@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import type { AgentRun } from '@/lib/api';
+import type { AgentConfig, AgentRun } from '@/lib/api';
 import { formatCost, formatDate, formatDuration, formatDurationMs } from '@/lib/format-utils';
 import {
   accountsQuery,
@@ -163,8 +163,8 @@ export default function AgentDetailPage(): React.JSX.Element {
     if (!editName.trim()) return;
 
     // Build config, merging new values with existing config
-    const existingConfig = (agent.data?.config ?? {}) as Record<string, unknown>;
-    const config: Record<string, unknown> = { ...existingConfig };
+    const existingConfig = agent.data?.config ?? {};
+    const config: AgentConfig = { ...existingConfig };
 
     if (editModel.trim()) {
       config.model = editModel.trim();

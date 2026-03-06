@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
+import type { AgentConfig } from './api';
 import { api } from './api';
 import { STORAGE_KEYS } from './storage-keys';
 
@@ -282,7 +283,7 @@ export function useUpdateAgent() {
       machineId?: string;
       type?: string;
       schedule?: string | null;
-      config?: Record<string, unknown>;
+      config?: AgentConfig;
     }) => api.updateAgent(id, body),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
@@ -345,7 +346,7 @@ export function useCreateAccount() {
 export function useUpdateAccount() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
+    mutationFn: ({ id, ...body }: { id: string } & Partial<Pick<import('./api').ApiAccount, 'name' | 'priority' | 'isActive'>>) =>
       api.updateAccount(id, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.accounts });

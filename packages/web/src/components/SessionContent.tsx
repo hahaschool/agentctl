@@ -498,7 +498,7 @@ export function SessionContent({
                       key={`${msg.type}-${String(i)}`}
                       content={msg.content}
                       toolName={msg.toolName}
-                      subagentId={(msg as Record<string, unknown>).subagentId as string | undefined}
+                      subagentId={msg.subagentId}
                       timestamp={msg.timestamp}
                     />
                   );

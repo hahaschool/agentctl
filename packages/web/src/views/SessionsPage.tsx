@@ -23,7 +23,7 @@ import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import type { ApiAccount, Session, SessionContentMessage } from '../lib/api';
+import type { AgentConfig, ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import { downloadCsv, formatDateTime, formatDuration, shortenPath } from '../lib/format-utils';
 import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '../lib/model-options';
@@ -393,7 +393,7 @@ export function SessionsPage(): React.JSX.Element {
   const handleConvertToAgent = useCallback(() => {
     if (!selected) return;
     const agentName = convertName.trim() || `agent-from-${selected.id.slice(0, 8)}`;
-    const config: Record<string, unknown> = {};
+    const config: AgentConfig = {};
     if (selected.model) config.model = selected.model;
 
     createAgent.mutate(
@@ -445,7 +445,7 @@ export function SessionsPage(): React.JSX.Element {
       selectedMessageIds: number[];
     }) => {
       if (!selected) return;
-      const agentConfig: Record<string, unknown> = {};
+      const agentConfig: AgentConfig = {};
       if (config.model) agentConfig.model = config.model;
       if (config.systemPrompt) agentConfig.systemPrompt = config.systemPrompt;
 
@@ -455,7 +455,7 @@ export function SessionsPage(): React.JSX.Element {
         .filter((msg): msg is SessionContentMessage => msg != null)
         .map((msg) => `[${msg.type}] ${msg.content}`)
         .join('\n\n');
-      if (contextMessages) agentConfig.context = contextMessages;
+      if (contextMessages) agentConfig.initialPrompt = contextMessages;
 
       createAgent.mutate(
         {

@@ -22,7 +22,7 @@ type StartAgentMessage = {
   agentId: string;
   prompt: string;
   machineId?: string;
-  config?: Record<string, unknown>;
+  config?: import('../lib/api').AgentConfig;
 };
 
 type StopAgentMessage = {

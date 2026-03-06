@@ -428,7 +428,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateAccount: (id: string, body: Record<string, unknown>) =>
+  updateAccount: (id: string, body: Partial<Pick<ApiAccount, 'name' | 'priority' | 'isActive'>>) =>
     request<ApiAccount>(`/api/settings/accounts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(body),
