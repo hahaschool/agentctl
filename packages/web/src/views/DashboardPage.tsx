@@ -723,7 +723,7 @@ function CostOverview({
   }[];
   agentCostBreakdown: { id: string; name: string; totalCostUsd: number }[];
   isLoading: boolean;
-}): React.JSX.Element {
+}): React.ReactNode {
   const totalCost = useMemo(
     () => sessionList.reduce((sum, s) => sum + (s.metadata?.costUsd ?? 0), 0),
     [sessionList],
