@@ -648,7 +648,8 @@ describe('AgentsPage', () => {
     });
     renderAgentsPage();
     await waitFor(() => {
-      expect(screen.getByTestId('confirm-button')).toBeDefined();
+      const confirmButtons = screen.getAllByTestId('confirm-button');
+      expect(confirmButtons.length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Stop')).toBeDefined();
     });
   });
@@ -700,9 +701,10 @@ describe('AgentsPage', () => {
     });
     renderAgentsPage();
     await waitFor(() => {
-      expect(screen.getByTestId('confirm-button')).toBeDefined();
+      // Card-level Stop button (text "Stop") — distinct from bulk "Stop All (N)"
+      expect(screen.getByText('Stop')).toBeDefined();
     });
-    fireEvent.click(screen.getByTestId('confirm-button'));
+    fireEvent.click(screen.getByText('Stop'));
     expect(mutateFn).toHaveBeenCalled();
   });
 

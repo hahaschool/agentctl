@@ -553,6 +553,41 @@ export function LogsPage(): React.JSX.Element {
                 </option>
               ))}
             </select>
+
+            {/* Export CSV */}
+            <button
+              type="button"
+              onClick={() => {
+                const actions = filteredActions;
+                if (actions.length === 0) return;
+                const header = 'timestamp,actionType,toolName,agentId,runId,durationMs,approvedBy\n';
+                const rows = actions.map((a) =>
+                  [
+                    a.timestamp ?? '',
+                    a.actionType,
+                    a.toolName ?? '',
+                    a.agentId ?? '',
+                    a.runId,
+                    String(a.durationMs ?? ''),
+                    a.approvedBy ?? '',
+                  ]
+                    .map((v) => `"${v.replace(/"/g, '""')}"`)
+                    .join(','),
+                );
+                const csv = header + rows.join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              disabled={filteredActions.length === 0}
+              className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
+            >
+              Export CSV
+            </button>
           </div>
 
           {/* Action type filter tabs */}

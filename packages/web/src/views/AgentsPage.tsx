@@ -428,6 +428,39 @@ export function AgentsPage(): React.JSX.Element {
     });
   };
 
+  // -- Stop all running agents --
+  const [stoppingAll, setStoppingAll] = useState(false);
+  const runningAgents = useMemo(() => agentList.filter((a) => a.status === 'running'), [agentList]);
+
+  const handleStopAll = (): void => {
+    if (runningAgents.length === 0) return;
+    setStoppingAll(true);
+    let completed = 0;
+    let errors = 0;
+    for (const agent of runningAgents) {
+      stopAgent.mutate(agent.id, {
+        onSuccess: () => {
+          completed++;
+          if (completed + errors === runningAgents.length) {
+            setStoppingAll(false);
+            if (errors === 0) {
+              toast.success(`Stopped ${completed} agent${completed !== 1 ? 's' : ''}`);
+            } else {
+              toast.error(`Stopped ${completed}, failed ${errors}`);
+            }
+          }
+        },
+        onError: (err) => {
+          errors++;
+          if (completed + errors === runningAgents.length) {
+            setStoppingAll(false);
+            toast.error(`Stopped ${completed}, failed ${errors}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        },
+      });
+    }
+  };
+
   const isCreateDisabled = createAgent.isPending || !createPrompt.trim() || !createMachineId;
 
   return (
@@ -1057,6 +1090,19 @@ export function AgentsPage(): React.JSX.Element {
           <option value="lastRun">{'\u2193'} Last run</option>
           <option value="cost">{'\u2193'} Total cost</option>
         </select>
+        {runningAgents.length > 0 && (
+          <ConfirmButton
+            label={stoppingAll ? 'Stopping...' : `Stop All (${runningAgents.length})`}
+            confirmLabel={`Stop ${runningAgents.length} running?`}
+            onConfirm={handleStopAll}
+            disabled={stoppingAll}
+            className={cn(
+              'px-2.5 py-1.5 text-[12px] font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md transition-colors whitespace-nowrap',
+              stoppingAll ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/60',
+            )}
+            confirmClassName="px-2.5 py-1.5 text-[12px] font-medium bg-red-700 text-white border border-red-600 rounded-md cursor-pointer animate-pulse whitespace-nowrap"
+          />
+        )}
         <span className="text-[11px] text-muted-foreground ml-auto">
           {filteredAgents.length}/{agentList.length} agents
         </span>
