@@ -34,7 +34,7 @@ import type {
 import { api } from '../lib/api';
 import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
-import { accountsQuery, queryKeys, sessionsQuery } from '../lib/queries';
+import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -144,6 +144,12 @@ export function SessionsPage(): React.JSX.Element {
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Convert session to agent
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
+  const [convertName, setConvertName] = useState('');
+  const [convertType, setConvertType] = useState('autonomous');
+  const createAgent = useCreateAgent();
 
   // Bulk selection state
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -425,6 +431,8 @@ export function SessionsPage(): React.JSX.Element {
   const handleSend = useCallback(async () => {
     if (!selected || !prompt.trim()) return;
     const messageText = prompt.trim();
+    // Clear prompt and show optimistic message immediately — don't wait for API
+    setPrompt('');
     setSending(true);
     setLastSentMessage({ text: messageText, ts: Date.now() });
     try {
@@ -433,7 +441,6 @@ export function SessionsPage(): React.JSX.Element {
       } else {
         await api.resumeSession(selected.id, messageText);
       }
-      setPrompt('');
       // Only invalidate queries — don't clear the session list (causes "0 sessions" flash)
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     } catch (err) {
@@ -453,6 +460,34 @@ export function SessionsPage(): React.JSX.Element {
       toast.error(err instanceof Error ? err.message : String(err));
     }
   }, [selected, resetAndInvalidateSessions, toast]);
+
+  const handleConvertToAgent = useCallback(() => {
+    if (!selected) return;
+    const agentName = convertName.trim() || `agent-from-${selected.id.slice(0, 8)}`;
+    const config: Record<string, unknown> = {};
+    if (selected.model) config.model = selected.model;
+
+    createAgent.mutate(
+      {
+        name: agentName,
+        machineId: selected.machineId,
+        type: convertType,
+        ...(selected.projectPath ? { projectPath: selected.projectPath } : {}),
+        ...(Object.keys(config).length > 0 ? { config } : {}),
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Agent "${agentName}" created from session`);
+          setShowConvertDialog(false);
+          setConvertName('');
+          setConvertType('autonomous');
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : String(err));
+        },
+      },
+    );
+  }, [selected, convertName, convertType, createAgent, toast]);
 
   // Keyboard navigation: arrow up/down to move through sessions, Escape to deselect
   const handleListKeyDown = useCallback(
@@ -962,6 +997,16 @@ export function SessionsPage(): React.JSX.Element {
                     Fork
                   </Link>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConvertName(selected.agentName ?? `agent-from-${selected.id.slice(0, 8)}`);
+                    setShowConvertDialog(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-emerald-900/50 text-emerald-300 border border-emerald-800/50 rounded-sm text-xs font-medium cursor-pointer hover:bg-emerald-900"
+                >
+                  Create Agent
+                </button>
                 {(selected.status === 'active' || selected.status === 'starting') && (
                   <ConfirmButton
                     label="End Session"
@@ -1031,6 +1076,58 @@ export function SessionsPage(): React.JSX.Element {
                 </div>
               )}
             </div>
+
+            {/* Convert to Agent dialog */}
+            {showConvertDialog && (
+              <div className="px-5 py-4 border-b border-border bg-emerald-950/20">
+                <div className="text-xs font-semibold text-emerald-400 mb-3">Create Agent from Session</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-1">Agent Name</label>
+                    <input
+                      type="text"
+                      value={convertName}
+                      onChange={(e) => setConvertName(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
+                      placeholder="my-agent"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-1">Agent Type</label>
+                    <select
+                      value={convertType}
+                      onChange={(e) => setConvertType(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
+                    >
+                      <option value="autonomous">Autonomous (long-running)</option>
+                      <option value="ad-hoc">Ad-hoc (one-shot)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="text-[11px] text-muted-foreground mb-3 space-y-0.5">
+                  <div>Machine: <span className="text-foreground font-mono">{selected.machineId}</span></div>
+                  {selected.projectPath && <div>Project: <span className="text-foreground font-mono">{selected.projectPath}</span></div>}
+                  {selected.model && <div>Model: <span className="text-foreground">{selected.model}</span></div>}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleConvertToAgent}
+                    disabled={createAgent.isPending}
+                    className="px-3.5 py-1.5 bg-emerald-700 text-white rounded-sm text-xs font-medium cursor-pointer hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    {createAgent.isPending ? 'Creating...' : 'Create Agent'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowConvertDialog(false)}
+                    className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer hover:bg-accent/10"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Session content viewer */}
             {selected.claudeSessionId && selected.machineId && (
@@ -1364,6 +1461,9 @@ function SessionContent({
   fetchLatestRef.current = fetchLatest;
 
   // Fetch older messages (prepend to existing)
+  // Track whether we're prepending (to suppress auto-scroll to bottom)
+  const prependingRef = useRef(false);
+
   const fetchOlder = useCallback(async () => {
     if (loadingOlder || allMessages.length >= totalMessages) return;
     setLoadingOlder(true);
@@ -1377,16 +1477,19 @@ function SessionContent({
       });
       setTotalMessages(result.totalMessages);
       if (result.messages.length > 0) {
-        // Preserve scroll position by measuring before/after
         const el = scrollRef.current;
         const prevScrollHeight = el?.scrollHeight ?? 0;
+        const prevScrollTop = el?.scrollTop ?? 0;
+        prependingRef.current = true;
         setAllMessages((prev) => [...result.messages, ...prev]);
-        // Restore scroll position after prepend
+        // Use double-RAF to ensure React has committed the DOM
         requestAnimationFrame(() => {
-          if (el) {
-            const newScrollHeight = el.scrollHeight;
-            el.scrollTop += newScrollHeight - prevScrollHeight;
-          }
+          requestAnimationFrame(() => {
+            if (el) {
+              el.scrollTop = prevScrollTop + (el.scrollHeight - prevScrollHeight);
+            }
+            prependingRef.current = false;
+          });
         });
       }
     } catch (err) {
@@ -1421,9 +1524,9 @@ function SessionContent({
     };
   }, [isActive, fetchLatest]);
 
-  // Auto-scroll when new messages arrive (only if autoScroll is true)
+  // Auto-scroll when new messages arrive at the END (not when prepending older)
   useEffect(() => {
-    if (allMessages.length > 0 && scrollRef.current) {
+    if (allMessages.length > 0 && scrollRef.current && !prependingRef.current) {
       const newCount = allMessages.length;
       if (newCount > prevMsgCountRef.current && autoScroll) {
         scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -1432,14 +1535,22 @@ function SessionContent({
     }
   }, [allMessages.length, autoScroll]);
 
-  // Clear optimistic messages when they appear in the real data
+  // Clear optimistic messages when they appear in real data (compare against latest human messages only)
+  const prevHumanCountRef = useRef(0);
   useEffect(() => {
-    if (allMessages.length === 0 || optimisticMessages.length === 0) return;
-    const realTexts = allMessages
-      .filter((m) => m.type === 'human')
-      .map((m) => (m.content ?? '').trim());
+    if (optimisticMessages.length === 0) return;
+    const humanMessages = allMessages.filter((m) => m.type === 'human');
+    const newHumanCount = humanMessages.length;
+    // Only check when new human messages appeared
+    if (newHumanCount <= prevHumanCountRef.current) {
+      prevHumanCountRef.current = newHumanCount;
+      return;
+    }
+    prevHumanCountRef.current = newHumanCount;
+    // Check the latest few human messages (new ones since last check)
+    const recentHumanTexts = humanMessages.slice(-5).map((m) => (m.content ?? '').trim());
     setOptimisticMessages((prev) =>
-      prev.filter((om) => !realTexts.includes(om.text.trim())),
+      prev.filter((om) => !recentHumanTexts.includes(om.text.trim())),
     );
   }, [allMessages, optimisticMessages.length]);
 
@@ -1566,7 +1677,7 @@ function SessionContent({
 
       {/* Content */}
       <div className="relative flex-1 min-h-0">
-        <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-auto px-5 py-2 scroll-smooth">
+        <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-auto px-5 py-2">
           {loading && (
             <div className="p-4 space-y-3">
               {[1, 2, 3, 4].map((i) => (
