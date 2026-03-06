@@ -528,16 +528,21 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Filter bar */}
       <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border/50 rounded-lg mb-4">
-        <input
-          ref={searchRef}
-          id="discover-search"
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search sessions... (press /)"
-          aria-label="Search sessions"
-          className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-md text-[13px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-        />
+        <div className="relative flex-1 min-w-[140px]">
+          <input
+            ref={searchRef}
+            id="discover-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search sessions..."
+            aria-label="Search sessions"
+            className="w-full px-2.5 py-1.5 pr-10 bg-background text-foreground border border-border rounded-md text-[13px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          />
+          {!search && (
+            <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-muted border border-border/50 rounded pointer-events-none">/</kbd>
+          )}
+        </div>
         <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
           <span className="text-muted-foreground">Min msgs:</span>
           <select

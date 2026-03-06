@@ -513,11 +513,14 @@ export function LogsPage(): React.JSX.Element {
                 placeholder="Search actions, tools, agents..."
                 value={auditSearch}
                 onChange={(e) => setAuditSearch(e.target.value)}
-                className="w-full px-3 py-1.5 pl-8 text-[13px] bg-card border border-border/50 rounded-md placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                className="w-full px-3 py-1.5 pl-8 pr-10 text-[13px] bg-card border border-border/50 rounded-md placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
               />
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[13px]">
                 &#x2315;
               </span>
+              {!auditSearch && (
+                <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">/</kbd>
+              )}
             </div>
 
             {/* Agent filter */}
@@ -555,39 +558,41 @@ export function LogsPage(): React.JSX.Element {
             </select>
 
             {/* Export CSV */}
-            <button
-              type="button"
-              onClick={() => {
-                const actions = filteredActions;
-                if (actions.length === 0) return;
-                const header = 'timestamp,actionType,toolName,agentId,runId,durationMs,approvedBy\n';
-                const rows = actions.map((a) =>
-                  [
-                    a.timestamp ?? '',
-                    a.actionType,
-                    a.toolName ?? '',
-                    a.agentId ?? '',
-                    a.runId,
-                    String(a.durationMs ?? ''),
-                    a.approvedBy ?? '',
-                  ]
-                    .map((v) => `"${v.replace(/"/g, '""')}"`)
-                    .join(','),
-                );
-                const csv = header + rows.join('\n');
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-              disabled={filteredActions.length === 0}
-              className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
-            >
-              Export CSV
-            </button>
+            <SimpleTooltip content={filteredActions.length === 0 ? 'No actions to export' : 'Download filtered actions as CSV'}>
+              <button
+                type="button"
+                onClick={() => {
+                  const actions = filteredActions;
+                  if (actions.length === 0) return;
+                  const header = 'timestamp,actionType,toolName,agentId,runId,durationMs,approvedBy\n';
+                  const rows = actions.map((a) =>
+                    [
+                      a.timestamp ?? '',
+                      a.actionType,
+                      a.toolName ?? '',
+                      a.agentId ?? '',
+                      a.runId,
+                      String(a.durationMs ?? ''),
+                      a.approvedBy ?? '',
+                    ]
+                      .map((v) => `"${v.replace(/"/g, '""')}"`)
+                      .join(','),
+                  );
+                  const csv = header + rows.join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                disabled={filteredActions.length === 0}
+                className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
+              >
+                Export CSV
+              </button>
+            </SimpleTooltip>
           </div>
 
           {/* Action type filter tabs */}

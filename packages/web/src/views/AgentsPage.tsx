@@ -1196,7 +1196,7 @@ export function AgentsPage(): React.JSX.Element {
           <EmptyState icon={Filter} title="No agents match the current filters" />
         )
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 transition-opacity duration-200', agents.isFetching && !agents.isLoading && 'opacity-60')}>
           {filteredAgents.map((agent) => (
             <div key={agent.id} className="p-4 bg-card border border-border/50 rounded-lg transition-colors hover:border-border">
               {/* Card header: name + status */}

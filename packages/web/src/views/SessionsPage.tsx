@@ -684,15 +684,20 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Search */}
         <div className="px-3 py-1.5 border-b border-border">
-          <input
-            id="session-search"
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search sessions..."
-            aria-label="Search sessions"
-            className="w-full h-7 px-2.5 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
-          />
+          <div className="relative">
+            <input
+              id="session-search"
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sessions..."
+              aria-label="Search sessions"
+              className="w-full h-7 px-2.5 pr-12 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
+            />
+            {!searchQuery && (
+              <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">/</kbd>
+            )}
+          </div>
         </div>
 
         {/* Status tabs */}
@@ -942,7 +947,7 @@ export function SessionsPage(): React.JSX.Element {
         )}
 
         <div
-          className="flex-1 overflow-auto"
+          className={cn('flex-1 overflow-auto transition-opacity duration-200', sessions.isFetching && !sessions.isLoading && 'opacity-60')}
           role="listbox"
           tabIndex={0}
           onKeyDown={handleListKeyDown}

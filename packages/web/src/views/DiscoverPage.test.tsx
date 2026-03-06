@@ -479,7 +479,7 @@ describe('DiscoverPage', () => {
 
   it('shows search placeholder text', () => {
     renderDiscover();
-    const searchInput = screen.getByPlaceholderText('Search sessions... (press /)');
+    const searchInput = screen.getByPlaceholderText('Search sessions...');
     expect(searchInput).toBeDefined();
   });
 
