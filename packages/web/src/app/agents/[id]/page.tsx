@@ -265,8 +265,8 @@ export default function AgentDetailPage(): React.JSX.Element {
               confirmLabel="Confirm Stop"
               onConfirm={handleStop}
               disabled={stopAgent.isPending}
-              className="px-3 py-1.5 text-sm font-medium rounded-sm bg-destructive text-destructive-foreground cursor-pointer"
-              confirmClassName="px-3 py-1.5 text-sm font-medium rounded-sm bg-red-600 text-white animate-pulse cursor-pointer"
+              className="px-3 py-1.5 text-sm font-medium rounded-md bg-destructive text-destructive-foreground cursor-pointer"
+              confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
             />
           ) : promptVisible ? (
             <div className="flex gap-2 items-center">
@@ -283,7 +283,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 }}
                 placeholder="Enter prompt..."
                 aria-label="Prompt to start agent"
-                className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[200px]"
+                className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[200px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
               />
               <Button
                 size="sm"
@@ -398,7 +398,7 @@ export default function AgentDetailPage(): React.JSX.Element {
             <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
               Last Run Cost
             </div>
-            <div className="text-2xl font-bold text-foreground">{formatCost(data.lastCostUsd)}</div>
+            <div className="text-2xl font-semibold text-foreground">{formatCost(data.lastCostUsd)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -406,7 +406,7 @@ export default function AgentDetailPage(): React.JSX.Element {
             <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
               Total Cost
             </div>
-            <div className="text-2xl font-bold text-foreground">
+            <div className="text-2xl font-semibold text-foreground">
               {formatCost(data.totalCostUsd)}
             </div>
           </CardContent>
@@ -487,7 +487,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               {/* Mobile card layout */}
               <div className="sm:hidden space-y-2">
                 {runList.map((run) => (
-                  <div key={run.id} className="rounded-lg border border-border/50 p-3 space-y-1.5">
+                  <div key={run.id} className="rounded-lg border border-border/50 p-3 space-y-1.5 transition-colors hover:border-border">
                     <div className="flex items-center justify-between">
                       <StatusBadge status={run.status} />
                       <span className="text-xs font-mono text-muted-foreground">

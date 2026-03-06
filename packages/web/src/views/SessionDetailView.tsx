@@ -437,7 +437,7 @@ function SessionHeader({
               type="button"
               onClick={onToggleFiles}
               className={cn(
-                'px-3 py-1 border rounded-sm text-xs cursor-pointer',
+                'px-3 py-1 border rounded-md text-xs cursor-pointer',
                 showFiles
                   ? 'bg-primary text-primary-foreground border-primary hover:opacity-90'
                   : 'bg-muted text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground',
@@ -451,12 +451,12 @@ function SessionHeader({
             <button
               type="button"
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
+              className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
             >
               Export
             </button>
             {showExportMenu && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-sm shadow-lg min-w-[160px]">
+              <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-md shadow-lg min-w-[160px]">
                 <button
                   type="button"
                   onClick={() => {
@@ -484,7 +484,7 @@ function SessionHeader({
             <button
               type="button"
               onClick={() => setShowFork(!showFork)}
-              className="px-3 py-1 bg-blue-900/50 text-blue-300 border border-blue-800/50 rounded-sm text-xs cursor-pointer hover:bg-blue-900"
+              className="px-3 py-1 bg-blue-900/50 text-blue-300 border border-blue-800/50 rounded-md text-xs cursor-pointer hover:bg-blue-900"
             >
               Fork
             </button>
@@ -494,8 +494,8 @@ function SessionHeader({
               label="End Session"
               confirmLabel="Confirm End?"
               onConfirm={handleEnd}
-              className="px-3 py-1 bg-red-900/50 text-red-300 border border-red-800/50 rounded-sm text-xs cursor-pointer hover:bg-red-900"
-              confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-sm text-xs cursor-pointer animate-pulse"
+              className="px-3 py-1 bg-red-900/50 text-red-300 border border-red-800/50 rounded-md text-xs cursor-pointer hover:bg-red-900"
+              confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-md text-xs cursor-pointer animate-pulse"
             />
           )}
         </div>
@@ -517,13 +517,13 @@ function SessionHeader({
                 }
               }}
               placeholder="Prompt for the forked session..."
-              className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
+              className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-[12px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             />
             <button
               type="button"
               onClick={handleFork}
               disabled={!forkPrompt.trim() || forkSession.isPending}
-              className="px-3 py-1.5 bg-blue-700 text-white rounded-sm text-xs cursor-pointer disabled:opacity-50"
+              className="px-3 py-1.5 bg-blue-700 text-white rounded-md text-xs cursor-pointer disabled:opacity-50"
             >
               {forkSession.isPending ? 'Forking...' : 'Fork Session'}
             </button>
@@ -532,11 +532,11 @@ function SessionHeader({
             const errMsg = (session.metadata?.errorMessage ?? '').toLowerCase();
             const isQuotaOrAuth = /quota|rate.?limit|authentication|unauthorized|key\b/.test(errMsg);
             return isQuotaOrAuth ? (
-              <div className="px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-sm text-[11px] text-red-300">
+              <div className="px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-md text-[11px] text-red-300">
                 This session failed due to quota or authentication issues. Resolve the underlying issue before forking.
               </div>
             ) : (
-              <div className="px-3 py-2 bg-yellow-900/30 border border-yellow-700/50 rounded-sm text-[11px] text-yellow-300">
+              <div className="px-3 py-2 bg-yellow-900/30 border border-yellow-700/50 rounded-md text-[11px] text-yellow-300">
                 This session ended with an error. The forked session may also fail if the error is unresolved.
               </div>
             );
@@ -603,7 +603,7 @@ function SessionHeader({
 
       {/* Error details */}
       {session.status === 'error' && (
-        <div className="mt-2 px-3 py-2 rounded-sm bg-red-950/50 border border-red-900/50 text-[12px] text-red-300 space-y-1">
+        <div className="mt-2 px-3 py-2 rounded-md bg-red-950/50 border border-red-900/50 text-[12px] text-red-300 space-y-1">
           <div>
             <span className="font-semibold text-red-400">Error: </span>
             {session.metadata?.errorMessage ?? 'Session ended with an error (no details available)'}
@@ -619,7 +619,7 @@ function SessionHeader({
 
       {/* Starting indicator */}
       {session.status === 'starting' && (
-        <div className="mt-2 px-3 py-2 rounded-sm bg-yellow-950/40 border border-yellow-900/40 text-[12px] text-yellow-300 animate-pulse">
+        <div className="mt-2 px-3 py-2 rounded-md bg-yellow-950/40 border border-yellow-900/40 text-[12px] text-yellow-300 animate-pulse">
           Waiting for worker to start session...
         </div>
       )}
@@ -646,7 +646,7 @@ function ViewModeToggle({
   onViewModeChange: (mode: 'messages' | 'terminal') => void;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center rounded-sm border border-border overflow-hidden">
+    <div className="flex items-center rounded-md border border-border overflow-hidden">
       <button
         type="button"
         onClick={() => onViewModeChange('messages')}
@@ -824,7 +824,7 @@ function MessageList({
           aria-label={showThinking ? 'Hide thinking' : 'Show thinking'}
           aria-pressed={showThinking}
           className={cn(
-            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
+            'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showThinking ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
@@ -836,7 +836,7 @@ function MessageList({
           aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
           aria-pressed={showTools}
           className={cn(
-            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
+            'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showTools ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
@@ -848,7 +848,7 @@ function MessageList({
           aria-label={showProgress ? 'Hide progress' : 'Show progress'}
           aria-pressed={showProgress}
           className={cn(
-            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
+            'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showProgress ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
@@ -860,7 +860,7 @@ function MessageList({
           aria-label={renderMarkdown ? 'Show raw text' : 'Render markdown'}
           aria-pressed={renderMarkdown}
           className={cn(
-            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
+            'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             renderMarkdown ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
@@ -879,7 +879,7 @@ function MessageList({
               }
             }}
             placeholder="Search messages..."
-            className="px-2 py-0.5 bg-muted text-foreground border border-border rounded-sm text-[11px] outline-none w-[140px] placeholder:text-muted-foreground/50"
+            className="px-2 py-0.5 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none w-[140px] placeholder:text-muted-foreground/50 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           />
           {search && (
             <span className="text-[10px] text-muted-foreground whitespace-nowrap">
@@ -901,7 +901,7 @@ function MessageList({
               }
             }}
             aria-label="Jump to bottom of conversation"
-            className="ml-auto px-2 py-0.5 bg-primary text-primary-foreground rounded-sm text-[10px] cursor-pointer"
+            className="ml-auto px-2 py-0.5 bg-primary text-primary-foreground rounded-md text-[10px] cursor-pointer"
           >
             {isActive ? 'Follow output' : 'Jump to bottom'}
           </button>
@@ -1453,7 +1453,7 @@ function MessageInput({ session, onOptimisticSend }: { session: Session; onOptim
   if (sessionLost) {
     return (
       <div className="px-5 py-3 border-t border-border bg-card shrink-0">
-        <div className="flex items-center gap-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-sm">
+        <div className="flex items-center gap-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
           <span className="text-yellow-500 text-sm font-medium">!</span>
           <div className="flex-1 text-xs text-muted-foreground">
             This session was lost due to a worker restart. You can fork this session or create a new
@@ -1488,7 +1488,7 @@ function MessageInput({ session, onOptimisticSend }: { session: Session; onOptim
           <select
             value={resumeModel}
             onChange={(e) => setResumeModel(e.target.value)}
-            className="px-2 py-1 bg-muted text-foreground border border-border rounded-sm text-[11px] outline-none"
+            className="px-2 py-1 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             {RESUME_MODEL_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -1509,7 +1509,7 @@ function MessageInput({ session, onOptimisticSend }: { session: Session; onOptim
           onKeyDown={handleKeyDown}
           placeholder={isActive ? 'Send a message...' : 'Resume session with a prompt...'}
           rows={1}
-          className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none resize-none min-h-[36px] max-h-[120px]"
+          className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none resize-none min-h-[36px] max-h-[120px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           disabled={isSending}
         />
         <button
@@ -1517,7 +1517,7 @@ function MessageInput({ session, onOptimisticSend }: { session: Session; onOptim
           onClick={handleSubmit}
           disabled={!message.trim() || isSending}
           className={cn(
-            'px-4 py-2 rounded-sm text-xs font-medium transition-colors',
+            'px-4 py-2 rounded-md text-xs font-medium transition-colors',
             message.trim() && !isSending
               ? 'bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90'
               : 'bg-muted text-muted-foreground cursor-not-allowed',

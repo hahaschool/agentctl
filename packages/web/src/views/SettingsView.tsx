@@ -33,7 +33,7 @@ function SettingsGroup({
         <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         {description && <p className="text-[13px] text-muted-foreground mt-1">{description}</p>}
       </div>
-      <div className="rounded-lg border border-border/50 bg-card/50 p-5 space-y-6">{children}</div>
+      <div className="rounded-lg border border-border/50 bg-card/50 p-5 space-y-6 transition-colors hover:border-border">{children}</div>
     </section>
   );
 }

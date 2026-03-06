@@ -82,7 +82,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
         <div className="space-y-4">
           {/* Existing mappings table */}
           {mappings.data && mappings.data.length > 0 ? (
-            <div className="border border-border/50 rounded-lg overflow-hidden">
+            <div className="border border-border/50 rounded-lg overflow-hidden transition-colors hover:border-border">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">

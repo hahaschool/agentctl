@@ -762,7 +762,7 @@ export function SessionsPage(): React.JSX.Element {
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
             aria-label="Sort order"
-            className="h-5 px-1 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer"
+            className="h-5 px-1 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             <option value="newest">New</option>
             <option value="oldest">Old</option>
@@ -772,7 +772,7 @@ export function SessionsPage(): React.JSX.Element {
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
             aria-label="Group by"
-            className="h-6 px-1.5 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer"
+            className="h-6 px-1.5 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             <option value="none">Flat</option>
             <option value="project">By Project</option>
@@ -1289,7 +1289,7 @@ export function SessionsPage(): React.JSX.Element {
                     <select
                       value={resumeModel}
                       onChange={(e) => setResumeModel(e.target.value)}
-                      className="px-2 h-7 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                      className="px-2 h-7 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                     >
                       {MODEL_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -1412,7 +1412,7 @@ function SessionListItem({
       id={`session-${s.id}`}
       aria-selected={isSelected}
       className={cn(
-        'flex w-full text-left border-b border-border transition-all duration-200',
+        'flex w-full text-left border-b border-border transition-colors hover:border-border',
         isSelected ? 'bg-accent/15' : 'bg-transparent hover:bg-accent/8',
         s.status === 'error'
           ? 'border-l-[3px] border-l-red-500'
@@ -1522,7 +1522,7 @@ function DetailRow({
             onClick={handleCopy}
             title={copied ? 'Copied!' : 'Copy to clipboard'}
             className={cn(
-              'shrink-0 px-1 py-px text-[10px] border-0 rounded-sm cursor-pointer transition-opacity duration-150',
+              'shrink-0 px-1 py-px text-[10px] border-0 rounded-md cursor-pointer transition-opacity duration-150',
               copied
                 ? 'text-green-500 bg-muted opacity-100'
                 : 'text-muted-foreground bg-transparent opacity-0 group-hover:opacity-70 hover:!opacity-100',
