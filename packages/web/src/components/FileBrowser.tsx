@@ -288,6 +288,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
           />
           <button
             type="submit"
+            aria-label="Navigate to path"
             className="px-2 py-1 bg-primary text-primary-foreground rounded-md text-xs cursor-pointer hover:opacity-90"
           >
             Go
@@ -361,6 +362,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
                 }}
                 className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none text-sm"
                 title="Close file"
+                aria-label="Close file"
               >
                 x
               </button>
