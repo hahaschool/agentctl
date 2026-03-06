@@ -53,6 +53,10 @@ export function DashboardPage(): React.JSX.Element {
   const agentsRegistered = agentList.length;
   const activeRuns = Number(metricsData.agentctl_agents_active ?? 0);
   const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
+  const totalAgentCost = useMemo(
+    () => agentList.reduce((sum, a) => sum + (a.totalCostUsd ?? 0), 0),
+    [agentList],
+  );
 
   // Active sessions (running or active status)
   const activeSessions = sessionList.filter((s) => s.status === 'running' || s.status === 'active');
@@ -219,6 +223,15 @@ export function DashboardPage(): React.JSX.Element {
           value={String(activeSessionCount)}
           sublabel={`${sessionList.length} total`}
         />
+        <StatCard
+          label="Total Cost"
+          value={formatCost(totalAgentCost)}
+          sublabel={
+            agentCostBreakdown.length > 0
+              ? `top: ${agentCostBreakdown[0]?.name ?? 'N/A'}`
+              : undefined
+          }
+        />
       </div>
 
       {/* Two-column layout: Recent Sessions Activity + Machine Status */}
@@ -258,7 +271,7 @@ export function DashboardPage(): React.JSX.Element {
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
                     {session?.model && (
-                      <span className="font-mono bg-muted px-1.5 py-px rounded text-[10px]">
+                      <span className="font-mono bg-purple-500/15 text-purple-400 px-1.5 py-px rounded text-[10px]">
                         {session.model}
                       </span>
                     )}
