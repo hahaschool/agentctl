@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  downloadCsv,
   escapeCsvValue,
   formatCost,
   formatDuration,
@@ -313,6 +314,40 @@ describe('escapeCsvValue', () => {
 
   it('handles number values', () => {
     expect(escapeCsvValue(42)).toBe('42');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// downloadCsv
+// ---------------------------------------------------------------------------
+
+describe('downloadCsv', () => {
+  it('creates a CSV blob and triggers download', () => {
+    const clicks: string[] = [];
+    const revokedUrls: string[] = [];
+
+    const mockElement = {
+      href: '',
+      download: '',
+      click: () => clicks.push('clicked'),
+    };
+
+    vi.spyOn(document, 'createElement').mockReturnValue(mockElement as unknown as HTMLElement);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-url');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => revokedUrls.push(url));
+
+    downloadCsv(
+      ['name', 'value'],
+      [['Alice', 42], ['Bob, Jr', null]],
+      'test.csv',
+    );
+
+    expect(clicks).toHaveLength(1);
+    expect(mockElement.download).toBe('test.csv');
+    expect(mockElement.href).toBe('blob:test-url');
+    expect(revokedUrls).toEqual(['blob:test-url']);
+
+    vi.restoreAllMocks();
   });
 });
 

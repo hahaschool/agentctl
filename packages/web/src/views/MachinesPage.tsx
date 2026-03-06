@@ -19,7 +19,7 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Machine } from '../lib/api';
-import { formatDate, isStaleHeartbeat } from '../lib/format-utils';
+import { downloadCsv, formatDate, isStaleHeartbeat } from '../lib/format-utils';
 import { machinesQuery } from '../lib/queries';
 
 type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
@@ -164,20 +164,11 @@ export function MachinesPage(): React.JSX.Element {
           type="button"
           onClick={() => {
             if (filteredList.length === 0) return;
-            const header = 'hostname,id,status,os,arch,tailscaleIp,lastHeartbeat\n';
-            const rows = filteredList.map((m) =>
-              [m.hostname, m.id, m.status, m.os, m.arch, m.tailscaleIp ?? '', m.lastHeartbeat ?? '']
-                .map((v) => `"${v.replace(/"/g, '""')}"`)
-                .join(','),
+            downloadCsv(
+              ['hostname', 'id', 'status', 'os', 'arch', 'tailscaleIp', 'lastHeartbeat'],
+              filteredList.map((m) => [m.hostname, m.id, m.status, m.os, m.arch, m.tailscaleIp, m.lastHeartbeat]),
+              `machines-${new Date().toISOString().slice(0, 10)}.csv`,
             );
-            const csv = header + rows.join('\n');
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `machines-${new Date().toISOString().slice(0, 10)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
           }}
           disabled={filteredList.length === 0}
           className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"

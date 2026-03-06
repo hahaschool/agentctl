@@ -159,6 +159,24 @@ export function escapeCsvValue(value: string | number | null | undefined): strin
   return str;
 }
 
+/** Build a CSV string from headers and rows, and trigger a browser download. */
+export function downloadCsv(
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+  filename: string,
+): void {
+  const headerLine = headers.join(',');
+  const dataLines = rows.map((row) => row.map(escapeCsvValue).join(','));
+  const csv = [headerLine, ...dataLines].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /**
  * Recency Tailwind class for activity dots.
  * Returns a `bg-*` class instead of a hex color string.

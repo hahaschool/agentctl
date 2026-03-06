@@ -18,7 +18,7 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AuditAction } from '../lib/api';
-import { formatDateTime, formatDurationMs, formatNumber, formatTime } from '../lib/format-utils';
+import { downloadCsv, formatDateTime, formatDurationMs, formatNumber, formatTime } from '../lib/format-utils';
 import {
   agentsQuery,
   auditQuery,
@@ -614,29 +614,11 @@ export function LogsPage(): React.JSX.Element {
                 onClick={() => {
                   const actions = sortedActions;
                   if (actions.length === 0) return;
-                  const header =
-                    'timestamp,actionType,toolName,agentId,runId,durationMs,approvedBy\n';
-                  const rows = actions.map((a) =>
-                    [
-                      a.timestamp ?? '',
-                      a.actionType,
-                      a.toolName ?? '',
-                      a.agentId ?? '',
-                      a.runId,
-                      String(a.durationMs ?? ''),
-                      a.approvedBy ?? '',
-                    ]
-                      .map((v) => `"${v.replace(/"/g, '""')}"`)
-                      .join(','),
+                  downloadCsv(
+                    ['timestamp', 'actionType', 'toolName', 'agentId', 'runId', 'durationMs', 'approvedBy'],
+                    actions.map((a) => [a.timestamp, a.actionType, a.toolName, a.agentId, a.runId, a.durationMs, a.approvedBy]),
+                    `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`,
                   );
-                  const csv = header + rows.join('\n');
-                  const blob = new Blob([csv], { type: 'text/csv' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
                 }}
                 disabled={sortedActions.length === 0}
                 className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"

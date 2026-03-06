@@ -37,7 +37,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Agent, Machine } from '../lib/api';
-import { formatCost } from '../lib/format-utils';
+import { downloadCsv, formatCost } from '../lib/format-utils';
 import {
   agentsQuery,
   machinesQuery,
@@ -1150,29 +1150,11 @@ export function AgentsPage(): React.JSX.Element {
             onClick={() => {
               const agents = filteredAgents;
               if (agents.length === 0) return;
-              const header = 'name,id,type,status,machineId,projectPath,lastRunAt,totalCostUsd\n';
-              const rows = agents.map((a) =>
-                [
-                  a.name,
-                  a.id,
-                  a.type,
-                  a.status,
-                  a.machineId,
-                  a.projectPath ?? '',
-                  a.lastRunAt ?? '',
-                  String(a.totalCostUsd ?? ''),
-                ]
-                  .map((v) => `"${v.replace(/"/g, '""')}"`)
-                  .join(','),
+              downloadCsv(
+                ['name', 'id', 'type', 'status', 'machineId', 'projectPath', 'lastRunAt', 'totalCostUsd'],
+                agents.map((a) => [a.name, a.id, a.type, a.status, a.machineId, a.projectPath, a.lastRunAt, a.totalCostUsd]),
+                `agents-${new Date().toISOString().slice(0, 10)}.csv`,
               );
-              const csv = header + rows.join('\n');
-              const blob = new Blob([csv], { type: 'text/csv' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `agents-${new Date().toISOString().slice(0, 10)}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
             }}
             disabled={filteredAgents.length === 0}
             className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"

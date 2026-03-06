@@ -35,7 +35,7 @@ import { useSessionStream } from '../hooks/use-session-stream';
 import type { ApiAccount, Machine, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import {
-  escapeCsvValue,
+  downloadCsv,
   formatDateTime,
   formatDuration,
   formatTime,
@@ -83,43 +83,22 @@ function matchesSearchQuery(session: Session, query: string): boolean {
 }
 
 function exportSessionsCsv(sessions: Session[]): void {
-  const headers = [
-    'id',
-    'agentName',
-    'machineId',
-    'status',
-    'model',
-    'projectPath',
-    'startedAt',
-    'endedAt',
-    'costUsd',
-    'messageCount',
-  ];
-  const rows = sessions.map((s) =>
-    [
+  downloadCsv(
+    ['id', 'agentName', 'machineId', 'status', 'model', 'projectPath', 'startedAt', 'endedAt', 'costUsd', 'messageCount'],
+    sessions.map((s) => [
       s.id,
       s.agentName ?? s.agentId,
       s.machineId,
       s.status,
-      s.model ?? '',
-      s.projectPath ?? '',
+      s.model,
+      s.projectPath,
       s.startedAt,
-      s.endedAt ?? '',
-      s.metadata?.costUsd ?? '',
-      s.metadata?.messageCount ?? '',
-    ]
-      .map(escapeCsvValue)
-      .join(','),
+      s.endedAt,
+      s.metadata?.costUsd,
+      s.metadata?.messageCount,
+    ]),
+    `sessions-${new Date().toISOString().slice(0, 10)}.csv`,
   );
-
-  const csv = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `sessions-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 const PAGE_SIZE = 50;
