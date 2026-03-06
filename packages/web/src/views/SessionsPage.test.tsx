@@ -141,6 +141,7 @@ vi.mock('@/lib/queries', () => ({
   queryKeys: {
     sessions: () => ['sessions'],
   },
+  useCreateAgent: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -273,13 +274,15 @@ describe('SessionsPage', () => {
   it('renders session count in header', async () => {
     renderSessions();
     await waitFor(() => {
-      expect(screen.getByText(/\(1\)/)).toBeDefined();
+      // Count is shown inline as a plain number (no parentheses)
+      const heading = screen.getByRole('heading', { level: 2 });
+      expect(heading.textContent).toContain('1');
     });
   });
 
   it('renders new session button', () => {
     renderSessions();
-    expect(screen.getByText('+ New Session')).toBeDefined();
+    expect(screen.getByText('+ New')).toBeDefined();
   });
 
   it('renders refresh button', () => {
@@ -348,7 +351,7 @@ describe('SessionsPage', () => {
   it('renders search input', () => {
     renderSessions();
     const searchInput = screen.getByPlaceholderText(
-      'Filter by ID, project, agent, model...',
+      'Search sessions...',
     ) as HTMLInputElement;
     expect(searchInput).toBeDefined();
   });
@@ -440,7 +443,7 @@ describe('SessionsPage', () => {
 
   it('renders create form toggle button', () => {
     renderSessions();
-    const createButton = screen.getByText('+ New Session') as HTMLButtonElement;
+    const createButton = screen.getByText('+ New') as HTMLButtonElement;
     expect(createButton).toBeDefined();
   });
 
@@ -474,7 +477,7 @@ describe('SessionsPage', () => {
 
     renderSessions();
     await waitFor(() => {
-      expect(screen.getByText(/Clean Up \(2\)/)).toBeDefined();
+      expect(screen.getByText(/Clean 2/)).toBeDefined();
     });
   });
 
@@ -491,7 +494,7 @@ describe('SessionsPage', () => {
 
     renderSessions();
     await waitFor(() => {
-      expect(screen.queryByText(/Clean Up/)).toBeNull();
+      expect(screen.queryByText(/Clean \d/)).toBeNull();
     });
   });
 
@@ -542,7 +545,8 @@ describe('SessionsPage', () => {
 
     renderSessions();
     await waitFor(() => {
-      expect(screen.getByText(/\(4\)/)).toBeDefined();
+      const heading = screen.getByRole('heading', { level: 2 });
+      expect(heading.textContent).toContain('4');
     });
   });
 
@@ -599,7 +603,7 @@ describe('SessionsPage', () => {
   it('changes search query input', async () => {
     renderSessions();
     const searchInput = screen.getByPlaceholderText(
-      'Filter by ID, project, agent, model...',
+      'Search sessions...',
     ) as HTMLInputElement;
     expect(searchInput.value).toBe('');
     fireEvent.change(searchInput, { target: { value: 'test-search' } });
