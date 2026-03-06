@@ -47,7 +47,13 @@ import {
   useUpdateAgent,
 } from '../lib/queries';
 
-const AGENT_TYPES = ['autonomous', 'adhoc', 'scheduled'] as const;
+const AGENT_TYPES = [
+  { value: 'adhoc', label: 'Ad-hoc', desc: 'One-shot task, runs once then stops' },
+  { value: 'manual', label: 'Manual', desc: 'Started/stopped manually, persistent config' },
+  { value: 'loop', label: 'Loop', desc: 'Runs in a loop until stopped or goal met' },
+  { value: 'heartbeat', label: 'Heartbeat', desc: 'Triggered periodically (e.g. every 30min)' },
+  { value: 'cron', label: 'Cron', desc: 'Triggered on a cron schedule' },
+] as const;
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
@@ -100,7 +106,7 @@ export function AgentsPage(): React.JSX.Element {
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [editName, setEditName] = useState('');
   const [editMachineId, setEditMachineId] = useState('');
-  const [editType, setEditType] = useState<string>('autonomous');
+  const [editType, setEditType] = useState<string>('adhoc');
   const [editModel, setEditModel] = useState('');
   const [editInitialPrompt, setEditInitialPrompt] = useState('');
 
@@ -594,8 +600,9 @@ export function AgentsPage(): React.JSX.Element {
                       </SelectTrigger>
                       <SelectContent position="popper" sideOffset={4}>
                         {AGENT_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
+                          <SelectItem key={t.value} value={t.value}>
+                            <span className="font-medium">{t.label}</span>
+                            <span className="ml-2 text-muted-foreground text-[10px]">{t.desc}</span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -679,8 +686,9 @@ export function AgentsPage(): React.JSX.Element {
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
                   {AGENT_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
+                    <SelectItem key={t.value} value={t.value}>
+                      <span className="font-medium">{t.label}</span>
+                      <span className="ml-2 text-muted-foreground text-[10px]">{t.desc}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
