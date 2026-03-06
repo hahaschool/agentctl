@@ -1,6 +1,20 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  BellOff,
+  Bot,
+  Compass,
+  Gauge,
+  HelpCircle,
+  MessageSquare,
+  Moon,
+  RefreshCw,
+  ScrollText,
+  Server,
+  Settings,
+  Sun,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type React from 'react';
@@ -10,11 +24,13 @@ import { toast } from '@/components/Toast';
 import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
+type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
+
 type CommandItem = {
   id: string;
   label: string;
   description?: string;
-  icon: string;
+  icon: string | IconComponent;
   shortcut?: string;
   badge?: { text: string; variant: 'default' | 'success' | 'warning' | 'destructive' };
   action: () => void;
@@ -27,19 +43,19 @@ type Props = {
 };
 
 const NAV_COMMANDS = [
-  { href: '/', label: 'Dashboard', icon: '\u25A0', shortcut: '1', section: 'Navigate' },
-  { href: '/machines', label: 'Machines', icon: '\u2302', shortcut: '2', section: 'Navigate' },
-  { href: '/agents', label: 'Agents', icon: '\u2699', shortcut: '3', section: 'Navigate' },
-  { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4', section: 'Navigate' },
+  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1', section: 'Navigate' },
+  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2', section: 'Navigate' },
+  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3', section: 'Navigate' },
+  { href: '/sessions', label: 'Sessions', icon: MessageSquare, shortcut: '4', section: 'Navigate' },
   {
     href: '/discover',
     label: 'Discover Sessions',
-    icon: '\u2315',
+    icon: Compass,
     shortcut: '5',
     section: 'Navigate',
   },
-  { href: '/logs', label: 'Logs & Metrics', icon: '\u2261', shortcut: '6', section: 'Navigate' },
-  { href: '/settings', label: 'Settings', icon: '\u2630', shortcut: '7', section: 'Navigate' },
+  { href: '/logs', label: 'Logs & Metrics', icon: ScrollText, shortcut: '6', section: 'Navigate' },
+  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7', section: 'Navigate' },
 ] as const;
 
 const STATUS_BADGE_VARIANTS: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {
@@ -122,7 +138,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           id: `agent-${agent.id}`,
           label: agent.name || agent.id,
           description: agent.projectPath ? shortPath(agent.projectPath) : agent.type,
-          icon: '\u2699',
+          icon: Bot,
           badge: { text: agent.status, variant: badgeVariant(agent.status) },
           section: 'Agents',
           action: () => {
@@ -145,7 +161,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           id: `machine-${machine.id}`,
           label: machine.hostname,
           description: `${machine.os}/${machine.arch} \u2014 ${machine.tailscaleIp}`,
-          icon: '\u2302',
+          icon: Server,
           badge: { text: machine.status, variant: badgeVariant(machine.status) },
           section: 'Machines',
           action: () => {
@@ -169,7 +185,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           id: `session-${session.id}`,
           label,
           description: session.projectPath ? shortPath(session.projectPath) : undefined,
-          icon: '\u25B6',
+          icon: MessageSquare,
           badge: { text: session.status, variant: badgeVariant(session.status) },
           section: 'Sessions',
           action: () => {
@@ -185,7 +201,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       id: 'action-refresh',
       label: 'Refresh All Data',
       description: 'Invalidate all cached queries',
-      icon: '\u21BB',
+      icon: RefreshCw,
       section: 'Actions',
       action: () => {
         void queryClient.invalidateQueries();
@@ -197,7 +213,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     items.push({
       id: 'action-theme',
       label: 'Toggle Dark/Light Mode',
-      icon: '\u263D',
+      icon: theme === 'dark' ? Sun : Moon,
       section: 'Actions',
       shortcut: 'Theme',
       action: () => {
@@ -210,7 +226,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       id: 'action-clear-notifications',
       label: 'Clear Notifications',
       description: 'Dismiss all toast messages',
-      icon: '\u2715',
+      icon: BellOff,
       section: 'Actions',
       action: () => {
         toast.dismiss();
@@ -221,7 +237,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     items.push({
       id: 'action-help',
       label: 'Keyboard Shortcuts',
-      icon: '?',
+      icon: HelpCircle,
       section: 'Actions',
       shortcut: '?',
       action: () => {
@@ -403,7 +419,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
                         : 'bg-transparent text-muted-foreground hover:bg-accent/10',
                     )}
                   >
-                    <span className="w-5 text-center text-base shrink-0">{cmd.icon}</span>
+                    {typeof cmd.icon === 'string' ? (
+                      <span className="w-5 text-center text-base shrink-0">{cmd.icon}</span>
+                    ) : (
+                      <cmd.icon size={16} className="w-5 shrink-0 text-muted-foreground" />
+                    )}
                     <span className="flex-1 min-w-0">
                       <span className="font-medium">{cmd.label}</span>
                       {cmd.description && (

@@ -22,7 +22,7 @@ export function ConnectionBanner({ status }: ConnectionBannerProps): React.JSX.E
   return (
     <div
       role="alert"
-      className="fixed top-0 right-0 left-0 md:left-[220px] z-30 bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-1.5 text-[12px] text-yellow-600 dark:text-yellow-400 flex items-center justify-between animate-fade-in"
+      className="fixed top-0 right-0 left-0 md:left-[60px] lg:left-[220px] z-30 bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-1.5 text-[12px] text-yellow-600 dark:text-yellow-400 flex items-center justify-between animate-fade-in"
     >
       <span>Connection lost — displayed data may be stale</span>
       <button

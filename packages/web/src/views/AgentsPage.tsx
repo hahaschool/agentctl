@@ -1031,13 +1031,13 @@ export function AgentsPage(): React.JSX.Element {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search agents"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as AgentStatusFilter)}
           aria-label="Filter by status"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
           <option value="all">All statuses</option>
           <option value="running">Running</option>
@@ -1049,7 +1049,7 @@ export function AgentsPage(): React.JSX.Element {
           value={sortOrder}
           onChange={(e) => setSortOrder(e.target.value as AgentSortOrder)}
           aria-label="Sort order"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
           <option value="name">{'\u2191'} Name (A-Z)</option>
           <option value="status">{'\u2191'} Status</option>
@@ -1063,12 +1063,21 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Summary stats */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-6">
-        <StatCard label="Total Agents" value={String(agentList.length)} />
+        <StatCard label="Total Agents" value={String(agentList.length)} accent="blue" />
         {Object.entries(statusCounts).map(([status, count]) => (
           <StatCard
             key={status}
             label={status.charAt(0).toUpperCase() + status.slice(1)}
             value={String(count)}
+            accent={
+              status === 'running'
+                ? 'green'
+                : status === 'error'
+                  ? 'red'
+                  : status === 'idle'
+                    ? 'yellow'
+                    : 'purple'
+            }
           />
         ))}
       </div>
@@ -1079,7 +1088,7 @@ export function AgentsPage(): React.JSX.Element {
           {Array.from({ length: 4 }, (_, i) => (
             <div
               key={`sk-${String(i)}`}
-              className="p-4 bg-card border border-border/50 rounded-lg space-y-3"
+              className="p-4 bg-card border border-border/50 rounded-lg space-y-3 transition-colors hover:border-border"
             >
               <div className="flex justify-between items-center">
                 <Skeleton className="h-5 w-32" />
@@ -1108,7 +1117,7 @@ export function AgentsPage(): React.JSX.Element {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           {filteredAgents.map((agent) => (
-            <div key={agent.id} className="p-4 bg-card border border-border/50 rounded-lg">
+            <div key={agent.id} className="p-4 bg-card border border-border/50 rounded-lg transition-colors hover:border-border">
               {/* Card header: name + status */}
               <div className="flex justify-between items-center mb-3">
                 <Link
@@ -1151,7 +1160,7 @@ export function AgentsPage(): React.JSX.Element {
                   type="button"
                   onClick={() => openEditDialog(agent)}
                   aria-label={`Edit agent ${agent.name}`}
-                  className="px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs font-medium cursor-pointer hover:bg-accent transition-colors"
+                  className="px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors"
                 >
                   Edit
                 </button>
@@ -1162,10 +1171,10 @@ export function AgentsPage(): React.JSX.Element {
                     onConfirm={() => handleStop(agent.id)}
                     disabled={stopAgent.isPending}
                     className={cn(
-                      'px-3.5 py-1.5 bg-red-900 text-red-300 border border-red-800 rounded-sm text-xs font-medium',
+                      'px-3.5 py-1.5 bg-red-900 text-red-300 border border-red-800 rounded-md text-xs font-medium',
                       stopAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                     )}
-                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white border border-red-600 rounded-sm text-xs font-medium cursor-pointer animate-pulse"
+                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white border border-red-600 rounded-md text-xs font-medium cursor-pointer animate-pulse"
                   />
                 ) : promptAgentId === agent.id ? (
                   <>
@@ -1183,7 +1192,7 @@ export function AgentsPage(): React.JSX.Element {
                       }}
                       placeholder="Enter prompt..."
                       disabled={startAgent.isPending}
-                      className="flex-1 px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
+                      className="flex-1 px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                     />
                     <button
                       type="button"
@@ -1191,7 +1200,7 @@ export function AgentsPage(): React.JSX.Element {
                       disabled={!prompt.trim() || startAgent.isPending}
                       aria-label="Start agent with entered prompt"
                       className={cn(
-                        'px-3 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium',
+                        'px-3 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium',
                         !prompt.trim() || startAgent.isPending
                           ? 'cursor-not-allowed opacity-50'
                           : 'cursor-pointer opacity-100',
@@ -1208,7 +1217,7 @@ export function AgentsPage(): React.JSX.Element {
                       disabled={startAgent.isPending}
                       aria-label="Cancel agent start"
                       className={cn(
-                        'px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs',
+                        'px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-md text-xs',
                         startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                       )}
                     >
@@ -1224,7 +1233,7 @@ export function AgentsPage(): React.JSX.Element {
                     }}
                     disabled={startAgent.isPending}
                     className={cn(
-                      'px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium',
+                      'px-3.5 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium',
                       startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                     )}
                   >

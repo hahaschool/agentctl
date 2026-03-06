@@ -427,7 +427,7 @@ export function DiscoverPage(): React.JSX.Element {
             aria-label={showNewSession ? 'Cancel new session form' : 'Show new session form'}
             aria-expanded={showNewSession}
             className={cn(
-              'px-3.5 py-1.5 border border-border rounded-sm text-[13px] cursor-pointer font-medium',
+              'px-3.5 py-1.5 border border-border rounded-md text-[13px] cursor-pointer font-medium',
               showNewSession ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
             )}
           >
@@ -456,7 +456,7 @@ export function DiscoverPage(): React.JSX.Element {
               value={newMachineId}
               onChange={(e) => setNewMachineId(e.target.value)}
               disabled={newSessionCreating}
-              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
+              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-md font-mono text-xs outline-none box-border focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               {machines.length === 0 ? (
                 <option value="">No machines</option>
@@ -483,7 +483,7 @@ export function DiscoverPage(): React.JSX.Element {
               onChange={(e) => setNewProjectPath(e.target.value)}
               disabled={newSessionCreating}
               placeholder="/Users/hahaschool/my-project"
-              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
+              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-md font-mono text-xs outline-none box-border focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             />
           </div>
           <div className="flex-[2] min-w-[200px]">
@@ -503,7 +503,7 @@ export function DiscoverPage(): React.JSX.Element {
               }}
               disabled={newSessionCreating}
               placeholder="What should Claude work on?"
-              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-xs outline-none box-border"
+              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-md text-xs outline-none box-border focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             />
           </div>
           <button
@@ -533,7 +533,7 @@ export function DiscoverPage(): React.JSX.Element {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search sessions... (press /)"
           aria-label="Search sessions"
-          className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-[13px] outline-none"
+          className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-md text-[13px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         />
         <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
           <span className="text-muted-foreground">Min msgs:</span>
@@ -542,7 +542,7 @@ export function DiscoverPage(): React.JSX.Element {
             value={minMessages}
             onChange={(e) => setMinMessages(Number(e.target.value) as MinMessages)}
             aria-label="Minimum message count"
-            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
+            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             {MIN_MESSAGE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -558,7 +558,7 @@ export function DiscoverPage(): React.JSX.Element {
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
             aria-label="Sort order"
-            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
+            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -575,7 +575,7 @@ export function DiscoverPage(): React.JSX.Element {
               id="discover-machine"
               value={machineFilter}
               onChange={(e) => setMachineFilter(e.target.value)}
-              className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
+              className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               <option value="all">All ({hostnames.length})</option>
               {hostnames.map((h) => (
@@ -594,7 +594,7 @@ export function DiscoverPage(): React.JSX.Element {
             value={groupMode}
             onChange={(e) => setGroupMode(e.target.value as GroupMode)}
             aria-label="Group by"
-            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
+            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             <option value="project">By Project</option>
             <option value="machine">By Machine</option>
@@ -706,7 +706,7 @@ export function DiscoverPage(): React.JSX.Element {
             return (
               <div
                 key={group.projectPath}
-                className="border border-border/50 rounded-lg overflow-hidden"
+                className="border border-border/50 rounded-lg overflow-hidden transition-colors hover:border-border"
               >
                 {/* Group header (hidden in flat mode) */}
                 {!isFlat && (
@@ -903,7 +903,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 }}
                                 placeholder="Enter prompt to resume..."
                                 aria-label="Prompt to resume session"
-                                className="flex-1 px-2.5 py-[5px] bg-background text-foreground border border-border rounded-sm text-xs outline-none"
+                                className="flex-1 px-2.5 py-[5px] bg-background text-foreground border border-border rounded-md text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                               />
                               <button
                                 type="button"

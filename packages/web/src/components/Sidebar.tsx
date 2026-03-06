@@ -205,18 +205,20 @@ export function Sidebar(): React.JSX.Element {
         className={cn(
           'bg-sidebar border-r border-border flex flex-col py-4 shrink-0',
           // Desktop: always visible, fixed width
-          'hidden md:flex w-[220px] min-w-[220px]',
+          'hidden md:flex md:w-[60px] md:min-w-[60px] lg:w-[220px] lg:min-w-[220px]',
           // Mobile: overlay from left
           mobileOpen &&
-            'fixed inset-y-0 left-0 z-50 flex w-[260px] shadow-lg pt-14 md:relative md:pt-4 md:w-[220px] md:min-w-[220px] md:shadow-none',
+            'fixed inset-y-0 left-0 z-50 flex w-[260px] shadow-lg pt-14 md:relative md:pt-4 md:w-[60px] md:min-w-[60px] lg:w-[220px] lg:min-w-[220px] md:shadow-none',
         )}
       >
         {/* Logo (desktop only, mobile has it in the top bar) */}
-        <div className="px-5 pb-5 items-center gap-2 hidden md:flex">
-          <span className="text-lg font-bold text-foreground tracking-tight">AgentCTL</span>
-          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
+        <div className="px-5 pb-5 items-center gap-2 hidden md:flex md:justify-center lg:justify-start">
+          <span className="text-lg font-bold text-foreground tracking-tight hidden lg:inline">AgentCTL</span>
+          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider hidden lg:inline">
             BETA
           </span>
+          {/* Icon-only logo for medium screens */}
+          <span className="text-lg font-bold text-foreground tracking-tight lg:hidden">A</span>
         </div>
 
         {NAV_ITEMS.map((item) => {
@@ -228,7 +230,7 @@ export function Sidebar(): React.JSX.Element {
               href={item.href}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'flex items-center gap-2.5 px-5 py-3 md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0',
+                'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0',
                 'border-l-[3px]',
                 isActive
                   ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
@@ -236,10 +238,10 @@ export function Sidebar(): React.JSX.Element {
               )}
             >
               <Icon size={16} className="shrink-0" />
-              <span className="flex-1">{item.label}</span>
+              <span className="flex-1 hidden lg:inline">{item.label}</span>
               <span
                 className={cn(
-                  'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm hidden md:inline',
+                  'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm hidden lg:inline',
                   isActive ? 'opacity-80' : 'opacity-50',
                 )}
               >
@@ -252,11 +254,11 @@ export function Sidebar(): React.JSX.Element {
         <div className="flex-1" />
 
         {/* Bottom section */}
-        <div className="hidden md:block border-t border-border px-4 py-3 space-y-2.5">
+        <div className="hidden md:block border-t border-border px-4 lg:px-4 md:px-2 py-3 space-y-2.5">
           {/* Connection + Notifications row */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 md:flex-col md:gap-2 lg:flex-row lg:gap-3">
             <WsStatusIndicator status={wsStatus} compact />
-            <div className="flex-1" />
+            <div className="flex-1 hidden lg:block" />
             <NotificationBell
               notifications={notifications}
               unreadCount={unreadCount}
@@ -265,20 +267,20 @@ export function Sidebar(): React.JSX.Element {
               onClearAll={clearAll}
             />
             {unreadCount > 0 && (
-              <span className="text-[10px] text-primary font-medium">{unreadCount}</span>
+              <span className="text-[10px] text-primary font-medium hidden lg:inline">{unreadCount}</span>
             )}
           </div>
 
-          {/* Keyboard hints */}
-          <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex flex-wrap gap-x-3 gap-y-0.5">
+          {/* Keyboard hints (hidden on medium, shown on large) */}
+          <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex-wrap gap-x-3 gap-y-0.5 hidden lg:flex">
             <span><Kbd>1</Kbd>-<Kbd>7</Kbd> Nav</span>
             <span><Kbd>{'\u2318'}K</Kbd> Search</span>
             <span><Kbd>?</Kbd> Help</span>
           </div>
 
           {/* Version + theme */}
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground/50">v0.1.0</span>
+          <div className="flex items-center justify-between md:justify-center lg:justify-between">
+            <span className="text-[10px] text-muted-foreground/50 hidden lg:inline">v0.1.0</span>
             {mounted ? (
               <button
                 type="button"

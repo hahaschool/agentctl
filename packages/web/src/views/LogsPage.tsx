@@ -12,6 +12,7 @@ import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { RefreshButton } from '../components/RefreshButton';
+import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AuditAction } from '../lib/api';
@@ -257,7 +258,7 @@ export function LogsPage(): React.JSX.Element {
             </div>
           ) : (
             <output
-              className="p-4 bg-card border border-border/50 rounded mb-6 flex items-center gap-4"
+              className="p-4 bg-card border border-border/50 rounded mb-6 flex items-center gap-4 transition-colors hover:border-border"
               aria-live="polite"
             >
               <span
@@ -336,27 +337,33 @@ export function LogsPage(): React.JSX.Element {
                 label="Control Plane"
                 value={metricsVal('agentctl_control_plane_up') === 1 ? 'UP' : 'DOWN'}
                 valueVariant={metricsVal('agentctl_control_plane_up') === 1 ? 'green' : 'red'}
+                accent="green"
               />
               <MetricCard
                 label="Agents Total"
                 value={formatNumber(metricsVal('agentctl_agents_total') ?? '-')}
+                accent="blue"
               />
               <MetricCard
                 label="Agents Active"
                 value={formatNumber(metricsVal('agentctl_agents_active') ?? '-')}
+                accent="purple"
               />
               <MetricCard
                 label="Runs Total"
                 value={formatNumber(metricsVal('agentctl_runs_total') ?? '-')}
+                accent="yellow"
               />
               <MetricCard
                 label="Machines Online"
                 value={machines.data ? `${onlineMachines} / ${machineList.length}` : '-'}
+                accent="blue"
               />
               <MetricCard
                 label="Health Status"
                 value={health.data?.status ?? '-'}
                 valueClassName={statusTextClasses}
+                accent="red"
               />
             </div>
           )}
@@ -405,7 +412,7 @@ export function LogsPage(): React.JSX.Element {
               description="Run setup-machine.sh on a host to register it as a worker."
             />
           ) : (
-            <div className="border border-border/50 rounded overflow-x-auto">
+            <div className="border border-border/50 rounded overflow-x-auto transition-colors hover:border-border">
               <table className="w-full border-collapse text-[13px]" aria-label="Worker machines">
                 <thead>
                   <tr className="bg-muted text-left">
@@ -471,21 +478,25 @@ export function LogsPage(): React.JSX.Element {
           {/* Audit summary cards */}
           {auditSummary.data && (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-5">
-              <MetricCard
+              <StatCard
                 label="Total Actions"
                 value={formatNumber(auditSummary.data.totalActions)}
+                accent="blue"
               />
-              <MetricCard
+              <StatCard
                 label="Unique Tools"
                 value={String(Object.keys(auditSummary.data.toolBreakdown ?? {}).length)}
+                accent="purple"
               />
-              <MetricCard
+              <StatCard
                 label="Avg Duration"
                 value={formatDurationMs(auditSummary.data.avgDurationMs)}
+                accent="yellow"
               />
-              <MetricCard
+              <StatCard
                 label="Action Types"
                 value={String(Object.keys(auditSummary.data.actionTypeBreakdown ?? {}).length)}
+                accent="green"
               />
             </div>
           )}
@@ -499,7 +510,7 @@ export function LogsPage(): React.JSX.Element {
                 placeholder="Search actions, tools, agents..."
                 value={auditSearch}
                 onChange={(e) => setAuditSearch(e.target.value)}
-                className="w-full px-3 py-1.5 pl-8 text-[13px] bg-card border border-border/50 rounded placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full px-3 py-1.5 pl-8 text-[13px] bg-card border border-border/50 rounded-md placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
               />
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[13px]">
                 &#x2315;
@@ -513,7 +524,7 @@ export function LogsPage(): React.JSX.Element {
                 setAuditAgentFilter(e.target.value);
                 setAuditOffset(0);
               }}
-              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               <option value="">All Agents</option>
               {agentList.map((a) => (
@@ -530,7 +541,7 @@ export function LogsPage(): React.JSX.Element {
                 setAuditToolFilter(e.target.value);
                 setAuditOffset(0);
               }}
-              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               <option value="">All Tools</option>
               {toolNames.map((t) => (
@@ -594,7 +605,7 @@ export function LogsPage(): React.JSX.Element {
                 }
               />
             ) : (
-              <div className="border border-border/50 rounded overflow-hidden">
+              <div className="border border-border/50 rounded overflow-hidden transition-colors hover:border-border">
                 {filteredActions.map((action, idx) => (
                   <AuditActionRow
                     key={action.id}
@@ -665,7 +676,7 @@ export function LogsPage(): React.JSX.Element {
                           'px-3 py-2 bg-card border rounded text-left transition-colors',
                           auditToolFilter === tool
                             ? 'border-foreground'
-                            : 'border-border hover:border-muted-foreground',
+                            : 'border-border/50 hover:border-border',
                         )}
                       >
                         <div className="text-[12px] font-medium font-mono truncate">{tool}</div>
@@ -737,25 +748,39 @@ const VALUE_VARIANT_CLASSES = {
   default: 'text-foreground',
 } as const;
 
+const METRIC_ACCENT_CLASSES: Record<string, string> = {
+  green: 'border-l-green-500/60',
+  yellow: 'border-l-yellow-500/60',
+  red: 'border-l-red-500/60',
+  blue: 'border-l-blue-500/60',
+  purple: 'border-l-purple-500/60',
+};
+
 function MetricCard({
   label,
   value,
   valueVariant,
   valueClassName,
+  accent,
 }: {
   label: string;
   value: string;
   valueVariant?: 'green' | 'red' | 'yellow';
   valueClassName?: string;
+  accent?: 'green' | 'yellow' | 'red' | 'blue' | 'purple';
 }): React.JSX.Element {
   return (
-    <div className="px-[18px] py-4 bg-card border border-border/50 rounded">
+    <div className={cn(
+      'px-[18px] py-4 bg-card border border-border/50 rounded transition-colors hover:border-border',
+      accent && 'border-l-[3px]',
+      accent && METRIC_ACCENT_CLASSES[accent],
+    )}>
       <div className="text-[11px] text-muted-foreground mb-1.5">
         {label}
       </div>
       <div
         className={cn(
-          'text-2xl font-bold',
+          'text-2xl font-semibold',
           valueClassName ?? VALUE_VARIANT_CLASSES[valueVariant ?? 'default'],
         )}
       >
@@ -784,11 +809,12 @@ function DependencyCard({
     <div
       className={cn(
         'px-3.5 py-3 bg-card border rounded transition-colors',
+        'hover:border-border',
         dep.status === 'error'
           ? 'border-red-500/40'
           : latencyCritical
             ? 'border-yellow-500/40'
-            : 'border-border',
+            : 'border-border/50',
       )}
     >
       <div className="flex justify-between items-center mb-1.5">

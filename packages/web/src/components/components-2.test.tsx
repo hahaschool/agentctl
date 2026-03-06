@@ -296,11 +296,11 @@ describe('ErrorBanner', () => {
     expect(alertElement).toBeDefined();
   });
 
-  it('applies red color classes for error styling', () => {
+  it('applies destructive color classes for error styling', () => {
     const { container } = render(<ErrorBanner message="Error" />);
     const banner = container.querySelector('[role="alert"]');
-    expect(banner?.className).toContain('bg-red-900');
-    expect(banner?.className).toContain('text-red-300');
+    expect(banner?.className).toContain('bg-destructive/10');
+    expect(banner?.className).toContain('text-destructive');
   });
 
   it('applies custom className prop', () => {
