@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Agent, Machine } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -277,7 +278,9 @@ function renderAgentsPage() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <AgentsPage />
+      <TooltipProvider>
+        <AgentsPage />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }

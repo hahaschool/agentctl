@@ -261,7 +261,10 @@ function MachineCard({
 
   if (compact) {
     return (
-      <div className="p-3 bg-card border border-border/50 rounded-lg flex items-center gap-3 transition-colors hover:border-border">
+      <div className={cn(
+        'group p-3 bg-card border border-border/50 rounded-lg flex items-center gap-3 transition-all duration-200 hover:border-border/80 hover:shadow-sm',
+        m.status === 'online' && 'border-l-2 border-l-green-500',
+      )}>
         <Link
           href={`/machines/${m.id}`}
           className="text-[14px] font-semibold text-foreground hover:text-primary transition-colors no-underline truncate"
@@ -287,7 +290,10 @@ function MachineCard({
   }
 
   return (
-    <div className="p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5 transition-colors hover:border-border">
+    <div className={cn(
+      'group p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5 transition-all duration-200 hover:border-border/80 hover:shadow-sm',
+      m.status === 'online' && 'border-l-2 border-l-green-500',
+    )}>
       {/* Top row: hostname + status */}
       <div className="flex justify-between items-start">
         <div>
@@ -330,17 +336,17 @@ function MachineCard({
       {m.capabilities && (
         <div className="flex items-center gap-2 flex-wrap pt-2.5 border-t border-border">
           <span className="text-[10px] text-muted-foreground mr-1">Capabilities</span>
-          <SimpleTooltip content="GPU acceleration available for compute-intensive tasks">
+          <SimpleTooltip content="GPU acceleration available for model inference">
             <span>
               <CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" />
             </span>
           </SimpleTooltip>
-          <SimpleTooltip content="Docker container runtime for sandboxed agent execution">
+          <SimpleTooltip content="Docker container support for sandboxed agent execution">
             <span>
               <CapBadge label="Docker" enabled={m.capabilities?.docker ?? false} variant="blue" />
             </span>
           </SimpleTooltip>
-          <SimpleTooltip content="Maximum agents that can run concurrently on this machine">
+          <SimpleTooltip content="Maximum number of agents that can run concurrently on this machine">
             <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-md bg-muted text-muted-foreground border border-border font-mono">
               {m.capabilities?.maxConcurrentAgents ?? 0} max agents
             </span>

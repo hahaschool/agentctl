@@ -21,6 +21,7 @@ import { MarkdownContent } from '../components/MarkdownContent';
 import { PathBadge } from '../components/PathBadge';
 import { ProgressIndicator } from '../components/ProgressIndicator';
 import { RefreshButton } from '../components/RefreshButton';
+import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatusBadge } from '../components/StatusBadge';
 import { SubagentBlock } from '../components/SubagentBlock';
 import { TerminalView } from '../components/TerminalView';
@@ -687,14 +688,22 @@ export function SessionsPage(): React.JSX.Element {
                 confirmClassName="h-6 px-2 rounded text-[10px] font-medium bg-destructive text-destructive-foreground cursor-pointer shrink-0 whitespace-nowrap"
               />
             )}
-            <button
-              type="button"
-              onClick={() => exportSessionsCsv(filteredSessions)}
-              disabled={filteredSessions.length === 0}
-              className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 transition-colors shrink-0 whitespace-nowrap"
+            <SimpleTooltip
+              content={
+                filteredSessions.length === 0
+                  ? 'No sessions to export'
+                  : 'Download sessions as CSV'
+              }
             >
-              CSV
-            </button>
+              <button
+                type="button"
+                onClick={() => exportSessionsCsv(filteredSessions)}
+                disabled={filteredSessions.length === 0}
+                className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 transition-colors shrink-0 whitespace-nowrap"
+              >
+                CSV
+              </button>
+            </SimpleTooltip>
           </div>
         </div>
 
@@ -1505,7 +1514,7 @@ function SessionListItem({
       id={`session-${s.id}`}
       aria-selected={isSelected}
       className={cn(
-        'flex w-full text-left border-b border-border transition-colors hover:border-border',
+        'group flex w-full text-left border-b border-border transition-all duration-200 hover:border-border/80',
         isSelected
           ? 'bg-accent/15'
           : isFocused

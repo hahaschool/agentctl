@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { ApiAccount, Machine, Session } from '@/lib/api';
 import { SessionsPage } from './SessionsPage';
 
@@ -224,7 +225,9 @@ function renderSessions() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <SessionsPage />
+      <TooltipProvider>
+        <SessionsPage />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }

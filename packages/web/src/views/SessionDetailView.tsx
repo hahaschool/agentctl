@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -461,10 +462,13 @@ function SessionHeader({
           items={[{ label: 'Sessions', href: '/sessions' }, { label: session.id.slice(0, 12) }]}
         />
         <StatusBadge status={session.status} />
-        {session.agentName && (
-          <span className="text-[11px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-sm border border-border">
-            {session.agentName}
-          </span>
+        {session.agentId && (
+          <Link
+            href={`/agents/${session.agentId}`}
+            className="text-xs text-muted-foreground hover:text-foreground bg-muted px-2 py-0.5 rounded-md border border-border transition-colors no-underline"
+          >
+            {session.agentName ?? session.agentId.slice(0, 12)}
+          </Link>
         )}
         {session.status === 'active' && (
           <output

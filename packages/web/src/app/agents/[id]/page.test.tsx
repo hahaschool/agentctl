@@ -260,7 +260,7 @@ function createAgent(overrides?: Partial<Agent>): Agent {
     id: 'agent-1',
     machineId: 'machine-1',
     name: 'test-agent',
-    type: 'autonomous' as Agent['type'],
+    type: 'cron',
     status: 'registered',
     schedule: '*/15 * * * *',
     projectPath: '/home/user/project',
@@ -511,7 +511,7 @@ describe('AgentDetailPage', () => {
   it('displays agent type', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('autonomous')).toBeDefined();
+      expect(screen.getByText('cron')).toBeDefined();
     });
   });
 
@@ -881,7 +881,7 @@ describe('AgentDetailPage', () => {
     });
   });
 
-  it('shows schedule field when type is autonomous', async () => {
+  it('shows schedule field when type is cron', async () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('Edit')).toBeDefined();

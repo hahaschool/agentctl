@@ -311,7 +311,7 @@ export function DashboardPage(): React.JSX.Element {
                   key={session.id}
                   href={`/sessions/${session.id}`}
                   className={cn(
-                    'block px-4 py-3 bg-card no-underline transition-all duration-150 hover:bg-accent/10 hover:pl-5',
+                    'block px-4 py-3 bg-card no-underline transition-all duration-200 hover:bg-accent/10 hover:pl-5 hover:shadow-sm',
                     idx > 0 && 'border-t border-border',
                   )}
                 >
@@ -378,7 +378,7 @@ export function DashboardPage(): React.JSX.Element {
                     key={machine.id}
                     href={`/machines/${machine.id}`}
                     className={cn(
-                      'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-all duration-150 hover:bg-accent/10 hover:pl-5',
+                      'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-all duration-200 hover:bg-accent/10 hover:pl-5',
                       idx > 0 && 'border-t border-border',
                     )}
                   >
@@ -420,7 +420,7 @@ export function DashboardPage(): React.JSX.Element {
                     key={session.sessionId}
                     href="/discover"
                     className={cn(
-                      'block px-4 py-2.5 bg-card no-underline transition-all duration-150 hover:bg-accent/10 hover:pl-5',
+                      'block px-4 py-2.5 bg-card no-underline transition-all duration-200 hover:bg-accent/10 hover:pl-5',
                       idx > 0 && 'border-t border-border',
                     )}
                   >
@@ -545,7 +545,7 @@ export function DashboardPage(): React.JSX.Element {
                 <div
                   key={name}
                   className={cn(
-                    'px-3.5 py-2.5 bg-card border rounded-lg flex justify-between items-center',
+                    'px-3.5 py-2.5 bg-card border rounded-lg flex justify-between items-center transition-all duration-200 hover:shadow-sm',
                     borderClass,
                   )}
                 >
@@ -695,7 +695,7 @@ function CostOverview({
       <SectionHeader title="Cost Overview" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total cost */}
-        <div className="border border-border/50 rounded-lg bg-card p-4 transition-colors hover:border-border flex flex-col justify-center">
+        <div className="border border-border/50 rounded-lg bg-card p-4 transition-all duration-200 hover:border-border/80 hover:shadow-sm flex flex-col justify-center">
           <div className="text-[11px] font-medium text-muted-foreground mb-1">
             Total Session Cost
           </div>
@@ -708,7 +708,7 @@ function CostOverview({
         </div>
 
         {/* Bar chart: cost per agent */}
-        <div className="border border-border/50 rounded-lg bg-card p-4 transition-colors hover:border-border">
+        <div className="border border-border/50 rounded-lg bg-card p-4 transition-all duration-200 hover:border-border/80 hover:shadow-sm">
           <div className="text-[11px] font-medium text-muted-foreground mb-3">Cost by Agent</div>
           {agentCostBreakdown.length > 0 ? (
             <div className="space-y-2">
@@ -744,7 +744,7 @@ function CostOverview({
         </div>
 
         {/* Top 5 most expensive sessions */}
-        <div className="border border-border/50 rounded-lg bg-card p-4 transition-colors hover:border-border">
+        <div className="border border-border/50 rounded-lg bg-card p-4 transition-all duration-200 hover:border-border/80 hover:shadow-sm">
           <div className="text-[11px] font-medium text-muted-foreground mb-3">
             Most Expensive Sessions
           </div>

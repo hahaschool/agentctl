@@ -34,6 +34,7 @@ import {
 
 type ActiveTab = 'overview' | 'audit';
 type ActionTypeFilter = 'all' | 'tool_use' | 'tool_result' | 'text' | 'error';
+type AuditSortBy = 'newest' | 'oldest' | 'agent' | 'tool';
 
 const ACTION_TYPE_TABS: { key: ActionTypeFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -64,6 +65,7 @@ export function LogsPage(): React.JSX.Element {
   const [auditToolFilter, setAuditToolFilter] = useState('');
   const [auditOffset, setAuditOffset] = useState(0);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
+  const [auditSortBy, setAuditSortBy] = useState<AuditSortBy>('newest');
   const auditScrollRef = useRef<HTMLDivElement>(null);
 
   // Queries — overview
@@ -122,6 +124,20 @@ export function LogsPage(): React.JSX.Element {
       return true;
     });
   }, [audit.data?.actions, actionTypeFilter, auditSearch]);
+
+  const sortedActions = useMemo(() => {
+    const arr = [...filteredActions];
+    switch (auditSortBy) {
+      case 'oldest':
+        return arr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      case 'agent':
+        return arr.sort((a, b) => (a.agentId ?? '').localeCompare(b.agentId ?? ''));
+      case 'tool':
+        return arr.sort((a, b) => (a.toolName ?? '').localeCompare(b.toolName ?? ''));
+      default:
+        return arr.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }
+  }, [filteredActions, auditSortBy]);
 
   // Unique tool names from summary for filter dropdown
   const toolNames = useMemo(() => {
@@ -568,10 +584,23 @@ export function LogsPage(): React.JSX.Element {
               ))}
             </select>
 
+            {/* Sort */}
+            <select
+              value={auditSortBy}
+              onChange={(e) => setAuditSortBy(e.target.value as AuditSortBy)}
+              aria-label="Sort by"
+              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="agent">Agent</option>
+              <option value="tool">Tool name</option>
+            </select>
+
             {/* Export CSV */}
             <SimpleTooltip
               content={
-                filteredActions.length === 0
+                sortedActions.length === 0
                   ? 'No actions to export'
                   : 'Download filtered actions as CSV'
               }
@@ -579,7 +608,7 @@ export function LogsPage(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => {
-                  const actions = filteredActions;
+                  const actions = sortedActions;
                   if (actions.length === 0) return;
                   const header =
                     'timestamp,actionType,toolName,agentId,runId,durationMs,approvedBy\n';
@@ -605,7 +634,7 @@ export function LogsPage(): React.JSX.Element {
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
-                disabled={filteredActions.length === 0}
+                disabled={sortedActions.length === 0}
                 className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
               >
                 Export CSV
@@ -655,7 +684,7 @@ export function LogsPage(): React.JSX.Element {
                 message={audit.error?.message ?? 'Failed to load audit trail'}
                 onRetry={() => void audit.refetch()}
               />
-            ) : filteredActions.length === 0 ? (
+            ) : sortedActions.length === 0 ? (
               <EmptyState
                 icon={ScrollText}
                 title="No audit actions found"
@@ -667,7 +696,7 @@ export function LogsPage(): React.JSX.Element {
               />
             ) : (
               <div className="border border-border/50 rounded overflow-hidden transition-colors hover:border-border">
-                {filteredActions.map((action, idx) => (
+                {sortedActions.map((action, idx) => (
                   <AuditActionRow
                     key={action.id}
                     action={action}

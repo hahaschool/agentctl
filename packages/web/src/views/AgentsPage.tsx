@@ -31,6 +31,7 @@ import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { RefreshButton } from '../components/RefreshButton';
+import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
@@ -1134,40 +1135,48 @@ export function AgentsPage(): React.JSX.Element {
           <option value="lastRun">{'\u2193'} Last run</option>
           <option value="cost">{'\u2193'} Total cost</option>
         </select>
-        <button
-          type="button"
-          onClick={() => {
-            const agents = filteredAgents;
-            if (agents.length === 0) return;
-            const header = 'name,id,type,status,machineId,projectPath,lastRunAt,totalCostUsd\n';
-            const rows = agents.map((a) =>
-              [
-                a.name,
-                a.id,
-                a.type,
-                a.status,
-                a.machineId,
-                a.projectPath ?? '',
-                a.lastRunAt ?? '',
-                String(a.totalCostUsd ?? ''),
-              ]
-                .map((v) => `"${v.replace(/"/g, '""')}"`)
-                .join(','),
-            );
-            const csv = header + rows.join('\n');
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `agents-${new Date().toISOString().slice(0, 10)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-          disabled={filteredAgents.length === 0}
-          className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
+        <SimpleTooltip
+          content={
+            filteredAgents.length === 0
+              ? 'No agents to export'
+              : 'Download agents as CSV'
+          }
         >
-          Export CSV
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              const agents = filteredAgents;
+              if (agents.length === 0) return;
+              const header = 'name,id,type,status,machineId,projectPath,lastRunAt,totalCostUsd\n';
+              const rows = agents.map((a) =>
+                [
+                  a.name,
+                  a.id,
+                  a.type,
+                  a.status,
+                  a.machineId,
+                  a.projectPath ?? '',
+                  a.lastRunAt ?? '',
+                  String(a.totalCostUsd ?? ''),
+                ]
+                  .map((v) => `"${v.replace(/"/g, '""')}"`)
+                  .join(','),
+              );
+              const csv = header + rows.join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `agents-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            disabled={filteredAgents.length === 0}
+            className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
+          >
+            Export CSV
+          </button>
+        </SimpleTooltip>
         {runningAgents.length > 0 && (
           <ConfirmButton
             label={stoppingAll ? 'Stopping...' : `Stop All (${runningAgents.length})`}
@@ -1251,7 +1260,10 @@ export function AgentsPage(): React.JSX.Element {
           {filteredAgents.map((agent) => (
             <div
               key={agent.id}
-              className="p-4 bg-card border border-border/50 rounded-lg transition-colors hover:border-border"
+              className={cn(
+                'group p-4 bg-card border border-border/50 rounded-lg transition-all duration-200 hover:border-border/80 hover:shadow-sm',
+                agent.status === 'running' && 'border-l-2 border-l-green-500',
+              )}
             >
               {/* Card header: name + status */}
               <div className="flex justify-between items-center mb-3">

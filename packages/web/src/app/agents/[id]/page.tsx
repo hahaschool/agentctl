@@ -707,13 +707,16 @@ export default function AgentDetailPage(): React.JSX.Element {
                   <SelectValue placeholder="Select agent type" />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
-                  <SelectItem value="autonomous">Autonomous</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
                   <SelectItem value="adhoc">Ad-hoc</SelectItem>
+                  <SelectItem value="heartbeat">Heartbeat</SelectItem>
+                  <SelectItem value="cron">Cron</SelectItem>
+                  <SelectItem value="loop">Loop</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {editType === 'autonomous' && (
+            {editType === 'cron' && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="edit-agent-schedule">
                   Schedule
