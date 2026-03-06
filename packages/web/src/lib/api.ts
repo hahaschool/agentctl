@@ -167,6 +167,38 @@ export type AuditSummary = {
   avgDurationMs: number | null;
 };
 
+export type GitFileStatus = {
+  clean: boolean;
+  staged: number;
+  modified: number;
+  untracked: number;
+  ahead: number;
+  behind: number;
+};
+
+export type GitLastCommit = {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+};
+
+export type GitWorktreeEntry = {
+  path: string;
+  branch: string | null;
+  isMain: boolean;
+};
+
+export type GitStatusResponse = {
+  branch: string;
+  worktree: string;
+  isWorktree: boolean;
+  bareRepo: string | null;
+  status: GitFileStatus;
+  lastCommit: GitLastCommit | null;
+  worktrees: GitWorktreeEntry[];
+};
+
 export type RouterModelsResponse = {
   models: string[];
 };
@@ -179,6 +211,24 @@ export type ModelDeploymentInfo = {
 
 export type RouterModelsInfoResponse = {
   deployments: ModelDeploymentInfo[];
+};
+
+export type FileEntry = {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modified?: string;
+};
+
+export type FileListResponse = {
+  entries: FileEntry[];
+  path: string;
+};
+
+export type FileContentResponse = {
+  content: string;
+  path: string;
+  size: number;
 };
 
 export class ApiError extends Error {
@@ -440,4 +490,30 @@ export const api = {
   // Router / LiteLLM
   getRouterModels: () => request<RouterModelsResponse>('/api/router/models'),
   getRouterModelsInfo: () => request<RouterModelsInfoResponse>('/api/router/models/info'),
+
+  // File browsing
+  listFiles: (machineId: string, path: string) => {
+    const qs = new URLSearchParams({ path });
+    return request<FileListResponse>(`/api/machines/${encodeURIComponent(machineId)}/files?${qs}`);
+  },
+  readFile: (machineId: string, path: string) => {
+    const qs = new URLSearchParams({ path });
+    return request<FileContentResponse>(`/api/machines/${encodeURIComponent(machineId)}/files/content?${qs}`);
+  },
+  writeFile: (machineId: string, path: string, content: string) =>
+    request<{ success: boolean; path: string }>(
+      `/api/machines/${encodeURIComponent(machineId)}/files/content`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ path, content }),
+      },
+    ),
+
+  // Git status
+  getGitStatus: (machineId: string, path: string) => {
+    const qs = new URLSearchParams({ path });
+    return request<GitStatusResponse>(
+      `/api/machines/${encodeURIComponent(machineId)}/git/status?${qs}`,
+    );
+  },
 };

@@ -14,6 +14,8 @@ import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
+import { FileBrowser } from '../components/FileBrowser';
+import { GitStatusBadge } from '../components/GitStatusBadge';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
@@ -241,7 +243,11 @@ export function SessionDetailView(): React.JSX.Element {
     );
   }, [contentMessages, optimisticMessages.length]);
 
-  useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
+  // File browser panel toggle
+  const [showFiles, setShowFiles] = useState(false);
+  const toggleFiles = useCallback(() => setShowFiles((prev) => !prev), []);
+
+  useHotkeys(useMemo(() => ({ r: refetchAll, f: toggleFiles }), [refetchAll, toggleFiles]));
 
   if (session.isLoading) {
     return <LoadingState />;
@@ -263,25 +269,40 @@ export function SessionDetailView(): React.JSX.Element {
         onRefresh={refetchAll}
         streamConnected={stream.connected}
         streamCost={stream.latestCost}
+        showFiles={showFiles}
+        onToggleFiles={toggleFiles}
       />
 
       {/* Content area */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <MessageList
-          messages={content.data?.messages ?? []}
-          totalMessages={content.data?.totalMessages ?? 0}
-          isLoading={content.isLoading}
-          error={content.error?.message}
-          isActive={s.status === 'active'}
-          streamOutput={stream.streamOutput}
-          streamConnected={stream.connected}
-          pendingUserMessages={stream.pendingUserMessages}
-          optimisticMessages={optimisticMessages}
-          onLoadMore={() => setContentLimit((prev) => prev * 2)}
-        />
+      <div className="flex-1 overflow-hidden flex">
+        {/* Messages panel */}
+        <div className={cn('flex-1 overflow-hidden flex flex-col', showFiles && 'w-1/2')}>
+          <MessageList
+            messages={content.data?.messages ?? []}
+            totalMessages={content.data?.totalMessages ?? 0}
+            isLoading={content.isLoading}
+            error={content.error?.message}
+            isActive={s.status === 'active'}
+            streamOutput={stream.streamOutput}
+            streamConnected={stream.connected}
+            pendingUserMessages={stream.pendingUserMessages}
+            optimisticMessages={optimisticMessages}
+            onLoadMore={() => setContentLimit((prev) => prev * 2)}
+          />
 
-        {/* Input area */}
-        <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
+          {/* Input area */}
+          <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
+        </div>
+
+        {/* File browser panel */}
+        {showFiles && (
+          <div className="w-1/2 overflow-hidden">
+            <FileBrowser
+              machineId={s.machineId}
+              initialPath={s.projectPath ?? undefined}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -299,6 +320,8 @@ function SessionHeader({
   onRefresh,
   streamConnected,
   streamCost,
+  showFiles,
+  onToggleFiles,
 }: {
   session: Session;
   messages: SessionContentMessage[];
@@ -307,6 +330,8 @@ function SessionHeader({
   onRefresh: () => void;
   streamConnected?: boolean;
   streamCost?: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
+  showFiles?: boolean;
+  onToggleFiles?: () => void;
 }): React.JSX.Element {
   const router = useRouter();
   const toast = useToast();
@@ -390,6 +415,21 @@ function SessionHeader({
         <div className="ml-auto flex items-center gap-2">
           <LastUpdated dataUpdatedAt={dataUpdatedAt} />
           <RefreshButton onClick={onRefresh} isFetching={isFetching} />
+          {onToggleFiles && (
+            <button
+              type="button"
+              onClick={onToggleFiles}
+              className={cn(
+                'px-3 py-1 border rounded-sm text-xs cursor-pointer',
+                showFiles
+                  ? 'bg-primary text-primary-foreground border-primary hover:opacity-90'
+                  : 'bg-muted text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground',
+              )}
+              title="Toggle file browser (F)"
+            >
+              Files
+            </button>
+          )}
           <div className="relative" ref={exportMenuRef}>
             <button
               type="button"
@@ -538,6 +578,13 @@ function SessionHeader({
           </span>
         )}
       </div>
+
+      {/* Git status */}
+      {session.projectPath && session.machineId && (
+        <div className="mt-2">
+          <GitStatusBadge machineId={session.machineId} projectPath={session.projectPath} />
+        </div>
+      )}
 
       {/* Error details */}
       {session.status === 'error' && (

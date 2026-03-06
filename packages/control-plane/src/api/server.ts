@@ -25,6 +25,8 @@ import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
+import { fileProxyRoutes } from './routes/files.js';
+import { gitProxyRoutes } from './routes/git.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -304,6 +306,24 @@ export async function createServer({
       dbRegistry,
       workerPort,
       encryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY ?? '',
+    });
+  }
+
+  // Register file browsing proxy routes when dbRegistry is available.
+  if (dbRegistry) {
+    await app.register(fileProxyRoutes, {
+      prefix: '/api/machines',
+      dbRegistry,
+      workerPort,
+    });
+  }
+
+  // Register git status proxy routes when dbRegistry is available.
+  if (dbRegistry) {
+    await app.register(gitProxyRoutes, {
+      prefix: '/api/machines',
+      dbRegistry,
+      workerPort,
     });
   }
 

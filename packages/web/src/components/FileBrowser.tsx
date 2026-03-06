@@ -1,0 +1,398 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { useToast } from '@/components/Toast';
+import { cn } from '@/lib/utils';
+import type { FileContentResponse, FileEntry, FileListResponse } from '../lib/api';
+import { api, ApiError } from '../lib/api';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type FileBrowserProps = {
+  machineId: string;
+  initialPath?: string;
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatFileSize(bytes?: number): string {
+  if (bytes === undefined || bytes === null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+}
+
+function formatModified(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function pathSegments(path: string): { label: string; path: string }[] {
+  const parts = path.split('/').filter(Boolean);
+  const segments: { label: string; path: string }[] = [{ label: '/', path: '/' }];
+  let current = '';
+  for (const part of parts) {
+    current += `/${part}`;
+    segments.push({ label: part, path: current });
+  }
+  return segments;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React.JSX.Element {
+  const toast = useToast();
+
+  // Navigation state
+  const [currentPath, setCurrentPath] = useState(initialPath ?? '/');
+  const [pathInput, setPathInput] = useState(initialPath ?? '/');
+  const [entries, setEntries] = useState<FileEntry[]>([]);
+  const [dirLoading, setDirLoading] = useState(false);
+  const [dirError, setDirError] = useState<string | null>(null);
+
+  // File viewer state
+  const [openFile, setOpenFile] = useState<FileContentResponse | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  // Edit state
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // -------------------------------------------------------------------------
+  // Load directory
+  // -------------------------------------------------------------------------
+
+  const loadDirectory = useCallback(
+    async (path: string) => {
+      setDirLoading(true);
+      setDirError(null);
+      setOpenFile(null);
+      setEditing(false);
+
+      try {
+        const data: FileListResponse = await api.listFiles(machineId, path);
+        setEntries(data.entries);
+        setCurrentPath(data.path);
+        setPathInput(data.path);
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : String(err);
+        setDirError(msg);
+        setEntries([]);
+      } finally {
+        setDirLoading(false);
+      }
+    },
+    [machineId],
+  );
+
+  // Load initial directory
+  useEffect(() => {
+    void loadDirectory(currentPath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machineId]);
+
+  // -------------------------------------------------------------------------
+  // Open file
+  // -------------------------------------------------------------------------
+
+  const handleOpenFile = useCallback(
+    async (filePath: string) => {
+      setFileLoading(true);
+      setFileError(null);
+      setEditing(false);
+
+      try {
+        const data: FileContentResponse = await api.readFile(machineId, filePath);
+        setOpenFile(data);
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : String(err);
+        setFileError(msg);
+        setOpenFile(null);
+      } finally {
+        setFileLoading(false);
+      }
+    },
+    [machineId],
+  );
+
+  // -------------------------------------------------------------------------
+  // Save file
+  // -------------------------------------------------------------------------
+
+  const handleSave = useCallback(async () => {
+    if (!openFile) return;
+    setSaving(true);
+
+    try {
+      await api.writeFile(machineId, openFile.path, editContent);
+      toast.success('File saved');
+      // Update the openFile with new content
+      setOpenFile({ ...openFile, content: editContent, size: new Blob([editContent]).size });
+      setEditing(false);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : String(err);
+      toast.error(`Failed to save: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [machineId, openFile, editContent, toast]);
+
+  // -------------------------------------------------------------------------
+  // Entry click handler
+  // -------------------------------------------------------------------------
+
+  const handleEntryClick = useCallback(
+    (entry: FileEntry) => {
+      if (entry.type === 'directory') {
+        const newPath = currentPath === '/' ? `/${entry.name}` : `${currentPath}/${entry.name}`;
+        void loadDirectory(newPath);
+      } else {
+        const filePath = currentPath === '/' ? `/${entry.name}` : `${currentPath}/${entry.name}`;
+        void handleOpenFile(filePath);
+      }
+    },
+    [currentPath, loadDirectory, handleOpenFile],
+  );
+
+  // -------------------------------------------------------------------------
+  // Navigation
+  // -------------------------------------------------------------------------
+
+  const handlePathSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (pathInput.trim()) {
+        void loadDirectory(pathInput.trim());
+      }
+    },
+    [pathInput, loadDirectory],
+  );
+
+  const handleGoUp = useCallback(() => {
+    const parent = currentPath.replace(/\/[^/]+\/?$/, '') || '/';
+    void loadDirectory(parent);
+  }, [currentPath, loadDirectory]);
+
+  const startEditing = useCallback(() => {
+    if (!openFile) return;
+    setEditContent(openFile.content);
+    setEditing(true);
+    // Focus textarea after render
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, [openFile]);
+
+  const cancelEditing = useCallback(() => {
+    setEditing(false);
+    setEditContent('');
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
+
+  return (
+    <div className="flex flex-col h-full border-l border-border bg-card">
+      {/* Path bar */}
+      <div className="px-3 py-2 border-b border-border shrink-0">
+        <form onSubmit={handlePathSubmit} className="flex gap-2">
+          <input
+            type="text"
+            value={pathInput}
+            onChange={(e) => setPathInput(e.target.value)}
+            className="flex-1 px-2 py-1 bg-muted text-foreground border border-border rounded-sm text-xs font-mono outline-none focus:border-primary"
+            placeholder="Absolute path..."
+          />
+          <button
+            type="submit"
+            className="px-2 py-1 bg-primary text-primary-foreground rounded-sm text-xs cursor-pointer hover:opacity-90"
+          >
+            Go
+          </button>
+        </form>
+
+        {/* Breadcrumbs */}
+        <div className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground overflow-x-auto">
+          {pathSegments(currentPath).map((seg, i, arr) => (
+            <span key={seg.path} className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => void loadDirectory(seg.path)}
+                className={cn(
+                  'hover:text-foreground cursor-pointer bg-transparent border-none p-0',
+                  i === arr.length - 1 ? 'text-foreground font-medium' : 'text-muted-foreground',
+                )}
+              >
+                {seg.label}
+              </button>
+              {i < arr.length - 1 && <span className="text-muted-foreground/50">/</span>}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Content area */}
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+        {/* File viewer / editor */}
+        {(openFile || fileLoading || fileError) && (
+          <div className="flex-1 flex flex-col overflow-hidden border-b border-border">
+            {/* File header */}
+            <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 shrink-0 bg-muted/50">
+              <span className="text-xs font-mono text-foreground truncate flex-1">
+                {openFile?.path?.split('/').pop() ?? 'Loading...'}
+              </span>
+              {openFile && !editing && (
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="px-2 py-0.5 bg-primary text-primary-foreground rounded-sm text-[11px] cursor-pointer hover:opacity-90"
+                >
+                  Edit
+                </button>
+              )}
+              {editing && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-2 py-0.5 bg-green-700 text-white rounded-sm text-[11px] cursor-pointer hover:bg-green-600 disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditing}
+                    className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] cursor-pointer hover:bg-accent"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenFile(null);
+                  setFileError(null);
+                  setEditing(false);
+                }}
+                className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none text-sm"
+                title="Close file"
+              >
+                x
+              </button>
+            </div>
+
+            {/* File content */}
+            <div className="flex-1 overflow-auto min-h-0">
+              {fileLoading && (
+                <div className="p-4 text-xs text-muted-foreground animate-pulse">Loading file...</div>
+              )}
+              {fileError && (
+                <div className="p-4 text-xs text-red-400">{fileError}</div>
+              )}
+              {openFile && !editing && (
+                <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground leading-5 m-0">
+                  {openFile.content}
+                </pre>
+              )}
+              {editing && (
+                <textarea
+                  ref={textareaRef}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full h-full p-3 text-xs font-mono whitespace-pre bg-background text-foreground border-none outline-none resize-none leading-5"
+                  spellCheck={false}
+                />
+              )}
+            </div>
+
+            {/* File info */}
+            {openFile && (
+              <div className="px-3 py-1 border-t border-border text-[10px] text-muted-foreground shrink-0 bg-muted/30">
+                {formatFileSize(openFile.size)} | {openFile.path}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Directory listing */}
+        <div className={cn('overflow-auto', openFile || fileLoading || fileError ? 'max-h-[200px]' : 'flex-1')}>
+          {dirLoading && (
+            <div className="p-4 text-xs text-muted-foreground animate-pulse">Loading directory...</div>
+          )}
+          {dirError && (
+            <div className="p-4 text-xs text-red-400">{dirError}</div>
+          )}
+          {!dirLoading && !dirError && (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider">
+                  <th className="text-left px-3 py-1.5 font-medium">Name</th>
+                  <th className="text-right px-3 py-1.5 font-medium w-20">Size</th>
+                  <th className="text-right px-3 py-1.5 font-medium w-32">Modified</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Go up entry */}
+                {currentPath !== '/' && (
+                  <tr
+                    onClick={handleGoUp}
+                    className="border-b border-border/50 hover:bg-accent/50 cursor-pointer"
+                  >
+                    <td className="px-3 py-1.5 text-muted-foreground" colSpan={3}>
+                      <span className="mr-1.5">&#128193;</span> ..
+                    </td>
+                  </tr>
+                )}
+                {entries.map((entry) => (
+                  <tr
+                    key={entry.name}
+                    onClick={() => handleEntryClick(entry)}
+                    className={cn(
+                      'border-b border-border/50 hover:bg-accent/50 cursor-pointer',
+                      openFile?.path.endsWith(`/${entry.name}`) && 'bg-accent',
+                    )}
+                  >
+                    <td className="px-3 py-1.5">
+                      <span className="mr-1.5">
+                        {entry.type === 'directory' ? '\u{1F4C1}' : '\u{1F4C4}'}
+                      </span>
+                      <span className={entry.type === 'directory' ? 'text-blue-400' : 'text-foreground'}>
+                        {entry.name}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-muted-foreground tabular-nums">
+                      {entry.type === 'file' ? formatFileSize(entry.size) : ''}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-muted-foreground">
+                      {formatModified(entry.modified)}
+                    </td>
+                  </tr>
+                ))}
+                {entries.length === 0 && !dirLoading && (
+                  <tr>
+                    <td className="px-3 py-4 text-muted-foreground text-center italic" colSpan={3}>
+                      Empty directory
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

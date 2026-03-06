@@ -6,6 +6,8 @@ import type { AgentPool } from '../runtime/agent-pool.js';
 import type { CliSessionManager } from '../runtime/cli-session-manager.js';
 import { agentRoutes } from './routes/agents.js';
 import { emergencyStopRoutes } from './routes/emergency-stop.js';
+import { fileRoutes } from './routes/files.js';
+import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { sessionRoutes } from './routes/sessions.js';
@@ -174,6 +176,16 @@ export async function createWorkerServer({
 
   await app.register(workerMetricsRoutes, {
     agentPool,
+  });
+
+  await app.register(fileRoutes, {
+    prefix: '/api/files',
+    logger,
+  });
+
+  await app.register(gitRoutes, {
+    prefix: '/api/git',
+    logger,
   });
 
   if (sessionManager) {
