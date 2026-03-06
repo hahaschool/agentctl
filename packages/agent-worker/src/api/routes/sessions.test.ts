@@ -13,6 +13,33 @@ import type {
 import { type ContentMessage, parseJsonlEntry, sessionRoutes } from './sessions.js';
 
 // ---------------------------------------------------------------------------
+// Partial mock for node:fs and node:os — used by the content endpoint tests.
+// The mock is hoisted; per-test behaviour is set via vi.mocked().
+// ---------------------------------------------------------------------------
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    existsSync: vi.fn(actual.existsSync),
+    statSync: vi.fn(actual.statSync),
+    readFileSync: vi.fn(actual.readFileSync),
+    readdirSync: vi.fn(actual.readdirSync),
+  };
+});
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return {
+    ...actual,
+    homedir: vi.fn(actual.homedir),
+  };
+});
+
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+
+// ---------------------------------------------------------------------------
 // Mock helpers
 // ---------------------------------------------------------------------------
 
@@ -139,6 +166,7 @@ describe('Worker session routes', () => {
 
   afterEach(async () => {
     await app.close();
+    vi.restoreAllMocks();
   });
 
   // ── GET /api/sessions ──────────────────────────────────────────
@@ -689,6 +717,260 @@ describe('Worker session routes', () => {
       for (const key of expectedKeys) {
         expect(body).toHaveProperty(key);
       }
+    });
+  });
+
+  // ── GET /api/sessions/content/:claudeSessionId ───────────────────
+
+  describe('GET /api/sessions/content/:claudeSessionId', () => {
+    const FAKE_HOME = '/fake-home';
+    const CLAUDE_SESSION_ID = 'test-session-abc123';
+    const PROJECT_PATH = '/home/user/myproject';
+    const ENCODED_PATH = PROJECT_PATH.replace(/\//g, '-');
+    const JSONL_DIR = `${FAKE_HOME}/.claude/projects/${ENCODED_PATH}`;
+    const JSONL_FILE = `${JSONL_DIR}/${CLAUDE_SESSION_ID}.jsonl`;
+
+    function setupFsMocks(opts: {
+      fileExists?: boolean;
+      fileSize?: number;
+      fileContent?: string;
+    }): void {
+      const { fileExists = true, fileSize = 100, fileContent = '' } = opts;
+
+      vi.mocked(homedir).mockReturnValue(FAKE_HOME);
+
+      vi.mocked(existsSync).mockImplementation((p: string | URL) => {
+        const path = String(p);
+        if (path === `${FAKE_HOME}/.claude/projects`) return true;
+        if (path === JSONL_FILE) return fileExists;
+        return false;
+      });
+
+      if (fileExists) {
+        vi.mocked(statSync).mockImplementation((p: string | URL) => {
+          if (String(p) === JSONL_FILE) {
+            return { size: fileSize, isDirectory: () => false } as ReturnType<typeof statSync>;
+          }
+          throw new Error(`ENOENT: ${String(p)}`);
+        });
+
+        vi.mocked(readFileSync).mockImplementation((p: string | URL | number) => {
+          if (String(p) === JSONL_FILE) return fileContent;
+          throw new Error(`ENOENT: ${String(p)}`);
+        });
+      }
+
+      // readdirSync for the fallback recursive search — return empty to avoid scanning
+      vi.mocked(readdirSync).mockReturnValue([]);
+    }
+
+    it('should return 404 when JSONL file is not found', async () => {
+      setupFsMocks({ fileExists: false });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = res.json();
+      expect(body.code).toBe('SESSION_CONTENT_NOT_FOUND');
+    });
+
+    it('should return 413 when JSONL file exceeds 100 MB', async () => {
+      const overLimit = 100 * 1024 * 1024 + 1; // one byte over
+      setupFsMocks({ fileExists: true, fileSize: overLimit });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(413);
+      const body = res.json();
+      expect(body.code).toBe('CONTENT_TOO_LARGE');
+      expect(body.error).toContain('100 MB');
+    });
+
+    it('should return 200 with exactly 100 MB file (boundary)', async () => {
+      const atLimit = 100 * 1024 * 1024;
+      const content = JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'text', text: 'Hello' }] },
+      });
+      setupFsMocks({ fileExists: true, fileSize: atLimit, fileContent: content });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.messages).toHaveLength(1);
+      expect(body.sessionId).toBe(CLAUDE_SESSION_ID);
+    });
+
+    it('should parse JSONL content and return messages', async () => {
+      const lines = [
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: 'Fix the bug' }] },
+          timestamp: '2026-03-01T10:00:00Z',
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'I will fix the bug now.' }] },
+          timestamp: '2026-03-01T10:00:05Z',
+        }),
+      ].join('\n');
+
+      setupFsMocks({ fileExists: true, fileSize: lines.length, fileContent: lines });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(2);
+      expect(body.messages).toHaveLength(2);
+      expect(body.messages[0].type).toBe('human');
+      expect(body.messages[0].content).toBe('Fix the bug');
+      expect(body.messages[1].type).toBe('assistant');
+      expect(body.messages[1].content).toBe('I will fix the bug now.');
+    });
+
+    it('should apply limit parameter', async () => {
+      const lines = Array.from({ length: 5 }, (_, i) =>
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: `Message ${i + 1}` }] },
+        }),
+      ).join('\n');
+
+      setupFsMocks({ fileExists: true, fileSize: lines.length, fileContent: lines });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}&limit=2`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(5);
+      // limit=2 returns the last 2 messages (offset default 0 → latest)
+      expect(body.messages).toHaveLength(2);
+      expect(body.messages[0].content).toBe('Message 4');
+      expect(body.messages[1].content).toBe('Message 5');
+    });
+
+    it('should apply offset parameter (skip latest N messages)', async () => {
+      const lines = Array.from({ length: 5 }, (_, i) =>
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: `Msg ${i + 1}` }] },
+        }),
+      ).join('\n');
+
+      setupFsMocks({ fileExists: true, fileSize: lines.length, fileContent: lines });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}&limit=2&offset=2`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(5);
+      // offset=2 skips the last 2, limit=2 takes the next 2 from the end
+      expect(body.messages).toHaveLength(2);
+      expect(body.messages[0].content).toBe('Msg 2');
+      expect(body.messages[1].content).toBe('Msg 3');
+    });
+
+    it('should skip unparseable JSONL lines gracefully', async () => {
+      const lines = [
+        '{ bad json',
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: 'Valid message' }] },
+        }),
+        'not json at all',
+      ].join('\n');
+
+      setupFsMocks({ fileExists: true, fileSize: lines.length, fileContent: lines });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(1);
+      expect(body.messages[0].content).toBe('Valid message');
+    });
+
+    it('should return empty messages for empty JSONL file', async () => {
+      setupFsMocks({ fileExists: true, fileSize: 0, fileContent: '' });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(0);
+      expect(body.messages).toEqual([]);
+    });
+
+    it('should use default limit of 100 when not specified', async () => {
+      // Create 150 messages
+      const lines = Array.from({ length: 150 }, (_, i) =>
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: `Msg ${i}` }] },
+        }),
+      ).join('\n');
+
+      setupFsMocks({ fileExists: true, fileSize: lines.length, fileContent: lines });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(150);
+      // Default limit=100, offset=0, so we get the last 100 messages
+      expect(body.messages).toHaveLength(100);
+      expect(body.messages[0].content).toBe('Msg 50');
+      expect(body.messages[99].content).toBe('Msg 149');
+    });
+
+    it('should handle offset larger than total messages', async () => {
+      const lines = [
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: 'Only message' }] },
+        }),
+      ].join('\n');
+
+      setupFsMocks({ fileExists: true, fileSize: lines.length, fileContent: lines });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}&offset=100`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(1);
+      expect(body.messages).toEqual([]);
     });
   });
 });
@@ -1362,6 +1644,147 @@ describe('parseJsonlEntry', () => {
     it('should return empty for empty content array', () => {
       const entry = { type: 'assistant', message: { content: [] } };
       expect(parseJsonlEntry(entry)).toEqual([]);
+    });
+  });
+
+  // ── Truncation limits ──────────────────────────────────────────
+
+  describe('truncation limits', () => {
+    it('should truncate user text blocks to 8000 chars', () => {
+      const longText = 'x'.repeat(10_000);
+      const entry = {
+        type: 'user',
+        message: { content: [{ type: 'text', text: longText }] },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('human');
+      expect(results[0].content).toHaveLength(8000);
+    });
+
+    it('should not truncate user text blocks at or below 8000 chars', () => {
+      const exactText = 'y'.repeat(8000);
+      const entry = {
+        type: 'user',
+        message: { content: [{ type: 'text', text: exactText }] },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toHaveLength(8000);
+    });
+
+    it('should truncate assistant text blocks to 8000 chars', () => {
+      const longText = 'a'.repeat(12_000);
+      const entry = {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: longText }] },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('assistant');
+      expect(results[0].content).toHaveLength(8000);
+    });
+
+    it('should not truncate assistant text blocks at exactly 8000 chars', () => {
+      const exactText = 'b'.repeat(8000);
+      const entry = {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: exactText }] },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toHaveLength(8000);
+    });
+
+    it('should truncate tool_result string content to 4000 chars', () => {
+      const longContent = 'r'.repeat(6000);
+      const entry = {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'toolu_abc', content: longContent },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('tool_result');
+      expect(results[0].content).toHaveLength(4000);
+    });
+
+    it('should truncate tool_result non-string content (JSON serialized) to 4000 chars', () => {
+      // When content is not a string, it gets JSON.stringify'd then truncated
+      const bigArray = Array.from({ length: 500 }, (_, i) => ({ index: i, data: 'x'.repeat(20) }));
+      const entry = {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'toolu_xyz', content: bigArray },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('tool_result');
+      expect(results[0].content.length).toBeLessThanOrEqual(4000);
+    });
+
+    it('should truncate tool_use string input to 4000 chars', () => {
+      const longInput = 'i'.repeat(5000);
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Bash', id: 'toolu_001', input: longInput },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('tool_use');
+      expect(results[0].content).toHaveLength(4000);
+    });
+
+    it('should truncate tool_use object input (JSON serialized) to 4000 chars', () => {
+      const bigObject = {
+        file_path: '/tmp/test',
+        content: 'z'.repeat(6000),
+      };
+      const entry = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Write', id: 'toolu_002', input: bigObject },
+          ],
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('tool_use');
+      expect(results[0].content.length).toBeLessThanOrEqual(4000);
+    });
+
+    it('should truncate user string content (non-array) — no truncation applied for string message.content', () => {
+      // When message.content is a plain string (not array), the code does NOT truncate
+      // This test documents the current behavior
+      const longString = 'q'.repeat(10_000);
+      const entry = {
+        type: 'user',
+        message: { content: longString },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      // Plain string content path does not apply 8000-char truncation
+      expect(results[0].content).toHaveLength(10_000);
     });
   });
 });

@@ -9,7 +9,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import type { AgentEvent } from '@agentctl/shared';
+import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
@@ -81,15 +81,8 @@ type ContentQuerystring = {
   offset?: string;
 };
 
-export type ContentMessage = {
-  type: string;
-  content: string;
-  timestamp?: string;
-  toolName?: string;
-  toolId?: string;
-  subagentId?: string;
-  metadata?: Record<string, unknown>;
-};
+// ContentMessage is re-exported from @agentctl/shared for downstream consumers
+export type { ContentMessage } from '@agentctl/shared';
 
 const DEFAULT_CONTENT_LIMIT = 100;
 const MAX_SEARCH_DEPTH = 3;
