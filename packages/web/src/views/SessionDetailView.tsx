@@ -224,6 +224,23 @@ export function SessionDetailView(): React.JSX.Element {
     }
   }, [contentMessages, stream.pendingUserMessages, stream.clearPendingMessages]);
 
+  // Optimistic messages — shown immediately when user sends, cleared when JSONL catches up
+  const [optimisticMessages, setOptimisticMessages] = useState<string[]>([]);
+  const addOptimisticMessage = useCallback((text: string) => {
+    setOptimisticMessages((prev) => [...prev, text]);
+  }, []);
+
+  // Clear optimistic messages when they appear in JSONL content
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return;
+    const humanTexts = contentMessages
+      .filter((m) => m.type === 'human')
+      .map((m) => m.content?.trim());
+    setOptimisticMessages((prev) =>
+      prev.filter((text) => !humanTexts.includes(text.trim())),
+    );
+  }, [contentMessages, optimisticMessages.length]);
+
   useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
 
   if (session.isLoading) {
@@ -259,11 +276,12 @@ export function SessionDetailView(): React.JSX.Element {
           streamOutput={stream.streamOutput}
           streamConnected={stream.connected}
           pendingUserMessages={stream.pendingUserMessages}
+          optimisticMessages={optimisticMessages}
           onLoadMore={() => setContentLimit((prev) => prev * 2)}
         />
 
         {/* Input area */}
-        <MessageInput session={s} />
+        <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
       </div>
     </div>
   );
@@ -563,6 +581,7 @@ function MessageList({
   streamOutput,
   streamConnected,
   pendingUserMessages,
+  optimisticMessages,
   onLoadMore,
 }: {
   messages: SessionContentMessage[];
@@ -573,6 +592,7 @@ function MessageList({
   streamOutput?: string[];
   streamConnected?: boolean;
   pendingUserMessages?: string[];
+  optimisticMessages?: string[];
   onLoadMore?: () => void;
 }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -819,18 +839,32 @@ function MessageList({
         )}
         {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} aria-hidden />}
 
-        {/* Pending user messages (shown immediately before JSONL poll catches up) */}
-        {pendingUserMessages && pendingUserMessages.length > 0 &&
-          pendingUserMessages.map((text, i) => (
-            <div key={`pending-user-${String(i)}`} className="relative">
-              <MessageBubble
-                message={{ type: 'human', content: text, timestamp: new Date().toISOString() }}
-              />
-              <span className="absolute top-2 right-3 text-[9px] text-muted-foreground/60 animate-pulse">
-                sending...
-              </span>
+        {/* Optimistic user messages (shown instantly on send, before any SSE/JSONL) */}
+        {optimisticMessages && optimisticMessages.length > 0 &&
+          optimisticMessages.map((text, i) => (
+            <div key={`optimistic-${String(i)}`} className="relative">
+              <div className="px-3 py-2 rounded-lg border-l-[3px] bg-blue-500/[0.06] border-l-blue-400 opacity-80">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[11px] font-semibold text-blue-400">You</span>
+                  <span className="text-[9px] text-muted-foreground/60 animate-pulse">sending...</span>
+                </div>
+                <div className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap break-words">
+                  {text}
+                </div>
+              </div>
             </div>
           ))}
+
+        {/* Pending user messages from SSE (shown before JSONL poll catches up) */}
+        {pendingUserMessages && pendingUserMessages.length > 0 &&
+          pendingUserMessages
+            .filter((text) => !(optimisticMessages ?? []).includes(text))
+            .map((text, i) => (
+              <MessageBubble
+                key={`pending-user-${String(i)}`}
+                message={{ type: 'human', content: text, timestamp: new Date().toISOString() }}
+              />
+            ))}
 
         {/* Live streaming output */}
         {streamConnected && streamOutput && streamOutput.length > 0 && (
@@ -1130,7 +1164,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
 // Message input
 // ---------------------------------------------------------------------------
 
-function MessageInput({ session }: { session: Session }): React.JSX.Element {
+function MessageInput({ session, onOptimisticSend }: { session: Session; onOptimisticSend?: (text: string) => void }): React.JSX.Element {
   const [message, setMessage] = useState('');
   const lostKey = `lost:${session.id}`;
   const [sessionLost, setSessionLost] = useState(() => sessionStorage.getItem(lostKey) === '1');
@@ -1182,6 +1216,9 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
   const handleSubmit = useCallback(() => {
     const text = message.trim();
     if (!text || isSending) return;
+
+    // Show optimistic message immediately
+    onOptimisticSend?.(text);
 
     if (isActive) {
       sendMessage.mutate(
@@ -1256,6 +1293,7 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
     storageKey,
     sendMessage,
     resumeSession,
+    onOptimisticSend,
     isSessionLostError,
     markSessionLost,
     toast,
