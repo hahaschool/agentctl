@@ -1126,7 +1126,7 @@ function ToolPairBlock({
         type="button"
         onClick={() => setExpanded(true)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-1.5 rounded-sm cursor-pointer text-left text-foreground font-[inherit] border-none border-l-2',
+          'w-full flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-left text-foreground font-[inherit] border-none border-l-2',
           'bg-yellow-500/[0.04] border-l-yellow-400',
         )}
       >
@@ -1231,7 +1231,7 @@ function MessageBubble({ message, renderMarkdown }: { message: SessionContentMes
         type="button"
         onClick={() => setExpanded(true)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-1 rounded-sm cursor-pointer text-left text-foreground font-[inherit] border-none border-l-2',
+          'w-full flex items-center gap-2 px-3 py-1 rounded-md cursor-pointer text-left text-foreground font-[inherit] border-none border-l-2',
           style.bubbleClass,
         )}
       >

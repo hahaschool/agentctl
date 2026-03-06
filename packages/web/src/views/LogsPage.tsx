@@ -724,7 +724,7 @@ function CollapsibleSection({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex items-center gap-2 mb-2.5 bg-transparent border-none p-0 cursor-pointer text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 rounded-sm"
+        className="flex items-center gap-2 mb-2.5 bg-transparent border-none p-0 cursor-pointer text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 rounded-md"
       >
         <span
           className={cn(

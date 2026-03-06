@@ -2007,7 +2007,7 @@ function SessionContent({
             {optimisticMessages.map((om) => (
               <div
                 key={om.id}
-                className="mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2 border-blue-500/50 bg-blue-500/10"
+                className="mb-1.5 px-2.5 py-1.5 rounded-md border-l-2 border-blue-500/50 bg-blue-500/10"
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
                   <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">You</span>
