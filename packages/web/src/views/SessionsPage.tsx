@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { ConvertToAgentForm } from '../components/ConvertToAgentForm';
 import { CopyableText } from '../components/CopyableText';
 import { CreateSessionForm } from '../components/CreateSessionForm';
 import { DetailRow } from '../components/DetailRow';
@@ -1061,79 +1062,18 @@ export function SessionsPage(): React.JSX.Element {
 
             {/* Convert to Agent dialog */}
             {showConvertDialog && (
-              <div className="px-5 py-4 border-b border-border bg-emerald-950/15">
-                <div className="text-xs font-semibold text-emerald-400 mb-3 tracking-tight">
-                  Create Agent from Session
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
-                  <div>
-                    <label
-                      htmlFor="convert-agent-name"
-                      className="text-[11px] text-muted-foreground block mb-1"
-                    >
-                      Agent Name
-                    </label>
-                    <input
-                      id="convert-agent-name"
-                      type="text"
-                      value={convertName}
-                      onChange={(e) => setConvertName(e.target.value)}
-                      className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
-                      placeholder="my-agent"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="convert-agent-type"
-                      className="text-[11px] text-muted-foreground block mb-1"
-                    >
-                      Agent Type
-                    </label>
-                    <select
-                      id="convert-agent-type"
-                      value={convertType}
-                      onChange={(e) => setConvertType(e.target.value)}
-                      className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
-                    >
-                      <option value="autonomous">Autonomous (long-running)</option>
-                      <option value="ad-hoc">Ad-hoc (one-shot)</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="text-[11px] text-muted-foreground mb-3 space-y-0.5">
-                  <div>
-                    Machine: <span className="text-foreground font-mono">{selected.machineId}</span>
-                  </div>
-                  {selected.projectPath && (
-                    <div>
-                      Project:{' '}
-                      <span className="text-foreground font-mono">{selected.projectPath}</span>
-                    </div>
-                  )}
-                  {selected.model && (
-                    <div>
-                      Model: <span className="text-foreground">{selected.model}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleConvertToAgent}
-                    disabled={createAgent.isPending}
-                    className="h-8 px-3.5 bg-emerald-700 text-white rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    {createAgent.isPending ? 'Creating...' : 'Create Agent'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowConvertDialog(false)}
-                    className="h-8 px-3.5 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer transition-all duration-200 hover:bg-accent hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+              <ConvertToAgentForm
+                convertName={convertName}
+                onNameChange={setConvertName}
+                convertType={convertType}
+                onTypeChange={setConvertType}
+                machineId={selected.machineId}
+                projectPath={selected.projectPath}
+                model={selected.model}
+                isPending={createAgent.isPending}
+                onSubmit={handleConvertToAgent}
+                onCancel={() => setShowConvertDialog(false)}
+              />
             )}
 
             {/* Session content viewer */}
