@@ -30,7 +30,6 @@ import type {
   Machine,
   Session,
   SessionContentMessage,
-  SessionContentResponse,
 } from '../lib/api';
 import { api } from '../lib/api';
 import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
@@ -1306,9 +1305,12 @@ function SessionContent({
   isActive?: boolean;
   lastSentMessage?: { text: string; ts: number } | null;
 }): React.JSX.Element {
-  const [data, setData] = useState<SessionContentResponse | null>(null);
+  const PAGE_SIZE = 200;
+  const [allMessages, setAllMessages] = useState<SessionContentMessage[]>([]);
+  const [totalMessages, setTotalMessages] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const [showProgress, setShowProgress] = useState(isActive ?? false);
@@ -1319,27 +1321,37 @@ function SessionContent({
   >([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
+  // Track how many messages we've loaded from the end
+  const loadedOffsetRef = useRef(0);
 
   // SSE streaming for active sessions
   const stream = useSessionStream({
     sessionId: rcSessionId,
     enabled: isActive ?? false,
     onEvent: useCallback((event: SessionStreamEvent) => {
-      // Refetch full content on status change / loop complete
+      // Refetch latest content on status change / loop complete
       if (event.event === 'status' || event.event === 'loop_complete') {
-        void fetchContentRef.current();
+        void fetchLatestRef.current();
       }
     }, []),
   });
 
-  const fetchContent = useCallback(async () => {
+  // Fetch latest messages (offset=0, replaces tail of loaded messages)
+  const fetchLatest = useCallback(async () => {
     try {
       const result = await api.getSessionContent(sessionId, {
         machineId,
         projectPath,
-        limit: 500,
+        limit: PAGE_SIZE,
       });
-      setData(result);
+      setTotalMessages(result.totalMessages);
+      // If we had older messages loaded, keep them and replace the tail
+      setAllMessages((prev) => {
+        const olderCount = Math.max(0, prev.length - PAGE_SIZE);
+        const olderMessages = prev.slice(0, olderCount);
+        return [...olderMessages, ...result.messages];
+      });
+      loadedOffsetRef.current = 0;
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1348,23 +1360,58 @@ function SessionContent({
     }
   }, [sessionId, machineId, projectPath]);
 
-  const fetchContentRef = useRef(fetchContent);
-  fetchContentRef.current = fetchContent;
+  const fetchLatestRef = useRef(fetchLatest);
+  fetchLatestRef.current = fetchLatest;
+
+  // Fetch older messages (prepend to existing)
+  const fetchOlder = useCallback(async () => {
+    if (loadingOlder || allMessages.length >= totalMessages) return;
+    setLoadingOlder(true);
+    try {
+      const offset = allMessages.length;
+      const result = await api.getSessionContent(sessionId, {
+        machineId,
+        projectPath,
+        limit: PAGE_SIZE,
+        offset,
+      });
+      setTotalMessages(result.totalMessages);
+      if (result.messages.length > 0) {
+        // Preserve scroll position by measuring before/after
+        const el = scrollRef.current;
+        const prevScrollHeight = el?.scrollHeight ?? 0;
+        setAllMessages((prev) => [...result.messages, ...prev]);
+        // Restore scroll position after prepend
+        requestAnimationFrame(() => {
+          if (el) {
+            const newScrollHeight = el.scrollHeight;
+            el.scrollTop += newScrollHeight - prevScrollHeight;
+          }
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [sessionId, machineId, projectPath, allMessages.length, totalMessages, loadingOlder]);
 
   // Initial fetch
   useEffect(() => {
     setLoading(true);
-    void fetchContent();
-  }, [fetchContent]);
+    setAllMessages([]);
+    loadedOffsetRef.current = 0;
+    void fetchLatest();
+  }, [fetchLatest]);
 
-  // Auto-poll when session is active
+  // Auto-poll when session is active (only refresh latest)
   useEffect(() => {
     if (!isActive) return;
 
-    const timer = setInterval(() => void fetchContent(), CONTENT_POLL_MS);
+    const timer = setInterval(() => void fetchLatest(), CONTENT_POLL_MS);
 
     const handleVisibility = (): void => {
-      if (!document.hidden) void fetchContent();
+      if (!document.hidden) void fetchLatest();
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -1372,29 +1419,29 @@ function SessionContent({
       clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [isActive, fetchContent]);
+  }, [isActive, fetchLatest]);
 
   // Auto-scroll when new messages arrive (only if autoScroll is true)
   useEffect(() => {
-    if (data && scrollRef.current) {
-      const newCount = data.messages.length;
+    if (allMessages.length > 0 && scrollRef.current) {
+      const newCount = allMessages.length;
       if (newCount > prevMsgCountRef.current && autoScroll) {
         scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
       }
       prevMsgCountRef.current = newCount;
     }
-  }, [data, autoScroll]);
+  }, [allMessages.length, autoScroll]);
 
   // Clear optimistic messages when they appear in the real data
   useEffect(() => {
-    if (!data || optimisticMessages.length === 0) return;
-    const realTexts = data.messages
+    if (allMessages.length === 0 || optimisticMessages.length === 0) return;
+    const realTexts = allMessages
       .filter((m) => m.type === 'human')
       .map((m) => (m.content ?? '').trim());
     setOptimisticMessages((prev) =>
       prev.filter((om) => !realTexts.includes(om.text.trim())),
     );
-  }, [data, optimisticMessages.length]);
+  }, [allMessages, optimisticMessages.length]);
 
   // Scroll handler for user-scrolled-up detection
   const handleScroll = useCallback(() => {
@@ -1428,25 +1475,25 @@ function SessionContent({
     }, 50);
   }, [lastSentMessage]);
 
-  const messages = data
-    ? data.messages.filter((m) => {
-        // Always show these types
-        if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo') return true;
-        // Toggle-controlled types
-        if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
-        if (m.type === 'thinking') return showThinking;
-        if (m.type === 'progress') return showProgress;
-        // Hide unknown types unless tools are shown
-        return showTools;
-      })
-    : [];
+  const hasMore = allMessages.length < totalMessages;
+
+  const messages = allMessages.filter((m) => {
+    // Always show these types
+    if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo') return true;
+    // Toggle-controlled types
+    if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
+    if (m.type === 'thinking') return showThinking;
+    if (m.type === 'progress') return showProgress;
+    // Hide unknown types unless tools are shown
+    return showTools;
+  });
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Controls */}
       <div className="px-5 py-1.5 border-b border-border flex justify-between items-center shrink-0">
         <span className="text-[11px] text-muted-foreground">
-          {data ? `${messages.length} messages${showTools ? '' : ' (conversations only)'}` : ''}
+          {allMessages.length > 0 ? `${messages.length}${hasMore ? ` / ${totalMessages}` : ''} messages` : ''}
           {isActive && (
             <span
               className={cn(
@@ -1498,7 +1545,7 @@ function SessionContent({
           </button>
           <button
             type="button"
-            onClick={() => void fetchContent()}
+            onClick={() => void fetchLatest()}
             aria-label="Refresh conversation"
             className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer transition-colors min-h-[28px]"
           >
@@ -1524,9 +1571,27 @@ function SessionContent({
               ))}
             </div>
           )}
-          {error && <ErrorBanner message={error} onRetry={() => void fetchContent()} />}
-          {data && messages.length === 0 && !loading && (
+          {error && <ErrorBanner message={error} onRetry={() => void fetchLatest()} />}
+          {allMessages.length > 0 && messages.length === 0 && !loading && (
+            <div className="p-5 text-center text-muted-foreground text-xs">No messages match current filters</div>
+          )}
+          {allMessages.length === 0 && !loading && !error && (
             <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
+          )}
+          {/* Load older messages button */}
+          {hasMore && !loading && (
+            <div className="py-2 text-center">
+              <button
+                type="button"
+                onClick={() => void fetchOlder()}
+                disabled={loadingOlder}
+                className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline cursor-pointer disabled:opacity-50 bg-transparent border-none"
+              >
+                {loadingOlder
+                  ? 'Loading...'
+                  : `Load older messages (${totalMessages - allMessages.length} more)`}
+              </button>
+            </div>
           )}
           {messages.map((msg, i) => {
             switch (msg.type) {

@@ -376,12 +376,13 @@ export const api = {
   // Session content preview
   getSessionContent: (
     sessionId: string,
-    params: { machineId: string; projectPath?: string; limit?: number },
+    params: { machineId: string; projectPath?: string; limit?: number; offset?: number },
   ) => {
     const qs = new URLSearchParams();
     qs.set('machineId', params.machineId);
     if (params.projectPath) qs.set('projectPath', params.projectPath);
     if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
     return request<SessionContentResponse>(
       `/api/sessions/content/${encodeURIComponent(sessionId)}?${qs}`,
     );

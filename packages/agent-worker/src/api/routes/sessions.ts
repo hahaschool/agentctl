@@ -77,6 +77,7 @@ type ContentParams = {
 type ContentQuerystring = {
   projectPath?: string;
   limit?: string;
+  offset?: string;
 };
 
 export type ContentMessage = {
@@ -365,13 +366,22 @@ export async function sessionRoutes(
     '/content/:claudeSessionId',
     async (request, reply) => {
       const { claudeSessionId } = request.params;
-      const { projectPath, limit: limitStr } = request.query;
+      const { projectPath, limit: limitStr, offset: offsetStr } = request.query;
 
       let limit = DEFAULT_CONTENT_LIMIT;
       if (limitStr !== undefined) {
         const parsed = Number(limitStr);
         if (Number.isInteger(parsed) && parsed >= 1) {
           limit = parsed;
+        }
+      }
+
+      // offset counts backwards from the end (0 = latest messages)
+      let offset = 0;
+      if (offsetStr !== undefined) {
+        const parsed = Number(offsetStr);
+        if (Number.isInteger(parsed) && parsed >= 0) {
+          offset = parsed;
         }
       }
 
@@ -403,7 +413,10 @@ export async function sessionRoutes(
         }
 
         const totalMessages = allMessages.length;
-        const messages = allMessages.slice(-limit);
+        // offset counts backwards from end: offset=0 → latest, offset=200 → skip last 200
+        const end = totalMessages - offset;
+        const start = Math.max(0, end - limit);
+        const messages = end > 0 ? allMessages.slice(start, end) : [];
 
         return {
           messages,
