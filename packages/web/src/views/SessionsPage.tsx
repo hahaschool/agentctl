@@ -34,7 +34,13 @@ import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
 import type { ApiAccount, Machine, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
-import { formatDateTime, formatDuration, formatTime, shortenPath } from '../lib/format-utils';
+import {
+  escapeCsvValue,
+  formatDateTime,
+  formatDuration,
+  formatTime,
+  shortenPath,
+} from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
 import { STORAGE_KEYS } from '../lib/storage-keys';
@@ -74,15 +80,6 @@ function matchesSearchQuery(session: Session, query: string): boolean {
   if (session.machineId.toLowerCase().includes(q)) return true;
   if (session.model?.toLowerCase().includes(q)) return true;
   return false;
-}
-
-function escapeCsvValue(value: string | number | null | undefined): string {
-  if (value == null) return '';
-  const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
 }
 
 function exportSessionsCsv(sessions: Session[]): void {

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  escapeCsvValue,
   formatCost,
   formatDuration,
   formatDurationMs,
+  formatFileSize,
   formatNumber,
+  isStaleHeartbeat,
   recencyColorClass,
   shortenPath,
   timeAgo,
@@ -225,6 +228,91 @@ describe('formatNumber', () => {
 
   it('returns original string for NaN input', () => {
     expect(formatNumber('not-a-number')).toBe('not-a-number');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatFileSize
+// ---------------------------------------------------------------------------
+
+describe('formatFileSize', () => {
+  it('returns empty string for null', () => {
+    expect(formatFileSize(null)).toBe('');
+  });
+
+  it('returns empty string for undefined', () => {
+    expect(formatFileSize(undefined)).toBe('');
+  });
+
+  it('returns bytes for small values', () => {
+    expect(formatFileSize(512)).toBe('512 B');
+  });
+
+  it('returns KB for medium values', () => {
+    expect(formatFileSize(2048)).toBe('2.0 KB');
+  });
+
+  it('returns MB for large values', () => {
+    expect(formatFileSize(5_242_880)).toBe('5.0 MB');
+  });
+
+  it('returns 0 B for zero', () => {
+    expect(formatFileSize(0)).toBe('0 B');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isStaleHeartbeat
+// ---------------------------------------------------------------------------
+
+describe('isStaleHeartbeat', () => {
+  it('returns false for recent heartbeat (< 60s)', () => {
+    const recent = new Date(Date.now() - 30_000).toISOString();
+    expect(isStaleHeartbeat(recent)).toBe(false);
+  });
+
+  it('returns true for stale heartbeat (> 60s)', () => {
+    const stale = new Date(Date.now() - 120_000).toISOString();
+    expect(isStaleHeartbeat(stale)).toBe(true);
+  });
+
+  it('returns true for very old heartbeat', () => {
+    const old = new Date(Date.now() - 3_600_000).toISOString();
+    expect(isStaleHeartbeat(old)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// escapeCsvValue
+// ---------------------------------------------------------------------------
+
+describe('escapeCsvValue', () => {
+  it('returns empty string for null', () => {
+    expect(escapeCsvValue(null)).toBe('');
+  });
+
+  it('returns empty string for undefined', () => {
+    expect(escapeCsvValue(undefined)).toBe('');
+  });
+
+  it('returns plain string unchanged', () => {
+    expect(escapeCsvValue('hello')).toBe('hello');
+  });
+
+  it('wraps strings with commas in quotes', () => {
+    expect(escapeCsvValue('hello, world')).toBe('"hello, world"');
+  });
+
+  it('escapes double quotes', () => {
+    expect(escapeCsvValue('say "hi"')).toBe('"say ""hi"""');
+  });
+
+  it('wraps strings with newlines in quotes', () => {
+    expect(escapeCsvValue('line1\nline2')).toBe('"line1\nline2"');
+  });
+
+  it('handles number values', () => {
+    expect(escapeCsvValue(42)).toBe('42');
   });
 });
 

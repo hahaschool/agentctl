@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatFileSize } from '@/lib/format-utils';
 import { cn } from '@/lib/utils';
 import type { FileContentResponse, FileEntry, FileListResponse } from '../lib/api';
 import { ApiError, api } from '../lib/api';
@@ -16,17 +17,6 @@ type FileBrowserProps = {
   machineId: string;
   initialPath?: string;
 };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatFileSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1_048_576).toFixed(1)} MB`;
-}
 
 function formatModified(iso?: string): string {
   if (!iso) return '';

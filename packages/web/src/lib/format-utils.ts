@@ -133,6 +133,32 @@ export function formatNumber(n: number | string | null | undefined): string {
   return num.toLocaleString('en-US');
 }
 
+/** Format a byte count as "1.2 KB", "3.5 MB", etc. */
+export function formatFileSize(bytes?: number | null): string {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+}
+
+const STALE_HEARTBEAT_MS = 60_000;
+
+/** Check if a heartbeat timestamp is stale (>60 s ago). */
+export function isStaleHeartbeat(dateStr: string): boolean {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  return diffMs > STALE_HEARTBEAT_MS;
+}
+
+/** Escape a value for CSV output — wraps in quotes if it contains commas, quotes, or newlines. */
+export function escapeCsvValue(value: string | number | null | undefined): string {
+  if (value == null) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 /**
  * Recency Tailwind class for activity dots.
  * Returns a `bg-*` class instead of a hex color string.

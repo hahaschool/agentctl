@@ -19,7 +19,7 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Machine } from '../lib/api';
-import { formatDate } from '../lib/format-utils';
+import { formatDate, isStaleHeartbeat } from '../lib/format-utils';
 import { machinesQuery } from '../lib/queries';
 
 type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
@@ -359,15 +359,6 @@ function MachineCard({
       )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers: is a heartbeat stale (> 60s)?
-// ---------------------------------------------------------------------------
-
-function isStaleHeartbeat(dateStr: string): boolean {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  return diffMs > 60_000;
 }
 
 // ---------------------------------------------------------------------------

@@ -33,7 +33,7 @@ import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
 import type { Attachment, Session, SessionContentMessage, SessionMetadata } from '../lib/api';
 import { clipboardImageToAttachment, fileToAttachment } from '../lib/api';
-import { formatNumber, formatTime } from '../lib/format-utils';
+import { formatFileSize, formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import {
   accountsQuery,
@@ -1746,12 +1746,6 @@ const RESUME_MODEL_OPTIONS = [
   { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
 ];
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function MessageInput({
   session,

@@ -18,7 +18,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import { formatDate } from '@/lib/format-utils';
+import { formatDate, isStaleHeartbeat } from '@/lib/format-utils';
 import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -423,17 +423,6 @@ export function MachineDetailView(): React.JSX.Element {
       </Card>
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const STALE_HEARTBEAT_MS = 60_000;
-
-function isStaleHeartbeat(dateStr: string): boolean {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  return diffMs > STALE_HEARTBEAT_MS;
 }
 
 // ---------------------------------------------------------------------------
