@@ -32,6 +32,9 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'AgentCTL',
   },
+  other: {
+    'color-scheme': 'light dark',
+  },
 };
 
 export const viewport = {
@@ -49,7 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <a
             href="#main-content"
-            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-sm focus:text-sm focus:font-medium"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium"
           >
             Skip to content
           </a>
