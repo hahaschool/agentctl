@@ -1063,12 +1063,15 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
     const progressType = typeof data.type === 'string' ? data.type : null;
 
     if (progressType === 'agent_progress') {
-      // Subagent dispatch
-      const content = typeof data.content === 'string' ? data.content : '';
+      // Subagent dispatch — real data uses `data.prompt`, SDK docs say `data.content`
+      const content = typeof data.prompt === 'string' ? data.prompt
+        : typeof data.content === 'string' ? data.content : '';
+      const subAgentId = typeof data.agentId === 'string' ? data.agentId : undefined;
       const agentType = typeof data.agentType === 'string' ? data.agentType : 'subagent';
       if (content.trim().length > 0) {
         const msg: ContentMessage = { type: 'subagent', content: content.slice(0, 4000), toolName: agentType, timestamp };
-        if (isSidechain) msg.subagentId = agentId;
+        if (subAgentId) msg.subagentId = subAgentId;
+        else if (isSidechain) msg.subagentId = agentId;
         return [msg];
       }
     } else if (progressType === 'bash_progress') {
@@ -1087,6 +1090,9 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
         return [msg];
       }
     } else if (progressType === 'mcp_progress') {
+      // Only show "started" events (skip "completed" to avoid duplicates)
+      const status = typeof data.status === 'string' ? data.status : 'started';
+      if (status === 'completed') return [];
       const server = typeof data.serverName === 'string' ? data.serverName : 'mcp';
       const tool = typeof data.toolName === 'string' ? data.toolName : '';
       const content = tool ? `${server}: ${tool}` : server;

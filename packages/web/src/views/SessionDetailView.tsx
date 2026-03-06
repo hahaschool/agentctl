@@ -161,7 +161,7 @@ export function SessionDetailView(): React.JSX.Element {
 
   // We need the Claude session ID (not the RC session ID) to fetch content
   const claudeSessionId = s?.claudeSessionId ?? '';
-  const [contentLimit, setContentLimit] = useState(500);
+  const [contentLimit, setContentLimit] = useState(2000);
   const content = useQuery({
     ...sessionContentQuery(claudeSessionId, {
       machineId: s?.machineId ?? '',
@@ -208,6 +208,21 @@ export function SessionDetailView(): React.JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['session-content'] });
     }
   }, [stream.latestStatus, sessionId, queryClient]);
+
+  // Clear pending user messages once JSONL content includes matching human messages
+  const contentMessages = content.data?.messages ?? [];
+  useEffect(() => {
+    if (stream.pendingUserMessages.length === 0) return;
+    const humanMessages = contentMessages
+      .filter((m) => m.type === 'human')
+      .map((m) => m.content?.trim());
+    const allFound = stream.pendingUserMessages.every((text) =>
+      humanMessages.includes(text.trim()),
+    );
+    if (allFound) {
+      stream.clearPendingMessages();
+    }
+  }, [contentMessages, stream.pendingUserMessages, stream.clearPendingMessages]);
 
   useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
 
@@ -467,6 +482,11 @@ function SessionHeader({
         <span>
           Machine: <CopyableText value={session.machineId} maxDisplay={12} />
         </span>
+        {session.pid && (
+          <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm border border-border">
+            PID {session.pid}
+          </span>
+        )}
         {session.projectPath && <PathBadge path={session.projectPath} />}
         <span className="flex items-center gap-1">
           Account:{' '}
@@ -559,29 +579,20 @@ function MessageList({
   const searchRef = useRef<HTMLInputElement>(null);
   const [showTools, setShowTools] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
-  const [showProgress, setShowProgress] = useState(false);
+  const [showProgress, setShowProgress] = useState(isActive);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [search, setSearch] = useState('');
-
-  const maxDisplayMessages = useMemo(
-    () =>
-      typeof window !== 'undefined'
-        ? Number(localStorage.getItem('agentctl:maxDisplayMessages')) || 100
-        : 100,
-    [],
-  );
 
   // Always show: human, assistant, subagent, todo
   // Toggle: tool_use/tool_result (showTools), thinking (showThinking), progress (showProgress)
-  const filteredMessages = messages.filter((m) => {
+  const visibleMessages = messages.filter((m) => {
     if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo') return true;
     if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
     if (m.type === 'thinking') return showThinking;
     if (m.type === 'progress') return showProgress;
     return false;
   });
-
-  const visibleMessages = filteredMessages.slice(-maxDisplayMessages);
 
   // Apply text search filter
   const searchFiltered = search
@@ -626,17 +637,23 @@ function MessageList({
   // Auto-scroll to bottom when new messages or stream output arrive
   const prevCountRef = useRef(0);
   const prevStreamLenRef = useRef(0);
+  const prevPendingRef = useRef(0);
   useEffect(() => {
     const count = visibleMessages.length;
     const streamLen = streamOutput?.length ?? 0;
-    if (count !== prevCountRef.current || streamLen !== prevStreamLenRef.current) {
-      prevCountRef.current = count;
-      prevStreamLenRef.current = streamLen;
-      if (autoScroll && scrollRef.current) {
-        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-      }
+    const pendingLen = pendingUserMessages?.length ?? 0;
+    const changed = count !== prevCountRef.current || streamLen !== prevStreamLenRef.current || pendingLen !== prevPendingRef.current;
+    prevCountRef.current = count;
+    prevStreamLenRef.current = streamLen;
+    prevPendingRef.current = pendingLen;
+    if (changed && autoScroll && scrollRef.current) {
+      // Use instant for stream output (frequent updates), smooth for new messages
+      const behavior = streamLen !== prevStreamLenRef.current ? 'instant' as const : 'smooth' as const;
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior });
+      });
     }
-  }, [visibleMessages.length, streamOutput?.length, autoScroll]);
+  }, [visibleMessages.length, streamOutput?.length, pendingUserMessages?.length, autoScroll]);
 
   // Detect user scrolling up to pause auto-scroll
   const handleScroll = useCallback(() => {
@@ -644,6 +661,7 @@ function MessageList({
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
     setAutoScroll(isAtBottom);
+    setUserScrolledUp(!isAtBottom);
     handleWindowScroll();
   }, [handleWindowScroll]);
 
@@ -663,8 +681,10 @@ function MessageList({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
-        <span>{formatNumber(totalMessages)} total messages</span>
-        <span>{formatNumber(searchFiltered.length)} shown</span>
+        <span>{formatNumber(messages.length)}{messages.length < totalMessages ? ` / ${formatNumber(totalMessages)}` : ''} messages</span>
+        {searchFiltered.length !== messages.length && (
+          <span>{formatNumber(searchFiltered.length)} shown</span>
+        )}
         <button
           type="button"
           onClick={() => setShowThinking(!showThinking)}
@@ -722,11 +742,12 @@ function MessageList({
             </span>
           )}
         </div>
-        {!autoScroll && isActive && (
+        {userScrolledUp && (
           <button
             type="button"
             onClick={() => {
               setAutoScroll(true);
+              setUserScrolledUp(false);
               if (scrollRef.current) {
                 scrollRef.current.scrollTo({
                   top: scrollRef.current.scrollHeight,
@@ -737,7 +758,7 @@ function MessageList({
             aria-label="Jump to bottom of conversation"
             className="ml-auto px-2 py-0.5 bg-primary text-primary-foreground rounded-sm text-[10px] cursor-pointer"
           >
-            Jump to bottom
+            {isActive ? 'Follow output' : 'Jump to bottom'}
           </button>
         )}
       </div>
@@ -798,13 +819,17 @@ function MessageList({
         )}
         {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} aria-hidden />}
 
-        {/* Pending user messages (shown immediately via SSE before JSONL poll) */}
+        {/* Pending user messages (shown immediately before JSONL poll catches up) */}
         {pendingUserMessages && pendingUserMessages.length > 0 &&
           pendingUserMessages.map((text, i) => (
-            <MessageBubble
-              key={`pending-user-${String(i)}`}
-              message={{ type: 'human', content: text, timestamp: new Date().toISOString() }}
-            />
+            <div key={`pending-user-${String(i)}`} className="relative">
+              <MessageBubble
+                message={{ type: 'human', content: text, timestamp: new Date().toISOString() }}
+              />
+              <span className="absolute top-2 right-3 text-[9px] text-muted-foreground/60 animate-pulse">
+                sending...
+              </span>
+            </div>
           ))}
 
         {/* Live streaming output */}
@@ -820,6 +845,24 @@ function MessageList({
           </div>
         )}
       </div>
+
+      {/* Floating scroll-to-bottom button */}
+      {userScrolledUp && (
+        <button
+          type="button"
+          onClick={() => {
+            setAutoScroll(true);
+            setUserScrolledUp(false);
+            if (scrollRef.current) {
+              scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            }
+          }}
+          className="absolute bottom-4 right-6 z-10 px-3 py-2 bg-primary text-primary-foreground rounded-full shadow-lg text-xs font-medium cursor-pointer hover:bg-primary/90 transition-opacity"
+          aria-label="Scroll to bottom"
+        >
+          {isActive ? 'Follow output' : 'Scroll to bottom'}
+        </button>
+      )}
     </div>
   );
 }

@@ -42,6 +42,8 @@ type UseSessionStreamResult = {
   latestCost: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
   /** Clear accumulated stream output (e.g. after content refetch absorbs it). */
   clearStreamOutput: () => void;
+  /** Clear pending user messages (e.g. after JSONL content includes them). */
+  clearPendingMessages: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -185,7 +187,13 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
   const clearStreamOutput = useCallback(() => {
     setStreamOutput([]);
+    // Don't clear pending user messages here — they need to persist
+    // until JSONL content includes the user's message text
+  }, []);
+
+  const clearPendingMessages = useCallback(() => {
     setPendingUserMessages([]);
   }, []);
-  return { connected, streamOutput, pendingUserMessages, latestStatus, latestCost, clearStreamOutput };
+
+  return { connected, streamOutput, pendingUserMessages, latestStatus, latestCost, clearStreamOutput, clearPendingMessages };
 }

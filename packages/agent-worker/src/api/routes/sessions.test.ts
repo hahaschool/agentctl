@@ -839,6 +839,33 @@ describe('parseJsonlEntry', () => {
       expect(results[0].content).toHaveLength(4000);
     });
 
+    it('should parse agent_progress with prompt field (real CLI format)', () => {
+      const entry = {
+        type: 'progress',
+        timestamp: '2026-03-06T10:01:30Z',
+        data: {
+          type: 'agent_progress',
+          prompt: 'Fix the auth module and add tests',
+          agentId: 'a4de052fcb9393841',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('subagent');
+      expect(results[0].content).toBe('Fix the auth module and add tests');
+      expect(results[0].subagentId).toBe('a4de052fcb9393841');
+    });
+
+    it('should skip mcp_progress with status completed', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'mcp_progress', status: 'completed', serverName: 'slack', toolName: 'send' },
+      };
+
+      expect(parseJsonlEntry(entry)).toHaveLength(0);
+    });
+
     it('should parse bash_progress with command and toolName "bash"', () => {
       const entry = {
         type: 'progress',
