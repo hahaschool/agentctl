@@ -84,6 +84,7 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [promptVisible, setPromptVisible] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [editOpen, setEditOpen] = useState(false);
+  const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
 
   // -- Edit form state --
   const [editName, setEditName] = useState('');
@@ -430,6 +431,70 @@ export default function AgentDetailPage(): React.JSX.Element {
           </CardContent>
         </Card>
       </div>
+
+      {/* Agent Configuration */}
+      {data.config && Object.keys(data.config).length > 0 && (
+        <Card className="mb-4" data-testid="agent-config-card">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm">Agent Configuration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+              {(data.config.model as string | undefined) && (
+                <InfoField label="Model">
+                  <span className="font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30 text-[11px]">
+                    {data.config.model as string}
+                  </span>
+                </InfoField>
+              )}
+              <InfoField label="Max Turns">
+                <span className="font-mono text-xs">
+                  {data.config.maxTurns != null ? String(data.config.maxTurns) : 'Unlimited'}
+                </span>
+              </InfoField>
+              <InfoField label="Permission Mode">
+                <span className="font-mono text-xs">
+                  {data.config.permissionMode ?? 'default'}
+                </span>
+              </InfoField>
+              <InfoField label="Allowed Tools">
+                <span className="text-xs">
+                  {(data.config.allowedTools ?? []).length > 0
+                    ? (data.config.allowedTools as string[]).join(', ')
+                    : 'All'}
+                </span>
+              </InfoField>
+              <InfoField label="Disallowed Tools">
+                <span className="text-xs">
+                  {(data.config.disallowedTools ?? []).length > 0
+                    ? (data.config.disallowedTools as string[]).join(', ')
+                    : 'None'}
+                </span>
+              </InfoField>
+              {(data.config.systemPrompt as string | undefined) && (
+                <div className="col-span-2 md:col-span-3">
+                  <InfoField label="System Prompt">
+                    <div className="font-mono text-xs whitespace-pre-wrap break-words bg-muted/50 rounded-md p-2 border border-border/50">
+                      {systemPromptExpanded || (data.config.systemPrompt as string).length <= 200
+                        ? (data.config.systemPrompt as string)
+                        : `${(data.config.systemPrompt as string).slice(0, 200)}...`}
+                    </div>
+                    {(data.config.systemPrompt as string).length > 200 && (
+                      <button
+                        type="button"
+                        className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline mt-1"
+                        onClick={() => setSystemPromptExpanded((prev) => !prev)}
+                      >
+                        {systemPromptExpanded ? 'Show less' : 'Show more'}
+                      </button>
+                    )}
+                  </InfoField>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sessions for this agent */}
       <Card className="mb-4">
