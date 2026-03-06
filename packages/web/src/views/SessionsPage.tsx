@@ -1321,6 +1321,7 @@ export function SessionsPage(): React.JSX.Element {
                     <select
                       value={convertType}
                       onChange={(e) => setConvertType(e.target.value)}
+                      aria-label="Agent type"
                       className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
                     >
                       <option value="autonomous">Autonomous (long-running)</option>
@@ -1404,6 +1405,7 @@ export function SessionsPage(): React.JSX.Element {
                     <select
                       value={resumeModel}
                       onChange={(e) => setResumeModel(e.target.value)}
+                      aria-label="Resume model"
                       className="px-2 h-7 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                     >
                       {MODEL_OPTIONS.map((opt) => (

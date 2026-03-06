@@ -2014,6 +2014,7 @@ function MessageInput({
           <select
             value={resumeModel}
             onChange={(e) => setResumeModel(e.target.value)}
+            aria-label="Resume model"
             className="px-2 py-1 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             {RESUME_MODEL_OPTIONS.map((opt) => (

@@ -561,6 +561,7 @@ export function LogsPage(): React.JSX.Element {
                 setAuditAgentFilter(e.target.value);
                 setAuditOffset(0);
               }}
+              aria-label="Filter by agent"
               className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               <option value="">All Agents</option>
@@ -578,6 +579,7 @@ export function LogsPage(): React.JSX.Element {
                 setAuditToolFilter(e.target.value);
                 setAuditOffset(0);
               }}
+              aria-label="Filter by tool"
               className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               <option value="">All Tools</option>
