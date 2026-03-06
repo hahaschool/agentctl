@@ -112,11 +112,14 @@ test.describe('Command palette', () => {
     await page.goto('/');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    // Open command palette
-    await page.keyboard.press('Meta+k');
+    // Focus body before keyboard shortcuts (headless Chromium may not auto-focus)
+    await page.locator('body').click();
+
+    // Open command palette (Control+k works cross-platform in headless Chromium)
+    await page.keyboard.press('Control+k');
 
     // Should show the command palette input
-    const input = page.locator('input[placeholder*="Search"]').first();
+    const input = page.locator('input[placeholder*="Type a command"]');
     await expect(input).toBeVisible({ timeout: 5_000 });
 
     // Close with Escape
@@ -128,7 +131,8 @@ test.describe('Command palette', () => {
     await page.goto('/');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    await page.keyboard.press('Meta+k');
+    await page.locator('body').click();
+    await page.keyboard.press('Control+k');
 
     // Should show navigation items
     await expect(page.getByText('Dashboard').first()).toBeVisible({ timeout: 5_000 });
@@ -142,9 +146,10 @@ test.describe('Command palette', () => {
     await page.goto('/');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    await page.keyboard.press('Meta+k');
+    await page.locator('body').click();
+    await page.keyboard.press('Control+k');
 
-    const input = page.locator('input[placeholder*="Search"]').first();
+    const input = page.locator('input[placeholder*="Type a command"]');
     await expect(input).toBeVisible({ timeout: 5_000 });
 
     // Type "sess" to filter
@@ -167,8 +172,8 @@ test.describe('Keyboard help overlay', () => {
     await page.goto('/');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    // Press ? to open help overlay
-    await page.keyboard.press('Shift+/');
+    // Press ? to open help overlay (type '?' directly — Shift+/ is unreliable in headless)
+    await page.keyboard.type('?');
 
     // Should show keyboard shortcuts dialog
     await expect(page.getByText(/keyboard shortcuts/i).first()).toBeVisible({ timeout: 5_000 });
@@ -265,7 +270,7 @@ test.describe('Settings page interactions', () => {
     await page.waitForSelector('h1', { timeout: 15_000 });
 
     await expect(page.getByText('API Accounts')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Preferences')).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole('heading', { name: /Preferences/i })).toBeVisible({ timeout: 3_000 });
   });
 
   test('router config link navigates to /settings/router', async ({ page }) => {
