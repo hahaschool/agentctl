@@ -127,42 +127,130 @@ function RouterLink(): React.JSX.Element {
 // Theme section
 // ---------------------------------------------------------------------------
 
+// Mini UI mockup for theme preview cards
+function ThemePreview({
+  bg,
+  sidebar,
+  header,
+  line1,
+  line2,
+  accent,
+}: {
+  bg: string;
+  sidebar: string;
+  header: string;
+  line1: string;
+  line2: string;
+  accent: string;
+}): React.JSX.Element {
+  return (
+    <div className="w-full aspect-[4/3] rounded-md overflow-hidden border border-black/10" style={{ background: bg }}>
+      {/* Sidebar */}
+      <div className="flex h-full">
+        <div className="w-[28%] h-full p-1 flex flex-col gap-0.5" style={{ background: sidebar }}>
+          <div className="h-1 w-3/4 rounded-sm" style={{ background: accent }} />
+          <div className="h-1 w-full rounded-sm opacity-40" style={{ background: header }} />
+          <div className="h-1 w-4/5 rounded-sm opacity-40" style={{ background: header }} />
+        </div>
+        {/* Main content */}
+        <div className="flex-1 p-1.5 flex flex-col gap-1">
+          <div className="h-1.5 w-2/3 rounded-sm" style={{ background: header }} />
+          <div className="h-1 w-full rounded-sm" style={{ background: line1 }} />
+          <div className="h-1 w-5/6 rounded-sm" style={{ background: line2 }} />
+          <div className="h-1 w-3/4 rounded-sm" style={{ background: line1 }} />
+          <div className="mt-auto h-2 w-1/3 rounded-sm" style={{ background: accent }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const THEME_OPTIONS = [
+  {
+    key: 'system',
+    label: 'System',
+    preview: {
+      // Split light/dark gradient to hint at "system"
+      bg: 'linear-gradient(135deg, #ffffff 50%, #1a1a2e 50%)',
+      sidebar: 'linear-gradient(135deg, #f4f4f5 50%, #111827 50%)',
+      header: '#71717a',
+      line1: '#a1a1aa',
+      line2: '#d4d4d8',
+      accent: '#6366f1',
+    },
+  },
+  {
+    key: 'light',
+    label: 'Light',
+    preview: {
+      bg: '#ffffff',
+      sidebar: '#f4f4f5',
+      header: '#27272a',
+      line1: '#d4d4d8',
+      line2: '#e4e4e7',
+      accent: '#6366f1',
+    },
+  },
+  {
+    key: 'dark',
+    label: 'Dark',
+    preview: {
+      bg: '#1a1a2e',
+      sidebar: '#111827',
+      header: '#e4e4e7',
+      line1: '#3f3f46',
+      line2: '#27272a',
+      accent: '#818cf8',
+    },
+  },
+] as const;
+
 function ThemeSection(): React.JSX.Element {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
-  const themes = [
-    { key: 'light', label: 'Light' },
-    { key: 'dark', label: 'Dark' },
-    { key: 'system', label: 'System' },
-  ];
-
   return (
     <div>
-      <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/30">
-        <div>
-          <h3 className="text-sm font-semibold">Theme</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Choose your preferred color scheme.</p>
-        </div>
-        <div className="flex gap-1 rounded-lg bg-muted/30 p-1">
-          {themes.map((t) => (
+      <div className="pb-3 mb-4 border-b border-border/30">
+        <h3 className="text-sm font-semibold">Theme</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">Choose your preferred color scheme.</p>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {THEME_OPTIONS.map((t) => {
+          const isSelected = mounted && theme === t.key;
+          return (
             <button
               key={t.key}
               type="button"
               onClick={() => setTheme(t.key)}
               className={cn(
-                'px-3 py-1.5 text-[12px] font-medium transition-all rounded-lg',
-                mounted && theme === t.key
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                'group flex flex-col items-center gap-2 rounded-lg border-2 p-2 transition-all',
+                isSelected
+                  ? 'border-primary bg-primary/5 shadow-sm'
+                  : 'border-transparent bg-muted/20 hover:border-border hover:bg-muted/40',
               )}
             >
-              {t.label}
+              <ThemePreview
+                bg={t.preview.bg}
+                sidebar={t.preview.sidebar}
+                header={t.preview.header}
+                line1={t.preview.line1}
+                line2={t.preview.line2}
+                accent={t.preview.accent}
+              />
+              <span
+                className={cn(
+                  'text-[12px] font-medium transition-colors',
+                  isSelected ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                )}
+              >
+                {t.label}
+              </span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </div>
   );

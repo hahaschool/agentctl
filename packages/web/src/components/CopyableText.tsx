@@ -1,5 +1,6 @@
 'use client';
 
+import { Check, Copy } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -61,6 +62,7 @@ export function CopyableText({
         className,
       )}
     >
+      {copied ? <Check size={10} className="text-green-500" /> : <Copy size={10} className="opacity-40" />}
       {copied ? 'Copied!' : display}
     </button>
   );

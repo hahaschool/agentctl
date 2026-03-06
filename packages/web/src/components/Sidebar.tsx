@@ -191,14 +191,15 @@ export function Sidebar(): React.JSX.Element {
       </div>
 
       {/* Mobile backdrop */}
-      {mobileOpen && (
-        <button
-          type="button"
-          className="md:hidden fixed inset-0 z-40 bg-black/50"
-          onClick={() => setMobileOpen(false)}
-          aria-label="Close navigation"
-        />
-      )}
+      <button
+        type="button"
+        className={cn(
+          'md:hidden fixed inset-0 z-40 bg-black/50 transition-opacity duration-200',
+          mobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        )}
+        onClick={() => setMobileOpen(false)}
+        aria-label="Close navigation"
+      />
 
       {/* Sidebar */}
       <nav
@@ -206,9 +207,10 @@ export function Sidebar(): React.JSX.Element {
           'bg-sidebar border-r border-border flex flex-col py-4 shrink-0',
           // Desktop: always visible, fixed width
           'hidden md:flex md:w-[60px] md:min-w-[60px] lg:w-[220px] lg:min-w-[220px]',
-          // Mobile: overlay from left
-          mobileOpen &&
-            'fixed inset-y-0 left-0 z-50 flex w-[260px] shadow-lg pt-14 md:relative md:pt-4 md:w-[60px] md:min-w-[60px] lg:w-[220px] lg:min-w-[220px] md:shadow-none',
+          // Mobile: always rendered, slide in/out from left
+          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:flex max-md:w-[260px] max-md:shadow-lg max-md:pt-14',
+          'max-md:transition-transform max-md:duration-200 max-md:ease-in-out',
+          mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
         )}
       >
         {/* Logo (desktop only, mobile has it in the top bar) */}
