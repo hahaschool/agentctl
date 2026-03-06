@@ -26,6 +26,7 @@ import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
+import { CopyableText } from '../components/CopyableText';
 import { useNotificationContext } from '../contexts/notification-context';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
@@ -432,6 +433,7 @@ export function SessionsPage(): React.JSX.Element {
 
   const handleBulkDelete = useCallback(async () => {
     if (checkedIds.size === 0) return;
+    if (!window.confirm(`Delete ${checkedIds.size} session(s)? This cannot be undone.`)) return;
     setBulkDeleting(true);
     try {
       const ids = Array.from(checkedIds);
@@ -1110,9 +1112,7 @@ export function SessionsPage(): React.JSX.Element {
                     {'\u2190'}
                   </button>
                   <div className="flex items-center gap-2.5">
-                    <span className="font-mono text-[13px] font-semibold text-foreground/90 truncate max-w-[200px]" title={selected.id}>
-                      {selected.id.slice(0, 16)}…
-                    </span>
+                    <CopyableText value={selected.id} maxDisplay={16} className="font-mono text-[13px] font-semibold text-foreground/90" />
                     <StatusBadge status={selected.status} />
                   </div>
                 </div>
@@ -1472,7 +1472,7 @@ function SessionListItem({
         className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
       >
       <div className="flex justify-between items-center mb-1.5">
-        <span className="font-mono text-xs font-medium text-foreground/90">{s.id.slice(0, 16)}...</span>
+        <CopyableText value={s.id} maxDisplay={16} className="font-mono text-xs font-medium text-foreground/90" />
         <span className="flex items-center gap-2">
           {s.status === 'active' && (
             <span className="relative flex h-2 w-2">

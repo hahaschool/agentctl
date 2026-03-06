@@ -7,6 +7,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Info, ScrollText, Server } from 'lucide-react';
+import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -445,9 +446,7 @@ export function LogsPage(): React.JSX.Element {
                       <td className={TD_CLASSES}>
                         <span className="font-medium">{m.hostname}</span>
                         <br />
-                        <span className="text-[11px] text-muted-foreground font-mono">
-                          {m.id.slice(0, 12)}...
-                        </span>
+                        <CopyableText value={m.id} maxDisplay={12} className="text-[11px] text-muted-foreground font-mono" />
                       </td>
                       <td className={TD_CLASSES}>
                         <StatusBadge status={m.status} />
@@ -962,9 +961,7 @@ function AuditActionRow({
 
         {/* Agent ID (short) */}
         {action.agentId && (
-          <span className="text-[11px] text-muted-foreground font-mono hidden sm:inline truncate max-w-[100px]">
-            {action.agentId.slice(0, 8)}
-          </span>
+          <CopyableText value={action.agentId} maxDisplay={8} className="text-[11px] text-muted-foreground font-mono hidden sm:inline" />
         )}
 
         {/* Duration */}

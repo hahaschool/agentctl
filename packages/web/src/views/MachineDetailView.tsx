@@ -363,13 +363,14 @@ export function MachineDetailView(): React.JSX.Element {
                 <tbody>
                   {recentSessions.map((session) => (
                     <tr key={session.id} className="border-b border-border/50 last:border-0">
-                      <td className="py-2.5 pr-4">
+                      <td className="py-2.5 pr-4 flex items-center gap-1">
                         <Link
                           href={`/sessions/${session.id}`}
                           className="text-foreground hover:text-primary transition-colors font-mono text-xs no-underline"
                         >
                           {session.id.slice(0, 12)}...
                         </Link>
+                        <CopyableText value={session.id} maxDisplay={0} label="" className="text-[11px] px-0.5" />
                       </td>
                       <td className="py-2.5 pr-4">
                         <StatusBadge status={session.status} />
@@ -466,5 +467,5 @@ function AgentName({
     );
   }
 
-  return <span className="text-xs font-mono text-muted-foreground">{agentId.slice(0, 12)}...</span>;
+  return <CopyableText value={agentId} maxDisplay={12} className="text-xs font-mono text-muted-foreground" />;
 }
