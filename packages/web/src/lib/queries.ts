@@ -47,6 +47,8 @@ export const queryKeys = {
   }) => (params ? (['audit', params] as const) : (['audit'] as const)),
   auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
     params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
+  gitStatus: (machineId: string, path: string) =>
+    ['git-status', machineId, path] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -207,6 +209,17 @@ export function routerModelsInfoQuery() {
     queryKey: queryKeys.routerModelsInfo,
     queryFn: api.getRouterModelsInfo,
     staleTime: 30_000,
+  });
+}
+
+export function gitStatusQuery(machineId: string, path: string) {
+  return queryOptions({
+    queryKey: queryKeys.gitStatus(machineId, path),
+    queryFn: () => api.getGitStatus(machineId, path),
+    enabled: !!machineId && !!path,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 }
 
