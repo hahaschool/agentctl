@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { InteractiveTerminal } from '@/components/InteractiveTerminal';
-import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/Toast';
+import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 
 export default function MachineTerminalPage() {
@@ -85,11 +85,7 @@ export default function MachineTerminalPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(`/machines/${machineId}`)}
-          >
+          <Button variant="outline" size="sm" onClick={() => router.push(`/machines/${machineId}`)}>
             Close
           </Button>
         </div>

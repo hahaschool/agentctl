@@ -67,16 +67,12 @@ describe('NotificationBell', () => {
 
     it('sets correct aria-label with unread count', () => {
       render(<NotificationBell {...defaultProps} unreadCount={3} />);
-      expect(
-        screen.getByRole('button', { name: 'Notifications (3 unread)' }),
-      ).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Notifications (3 unread)' })).toBeDefined();
     });
 
     it('sets aria-label without unread info when count is 0', () => {
       render(<NotificationBell {...defaultProps} unreadCount={0} />);
-      expect(
-        screen.getByRole('button', { name: 'Notifications' }),
-      ).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Notifications' })).toBeDefined();
     });
   });
 
@@ -137,13 +133,7 @@ describe('NotificationBell', () => {
         makeNotification({ id: 'n-1', message: 'Session ended' }),
         makeNotification({ id: 'n-2', message: 'Error in agent', type: 'error' }),
       ];
-      render(
-        <NotificationBell
-          {...defaultProps}
-          notifications={notifications}
-          unreadCount={2}
-        />,
-      );
+      render(<NotificationBell {...defaultProps} notifications={notifications} unreadCount={2} />);
       fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
       expect(screen.getByText('Session ended')).toBeDefined();
       expect(screen.getByText('Error in agent')).toBeDefined();
@@ -156,13 +146,7 @@ describe('NotificationBell', () => {
         makeNotification({ id: 'n-3', type: 'warning', message: 'Watch out' }),
         makeNotification({ id: 'n-4', type: 'info', message: 'FYI' }),
       ];
-      render(
-        <NotificationBell
-          {...defaultProps}
-          notifications={notifications}
-          unreadCount={4}
-        />,
-      );
+      render(<NotificationBell {...defaultProps} notifications={notifications} unreadCount={4} />);
       fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
       expect(screen.getByTestId('icon-check')).toBeDefined();
       expect(screen.getByTestId('icon-xcircle')).toBeDefined();
@@ -174,13 +158,7 @@ describe('NotificationBell', () => {
       const notifications = [
         makeNotification({ id: 'n-1', timestamp: Date.now() - 10_000, message: 'Recent' }),
       ];
-      render(
-        <NotificationBell
-          {...defaultProps}
-          notifications={notifications}
-          unreadCount={1}
-        />,
-      );
+      render(<NotificationBell {...defaultProps} notifications={notifications} unreadCount={1} />);
       fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
       expect(screen.getByText('just now')).toBeDefined();
     });
@@ -189,9 +167,7 @@ describe('NotificationBell', () => {
   describe('callbacks', () => {
     it('calls onMarkRead with notification id when dismiss button is clicked', () => {
       const onMarkRead = vi.fn();
-      const notifications = [
-        makeNotification({ id: 'notif-42', message: 'Alert' }),
-      ];
+      const notifications = [makeNotification({ id: 'notif-42', message: 'Alert' })];
       render(
         <NotificationBell
           {...defaultProps}
@@ -223,13 +199,7 @@ describe('NotificationBell', () => {
 
     it('does not show "Mark all read" when unreadCount is 0', () => {
       const notifications = [makeNotification({ id: 'n-1', read: true })];
-      render(
-        <NotificationBell
-          {...defaultProps}
-          notifications={notifications}
-          unreadCount={0}
-        />,
-      );
+      render(<NotificationBell {...defaultProps} notifications={notifications} unreadCount={0} />);
       fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
       expect(screen.queryByText('Mark all read')).toBeNull();
     });

@@ -5,8 +5,7 @@ import { TodoBlock } from './TodoBlock';
 describe('TodoBlock', () => {
   const makeTodos = (
     items: Array<{ content: string; status: string; priority?: string; id?: string }>,
-  ): string =>
-    JSON.stringify(items.map((item, i) => ({ id: item.id ?? String(i), ...item })));
+  ): string => JSON.stringify(items.map((item, i) => ({ id: item.id ?? String(i), ...item })));
 
   describe('basic rendering', () => {
     it('renders todo items with correct text', () => {
@@ -147,17 +146,13 @@ describe('TodoBlock', () => {
 
   describe('priority indicators', () => {
     it('shows priority badge for high priority', () => {
-      const content = makeTodos([
-        { content: 'Urgent task', status: 'pending', priority: 'high' },
-      ]);
+      const content = makeTodos([{ content: 'Urgent task', status: 'pending', priority: 'high' }]);
       render(<TodoBlock content={content} />);
       expect(screen.getByText('high')).toBeDefined();
     });
 
     it('shows priority badge for low priority', () => {
-      const content = makeTodos([
-        { content: 'Low task', status: 'pending', priority: 'low' },
-      ]);
+      const content = makeTodos([{ content: 'Low task', status: 'pending', priority: 'low' }]);
       render(<TodoBlock content={content} />);
       expect(screen.getByText('low')).toBeDefined();
     });
@@ -179,18 +174,14 @@ describe('TodoBlock', () => {
     });
 
     it('applies red styling to high priority badge', () => {
-      const content = makeTodos([
-        { content: 'Urgent', status: 'pending', priority: 'high' },
-      ]);
+      const content = makeTodos([{ content: 'Urgent', status: 'pending', priority: 'high' }]);
       render(<TodoBlock content={content} />);
       const badge = screen.getByText('high');
       expect(badge.className).toContain('text-red-600');
     });
 
     it('applies muted styling to low priority badge', () => {
-      const content = makeTodos([
-        { content: 'Optional', status: 'pending', priority: 'low' },
-      ]);
+      const content = makeTodos([{ content: 'Optional', status: 'pending', priority: 'low' }]);
       render(<TodoBlock content={content} />);
       const badge = screen.getByText('low');
       expect(badge.className).toContain('text-muted-foreground');

@@ -310,7 +310,9 @@ export function Sidebar(): React.JSX.Element {
 
           {/* Version + theme */}
           <div className="flex items-center justify-between md:justify-center lg:justify-between">
-            <span className="text-[10px] text-muted-foreground/50 max-md:inline hidden lg:inline">v0.1.0</span>
+            <span className="text-[10px] text-muted-foreground/50 max-md:inline hidden lg:inline">
+              v0.1.0
+            </span>
             {mounted ? (
               <button
                 type="button"
@@ -319,7 +321,11 @@ export function Sidebar(): React.JSX.Element {
                 aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               >
-                {theme === 'dark' ? <Moon size={16} className="md:w-[13px] md:h-[13px]" /> : <Sun size={16} className="md:w-[13px] md:h-[13px]" />}
+                {theme === 'dark' ? (
+                  <Moon size={16} className="md:w-[13px] md:h-[13px]" />
+                ) : (
+                  <Sun size={16} className="md:w-[13px] md:h-[13px]" />
+                )}
               </button>
             ) : (
               <span className="w-[44px] h-[44px] md:w-6 md:h-5" />

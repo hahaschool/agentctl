@@ -61,11 +61,11 @@ describe('Breadcrumb', () => {
       );
       const homeLink = screen.getByText('Home').closest('a');
       expect(homeLink).not.toBeNull();
-      expect(homeLink!.getAttribute('href')).toBe('/');
+      expect(homeLink?.getAttribute('href')).toBe('/');
 
       const agentsLink = screen.getByText('Agents').closest('a');
       expect(agentsLink).not.toBeNull();
-      expect(agentsLink!.getAttribute('href')).toBe('/agents');
+      expect(agentsLink?.getAttribute('href')).toBe('/agents');
     });
 
     it('renders the last item as plain text even if it has an href', () => {
@@ -83,14 +83,7 @@ describe('Breadcrumb', () => {
     });
 
     it('renders the last item with aria-current="page"', () => {
-      render(
-        <Breadcrumb
-          items={[
-            { label: 'Home', href: '/' },
-            { label: 'Detail' },
-          ]}
-        />,
-      );
+      render(<Breadcrumb items={[{ label: 'Home', href: '/' }, { label: 'Detail' }]} />);
       const detail = screen.getByText('Detail');
       expect(detail.getAttribute('aria-current')).toBe('page');
     });
@@ -110,14 +103,7 @@ describe('Breadcrumb', () => {
     });
 
     it('renders an item without href as plain text (not a link)', () => {
-      render(
-        <Breadcrumb
-          items={[
-            { label: 'No Link' },
-            { label: 'Also No Link' },
-          ]}
-        />,
-      );
+      render(<Breadcrumb items={[{ label: 'No Link' }, { label: 'Also No Link' }]} />);
       expect(screen.getByText('No Link').closest('a')).toBeNull();
     });
   });
@@ -126,24 +112,18 @@ describe('Breadcrumb', () => {
     it('renders "/" separator between items', () => {
       const { container } = render(
         <Breadcrumb
-          items={[
-            { label: 'A', href: '/a' },
-            { label: 'B', href: '/b' },
-            { label: 'C' },
-          ]}
+          items={[{ label: 'A', href: '/a' }, { label: 'B', href: '/b' }, { label: 'C' }]}
         />,
       );
       const separators = container.querySelectorAll('[aria-hidden="true"]');
       // Separators appear before items at index 1 and 2 → 2 separators
       expect(separators.length).toBe(2);
-      expect(separators[0]!.textContent).toBe('/');
-      expect(separators[1]!.textContent).toBe('/');
+      expect(separators[0]?.textContent).toBe('/');
+      expect(separators[1]?.textContent).toBe('/');
     });
 
     it('does not render a separator before the first item', () => {
-      const { container } = render(
-        <Breadcrumb items={[{ label: 'Only' }]} />,
-      );
+      const { container } = render(<Breadcrumb items={[{ label: 'Only' }]} />);
       const separators = container.querySelectorAll('[aria-hidden="true"]');
       expect(separators.length).toBe(0);
     });
@@ -151,14 +131,7 @@ describe('Breadcrumb', () => {
 
   describe('styling', () => {
     it('applies font-medium class to the last item', () => {
-      render(
-        <Breadcrumb
-          items={[
-            { label: 'Home', href: '/' },
-            { label: 'Last' },
-          ]}
-        />,
-      );
+      render(<Breadcrumb items={[{ label: 'Home', href: '/' }, { label: 'Last' }]} />);
       const lastItem = screen.getByText('Last');
       expect(lastItem.className).toContain('font-medium');
     });
@@ -166,9 +139,7 @@ describe('Breadcrumb', () => {
 
   describe('edge cases', () => {
     it('renders single-item breadcrumb without separators', () => {
-      const { container } = render(
-        <Breadcrumb items={[{ label: 'Dashboard' }]} />,
-      );
+      const { container } = render(<Breadcrumb items={[{ label: 'Dashboard' }]} />);
       expect(screen.getByText('Dashboard')).toBeDefined();
       expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(0);
     });
@@ -178,7 +149,7 @@ describe('Breadcrumb', () => {
       const nav = container.querySelector('nav');
       expect(nav).not.toBeNull();
       // No children rendered
-      expect(nav!.children.length).toBe(0);
+      expect(nav?.children.length).toBe(0);
     });
   });
 });

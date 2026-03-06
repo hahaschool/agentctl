@@ -1,6 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 
-
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
   WifiOff: (props: Record<string, unknown>) => <svg data-testid="icon-wifi-off" {...props} />,
@@ -63,9 +62,7 @@ describe('ConnectionBanner', () => {
   describe('state transitions', () => {
     it('hides the banner when status transitions from disconnected to connected', () => {
       vi.useFakeTimers();
-      const { rerender, container } = render(
-        <ConnectionBanner status="disconnected" />,
-      );
+      const { rerender, container } = render(<ConnectionBanner status="disconnected" />);
       expect(screen.getByRole('alert')).toBeDefined();
 
       rerender(<ConnectionBanner status="connected" />);
@@ -74,9 +71,7 @@ describe('ConnectionBanner', () => {
 
     it('resets elapsed timer when reconnected and then disconnected again', () => {
       vi.useFakeTimers();
-      const { rerender } = render(
-        <ConnectionBanner status="disconnected" />,
-      );
+      const { rerender } = render(<ConnectionBanner status="disconnected" />);
       act(() => {
         vi.advanceTimersByTime(10_000);
       });
@@ -94,9 +89,7 @@ describe('ConnectionBanner', () => {
   describe('Dismiss button', () => {
     it('hides the banner when Dismiss is clicked', () => {
       vi.useFakeTimers();
-      const { container } = render(
-        <ConnectionBanner status="disconnected" />,
-      );
+      const { container } = render(<ConnectionBanner status="disconnected" />);
       expect(screen.getByRole('alert')).toBeDefined();
 
       fireEvent.click(screen.getByText('Dismiss'));
@@ -105,9 +98,7 @@ describe('ConnectionBanner', () => {
 
     it('re-shows banner if status cycles back to disconnected after dismiss', () => {
       vi.useFakeTimers();
-      const { rerender } = render(
-        <ConnectionBanner status="disconnected" />,
-      );
+      const { rerender } = render(<ConnectionBanner status="disconnected" />);
       fireEvent.click(screen.getByText('Dismiss'));
 
       // Reconnect then disconnect again — dismissed flag should reset

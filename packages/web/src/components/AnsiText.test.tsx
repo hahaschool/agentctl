@@ -13,10 +13,10 @@ vi.mock('ansi-to-react', () => ({
   },
 }));
 
-import { AnsiSpan, AnsiText } from './AnsiText';
-
 // Clear call tracking between tests
 import { beforeEach } from 'vitest';
+import { AnsiSpan, AnsiText } from './AnsiText';
+
 beforeEach(() => {
   ansiCalls.length = 0;
 });
@@ -109,9 +109,7 @@ describe('AnsiSpan', () => {
   });
 
   it('applies custom className to the span wrapper', () => {
-    const { container } = render(
-      <AnsiSpan className="whitespace-pre-wrap">styled</AnsiSpan>,
-    );
+    const { container } = render(<AnsiSpan className="whitespace-pre-wrap">styled</AnsiSpan>);
     const outer = container.firstElementChild as HTMLElement;
     expect(outer.className).toContain('whitespace-pre-wrap');
   });

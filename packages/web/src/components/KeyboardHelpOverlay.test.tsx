@@ -33,9 +33,7 @@ afterEach(() => {
 describe('KeyboardHelpOverlay', () => {
   describe('open/close state', () => {
     it('returns null when open is false', () => {
-      const { container } = render(
-        <KeyboardHelpOverlay open={false} onClose={vi.fn()} />,
-      );
+      const { container } = render(<KeyboardHelpOverlay open={false} onClose={vi.fn()} />);
       expect(container.innerHTML).toBe('');
     });
 
@@ -67,9 +65,7 @@ describe('KeyboardHelpOverlay', () => {
     });
 
     it('renders shortcut keys as <kbd> elements', () => {
-      const { container } = render(
-        <KeyboardHelpOverlay open={true} onClose={vi.fn()} />,
-      );
+      const { container } = render(<KeyboardHelpOverlay open={true} onClose={vi.fn()} />);
       const kbdElements = container.querySelectorAll('kbd');
       // 3 Global keys (?, CmdK, Esc) + 2 Sessions keys (r, n) + Esc button in header + ? and Esc in footer = 10 total
       // Just check that the shortcut keys are present
@@ -98,9 +94,7 @@ describe('KeyboardHelpOverlay', () => {
 
     it('calls onClose when backdrop is clicked', () => {
       const onClose = vi.fn();
-      const { container } = render(
-        <KeyboardHelpOverlay open={true} onClose={onClose} />,
-      );
+      const { container } = render(<KeyboardHelpOverlay open={true} onClose={onClose} />);
       // The outermost div is the backdrop wrapper
       const backdrop = container.firstElementChild as HTMLElement;
       fireEvent.click(backdrop);
@@ -126,21 +120,15 @@ describe('KeyboardHelpOverlay', () => {
     it('does not register keydown listener when closed', () => {
       const addSpy = vi.spyOn(document, 'addEventListener');
       render(<KeyboardHelpOverlay open={false} onClose={vi.fn()} />);
-      const keydownCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'keydown',
-      );
+      const keydownCalls = addSpy.mock.calls.filter(([event]) => event === 'keydown');
       expect(keydownCalls).toHaveLength(0);
     });
 
     it('removes keydown listener on unmount', () => {
       const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const { unmount } = render(
-        <KeyboardHelpOverlay open={true} onClose={vi.fn()} />,
-      );
+      const { unmount } = render(<KeyboardHelpOverlay open={true} onClose={vi.fn()} />);
       unmount();
-      const keydownCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'keydown',
-      );
+      const keydownCalls = removeSpy.mock.calls.filter(([event]) => event === 'keydown');
       expect(keydownCalls.length).toBeGreaterThanOrEqual(1);
     });
   });

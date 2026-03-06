@@ -577,7 +577,7 @@ describe('SessionPreview — tool_use message rendering', () => {
       expect(expandHints).toHaveLength(2);
 
       // Expand first one (click the first "click to expand")
-      fireEvent.click(expandHints[0]!);
+      fireEvent.click(expandHints[0] as HTMLElement);
 
       // First tool content visible, second still collapsed
       expect(screen.getByText('first tool content')).toBeDefined();

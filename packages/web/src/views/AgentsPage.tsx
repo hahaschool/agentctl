@@ -1142,11 +1142,7 @@ export function AgentsPage(): React.JSX.Element {
           <option value="cost">{'\u2193'} Total cost</option>
         </select>
         <SimpleTooltip
-          content={
-            filteredAgents.length === 0
-              ? 'No agents to export'
-              : 'Download agents as CSV'
-          }
+          content={filteredAgents.length === 0 ? 'No agents to export' : 'Download agents as CSV'}
         >
           <button
             type="button"

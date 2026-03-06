@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
+import type { AgentRun } from '@/lib/api';
 import { formatCost, formatDate, formatDuration, formatDurationMs } from '@/lib/format-utils';
 import {
   accountsQuery,
@@ -47,7 +48,6 @@ import {
   useStopAgent,
   useUpdateAgent,
 } from '@/lib/queries';
-import type { AgentRun } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -453,9 +453,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 </span>
               </InfoField>
               <InfoField label="Permission Mode">
-                <span className="font-mono text-xs">
-                  {data.config.permissionMode ?? 'default'}
-                </span>
+                <span className="font-mono text-xs">{data.config.permissionMode ?? 'default'}</span>
               </InfoField>
               <InfoField label="Allowed Tools">
                 <span className="text-xs">
@@ -903,6 +901,7 @@ function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null
           return (
             <div
               key={run.id}
+              role="img"
               className={cn('h-5 flex-1 rounded-sm transition-opacity hover:opacity-80', bg)}
               title={tooltip}
               aria-label={`Run ${label}: ${run.status}`}

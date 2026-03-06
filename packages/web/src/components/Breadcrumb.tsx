@@ -25,11 +25,17 @@ export function Breadcrumb({ items }: Props): React.JSX.Element {
               </span>
             )}
             {item.href && !isLast ? (
-              <Link href={item.href} className="hover:text-foreground transition-colors no-underline">
+              <Link
+                href={item.href}
+                className="hover:text-foreground transition-colors no-underline"
+              >
                 {item.label}
               </Link>
             ) : (
-              <span className={isLast ? 'text-foreground font-medium' : ''} aria-current={isLast ? 'page' : undefined}>
+              <span
+                className={isLast ? 'text-foreground font-medium' : ''}
+                aria-current={isLast ? 'page' : undefined}
+              >
                 {item.label}
               </span>
             )}

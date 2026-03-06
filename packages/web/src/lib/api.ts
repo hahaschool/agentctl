@@ -590,7 +590,9 @@ export function fileToAttachment(file: File): Promise<Attachment> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     const isImage = file.type.startsWith('image/');
-    const isText = file.type.startsWith('text/') || /\.(ts|js|json|md|py|sh|yaml|yml|toml|cfg|ini|xml|html|css|sql|csv)$/i.test(file.name);
+    const isText =
+      file.type.startsWith('text/') ||
+      /\.(ts|js|json|md|py|sh|yaml|yml|toml|cfg|ini|xml|html|css|sql|csv)$/i.test(file.name);
 
     if (isText) {
       reader.onload = () => {
@@ -644,9 +646,7 @@ export async function uploadAttachments(
 
   for (const attachment of attachments) {
     const filePath = `${uploadDir}/${attachment.name}`;
-    const content = attachment.isBase64
-      ? `__BASE64__${attachment.content}`
-      : attachment.content;
+    const content = attachment.isBase64 ? `__BASE64__${attachment.content}` : attachment.content;
 
     await api.writeFile(machineId, filePath, content);
     paths.push(filePath);

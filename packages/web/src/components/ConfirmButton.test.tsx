@@ -19,9 +19,7 @@ describe('ConfirmButton', () => {
     });
 
     it('does not show confirm text initially', () => {
-      render(
-        <ConfirmButton label="Delete" confirmLabel="Really delete?" onConfirm={vi.fn()} />,
-      );
+      render(<ConfirmButton label="Delete" confirmLabel="Really delete?" onConfirm={vi.fn()} />);
       expect(screen.queryByText(/Really delete/)).toBeNull();
     });
   });
@@ -29,9 +27,7 @@ describe('ConfirmButton', () => {
   describe('two-click confirmation pattern', () => {
     it('shows confirm text after first click', () => {
       vi.useFakeTimers();
-      render(
-        <ConfirmButton label="Delete" confirmLabel="Really delete?" onConfirm={vi.fn()} />,
-      );
+      render(<ConfirmButton label="Delete" confirmLabel="Really delete?" onConfirm={vi.fn()} />);
       fireEvent.click(screen.getByRole('button'));
       expect(screen.getByText(/Really delete\?/)).toBeDefined();
     });
@@ -101,9 +97,7 @@ describe('ConfirmButton', () => {
 
     it('displays countdown seconds while in confirm state', () => {
       vi.useFakeTimers();
-      render(
-        <ConfirmButton label="Delete" onConfirm={vi.fn()} timeout={3000} />,
-      );
+      render(<ConfirmButton label="Delete" onConfirm={vi.fn()} timeout={3000} />);
       fireEvent.click(screen.getByRole('button'));
       // Should show 3s initially (ceil of 3000/1000)
       expect(screen.getByText('(3s)')).toBeDefined();
@@ -140,17 +134,13 @@ describe('ConfirmButton', () => {
 
   describe('disabled state', () => {
     it('renders as disabled when disabled=true', () => {
-      render(
-        <ConfirmButton label="Delete" onConfirm={vi.fn()} disabled />,
-      );
+      render(<ConfirmButton label="Delete" onConfirm={vi.fn()} disabled />);
       expect(screen.getByRole('button').hasAttribute('disabled')).toBe(true);
     });
 
     it('does not enter confirming state when disabled', () => {
       vi.useFakeTimers();
-      render(
-        <ConfirmButton label="Delete" confirmLabel="Sure?" onConfirm={vi.fn()} disabled />,
-      );
+      render(<ConfirmButton label="Delete" confirmLabel="Sure?" onConfirm={vi.fn()} disabled />);
       fireEvent.click(screen.getByRole('button'));
       expect(screen.queryByText(/Sure\?/)).toBeNull();
       expect(screen.getByText('Delete')).toBeDefined();
@@ -159,9 +149,7 @@ describe('ConfirmButton', () => {
     it('does not call onConfirm when disabled', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(
-        <ConfirmButton label="Delete" onConfirm={onConfirm} disabled />,
-      );
+      render(<ConfirmButton label="Delete" onConfirm={onConfirm} disabled />);
       fireEvent.click(screen.getByRole('button'));
       fireEvent.click(screen.getByRole('button'));
       expect(onConfirm).not.toHaveBeenCalled();
@@ -170,13 +158,7 @@ describe('ConfirmButton', () => {
 
   describe('className props', () => {
     it('applies className in default state', () => {
-      render(
-        <ConfirmButton
-          label="Delete"
-          onConfirm={vi.fn()}
-          className="btn-danger"
-        />,
-      );
+      render(<ConfirmButton label="Delete" onConfirm={vi.fn()} className="btn-danger" />);
       expect(screen.getByRole('button').className).toContain('btn-danger');
     });
 

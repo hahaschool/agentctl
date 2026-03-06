@@ -261,10 +261,12 @@ function MachineCard({
 
   if (compact) {
     return (
-      <div className={cn(
-        'group p-3 bg-card border border-border/50 rounded-lg flex items-center gap-3 transition-all duration-200 hover:border-border/80 hover:shadow-sm',
-        m.status === 'online' && 'border-l-2 border-l-green-500',
-      )}>
+      <div
+        className={cn(
+          'group p-3 bg-card border border-border/50 rounded-lg flex items-center gap-3 transition-all duration-200 hover:border-border/80 hover:shadow-sm',
+          m.status === 'online' && 'border-l-2 border-l-green-500',
+        )}
+      >
         <Link
           href={`/machines/${m.id}`}
           className="text-[14px] font-semibold text-foreground hover:text-primary transition-colors no-underline truncate"
@@ -290,10 +292,12 @@ function MachineCard({
   }
 
   return (
-    <div className={cn(
-      'group p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5 transition-all duration-200 hover:border-border/80 hover:shadow-sm',
-      m.status === 'online' && 'border-l-2 border-l-green-500',
-    )}>
+    <div
+      className={cn(
+        'group p-5 bg-card border border-border/50 rounded-lg flex flex-col gap-3.5 transition-all duration-200 hover:border-border/80 hover:shadow-sm',
+        m.status === 'online' && 'border-l-2 border-l-green-500',
+      )}
+    >
       {/* Top row: hostname + status */}
       <div className="flex justify-between items-start">
         <div>

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -319,10 +319,18 @@ describe('useToast hook', () => {
     const t = useToast();
     return (
       <div>
-        <button type="button" onClick={() => t.success('hook success')}>Success</button>
-        <button type="button" onClick={() => t.error('hook error')}>Error</button>
-        <button type="button" onClick={() => t.info('hook info')}>Info</button>
-        <button type="button" onClick={() => t.toast('success', 'hook toast')}>Toast</button>
+        <button type="button" onClick={() => t.success('hook success')}>
+          Success
+        </button>
+        <button type="button" onClick={() => t.error('hook error')}>
+          Error
+        </button>
+        <button type="button" onClick={() => t.info('hook info')}>
+          Info
+        </button>
+        <button type="button" onClick={() => t.toast('success', 'hook toast')}>
+          Toast
+        </button>
       </div>
     );
   }

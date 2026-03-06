@@ -16,9 +16,7 @@ describe('HighlightText', () => {
   });
 
   it('renders text in a span element', () => {
-    const { container } = render(
-      <HighlightText text="Some text" highlight="" />,
-    );
+    const { container } = render(<HighlightText text="Some text" highlight="" />);
     const outer = container.firstElementChild;
     expect(outer?.tagName).toBe('SPAN');
   });
@@ -27,18 +25,14 @@ describe('HighlightText', () => {
   // No highlight (empty/whitespace query)
   // -------------------------------------------------------------------------
   it('returns plain text when highlight is empty', () => {
-    const { container } = render(
-      <HighlightText text="Plain text" highlight="" />,
-    );
+    const { container } = render(<HighlightText text="Plain text" highlight="" />);
     expect(container.textContent).toBe('Plain text');
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(0);
   });
 
   it('returns plain text when highlight is only whitespace', () => {
-    const { container } = render(
-      <HighlightText text="Plain text" highlight="   " />,
-    );
+    const { container } = render(<HighlightText text="Plain text" highlight="   " />);
     expect(container.textContent).toBe('Plain text');
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(0);
@@ -48,9 +42,7 @@ describe('HighlightText', () => {
   // No match
   // -------------------------------------------------------------------------
   it('renders text without highlights when query does not match', () => {
-    const { container } = render(
-      <HighlightText text="Hello world" highlight="xyz" />,
-    );
+    const { container } = render(<HighlightText text="Hello world" highlight="xyz" />);
     expect(container.textContent).toBe('Hello world');
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(0);
@@ -60,18 +52,14 @@ describe('HighlightText', () => {
   // Single match
   // -------------------------------------------------------------------------
   it('wraps a matching substring in a <mark> element', () => {
-    const { container } = render(
-      <HighlightText text="Hello world" highlight="world" />,
-    );
+    const { container } = render(<HighlightText text="Hello world" highlight="world" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
     expect(marks[0]!.textContent).toBe('world');
   });
 
   it('preserves non-matching text around the highlight', () => {
-    const { container } = render(
-      <HighlightText text="Hello world" highlight="world" />,
-    );
+    const { container } = render(<HighlightText text="Hello world" highlight="world" />);
     expect(container.textContent).toBe('Hello world');
   });
 
@@ -79,9 +67,7 @@ describe('HighlightText', () => {
   // Multiple matches
   // -------------------------------------------------------------------------
   it('highlights all occurrences of the query', () => {
-    const { container } = render(
-      <HighlightText text="foo bar foo baz foo" highlight="foo" />,
-    );
+    const { container } = render(<HighlightText text="foo bar foo baz foo" highlight="foo" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(3);
     for (const mark of marks) {
@@ -93,17 +79,13 @@ describe('HighlightText', () => {
   // Case insensitivity
   // -------------------------------------------------------------------------
   it('matches case-insensitively', () => {
-    const { container } = render(
-      <HighlightText text="Hello HELLO hello" highlight="hello" />,
-    );
+    const { container } = render(<HighlightText text="Hello HELLO hello" highlight="hello" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(3);
   });
 
   it('preserves original casing in highlighted text', () => {
-    const { container } = render(
-      <HighlightText text="Hello HELLO" highlight="hello" />,
-    );
+    const { container } = render(<HighlightText text="Hello HELLO" highlight="hello" />);
     const marks = container.querySelectorAll('mark');
     expect(marks[0]!.textContent).toBe('Hello');
     expect(marks[1]!.textContent).toBe('HELLO');
@@ -123,36 +105,28 @@ describe('HighlightText', () => {
   });
 
   it('handles regex special characters in the query (parentheses)', () => {
-    const { container } = render(
-      <HighlightText text="call fn() now" highlight="fn()" />,
-    );
+    const { container } = render(<HighlightText text="call fn() now" highlight="fn()" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
     expect(marks[0]!.textContent).toBe('fn()');
   });
 
   it('handles regex special characters in the query (brackets)', () => {
-    const { container } = render(
-      <HighlightText text="array[0] is first" highlight="[0]" />,
-    );
+    const { container } = render(<HighlightText text="array[0] is first" highlight="[0]" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
     expect(marks[0]!.textContent).toBe('[0]');
   });
 
   it('handles asterisk in query', () => {
-    const { container } = render(
-      <HighlightText text="a * b = c" highlight="*" />,
-    );
+    const { container } = render(<HighlightText text="a * b = c" highlight="*" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
     expect(marks[0]!.textContent).toBe('*');
   });
 
   it('handles plus sign in query', () => {
-    const { container } = render(
-      <HighlightText text="a + b = c" highlight="+" />,
-    );
+    const { container } = render(<HighlightText text="a + b = c" highlight="+" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
     expect(marks[0]!.textContent).toBe('+');
@@ -162,9 +136,7 @@ describe('HighlightText', () => {
   // className prop
   // -------------------------------------------------------------------------
   it('applies className to the outer span', () => {
-    const { container } = render(
-      <HighlightText text="styled" highlight="" className="text-sm" />,
-    );
+    const { container } = render(<HighlightText text="styled" highlight="" className="text-sm" />);
     const outer = container.firstElementChild as HTMLElement;
     expect(outer.className).toContain('text-sm');
   });
@@ -181,9 +153,7 @@ describe('HighlightText', () => {
   // Mark styling
   // -------------------------------------------------------------------------
   it('applies highlight styling classes to <mark> elements', () => {
-    const { container } = render(
-      <HighlightText text="Find me" highlight="me" />,
-    );
+    const { container } = render(<HighlightText text="Find me" highlight="me" />);
     const mark = container.querySelector('mark');
     expect(mark).not.toBeNull();
     expect(mark?.className).toContain('bg-yellow-500/30');
@@ -194,9 +164,7 @@ describe('HighlightText', () => {
   // Edge cases
   // -------------------------------------------------------------------------
   it('highlights the entire text when query matches the full string', () => {
-    const { container } = render(
-      <HighlightText text="exact" highlight="exact" />,
-    );
+    const { container } = render(<HighlightText text="exact" highlight="exact" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(1);
     expect(marks[0]!.textContent).toBe('exact');
@@ -204,9 +172,7 @@ describe('HighlightText', () => {
   });
 
   it('highlights single character matches', () => {
-    const { container } = render(
-      <HighlightText text="abcabc" highlight="a" />,
-    );
+    const { container } = render(<HighlightText text="abcabc" highlight="a" />);
     const marks = container.querySelectorAll('mark');
     expect(marks.length).toBe(2);
   });

@@ -238,7 +238,10 @@ export function DashboardPage(): React.JSX.Element {
 
       {/* Stats grid */}
       {machines.isLoading || agents.isLoading || metrics.isLoading || sessions.isLoading ? (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6" data-testid="stat-cards-skeleton">
+        <div
+          className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6"
+          data-testid="stat-cards-skeleton"
+        >
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="h-20 rounded-lg" />
           ))}
@@ -472,7 +475,11 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Cost Overview */}
-      <CostOverview sessionList={sessionList} agentCostBreakdown={agentCostBreakdown} isLoading={sessions.isLoading || agents.isLoading} />
+      <CostOverview
+        sessionList={sessionList}
+        agentCostBreakdown={agentCostBreakdown}
+        isLoading={sessions.isLoading || agents.isLoading}
+      />
 
       {/* Platform summary bar */}
       <div className="mt-5 bg-card border border-border/50 rounded-lg overflow-hidden">

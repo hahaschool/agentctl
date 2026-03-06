@@ -130,9 +130,7 @@ export function InteractiveTerminal({
             );
             onExitRef.current?.(msg.code ?? 0);
           } else if (msg.type === 'error') {
-            terminal.write(
-              `\r\n\x1b[31m[Error: ${msg.message ?? 'Unknown error'}]\x1b[0m\r\n`,
-            );
+            terminal.write(`\r\n\x1b[31m[Error: ${msg.message ?? 'Unknown error'}]\x1b[0m\r\n`);
             onErrorRef.current?.(msg.message ?? 'Unknown error');
           }
         } catch {
@@ -211,10 +209,7 @@ export function InteractiveTerminal({
           className={cn('w-1.5 h-1.5 rounded-full', connected ? 'bg-green-500' : 'bg-red-500')}
         />
         <span
-          className={cn(
-            'text-[9px] font-semibold',
-            connected ? 'text-green-500' : 'text-red-500',
-          )}
+          className={cn('text-[9px] font-semibold', connected ? 'text-green-500' : 'text-red-500')}
         >
           {connected ? 'Connected' : 'Disconnected'}
         </span>

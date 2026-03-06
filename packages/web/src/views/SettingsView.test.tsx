@@ -469,9 +469,9 @@ describe('SettingsView', () => {
     renderSettings();
     const h2s = screen.getAllByRole('heading', { level: 2 });
     expect(h2s.length).toBe(3);
-    expect(h2s[0]!.textContent).toBe('API Accounts');
-    expect(h2s[1]!.textContent).toBe('Appearance & Preferences');
-    expect(h2s[2]!.textContent).toBe('System');
+    expect(h2s[0]?.textContent).toBe('API Accounts');
+    expect(h2s[1]?.textContent).toBe('Appearance & Preferences');
+    expect(h2s[2]?.textContent).toBe('System');
   });
 
   it('renders h3 sub-section headings', () => {

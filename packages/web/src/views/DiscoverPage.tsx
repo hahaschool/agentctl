@@ -92,7 +92,9 @@ export function DiscoverPage(): React.JSX.Element {
   // Selection state for bulk import
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkImporting, setBulkImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  );
 
   // Single-session import state
   const [importingSessionId, setImportingSessionId] = useState<string | null>(null);
@@ -672,7 +674,9 @@ export function DiscoverPage(): React.JSX.Element {
                       style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
                     />
                   </div>
-                  <span>{importProgress.current}/{importProgress.total}</span>
+                  <span>
+                    {importProgress.current}/{importProgress.total}
+                  </span>
                 </div>
               )}
             </>

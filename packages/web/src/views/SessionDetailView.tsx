@@ -177,7 +177,8 @@ export function SessionDetailView(): React.JSX.Element {
       limit: contentLimit,
     }),
     enabled: !!claudeSessionId && !!s?.machineId,
-    refetchInterval: (s?.status === 'active' || s?.status === 'starting') && autoRefresh ? 2_000 : false,
+    refetchInterval:
+      (s?.status === 'active' || s?.status === 'starting') && autoRefresh ? 2_000 : false,
     refetchOnWindowFocus: true,
   });
 
@@ -714,9 +715,7 @@ function SessionHeader({
           </span>
         )}
         {totalMessages !== undefined && totalMessages > 0 && (
-          <span className="text-[11px] text-muted-foreground">
-            Messages: {totalMessages}
-          </span>
+          <span className="text-[11px] text-muted-foreground">Messages: {totalMessages}</span>
         )}
       </div>
 
@@ -728,9 +727,7 @@ function SessionHeader({
       )}
 
       {/* Error details */}
-      {session.status === 'error' && (
-        <ErrorDetailPanel metadata={session.metadata} />
-      )}
+      {session.status === 'error' && <ErrorDetailPanel metadata={session.metadata} />}
 
       {/* Starting indicator */}
       {session.status === 'starting' && (
@@ -789,9 +786,7 @@ function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.J
                 {errorCode}
               </span>
             )}
-            <span>
-              {isLong && !expanded ? `${errorMessage.slice(0, 200)}...` : errorMessage}
-            </span>
+            <span>{isLong && !expanded ? `${errorMessage.slice(0, 200)}...` : errorMessage}</span>
           </div>
 
           {/* Exit reason (if different from error) */}
@@ -1143,7 +1138,10 @@ function MessageList({
             setAutoScroll(next);
             setUserScrolledUp(!next);
             if (next && scrollRef.current) {
-              scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+              scrollRef.current.scrollTo({
+                top: scrollRef.current.scrollHeight,
+                behavior: 'smooth',
+              });
             }
           }}
           aria-label={autoScroll ? 'Pause auto-scroll' : 'Resume auto-scroll'}
@@ -2021,11 +2019,7 @@ function MessageInput({
               className="relative group flex items-center gap-1.5 px-2 py-1 bg-muted border border-border rounded-md text-[11px]"
             >
               {a.type === 'image' && a.previewUrl ? (
-                <img
-                  src={a.previewUrl}
-                  alt={a.name}
-                  className="w-8 h-8 object-cover rounded-sm"
-                />
+                <img src={a.previewUrl} alt={a.name} className="w-8 h-8 object-cover rounded-sm" />
               ) : (
                 <svg
                   width="14"
@@ -2050,7 +2044,14 @@ function MessageInput({
                 className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
                 aria-label={`Remove ${a.name}`}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -2066,10 +2067,18 @@ function MessageInput({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            onCompositionStart={() => { composingRef.current = true; }}
-            onCompositionEnd={() => { composingRef.current = false; }}
+            onCompositionStart={() => {
+              composingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+            }}
             onPaste={handlePaste}
-            placeholder={isActive ? 'Send a message... (paste images with Ctrl+V)' : 'Resume session with a prompt...'}
+            placeholder={
+              isActive
+                ? 'Send a message... (paste images with Ctrl+V)'
+                : 'Resume session with a prompt...'
+            }
             rows={1}
             className="w-full px-3 py-2 pr-9 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none resize-none min-h-[36px] max-h-[120px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             disabled={isSending}
@@ -2082,7 +2091,16 @@ function MessageInput({
             aria-label="Attach file"
             title="Attach file"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
             </svg>
           </button>

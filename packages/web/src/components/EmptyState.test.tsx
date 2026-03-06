@@ -20,12 +20,7 @@ describe('EmptyState', () => {
 
   describe('description', () => {
     it('renders description when provided', () => {
-      render(
-        <EmptyState
-          title="No sessions"
-          description="Start a new session to get going."
-        />,
-      );
+      render(<EmptyState title="No sessions" description="Start a new session to get going." />);
       expect(screen.getByText('Start a new session to get going.')).toBeDefined();
     });
 
@@ -37,12 +32,7 @@ describe('EmptyState', () => {
 
   describe('action slot', () => {
     it('renders the action ReactNode when provided', () => {
-      render(
-        <EmptyState
-          title="No data"
-          action={<button type="button">Create one</button>}
-        />,
-      );
+      render(<EmptyState title="No data" action={<button type="button">Create one</button>} />);
       expect(screen.getByRole('button', { name: 'Create one' })).toBeDefined();
     });
 
@@ -81,9 +71,7 @@ describe('EmptyState', () => {
     });
 
     it('applies compact variant with smaller padding', () => {
-      const { container } = render(
-        <EmptyState title="Compact" variant="compact" />,
-      );
+      const { container } = render(<EmptyState title="Compact" variant="compact" />);
       const wrapper = container.firstElementChild as HTMLElement;
       expect(wrapper.className).toContain('py-6');
     });

@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @theme {
   /* Base design tokens — light theme (default) */
@@ -85,7 +85,9 @@ button:active:not(:disabled) {
   transform: scale(0.98);
 }
 
-h1, h2, h3 {
+h1,
+h2,
+h3 {
   text-wrap: balance;
   letter-spacing: -0.01em;
 }
@@ -249,11 +251,21 @@ a:hover {
   animation: stagger-in 0.3s ease-out both;
 }
 
-.animate-stagger-in > *:nth-child(1) { animation-delay: 0ms; }
-.animate-stagger-in > *:nth-child(2) { animation-delay: 50ms; }
-.animate-stagger-in > *:nth-child(3) { animation-delay: 100ms; }
-.animate-stagger-in > *:nth-child(4) { animation-delay: 150ms; }
-.animate-stagger-in > *:nth-child(5) { animation-delay: 200ms; }
+.animate-stagger-in > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.animate-stagger-in > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.animate-stagger-in > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.animate-stagger-in > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+.animate-stagger-in > *:nth-child(5) {
+  animation-delay: 200ms;
+}
 
 /* Toast slide-in from top-right */
 @keyframes toast-in {

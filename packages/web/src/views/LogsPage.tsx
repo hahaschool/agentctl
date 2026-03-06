@@ -129,13 +129,17 @@ export function LogsPage(): React.JSX.Element {
     const arr = [...filteredActions];
     switch (auditSortBy) {
       case 'oldest':
-        return arr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        return arr.sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        );
       case 'agent':
         return arr.sort((a, b) => (a.agentId ?? '').localeCompare(b.agentId ?? ''));
       case 'tool':
         return arr.sort((a, b) => (a.toolName ?? '').localeCompare(b.toolName ?? ''));
       default:
-        return arr.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        return arr.sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+        );
     }
   }, [filteredActions, auditSortBy]);
 

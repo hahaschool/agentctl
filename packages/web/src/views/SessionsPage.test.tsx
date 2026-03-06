@@ -999,7 +999,8 @@ describe('SessionsPage', () => {
     });
     const allButtons = screen.getAllByText('All');
     const allTab = allButtons.find((el) => el.closest('button')?.className.includes('border-b-2'));
-    fireEvent.click(allTab!);
+    expect(allTab).toBeDefined();
+    fireEvent.click(allTab as HTMLElement);
     await waitFor(() => {
       expect(screen.getByText('agt-active-at')).toBeDefined();
       expect(screen.getByText('agt-ended-at')).toBeDefined();
@@ -1202,12 +1203,12 @@ describe('SessionsPage', () => {
       expect(getSessionItems().length).toBe(2);
     });
     let items = getSessionItems();
-    expect(items[0]!.textContent).toContain('agt-new-so');
+    expect(items[0]?.textContent).toContain('agt-new-so');
     const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
     fireEvent.change(sortSelect, { target: { value: 'oldest' } });
     await waitFor(() => {
       items = getSessionItems();
-      expect(items[0]!.textContent).toContain('agt-old-so');
+      expect(items[0]?.textContent).toContain('agt-old-so');
     });
   });
 
@@ -1245,8 +1246,8 @@ describe('SessionsPage', () => {
     fireEvent.change(sortSelect, { target: { value: 'status' } });
     await waitFor(() => {
       const items = getSessionItems();
-      expect(items[0]!.textContent).toContain('agt-active-ss');
-      expect(items[1]!.textContent).toContain('agt-error-ss');
+      expect(items[0]?.textContent).toContain('agt-active-ss');
+      expect(items[1]?.textContent).toContain('agt-error-ss');
     });
   });
 

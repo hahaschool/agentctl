@@ -103,16 +103,12 @@ describe('InteractiveTerminal', () => {
   });
 
   it('renders the container div', () => {
-    const { container } = render(
-      <InteractiveTerminal machineId="m1" terminalId="t1" />,
-    );
+    const { container } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
     expect(container.firstChild).toBeDefined();
   });
 
   it('has the terminal container with bg-[#0a0a0a] class', () => {
-    const { container } = render(
-      <InteractiveTerminal machineId="m1" terminalId="t1" />,
-    );
+    const { container } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
     const termDiv = container.querySelector('.bg-\\[\\#0a0a0a\\]');
     expect(termDiv).toBeDefined();
     expect(termDiv).not.toBeNull();
@@ -171,9 +167,7 @@ describe('InteractiveTerminal', () => {
     ws.simulateOpen();
 
     await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: 'resize', cols: 80, rows: 24 }),
-      );
+      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
     });
   });
 
@@ -195,9 +189,7 @@ describe('InteractiveTerminal', () => {
 
   it('calls onExit when exit message is received', async () => {
     const onExit = vi.fn();
-    render(
-      <InteractiveTerminal machineId="m1" terminalId="t1" onExit={onExit} />,
-    );
+    render(<InteractiveTerminal machineId="m1" terminalId="t1" onExit={onExit} />);
 
     await vi.waitFor(() => {
       expect(MockWebSocket.instances.length).toBeGreaterThan(0);
@@ -214,9 +206,7 @@ describe('InteractiveTerminal', () => {
 
   it('calls onError when error message is received', async () => {
     const onError = vi.fn();
-    render(
-      <InteractiveTerminal machineId="m1" terminalId="t1" onError={onError} />,
-    );
+    render(<InteractiveTerminal machineId="m1" terminalId="t1" onError={onError} />);
 
     await vi.waitFor(() => {
       expect(MockWebSocket.instances.length).toBeGreaterThan(0);
@@ -255,9 +245,7 @@ describe('InteractiveTerminal', () => {
   // ---------------------------------------------------------------------------
   describe('WebSocket reconnection on prop changes', () => {
     it('creates a new WebSocket when machineId changes', async () => {
-      const { rerender } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { rerender } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -278,9 +266,7 @@ describe('InteractiveTerminal', () => {
     });
 
     it('creates a new WebSocket when terminalId changes', async () => {
-      const { rerender } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { rerender } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -301,9 +287,7 @@ describe('InteractiveTerminal', () => {
     });
 
     it('disposes previous terminal instance on prop change', async () => {
-      const { rerender } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { rerender } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -375,9 +359,7 @@ describe('InteractiveTerminal', () => {
       ws.send.mockClear();
       resizeCallback({ cols: 120, rows: 40 });
 
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: 'resize', cols: 120, rows: 40 }),
-      );
+      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'resize', cols: 120, rows: 40 }));
     });
 
     it('does not send resize event when WebSocket is not open', async () => {
@@ -445,9 +427,7 @@ describe('InteractiveTerminal', () => {
       ws.send.mockClear();
       dataCallback('ls -la\r');
 
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: 'input', data: 'ls -la\r' }),
-      );
+      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'input', data: 'ls -la\r' }));
     });
 
     it('does not send input when WebSocket is not open', async () => {
@@ -527,17 +507,13 @@ describe('InteractiveTerminal', () => {
   // ---------------------------------------------------------------------------
   describe('connection status display', () => {
     it('shows red indicator dot when disconnected', () => {
-      const { container } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { container } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
       const dot = container.querySelector('.bg-red-500.rounded-full');
       expect(dot).not.toBeNull();
     });
 
     it('shows green indicator dot when connected', async () => {
-      const { container } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { container } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -573,9 +549,7 @@ describe('InteractiveTerminal', () => {
     });
 
     it('reverts to disconnected after connection then close', async () => {
-      const { container } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { container } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -604,9 +578,7 @@ describe('InteractiveTerminal', () => {
   describe('WebSocket error handling', () => {
     it('calls onError when WebSocket fires onerror', async () => {
       const onError = vi.fn();
-      render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" onError={onError} />,
-      );
+      render(<InteractiveTerminal machineId="m1" terminalId="t1" onError={onError} />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -633,17 +605,13 @@ describe('InteractiveTerminal', () => {
       ws.simulateClose();
 
       await vi.waitFor(() => {
-        expect(mockWrite).toHaveBeenCalledWith(
-          expect.stringContaining('[Connection closed]'),
-        );
+        expect(mockWrite).toHaveBeenCalledWith(expect.stringContaining('[Connection closed]'));
       });
     });
 
     it('handles exit message with no code (defaults to 0)', async () => {
       const onExit = vi.fn();
-      render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" onExit={onExit} />,
-      );
+      render(<InteractiveTerminal machineId="m1" terminalId="t1" onExit={onExit} />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -660,9 +628,7 @@ describe('InteractiveTerminal', () => {
 
     it('handles error message with no message text', async () => {
       const onError = vi.fn();
-      render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" onError={onError} />,
-      );
+      render(<InteractiveTerminal machineId="m1" terminalId="t1" onError={onError} />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -690,9 +656,7 @@ describe('InteractiveTerminal', () => {
       ws.simulateMessage({ type: 'error', message: 'disk full' });
 
       await vi.waitFor(() => {
-        expect(mockWrite).toHaveBeenCalledWith(
-          expect.stringContaining('[Error: disk full]'),
-        );
+        expect(mockWrite).toHaveBeenCalledWith(expect.stringContaining('[Error: disk full]'));
       });
     });
 
@@ -756,9 +720,7 @@ describe('InteractiveTerminal', () => {
   // ---------------------------------------------------------------------------
   describe('cleanup on unmount', () => {
     it('closes WebSocket on unmount', async () => {
-      const { unmount } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { unmount } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -773,9 +735,7 @@ describe('InteractiveTerminal', () => {
     });
 
     it('disposes terminal on unmount', async () => {
-      const { unmount } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { unmount } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -792,9 +752,7 @@ describe('InteractiveTerminal', () => {
     it('removes window resize listener on unmount', async () => {
       const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 
-      const { unmount } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { unmount } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -802,10 +760,7 @@ describe('InteractiveTerminal', () => {
 
       unmount();
 
-      expect(removeEventListenerSpy).toHaveBeenCalledWith(
-        'resize',
-        expect.any(Function),
-      );
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('resize', expect.any(Function));
 
       removeEventListenerSpy.mockRestore();
     });
@@ -814,12 +769,7 @@ describe('InteractiveTerminal', () => {
       const onExit = vi.fn();
       const onError = vi.fn();
       const { unmount } = render(
-        <InteractiveTerminal
-          machineId="m1"
-          terminalId="t1"
-          onExit={onExit}
-          onError={onError}
-        />,
+        <InteractiveTerminal machineId="m1" terminalId="t1" onExit={onExit} onError={onError} />,
       );
 
       await vi.waitFor(() => {
@@ -856,9 +806,7 @@ describe('InteractiveTerminal', () => {
     });
 
     it('does not call setConnected after unmount (no state update warnings)', async () => {
-      const { unmount } = render(
-        <InteractiveTerminal machineId="m1" terminalId="t1" />,
-      );
+      const { unmount } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -920,9 +868,7 @@ describe('InteractiveTerminal', () => {
     });
 
     it('encodes special characters in machineId and terminalId for URL', async () => {
-      render(
-        <InteractiveTerminal machineId="m/1" terminalId="t 2" />,
-      );
+      render(<InteractiveTerminal machineId="m/1" terminalId="t 2" />);
 
       await vi.waitFor(() => {
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -953,9 +899,7 @@ describe('InteractiveTerminal', () => {
       ws.simulateOpen();
 
       // Re-render with a new onExit — should NOT create a new WebSocket
-      rerender(
-        <InteractiveTerminal machineId="m1" terminalId="t1" onExit={onExit2} />,
-      );
+      rerender(<InteractiveTerminal machineId="m1" terminalId="t1" onExit={onExit2} />);
 
       // Still only 1 WebSocket instance (no reconnection)
       expect(MockWebSocket.instances).toHaveLength(1);
@@ -985,9 +929,7 @@ describe('InteractiveTerminal', () => {
       const ws = getWs();
       ws.simulateOpen();
 
-      rerender(
-        <InteractiveTerminal machineId="m1" terminalId="t1" onError={onError2} />,
-      );
+      rerender(<InteractiveTerminal machineId="m1" terminalId="t1" onError={onError2} />);
 
       expect(MockWebSocket.instances).toHaveLength(1);
 

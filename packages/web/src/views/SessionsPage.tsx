@@ -270,9 +270,7 @@ export function SessionsPage(): React.JSX.Element {
       .catch((err: unknown) => {
         console.warn('Failed to load machines:', err);
         setMachines([]);
-        toast.error(
-          `Failed to load machines: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        toast.error(`Failed to load machines: ${err instanceof Error ? err.message : String(err)}`);
       })
       .finally(() => {
         setMachinesLoading(false);
@@ -397,9 +395,7 @@ export function SessionsPage(): React.JSX.Element {
         (a, b) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5),
       );
     } else if (sortOrder === 'cost') {
-      result = [...result].sort(
-        (a, b) => (b.metadata?.costUsd ?? 0) - (a.metadata?.costUsd ?? 0),
-      );
+      result = [...result].sort((a, b) => (b.metadata?.costUsd ?? 0) - (a.metadata?.costUsd ?? 0));
     } else if (sortOrder === 'duration') {
       result = [...result].sort((a, b) => {
         const endA = a.endedAt ?? a.lastHeartbeat ?? new Date().toISOString();
@@ -720,9 +716,7 @@ export function SessionsPage(): React.JSX.Element {
             )}
             <SimpleTooltip
               content={
-                filteredSessions.length === 0
-                  ? 'No sessions to export'
-                  : 'Download sessions as CSV'
+                filteredSessions.length === 0 ? 'No sessions to export' : 'Download sessions as CSV'
               }
             >
               <button
@@ -1531,7 +1525,10 @@ function LiveDuration({
   const formatted = formatDuration(startedAt, endedAt);
 
   return (
-    <span className="text-[11px] text-muted-foreground" title={isActive ? 'Running' : 'Total duration'}>
+    <span
+      className="text-[11px] text-muted-foreground"
+      title={isActive ? 'Running' : 'Total duration'}
+    >
       {isActive ? `Running for ${formatted}` : `Duration: ${formatted}`}
     </span>
   );

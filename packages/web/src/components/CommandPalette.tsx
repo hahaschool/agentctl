@@ -166,7 +166,11 @@ export function fuzzyScore(query: string, text: string): number | null {
     let bestDist = threshold + 1;
 
     // Sliding window comparison for partial matches within the text
-    for (let winLen = Math.max(1, q.length - threshold); winLen <= q.length + threshold && winLen <= t.length; winLen++) {
+    for (
+      let winLen = Math.max(1, q.length - threshold);
+      winLen <= q.length + threshold && winLen <= t.length;
+      winLen++
+    ) {
       for (let start = 0; start + winLen <= t.length; start++) {
         const window = t.slice(start, start + winLen);
         const dist = levenshtein(q, window);
@@ -194,13 +198,7 @@ export function fuzzyScore(query: string, text: string): number | null {
 function scoreCommand(cmd: CommandItem, query: string): number | null {
   let best: number | null = null;
 
-  const fields = [
-    cmd.label,
-    cmd.description,
-    cmd.section,
-    cmd.badge?.text,
-    cmd.id,
-  ];
+  const fields = [cmd.label, cmd.description, cmd.section, cmd.badge?.text, cmd.id];
 
   for (const field of fields) {
     if (!field) continue;
@@ -346,7 +344,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     });
 
     if (machines && machines.length > 0) {
-      for (const machine of machines.filter(m => m.status === 'online')) {
+      for (const machine of machines.filter((m) => m.status === 'online')) {
         items.push({
           id: `terminal-${machine.id}`,
           label: `Terminal: ${machine.hostname}`,

@@ -118,18 +118,14 @@ describe('ErrorBanner', () => {
 
   describe('className prop', () => {
     it('applies custom className via cn()', () => {
-      const { container } = render(
-        <ErrorBanner message="Error" className="mt-8 custom-class" />,
-      );
+      const { container } = render(<ErrorBanner message="Error" className="mt-8 custom-class" />);
       const wrapper = container.querySelector('[role="alert"]') as HTMLElement;
       expect(wrapper.className).toContain('mt-8');
       expect(wrapper.className).toContain('custom-class');
     });
 
     it('preserves default classes when className is provided', () => {
-      const { container } = render(
-        <ErrorBanner message="Error" className="extra" />,
-      );
+      const { container } = render(<ErrorBanner message="Error" className="extra" />);
       const wrapper = container.querySelector('[role="alert"]') as HTMLElement;
       // The cn mock joins all truthy args, so default classes should still be present
       expect(wrapper.className).toContain('bg-destructive/10');
@@ -160,14 +156,7 @@ describe('ErrorBanner', () => {
     });
 
     it('icon is always rendered regardless of other props', () => {
-      render(
-        <ErrorBanner
-          message="Error"
-          hint="Hint"
-          onRetry={() => {}}
-          className="custom"
-        />,
-      );
+      render(<ErrorBanner message="Error" hint="Hint" onRetry={() => {}} className="custom" />);
       expect(screen.getByTestId('icon-alert-circle')).toBeDefined();
     });
   });

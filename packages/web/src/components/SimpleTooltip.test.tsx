@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // Mock the shadcn/radix tooltip primitives to avoid needing a full Radix provider setup
 vi.mock('@/components/ui/tooltip', () => ({

@@ -8,12 +8,8 @@ vi.mock('lucide-react', () => ({
   AlertTriangle: (props: Record<string, unknown>) => (
     <svg data-testid="icon-alert-triangle" {...props} />
   ),
-  RefreshCw: (props: Record<string, unknown>) => (
-    <svg data-testid="icon-refresh" {...props} />
-  ),
-  RotateCcw: (props: Record<string, unknown>) => (
-    <svg data-testid="icon-rotate" {...props} />
-  ),
+  RefreshCw: (props: Record<string, unknown>) => <svg data-testid="icon-refresh" {...props} />,
+  RotateCcw: (props: Record<string, unknown>) => <svg data-testid="icon-rotate" {...props} />,
 }));
 
 import { ErrorBoundary } from './ErrorBoundary';
