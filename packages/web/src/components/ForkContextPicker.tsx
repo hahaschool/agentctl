@@ -3,15 +3,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Session, SessionContentMessage } from '@/lib/api';
 import { getMessageStyle } from '@/lib/message-styles';
-import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '@/lib/model-options';
+import { FORK_AGENT_TYPES as AGENT_TYPES, MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '@/lib/model-options';
 import { cn } from '@/lib/utils';
-
-const AGENT_TYPES = [
-  { value: 'adhoc', label: 'Ad-hoc', desc: 'One-shot task' },
-  { value: 'manual', label: 'Manual', desc: 'Started/stopped manually' },
-  { value: 'loop', label: 'Loop', desc: 'Runs in a loop' },
-  { value: 'autonomous', label: 'Autonomous', desc: 'Long-running agent' },
-];
 
 type ForkContextPickerProps = {
   session: Session;

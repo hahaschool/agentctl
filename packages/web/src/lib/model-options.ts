@@ -34,3 +34,30 @@ export const RESUME_MODEL_OPTIONS: readonly ModelOption[] = [
   { value: '', label: 'Keep current model' },
   ...LATEST_MODELS,
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Agent types
+// ---------------------------------------------------------------------------
+
+export type AgentTypeOption = {
+  readonly value: string;
+  readonly label: string;
+  readonly desc: string;
+};
+
+/** All agent types available for agent creation/editing. */
+export const AGENT_TYPES: readonly AgentTypeOption[] = [
+  { value: 'adhoc', label: 'Ad-hoc', desc: 'One-shot task, runs once then stops' },
+  { value: 'manual', label: 'Manual', desc: 'Started/stopped manually, persistent config' },
+  { value: 'loop', label: 'Loop', desc: 'Runs in a loop until stopped or goal met' },
+  { value: 'heartbeat', label: 'Heartbeat', desc: 'Triggered periodically (e.g. every 30min)' },
+  { value: 'cron', label: 'Cron', desc: 'Triggered on a cron schedule' },
+] as const;
+
+/** Subset of agent types for fork/convert (excludes heartbeat/cron). */
+export const FORK_AGENT_TYPES: readonly AgentTypeOption[] = AGENT_TYPES.filter(
+  (t) => t.value !== 'heartbeat' && t.value !== 'cron',
+);
+
+/** Default model for new agents. */
+export const DEFAULT_MODEL = 'claude-sonnet-4-6';

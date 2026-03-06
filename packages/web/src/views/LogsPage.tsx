@@ -12,19 +12,15 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import type { ActionTypeFilter, AuditSortBy } from '../components/LogsFilterBar';
+import { LogsFilterBar } from '../components/LogsFilterBar';
 import { RefreshButton } from '../components/RefreshButton';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AuditAction } from '../lib/api';
-import {
-  downloadCsv,
-  formatDateTime,
-  formatDurationMs,
-  formatNumber,
-  formatTime,
-} from '../lib/format-utils';
+import { formatDateTime, formatDurationMs, formatNumber, formatTime } from '../lib/format-utils';
 import {
   agentsQuery,
   auditQuery,
@@ -39,16 +35,6 @@ import {
 // ---------------------------------------------------------------------------
 
 type ActiveTab = 'overview' | 'audit';
-type ActionTypeFilter = 'all' | 'tool_use' | 'tool_result' | 'text' | 'error';
-type AuditSortBy = 'newest' | 'oldest' | 'agent' | 'tool';
-
-const ACTION_TYPE_TABS: { key: ActionTypeFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'tool_use', label: 'Tool Use' },
-  { key: 'tool_result', label: 'Tool Result' },
-  { key: 'text', label: 'Text' },
-  { key: 'error', label: 'Error' },
-];
 
 const AUDIT_PAGE_SIZE = 50;
 
@@ -539,139 +525,27 @@ export function LogsPage(): React.JSX.Element {
             </div>
           )}
 
-          {/* Filters row */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[200px] max-w-[360px]">
-              <input
-                type="text"
-                placeholder="Search actions, tools, agents..."
-                value={auditSearch}
-                onChange={(e) => setAuditSearch(e.target.value)}
-                className="w-full px-3 py-1.5 pl-8 pr-10 text-[13px] bg-card border border-border/50 rounded-md placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-              />
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[13px]">
-                &#x2315;
-              </span>
-              {!auditSearch && (
-                <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">
-                  /
-                </kbd>
-              )}
-            </div>
-
-            {/* Agent filter */}
-            <select
-              value={auditAgentFilter}
-              onChange={(e) => {
-                setAuditAgentFilter(e.target.value);
-                setAuditOffset(0);
-              }}
-              aria-label="Filter by agent"
-              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            >
-              <option value="">All Agents</option>
-              {agentList.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-
-            {/* Tool filter */}
-            <select
-              value={auditToolFilter}
-              onChange={(e) => {
-                setAuditToolFilter(e.target.value);
-                setAuditOffset(0);
-              }}
-              aria-label="Filter by tool"
-              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            >
-              <option value="">All Tools</option>
-              {toolNames.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-
-            {/* Sort */}
-            <select
-              value={auditSortBy}
-              onChange={(e) => setAuditSortBy(e.target.value as AuditSortBy)}
-              aria-label="Sort by"
-              className="px-2.5 py-1.5 text-[13px] bg-card border border-border/50 rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            >
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="agent">Agent</option>
-              <option value="tool">Tool name</option>
-            </select>
-
-            {/* Export CSV */}
-            <SimpleTooltip
-              content={
-                sortedActions.length === 0
-                  ? 'No actions to export'
-                  : 'Download filtered actions as CSV'
-              }
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  const actions = sortedActions;
-                  if (actions.length === 0) return;
-                  downloadCsv(
-                    [
-                      'timestamp',
-                      'actionType',
-                      'toolName',
-                      'agentId',
-                      'runId',
-                      'durationMs',
-                      'approvedBy',
-                    ],
-                    actions.map((a) => [
-                      a.timestamp,
-                      a.actionType,
-                      a.toolName,
-                      a.agentId,
-                      a.runId,
-                      a.durationMs,
-                      a.approvedBy,
-                    ]),
-                    `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`,
-                  );
-                }}
-                disabled={sortedActions.length === 0}
-                className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
-              >
-                Export CSV
-              </button>
-            </SimpleTooltip>
-          </div>
-
-          {/* Action type filter tabs */}
-          <div className="flex gap-1 mb-4 flex-wrap">
-            {ACTION_TYPE_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => {
-                  setActionTypeFilter(tab.key);
-                }}
-                className={cn(
-                  'px-3 py-1 rounded-md text-[12px] font-medium transition-colors border',
-                  actionTypeFilter === tab.key
-                    ? 'bg-foreground text-background border-foreground'
-                    : 'bg-card text-muted-foreground border-border hover:text-foreground',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <LogsFilterBar
+            search={auditSearch}
+            actionTypeFilter={actionTypeFilter}
+            agentFilter={auditAgentFilter}
+            toolFilter={auditToolFilter}
+            sortBy={auditSortBy}
+            agents={agentList}
+            toolNames={toolNames}
+            sortedActions={sortedActions}
+            onSearchChange={setAuditSearch}
+            onActionTypeFilterChange={setActionTypeFilter}
+            onAgentFilterChange={(v) => {
+              setAuditAgentFilter(v);
+              setAuditOffset(0);
+            }}
+            onToolFilterChange={(v) => {
+              setAuditToolFilter(v);
+              setAuditOffset(0);
+            }}
+            onSortByChange={setAuditSortBy}
+          />
 
           {/* Audit log entries */}
           <div ref={auditScrollRef}>

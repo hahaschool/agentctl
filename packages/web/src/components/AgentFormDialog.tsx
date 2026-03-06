@@ -20,22 +20,8 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { Agent, Machine } from '../lib/api';
-import { ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
+import { AGENT_TYPES, ALL_MODELS as MODEL_OPTIONS, DEFAULT_MODEL } from '../lib/model-options';
 import { STORAGE_KEYS } from '../lib/storage-keys';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-export const AGENT_TYPES = [
-  { value: 'adhoc', label: 'Ad-hoc', desc: 'One-shot task, runs once then stops' },
-  { value: 'manual', label: 'Manual', desc: 'Started/stopped manually, persistent config' },
-  { value: 'loop', label: 'Loop', desc: 'Runs in a loop until stopped or goal met' },
-  { value: 'heartbeat', label: 'Heartbeat', desc: 'Triggered periodically (e.g. every 30min)' },
-  { value: 'cron', label: 'Cron', desc: 'Triggered on a cron schedule' },
-] as const;
-
-export const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 // ---------------------------------------------------------------------------
 // Helpers
