@@ -248,12 +248,39 @@ export function SessionDetailView(): React.JSX.Element {
 
   // View mode toggle (messages vs terminal)
   const [viewMode, setViewMode] = useState<'messages' | 'terminal'>('messages');
+  const toggleViewMode = useCallback(
+    () => setViewMode((prev) => (prev === 'messages' ? 'terminal' : 'messages')),
+    [],
+  );
 
   // File browser panel toggle
   const [showFiles, setShowFiles] = useState(false);
   const toggleFiles = useCallback(() => setShowFiles((prev) => !prev), []);
 
-  useHotkeys(useMemo(() => ({ r: refetchAll, f: toggleFiles }), [refetchAll, toggleFiles]));
+  // Escape handler ref — SessionHeader populates this to close its menus
+  const escapeRef = useRef<() => void>(() => {});
+
+  const handleExportJson = useCallback(() => {
+    if (s && contentMessages.length > 0) exportSessionAsJson(s, contentMessages);
+  }, [s, contentMessages]);
+
+  const handleExportMarkdown = useCallback(() => {
+    if (s && contentMessages.length > 0) exportSessionAsMarkdown(s, contentMessages);
+  }, [s, contentMessages]);
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: refetchAll,
+        f: toggleFiles,
+        t: toggleViewMode,
+        e: handleExportJson,
+        m: handleExportMarkdown,
+        Escape: () => escapeRef.current(),
+      }),
+      [refetchAll, toggleFiles, toggleViewMode, handleExportJson, handleExportMarkdown],
+    ),
+  );
 
   if (session.isLoading) {
     return <LoadingState />;
@@ -277,6 +304,7 @@ export function SessionDetailView(): React.JSX.Element {
         streamCost={stream.latestCost}
         showFiles={showFiles}
         onToggleFiles={toggleFiles}
+        escapeRef={escapeRef}
       />
 
       {/* Content area */}
@@ -340,6 +368,7 @@ function SessionHeader({
   streamCost,
   showFiles,
   onToggleFiles,
+  escapeRef,
 }: {
   session: Session;
   messages: SessionContentMessage[];
@@ -350,6 +379,7 @@ function SessionHeader({
   streamCost?: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
   showFiles?: boolean;
   onToggleFiles?: () => void;
+  escapeRef?: React.MutableRefObject<() => void>;
 }): React.JSX.Element {
   const router = useRouter();
   const toast = useToast();
@@ -367,6 +397,18 @@ function SessionHeader({
     const found = accounts.data.find((a) => a.id === session.accountId);
     return found?.name ?? null;
   }, [session.accountId, accounts.data]);
+
+  // Wire up escape ref to close menus/dialogs
+  useEffect(() => {
+    if (!escapeRef) return;
+    escapeRef.current = () => {
+      if (showExportMenu) setShowExportMenu(false);
+      if (showFork) {
+        setShowFork(false);
+        setForkPrompt('');
+      }
+    };
+  }, [escapeRef, showExportMenu, showFork]);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -445,7 +487,7 @@ function SessionHeader({
               )}
               title="Toggle file browser (F)"
             >
-              Files
+              Files <kbd className="ml-1 px-1 py-0.5 text-[9px] font-mono bg-background/50 border border-border/50 rounded opacity-60">F</kbd>
             </button>
           )}
           <div className="relative" ref={exportMenuRef}>
@@ -453,6 +495,7 @@ function SessionHeader({
               type="button"
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
+              title="Export session"
             >
               Export
             </button>
@@ -464,9 +507,10 @@ function SessionHeader({
                     exportSessionAsJson(session, messages);
                     setShowExportMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent"
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent flex items-center justify-between"
                 >
                   Export as JSON
+                  <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">E</kbd>
                 </button>
                 <button
                   type="button"
@@ -474,9 +518,10 @@ function SessionHeader({
                     exportSessionAsMarkdown(session, messages);
                     setShowExportMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent border-t border-t-border"
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent border-t border-t-border flex items-center justify-between"
                 >
                   Export as Markdown
+                  <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">M</kbd>
                 </button>
               </div>
             )}
@@ -652,31 +697,34 @@ function ViewModeToggle({
   onViewModeChange: (mode: 'messages' | 'terminal') => void;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center rounded-md border border-border overflow-hidden">
-      <button
-        type="button"
-        onClick={() => onViewModeChange('messages')}
-        className={cn(
-          'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
-          viewMode === 'messages'
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-        )}
-      >
-        Messages
-      </button>
-      <button
-        type="button"
-        onClick={() => onViewModeChange('terminal')}
-        className={cn(
-          'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
-          viewMode === 'terminal'
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-        )}
-      >
-        Terminal
-      </button>
+    <div className="flex items-center gap-1">
+      <div className="flex items-center rounded-md border border-border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => onViewModeChange('messages')}
+          className={cn(
+            'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
+            viewMode === 'messages'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+          )}
+        >
+          Messages
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewModeChange('terminal')}
+          className={cn(
+            'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
+            viewMode === 'terminal'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+          )}
+        >
+          Terminal
+        </button>
+      </div>
+      <kbd className="px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded text-muted-foreground opacity-60">T</kbd>
     </div>
   );
 }
