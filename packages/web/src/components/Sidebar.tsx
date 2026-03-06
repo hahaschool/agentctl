@@ -7,10 +7,12 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
+import { useNotificationContext } from '../contexts/notification-context';
 import { useWebSocket } from '../hooks/use-websocket';
 import { CommandPalette } from './CommandPalette';
 import { ConnectionBanner } from './ConnectionBanner';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
+import { NotificationBell } from './NotificationBell';
 import { useToast } from './Toast';
 import { WsStatusIndicator } from './WsStatusIndicator';
 
@@ -45,6 +47,7 @@ export function Sidebar(): React.JSX.Element {
   const [showHelp, setShowHelp] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const toast = useToast();
+  const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotificationContext();
 
   // Track WS connection for reconnect/disconnect toasts (skip initial connect)
   const wasConnectedRef = useRef(false);
@@ -249,6 +252,19 @@ export function Sidebar(): React.JSX.Element {
 
         <div className="px-5 py-1.5 border-t border-border hidden md:flex items-center gap-2">
           <WsStatusIndicator status={wsStatus} compact />
+        </div>
+
+        <div className="px-5 py-1.5 border-t border-border hidden md:flex items-center">
+          <NotificationBell
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onMarkRead={markRead}
+            onMarkAllRead={markAllRead}
+            onClearAll={clearAll}
+          />
+          <span className="ml-2 text-[11px] text-muted-foreground">
+            {unreadCount > 0 ? `${unreadCount} new` : 'Notifications'}
+          </span>
         </div>
 
         <div className="px-5 py-2.5 border-t border-border flex items-center justify-between">

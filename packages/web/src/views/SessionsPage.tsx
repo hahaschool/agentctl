@@ -23,6 +23,7 @@ import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
+import { useNotificationContext } from '../contexts/notification-context';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
@@ -1406,6 +1407,10 @@ function SessionContent({
   lastSentMessage?: { text: string; ts: number } | null;
 }): React.JSX.Element {
   const PAGE_SIZE = 200;
+  const { addNotification } = useNotificationContext();
+  const addNotificationRef = useRef(addNotification);
+  addNotificationRef.current = addNotification;
+
   const [allMessages, setAllMessages] = useState<SessionContentMessage[]>([]);
   const [totalMessages, setTotalMessages] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -1434,7 +1439,32 @@ function SessionContent({
       if (event.event === 'status' || event.event === 'loop_complete') {
         void fetchLatestRef.current();
       }
-    }, []),
+      // Fire notifications for session lifecycle events
+      if (event.event === 'status') {
+        const status = (event.data as { status?: string }).status;
+        if (status === 'ended') {
+          addNotificationRef.current({
+            type: 'success',
+            message: `Session ${rcSessionId.slice(0, 8)} completed`,
+            sessionId: rcSessionId,
+          });
+        } else if (status === 'error') {
+          addNotificationRef.current({
+            type: 'error',
+            message: `Session ${rcSessionId.slice(0, 8)} encountered an error`,
+            sessionId: rcSessionId,
+          });
+        }
+      }
+      if (event.event === 'approval_needed') {
+        const toolName = (event.data as { toolName?: string }).toolName ?? 'unknown';
+        addNotificationRef.current({
+          type: 'warning',
+          message: `Session ${rcSessionId.slice(0, 8)} needs approval for ${toolName}`,
+          sessionId: rcSessionId,
+        });
+      }
+    }, [rcSessionId]),
   });
 
   // Fetch latest messages (offset=0, replaces tail of loaded messages)

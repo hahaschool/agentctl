@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Toaster } from 'sonner';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { NotificationProvider } from '@/contexts/notification-context';
 import { ApiError } from '@/lib/api';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -32,7 +33,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-        <TooltipProvider>{children}</TooltipProvider>
+        <NotificationProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </NotificationProvider>
         <Toaster
           position="bottom-right"
           theme="dark"
