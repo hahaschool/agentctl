@@ -32,7 +32,7 @@ import { useNotificationContext } from '../contexts/notification-context';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
-import type { ApiAccount, Machine, Session, SessionContentMessage } from '../lib/api';
+import type { ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import {
   downloadCsv,
@@ -43,7 +43,7 @@ import {
 } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
-import { STORAGE_KEYS } from '../lib/storage-keys';
+import { CreateSessionForm } from '../components/CreateSessionForm';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -194,19 +194,6 @@ export function SessionsPage(): React.JSX.Element {
       window.history.replaceState({}, '', newUrl);
     }
   }, []);
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [machinesLoading, setMachinesLoading] = useState(false);
-  const [formMachineId, setFormMachineId] = useState('');
-  const [formProjectPath, setFormProjectPath] = useState('');
-  const [formPrompt, setFormPrompt] = useState('');
-  const [formModel, setFormModel] = useState(
-    () =>
-      (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DEFAULT_MODEL) : null) ?? '',
-  );
-  const [formAccountId, setFormAccountId] = useState('');
-  const [formSubmitting, setFormSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-
   const accounts = useQuery(accountsQuery());
 
   // Reset pagination and invalidate all session queries so the list starts fresh.
@@ -231,95 +218,10 @@ export function SessionsPage(): React.JSX.Element {
     ),
   );
 
-  useEffect(() => {
-    if (!showCreateForm) return;
-    setMachinesLoading(true);
-    api
-      .listMachines()
-      .then((list) => {
-        setMachines(list);
-        if (list.length > 0) {
-          // Prefer the first online machine as the default selection
-          const firstOnline = list.find((m) => m.status === 'online');
-          const fallback = firstOnline ?? list[0];
-          if (fallback) setFormMachineId((prev) => prev || fallback.id);
-        }
-      })
-      .catch((err: unknown) => {
-        setMachines([]);
-        toast.error(`Failed to load machines: ${err instanceof Error ? err.message : String(err)}`);
-      })
-      .finally(() => {
-        setMachinesLoading(false);
-      });
-  }, [showCreateForm, toast]);
-
-  const resetForm = useCallback(() => {
-    setFormMachineId('');
-    setFormProjectPath('');
-    setFormPrompt('');
-    setFormModel(
-      (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DEFAULT_MODEL) : null) ?? '',
-    );
-    setFormAccountId('');
-    setFormError(null);
-  }, []);
-
-  const handleCreateSession = useCallback(async () => {
-    setFormError(null);
-
-    if (!formMachineId) {
-      setFormError('Please select a machine.');
-      return;
-    }
-    const selectedMachine = machines.find((m) => m.id === formMachineId);
-    if (selectedMachine?.status === 'offline') {
-      setFormError('Selected machine is offline. Please choose an online machine.');
-      return;
-    }
-    if (!formProjectPath.trim()) {
-      setFormError('Project path is required.');
-      return;
-    }
-    if (!formProjectPath.trim().startsWith('/')) {
-      setFormError('Project path must be an absolute path (start with /)');
-      return;
-    }
-    if (!formPrompt.trim()) {
-      setFormError('Prompt is required.');
-      return;
-    }
-
-    setFormSubmitting(true);
-    try {
-      const result = await api.createSession({
-        agentId: 'adhoc',
-        machineId: formMachineId,
-        projectPath: formProjectPath.trim(),
-        prompt: formPrompt.trim(),
-        model: formModel || undefined,
-        accountId: formAccountId || undefined,
-      });
-      toast.success(`Session created: ${result.sessionId.slice(0, 16)}...`);
-      resetForm();
-      setShowCreateForm(false);
-      resetAndInvalidateSessions();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setFormSubmitting(false);
-    }
-  }, [
-    formMachineId,
-    formProjectPath,
-    formPrompt,
-    formModel,
-    formAccountId,
-    machines,
-    resetForm,
-    resetAndInvalidateSessions,
-    toast,
-  ]);
+  const handleSessionCreated = useCallback(() => {
+    setShowCreateForm(false);
+    resetAndInvalidateSessions();
+  }, [resetAndInvalidateSessions]);
 
   const sessionList = accumulatedSessions;
   const hasMore = sessions.data?.hasMore ?? false;
@@ -630,9 +532,6 @@ export function SessionsPage(): React.JSX.Element {
     }
   }, [focusedIndex, filteredSessions]);
 
-  const isFormDisabled =
-    formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim();
-
   return (
     <div className="relative flex h-full animate-page-enter">
       <FetchingBar isFetching={sessions.isFetching && !sessions.isLoading} />
@@ -656,10 +555,7 @@ export function SessionsPage(): React.JSX.Element {
             </h2>
             <button
               type="button"
-              onClick={() => {
-                setShowCreateForm((prev) => !prev);
-                setFormError(null);
-              }}
+              onClick={() => setShowCreateForm((prev) => !prev)}
               aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
               aria-expanded={showCreateForm}
               className={cn(
@@ -853,132 +749,11 @@ export function SessionsPage(): React.JSX.Element {
           </label>
         </div>
 
-        {/* Inline "New Session" creation form */}
         {showCreateForm && (
-          <div className="px-4 py-4 border-b border-border bg-card/50">
-            <div className="text-[13px] font-semibold mb-3 tracking-tight">Create New Session</div>
-
-            {/* Machine selector */}
-            <label
-              htmlFor="create-session-machine"
-              className="block text-[11px] text-muted-foreground mb-1"
-            >
-              Machine
-            </label>
-            <select
-              id="create-session-machine"
-              value={formMachineId}
-              onChange={(e) => setFormMachineId(e.target.value)}
-              disabled={machinesLoading}
-              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            >
-              {machinesLoading && <option value="">Loading machines...</option>}
-              {!machinesLoading && machines.length === 0 && (
-                <option value="">No machines available</option>
-              )}
-              {machines.map((m) => {
-                const isOffline = m.status === 'offline';
-                return (
-                  <option key={m.id} value={m.id} disabled={isOffline}>
-                    {m.hostname}
-                    {isOffline ? ' (offline)' : m.status === 'degraded' ? ' (degraded)' : ''}
-                  </option>
-                );
-              })}
-            </select>
-
-            {/* Project path */}
-            <label
-              htmlFor="create-session-project"
-              className="block text-[11px] text-muted-foreground mb-1"
-            >
-              Project Path
-            </label>
-            <input
-              id="create-session-project"
-              type="text"
-              value={formProjectPath}
-              onChange={(e) => setFormProjectPath(e.target.value)}
-              placeholder="/home/user/project"
-              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md font-mono text-xs mb-2.5 outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            />
-
-            {/* Prompt */}
-            <label
-              htmlFor="create-session-prompt"
-              className="block text-[11px] text-muted-foreground mb-1"
-            >
-              Prompt
-            </label>
-            <textarea
-              id="create-session-prompt"
-              value={formPrompt}
-              onChange={(e) => setFormPrompt(e.target.value)}
-              placeholder="What should Claude work on?"
-              rows={3}
-              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none resize-y font-[inherit] box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            />
-
-            {/* Model selector */}
-            <label
-              htmlFor="create-session-model"
-              className="block text-[11px] text-muted-foreground mb-1"
-            >
-              Model (optional)
-            </label>
-            <select
-              id="create-session-model"
-              value={formModel}
-              onChange={(e) => setFormModel(e.target.value)}
-              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            >
-              {MODEL_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            {/* Account override selector */}
-            <label
-              htmlFor="create-session-account"
-              className="block text-[11px] text-muted-foreground mb-1"
-            >
-              Account (optional)
-            </label>
-            <select
-              id="create-session-account"
-              value={formAccountId}
-              onChange={(e) => setFormAccountId(e.target.value)}
-              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-3 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            >
-              <option value="">Default (auto)</option>
-              {(accounts.data ?? [])
-                .filter((a: ApiAccount) => a.isActive)
-                .map((a: ApiAccount) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.provider})
-                  </option>
-                ))}
-            </select>
-
-            {/* Error / Success feedback */}
-            {formError && <ErrorBanner message={formError} className="mb-2.5" />}
-            {/* Submit button */}
-            <button
-              type="button"
-              onClick={() => void handleCreateSession()}
-              disabled={isFormDisabled}
-              className={cn(
-                'w-full h-9 px-3.5 bg-primary text-white rounded-md text-xs font-medium transition-all duration-200',
-                isFormDisabled
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'opacity-100 cursor-pointer hover:bg-primary/90',
-              )}
-            >
-              {formSubmitting ? 'Creating...' : 'Create Session'}
-            </button>
-          </div>
+          <CreateSessionForm
+            accounts={(accounts.data ?? []) as ApiAccount[]}
+            onCreated={handleSessionCreated}
+          />
         )}
 
         <div
