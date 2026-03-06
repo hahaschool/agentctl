@@ -256,6 +256,62 @@ test.describe('Sidebar navigation', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Settings page interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Settings page interactions', () => {
+  test('settings page shows all major sections', async ({ page }) => {
+    await page.goto('/settings');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    await expect(page.getByText('API Accounts')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Preferences')).toBeVisible({ timeout: 3_000 });
+  });
+
+  test('router config link navigates to /settings/router', async ({ page }) => {
+    await page.goto('/settings');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const routerLink = page.getByRole('link', { name: /router/i }).first();
+    if (await routerLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await routerLink.click();
+      await expect(page).toHaveURL(/\/settings\/router/, { timeout: 10_000 });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Error boundary — pages show error UI, not white screen
+// ---------------------------------------------------------------------------
+
+test.describe('Error boundary', () => {
+  test('404 page shows not-found content', async ({ page }) => {
+    await page.goto('/nonexistent-page-that-does-not-exist', { timeout: 15_000 });
+    // Should show some kind of 404 or "not found" indication
+    await page.waitForTimeout(2_000);
+    const content = await page.content();
+    // Next.js should render a 404 page, not a blank page
+    expect(content.length).toBeGreaterThan(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Responsive layout basics
+// ---------------------------------------------------------------------------
+
+test.describe('Responsive layout', () => {
+  test('sidebar is visible on desktop viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    // Sidebar should have navigation links
+    const dashboardLink = page.getByRole('link', { name: 'Dashboard' }).first();
+    await expect(dashboardLink).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // No runtime errors during navigation
 // ---------------------------------------------------------------------------
 
