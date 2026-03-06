@@ -190,6 +190,7 @@ export function DashboardPage(): React.JSX.Element {
           label="Machines Online"
           value={`${machinesOnline} / ${machineList.length}`}
           accent={machinesOnline > 0 ? 'green' : undefined}
+          tooltip="Active machines connected via Tailscale"
           sublabel={
             machineList.length > 0
               ? `${machineList.filter((m) => m.status === 'offline').length} offline`
@@ -232,6 +233,7 @@ export function DashboardPage(): React.JSX.Element {
           label="Total Cost"
           value={formatCost(totalAgentCost)}
           accent="purple"
+          tooltip="Cumulative API costs across all sessions"
           sublabel={
             agentCostBreakdown.length > 0
               ? `top: ${agentCostBreakdown[0]?.name ?? 'N/A'}`

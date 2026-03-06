@@ -1,3 +1,5 @@
+import { GitBranch } from 'lucide-react';
+
 type SubagentBlockProps = {
   content: string;
   toolName?: string;
@@ -9,6 +11,7 @@ export function SubagentBlock({ content, toolName, subagentId, timestamp }: Suba
   return (
     <div className="px-3 py-2 rounded-lg border-l-[3px] bg-orange-500/[0.06] border-l-orange-400/60">
       <div className="flex items-center gap-2 mb-1">
+        <GitBranch size={12} className="text-orange-400 shrink-0" />
         <span className="text-[11px] font-semibold text-orange-400">Subagent</span>
         {toolName && (
           <span className="text-[10px] font-mono text-muted-foreground">{toolName}</span>

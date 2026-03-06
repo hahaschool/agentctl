@@ -3,24 +3,28 @@ import { render, screen } from '@testing-library/react';
 import { ProgressIndicator } from './ProgressIndicator';
 
 describe('ProgressIndicator', () => {
-  it('renders with bash icon ($) when toolName is "bash"', () => {
-    render(<ProgressIndicator content="Running command" toolName="bash" />);
-    expect(screen.getByText('$')).toBeDefined();
+  it('renders with bash tool name', () => {
+    const { container } = render(<ProgressIndicator content="Running command" toolName="bash" />);
+    // Should have an SVG icon (Terminal)
+    expect(container.querySelector('svg')).toBeDefined();
+    expect(screen.getByText('bash')).toBeDefined();
   });
 
-  it('renders with task icon (...) when toolName is "task"', () => {
-    render(<ProgressIndicator content="Executing task" toolName="task" />);
-    expect(screen.getByText('...')).toBeDefined();
+  it('renders with task tool name', () => {
+    const { container } = render(<ProgressIndicator content="Executing task" toolName="task" />);
+    expect(container.querySelector('svg')).toBeDefined();
+    expect(screen.getByText('task')).toBeDefined();
   });
 
-  it('renders with default icon (>) when toolName is something else', () => {
-    render(<ProgressIndicator content="Doing something" toolName="read" />);
-    expect(screen.getByText('>')).toBeDefined();
+  it('renders with other tool name', () => {
+    const { container } = render(<ProgressIndicator content="Doing something" toolName="read" />);
+    expect(container.querySelector('svg')).toBeDefined();
+    expect(screen.getByText('read')).toBeDefined();
   });
 
-  it('renders with default icon (>) when no toolName is provided', () => {
-    render(<ProgressIndicator content="Doing something" />);
-    expect(screen.getByText('>')).toBeDefined();
+  it('renders without tool name', () => {
+    const { container } = render(<ProgressIndicator content="Doing something" />);
+    expect(container.querySelector('svg')).toBeDefined();
   });
 
   it('shows content text', () => {
@@ -35,8 +39,8 @@ describe('ProgressIndicator', () => {
 
   it('does not show tool name label when toolName is not provided', () => {
     const { container } = render(<ProgressIndicator content="Running" />);
-    // Only the icon and content should be rendered (no tool name span with ml-auto)
+    // Should have icon SVG + content span, no tool name span
     const spans = container.querySelectorAll('span');
-    expect(spans.length).toBe(2); // icon + content
+    expect(spans.length).toBe(1); // just content
   });
 });

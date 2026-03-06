@@ -6,13 +6,14 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { ScrollText, Server } from 'lucide-react';
+import { Info, ScrollText, Server } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { RefreshButton } from '../components/RefreshButton';
+import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
@@ -339,6 +340,7 @@ export function LogsPage(): React.JSX.Element {
                 value={metricsVal('agentctl_control_plane_up') === 1 ? 'UP' : 'DOWN'}
                 valueVariant={metricsVal('agentctl_control_plane_up') === 1 ? 'green' : 'red'}
                 accent="green"
+                tooltip="Health status of the central orchestration server"
               />
               <MetricCard
                 label="Agents Total"
@@ -763,12 +765,14 @@ function MetricCard({
   valueVariant,
   valueClassName,
   accent,
+  tooltip,
 }: {
   label: string;
   value: string;
   valueVariant?: 'green' | 'red' | 'yellow';
   valueClassName?: string;
   accent?: 'green' | 'yellow' | 'red' | 'blue' | 'purple';
+  tooltip?: string;
 }): React.JSX.Element {
   return (
     <div className={cn(
@@ -776,8 +780,17 @@ function MetricCard({
       accent && 'border-l-[3px]',
       accent && METRIC_ACCENT_CLASSES[accent],
     )}>
-      <div className="text-[11px] text-muted-foreground mb-1.5">
-        {label}
+      <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1">
+        {tooltip ? (
+          <SimpleTooltip content={tooltip}>
+            <span className="inline-flex items-center gap-1 cursor-default">
+              {label}
+              <Info size={10} className="text-muted-foreground/60" />
+            </span>
+          </SimpleTooltip>
+        ) : (
+          label
+        )}
       </div>
       <div
         className={cn(

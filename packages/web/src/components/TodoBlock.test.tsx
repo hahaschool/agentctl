@@ -6,17 +6,18 @@ describe('TodoBlock', () => {
   const makeTodos = (items: Array<{ content: string; status: string; priority?: string }>) =>
     JSON.stringify(items.map((item, i) => ({ id: String(i), ...item })));
 
-  it('renders todo items with checkmarks for completed', () => {
+  it('renders todo items with icons for completed and pending', () => {
     const content = makeTodos([
       { content: 'Done task', status: 'completed' },
       { content: 'Pending task', status: 'pending' },
     ]);
-    render(<TodoBlock content={content} />);
+    const { container } = render(<TodoBlock content={content} />);
     expect(screen.getByText('Done task')).toBeDefined();
     expect(screen.getByText('Pending task')).toBeDefined();
-    // Completed items get a checkmark, pending get a circle
-    expect(screen.getByText('\u2713')).toBeDefined();
-    expect(screen.getByText('\u25CB')).toBeDefined();
+    // Completed items get a CheckCircle2 SVG, pending get a Circle SVG
+    const svgs = container.querySelectorAll('svg');
+    // At least 3 SVGs: ListTodo header icon + CheckCircle2 + Circle
+    expect(svgs.length).toBeGreaterThanOrEqual(3);
   });
 
   it('shows completion count (X/Y complete)', () => {

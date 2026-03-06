@@ -1,10 +1,16 @@
+import { Info } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
+
+import { SimpleTooltip } from './SimpleTooltip';
 
 type Props = {
   label: string;
   value: string;
   sublabel?: string;
   accent?: 'green' | 'yellow' | 'red' | 'blue' | 'purple';
+  /** When provided, shows an info icon next to the label with a hover tooltip */
+  tooltip?: string;
 };
 
 const ACCENT_CLASSES: Record<string, string> = {
@@ -15,7 +21,7 @@ const ACCENT_CLASSES: Record<string, string> = {
   purple: 'border-l-purple-500/60',
 };
 
-export function StatCard({ label, value, sublabel, accent }: Props): React.JSX.Element {
+export function StatCard({ label, value, sublabel, accent, tooltip }: Props): React.JSX.Element {
   return (
     <div
       data-testid={`stat-card-${label}`}
@@ -25,8 +31,17 @@ export function StatCard({ label, value, sublabel, accent }: Props): React.JSX.E
         accent && ACCENT_CLASSES[accent],
       )}
     >
-      <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
-        {label}
+      <div className="text-[11px] font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+        {tooltip ? (
+          <SimpleTooltip content={tooltip}>
+            <span className="inline-flex items-center gap-1 cursor-default">
+              {label}
+              <Info size={10} className="text-muted-foreground/60" />
+            </span>
+          </SimpleTooltip>
+        ) : (
+          label
+        )}
       </div>
       <div
         data-testid={`stat-value-${label}`}

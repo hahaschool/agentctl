@@ -1,5 +1,7 @@
 'use client';
 
+import { CheckCircle2, Circle, ListTodo } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 
 type TodoItem = {
@@ -41,6 +43,7 @@ export function TodoBlock({ content, timestamp }: TodoBlockProps): React.JSX.Ele
   return (
     <div className="px-3 py-2 rounded-lg border-l-[3px] bg-blue-500/[0.06] border-l-blue-400/60">
       <div className="flex items-center gap-2 mb-1.5">
+        <ListTodo size={12} className="text-blue-400 shrink-0" />
         <span className="text-[11px] font-semibold text-blue-400">Tasks</span>
         <span className="text-[10px] text-muted-foreground">
           {completed}/{todos.length} complete
@@ -52,12 +55,11 @@ export function TodoBlock({ content, timestamp }: TodoBlockProps): React.JSX.Ele
       <div className="space-y-0.5">
         {todos.map((todo, i) => (
           <div key={todo.id ?? String(i)} className="flex items-start gap-2 text-[12px]">
-            <span className={cn(
-              'shrink-0 mt-0.5',
-              todo.status === 'completed' ? 'text-green-400' : 'text-muted-foreground',
-            )}>
-              {todo.status === 'completed' ? '\u2713' : '\u25CB'}
-            </span>
+            {todo.status === 'completed' ? (
+              <CheckCircle2 size={13} className="shrink-0 mt-0.5 text-green-400" />
+            ) : (
+              <Circle size={13} className="shrink-0 mt-0.5 text-muted-foreground" />
+            )}
             <span className={cn(
               'leading-relaxed',
               todo.status === 'completed' ? 'text-muted-foreground line-through' : 'text-foreground/90',
