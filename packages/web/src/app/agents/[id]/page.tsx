@@ -36,12 +36,13 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import { formatCost, formatDate, formatDurationMs } from '@/lib/format-utils';
+import { formatCost, formatDate, formatDuration, formatDurationMs } from '@/lib/format-utils';
 import {
   accountsQuery,
   agentQuery,
   agentRunsQuery,
   machinesQuery,
+  sessionsQuery,
   useStartAgent,
   useStopAgent,
   useUpdateAgent,
@@ -58,6 +59,7 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const agent = useQuery(agentQuery(agentId));
   const runs = useQuery(agentRunsQuery(agentId));
+  const agentSessions = useQuery(sessionsQuery({ agentId, limit: 20 }));
   const accounts = useQuery(accountsQuery());
   const machinesList = useQuery(machinesQuery());
 
@@ -410,6 +412,54 @@ export default function AgentDetailPage(): React.JSX.Element {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sessions for this agent */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="text-sm">Sessions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {agentSessions.isLoading ? (
+            <div className="space-y-2">
+              {['sess-sk-1', 'sess-sk-2'].map((key) => (
+                <Skeleton key={key} className="h-10 rounded" />
+              ))}
+            </div>
+          ) : agentSessions.error ? (
+            <ErrorBanner
+              message={`Failed to load sessions: ${agentSessions.error.message}`}
+              onRetry={() => void agentSessions.refetch()}
+            />
+          ) : (agentSessions.data?.sessions ?? []).length === 0 ? (
+            <div className="py-6 text-center text-muted-foreground text-sm">
+              No sessions found for this agent.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {(agentSessions.data?.sessions ?? []).map((sess) => (
+                <Link
+                  key={sess.id}
+                  href={`/sessions/${sess.id}`}
+                  className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors"
+                >
+                  <StatusBadge status={sess.status} />
+                  <span className="text-xs font-mono text-muted-foreground">
+                    {sess.id.slice(0, 12)}
+                  </span>
+                  {sess.startedAt && sess.endedAt && (
+                    <span className="text-[11px] text-muted-foreground">
+                      {formatDuration(sess.startedAt, sess.endedAt)}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    <LiveTimeAgo date={sess.startedAt} />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent runs */}
       <Card>

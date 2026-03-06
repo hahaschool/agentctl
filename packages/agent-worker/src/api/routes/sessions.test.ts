@@ -911,6 +911,56 @@ describe('parseJsonlEntry', () => {
       expect(parseJsonlEntry(entry)).toHaveLength(0);
     });
 
+    it('should parse mcp_progress with server and tool name', () => {
+      const entry = {
+        type: 'progress',
+        timestamp: '2026-03-06T10:10:00Z',
+        data: { type: 'mcp_progress', serverName: 'filesystem', toolName: 'read_file' },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('progress');
+      expect(results[0].content).toBe('filesystem: read_file');
+      expect(results[0].toolName).toBe('mcp');
+    });
+
+    it('should parse mcp_progress with server name only', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'mcp_progress', serverName: 'slack' },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe('slack');
+    });
+
+    it('should parse hook_progress with name and event', () => {
+      const entry = {
+        type: 'progress',
+        timestamp: '2026-03-06T10:11:00Z',
+        data: { type: 'hook_progress', hookName: 'PreToolUse', event: 'Bash' },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('progress');
+      expect(results[0].content).toBe('PreToolUse (Bash)');
+      expect(results[0].toolName).toBe('hook');
+    });
+
+    it('should parse hook_progress with name only', () => {
+      const entry = {
+        type: 'progress',
+        data: { type: 'hook_progress', hookName: 'PostToolUse' },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe('PostToolUse');
+    });
+
     it('should return empty array for unknown progress type', () => {
       const entry = {
         type: 'progress',
@@ -1177,6 +1227,40 @@ describe('parseJsonlEntry', () => {
       const results = parseJsonlEntry(entry);
       expect(results).toHaveLength(1);
       expect(results[0].subagentId).toBe('sub-wait-1');
+    });
+
+    it('should tag mcp_progress with subagentId when isSidechain', () => {
+      const entry = {
+        type: 'progress',
+        isSidechain: true,
+        agentId: 'sub-mcp-1',
+        data: {
+          type: 'mcp_progress',
+          serverName: 'notion',
+          toolName: 'search',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].subagentId).toBe('sub-mcp-1');
+    });
+
+    it('should tag hook_progress with subagentId when isSidechain', () => {
+      const entry = {
+        type: 'progress',
+        isSidechain: true,
+        agentId: 'sub-hook-1',
+        data: {
+          type: 'hook_progress',
+          hookName: 'PreToolUse',
+          event: 'Write',
+        },
+      };
+
+      const results = parseJsonlEntry(entry);
+      expect(results).toHaveLength(1);
+      expect(results[0].subagentId).toBe('sub-hook-1');
     });
   });
 

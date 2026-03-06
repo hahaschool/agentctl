@@ -306,6 +306,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   app.get<{
     Querystring: {
       machineId?: string;
+      agentId?: string;
       status?: string;
       limit?: string;
       offset?: string;
@@ -314,7 +315,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
     '/',
     { schema: { tags: ['sessions'], summary: 'List all sessions across the fleet' } },
     async (request, reply) => {
-      const { machineId, status } = request.query;
+      const { machineId, agentId, status } = request.query;
 
       const rawLimit = request.query.limit;
       const rawOffset = request.query.offset;
@@ -339,6 +340,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       if (machineId) {
         conditions.push(eq(rcSessions.machineId, machineId));
+      }
+
+      if (agentId) {
+        conditions.push(eq(rcSessions.agentId, agentId));
       }
 
       if (status) {

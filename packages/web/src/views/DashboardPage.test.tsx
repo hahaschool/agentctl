@@ -144,7 +144,7 @@ function createAgent(overrides?: Partial<Agent>): Agent {
     id: 'agent-1',
     machineId: 'machine-1',
     name: 'test-agent',
-    type: 'autonomous',
+    type: 'manual',
     status: 'registered',
     schedule: null,
     projectPath: '/tmp/project',
@@ -164,6 +164,7 @@ function createSession(overrides?: Partial<Session>): Session {
   return {
     id: 'session-1',
     agentId: 'agent-1',
+    agentName: null,
     machineId: 'machine-1',
     sessionUrl: 'https://example.com/session',
     claudeSessionId: 'claude-session-1',

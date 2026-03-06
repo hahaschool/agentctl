@@ -274,10 +274,11 @@ export const api = {
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
 
   // Sessions
-  listSessions: (params?: { status?: string; machineId?: string; offset?: number; limit?: number }) => {
+  listSessions: (params?: { status?: string; machineId?: string; agentId?: string; offset?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
     if (params?.machineId) qs.set('machineId', params.machineId);
+    if (params?.agentId) qs.set('agentId', params.agentId);
     if (params?.offset !== undefined) qs.set('offset', String(params.offset));
     if (params?.limit !== undefined) qs.set('limit', String(params.limit));
     const suffix = qs.toString() ? `?${qs}` : '';

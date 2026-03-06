@@ -177,6 +177,7 @@ function createSession(overrides?: Partial<Session>): Session {
   return {
     id: 'session-1',
     agentId: 'agent-1',
+    agentName: null,
     machineId: 'machine-1',
     sessionUrl: 'https://example.com/session',
     claudeSessionId: 'claude-session-1',
@@ -197,7 +198,7 @@ function createAccount(overrides?: Partial<ApiAccount>): ApiAccount {
   return {
     id: 'account-1',
     name: 'Test Account',
-    provider: 'anthropic',
+    provider: 'anthropic_api',
     credentialMasked: '****abcd',
     priority: 1,
     rateLimit: {},

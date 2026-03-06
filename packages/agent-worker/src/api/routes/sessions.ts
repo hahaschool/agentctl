@@ -1086,6 +1086,20 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
         if (isSidechain) msg.subagentId = agentId;
         return [msg];
       }
+    } else if (progressType === 'mcp_progress') {
+      const server = typeof data.serverName === 'string' ? data.serverName : 'mcp';
+      const tool = typeof data.toolName === 'string' ? data.toolName : '';
+      const content = tool ? `${server}: ${tool}` : server;
+      const msg: ContentMessage = { type: 'progress', content, toolName: 'mcp', timestamp };
+      if (isSidechain) msg.subagentId = agentId;
+      return [msg];
+    } else if (progressType === 'hook_progress') {
+      const hookName = typeof data.hookName === 'string' ? data.hookName : 'hook';
+      const hookEvent = typeof data.event === 'string' ? data.event : '';
+      const content = hookEvent ? `${hookName} (${hookEvent})` : hookName;
+      const msg: ContentMessage = { type: 'progress', content, toolName: 'hook', timestamp };
+      if (isSidechain) msg.subagentId = agentId;
+      return [msg];
     }
 
     return [];
@@ -1130,8 +1144,8 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
       } else if (blockType === 'tool_result') {
         const content =
           typeof b.content === 'string'
-            ? b.content.slice(0, 2000)
-            : JSON.stringify(b.content ?? '').slice(0, 2000);
+            ? b.content.slice(0, 4000)
+            : JSON.stringify(b.content ?? '').slice(0, 4000);
         results.push({
           type: 'tool_result',
           content,

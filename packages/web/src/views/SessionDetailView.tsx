@@ -583,6 +583,46 @@ function MessageList({
 
   const visibleMessages = filteredMessages.slice(-maxDisplayMessages);
 
+  // Apply text search filter
+  const searchFiltered = search
+    ? visibleMessages.filter((m) => (m.content ?? '').toLowerCase().includes(search.toLowerCase()))
+    : visibleMessages;
+
+  // --- Lightweight windowing for large message lists ---
+  const WINDOW_SIZE = 50;
+  const OVERSCAN = 10;
+  const EST_MSG_HEIGHT = 60; // estimated px per message
+  const WINDOWING_THRESHOLD = 200;
+  const shouldWindow = searchFiltered.length > WINDOWING_THRESHOLD;
+  const [windowEnd, setWindowEnd] = useState(searchFiltered.length);
+  const windowDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep windowEnd pinned to end when autoScroll is on or messages change
+  useEffect(() => {
+    if (autoScroll || !shouldWindow) {
+      setWindowEnd(searchFiltered.length);
+    }
+  }, [autoScroll, searchFiltered.length, shouldWindow]);
+
+  const handleWindowScroll = useCallback(() => {
+    if (!shouldWindow || !scrollRef.current) return;
+    if (windowDebounceRef.current) clearTimeout(windowDebounceRef.current);
+    windowDebounceRef.current = setTimeout(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const scrollRatio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+      const centerIndex = Math.floor(scrollRatio * searchFiltered.length);
+      const newEnd = Math.min(searchFiltered.length, centerIndex + Math.floor(WINDOW_SIZE / 2) + OVERSCAN);
+      setWindowEnd(newEnd);
+    }, 200);
+  }, [shouldWindow, searchFiltered.length]);
+
+  const winStart = shouldWindow ? Math.max(0, windowEnd - WINDOW_SIZE - OVERSCAN * 2) : 0;
+  const winEnd = shouldWindow ? windowEnd : searchFiltered.length;
+  const windowedMessages = searchFiltered.slice(winStart, winEnd);
+  const topSpacerHeight = shouldWindow ? winStart * EST_MSG_HEIGHT : 0;
+  const bottomSpacerHeight = shouldWindow ? (searchFiltered.length - winEnd) * EST_MSG_HEIGHT : 0;
+
   // Auto-scroll to bottom when new messages or stream output arrive
   const prevCountRef = useRef(0);
   const prevStreamLenRef = useRef(0);
@@ -604,7 +644,8 @@ function MessageList({
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
     setAutoScroll(isAtBottom);
-  }, []);
+    handleWindowScroll();
+  }, [handleWindowScroll]);
 
   // Cmd+F / Ctrl+F to focus search input
   useEffect(() => {
@@ -617,11 +658,6 @@ function MessageList({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  // Apply text search filter
-  const searchFiltered = search
-    ? visibleMessages.filter((m) => (m.content ?? '').toLowerCase().includes(search.toLowerCase()))
-    : visibleMessages;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -752,9 +788,15 @@ function MessageList({
           </div>
         )}
 
-        {searchFiltered.map((msg, i) => (
-          <MessageBlock key={`${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${i}`} message={msg} />
-        ))}
+        {topSpacerHeight > 0 && <div style={{ height: topSpacerHeight }} aria-hidden />}
+        {groupToolPairs(windowedMessages, winStart).map((item) =>
+          item.kind === 'tool_pair' ? (
+            <ToolPairBlock key={item.key} toolUse={item.toolUse} toolResult={item.toolResult} />
+          ) : (
+            <MessageBlock key={item.key} message={item.message} />
+          ),
+        )}
+        {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} aria-hidden />}
 
         {/* Pending user messages (shown immediately via SSE before JSONL poll) */}
         {pendingUserMessages && pendingUserMessages.length > 0 &&
@@ -777,6 +819,161 @@ function MessageList({
             </AnsiText>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tool pair grouping — pairs tool_use + tool_result by toolId
+// ---------------------------------------------------------------------------
+
+type RenderedItem =
+  | { kind: 'message'; message: SessionContentMessage; key: string }
+  | { kind: 'tool_pair'; toolUse: SessionContentMessage; toolResult: SessionContentMessage; key: string };
+
+function groupToolPairs(messages: SessionContentMessage[], startIndex: number): RenderedItem[] {
+  // Build a map of toolId -> tool_result for quick lookup
+  const resultsByToolId = new Map<string, SessionContentMessage>();
+  for (const m of messages) {
+    if (m.type === 'tool_result' && m.toolId) {
+      resultsByToolId.set(m.toolId, m);
+    }
+  }
+
+  // Track which tool_result messages were consumed by a pair
+  const consumedToolResults = new Set<string>();
+  const items: RenderedItem[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i] as SessionContentMessage;
+
+    // If this is a tool_use with a toolId, try to pair it
+    if (msg.type === 'tool_use' && msg.toolId) {
+      const result = resultsByToolId.get(msg.toolId);
+      if (result) {
+        consumedToolResults.add(msg.toolId);
+        items.push({
+          kind: 'tool_pair',
+          toolUse: msg,
+          toolResult: result,
+          key: `tool-pair-${msg.toolId}`,
+        });
+        continue;
+      }
+    }
+
+    // If this is a tool_result that was already consumed by a pair, skip it
+    if (msg.type === 'tool_result' && msg.toolId && consumedToolResults.has(msg.toolId)) {
+      continue;
+    }
+
+    // Otherwise render as individual message
+    items.push({
+      kind: 'message',
+      message: msg,
+      key: `${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${String(startIndex + i)}`,
+    });
+  }
+
+  return items;
+}
+
+// ---------------------------------------------------------------------------
+// ToolPairBlock — renders tool_use + tool_result as a single collapsible block
+// ---------------------------------------------------------------------------
+
+function ToolPairBlock({
+  toolUse,
+  toolResult,
+}: {
+  toolUse: SessionContentMessage;
+  toolResult: SessionContentMessage;
+}): React.JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const toolName = toolUse.toolName ?? 'Tool';
+  const inputContent = toolUse.content ?? '';
+  const outputContent = toolResult.content ?? '';
+  const summary = inputContent.replace(/\n/g, ' ').slice(0, 80) + (inputContent.length > 80 ? '...' : '');
+
+  const handleCopyOutput = useCallback(() => {
+    void navigator.clipboard.writeText(outputContent).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [outputContent]);
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className={cn(
+          'w-full flex items-center gap-2 px-3 py-1.5 rounded-sm cursor-pointer text-left text-foreground font-[inherit] border-none border-l-2',
+          'bg-yellow-500/[0.04] border-l-yellow-400',
+        )}
+      >
+        <span className="text-[10px] font-semibold shrink-0 text-yellow-400">Tool</span>
+        <span className="text-[11px] font-mono text-muted-foreground shrink-0">{toolName}</span>
+        <span className="text-[10px] text-muted-foreground/60 truncate">{summary}</span>
+        <span className="text-[10px] text-muted-foreground ml-auto shrink-0">click to expand</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className={cn('px-3 py-2 rounded-lg border-l-[3px]', 'bg-yellow-500/[0.04] border-l-yellow-400')}>
+      {/* Header */}
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-[11px] font-semibold text-yellow-400">
+          Tool
+          <span className="ml-1.5 font-normal font-mono text-muted-foreground">{toolName}</span>
+        </span>
+        <div className="flex gap-2 items-center">
+          {toolUse.timestamp && (
+            <span className="text-[10px] text-muted-foreground">{formatTime(toolUse.timestamp)}</span>
+          )}
+          {toolResult.timestamp && toolResult.timestamp !== toolUse.timestamp && (
+            <>
+              <span className="text-[10px] text-muted-foreground/40">-</span>
+              <span className="text-[10px] text-muted-foreground">{formatTime(toolResult.timestamp)}</span>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="text-[10px] text-primary bg-transparent border-none p-0 cursor-pointer"
+          >
+            collapse
+          </button>
+        </div>
+      </div>
+
+      {/* Input section */}
+      <div className="mb-2">
+        <div className="text-[10px] font-semibold text-muted-foreground mb-0.5">Input</div>
+        <div className="text-[11px] font-mono text-foreground whitespace-pre-wrap break-words max-h-[300px] overflow-auto">
+          <AnsiSpan>{inputContent}</AnsiSpan>
+        </div>
+      </div>
+
+      {/* Output section */}
+      <div>
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-[10px] font-semibold text-muted-foreground">Output</span>
+          <button
+            type="button"
+            onClick={handleCopyOutput}
+            className="text-[10px] text-primary bg-transparent border-none p-0 cursor-pointer"
+          >
+            {copied ? 'copied!' : 'copy'}
+          </button>
+        </div>
+        <div className="text-[11px] font-mono text-foreground whitespace-pre-wrap break-words max-h-[400px] overflow-auto">
+          <AnsiSpan>{outputContent}</AnsiSpan>
+        </div>
       </div>
     </div>
   );
