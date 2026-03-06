@@ -622,7 +622,7 @@ export function SessionsPage(): React.JSX.Element {
               aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
               aria-expanded={showCreateForm}
               className={cn(
-                'h-7 px-2.5 rounded-md text-[11px] font-medium whitespace-nowrap transition-all duration-200',
+                'h-7 px-2.5 rounded-md text-[11px] font-medium whitespace-nowrap transition-all duration-200 shrink-0',
                 showCreateForm
                   ? 'bg-primary text-white hover:bg-primary/90'
                   : 'bg-primary/10 text-primary hover:bg-primary/20',
@@ -633,26 +633,27 @@ export function SessionsPage(): React.JSX.Element {
             <RefreshButton
               onClick={() => resetAndInvalidateSessions()}
               isFetching={sessions.isFetching && !sessions.isLoading}
-              className="h-7 w-7 p-0 text-[11px]"
+              label=""
+              className="h-7 w-7 p-0 text-[11px] justify-center"
             />
           </div>
           <div className="flex items-center gap-1.5 text-[10px]">
-            <LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} />
+            <span className="truncate min-w-0"><LastUpdated dataUpdatedAt={sessions.dataUpdatedAt} /></span>
             <span className="flex-1" />
             {cleanupSessions.length > 0 && (
               <ConfirmButton
                 label={`Clean ${cleanupSessions.length}`}
                 confirmLabel={`Delete ${cleanupSessions.length}?`}
                 onConfirm={() => void handleCleanup()}
-                className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                confirmClassName="h-6 px-2 rounded text-[10px] font-medium bg-destructive text-destructive-foreground cursor-pointer"
+                className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                confirmClassName="h-6 px-2 rounded text-[10px] font-medium bg-destructive text-destructive-foreground cursor-pointer shrink-0 whitespace-nowrap"
               />
             )}
             <button
               type="button"
               onClick={() => exportSessionsCsv(filteredSessions)}
               disabled={filteredSessions.length === 0}
-              className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+              className="h-6 px-2 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 transition-colors shrink-0 whitespace-nowrap"
             >
               CSV
             </button>
