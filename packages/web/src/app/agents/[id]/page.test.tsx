@@ -227,6 +227,16 @@ vi.mock('@/components/ConfirmButton', () => ({
   ),
 }));
 
+vi.mock('@/components/SimpleTooltip', () => ({
+  SimpleTooltip: ({
+    children,
+    content,
+  }: {
+    children: React.ReactNode;
+    content: string;
+  }) => <div title={content}>{children}</div>,
+}));
+
 vi.mock('@/components/Toast', () => ({
   useToast: () => ({
     success: vi.fn(),

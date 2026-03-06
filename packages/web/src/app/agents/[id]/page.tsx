@@ -1,10 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Copy, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
@@ -14,6 +15,7 @@ import { FetchingBar } from '@/components/FetchingBar';
 import { LastUpdated } from '@/components/LastUpdated';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { RefreshButton } from '@/components/RefreshButton';
+import { SimpleTooltip } from '@/components/SimpleTooltip';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
@@ -206,6 +208,46 @@ export default function AgentDetailPage(): React.JSX.Element {
     );
   };
 
+  // -- Export & Duplicate handlers --
+
+  const handleExportConfig = useCallback((): void => {
+    const d = agent.data;
+    if (!d) return;
+    const exportData = {
+      name: d.name,
+      type: d.type,
+      machineId: d.machineId,
+      schedule: d.schedule,
+      config: d.config,
+      projectPath: d.projectPath,
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agent-${d.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('Config exported');
+  }, [agent.data, toast]);
+
+  const handleDuplicate = useCallback((): void => {
+    const d = agent.data;
+    if (!d) return;
+    const exportData = {
+      name: d.name,
+      type: d.type,
+      machineId: d.machineId,
+      schedule: d.schedule,
+      config: d.config,
+      projectPath: d.projectPath,
+    };
+    void navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+    toast.success('Agent config copied to clipboard');
+  }, [agent.data, toast]);
+
   // -- Loading state --
 
   if (agent.isLoading) {
@@ -272,6 +314,28 @@ export default function AgentDetailPage(): React.JSX.Element {
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             Edit
           </Button>
+          <SimpleTooltip content="Export config as JSON">
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2"
+              onClick={handleExportConfig}
+              aria-label="Export config"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          </SimpleTooltip>
+          <SimpleTooltip content="Copy config to clipboard">
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2"
+              onClick={handleDuplicate}
+              aria-label="Duplicate agent"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </SimpleTooltip>
         </div>
         <div className="flex gap-2">
           {data.status === 'running' ? (
@@ -557,6 +621,16 @@ export default function AgentDetailPage(): React.JSX.Element {
                   </span>
                 </Link>
               ))}
+              {(agentSessions.data?.sessions ?? []).length === 20 && (
+                <div className="pt-2 text-center">
+                  <Link
+                    href={`/sessions?agentId=${agentId}`}
+                    className="text-[11px] text-primary font-medium hover:underline"
+                  >
+                    Load more sessions
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

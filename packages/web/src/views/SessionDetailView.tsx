@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
@@ -1491,6 +1491,8 @@ function ToolPairBlock({
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const reactId = useId();
+  const contentId = toolUse.toolId ? `tool-pair-${toolUse.toolId}` : `tool-pair-${reactId}`;
 
   const toolName = toolUse.toolName ?? 'Tool';
   const inputContent = toolUse.content ?? '';
@@ -1510,6 +1512,8 @@ function ToolPairBlock({
       <button
         type="button"
         onClick={() => setExpanded(true)}
+        aria-expanded={false}
+        aria-controls={contentId}
         className={cn(
           'w-full flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-left text-foreground font-[inherit] border-none border-l-2',
           'bg-yellow-500/[0.04] border-l-yellow-400',
@@ -1527,6 +1531,7 @@ function ToolPairBlock({
 
   return (
     <div
+      id={contentId}
       className={cn(
         'px-3 py-2 rounded-lg border-l-[3px]',
         'bg-yellow-500/[0.04] border-l-yellow-400',
@@ -1555,6 +1560,8 @@ function ToolPairBlock({
           <button
             type="button"
             onClick={() => setExpanded(false)}
+            aria-expanded={true}
+            aria-controls={contentId}
             className="text-[10px] text-primary bg-transparent border-none p-0 cursor-pointer"
           >
             collapse
