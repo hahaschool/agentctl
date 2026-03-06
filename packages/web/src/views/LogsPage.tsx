@@ -180,7 +180,7 @@ export function LogsPage(): React.JSX.Element {
             type="button"
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors',
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition-colors',
               autoRefresh
                 ? 'bg-green-500/10 text-green-500 border-green-500/30'
                 : 'bg-muted text-muted-foreground border-border',
@@ -565,7 +565,7 @@ export function LogsPage(): React.JSX.Element {
                   setActionTypeFilter(tab.key);
                 }}
                 className={cn(
-                  'px-3 py-1 rounded text-[12px] font-medium transition-colors border',
+                  'px-3 py-1 rounded-md text-[12px] font-medium transition-colors border',
                   actionTypeFilter === tab.key
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-card text-muted-foreground border-border hover:text-foreground',
@@ -640,7 +640,7 @@ export function LogsPage(): React.JSX.Element {
                     setAuditOffset(Math.max(0, auditOffset - AUDIT_PAGE_SIZE));
                     auditScrollRef.current?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="px-3 py-1 text-[12px] rounded border border-border bg-card text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
+                  className="px-3 py-1 text-[12px] rounded-md border border-border bg-card text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors"
                 >
                   Previous
                 </button>
@@ -651,7 +651,7 @@ export function LogsPage(): React.JSX.Element {
                     setAuditOffset(auditOffset + AUDIT_PAGE_SIZE);
                     auditScrollRef.current?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="px-3 py-1 text-[12px] rounded border border-border bg-card text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
+                  className="px-3 py-1 text-[12px] rounded-md border border-border bg-card text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors"
                 >
                   Next
                 </button>
@@ -676,7 +676,7 @@ export function LogsPage(): React.JSX.Element {
                           setAuditOffset(0);
                         }}
                         className={cn(
-                          'px-3 py-2 bg-card border rounded text-left transition-colors',
+                          'px-3 py-2 bg-card border rounded-md text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20',
                           auditToolFilter === tool
                             ? 'border-foreground'
                             : 'border-border/50 hover:border-border',
@@ -724,7 +724,7 @@ function CollapsibleSection({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex items-center gap-2 mb-2.5 bg-transparent border-none p-0 cursor-pointer text-left"
+        className="flex items-center gap-2 mb-2.5 bg-transparent border-none p-0 cursor-pointer text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 rounded-sm"
       >
         <span
           className={cn(
@@ -854,7 +854,7 @@ function DependencyCard({
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-[11px] text-red-500 mt-1 cursor-pointer hover:underline bg-transparent border-none p-0 text-left"
+            className="text-[11px] text-red-500 mt-1 cursor-pointer hover:underline focus-visible:outline-none focus-visible:underline bg-transparent border-none p-0 text-left"
           >
             {expanded ? 'Hide error' : 'Show error'}
           </button>
@@ -901,7 +901,7 @@ function AuditActionRow({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left bg-transparent hover:bg-muted/50 transition-colors cursor-pointer border-none"
+        className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left bg-transparent hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-inset transition-colors cursor-pointer border-none"
       >
         {/* Action type badge */}
         <span

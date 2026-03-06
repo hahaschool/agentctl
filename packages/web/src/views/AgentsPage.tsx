@@ -1161,7 +1161,7 @@ export function AgentsPage(): React.JSX.Element {
                   type="button"
                   onClick={() => openEditDialog(agent)}
                   aria-label={`Edit agent ${agent.name}`}
-                  className="px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors"
+                  className="px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                 >
                   Edit
                 </button>
@@ -1201,7 +1201,7 @@ export function AgentsPage(): React.JSX.Element {
                       disabled={!prompt.trim() || startAgent.isPending}
                       aria-label="Start agent with entered prompt"
                       className={cn(
-                        'px-3 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium',
+                        'px-3 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium focus:ring-2 focus:ring-primary/20',
                         !prompt.trim() || startAgent.isPending
                           ? 'cursor-not-allowed opacity-50'
                           : 'cursor-pointer opacity-100',
@@ -1218,7 +1218,7 @@ export function AgentsPage(): React.JSX.Element {
                       disabled={startAgent.isPending}
                       aria-label="Cancel agent start"
                       className={cn(
-                        'px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-md text-xs',
+                        'px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-md text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
                         startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                       )}
                     >
@@ -1234,7 +1234,7 @@ export function AgentsPage(): React.JSX.Element {
                     }}
                     disabled={startAgent.isPending}
                     className={cn(
-                      'px-3.5 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium',
+                      'px-3.5 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium focus:ring-2 focus:ring-primary/20',
                       startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                     )}
                   >
