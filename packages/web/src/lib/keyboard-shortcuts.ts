@@ -91,7 +91,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['r'], desc: 'Refresh' },
       { keys: ['\u2318F'], desc: 'Search messages' },
-      { keys: ['Esc'], desc: 'Close search' },
+      { keys: ['f'], desc: 'Toggle file browser' },
+      { keys: ['t'], desc: 'Toggle terminal view' },
+      { keys: ['e'], desc: 'Export as JSON' },
+      { keys: ['m'], desc: 'Export as Markdown' },
+      { keys: ['Esc'], desc: 'Close panels / search' },
     ],
   },
   {
