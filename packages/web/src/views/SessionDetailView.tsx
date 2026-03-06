@@ -18,6 +18,7 @@ import { FetchingBar } from '../components/FetchingBar';
 import { FileBrowser } from '../components/FileBrowser';
 import { GitStatusBadge } from '../components/GitStatusBadge';
 import { LastUpdated } from '../components/LastUpdated';
+import { LiveDuration } from '../components/LiveDuration';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
 import { ProgressIndicator } from '../components/ProgressIndicator';
@@ -30,7 +31,7 @@ import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
 import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
-import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
+import { formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import {
   accountsQuery,
@@ -582,10 +583,15 @@ function SessionHeader({
           Started <LiveTimeAgo date={session.startedAt} />
         </span>
         {session.endedAt && (
-          <span>Duration: {formatDuration(session.startedAt, session.endedAt)}</span>
+          <span>
+            Duration: <LiveDuration startedAt={session.startedAt} endedAt={session.endedAt} />
+          </span>
         )}
         {!session.endedAt && session.status === 'active' && (
-          <span>Running for {formatDuration(session.startedAt)}</span>
+          <span className="flex items-center gap-1">
+            <svg className="w-3 h-3 text-green-400 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+            <LiveDuration startedAt={session.startedAt} />
+          </span>
         )}
         {streamCost && (
           <span className="font-mono bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-sm border border-amber-500/30">

@@ -1,5 +1,6 @@
 'use client';
 
+import { AlertTriangle, Bell, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -14,11 +15,11 @@ type NotificationBellProps = {
   onClearAll: () => void;
 };
 
-const TYPE_ICONS: Record<NotificationType, string> = {
-  success: '\u2713',
-  error: '\u2717',
-  warning: '\u26A0',
-  info: '\u2139',
+const TYPE_ICONS: Record<NotificationType, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  error: XCircle,
+  warning: AlertTriangle,
+  info: Info,
 };
 
 const TYPE_COLORS: Record<NotificationType, string> = {
@@ -86,8 +87,7 @@ export function NotificationBell({
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         title="Notifications"
       >
-        {/* Bell icon (unicode) */}
-        {'\uD83D\uDD14'}
+        <Bell size={16} />
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1 leading-none">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -143,9 +143,10 @@ export function NotificationBell({
                     !n.read && 'bg-accent/10',
                   )}
                 >
-                  <span className={cn('text-sm mt-0.5 w-4 text-center shrink-0', TYPE_COLORS[n.type])}>
-                    {TYPE_ICONS[n.type]}
-                  </span>
+                  {(() => {
+                    const Icon = TYPE_ICONS[n.type];
+                    return <Icon size={14} className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])} />;
+                  })()}
                   <div className="flex-1 min-w-0">
                     <p className={cn('text-sm leading-snug', !n.read ? 'text-foreground' : 'text-muted-foreground')}>
                       {n.message}
@@ -159,7 +160,7 @@ export function NotificationBell({
                     aria-label="Dismiss notification"
                     title={n.read ? 'Already read' : 'Mark as read'}
                   >
-                    {'\u2715'}
+                    <X size={12} />
                   </button>
                 </div>
               ))
