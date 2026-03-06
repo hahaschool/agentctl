@@ -5,10 +5,15 @@ import Link from 'next/link';
 import type React from 'react';
 import { useMemo } from 'react';
 
+
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Keyboard } from 'lucide-react';
+import { useCallback, useState } from 'react';
+
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
+import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
@@ -42,6 +47,8 @@ export function DashboardPage(): React.JSX.Element {
   const sessions = useQuery(sessionsQuery());
 
   const { status: wsStatus } = useWebSocket();
+  const [showHelp, setShowHelp] = useState(false);
+  const toggleHelp = useCallback(() => setShowHelp((v) => !v), []);
 
   const machineList = machines.data ?? [];
   const agentList = agents.data ?? [];
@@ -94,7 +101,7 @@ export function DashboardPage(): React.JSX.Element {
     [health, metrics, machines, agents, discovered, sessions],
   );
 
-  useHotkeys(useMemo(() => ({ r: refreshAll }), [refreshAll]));
+  useHotkeys(useMemo(() => ({ r: refreshAll, '?': toggleHelp }), [refreshAll, toggleHelp]));
 
   const anyFetching =
     health.isFetching ||
@@ -122,12 +129,40 @@ export function DashboardPage(): React.JSX.Element {
         : 'bg-muted-foreground';
   const healthLabel = healthStatus ?? 'unknown';
 
+  // Combined system health: CP status + WS status + machine count
+  const systemHealthLabel = useMemo(() => {
+    const parts: string[] = [];
+    if (healthStatus === 'ok') parts.push('CP up');
+    else if (healthStatus === 'degraded') parts.push('CP degraded');
+    else parts.push('CP unknown');
+    if (wsStatus === 'connected') parts.push('WS connected');
+    else parts.push(`WS ${wsStatus}`);
+    if (machinesOnline > 0) parts.push(`${machinesOnline} machine${machinesOnline > 1 ? 's' : ''} online`);
+    else parts.push('no machines');
+    return parts.join(' · ');
+  }, [healthStatus, wsStatus, machinesOnline]);
+
+  const systemHealthOk = healthStatus === 'ok' && wsStatus === 'connected';
+
   return (
     <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
+      <KeyboardHelpOverlay open={showHelp} onClose={toggleHelp} />
       <FetchingBar isFetching={anyFetching} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-        <h1 className="text-[22px] font-semibold tracking-tight">Command center</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-[22px] font-semibold tracking-tight">Command center</h1>
+          <SimpleTooltip content="Keyboard shortcuts (?)">
+            <button
+              type="button"
+              onClick={toggleHelp}
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
+              aria-label="Show keyboard shortcuts"
+            >
+              <Keyboard className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
+        </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Link
             href="/sessions"
@@ -170,6 +205,17 @@ export function DashboardPage(): React.JSX.Element {
           <div>
             <div className="text-[15px] font-semibold text-foreground">
               Control Plane: <span className={cn('uppercase', healthTextClass)}>{healthLabel}</span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span
+                className={cn(
+                  'inline-block w-1.5 h-1.5 rounded-full',
+                  systemHealthOk ? 'bg-green-500' : 'bg-yellow-500',
+                )}
+              />
+              <span className="text-[11px] text-muted-foreground" data-testid="system-health-summary">
+                {systemHealthLabel}
+              </span>
             </div>
             {health.data?.timestamp && (
               <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -259,7 +305,7 @@ export function DashboardPage(): React.JSX.Element {
                   key={session.id}
                   href={`/sessions/${session.id}`}
                   className={cn(
-                    'block px-4 py-3 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                    'block px-4 py-3 bg-card no-underline transition-all duration-150 hover:bg-accent/10 hover:pl-5',
                     idx > 0 && 'border-t border-border',
                   )}
                 >
@@ -325,7 +371,7 @@ export function DashboardPage(): React.JSX.Element {
                     key={machine.id}
                     href={`/machines/${machine.id}`}
                     className={cn(
-                      'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                      'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-all duration-150 hover:bg-accent/10 hover:pl-5',
                       idx > 0 && 'border-t border-border',
                     )}
                   >
@@ -367,7 +413,7 @@ export function DashboardPage(): React.JSX.Element {
                     key={session.sessionId}
                     href="/discover"
                     className={cn(
-                      'block px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                      'block px-4 py-2.5 bg-card no-underline transition-all duration-150 hover:bg-accent/10 hover:pl-5',
                       idx > 0 && 'border-t border-border',
                     )}
                   >
