@@ -22,16 +22,25 @@ export function MarkdownContent({ children, className }: MarkdownContentProps): 
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        a: ({ href, children: linkChildren }) => (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all"
-          >
-            {linkChildren}
-          </a>
-        ),
+        a: ({ href, children: linkChildren }) => {
+          // Show URL inline when link text differs from the href
+          const linkText = String(linkChildren ?? '');
+          const isUrlVisible = href && (linkText === href || linkText === href.replace(/^https?:\/\//, ''));
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={href}
+              className="text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all"
+            >
+              {linkChildren}
+              {!isUrlVisible && href && (
+                <span className="text-[10px] text-blue-400/60 ml-1 no-underline">({href})</span>
+              )}
+            </a>
+          );
+        },
         p: ({ children: pChildren }) => <p className="mb-1.5 last:mb-0">{pChildren}</p>,
         h1: ({ children: h }) => <h1 className="text-sm font-bold mt-3 mb-1.5">{h}</h1>,
         h2: ({ children: h }) => <h2 className="text-[13px] font-bold mt-2.5 mb-1">{h}</h2>,
