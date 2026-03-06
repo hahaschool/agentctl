@@ -10,7 +10,7 @@ import type {
   CliSessionStatus,
   DiscoveredSession,
 } from '../../runtime/cli-session-manager.js';
-import { type ContentMessage, parseJsonlEntry, sessionRoutes } from './sessions.js';
+import { parseJsonlEntry, sessionRoutes } from './sessions.js';
 
 // ---------------------------------------------------------------------------
 // Partial mock for node:fs and node:os — used by the content endpoint tests.

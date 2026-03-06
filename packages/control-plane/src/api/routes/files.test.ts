@@ -130,7 +130,7 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
       mockFetchOk({ entries: [] });
       await app.inject({ method: 'GET', url: '/api/machines/machine-1/files?path=/tmp' });
 
-      const url = vi.mocked(globalThis.fetch).mock.calls[0]![0] as string;
+      const url = vi.mocked(globalThis.fetch).mock.calls[0]?.[0] as string;
       expect(url).toContain('100.64.0.1');
     });
 
@@ -142,7 +142,7 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
 
       await app.inject({ method: 'GET', url: '/api/machines/machine-1/files?path=/tmp' });
 
-      const url = vi.mocked(globalThis.fetch).mock.calls[0]![0] as string;
+      const url = vi.mocked(globalThis.fetch).mock.calls[0]?.[0] as string;
       expect(url).toContain('test-host');
     });
 

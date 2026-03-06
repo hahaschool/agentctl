@@ -305,7 +305,7 @@ describe('Git routes', () => {
       vi.mocked(statSync).mockReturnValue(makeStat(true));
 
       // First call (rev-parse --git-dir) succeeds, all subsequent fail
-      let callCount = 0;
+      let _callCount = 0;
       vi.mocked(execFile).mockImplementation(
         (_cmd: string, args: unknown, _opts: unknown, cb?: unknown) => {
           const argList = args as string[];
@@ -315,7 +315,7 @@ describe('Git routes', () => {
           if (key.includes('rev-parse --git-dir')) {
             callback(null, { stdout: '.git\n' });
           } else {
-            callCount++;
+            _callCount++;
             callback(new Error('git crashed'));
           }
           return {} as ReturnType<typeof execFile>;

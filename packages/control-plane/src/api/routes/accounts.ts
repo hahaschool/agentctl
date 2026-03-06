@@ -286,7 +286,7 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     let credential: string;
     try {
       credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
-    } catch (err) {
+    } catch (_err) {
       return reply.code(500).send({
         error: 'ACCOUNT_TEST_ERROR',
         message: 'Failed to decrypt account credential',

@@ -2,7 +2,7 @@ import { WorkerError } from '@agentctl/shared';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TerminalEvent, TerminalInfo } from './terminal-manager.js';
+import type { TerminalInfo } from './terminal-manager.js';
 import { TerminalManager } from './terminal-manager.js';
 
 // ---------------------------------------------------------------------------
