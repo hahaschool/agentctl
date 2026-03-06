@@ -603,22 +603,29 @@ export function SessionsPage(): React.JSX.Element {
         </div>
 
         {/* Status tabs */}
-        <div className="flex items-center border-b border-border px-2 py-1 gap-0.5">
-          {STATUS_TABS.map((tab) => (
-            <button
-              type="button"
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={cn(
-                'flex-1 py-1 text-[10px] rounded cursor-pointer transition-all duration-150 border-0 text-center',
-                statusFilter === tab.key
-                  ? 'font-semibold text-foreground bg-accent'
-                  : 'font-normal text-muted-foreground hover:bg-accent/50',
-              )}
-            >
-              {tab.label}<span className="ml-0.5 tabular-nums opacity-60">{statusCounts[tab.key]}</span>
-            </button>
-          ))}
+        <div className="flex items-center border-b border-border px-1 py-0.5 gap-px">
+          {STATUS_TABS.map((tab) => {
+            const isActive = statusFilter === tab.key;
+            const count = statusCounts[tab.key];
+            return (
+              <button
+                type="button"
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                className={cn(
+                  'flex-1 py-1 text-[10px] rounded cursor-pointer transition-colors border-0 text-center leading-none',
+                  isActive
+                    ? 'font-semibold text-foreground bg-accent'
+                    : 'font-normal text-muted-foreground hover:bg-accent/50',
+                )}
+              >
+                {tab.label}
+                {(isActive || count > 0) && (
+                  <span className="ml-0.5 text-[9px] tabular-nums opacity-50">{count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Sort / Bulk / Group controls */}
