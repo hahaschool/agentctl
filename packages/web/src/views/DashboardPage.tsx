@@ -165,6 +165,7 @@ export function DashboardPage(): React.JSX.Element {
               <Keyboard className="w-4 h-4" />
             </button>
           </SimpleTooltip>
+          <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Link
@@ -179,7 +180,6 @@ export function DashboardPage(): React.JSX.Element {
           >
             View Agents
           </Link>
-          <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>

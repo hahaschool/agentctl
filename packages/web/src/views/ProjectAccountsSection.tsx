@@ -68,7 +68,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
   }
 
   return (
-    <div>
+    <div id="project-accounts" className="scroll-mt-6">
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Project Account Overrides</h3>
       </div>

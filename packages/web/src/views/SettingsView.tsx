@@ -19,16 +19,18 @@ import { ProjectAccountsSection } from './ProjectAccountsSection';
 // ---------------------------------------------------------------------------
 
 function SettingsGroup({
+  id,
   title,
   description,
   children,
 }: {
+  id?: string;
   title: string;
   description?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="space-y-6">
+    <section id={id} className="space-y-6 scroll-mt-6">
       <div>
         <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         {description && <p className="text-[13px] text-muted-foreground mt-1">{description}</p>}
@@ -57,6 +59,7 @@ export function SettingsView(): React.JSX.Element {
       <div className="space-y-10">
         {/* --- API & Accounts group --- */}
         <SettingsGroup
+          id="accounts"
           title="API Accounts"
           description="Manage provider credentials and configure how requests are routed between accounts."
         >
@@ -68,7 +71,7 @@ export function SettingsView(): React.JSX.Element {
         <hr className="border-border/30" />
 
         {/* --- Appearance & Preferences group --- */}
-        <SettingsGroup title="Appearance & Preferences">
+        <SettingsGroup id="appearance" title="Appearance & Preferences">
           <ThemeSection />
           <PreferencesSection />
         </SettingsGroup>
@@ -76,7 +79,7 @@ export function SettingsView(): React.JSX.Element {
         <hr className="border-border/30" />
 
         {/* --- System group --- */}
-        <SettingsGroup title="System">
+        <SettingsGroup id="system" title="System">
           <ConnectionSection />
           <RouterLink />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

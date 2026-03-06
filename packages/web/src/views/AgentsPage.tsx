@@ -1269,6 +1269,7 @@ export function AgentsPage(): React.JSX.Element {
               className={cn(
                 'group p-4 bg-card border border-border/50 rounded-lg transition-all duration-200 hover:border-border/80 hover:shadow-sm',
                 agent.status === 'running' && 'border-l-2 border-l-green-500',
+                (agent.status === 'starting' || agent.status === 'stopping') && 'animate-pulse',
               )}
             >
               {/* Card header: name + status */}

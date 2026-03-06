@@ -1029,6 +1029,21 @@ export function SessionsPage(): React.JSX.Element {
                 title="No sessions yet"
                 description="Create a new session using the form above to get started."
               />
+            ) : statusFilter !== 'all' && !searchQuery ? (
+              <EmptyState
+                icon={Filter}
+                title={`No ${statusFilter} sessions`}
+                description={`There are currently no sessions with "${statusFilter}" status.`}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('all')}
+                    className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px]"
+                  >
+                    Show all sessions
+                  </button>
+                }
+              />
             ) : (
               <EmptyState
                 icon={Filter}

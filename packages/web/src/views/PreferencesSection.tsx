@@ -113,7 +113,7 @@ export function PreferencesSection(): React.JSX.Element {
   }, [maxMessages]);
 
   return (
-    <div>
+    <div id="preferences" className="scroll-mt-6">
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Defaults</h3>
       </div>
