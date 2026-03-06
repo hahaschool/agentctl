@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
@@ -714,18 +714,7 @@ function SessionHeader({
 
       {/* Error details */}
       {session.status === 'error' && (
-        <div className="mt-2 px-3 py-2 rounded-md bg-red-100/50 dark:bg-red-950/50 border border-red-300/50 dark:border-red-900/50 text-[12px] text-red-700 dark:text-red-300 space-y-1">
-          <div>
-            <span className="font-semibold text-red-600 dark:text-red-400">Error:</span>
-            {session.metadata?.errorMessage ?? 'Session ended with an error (no details available)'}
-          </div>
-          {session.metadata?.errorHint && (
-            <div className="text-yellow-700/90 dark:text-yellow-300/90">
-              <span className="font-semibold text-yellow-600 dark:text-yellow-400">Hint:</span>
-              {session.metadata.errorHint}
-            </div>
-          )}
-        </div>
+        <ErrorDetailPanel metadata={session.metadata} />
       )}
 
       {/* Starting indicator */}
@@ -737,6 +726,95 @@ function SessionHeader({
 
       {/* Cost / Model metadata (when available) */}
       <SessionMetadataBadges metadata={session.metadata} streamCost={streamCost} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Error detail panel (collapsible, with copy button)
+// ---------------------------------------------------------------------------
+
+function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.JSX.Element {
+  const errorMessage =
+    metadata?.errorMessage ?? 'Session ended with an error (no details available)';
+  const errorCode = metadata?.errorCode as string | undefined;
+  const exitReason = metadata?.exitReason as string | undefined;
+  const errorHint = metadata?.errorHint;
+
+  // Show exitReason only if it differs from the error message
+  const showExitReason = exitReason && exitReason !== errorMessage;
+
+  // Build full copyable text
+  const fullErrorText = [
+    errorCode ? `[${errorCode}] ` : '',
+    errorMessage,
+    showExitReason ? `\nExit reason: ${exitReason}` : '',
+    errorHint ? `\nHint: ${errorHint}` : '',
+  ].join('');
+
+  const isLong = errorMessage.length > 200;
+  const [expanded, setExpanded] = useState(!isLong);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard.writeText(fullErrorText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [fullErrorText]);
+
+  return (
+    <div className="mt-2 bg-red-500/5 border border-red-500/20 rounded-md px-3 py-2 text-[12px] text-red-700 dark:text-red-300">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 space-y-1 min-w-0">
+          {/* Error code + message */}
+          <div className="flex items-start gap-2">
+            {errorCode && (
+              <span className="shrink-0 font-mono text-[11px] bg-red-500/10 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded border border-red-500/20">
+                {errorCode}
+              </span>
+            )}
+            <span>
+              {isLong && !expanded ? `${errorMessage.slice(0, 200)}...` : errorMessage}
+            </span>
+          </div>
+
+          {/* Exit reason (if different from error) */}
+          {showExitReason && expanded && (
+            <div className="text-red-600/80 dark:text-red-400/80">
+              <span className="font-semibold">Exit reason:</span> {exitReason}
+            </div>
+          )}
+
+          {/* Hint */}
+          {errorHint && expanded && (
+            <div className="text-yellow-700/90 dark:text-yellow-300/90">
+              <span className="font-semibold text-yellow-600 dark:text-yellow-400">Hint:</span>{' '}
+              {errorHint}
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1 shrink-0">
+          {isLong && (
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="px-2 py-0.5 text-[10px] text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded cursor-pointer hover:bg-red-500/20"
+            >
+              {expanded ? 'Collapse' : 'Expand'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="px-2 py-0.5 text-[10px] text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded cursor-pointer hover:bg-red-500/20"
+          >
+            {copied ? 'Copied!' : 'Copy error'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1107,13 +1185,24 @@ function MessageList({
         )}
 
         {topSpacerHeight > 0 && <div style={{ height: topSpacerHeight }} aria-hidden />}
-        {groupToolPairs(windowedMessages, winStart).map((item) =>
-          item.kind === 'tool_pair' ? (
-            <ToolPairBlock key={item.key} toolUse={item.toolUse} toolResult={item.toolResult} />
-          ) : (
-            <MessageBlock key={item.key} message={item.message} renderMarkdown={renderMarkdown} />
-          ),
-        )}
+        {(() => {
+          const items = groupToolPairs(windowedMessages, winStart);
+          return items.map((item, idx) => {
+            const prevTs = idx > 0 ? getItemTimestamp(items[idx - 1] as RenderedItem) : undefined;
+            const curTs = getItemTimestamp(item);
+            const separatorLabel = getDateSeparatorLabel(prevTs, curTs);
+            return (
+              <React.Fragment key={item.key}>
+                {separatorLabel && <DateSeparator label={separatorLabel} />}
+                {item.kind === 'tool_pair' ? (
+                  <ToolPairBlock toolUse={item.toolUse} toolResult={item.toolResult} />
+                ) : (
+                  <MessageBlock message={item.message} renderMarkdown={renderMarkdown} />
+                )}
+              </React.Fragment>
+            );
+          });
+        })()}
         {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} aria-hidden />}
 
         {/* Optimistic user messages (shown instantly on send, before any SSE/JSONL) */}
@@ -1186,6 +1275,60 @@ function MessageList({
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Date separators — thin divider lines when timestamps cross hour/day boundaries
+// ---------------------------------------------------------------------------
+
+function DateSeparator({ label }: { label: string }): React.ReactElement {
+  return (
+    <div className="flex items-center gap-3 py-2 my-1">
+      <div className="flex-1 h-px bg-border" />
+      <span className="text-[10px] text-muted-foreground font-medium shrink-0">{label}</span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
+}
+
+function getItemTimestamp(item: RenderedItem): string | undefined {
+  return item.kind === 'tool_pair' ? item.toolUse.timestamp : item.message.timestamp;
+}
+
+/**
+ * Returns a separator label when the timestamp boundary crosses a new day or
+ * when more than 1 hour has elapsed. Returns null for the first message or
+ * when no significant boundary is crossed.
+ */
+function getDateSeparatorLabel(
+  prevTimestamp: string | undefined,
+  currentTimestamp: string | undefined,
+): string | null {
+  if (!prevTimestamp || !currentTimestamp) return null;
+  const prev = new Date(prevTimestamp);
+  const curr = new Date(currentTimestamp);
+  if (Number.isNaN(prev.getTime()) || Number.isNaN(curr.getTime())) return null;
+
+  // Day change — show full date
+  if (
+    prev.getFullYear() !== curr.getFullYear() ||
+    prev.getMonth() !== curr.getMonth() ||
+    prev.getDate() !== curr.getDate()
+  ) {
+    return curr.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  // More than 1 hour gap — show time
+  const diffMs = curr.getTime() - prev.getTime();
+  if (diffMs > 60 * 60 * 1000) {
+    return curr.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

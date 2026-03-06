@@ -52,6 +52,8 @@ export type Agent = {
 export type SessionMetadata = {
   errorMessage?: string;
   errorHint?: string;
+  errorCode?: string;
+  exitReason?: string;
   costUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
