@@ -1,7 +1,12 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveWorkerUrl, resolveWorkerUrlOrThrow } from './resolve-worker-url.js';
+import {
+  resolveWorkerUrl,
+  resolveWorkerUrlByMachineId,
+  resolveWorkerUrlByMachineIdOrThrow,
+  resolveWorkerUrlOrThrow,
+} from './resolve-worker-url.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -268,6 +273,176 @@ describe('resolveWorkerUrlOrThrow', () => {
       const cpErr = err as ControlPlaneError;
       expect(cpErr.code).toBe('REGISTRY_UNAVAILABLE');
       expect(cpErr.context).toEqual({ agentId: 'my-agent' });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveWorkerUrlByMachineId (machine-centric, result-based)
+// ---------------------------------------------------------------------------
+
+describe('resolveWorkerUrlByMachineId', () => {
+  it('resolves URL using tailscaleIp when available', async () => {
+    const dbRegistry = mockDbRegistry(
+      {},
+      {
+        'machine-1': {
+          id: 'machine-1',
+          hostname: 'ec2-box',
+          tailscaleIp: '100.64.0.5',
+          status: 'online',
+        },
+      },
+    );
+
+    const result = await resolveWorkerUrlByMachineId('machine-1', {
+      dbRegistry: dbRegistry as never,
+      workerPort: WORKER_PORT,
+    });
+
+    expect(result).toEqual({ ok: true, url: 'http://100.64.0.5:9000' });
+  });
+
+  it('falls back to hostname when tailscaleIp is missing', async () => {
+    const dbRegistry = {
+      ...mockDbRegistry({}, {}),
+      getMachine: vi.fn(async () => ({
+        id: 'machine-1',
+        hostname: 'mac-mini',
+        tailscaleIp: null,
+        status: 'online',
+      })),
+    };
+
+    const result = await resolveWorkerUrlByMachineId('machine-1', {
+      dbRegistry: dbRegistry as never,
+      workerPort: WORKER_PORT,
+    });
+
+    expect(result).toEqual({ ok: true, url: 'http://mac-mini:9000' });
+  });
+
+  it('returns MACHINE_NOT_FOUND when machine does not exist', async () => {
+    const dbRegistry = mockDbRegistry({}, {});
+
+    const result = await resolveWorkerUrlByMachineId('unknown', {
+      dbRegistry: dbRegistry as never,
+      workerPort: WORKER_PORT,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 404,
+      error: 'MACHINE_NOT_FOUND',
+      message: "Machine 'unknown' is not registered",
+    });
+  });
+
+  it('returns MACHINE_OFFLINE when machine is offline', async () => {
+    const dbRegistry = mockDbRegistry(
+      {},
+      {
+        'machine-1': {
+          id: 'machine-1',
+          hostname: 'ec2-box',
+          tailscaleIp: '100.64.0.5',
+          status: 'offline',
+        },
+      },
+    );
+
+    const result = await resolveWorkerUrlByMachineId('machine-1', {
+      dbRegistry: dbRegistry as never,
+      workerPort: WORKER_PORT,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 503,
+      error: 'MACHINE_OFFLINE',
+      message: "Machine 'machine-1' (ec2-box) is offline",
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveWorkerUrlByMachineIdOrThrow (machine-centric, exception-based)
+// ---------------------------------------------------------------------------
+
+describe('resolveWorkerUrlByMachineIdOrThrow', () => {
+  it('returns the URL on success', async () => {
+    const dbRegistry = mockDbRegistry(
+      {},
+      {
+        'machine-1': {
+          id: 'machine-1',
+          hostname: 'ec2-box',
+          tailscaleIp: '100.64.0.5',
+          status: 'online',
+        },
+      },
+    );
+
+    const url = await resolveWorkerUrlByMachineIdOrThrow('machine-1', {
+      dbRegistry: dbRegistry as never,
+      workerPort: WORKER_PORT,
+    });
+
+    expect(url).toBe('http://100.64.0.5:9000');
+  });
+
+  it('throws ControlPlaneError when machine is not found', async () => {
+    const dbRegistry = mockDbRegistry({}, {});
+
+    await expect(
+      resolveWorkerUrlByMachineIdOrThrow('unknown', {
+        dbRegistry: dbRegistry as never,
+        workerPort: WORKER_PORT,
+      }),
+    ).rejects.toThrow(ControlPlaneError);
+  });
+
+  it('includes machineId in the thrown error context', async () => {
+    const dbRegistry = mockDbRegistry({}, {});
+
+    try {
+      await resolveWorkerUrlByMachineIdOrThrow('my-machine', {
+        dbRegistry: dbRegistry as never,
+        workerPort: WORKER_PORT,
+      });
+      expect.fail('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ControlPlaneError);
+      const cpErr = err as ControlPlaneError;
+      expect(cpErr.code).toBe('MACHINE_NOT_FOUND');
+      expect(cpErr.context).toEqual({ machineId: 'my-machine' });
+    }
+  });
+
+  it('throws MACHINE_OFFLINE for offline machines', async () => {
+    const dbRegistry = mockDbRegistry(
+      {},
+      {
+        'machine-1': {
+          id: 'machine-1',
+          hostname: 'ec2-box',
+          tailscaleIp: '100.64.0.5',
+          status: 'offline',
+        },
+      },
+    );
+
+    try {
+      await resolveWorkerUrlByMachineIdOrThrow('machine-1', {
+        dbRegistry: dbRegistry as never,
+        workerPort: WORKER_PORT,
+      });
+      expect.fail('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ControlPlaneError);
+      const cpErr = err as ControlPlaneError;
+      expect(cpErr.code).toBe('MACHINE_OFFLINE');
+      expect(cpErr.context).toEqual({ machineId: 'machine-1' });
     }
   });
 });

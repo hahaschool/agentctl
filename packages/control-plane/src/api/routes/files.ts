@@ -10,13 +10,9 @@ import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 const FILE_REQUEST_TIMEOUT_MS = 10_000;
-
-/** Get the best address for a machine, preferring tailscaleIp with hostname fallback. */
-function machineAddress(machine: { tailscaleIp?: string | null; hostname: string }): string {
-  return machine.tailscaleIp ?? machine.hostname;
-}
 
 export type FileProxyRoutesOptions = {
   dbRegistry: DbAgentRegistry;
@@ -26,29 +22,9 @@ export type FileProxyRoutesOptions = {
 export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async (app, opts) => {
   const { dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
-  /**
-   * Look up a machine and build the worker base URL. Throws if the machine
-   * is not found or is offline.
-   */
-  async function resolveWorker(machineId: string): Promise<string> {
-    const machine = await dbRegistry.getMachine(machineId);
-
-    if (!machine) {
-      throw new ControlPlaneError('MACHINE_NOT_FOUND', `Machine '${machineId}' is not registered`, {
-        machineId,
-      });
-    }
-
-    if (machine.status === 'offline') {
-      throw new ControlPlaneError(
-        'MACHINE_OFFLINE',
-        `Machine '${machineId}' (${machine.hostname}) is offline`,
-        { machineId },
-      );
-    }
-
-    return `http://${machineAddress(machine)}:${String(workerPort)}`;
-  }
+  /** Resolve the worker base URL for a machine. */
+  const resolveWorker = (machineId: string): Promise<string> =>
+    resolveWorkerUrlByMachineIdOrThrow(machineId, { dbRegistry, workerPort });
 
   // -------------------------------------------------------------------------
   // GET /:machineId/files — list directory contents
