@@ -139,6 +139,7 @@ export function SessionsPage(): React.JSX.Element {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [resumeModel, setResumeModel] = useState('');
   const [sending, setSending] = useState(false);
   const [lastSentMessage, setLastSentMessage] = useState<{ text: string; ts: number } | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -442,7 +443,7 @@ export function SessionsPage(): React.JSX.Element {
       if (selected.status === 'active') {
         await api.sendMessage(selected.id, messageText);
       } else {
-        await api.resumeSession(selected.id, messageText);
+        await api.resumeSession(selected.id, messageText, resumeModel || undefined);
       }
       // Only invalidate queries — don't clear the session list (causes "0 sessions" flash)
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
@@ -532,17 +533,17 @@ export function SessionsPage(): React.JSX.Element {
           'md:w-[340px] md:min-w-[340px]',
         )}
       >
-        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2">
+        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2.5">
           <div className="flex justify-between items-center">
-            <h2 className="text-base font-semibold">
+            <h2 className="text-base font-semibold tracking-tight">
               Sessions
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums">
+              <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
                 {hasMore
                   ? `(${sessionList.length} of ${totalCount})`
                   : `(${filteredSessions.length})`}
               </span>
             </h2>
-            <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => {
@@ -552,8 +553,10 @@ export function SessionsPage(): React.JSX.Element {
                 aria-label={showCreateForm ? 'Cancel new session form' : 'Create new session'}
                 aria-expanded={showCreateForm}
                 className={cn(
-                  'px-2 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap',
-                  showCreateForm ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+                  'h-8 px-3 border rounded-md text-xs font-medium whitespace-nowrap transition-all duration-200',
+                  showCreateForm
+                    ? 'bg-primary text-white border-primary hover:bg-primary/90'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-accent hover:text-foreground',
                 )}
               >
                 {showCreateForm ? 'Cancel' : '+ New Session'}
@@ -563,22 +566,22 @@ export function SessionsPage(): React.JSX.Element {
                   label={`Clean Up (${cleanupSessions.length})`}
                   confirmLabel={`Delete ${cleanupSessions.length}?`}
                   onConfirm={() => void handleCleanup()}
-                  className="px-2 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground"
-                  confirmClassName="px-2 py-1.5 border border-destructive rounded-sm text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground"
+                  className="h-8 px-3 border border-border rounded-md text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground"
+                  confirmClassName="h-8 px-3 border border-destructive rounded-md text-xs font-medium whitespace-nowrap bg-destructive text-destructive-foreground transition-all duration-200"
                 />
               )}
               <button
                 type="button"
                 onClick={() => exportSessionsCsv(filteredSessions)}
                 disabled={filteredSessions.length === 0}
-                className="px-2 py-1.5 border border-border rounded-sm text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground disabled:opacity-50"
+                className="h-8 px-3 border border-border rounded-md text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground disabled:opacity-50 transition-all duration-200 hover:bg-accent hover:text-foreground"
               >
                 Export CSV
               </button>
               <RefreshButton
                 onClick={() => resetAndInvalidateSessions()}
                 isFetching={sessions.isFetching && !sessions.isLoading}
-                className="px-2 py-1.5 text-xs"
+                className="h-8 px-2 text-xs"
               />
             </div>
           </div>
@@ -599,29 +602,29 @@ export function SessionsPage(): React.JSX.Element {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter by ID, project, agent, model..."
-            className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none box-border"
+            className="w-full px-3 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/60"
           />
         </div>
 
         {/* Status filter tabs */}
-        <div className="flex border-b border-border px-2 overflow-x-auto">
+        <div className="flex border-b border-border px-3 py-1.5 gap-1 overflow-x-auto">
           {STATUS_TABS.map((tab) => (
             <button
               type="button"
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
               className={cn(
-                'flex-1 py-2 px-1 text-[11px] bg-transparent border-0 cursor-pointer transition-colors duration-150',
+                'flex-1 py-1.5 px-2 text-[11px] rounded-md cursor-pointer transition-all duration-200 border-0',
                 statusFilter === tab.key
-                  ? 'font-semibold text-primary border-b-2 border-b-primary'
-                  : 'font-normal text-muted-foreground border-b-2 border-b-transparent',
+                  ? 'font-semibold text-foreground bg-accent shadow-sm'
+                  : 'font-normal text-muted-foreground bg-transparent hover:bg-accent/50 hover:text-foreground',
               )}
             >
               {tab.label}
               <span
                 className={cn(
-                  'ml-1 text-[10px] opacity-70',
-                  statusFilter === tab.key ? 'text-primary' : 'text-muted-foreground',
+                  'ml-1 text-[10px] tabular-nums',
+                  statusFilter === tab.key ? 'text-foreground/70' : 'text-muted-foreground/60',
                 )}
               >
                 {statusCounts[tab.key]}
@@ -660,7 +663,7 @@ export function SessionsPage(): React.JSX.Element {
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
             aria-label="Sort order"
-            className="px-2 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] min-h-[32px]"
+            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] h-7 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:outline-none"
           >
             <option value="newest">{'\u2193'} Newest first</option>
             <option value="oldest">{'\u2191'} Oldest first</option>
@@ -670,7 +673,7 @@ export function SessionsPage(): React.JSX.Element {
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
             aria-label="Group by"
-            className="px-2 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] min-h-[32px]"
+            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] h-7 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:outline-none"
           >
             <option value="none">No grouping</option>
             <option value="project">Group by Project</option>
@@ -693,8 +696,8 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Inline "New Session" creation form */}
         {showCreateForm && (
-          <div className="px-4 py-3.5 border-b border-border bg-card">
-            <div className="text-[13px] font-semibold mb-2.5">Create New Session</div>
+          <div className="px-4 py-4 border-b border-border bg-card/50">
+            <div className="text-[13px] font-semibold mb-3 tracking-tight">Create New Session</div>
 
             {/* Machine selector */}
             <label
@@ -708,7 +711,7 @@ export function SessionsPage(): React.JSX.Element {
               value={formMachineId}
               onChange={(e) => setFormMachineId(e.target.value)}
               disabled={machinesLoading}
-              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-2.5 outline-none"
+              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               {machinesLoading && <option value="">Loading machines...</option>}
               {!machinesLoading && machines.length === 0 && (
@@ -734,7 +737,7 @@ export function SessionsPage(): React.JSX.Element {
               value={formProjectPath}
               onChange={(e) => setFormProjectPath(e.target.value)}
               placeholder="/home/user/project"
-              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm font-mono text-xs mb-2.5 outline-none box-border"
+              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md font-mono text-xs mb-2.5 outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             />
 
             {/* Prompt */}
@@ -750,7 +753,7 @@ export function SessionsPage(): React.JSX.Element {
               onChange={(e) => setFormPrompt(e.target.value)}
               placeholder="What should Claude work on?"
               rows={3}
-              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-2.5 outline-none resize-y font-[inherit] box-border"
+              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none resize-y font-[inherit] box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             />
 
             {/* Model selector */}
@@ -764,7 +767,7 @@ export function SessionsPage(): React.JSX.Element {
               id="create-session-model"
               value={formModel}
               onChange={(e) => setFormModel(e.target.value)}
-              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-2.5 outline-none"
+              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               {MODEL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -784,7 +787,7 @@ export function SessionsPage(): React.JSX.Element {
               id="create-session-account"
               value={formAccountId}
               onChange={(e) => setFormAccountId(e.target.value)}
-              className="w-full px-2 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs mb-3 outline-none"
+              className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-3 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               <option value="">Default (auto)</option>
               {(accounts.data ?? [])
@@ -804,8 +807,8 @@ export function SessionsPage(): React.JSX.Element {
               onClick={() => void handleCreateSession()}
               disabled={isFormDisabled}
               className={cn(
-                'w-full py-[7px] px-3.5 bg-primary text-white rounded-sm text-xs font-medium',
-                isFormDisabled ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer',
+                'w-full h-9 px-3.5 bg-primary text-white rounded-md text-xs font-medium transition-all duration-200',
+                isFormDisabled ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer hover:bg-primary/90',
               )}
             >
               {formSubmitting ? 'Creating...' : 'Create Session'}
@@ -910,7 +913,7 @@ export function SessionsPage(): React.JSX.Element {
                   type="button"
                   onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
                   disabled={sessions.isFetching}
-                  className="w-full px-3 py-2 bg-muted text-muted-foreground border border-border rounded-sm text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full h-9 px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:bg-accent hover:text-foreground"
                 >
                   {sessions.isFetching
                     ? 'Loading...'
@@ -927,15 +930,15 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Floating bulk action bar */}
         {checkedIds.size > 0 && (
-          <div className="border-t border-border bg-card px-3 py-2 flex items-center gap-2 shrink-0">
-            <span className="text-xs font-medium tabular-nums">
+          <div className="border-t border-border bg-card px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-sm">
+            <span className="text-xs font-medium tabular-nums text-foreground">
               {checkedIds.size} selected
             </span>
             <div className="flex-1" />
             <button
               type="button"
               onClick={() => setCheckedIds(new Set())}
-              className="px-2 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] font-medium cursor-pointer"
+              className="h-7 px-3 bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer transition-all duration-200 hover:bg-accent hover:text-foreground"
             >
               Clear
             </button>
@@ -944,8 +947,8 @@ export function SessionsPage(): React.JSX.Element {
               confirmLabel={`Delete ${checkedIds.size} sessions?`}
               onConfirm={() => void handleBulkDelete()}
               disabled={bulkDeleting}
-              className="px-2 py-1 border border-destructive/50 rounded-sm text-[11px] font-medium bg-destructive/10 text-destructive-foreground cursor-pointer"
-              confirmClassName="px-2 py-1 border border-destructive rounded-sm text-[11px] font-medium bg-destructive text-destructive-foreground cursor-pointer animate-pulse"
+              className="h-7 px-3 border border-destructive/50 rounded-md text-[11px] font-medium bg-destructive/10 text-destructive-foreground cursor-pointer transition-all duration-200 hover:bg-destructive/20"
+              confirmClassName="h-7 px-3 border border-destructive rounded-md text-[11px] font-medium bg-destructive text-destructive-foreground cursor-pointer animate-pulse"
             />
           </div>
         )}
@@ -962,40 +965,44 @@ export function SessionsPage(): React.JSX.Element {
         {selected ? (
           <>
             {/* Header */}
-            <div className="px-5 py-4 border-b border-border flex justify-between items-center gap-3">
+            <div className="px-5 py-4 border-b border-border flex justify-between items-start gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   {/* Mobile back button */}
                   <button
                     type="button"
                     onClick={() => setSelectedId(null)}
-                    className="md:hidden text-muted-foreground text-sm shrink-0"
+                    className="md:hidden text-muted-foreground text-sm shrink-0 hover:text-foreground transition-colors duration-200"
                     aria-label="Back to session list"
                   >
                     {'\u2190'}
                   </button>
-                  <div className="text-[15px] font-semibold truncate" title={selected.id}>
-                    Session: {selected.id.slice(0, 20)}...
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-mono text-[13px] font-semibold text-foreground/90 truncate" title={selected.id}>
+                      {selected.id.slice(0, 20)}...
+                    </span>
+                    <StatusBadge status={selected.status} />
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1">
-                  <span>Agent: {selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}</span>
-                  <span>Machine: {selected.machineId}</span>
-                  <span className="text-purple-400">Model: {selected.model ?? 'default'}</span>
-                  <StatusBadge status={selected.status} />
+                <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1.5 items-center">
+                  <span className="font-medium text-foreground/70">{selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}</span>
+                  <span className="text-muted-foreground/40">|</span>
+                  <span>{selected.machineId}</span>
+                  <span className="text-muted-foreground/40">|</span>
+                  <span className="text-purple-400/80">{selected.model ?? 'default'}</span>
                 </div>
               </div>
               <div className="flex gap-2 items-center shrink-0">
                 <Link
                   href={`/sessions/${selected.id}`}
-                  className="px-3.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs font-medium no-underline hover:bg-accent/10"
+                  className="h-8 px-3.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-accent hover:text-foreground inline-flex items-center"
                 >
                   Open Full View
                 </Link>
                 {selected.claudeSessionId && (
                   <Link
                     href={`/sessions/${selected.id}`}
-                    className="px-3.5 py-1.5 bg-blue-900/50 text-blue-300 border border-blue-800/50 rounded-sm text-xs font-medium no-underline hover:bg-blue-900"
+                    className="h-8 px-3.5 bg-blue-900/40 text-blue-300 border border-blue-800/40 rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-blue-900/70 inline-flex items-center"
                     title="Fork this session in Full View"
                   >
                     Fork
@@ -1007,7 +1014,7 @@ export function SessionsPage(): React.JSX.Element {
                     setConvertName(selected.agentName ?? `agent-from-${selected.id.slice(0, 8)}`);
                     setShowConvertDialog(true);
                   }}
-                  className="px-3.5 py-1.5 bg-emerald-900/50 text-emerald-300 border border-emerald-800/50 rounded-sm text-xs font-medium cursor-pointer hover:bg-emerald-900"
+                  className="h-8 px-3.5 bg-emerald-900/40 text-emerald-300 border border-emerald-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-emerald-900/70"
                 >
                   Create Agent
                 </button>
@@ -1016,8 +1023,8 @@ export function SessionsPage(): React.JSX.Element {
                     label="End Session"
                     confirmLabel="End Session?"
                     onConfirm={() => void handleStop()}
-                    className="px-3.5 py-1.5 bg-red-900 text-red-300 rounded-sm text-xs font-medium cursor-pointer"
-                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white rounded-sm text-xs font-medium cursor-pointer animate-pulse"
+                    className="h-8 px-3.5 bg-red-900/60 text-red-300 border border-red-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-900"
+                    confirmClassName="h-8 px-3.5 bg-red-700 text-white rounded-md text-xs font-medium cursor-pointer animate-pulse"
                   />
                 )}
               </div>
@@ -1025,7 +1032,7 @@ export function SessionsPage(): React.JSX.Element {
 
             {/* Session metadata */}
             <div className="px-5 py-4 border-b border-border text-[13px]">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="bg-card rounded-lg p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <DetailRow label="ID" value={selected.id} mono />
                 <DetailRow label="Status" value={selected.status} />
                 <DetailRow label="Agent" value={selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)} mono />
@@ -1066,7 +1073,7 @@ export function SessionsPage(): React.JSX.Element {
 
               {/* Error message display */}
               {selected.status === 'error' && selected.metadata && (
-                <div className="mt-2.5 px-2.5 py-2 bg-red-900/30 border border-red-500/30 rounded-sm text-red-300 text-xs">
+                <div className="mt-3 px-3 py-2.5 bg-red-900/20 border border-red-500/20 rounded-md text-red-300 text-xs">
                   <span className="font-semibold">Error: </span>
                   {selected.metadata.errorMessage ?? 'Unknown error'}
                 </div>
@@ -1074,7 +1081,7 @@ export function SessionsPage(): React.JSX.Element {
 
               {/* Starting state indicator */}
               {selected.status === 'starting' && (
-                <div className="mt-2.5 px-2.5 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-sm text-yellow-400 text-xs flex items-center gap-2">
+                <div className="mt-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/15 rounded-md text-yellow-400 text-xs flex items-center gap-2">
                   <span className="animate-pulse">&#x25CF;</span>
                   Session is starting... Waiting for worker to respond.
                 </div>
@@ -1083,16 +1090,16 @@ export function SessionsPage(): React.JSX.Element {
 
             {/* Convert to Agent dialog */}
             {showConvertDialog && (
-              <div className="px-5 py-4 border-b border-border bg-emerald-950/20">
-                <div className="text-xs font-semibold text-emerald-400 mb-3">Create Agent from Session</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <div className="px-5 py-4 border-b border-border bg-emerald-950/15">
+                <div className="text-xs font-semibold text-emerald-400 mb-3 tracking-tight">Create Agent from Session</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
                   <div>
                     <label className="text-[11px] text-muted-foreground block mb-1">Agent Name</label>
                     <input
                       type="text"
                       value={convertName}
                       onChange={(e) => setConvertName(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
+                      className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
                       placeholder="my-agent"
                     />
                   </div>
@@ -1101,7 +1108,7 @@ export function SessionsPage(): React.JSX.Element {
                     <select
                       value={convertType}
                       onChange={(e) => setConvertType(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
+                      className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
                     >
                       <option value="autonomous">Autonomous (long-running)</option>
                       <option value="ad-hoc">Ad-hoc (one-shot)</option>
@@ -1118,14 +1125,14 @@ export function SessionsPage(): React.JSX.Element {
                     type="button"
                     onClick={handleConvertToAgent}
                     disabled={createAgent.isPending}
-                    className="px-3.5 py-1.5 bg-emerald-700 text-white rounded-sm text-xs font-medium cursor-pointer hover:bg-emerald-600 disabled:opacity-50"
+                    className="h-8 px-3.5 bg-emerald-700 text-white rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-emerald-600 disabled:opacity-50"
                   >
                     {createAgent.isPending ? 'Creating...' : 'Create Agent'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowConvertDialog(false)}
-                    className="px-3.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer hover:bg-accent/10"
+                    className="h-8 px-3.5 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer transition-all duration-200 hover:bg-accent hover:text-foreground"
                   >
                     Cancel
                   </button>
@@ -1167,7 +1174,24 @@ export function SessionsPage(): React.JSX.Element {
             {(selected.status === 'active' ||
               selected.status === 'ended' ||
               selected.status === 'error') && (
-              <div className="px-5 py-3 border-t border-border flex gap-2">
+              <div className="px-5 py-3.5 border-t border-border bg-background/50 space-y-2">
+                {selected.status !== 'active' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Model:</span>
+                    <select
+                      value={resumeModel}
+                      onChange={(e) => setResumeModel(e.target.value)}
+                      className="px-2 h-7 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                    >
+                      {MODEL_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.value ? opt.label : `Keep current (${selected.model ?? 'default'})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="flex gap-2.5">
                 <input
                   type="text"
                   value={prompt}
@@ -1188,7 +1212,7 @@ export function SessionsPage(): React.JSX.Element {
                       ? 'Message to send to session'
                       : 'Prompt to resume session'
                   }
-                  className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none"
+                  className="flex-1 px-3.5 h-9 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
                 />
                 <button
                   type="button"
@@ -1196,18 +1220,20 @@ export function SessionsPage(): React.JSX.Element {
                   disabled={sending || !prompt.trim()}
                   aria-label={selected.status === 'active' ? 'Send message' : 'Resume session'}
                   className={cn(
-                    'px-[18px] py-2 bg-primary text-white rounded-sm text-[13px] font-medium',
+                    'h-9 px-5 bg-primary text-white rounded-md text-[13px] font-medium transition-all duration-200 hover:bg-primary/90',
                     sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
                   )}
                 >
                   {sending ? '...' : selected.status === 'active' ? 'Send' : 'Resume'}
                 </button>
+                </div>
               </div>
             )}
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Select a session to view details
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <span className="text-sm">Select a session to view details</span>
+            <span className="text-xs text-muted-foreground/50">Use arrow keys to navigate the list</span>
           </div>
         )}
       </div>
@@ -1263,8 +1289,8 @@ function SessionListItem({
       id={`session-${s.id}`}
       aria-selected={isSelected}
       className={cn(
-        'flex w-full text-left border-b border-border transition-colors duration-100',
-        isSelected ? 'bg-accent/10' : 'bg-transparent hover:bg-accent/10',
+        'flex w-full text-left border-b border-border transition-all duration-200',
+        isSelected ? 'bg-accent/15' : 'bg-transparent hover:bg-accent/8',
         s.status === 'error'
           ? 'border-l-[3px] border-l-red-500'
           : s.status === 'starting'
@@ -1275,7 +1301,7 @@ function SessionListItem({
       )}
     >
       {/* Checkbox */}
-      <div className="flex items-start pt-3.5 pl-2 shrink-0">
+      <div className="flex items-start pt-4 pl-2.5 shrink-0">
         <input
           type="checkbox"
           checked={isChecked}
@@ -1289,11 +1315,11 @@ function SessionListItem({
       <button
         type="button"
         onClick={() => onSelect(s.id)}
-        className="flex-1 text-left px-2 pr-4 py-3 bg-transparent border-0 cursor-pointer min-w-0"
+        className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
       >
-      <div className="flex justify-between items-center mb-1">
-        <span className="font-mono text-xs font-medium">{s.id.slice(0, 16)}...</span>
-        <span className="flex items-center gap-1.5">
+      <div className="flex justify-between items-center mb-1.5">
+        <span className="font-mono text-xs font-medium text-foreground/90">{s.id.slice(0, 16)}...</span>
+        <span className="flex items-center gap-2">
           {s.status === 'active' && (
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -1311,26 +1337,27 @@ function SessionListItem({
       </div>
       {/* Error message for failed sessions */}
       {s.status === 'error' && errorMsg && (
-        <div className="text-[11px] text-red-400 mb-1 line-clamp-1">{errorMsg}</div>
+        <div className="text-[11px] text-red-400 mb-1.5 line-clamp-1">{errorMsg}</div>
       )}
-      <div className="text-xs text-muted-foreground flex gap-2">
-        <span>{s.agentName ? s.agentName : s.agentId.slice(0, 8)}</span>
+      <div className="text-xs text-muted-foreground flex gap-2 items-center">
+        <span className="font-medium text-foreground/70">{s.agentName ? s.agentName : s.agentId.slice(0, 8)}</span>
+        <span className="text-muted-foreground/50">|</span>
         <span>{s.machineId}</span>
-        <span className="text-purple-400/80">{s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}</span>
+        <span className="text-purple-400/70 text-[11px]">{s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}</span>
       </div>
       {s.projectPath && (
-        <div className="mt-0.5">
+        <div className="mt-1">
           <PathBadge path={s.projectPath} className="text-[11px]" />
         </div>
       )}
-      <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
+      <div className="text-[11px] text-muted-foreground/70 mt-1 flex gap-2.5 items-center">
         <LiveTimeAgo date={s.startedAt} />
         <LiveDuration startedAt={s.startedAt} endedAt={s.endedAt} />
         {messageCount !== undefined && (
-          <span className="text-muted-foreground">{messageCount} msgs</span>
+          <span>{messageCount} msgs</span>
         )}
         {costUsd !== undefined && (
-          <span className="text-muted-foreground">${costUsd.toFixed(2)}</span>
+          <span className="tabular-nums">${costUsd.toFixed(2)}</span>
         )}
       </div>
       </button>
@@ -1362,9 +1389,9 @@ function DetailRow({
   }, [mono, value, toast]);
 
   return (
-    <div className="group">
-      <span className="text-muted-foreground text-[11px]">{label}</span>
-      <div className={cn('text-xs break-all flex items-start gap-1', mono && 'font-mono')}>
+    <div className="group py-0.5">
+      <span className="text-muted-foreground/70 text-[10px] font-medium uppercase tracking-wider">{label}</span>
+      <div className={cn('text-xs break-all flex items-start gap-1 mt-0.5 text-foreground/90', mono && 'font-mono')}>
         <span className="flex-1">{value}</span>
         {mono && value !== '-' && (
           <button
@@ -1651,13 +1678,13 @@ function SessionContent({
       <div className="px-5 py-1.5 border-b border-border flex justify-between items-center shrink-0">
         <div className="flex items-center gap-2">
           {/* View mode toggle */}
-          <div className="flex rounded-sm border border-border overflow-hidden">
+          <div className="flex rounded-md border border-border overflow-hidden">
             <button
               type="button"
               onClick={() => setViewMode('messages')}
               className={cn(
-                'px-2 py-0.5 text-[10px] cursor-pointer transition-colors min-h-[28px] border-0',
-                viewMode === 'messages' ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+                'px-3 py-0.5 text-[11px] cursor-pointer transition-all duration-200 h-7 border-0',
+                viewMode === 'messages' ? 'bg-primary text-white font-medium' : 'bg-muted text-muted-foreground hover:bg-accent',
               )}
             >
               Messages
@@ -1666,8 +1693,8 @@ function SessionContent({
               type="button"
               onClick={() => setViewMode('terminal')}
               className={cn(
-                'px-2 py-0.5 text-[10px] cursor-pointer transition-colors min-h-[28px] border-0 border-l border-border',
-                viewMode === 'terminal' ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+                'px-3 py-0.5 text-[11px] cursor-pointer transition-all duration-200 h-7 border-0 border-l border-border',
+                viewMode === 'terminal' ? 'bg-primary text-white font-medium' : 'bg-muted text-muted-foreground hover:bg-accent',
               )}
             >
               Terminal
@@ -1697,8 +1724,8 @@ function SessionContent({
                 aria-label={showThinking ? 'Hide thinking' : 'Show thinking'}
                 aria-pressed={showThinking}
                 className={cn(
-                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
-                  showThinking ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
+                  'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
+                  showThinking ? 'bg-purple-500/15 text-purple-300 border-purple-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Thinking
@@ -1709,8 +1736,8 @@ function SessionContent({
                 aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
                 aria-pressed={showTools}
                 className={cn(
-                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
-                  showTools ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
+                  'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
+                  showTools ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Tools
@@ -1721,8 +1748,8 @@ function SessionContent({
                 aria-label={showProgress ? 'Hide progress' : 'Show progress'}
                 aria-pressed={showProgress}
                 className={cn(
-                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
-                  showProgress ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
+                  'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
+                  showProgress ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Progress
@@ -1733,8 +1760,8 @@ function SessionContent({
                 aria-label={renderMarkdown ? 'Show raw text' : 'Render markdown'}
                 aria-pressed={renderMarkdown}
                 className={cn(
-                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
-                  renderMarkdown ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-muted text-muted-foreground',
+                  'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
+                  renderMarkdown ? 'bg-blue-500/15 text-blue-300 border-blue-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Markdown
@@ -1743,7 +1770,7 @@ function SessionContent({
                 type="button"
                 onClick={() => void fetchLatest()}
                 aria-label="Refresh conversation"
-                className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer transition-colors min-h-[28px]"
+                className="px-2.5 py-0.5 bg-muted text-muted-foreground border border-border rounded-md text-[11px] cursor-pointer transition-all duration-200 h-7 hover:bg-accent hover:text-foreground"
               >
                 Refresh
               </button>
@@ -1844,7 +1871,7 @@ function SessionContent({
             <button
               type="button"
               onClick={scrollToBottom}
-              className="absolute bottom-3 right-5 px-3 py-1.5 bg-primary text-white text-[11px] rounded-full shadow-lg cursor-pointer opacity-90 hover:opacity-100 transition-opacity z-10"
+              className="absolute bottom-3 right-5 px-4 py-1.5 bg-primary text-white text-[11px] font-medium rounded-full shadow-lg cursor-pointer opacity-90 hover:opacity-100 transition-all duration-200 z-10 hover:shadow-xl"
             >
               Scroll to bottom
             </button>
@@ -1868,7 +1895,7 @@ function InlineMessage({ message, renderMarkdown }: { message: SessionContentMes
     isLong && !expanded ? `${content.slice(0, TRUNCATE_THRESHOLD)}...` : content;
 
   return (
-    <div className={cn('mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2', msgStyle.bubbleClass)}>
+    <div className={cn('mb-2 px-3 py-2 rounded-md border-l-2', msgStyle.bubbleClass)}>
       <div className="flex items-center gap-1.5 mb-0.5">
         <span className={cn('text-[10px] font-semibold', msgStyle.textClass)}>
           {msgStyle.label}
