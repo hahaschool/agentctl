@@ -280,7 +280,7 @@ describe('DashboardPage', () => {
 
   it('renders the page title', async () => {
     renderDashboard();
-    expect(screen.getByText('Command Center')).toBeDefined();
+    expect(screen.getByText('Command center')).toBeDefined();
   });
 
   it('renders navigation links', async () => {
@@ -597,7 +597,7 @@ describe('DashboardPage', () => {
     });
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/Total Cost/i)).toBeDefined();
+      expect(screen.getAllByText(/Total Cost/i).length).toBeGreaterThanOrEqual(1);
     });
   });
 

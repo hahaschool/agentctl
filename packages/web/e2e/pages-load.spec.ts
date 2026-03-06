@@ -15,7 +15,7 @@ test.beforeAll(async ({ browser }) => {
 });
 
 const pages = [
-  { name: 'Dashboard', path: '/', heading: 'Command Center', sel: 'h1' },
+  { name: 'Dashboard', path: '/', heading: 'Command center', sel: 'h1' },
   { name: 'Machines', path: '/machines', heading: 'Fleet Machines', sel: 'h1' },
   { name: 'Agents', path: '/agents', heading: 'Agents', sel: 'h1' },
   { name: 'Sessions', path: '/sessions', heading: 'Sessions', sel: 'h2' },
@@ -58,7 +58,7 @@ test('Dashboard shows healthy control plane and no DB error', async ({ page }) =
   await expect(dbError).toHaveCount(0);
 
   // Should show machine count
-  await expect(page.getByText('MACHINES ONLINE')).toBeVisible();
+  await expect(page.getByText('Machines Online')).toBeVisible();
 
   expect(errors).toEqual([]);
 });
