@@ -93,6 +93,7 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [editSchedule, setEditSchedule] = useState('');
   const [editModel, setEditModel] = useState('');
   const [editMaxTurns, setEditMaxTurns] = useState('');
+  const [editSystemPrompt, setEditSystemPrompt] = useState('');
 
   // Sync form state only when editOpen transitions from false → true, so that
   // background refetches of agent.data do not clobber user edits mid-session.
@@ -108,6 +109,7 @@ export default function AgentDetailPage(): React.JSX.Element {
       setEditSchedule(d.schedule ?? '');
       setEditModel((d.config?.model as string) ?? '');
       setEditMaxTurns(d.config?.maxTurns != null ? String(d.config.maxTurns) : '');
+      setEditSystemPrompt((d.config?.systemPrompt as string) ?? '');
     }
   }, [editOpen, agent.data]);
 
@@ -175,6 +177,12 @@ export default function AgentDetailPage(): React.JSX.Element {
       }
     } else {
       delete config.maxTurns;
+    }
+
+    if (editSystemPrompt.trim()) {
+      config.systemPrompt = editSystemPrompt.trim();
+    } else {
+      delete config.systemPrompt;
     }
 
     updateAgent.mutate(
@@ -832,6 +840,29 @@ export default function AgentDetailPage(): React.JSX.Element {
               />
               <p className="text-[11px] text-muted-foreground">
                 Maximum number of conversation turns per run. Leave empty for unlimited.
+              </p>
+            </div>
+
+            {/* System Prompt */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-sysprompt">
+                System Prompt
+              </label>
+              <textarea
+                id="edit-agent-sysprompt"
+                rows={3}
+                placeholder="Custom system instructions..."
+                value={editSystemPrompt}
+                onChange={(e) => setEditSystemPrompt(e.target.value)}
+                disabled={updateAgent.isPending}
+                className={cn(
+                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  'dark:bg-input/30',
+                )}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Custom system instructions appended to the base prompt.
               </p>
             </div>
           </div>
