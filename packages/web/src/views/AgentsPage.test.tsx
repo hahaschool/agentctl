@@ -890,6 +890,55 @@ describe('AgentsPage', () => {
   });
 
   // =========================================================================
+  // Stop All Running bulk action
+  // =========================================================================
+
+  it('shows Stop All button when there are running agents', async () => {
+    mockAgentsQuery.mockReturnValue({
+      queryKey: ['agents'],
+      queryFn: vi.fn().mockResolvedValue([
+        createAgent({ id: 'a1', name: 'runner-1', status: 'running' }),
+        createAgent({ id: 'a2', name: 'runner-2', status: 'running' }),
+      ]),
+    });
+    renderAgentsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Stop All (2)')).toBeDefined();
+    });
+  });
+
+  it('does not show Stop All button when no agents are running', async () => {
+    mockAgentsQuery.mockReturnValue({
+      queryKey: ['agents'],
+      queryFn: vi.fn().mockResolvedValue([
+        createAgent({ id: 'a1', name: 'idle-1', status: 'registered' }),
+        createAgent({ id: 'a2', name: 'idle-2', status: 'stopped' }),
+      ]),
+    });
+    renderAgentsPage();
+    await waitFor(() => {
+      expect(screen.getByText('idle-1')).toBeDefined();
+    });
+    expect(screen.queryByText(/Stop All/)).toBeNull();
+  });
+
+  it('shows correct running agent count in Stop All button', async () => {
+    mockAgentsQuery.mockReturnValue({
+      queryKey: ['agents'],
+      queryFn: vi.fn().mockResolvedValue([
+        createAgent({ id: 'a1', name: 'runner-1', status: 'running' }),
+        createAgent({ id: 'a2', name: 'idle-1', status: 'registered' }),
+        createAgent({ id: 'a3', name: 'runner-2', status: 'running' }),
+        createAgent({ id: 'a4', name: 'runner-3', status: 'running' }),
+      ]),
+    });
+    renderAgentsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Stop All (3)')).toBeDefined();
+    });
+  });
+
+  // =========================================================================
   // Status description in header
   // =========================================================================
 
