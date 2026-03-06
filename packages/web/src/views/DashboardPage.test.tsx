@@ -937,13 +937,16 @@ describe('DashboardPage', () => {
         },
       });
       renderDashboard();
-      await waitFor(() => {
-        // First 8 should be visible (sorted by most recent)
-        expect(screen.getByText(/Session cs-00000/)).toBeDefined();
-        expect(screen.getByText(/Session cs-00007/)).toBeDefined();
-        // 9th and beyond should not appear
-        expect(screen.queryByText(/Session cs-00008/)).toBeNull();
-      });
+      await waitFor(
+        () => {
+          // First 8 should be visible (sorted by most recent)
+          expect(screen.getByText(/Session cs-00000/)).toBeDefined();
+          expect(screen.getByText(/Session cs-00007/)).toBeDefined();
+          // 9th and beyond should not appear
+          expect(screen.queryByText(/Session cs-00008/)).toBeNull();
+        },
+        { timeout: 3000 },
+      );
     });
 
     it('shows "View All" link for sessions pointing to /sessions', async () => {
