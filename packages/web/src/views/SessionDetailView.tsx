@@ -2,7 +2,8 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { Skeleton } from '@/components/ui/skeleton';
