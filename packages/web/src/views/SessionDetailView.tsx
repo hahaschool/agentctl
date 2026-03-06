@@ -1368,7 +1368,9 @@ function MessageList({
 // Date separators — thin divider lines when timestamps cross hour/day boundaries
 // ---------------------------------------------------------------------------
 
-function DateSeparator({ label }: { label: string }): React.ReactElement {
+const DateSeparator = React.memo(function DateSeparator({
+  label,
+}: { label: string }): React.ReactElement {
   return (
     <div className="flex items-center gap-3 py-2 my-1">
       <div className="flex-1 h-px bg-border" />
@@ -1376,7 +1378,7 @@ function DateSeparator({ label }: { label: string }): React.ReactElement {
       <div className="flex-1 h-px bg-border" />
     </div>
   );
-}
+});
 
 function getItemTimestamp(item: RenderedItem): string | undefined {
   return item.kind === 'tool_pair' ? item.toolUse.timestamp : item.message.timestamp;
@@ -1601,7 +1603,7 @@ function ToolPairBlock({
 // Message block — routes to specialized component per type
 // ---------------------------------------------------------------------------
 
-function MessageBlock({
+const MessageBlock = React.memo(function MessageBlock({
   message,
   renderMarkdown,
 }: {
@@ -1633,7 +1635,7 @@ function MessageBlock({
     default:
       return <MessageBubble message={message} renderMarkdown={renderMarkdown} />;
   }
-}
+});
 
 // ---------------------------------------------------------------------------
 // Message bubble
