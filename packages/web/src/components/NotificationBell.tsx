@@ -81,7 +81,7 @@ export function NotificationBell({
         type="button"
         onClick={toggle}
         className={cn(
-          'relative text-lg text-muted-foreground hover:text-foreground transition-colors duration-150 px-1.5 py-0.5 rounded-sm hover:bg-muted',
+          'relative text-lg text-muted-foreground hover:text-foreground transition-colors duration-150 px-1.5 py-0.5 rounded-md hover:bg-muted',
           open && 'text-foreground bg-muted',
         )}
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}

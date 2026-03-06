@@ -381,7 +381,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               <InfoField label="Current Session">
                 <Link
                   href={`/sessions/${data.currentSessionId}`}
-                  className="text-blue-400 hover:text-blue-300 underline underline-offset-2 font-mono text-xs"
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 underline underline-offset-2 font-mono text-xs"
                 >
                   {data.currentSessionId.slice(0, 12)}...
                 </Link>
@@ -510,7 +510,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                       </span>
                       {run.errorMessage && (
                         <div
-                          className="text-[11px] text-red-400 mt-0.5 truncate"
+                          className="text-[11px] text-red-600 dark:text-red-400 mt-0.5 truncate"
                           title={run.errorMessage}
                         >
                           {run.errorMessage}
@@ -578,7 +578,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                           </span>
                           {run.errorMessage && (
                             <div
-                              className="text-[11px] text-red-400 mt-0.5 truncate max-w-[200px]"
+                              className="text-[11px] text-red-600 dark:text-red-400 mt-0.5 truncate max-w-[200px]"
                               title={run.errorMessage}
                             >
                               {run.errorMessage}

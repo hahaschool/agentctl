@@ -53,7 +53,7 @@ export function CopyableText({
       onClick={handleCopy}
       title={copied ? 'Copied!' : `Click to copy: ${value}`}
       className={cn(
-        'inline-flex items-center gap-1 rounded-sm px-1 py-0.5',
+        'inline-flex items-center gap-1 rounded-md px-1 py-0.5',
         'font-mono text-[11px] whitespace-nowrap shrink-0 cursor-pointer',
         'transition-colors duration-200',
         copied

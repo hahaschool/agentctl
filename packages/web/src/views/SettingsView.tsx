@@ -322,7 +322,7 @@ function ConnectionSection(): React.JSX.Element {
               <div
                 className={cn(
                   'text-[12px] font-medium mt-0.5',
-                  dep.status === 'ok' ? 'text-green-500' : 'text-red-400',
+                  dep.status === 'ok' ? 'text-green-500' : 'text-red-600 dark:text-red-400',
                 )}
               >
                 {dep.status === 'ok' ? `${dep.latencyMs}ms` : 'Error'}

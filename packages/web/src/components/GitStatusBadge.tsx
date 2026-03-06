@@ -64,19 +64,19 @@ export function GitStatusBadge({
               status.clean ? 'bg-green-500' : 'bg-yellow-500',
             )}
           />
-          <span className={cn(status.clean ? 'text-green-400' : 'text-yellow-400')}>
+          <span className={cn(status.clean ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400')}>
             {statusSummary}
           </span>
         </span>
 
         {/* Ahead/behind */}
         {upDownStr && (
-          <span className="font-mono text-blue-400">{upDownStr}</span>
+          <span className="font-mono text-blue-600 dark:text-blue-400">{upDownStr}</span>
         )}
 
         {/* Worktree badge */}
         {isWorktree && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded-sm border border-purple-500/20 text-[10px]">
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-sm border border-purple-500/20 text-[10px]">
             worktree
           </span>
         )}
@@ -136,7 +136,7 @@ function WorktreeRow({
       )}
       <span className="font-mono">{worktree.branch ?? '(detached)'}</span>
       {worktree.isMain && (
-        <span className="text-[9px] px-1 py-0 bg-blue-500/10 text-blue-400 rounded-sm border border-blue-500/20">
+        <span className="text-[9px] px-1 py-0 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-sm border border-blue-500/20">
           main
         </span>
       )}

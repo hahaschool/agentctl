@@ -279,7 +279,7 @@ export function DashboardPage(): React.JSX.Element {
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
                     {session?.model && (
-                      <span className="font-mono bg-purple-500/15 text-purple-400 px-1.5 py-px rounded text-[10px]">
+                      <span className="font-mono bg-purple-500/15 text-purple-600 dark:text-purple-400 px-1.5 py-px rounded text-[10px]">
                         {session.model}
                       </span>
                     )}
@@ -533,7 +533,7 @@ export function DashboardPage(): React.JSX.Element {
             })}
           </div>
           {Object.values(health.data?.dependencies ?? {}).some((d) => d.error) && (
-            <div className="mt-2 px-3 py-2 bg-red-500/5 border border-red-500/20 rounded text-[12px] text-red-400">
+            <div className="mt-2 px-3 py-2 bg-red-500/5 border border-red-500/20 rounded text-[12px] text-red-600 dark:text-red-400">
               {Object.entries(health.data?.dependencies ?? {})
                 .filter(([, d]) => d.error)
                 .map(([name, d]) => (
@@ -715,7 +715,7 @@ function CostOverview({
                       )}
                     </span>
                   </div>
-                  <span className="text-[12px] font-mono text-green-400 shrink-0 ml-2">
+                  <span className="text-[12px] font-mono text-green-600 dark:text-green-400 shrink-0 ml-2">
                     {formatCost(session.metadata?.costUsd ?? 0)}
                   </span>
                 </Link>

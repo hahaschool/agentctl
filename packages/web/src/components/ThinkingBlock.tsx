@@ -21,9 +21,9 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
         onClick={() => setExpanded(true)}
         className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-left font-[inherit] border-none border-l-2 bg-purple-500/[0.06] border-l-purple-400/60"
       >
-        <ChevronRight size={12} className="text-purple-400 shrink-0" />
-        <Brain size={12} className="text-purple-400 shrink-0" />
-        <span className="text-[10px] font-semibold text-purple-400 shrink-0">Thinking</span>
+        <ChevronRight size={12} className="text-purple-600 dark:text-purple-400 shrink-0" />
+        <Brain size={12} className="text-purple-600 dark:text-purple-400 shrink-0" />
+        <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 shrink-0">Thinking</span>
         <span className="text-[11px] text-muted-foreground truncate">{firstLine}</span>
         <span className="text-[10px] text-muted-foreground ml-auto shrink-0">click to expand</span>
       </button>
@@ -33,7 +33,7 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
   return (
     <div className="px-3 py-2 rounded-lg border-l-[3px] bg-purple-500/[0.06] border-l-purple-400/60">
       <div className="flex justify-between items-center mb-1">
-        <span className="text-[11px] font-semibold text-purple-400 flex items-center gap-1.5">
+        <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
           <ChevronDown size={12} />
           <Brain size={12} />
           Thinking

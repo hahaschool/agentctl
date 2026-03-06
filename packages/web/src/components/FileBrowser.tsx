@@ -48,7 +48,7 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
 
   // For markdown: headers
   if ((ext === 'md' || ext === 'mdx') && /^#{1,6}\s/.test(line)) {
-    return <span className="text-blue-400 font-semibold">{line}</span>;
+    return <span className="text-blue-600 dark:text-blue-400 font-semibold">{line}</span>;
   }
 
   // For code files: apply keyword + string highlighting
@@ -61,7 +61,7 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
         {parts.map((part, i) => {
           // String literals
           if (/^['"`]/.test(part)) {
-            return <span key={i} className="text-amber-400">{part}</span>;
+            return <span key={i} className="text-amber-600 dark:text-amber-400">{part}</span>;
           }
           // Keywords
           const highlighted = part.replace(
@@ -76,7 +76,7 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
             <span key={i}>
               {kParts.map((kp, ki) =>
                 ki % 2 === 1 ? (
-                  <span key={ki} className="text-purple-400">{kp}</span>
+                  <span key={ki} className="text-purple-600 dark:text-purple-400">{kp}</span>
                 ) : (
                   <span key={ki}>{kp}</span>
                 ),
@@ -96,7 +96,7 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
       const rest = line.slice(full.length);
       return (
         <>
-          {indent}<span className="text-blue-400">&quot;{key}&quot;</span>{colon}<span className="text-amber-400">{rest}</span>
+          {indent}<span className="text-blue-600 dark:text-blue-400">&quot;{key}&quot;</span>{colon}<span className="text-amber-600 dark:text-amber-400">{rest}</span>
         </>
       );
     }
@@ -372,7 +372,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
                 <div className="p-4 text-xs text-muted-foreground animate-pulse">Loading file...</div>
               )}
               {fileError && (
-                <div className="p-4 text-xs text-red-400">{fileError}</div>
+                <div className="p-4 text-xs text-red-600 dark:text-red-400">{fileError}</div>
               )}
               {openFile && !editing && (() => {
                 const ext = getFileExtension(openFile.path);
@@ -436,7 +436,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
             <div className="p-4 text-xs text-muted-foreground animate-pulse">Loading directory...</div>
           )}
           {dirError && (
-            <div className="p-4 text-xs text-red-400">{dirError}</div>
+            <div className="p-4 text-xs text-red-600 dark:text-red-400">{dirError}</div>
           )}
           {!dirLoading && !dirError && (
             <table className="w-full text-xs">
@@ -472,7 +472,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
                       <span className="mr-1.5">
                         {entry.type === 'directory' ? '\u{1F4C1}' : '\u{1F4C4}'}
                       </span>
-                      <span className={entry.type === 'directory' ? 'text-blue-400' : 'text-foreground'}>
+                      <span className={entry.type === 'directory' ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}>
                         {entry.name}
                       </span>
                     </td>

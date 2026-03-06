@@ -309,7 +309,7 @@ export function AccountsSection(): React.JSX.Element {
                   {account.isActive ? (
                     <Badge
                       variant="outline"
-                      className="text-[10px] text-green-400 border-green-500/40 bg-green-500/10"
+                      className="text-[10px] text-green-600 dark:text-green-400 border-green-500/40 bg-green-500/10"
                     >
                       Active
                     </Badge>

@@ -155,7 +155,7 @@ export function ForkContextPicker({
               <button
                 type="button"
                 onClick={selectAll}
-                className="px-2 py-0.5 text-[10px] text-blue-400 hover:text-blue-300 border border-blue-800/50 rounded-md hover:bg-blue-900/30 cursor-pointer transition-colors"
+                className="px-2 py-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 border border-blue-300/50 dark:border-blue-800/50 rounded-md hover:bg-blue-100/50 dark:hover:bg-blue-900/30 cursor-pointer transition-colors"
               >
                 Select All
               </button>

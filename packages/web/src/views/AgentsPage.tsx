@@ -649,7 +649,7 @@ export function AgentsPage(): React.JSX.Element {
                             <span className="font-medium">{m.label}</span>
                             <span className={cn(
                               'ml-2 text-[10px]',
-                              m.tier === 'flagship' ? 'text-amber-400' : m.tier === 'fast' ? 'text-green-400' : 'text-blue-400',
+                              m.tier === 'flagship' ? 'text-amber-600 dark:text-amber-400' : m.tier === 'fast' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400',
                             )}>
                               {m.tier}
                             </span>

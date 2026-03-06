@@ -1116,7 +1116,7 @@ export function SessionsPage(): React.JSX.Element {
                   <span className="text-muted-foreground/40">|</span>
                   <span>{selected.machineId}</span>
                   <span className="text-muted-foreground/40">|</span>
-                  <span className="text-purple-400/80">{selected.model ?? 'default'}</span>
+                  <span className="text-purple-600/80 dark:text-purple-400/80">{selected.model ?? 'default'}</span>
                 </div>
               </div>
               <div className="flex gap-2 items-center shrink-0 flex-wrap">
@@ -1129,7 +1129,7 @@ export function SessionsPage(): React.JSX.Element {
                 {selected.claudeSessionId && (
                   <Link
                     href={`/sessions/${selected.id}`}
-                    className="h-8 px-3.5 bg-blue-900/40 text-blue-300 border border-blue-800/40 rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-blue-900/70 inline-flex items-center"
+                    className="h-8 px-3.5 bg-blue-100/50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-300/40 dark:border-blue-800/40 rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-blue-200/70 dark:hover:bg-blue-900/70 inline-flex items-center"
                     title="Fork this session in Full View"
                   >
                     Fork
@@ -1213,7 +1213,7 @@ export function SessionsPage(): React.JSX.Element {
 
               {/* Starting state indicator */}
               {selected.status === 'starting' && (
-                <div className="mt-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/15 rounded-md text-yellow-400 text-xs flex items-center gap-2">
+                <div className="mt-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/15 rounded-md text-yellow-600 dark:text-yellow-400 text-xs flex items-center gap-2">
                   <span className="animate-pulse">&#x25CF;</span>
                   Session is starting... Waiting for worker to respond.
                 </div>
@@ -1486,13 +1486,13 @@ function SessionListItem({
       </div>
       {/* Error message for failed sessions */}
       {s.status === 'error' && errorMsg && (
-        <div className="text-[11px] text-red-400 mb-1.5 line-clamp-1">{errorMsg}</div>
+        <div className="text-[11px] text-red-600 dark:text-red-400 mb-1.5 line-clamp-1">{errorMsg}</div>
       )}
       <div className="text-xs text-muted-foreground flex gap-2 items-center">
         <span className="font-medium text-foreground/70">{s.agentName ? s.agentName : s.agentId.slice(0, 8)}</span>
         <span className="text-muted-foreground/50">|</span>
         <span>{s.machineId}</span>
-        <span className="text-purple-400/70 text-[11px]">{s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}</span>
+        <span className="text-purple-600/70 dark:text-purple-400/70 text-[11px]">{s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}</span>
       </div>
       {s.projectPath && (
         <div className="mt-1">
@@ -1980,7 +1980,7 @@ function SessionContent({
                   type="button"
                   onClick={() => void fetchOlder()}
                   disabled={loadingOlder}
-                  className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline cursor-pointer disabled:opacity-50 bg-transparent border-none"
+                  className="text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline cursor-pointer disabled:opacity-50 bg-transparent border-none"
                 >
                   {loadingOlder
                     ? 'Loading...'
@@ -2010,8 +2010,8 @@ function SessionContent({
                 className="mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2 border-blue-500/50 bg-blue-500/10"
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[10px] font-semibold text-blue-400">You</span>
-                  <span className="text-[9px] text-blue-400/70 animate-pulse">sending...</span>
+                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">You</span>
+                  <span className="text-[9px] text-blue-600/70 dark:text-blue-400/70 animate-pulse">sending...</span>
                 </div>
                 <div className="text-xs text-foreground whitespace-pre-wrap break-words">
                   {om.text}

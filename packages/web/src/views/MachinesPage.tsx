@@ -67,7 +67,7 @@ export function MachinesPage(): React.JSX.Element {
           <div className="flex items-center gap-2.5">
             <h1 className="text-[22px] font-semibold tracking-tight">Fleet Machines</h1>
             {list.length > 0 && (
-              <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-sm">
+              <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
                 {list.length}
               </span>
             )}
@@ -200,7 +200,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           <StatusBadge status={m.status} />
           {m.lastHeartbeat && isStaleHeartbeat(m.lastHeartbeat) && (
             <span
-              className="px-1.5 py-0.5 text-[10px] font-semibold rounded-sm bg-yellow-900 text-yellow-300 border border-yellow-800"
+              className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-800"
               title="Last heartbeat was more than 60 seconds ago"
             >
               Offline
@@ -231,7 +231,7 @@ function MachineCard({ machine }: { machine: Machine }): React.JSX.Element {
           </span>
           <CapBadge label="GPU" enabled={m.capabilities?.gpu ?? false} variant="green" />
           <CapBadge label="Docker" enabled={m.capabilities?.docker ?? false} variant="blue" />
-          <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-sm bg-muted text-muted-foreground border border-border font-mono">
+          <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-md bg-muted text-muted-foreground border border-border font-mono">
             {m.capabilities?.maxConcurrentAgents ?? 0} max agents
           </span>
         </div>
@@ -286,8 +286,8 @@ function DetailField({
 }
 
 const CAP_VARIANT_CLASSES = {
-  green: 'bg-green-950 text-green-300 border-green-800',
-  blue: 'bg-blue-950 text-blue-300 border-blue-800',
+  green: 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-300 dark:border-green-800',
+  blue: 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800',
 } as const;
 
 function CapBadge({
@@ -302,7 +302,7 @@ function CapBadge({
   return (
     <span
       className={cn(
-        'px-2.5 py-0.5 text-[11px] font-semibold rounded-sm border',
+        'px-2.5 py-0.5 text-[11px] font-semibold rounded-md border',
         enabled ? CAP_VARIANT_CLASSES[variant] : 'bg-muted text-muted-foreground border-border',
       )}
     >

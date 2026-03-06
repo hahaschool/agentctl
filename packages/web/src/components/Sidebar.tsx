@@ -287,7 +287,7 @@ export function Sidebar(): React.JSX.Element {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="text-muted-foreground/60 hover:text-foreground transition-colors p-1 rounded-sm hover:bg-muted"
+                className="text-muted-foreground/60 hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted"
                 aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               >

@@ -485,7 +485,7 @@ function SessionHeader({
             <button
               type="button"
               onClick={() => setShowFork(!showFork)}
-              className="px-3 py-1 bg-blue-900/50 text-blue-300 border border-blue-800/50 rounded-md text-xs cursor-pointer hover:bg-blue-900"
+              className="px-3 py-1 bg-blue-100/50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-300/50 dark:border-blue-800/50 rounded-md text-xs cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900"
             >
               Fork
             </button>
@@ -576,7 +576,7 @@ function SessionHeader({
             <span className="italic text-muted-foreground/60">(default account)</span>
           )}
         </span>
-        <span className="font-mono bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30">
+        <span className="font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30">
           {session.model ?? '(default)'}
         </span>
         <span>
@@ -589,7 +589,7 @@ function SessionHeader({
         )}
         {!session.endedAt && session.status === 'active' && (
           <span className="flex items-center gap-1">
-            <svg className="w-3 h-3 text-green-400 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+            <svg className="w-3 h-3 text-green-600 dark:text-green-400 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
             <LiveDuration startedAt={session.startedAt} />
           </span>
         )}
@@ -611,12 +611,12 @@ function SessionHeader({
       {session.status === 'error' && (
         <div className="mt-2 px-3 py-2 rounded-md bg-red-950/50 border border-red-900/50 text-[12px] text-red-300 space-y-1">
           <div>
-            <span className="font-semibold text-red-400">Error: </span>
+            <span className="font-semibold text-red-600 dark:text-red-400">Error:</span>
             {session.metadata?.errorMessage ?? 'Session ended with an error (no details available)'}
           </div>
           {session.metadata?.errorHint && (
             <div className="text-yellow-300/90">
-              <span className="font-semibold text-yellow-400">Hint: </span>
+              <span className="font-semibold text-yellow-600 dark:text-yellow-400">Hint:</span>
               {session.metadata.errorHint}
             </div>
           )}
@@ -873,7 +873,7 @@ function MessageList({
           Markdown
         </button>
         {isActive && autoScroll && !userScrolledUp && (
-          <span className="flex items-center gap-1 text-[10px] text-green-400 ml-1" aria-label="Auto-scroll active">
+          <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 ml-1" aria-label="Auto-scroll active">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             Following
           </span>
@@ -955,7 +955,7 @@ function MessageList({
           <div className="py-2 text-center text-xs">
             <button
               type="button"
-              className="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline cursor-pointer"
               onClick={onLoadMore}
             >
               Load older messages ({formatNumber(totalMessages - messages.length)} more)
@@ -982,7 +982,7 @@ function MessageList({
             <div key={`optimistic-${String(i)}`} className="relative">
               <div className="px-3 py-2 rounded-lg border-l-[3px] bg-blue-500/[0.06] border-l-blue-400 opacity-80">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[11px] font-semibold text-blue-400">You</span>
+                  <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">You</span>
                   <span className="text-[9px] text-muted-foreground/60 animate-pulse">sending...</span>
                 </div>
                 <div className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap break-words">
@@ -1130,7 +1130,7 @@ function ToolPairBlock({
           'bg-yellow-500/[0.04] border-l-yellow-400',
         )}
       >
-        <span className="text-[10px] font-semibold shrink-0 text-yellow-400">Tool</span>
+        <span className="text-[10px] font-semibold shrink-0 text-yellow-600 dark:text-yellow-400">Tool</span>
         <span className="text-[11px] font-mono text-muted-foreground shrink-0">{toolName}</span>
         <span className="text-[10px] text-muted-foreground/60 truncate">{summary}</span>
         <span className="text-[10px] text-muted-foreground ml-auto shrink-0">click to expand</span>
@@ -1142,7 +1142,7 @@ function ToolPairBlock({
     <div className={cn('px-3 py-2 rounded-lg border-l-[3px]', 'bg-yellow-500/[0.04] border-l-yellow-400')}>
       {/* Header */}
       <div className="flex justify-between items-center mb-1">
-        <span className="text-[11px] font-semibold text-yellow-400">
+        <span className="text-[11px] font-semibold text-yellow-600 dark:text-yellow-400">
           Tool
           <span className="ml-1.5 font-normal font-mono text-muted-foreground">{toolName}</span>
         </span>
@@ -1710,7 +1710,7 @@ function ErrorState({ error }: { error: string }): React.JSX.Element {
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center max-w-md">
-        <div className="text-[15px] text-red-400 mb-2">Error</div>
+        <div className="text-[15px] text-red-600 dark:text-red-400 mb-2">Error</div>
         <div className="text-[13px] text-muted-foreground mb-4">{error}</div>
         <Breadcrumb items={[{ label: 'Sessions', href: '/sessions' }, { label: 'Error' }]} />
       </div>
