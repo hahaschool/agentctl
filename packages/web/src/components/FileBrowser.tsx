@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { FileContentResponse, FileEntry, FileListResponse } from '../lib/api';
 import { ApiError, api } from '../lib/api';
@@ -148,7 +149,7 @@ function pathSegments(path: string): { label: string; path: string }[] {
 // Component
 // ---------------------------------------------------------------------------
 
-export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React.JSX.Element {
+export const FileBrowser = React.memo(function FileBrowser({ machineId, initialPath }: FileBrowserProps): React.JSX.Element {
   const toast = useToast();
 
   // Navigation state
@@ -350,7 +351,7 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
           <div className="flex-1 flex flex-col overflow-hidden border-b border-border">
             {/* File header */}
             <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 shrink-0 bg-muted/50">
-              <span className="text-xs font-mono text-foreground truncate flex-1">
+              <span className="text-xs font-mono text-foreground truncate flex-1" title={openFile?.path ?? undefined}>
                 {openFile?.path?.split('/').pop() ?? 'Loading...'}
               </span>
               {openFile && !editing && (
@@ -477,8 +478,35 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
           )}
         >
           {dirLoading && (
-            <div className="p-4 text-xs text-muted-foreground animate-pulse">
-              Loading directory...
+            <div aria-busy="true">
+              <span className="sr-only">Loading directory...</span>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border text-[10px] text-muted-foreground">
+                    <th className="text-left px-3 py-1.5 font-medium">Name</th>
+                    <th className="text-right px-3 py-1.5 font-medium w-20">Size</th>
+                    <th className="text-right px-3 py-1.5 font-medium w-32">Modified</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <tr key={i} className="border-b border-border/50">
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-4 rounded shrink-0" />
+                          <Skeleton className="h-3 w-32" />
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <Skeleton className="h-3 w-12 ml-auto" />
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <Skeleton className="h-3 w-20 ml-auto" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
           {dirError && <div className="p-4 text-xs text-red-600 dark:text-red-400">{dirError}</div>}
@@ -548,4 +576,4 @@ export function FileBrowser({ machineId, initialPath }: FileBrowserProps): React
       </div>
     </div>
   );
-}
+});

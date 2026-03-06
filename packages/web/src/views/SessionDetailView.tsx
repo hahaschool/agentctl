@@ -933,19 +933,34 @@ function MessageList({
 
   // Always show: human, assistant, subagent, todo
   // Toggle: tool_use/tool_result (showTools), thinking (showThinking), progress (showProgress)
-  const visibleMessages = messages.filter((m) => {
-    if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo')
-      return true;
-    if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
-    if (m.type === 'thinking') return showThinking;
-    if (m.type === 'progress') return showProgress;
-    return false;
-  });
+  const visibleMessages = useMemo(
+    () =>
+      messages.filter((m) => {
+        if (
+          m.type === 'human' ||
+          m.type === 'assistant' ||
+          m.type === 'subagent' ||
+          m.type === 'todo'
+        )
+          return true;
+        if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
+        if (m.type === 'thinking') return showThinking;
+        if (m.type === 'progress') return showProgress;
+        return false;
+      }),
+    [messages, showTools, showThinking, showProgress],
+  );
 
   // Apply text search filter
-  const searchFiltered = search
-    ? visibleMessages.filter((m) => (m.content ?? '').toLowerCase().includes(search.toLowerCase()))
-    : visibleMessages;
+  const searchFiltered = useMemo(
+    () =>
+      search
+        ? visibleMessages.filter((m) =>
+            (m.content ?? '').toLowerCase().includes(search.toLowerCase()),
+          )
+        : visibleMessages,
+    [visibleMessages, search],
+  );
 
   // --- Lightweight windowing for large message lists ---
   const WINDOW_SIZE = 50;
@@ -1178,6 +1193,7 @@ function MessageList({
               }
             }}
             placeholder="Search messages..."
+            aria-label="Search messages"
             className="px-2 py-0.5 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none w-[140px] placeholder:text-muted-foreground/50 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           />
           {search && (

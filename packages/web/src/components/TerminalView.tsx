@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { Terminal as TerminalIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import '@xterm/xterm/css/xterm.css';
 
@@ -16,7 +17,7 @@ type TerminalViewProps = {
   className?: string;
 };
 
-export function TerminalView({
+export const TerminalView = React.memo(function TerminalView({
   rawOutput,
   isActive,
   className,
@@ -134,7 +135,7 @@ export function TerminalView({
   }, [handleResize]);
 
   return (
-    <div className={cn('relative flex-1 min-h-0', className)}>
+    <div role="region" aria-label="Terminal output" className={cn('relative flex-1 min-h-0', className)}>
       <div ref={containerRef} className="absolute inset-0 bg-[#0a0a0a]" />
       {isActive && rawOutput.length > 0 && (
         <div className="absolute top-2 right-3 flex items-center gap-1.5 z-10">
@@ -143,12 +144,16 @@ export function TerminalView({
         </div>
       )}
       {rawOutput.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <span className={cn('text-[12px] text-zinc-500', isActive && 'animate-pulse')}>
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none gap-3">
+          <TerminalIcon
+            className={cn('w-8 h-8 text-zinc-600', isActive && 'animate-pulse')}
+            aria-hidden="true"
+          />
+          <span className={cn('text-base text-zinc-500', isActive && 'animate-pulse')}>
             {isActive ? 'Waiting for terminal output...' : 'No terminal output'}
           </span>
         </div>
       )}
     </div>
   );
-}
+});

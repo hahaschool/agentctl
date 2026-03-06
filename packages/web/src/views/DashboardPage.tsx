@@ -107,13 +107,17 @@ export function DashboardPage(): React.JSX.Element {
     agents.isFetching ||
     discovered.isFetching ||
     sessions.isFetching;
-  const anyError =
-    health.error ??
-    metrics.error ??
-    machines.error ??
-    agents.error ??
-    discovered.error ??
-    sessions.error;
+  const errorMessages = useMemo(() => {
+    const msgs: string[] = [];
+    if (health.error) msgs.push(`Control plane: ${health.error.message}`);
+    if (metrics.error) msgs.push(`Metrics: ${metrics.error.message}`);
+    if (machines.error) msgs.push(`Machines: ${machines.error.message}`);
+    if (agents.error) msgs.push(`Agents: ${agents.error.message}`);
+    if (discovered.error) msgs.push(`Discover: ${discovered.error.message}`);
+    if (sessions.error) msgs.push(`Sessions: ${sessions.error.message}`);
+    return msgs;
+  }, [health.error, metrics.error, machines.error, agents.error, discovered.error, sessions.error]);
+  const anyError = errorMessages.length > 0;
 
   // Health status — Tailwind class helpers
   const healthStatus = health.data?.status;
@@ -186,7 +190,7 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Error banner */}
-      {anyError && <ErrorBanner message={anyError.message} onRetry={refreshAll} />}
+      {anyError && <ErrorBanner message={errorMessages.join(' · ')} onRetry={refreshAll} />}
 
       {/* Health status card */}
       <div
@@ -434,11 +438,23 @@ export function DashboardPage(): React.JSX.Element {
           </div>
 
           {/* Discovered Sessions (compact) */}
-          {discoveredSessions.length > 0 && (
-            <div>
-              <SectionHeader title="Discovered Sessions" href="/discover" />
-              <div className="border border-border/50 rounded-lg overflow-hidden">
-                {discoveredSessions.slice(0, 4).map((session, idx) => (
+          <div>
+            <SectionHeader title="Discovered Sessions" href="/discover" />
+            <div className="border border-border/50 rounded-lg overflow-hidden">
+              {discoveredSessions.length === 0 ? (
+                <div className="p-6 text-center bg-card">
+                  <div className="text-[13px] text-muted-foreground mb-2">
+                    No sessions discovered yet.
+                  </div>
+                  <Link
+                    href="/discover"
+                    className="text-[12px] text-primary font-medium no-underline hover:underline"
+                  >
+                    Scan fleet for active sessions &rarr;
+                  </Link>
+                </div>
+              ) : (
+                discoveredSessions.slice(0, 4).map((session, idx) => (
                   <Link
                     key={session.sessionId}
                     href="/discover"
@@ -467,10 +483,10 @@ export function DashboardPage(): React.JSX.Element {
                       <span>{session?.messageCount ?? 0} msgs</span>
                     </div>
                   </Link>
-                ))}
-              </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 

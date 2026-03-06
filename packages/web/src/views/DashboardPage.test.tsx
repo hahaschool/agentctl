@@ -1132,13 +1132,15 @@ describe('DashboardPage', () => {
       });
     });
 
-    it('does not render section when no discovered sessions', async () => {
+    it('shows empty state when no discovered sessions', async () => {
       setupDefaultMocks({
         discoverData: { sessions: [], count: 0, machinesQueried: 1, machinesFailed: 0 },
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.queryByText('Discovered Sessions')).toBeNull();
+        expect(screen.getByText('Discovered Sessions')).toBeDefined();
+        expect(screen.getByText('No sessions discovered yet.')).toBeDefined();
+        expect(screen.getByText(/Scan fleet/)).toBeDefined();
       });
     });
 
@@ -1326,7 +1328,7 @@ describe('DashboardPage', () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByTestId('error-banner')).toBeDefined();
-        expect(screen.getByText('Network error')).toBeDefined();
+        expect(screen.getByText(/Control plane: Network error/)).toBeDefined();
       });
     });
 
@@ -1338,7 +1340,7 @@ describe('DashboardPage', () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByTestId('error-banner')).toBeDefined();
-        expect(screen.getByText('Sessions fetch failed')).toBeDefined();
+        expect(screen.getByText(/Sessions: Sessions fetch failed/)).toBeDefined();
       });
     });
 
