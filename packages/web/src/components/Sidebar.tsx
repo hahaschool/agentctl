@@ -106,7 +106,6 @@ export function Sidebar(): React.JSX.Element {
   const pendingKeyRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-
   // Keyboard shortcuts: 1-7 to navigate pages, Cmd+K for command palette, Esc to close
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {

@@ -140,7 +140,10 @@ function pathSegments(path: string): { label: string; path: string }[] {
 // Component
 // ---------------------------------------------------------------------------
 
-export const FileBrowser = React.memo(function FileBrowser({ machineId, initialPath }: FileBrowserProps): React.JSX.Element {
+export const FileBrowser = React.memo(function FileBrowser({
+  machineId,
+  initialPath,
+}: FileBrowserProps): React.JSX.Element {
   const toast = useToast();
 
   // Navigation state
@@ -342,7 +345,10 @@ export const FileBrowser = React.memo(function FileBrowser({ machineId, initialP
           <div className="flex-1 flex flex-col overflow-hidden border-b border-border">
             {/* File header */}
             <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 shrink-0 bg-muted/50">
-              <span className="text-xs font-mono text-foreground truncate flex-1" title={openFile?.path ?? undefined}>
+              <span
+                className="text-xs font-mono text-foreground truncate flex-1"
+                title={openFile?.path ?? undefined}
+              >
                 {openFile?.path?.split('/').pop() ?? 'Loading...'}
               </span>
               {openFile && !editing && (

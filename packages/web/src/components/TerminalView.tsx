@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
 import { Terminal as TerminalIcon } from 'lucide-react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import '@xterm/xterm/css/xterm.css';
 

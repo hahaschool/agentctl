@@ -96,7 +96,7 @@ function pickDefaultMachine(machines: Machine[]): string {
   const online = machines.filter((m) => m.status === 'online');
   if (lastUsed && machines.some((m) => m.id === lastUsed)) return lastUsed;
   if (online.length > 0) return online[0]?.id ?? '';
-  return machines.length > 0 ? machines[0]?.id ?? '' : '';
+  return machines.length > 0 ? (machines[0]?.id ?? '') : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -1151,8 +1151,26 @@ export function AgentsPage(): React.JSX.Element {
               const agents = filteredAgents;
               if (agents.length === 0) return;
               downloadCsv(
-                ['name', 'id', 'type', 'status', 'machineId', 'projectPath', 'lastRunAt', 'totalCostUsd'],
-                agents.map((a) => [a.name, a.id, a.type, a.status, a.machineId, a.projectPath, a.lastRunAt, a.totalCostUsd]),
+                [
+                  'name',
+                  'id',
+                  'type',
+                  'status',
+                  'machineId',
+                  'projectPath',
+                  'lastRunAt',
+                  'totalCostUsd',
+                ],
+                agents.map((a) => [
+                  a.name,
+                  a.id,
+                  a.type,
+                  a.status,
+                  a.machineId,
+                  a.projectPath,
+                  a.lastRunAt,
+                  a.totalCostUsd,
+                ]),
                 `agents-${new Date().toISOString().slice(0, 10)}.csv`,
               );
             }}

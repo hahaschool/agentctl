@@ -166,7 +166,15 @@ export function MachinesPage(): React.JSX.Element {
             if (filteredList.length === 0) return;
             downloadCsv(
               ['hostname', 'id', 'status', 'os', 'arch', 'tailscaleIp', 'lastHeartbeat'],
-              filteredList.map((m) => [m.hostname, m.id, m.status, m.os, m.arch, m.tailscaleIp, m.lastHeartbeat]),
+              filteredList.map((m) => [
+                m.hostname,
+                m.id,
+                m.status,
+                m.os,
+                m.arch,
+                m.tailscaleIp,
+                m.lastHeartbeat,
+              ]),
               `machines-${new Date().toISOString().slice(0, 10)}.csv`,
             );
           }}

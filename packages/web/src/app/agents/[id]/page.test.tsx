@@ -230,13 +230,9 @@ vi.mock('@/components/ConfirmButton', () => ({
 }));
 
 vi.mock('@/components/SimpleTooltip', () => ({
-  SimpleTooltip: ({
-    children,
-    content,
-  }: {
-    children: React.ReactNode;
-    content: string;
-  }) => <div title={content}>{children}</div>,
+  SimpleTooltip: ({ children, content }: { children: React.ReactNode; content: string }) => (
+    <div title={content}>{children}</div>
+  ),
 }));
 
 vi.mock('@/components/Toast', () => ({
@@ -837,7 +833,11 @@ describe('AgentDetailPage', () => {
       makeQueryResult(
         'agent',
         createAgent({
-          config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Always be polite' },
+          config: {
+            model: 'claude-sonnet-4-20250514',
+            maxTurns: 50,
+            systemPrompt: 'Always be polite',
+          },
         }),
       ),
     );
@@ -1468,9 +1468,12 @@ describe('AgentDetailPage', () => {
     const mutateFn = vi.fn();
     mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
     mockAgentQuery.mockReturnValue(
-      makeQueryResult('agent', createAgent({
-        config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Be helpful' },
-      })),
+      makeQueryResult(
+        'agent',
+        createAgent({
+          config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Be helpful' },
+        }),
+      ),
     );
     renderPage();
     await waitFor(() => {
@@ -1489,9 +1492,12 @@ describe('AgentDetailPage', () => {
     const mutateFn = vi.fn();
     mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
     mockAgentQuery.mockReturnValue(
-      makeQueryResult('agent', createAgent({
-        config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Old prompt' },
-      })),
+      makeQueryResult(
+        'agent',
+        createAgent({
+          config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Old prompt' },
+        }),
+      ),
     );
     renderPage();
     await waitFor(() => {

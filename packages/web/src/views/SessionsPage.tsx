@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { CopyableText } from '../components/CopyableText';
+import { CreateSessionForm } from '../components/CreateSessionForm';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -43,7 +44,6 @@ import {
 } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
 import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
-import { CreateSessionForm } from '../components/CreateSessionForm';
 
 const MODEL_OPTIONS = [
   { value: '', label: 'Default' },
@@ -84,7 +84,18 @@ function matchesSearchQuery(session: Session, query: string): boolean {
 
 function exportSessionsCsv(sessions: Session[]): void {
   downloadCsv(
-    ['id', 'agentName', 'machineId', 'status', 'model', 'projectPath', 'startedAt', 'endedAt', 'costUsd', 'messageCount'],
+    [
+      'id',
+      'agentName',
+      'machineId',
+      'status',
+      'model',
+      'projectPath',
+      'startedAt',
+      'endedAt',
+      'costUsd',
+      'messageCount',
+    ],
     sessions.map((s) => [
       s.id,
       s.agentName ?? s.agentId,
@@ -125,7 +136,6 @@ export function SessionsPage(): React.JSX.Element {
       const dedupedSessions = newSessions.filter((s) => !existingIds.has(s.id));
       return [...prev, ...dedupedSessions];
     });
-    // biome-ignore lint/correctness/useExhaustiveDependencies: offset is intentionally read from state inside setter callback context
   }, [sessions.data, offset]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1080,7 +1090,10 @@ export function SessionsPage(): React.JSX.Element {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
                   <div>
-                    <label htmlFor="convert-agent-name" className="text-[11px] text-muted-foreground block mb-1">
+                    <label
+                      htmlFor="convert-agent-name"
+                      className="text-[11px] text-muted-foreground block mb-1"
+                    >
                       Agent Name
                     </label>
                     <input
@@ -1093,7 +1106,10 @@ export function SessionsPage(): React.JSX.Element {
                     />
                   </div>
                   <div>
-                    <label htmlFor="convert-agent-type" className="text-[11px] text-muted-foreground block mb-1">
+                    <label
+                      htmlFor="convert-agent-type"
+                      className="text-[11px] text-muted-foreground block mb-1"
+                    >
                       Agent Type
                     </label>
                     <select

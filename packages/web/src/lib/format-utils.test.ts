@@ -338,7 +338,10 @@ describe('downloadCsv', () => {
 
     downloadCsv(
       ['name', 'value'],
-      [['Alice', 42], ['Bob, Jr', null]],
+      [
+        ['Alice', 42],
+        ['Bob, Jr', null],
+      ],
       'test.csv',
     );
 

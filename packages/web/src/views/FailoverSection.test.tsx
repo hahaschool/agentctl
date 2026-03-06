@@ -28,14 +28,25 @@ vi.mock('next-themes', () => ({
 }));
 
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ children, value }: { children: React.ReactNode; value?: string; onValueChange?: (v: string) => void }) => (
+  Select: ({
+    children,
+    value,
+  }: {
+    children: React.ReactNode;
+    value?: string;
+    onValueChange?: (v: string) => void;
+  }) => (
     <div data-testid="select" data-value={value}>
       {children}
     </div>
   ),
-  SelectTrigger: ({ children, ...props }: Record<string, unknown>) => <button {...props}>{children as React.ReactNode}</button>,
+  SelectTrigger: ({ children, ...props }: Record<string, unknown>) => (
+    <button {...props}>{children as React.ReactNode}</button>
+  ),
   SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => <option value={value}>{children}</option>,
+  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
+    <option value={value}>{children}</option>
+  ),
   SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
 }));
 

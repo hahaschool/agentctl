@@ -18,7 +18,13 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AuditAction } from '../lib/api';
-import { downloadCsv, formatDateTime, formatDurationMs, formatNumber, formatTime } from '../lib/format-utils';
+import {
+  downloadCsv,
+  formatDateTime,
+  formatDurationMs,
+  formatNumber,
+  formatTime,
+} from '../lib/format-utils';
 import {
   agentsQuery,
   auditQuery,
@@ -617,8 +623,24 @@ export function LogsPage(): React.JSX.Element {
                   const actions = sortedActions;
                   if (actions.length === 0) return;
                   downloadCsv(
-                    ['timestamp', 'actionType', 'toolName', 'agentId', 'runId', 'durationMs', 'approvedBy'],
-                    actions.map((a) => [a.timestamp, a.actionType, a.toolName, a.agentId, a.runId, a.durationMs, a.approvedBy]),
+                    [
+                      'timestamp',
+                      'actionType',
+                      'toolName',
+                      'agentId',
+                      'runId',
+                      'durationMs',
+                      'approvedBy',
+                    ],
+                    actions.map((a) => [
+                      a.timestamp,
+                      a.actionType,
+                      a.toolName,
+                      a.agentId,
+                      a.runId,
+                      a.durationMs,
+                      a.approvedBy,
+                    ]),
                     `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`,
                   );
                 }}

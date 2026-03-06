@@ -1371,7 +1371,9 @@ function MessageList({
 
 const DateSeparator = React.memo(function DateSeparator({
   label,
-}: { label: string }): React.ReactElement {
+}: {
+  label: string;
+}): React.ReactElement {
   return (
     <div className="flex items-center gap-3 py-2 my-1">
       <div className="flex-1 h-px bg-border" />
