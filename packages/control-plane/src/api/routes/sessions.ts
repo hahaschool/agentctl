@@ -91,7 +91,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           and(
             inArray(rcSessions.status, ['starting', 'active']),
             or(isNull(rcSessions.lastHeartbeat), lt(rcSessions.lastHeartbeat, cutoff)),
-            lt(rcSessions.createdAt, cutoff),
+            lt(rcSessions.startedAt, cutoff),
           ),
         );
 

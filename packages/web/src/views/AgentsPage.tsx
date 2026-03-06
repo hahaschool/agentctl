@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -36,10 +36,11 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { formatCost } from '../lib/format-utils';
-import type { Agent } from '../lib/api';
+import type { Agent, Machine } from '../lib/api';
 import {
   agentsQuery,
   machinesQuery,
+  sessionsQuery,
   useCreateAgent,
   useStartAgent,
   useStopAgent,
@@ -47,9 +48,38 @@ import {
 } from '../lib/queries';
 
 const AGENT_TYPES = ['autonomous', 'adhoc', 'scheduled'] as const;
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
+
+/** Slugify the first ~30 chars of a prompt into a name like "fix-auth-bug-in-login" */
+function slugifyPrompt(prompt: string): string {
+  return prompt
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 40)
+    .replace(/-+$/, '') || 'new-task';
+}
+
+/** Show last 2 path segments for compact display */
+function shortPath(fullPath: string): string {
+  const segments = fullPath.replace(/\/+$/, '').split('/');
+  return segments.length <= 2 ? fullPath : `~/${segments.slice(-2).join('/')}`;
+}
+
+/** Pick the first online machine, or fallback to last-used, or first available */
+function pickDefaultMachine(machines: Machine[]): string {
+  const lastUsed = typeof window !== 'undefined'
+    ? localStorage.getItem('agentctl:lastMachineId')
+    : null;
+  const online = machines.filter((m) => m.status === 'online');
+  if (lastUsed && machines.some((m) => m.id === lastUsed)) return lastUsed;
+  if (online.length > 0) return online[0]!.id;
+  return machines.length > 0 ? machines[0]!.id : '';
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -59,6 +89,7 @@ export function AgentsPage(): React.JSX.Element {
   const toast = useToast();
   const agents = useQuery(agentsQuery());
   const machines = useQuery(machinesQuery());
+  const recentSessions = useQuery(sessionsQuery({ limit: 100 }));
 
   const createAgent = useCreateAgent();
   const updateAgent = useUpdateAgent();
@@ -72,19 +103,68 @@ export function AgentsPage(): React.JSX.Element {
   const [editType, setEditType] = useState<string>('autonomous');
   const [editModel, setEditModel] = useState('');
   const [editInitialPrompt, setEditInitialPrompt] = useState('');
-  const [createName, setCreateName] = useState('');
+
+  // New task dialog state
+  const [createPrompt, setCreatePrompt] = useState('');
+  const [createProjectPath, setCreateProjectPath] = useState('');
   const [createMachineId, setCreateMachineId] = useState('');
-  const [createType, setCreateType] = useState<string>('autonomous');
+  const [createAdvancedOpen, setCreateAdvancedOpen] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createType, setCreateType] = useState<string>('adhoc');
   const [createModel, setCreateModel] = useState(
     () =>
       (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
-      'claude-sonnet-4-6',
+      DEFAULT_MODEL,
   );
-  const [createProjectPath, setCreateProjectPath] = useState('');
-  const [createInitialPrompt, setCreateInitialPrompt] = useState('');
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const projectInputRef = useRef<HTMLInputElement>(null);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
 
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+
+  // Extract unique project paths from recent sessions
+  const recentProjectPaths = useMemo(() => {
+    const sessions = recentSessions.data?.sessions ?? [];
+    const pathSet = new Set<string>();
+    for (const s of sessions) {
+      if (s.projectPath) pathSet.add(s.projectPath);
+    }
+    return Array.from(pathSet).sort();
+  }, [recentSessions.data]);
+
+  // Filtered project paths for dropdown
+  const filteredProjectPaths = useMemo(() => {
+    if (!projectSearchQuery.trim()) return recentProjectPaths;
+    const q = projectSearchQuery.toLowerCase();
+    return recentProjectPaths.filter((p) => p.toLowerCase().includes(q));
+  }, [recentProjectPaths, projectSearchQuery]);
+
+  // Auto-select first online machine when dialog opens
+  const machineList = machines.data ?? [];
+  const autoSelectMachine = useCallback(() => {
+    if (!createMachineId && machineList.length > 0) {
+      setCreateMachineId(pickDefaultMachine(machineList));
+    }
+  }, [createMachineId, machineList]);
+
+  // Close project dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent): void {
+      if (
+        projectDropdownRef.current &&
+        !projectDropdownRef.current.contains(e.target as Node) &&
+        projectInputRef.current &&
+        !projectInputRef.current.contains(e.target as Node)
+      ) {
+        setShowProjectDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // -- Filter / Sort state --
   const [search, setSearch] = useState('');
@@ -106,7 +186,6 @@ export function AgentsPage(): React.JSX.Element {
   );
 
   const agentList = agents.data ?? [];
-  const machineList = machines.data ?? [];
 
   // Summary stats
   const statusCounts = useMemo(() => {
@@ -164,15 +243,18 @@ export function AgentsPage(): React.JSX.Element {
 
   // -- Create agent handler --
   function resetCreateForm(): void {
+    setCreatePrompt('');
     setCreateName('');
     setCreateMachineId('');
-    setCreateType('autonomous');
+    setCreateType('adhoc');
     setCreateModel(
       (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
-        'claude-sonnet-4-6',
+        DEFAULT_MODEL,
     );
     setCreateProjectPath('');
-    setCreateInitialPrompt('');
+    setCreateAdvancedOpen(false);
+    setProjectSearchQuery('');
+    setShowProjectDropdown(false);
   }
 
   // -- Edit agent helpers --
@@ -223,15 +305,21 @@ export function AgentsPage(): React.JSX.Element {
   const isEditDisabled = updateAgent.isPending || !editName.trim() || !editMachineId;
 
   const handleCreate = (): void => {
-    if (!createName.trim() || !createMachineId) return;
+    if (!createPrompt.trim() || !createMachineId) return;
 
+    const agentName = createName.trim() || slugifyPrompt(createPrompt);
     const config: Record<string, unknown> = {};
     if (createModel.trim()) config.model = createModel.trim();
-    if (createInitialPrompt.trim()) config.initialPrompt = createInitialPrompt.trim();
+    if (createPrompt.trim()) config.initialPrompt = createPrompt.trim();
+
+    // Remember last-used machine
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agentctl:lastMachineId', createMachineId);
+    }
 
     createAgent.mutate(
       {
-        name: createName.trim(),
+        name: agentName,
         machineId: createMachineId,
         type: createType,
         ...(createProjectPath.trim() ? { projectPath: createProjectPath.trim() } : {}),
@@ -239,7 +327,7 @@ export function AgentsPage(): React.JSX.Element {
       },
       {
         onSuccess: () => {
-          toast.success(`Agent "${createName.trim()}" created`);
+          toast.success(`Agent "${agentName}" created`);
           resetCreateForm();
           setShowCreateDialog(false);
         },
@@ -280,7 +368,7 @@ export function AgentsPage(): React.JSX.Element {
     });
   };
 
-  const isCreateDisabled = createAgent.isPending || !createName.trim() || !createMachineId;
+  const isCreateDisabled = createAgent.isPending || !createPrompt.trim() || !createMachineId;
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
@@ -309,7 +397,7 @@ export function AgentsPage(): React.JSX.Element {
             isFetching={agents.isFetching && !agents.isLoading}
           />
           <Button size="sm" onClick={() => setShowCreateDialog(true)}>
-            New Agent
+            New Task
           </Button>
         </div>
       </div>
@@ -319,129 +407,202 @@ export function AgentsPage(): React.JSX.Element {
         <ErrorBanner message={agents.error.message} onRetry={() => void agents.refetch()} />
       )}
 
-      {/* Create Agent Dialog */}
+      {/* New Task Dialog */}
       <Dialog
         open={showCreateDialog}
         onOpenChange={(open) => {
           if (!open) resetCreateForm();
           setShowCreateDialog(open);
+          if (open) {
+            autoSelectMachine();
+            // Auto-focus the prompt textarea after dialog renders
+            setTimeout(() => promptTextareaRef.current?.focus(), 50);
+          }
         }}
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>New Agent</DialogTitle>
+            <DialogTitle>New Task</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Prompt — primary input */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-name">
-                Name <span className="text-destructive">*</span>
-              </label>
-              <Input
-                id="create-agent-name"
-                placeholder="my-agent"
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
+              <textarea
+                ref={promptTextareaRef}
+                id="create-task-prompt"
+                rows={4}
+                placeholder="What do you want the agent to do?"
+                value={createPrompt}
+                onChange={(e) => setCreatePrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!isCreateDisabled) handleCreate();
+                  }
+                }}
                 disabled={createAgent.isPending}
+                className={cn(
+                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2.5 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  'dark:bg-input/30',
+                )}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Press Enter to start. Shift+Enter for newline.
+              </p>
             </div>
 
+            {/* Project path — combobox with recent projects */}
+            <div className="space-y-1.5 relative">
+              <label className="text-sm font-medium" htmlFor="create-task-project">
+                Project
+              </label>
+              <div className="relative">
+                <Input
+                  ref={projectInputRef}
+                  id="create-task-project"
+                  placeholder={recentProjectPaths.length > 0 ? 'Select or type a project path...' : '/path/to/project'}
+                  value={createProjectPath}
+                  onChange={(e) => {
+                    setCreateProjectPath(e.target.value);
+                    setProjectSearchQuery(e.target.value);
+                    setShowProjectDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (recentProjectPaths.length > 0) setShowProjectDropdown(true);
+                  }}
+                  disabled={createAgent.isPending}
+                />
+                {showProjectDropdown && filteredProjectPaths.length > 0 && (
+                  <div
+                    ref={projectDropdownRef}
+                    className="absolute z-50 mt-1 w-full max-h-[160px] overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+                  >
+                    {filteredProjectPaths.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        className={cn(
+                          'w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors',
+                          p === createProjectPath && 'bg-accent',
+                        )}
+                        title={p}
+                        onClick={() => {
+                          setCreateProjectPath(p);
+                          setProjectSearchQuery('');
+                          setShowProjectDropdown(false);
+                        }}
+                      >
+                        <span className="font-medium">{shortPath(p)}</span>
+                        <span className="text-[11px] text-muted-foreground ml-2 font-mono">{p}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Machine — auto-selected, shown inline */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-machine">
-                Machine <span className="text-destructive">*</span>
+              <label className="text-sm font-medium" htmlFor="create-task-machine">
+                Machine
               </label>
               <Select
                 value={createMachineId}
                 onValueChange={setCreateMachineId}
                 disabled={createAgent.isPending}
               >
-                <SelectTrigger className="w-full" id="create-agent-machine">
+                <SelectTrigger className="w-full" id="create-task-machine">
                   <SelectValue placeholder="Select a machine" />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
                   {machineList.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
-                      {m.hostname} ({m.id})
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            'inline-block w-2 h-2 rounded-full',
+                            m.status === 'online' ? 'bg-green-500' : 'bg-gray-400',
+                          )}
+                        />
+                        {m.hostname}
+                        <span className="text-muted-foreground text-[11px]">({m.id})</span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-type">
-                Type
-              </label>
-              <Select
-                value={createType}
-                onValueChange={setCreateType}
-                disabled={createAgent.isPending}
+            {/* Advanced options — collapsible */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setCreateAdvancedOpen(!createAdvancedOpen)}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                <SelectTrigger className="w-full" id="create-agent-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper" sideOffset={4}>
-                  {AGENT_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-model">
-                Model
-              </label>
-              <Input
-                id="create-agent-model"
-                placeholder="claude-sonnet-4-6"
-                value={createModel}
-                onChange={(e) => setCreateModel(e.target.value)}
-                disabled={createAgent.isPending}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                The Claude model to use for this agent.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-project">
-                Project Path
-              </label>
-              <Input
-                id="create-agent-project"
-                placeholder="/home/user/projects/my-app"
-                value={createProjectPath}
-                onChange={(e) => setCreateProjectPath(e.target.value)}
-                disabled={createAgent.isPending}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Absolute path to the project directory on the target machine.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-prompt">
-                Initial Prompt
-              </label>
-              <textarea
-                id="create-agent-prompt"
-                rows={3}
-                placeholder="Describe what this agent should do..."
-                value={createInitialPrompt}
-                onChange={(e) => setCreateInitialPrompt(e.target.value)}
-                disabled={createAgent.isPending}
-                className={cn(
-                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
-                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                  'dark:bg-input/30',
+                <span className="text-xs">{createAdvancedOpen ? '\u25BE' : '\u25B8'}</span>
+                Advanced
+                {(createName.trim() || createModel !== DEFAULT_MODEL || createType !== 'adhoc') && (
+                  <span className="text-[10px] text-primary">(customized)</span>
                 )}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Stored in agent config. Can be used as the default prompt when starting the agent.
-              </p>
+              </button>
+
+              {createAdvancedOpen && (
+                <div className="mt-3 space-y-3 pl-4 border-l-2 border-border">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="create-task-name">
+                      Name
+                    </label>
+                    <Input
+                      id="create-task-name"
+                      placeholder={createPrompt.trim() ? slugifyPrompt(createPrompt) : 'auto-generated from prompt'}
+                      value={createName}
+                      onChange={(e) => setCreateName(e.target.value)}
+                      disabled={createAgent.isPending}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Leave blank to auto-generate from prompt.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="create-task-model">
+                      Model
+                    </label>
+                    <Input
+                      id="create-task-model"
+                      placeholder={DEFAULT_MODEL}
+                      value={createModel}
+                      onChange={(e) => setCreateModel(e.target.value)}
+                      disabled={createAgent.isPending}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="create-task-type">
+                      Type
+                    </label>
+                    <Select
+                      value={createType}
+                      onValueChange={setCreateType}
+                      disabled={createAgent.isPending}
+                    >
+                      <SelectTrigger className="w-full" id="create-task-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={4}>
+                        {AGENT_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -450,7 +611,7 @@ export function AgentsPage(): React.JSX.Element {
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={isCreateDisabled}>
-              {createAgent.isPending ? 'Creating...' : 'Create Agent'}
+              {createAgent.isPending ? 'Starting...' : 'Start Agent'}
             </Button>
           </DialogFooter>
         </DialogContent>
