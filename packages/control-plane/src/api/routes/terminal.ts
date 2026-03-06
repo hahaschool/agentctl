@@ -177,12 +177,21 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
 
   app.post<{
     Params: { machineId: string; termId: string };
-    Body: Record<string, unknown>;
+    Body: { cols: number; rows: number };
   }>(
     '/:machineId/terminal/:termId/resize',
     { schema: { tags: ['terminal'], summary: 'Resize a terminal on a worker machine' } },
     async (request, reply) => {
       const { machineId, termId } = request.params;
+      const { cols, rows } = request.body;
+
+      if (typeof cols !== 'number' || typeof rows !== 'number' || cols < 1 || rows < 1) {
+        return reply.status(400).send({
+          error: 'INVALID_DIMENSIONS',
+          message: 'cols and rows must be positive numbers',
+        });
+      }
+
       const workerBaseUrl = await resolveWorker(machineId);
       const url = `${workerBaseUrl}/api/terminal/${encodeURIComponent(termId)}/resize`;
 

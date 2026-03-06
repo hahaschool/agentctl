@@ -69,6 +69,14 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     { schema: { tags: ['agents'], summary: 'Pause or resume an agent loop' } },
     async (request, reply) => {
       const agentId = request.params.id;
+      const { action } = request.body;
+
+      if (action !== 'pause' && action !== 'resume') {
+        return reply.status(400).send({
+          error: 'INVALID_ACTION',
+          message: `Invalid loop action "${String(action)}". Must be "pause" or "resume".`,
+        });
+      }
 
       const resolved = await resolveWorkerUrl(agentId, request.query, {
         registry,
