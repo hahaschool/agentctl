@@ -1,26 +1,29 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Info, ScrollText, Server } from 'lucide-react';
+import { ScrollText, Server } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { CollapsibleSection } from '../components/CollapsibleSection';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { LogsAuditActionRow } from '../components/LogsAuditActionRow';
+import { LogsDependencyCard } from '../components/LogsDependencyCard';
 import type { ActionTypeFilter, AuditSortBy } from '../components/LogsFilterBar';
 import { LogsFilterBar } from '../components/LogsFilterBar';
+import { LogsMetricCard } from '../components/LogsMetricCard';
+import { LogsSectionHeading } from '../components/LogsSectionHeading';
 import { RefreshButton } from '../components/RefreshButton';
-import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import type { AuditAction } from '../lib/api';
-import { formatDateTime, formatDurationMs, formatNumber, formatTime } from '../lib/format-utils';
+import { formatDateTime, formatDurationMs, formatNumber } from '../lib/format-utils';
 import {
   agentsQuery,
   auditQuery,
@@ -37,6 +40,14 @@ import {
 type ActiveTab = 'overview' | 'audit';
 
 const AUDIT_PAGE_SIZE = 50;
+
+// ---------------------------------------------------------------------------
+// Table class strings
+// ---------------------------------------------------------------------------
+
+const TH_CLASSES = 'px-3.5 py-2.5 text-[11px] font-semibold text-muted-foreground';
+
+const TD_CLASSES = 'px-3.5 py-2.5';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -267,7 +278,7 @@ export function LogsPage(): React.JSX.Element {
       {activeTab === 'overview' && (
         <>
           {/* Control Plane Status */}
-          <SectionHeading>Control Plane</SectionHeading>
+          <LogsSectionHeading>Control Plane</LogsSectionHeading>
           {health.isLoading ? (
             <div className="p-4 bg-card border border-border/50 rounded mb-6 flex items-center gap-4">
               <Skeleton className="w-3 h-3 rounded-full shrink-0" />
@@ -311,7 +322,7 @@ export function LogsPage(): React.JSX.Element {
           {/* Dependencies */}
           {health.isLoading ? (
             <div className="mb-6">
-              <SectionHeading>Dependencies</SectionHeading>
+              <LogsSectionHeading>Dependencies</LogsSectionHeading>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
                 {Array.from({ length: 3 }, (_, i) => (
                   <div
@@ -329,17 +340,17 @@ export function LogsPage(): React.JSX.Element {
             </div>
           ) : deps && Object.keys(deps).length > 0 ? (
             <div className="mb-6">
-              <SectionHeading>Dependencies</SectionHeading>
+              <LogsSectionHeading>Dependencies</LogsSectionHeading>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
                 {Object.entries(deps).map(([name, dep]) => (
-                  <DependencyCard key={name} name={name} dep={dep} />
+                  <LogsDependencyCard key={name} name={name} dep={dep} />
                 ))}
               </div>
             </div>
           ) : null}
 
           {/* Metrics */}
-          <SectionHeading>Metrics</SectionHeading>
+          <LogsSectionHeading>Metrics</LogsSectionHeading>
           {metrics.isLoading ? (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
               {Array.from({ length: 6 }, (_, i) => (
@@ -354,34 +365,34 @@ export function LogsPage(): React.JSX.Element {
             </div>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-              <MetricCard
+              <LogsMetricCard
                 label="Control Plane"
                 value={metricsVal('agentctl_control_plane_up') === 1 ? 'UP' : 'DOWN'}
                 valueVariant={metricsVal('agentctl_control_plane_up') === 1 ? 'green' : 'red'}
                 accent="green"
                 tooltip="Health status of the central orchestration server"
               />
-              <MetricCard
+              <LogsMetricCard
                 label="Agents Total"
                 value={formatNumber(metricsVal('agentctl_agents_total') ?? '-')}
                 accent="blue"
               />
-              <MetricCard
+              <LogsMetricCard
                 label="Agents Active"
                 value={formatNumber(metricsVal('agentctl_agents_active') ?? '-')}
                 accent="purple"
               />
-              <MetricCard
+              <LogsMetricCard
                 label="Runs Total"
                 value={formatNumber(metricsVal('agentctl_runs_total') ?? '-')}
                 accent="yellow"
               />
-              <MetricCard
+              <LogsMetricCard
                 label="Machines Online"
                 value={machines.data ? `${onlineMachines} / ${machineList.length}` : '-'}
                 accent="blue"
               />
-              <MetricCard
+              <LogsMetricCard
                 label="Health Status"
                 value={health.data?.status ?? '-'}
                 valueClassName={statusTextClasses}
@@ -409,7 +420,7 @@ export function LogsPage(): React.JSX.Element {
           )}
 
           {/* Worker Health */}
-          <SectionHeading>Worker Health</SectionHeading>
+          <LogsSectionHeading>Worker Health</LogsSectionHeading>
           {machines.isLoading ? (
             <div className="border border-border/50 rounded overflow-hidden">
               {Array.from({ length: 3 }, (_, i) => (
@@ -581,7 +592,7 @@ export function LogsPage(): React.JSX.Element {
             ) : (
               <div className="border border-border/50 rounded overflow-hidden transition-colors hover:border-border">
                 {sortedActions.map((action, idx) => (
-                  <AuditActionRow
+                  <LogsAuditActionRow
                     key={action.id}
                     action={action}
                     isFirst={idx === 0}
@@ -634,7 +645,7 @@ export function LogsPage(): React.JSX.Element {
           {/* Tool Breakdown (collapsible) */}
           {auditSummary.data && Object.keys(auditSummary.data.toolBreakdown ?? {}).length > 0 && (
             <div className="mt-6">
-              <SectionHeading>Tool Usage Breakdown</SectionHeading>
+              <LogsSectionHeading>Tool Usage Breakdown</LogsSectionHeading>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
                 {Object.entries(auditSummary.data.toolBreakdown)
                   .sort(([, a], [, b]) => (b as number) - (a as number))
@@ -667,342 +678,3 @@ export function LogsPage(): React.JSX.Element {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function SectionHeading({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <h2 className="text-[15px] font-semibold text-muted-foreground mb-2.5">{children}</h2>;
-}
-
-function CollapsibleSection({
-  title,
-  badge,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  badge?: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex items-center gap-2 mb-2.5 bg-transparent border-none p-0 cursor-pointer text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 rounded-md"
-      >
-        <span
-          className={cn(
-            'text-xs transition-transform duration-150 text-muted-foreground',
-            open ? 'rotate-0' : '-rotate-90',
-          )}
-        >
-          &#x25BC;
-        </span>
-        <span className="text-[15px] font-semibold text-muted-foreground">{title}</span>
-        {badge && <span className="text-[11px] text-muted-foreground font-normal">({badge})</span>}
-      </button>
-      {open && children}
-    </>
-  );
-}
-
-const VALUE_VARIANT_CLASSES = {
-  green: 'text-green-500',
-  red: 'text-red-500',
-  yellow: 'text-yellow-500',
-  default: 'text-foreground',
-} as const;
-
-const METRIC_ACCENT_CLASSES: Record<string, string> = {
-  green: 'border-l-green-500/60',
-  yellow: 'border-l-yellow-500/60',
-  red: 'border-l-red-500/60',
-  blue: 'border-l-blue-500/60',
-  purple: 'border-l-purple-500/60',
-};
-
-function MetricCard({
-  label,
-  value,
-  valueVariant,
-  valueClassName,
-  accent,
-  tooltip,
-}: {
-  label: string;
-  value: string;
-  valueVariant?: 'green' | 'red' | 'yellow';
-  valueClassName?: string;
-  accent?: 'green' | 'yellow' | 'red' | 'blue' | 'purple';
-  tooltip?: string;
-}): React.JSX.Element {
-  return (
-    <div
-      className={cn(
-        'px-[18px] py-4 bg-card border border-border/50 rounded transition-colors hover:border-border',
-        accent && 'border-l-[3px]',
-        accent && METRIC_ACCENT_CLASSES[accent],
-      )}
-    >
-      <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1">
-        {tooltip ? (
-          <SimpleTooltip content={tooltip}>
-            <span className="inline-flex items-center gap-1 cursor-default">
-              {label}
-              <Info size={10} className="text-muted-foreground/60" />
-            </span>
-          </SimpleTooltip>
-        ) : (
-          label
-        )}
-      </div>
-      <div
-        className={cn(
-          'text-2xl font-semibold',
-          valueClassName ?? VALUE_VARIANT_CLASSES[valueVariant ?? 'default'],
-        )}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Dependency card with level-based coloring and expandable error details
-// ---------------------------------------------------------------------------
-
-function DependencyCard({
-  name,
-  dep,
-}: {
-  name: string;
-  dep: { status: 'ok' | 'error'; latencyMs: number; error?: string };
-}): React.JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-  const latencyWarning = dep.latencyMs > 500;
-  const latencyCritical = dep.latencyMs > 2000;
-
-  return (
-    <div
-      className={cn(
-        'px-3.5 py-3 bg-card border rounded transition-colors',
-        'hover:border-border',
-        dep.status === 'error'
-          ? 'border-red-500/40'
-          : latencyCritical
-            ? 'border-yellow-500/40'
-            : 'border-border/50',
-      )}
-    >
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="text-[13px] font-medium capitalize">{name}</span>
-        <StatusBadge status={dep.status} />
-      </div>
-      <div
-        className={cn(
-          'text-[11px] font-mono',
-          latencyCritical
-            ? 'text-red-500'
-            : latencyWarning
-              ? 'text-yellow-500'
-              : 'text-muted-foreground',
-        )}
-      >
-        Latency: {dep.latencyMs?.toFixed(0) ?? '-'}ms
-        {latencyWarning && !latencyCritical && ' (slow)'}
-        {latencyCritical && ' (critical)'}
-      </div>
-      {dep.error && (
-        <>
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="text-[11px] text-red-500 mt-1 cursor-pointer hover:underline focus-visible:outline-none focus-visible:underline bg-transparent border-none p-0 text-left"
-          >
-            {expanded ? 'Hide error' : 'Show error'}
-          </button>
-          {expanded && (
-            <div className="text-[11px] text-red-500 mt-1 break-all bg-red-500/5 rounded px-2 py-1.5 font-mono">
-              {dep.error}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Audit action row
-// ---------------------------------------------------------------------------
-
-const ACTION_TYPE_COLORS: Record<string, string> = {
-  tool_use: 'bg-blue-500/15 text-blue-500 border-blue-500/30',
-  tool_result: 'bg-green-500/15 text-green-500 border-green-500/30',
-  text: 'bg-muted text-muted-foreground border-border',
-  error: 'bg-red-500/15 text-red-500 border-red-500/30',
-};
-
-function AuditActionRow({
-  action,
-  isFirst,
-  isExpanded,
-  onToggle,
-  searchQuery,
-}: {
-  action: AuditAction;
-  isFirst: boolean;
-  isExpanded: boolean;
-  onToggle: () => void;
-  searchQuery: string;
-}): React.JSX.Element {
-  const colorClass =
-    ACTION_TYPE_COLORS[action.actionType] ?? 'bg-muted text-muted-foreground border-border';
-
-  return (
-    <div className={cn(!isFirst && 'border-t border-border')}>
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left bg-transparent hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-inset transition-colors cursor-pointer border-none"
-      >
-        {/* Action type badge */}
-        <span
-          className={cn(
-            'inline-flex px-2 py-0.5 rounded text-[11px] font-medium border shrink-0',
-            colorClass,
-          )}
-        >
-          {action.actionType}
-        </span>
-
-        {/* Tool name */}
-        {action.toolName && (
-          <span className="text-[12px] font-mono font-medium text-foreground truncate max-w-[160px]">
-            {highlightMatch(action.toolName, searchQuery)}
-          </span>
-        )}
-
-        {/* Agent ID (short) */}
-        {action.agentId && (
-          <CopyableText
-            value={action.agentId}
-            maxDisplay={8}
-            className="text-[11px] text-muted-foreground font-mono hidden sm:inline"
-          />
-        )}
-
-        {/* Duration */}
-        {action.durationMs != null && action.durationMs > 0 && (
-          <span
-            className={cn(
-              'text-[11px] font-mono hidden md:inline',
-              action.durationMs > 5000 ? 'text-yellow-500' : 'text-muted-foreground',
-            )}
-          >
-            {formatDurationMs(action.durationMs)}
-          </span>
-        )}
-
-        {/* Timestamp */}
-        <span className="text-[11px] text-muted-foreground ml-auto shrink-0">
-          {formatTime(action.timestamp)}
-        </span>
-
-        {/* Expand indicator */}
-        <span
-          className={cn(
-            'text-[10px] text-muted-foreground transition-transform duration-150 shrink-0',
-            isExpanded ? 'rotate-0' : '-rotate-90',
-          )}
-        >
-          &#x25BC;
-        </span>
-      </button>
-
-      {/* Expanded details */}
-      {isExpanded && (
-        <div className="px-3.5 pb-3 pt-0">
-          <div className="bg-muted/30 rounded p-3 space-y-2 text-[12px]">
-            <DetailRow label="ID" value={action.id} mono />
-            <DetailRow label="Run ID" value={action.runId} mono />
-            <DetailRow label="Timestamp" value={formatDateTime(action.timestamp)} />
-            <DetailRow label="Action Type" value={action.actionType} />
-            {action.toolName && <DetailRow label="Tool" value={action.toolName} mono />}
-            {action.durationMs != null && (
-              <DetailRow label="Duration" value={`${action.durationMs}ms`} />
-            )}
-            {action.approvedBy && <DetailRow label="Approved By" value={action.approvedBy} />}
-            {action.toolOutputHash && (
-              <DetailRow label="Output Hash" value={action.toolOutputHash} mono />
-            )}
-            {action.toolInput && Object.keys(action.toolInput).length > 0 && (
-              <div>
-                <span className="text-[11px] text-muted-foreground font-medium">Tool Input:</span>
-                <pre className="mt-1 p-2 bg-card border border-border/50 rounded font-mono text-[11px] text-muted-foreground whitespace-pre-wrap break-all max-h-[200px] overflow-auto">
-                  {JSON.stringify(action.toolInput, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}): React.JSX.Element {
-  return (
-    <div className="flex gap-3">
-      <span className="text-[11px] text-muted-foreground font-medium w-[90px] shrink-0">
-        {label}:
-      </span>
-      <span className={cn('text-[12px] text-foreground break-all', mono && 'font-mono')}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Highlight search matches
-// ---------------------------------------------------------------------------
-
-function highlightMatch(text: string, query: string): React.ReactNode {
-  if (!query) return text;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return text;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark className="bg-yellow-500/30 text-inherit rounded-sm px-0.5">
-        {text.slice(idx, idx + query.length)}
-      </mark>
-      {text.slice(idx + query.length)}
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Table class strings
-// ---------------------------------------------------------------------------
-
-const TH_CLASSES = 'px-3.5 py-2.5 text-[11px] font-semibold text-muted-foreground';
-
-const TD_CLASSES = 'px-3.5 py-2.5';
