@@ -428,8 +428,10 @@ export function DiscoverPage(): React.JSX.Element {
             aria-label={showNewSession ? 'Cancel new session form' : 'Show new session form'}
             aria-expanded={showNewSession}
             className={cn(
-              'px-3.5 py-1.5 border border-border rounded-md text-[13px] cursor-pointer font-medium',
-              showNewSession ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+              'px-3.5 py-1.5 border border-border rounded-md text-[13px] cursor-pointer font-medium transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
+              showNewSession
+                ? 'bg-primary text-white hover:bg-primary/90'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80',
             )}
           >
             {showNewSession ? 'Cancel' : '+ New Session'}
@@ -512,7 +514,7 @@ export function DiscoverPage(): React.JSX.Element {
             onClick={() => void handleNewSession()}
             disabled={!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating}
             className={cn(
-              'px-[18px] py-1.5 bg-primary text-white rounded-md text-[13px] font-medium border-none cursor-pointer',
+              'px-[18px] py-1.5 bg-primary text-white rounded-md text-[13px] font-medium border-none cursor-pointer transition-colors hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
               (!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating) && 'opacity-50',
             )}
           >
@@ -607,7 +609,7 @@ export function DiscoverPage(): React.JSX.Element {
             type="button"
             onClick={toggleAll}
             aria-label={allExpanded ? 'Collapse all groups' : 'Expand all groups'}
-            className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer whitespace-nowrap"
+            className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer whitespace-nowrap transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             {allExpanded ? 'Collapse All' : 'Expand All'}
           </button>
@@ -621,7 +623,7 @@ export function DiscoverPage(): React.JSX.Element {
           across {projectCount} project{projectCount !== 1 ? 's' : ''} on {machineCount} machine
           {machineCount !== 1 ? 's' : ''}
           {importedSessionIds.size > 0 && (
-            <span className="ml-2 text-green-600">
+            <span className="ml-2 text-green-600 dark:text-green-400">
               ({filtered.filter((s) => importedSessionIds.has(s.sessionId)).length} already imported)
             </span>
           )}
@@ -630,7 +632,7 @@ export function DiscoverPage(): React.JSX.Element {
           <button
             type="button"
             onClick={selectAllFiltered}
-            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] cursor-pointer whitespace-nowrap"
+            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] cursor-pointer whitespace-nowrap transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             {selectedIds.size > 0 &&
             selectedIds.size === filtered.filter((s) => !importedSessionIds.has(s.sessionId)).length
@@ -643,7 +645,7 @@ export function DiscoverPage(): React.JSX.Element {
               onClick={() => void handleBulkImport()}
               disabled={bulkImporting}
               className={cn(
-                'px-3 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap',
+                'px-3 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap transition-colors hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
                 bulkImporting && 'opacity-50',
               )}
             >
@@ -716,7 +718,7 @@ export function DiscoverPage(): React.JSX.Element {
                     onClick={() => toggleGroup(group.projectPath)}
                     aria-expanded={!isCollapsed}
                     className={cn(
-                      'w-full flex items-center gap-3 px-4 py-2.5 bg-card border-none cursor-pointer text-left text-foreground',
+                      'w-full flex items-center gap-3 px-4 py-2.5 bg-card border-none cursor-pointer text-left text-foreground transition-colors hover:bg-accent/5 focus:ring-2 focus:ring-primary/20 focus:ring-inset',
                       !isCollapsed && 'border-b border-border',
                     )}
                   >
@@ -830,7 +832,7 @@ export function DiscoverPage(): React.JSX.Element {
 
                             {/* Imported badge */}
                             {isImported && (
-                              <span className="hidden sm:inline text-[10px] font-medium text-green-600 bg-green-600/10 border border-green-600/20 px-1.5 py-px rounded-md whitespace-nowrap shrink-0">
+                              <span className="hidden sm:inline text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-600/10 border border-green-600/20 px-1.5 py-px rounded-md whitespace-nowrap shrink-0">
                                 Imported
                               </span>
                             )}
@@ -861,7 +863,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 disabled={importingSessionId === s.sessionId}
                                 aria-label={`Import session ${s.sessionId.slice(0, 8)}`}
                                 className={cn(
-                                  'px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0',
+                                  'px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0 transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
                                   importingSessionId === s.sessionId && 'opacity-50 cursor-not-allowed',
                                 )}
                               >
@@ -879,7 +881,7 @@ export function DiscoverPage(): React.JSX.Element {
                                   setResumePrompt('');
                                 }}
                                 aria-label={`Resume session ${s.sessionId.slice(0, 8)}`}
-                                className="px-2.5 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
+                                className="px-2.5 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0 transition-colors hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                               >
                                 Resume
                               </button>
@@ -912,7 +914,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 disabled={!resumePrompt.trim()}
                                 aria-label="Submit resume prompt"
                                 className={cn(
-                                  'py-[5px] px-3 bg-primary text-white rounded-md text-xs border-none cursor-pointer',
+                                  'py-[5px] px-3 bg-primary text-white rounded-md text-xs border-none cursor-pointer transition-colors hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
                                   !resumePrompt.trim() && 'opacity-50',
                                 )}
                               >
@@ -922,7 +924,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 type="button"
                                 onClick={() => setResuming(null)}
                                 aria-label="Cancel resume"
-                                className="py-[5px] px-2.5 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer"
+                                className="py-[5px] px-2.5 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                               >
                                 Cancel
                               </button>
