@@ -92,6 +92,7 @@ export function DiscoverPage(): React.JSX.Element {
   // Selection state for bulk import
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkImporting, setBulkImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Single-session import state
   const [importingSessionId, setImportingSessionId] = useState<string | null>(null);
@@ -319,9 +320,11 @@ export function DiscoverPage(): React.JSX.Element {
     if (selectedIds.size === 0) return;
     setBulkImporting(true);
     const sessionsToImport = filtered.filter((s) => selectedIds.has(s.sessionId));
+    setImportProgress({ current: 0, total: sessionsToImport.length });
     let successCount = 0;
     let failCount = 0;
-    for (const s of sessionsToImport) {
+    for (let i = 0; i < sessionsToImport.length; i++) {
+      const s = sessionsToImport[i]!;
       try {
         await api.createSession({
           agentId: 'adhoc',
@@ -334,7 +337,9 @@ export function DiscoverPage(): React.JSX.Element {
       } catch {
         failCount++;
       }
+      setImportProgress({ current: i + 1, total: sessionsToImport.length });
     }
+    setImportProgress(null);
     setBulkImporting(false);
     setSelectedIds(new Set());
     if (failCount === 0) {
@@ -647,17 +652,30 @@ export function DiscoverPage(): React.JSX.Element {
               : 'Select All'}
           </button>
           {selectedIds.size > 0 && (
-            <button
-              type="button"
-              onClick={() => void handleBulkImport()}
-              disabled={bulkImporting}
-              className={cn(
-                'px-3 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap transition-colors hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
-                bulkImporting && 'opacity-50',
+            <>
+              <button
+                type="button"
+                onClick={() => void handleBulkImport()}
+                disabled={bulkImporting}
+                className={cn(
+                  'px-3 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap transition-colors hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
+                  bulkImporting && 'opacity-50 cursor-not-allowed',
+                )}
+              >
+                {bulkImporting ? 'Importing...' : `Import ${selectedIds.size} Selected`}
+              </button>
+              {importProgress && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-300"
+                      style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <span>{importProgress.current}/{importProgress.total}</span>
+                </div>
               )}
-            >
-              {bulkImporting ? 'Importing...' : `Import ${selectedIds.size} Selected`}
-            </button>
+            </>
           )}
         </div>
       </div>

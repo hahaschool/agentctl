@@ -237,62 +237,70 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-        <StatCard
-          label="Machines Online"
-          value={`${machinesOnline} / ${machineList.length}`}
-          accent={machinesOnline > 0 ? 'green' : undefined}
-          tooltip="Active machines connected via Tailscale"
-          sublabel={
-            machineList.length > 0
-              ? `${machineList.filter((m) => m.status === 'offline').length} offline`
-              : undefined
-          }
-        />
-        <StatCard
-          label="Sessions Discovered"
-          value={formatNumber(discovered.data?.count ?? 0)}
-          accent="blue"
-          sublabel={
-            discovered.data
-              ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
-              : undefined
-          }
-        />
-        <StatCard
-          label="Agents Registered"
-          value={String(agentsRegistered)}
-          accent={agentList.filter((a) => a?.status === 'error').length > 0 ? 'red' : 'blue'}
-          sublabel={
-            agentList.filter((a) => a?.status === 'error').length > 0
-              ? `${agentList.filter((a) => a?.status === 'error').length} in error`
-              : undefined
-          }
-        />
-        <StatCard
-          label="Active Runs"
-          value={formatNumber(activeRuns)}
-          accent={activeRuns > 0 ? 'green' : undefined}
-          sublabel={`${formatNumber(totalRuns)} total`}
-        />
-        <StatCard
-          label="Active Sessions"
-          value={String(activeSessionCount)}
-          accent={activeSessionCount > 0 ? 'green' : undefined}
-          sublabel={`${sessionList.length} total`}
-        />
-        <StatCard
-          label="Total Cost"
-          value={formatCost(totalAgentCost)}
-          accent="purple"
-          tooltip="Cumulative API costs across all sessions"
-          sublabel={
-            agentCostBreakdown.length > 0
-              ? `top: ${agentCostBreakdown[0]?.name ?? 'N/A'}`
-              : undefined
-          }
-        />
-      </div>
+      {machines.isLoading || agents.isLoading || metrics.isLoading || sessions.isLoading ? (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6" data-testid="stat-cards-skeleton">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-20 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
+          <StatCard
+            label="Machines Online"
+            value={`${machinesOnline} / ${machineList.length}`}
+            accent={machinesOnline > 0 ? 'green' : undefined}
+            tooltip="Active machines connected via Tailscale"
+            sublabel={
+              machineList.length > 0
+                ? `${machineList.filter((m) => m.status === 'offline').length} offline`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Sessions Discovered"
+            value={formatNumber(discovered.data?.count ?? 0)}
+            accent="blue"
+            sublabel={
+              discovered.data
+                ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Agents Registered"
+            value={String(agentsRegistered)}
+            accent={agentList.filter((a) => a?.status === 'error').length > 0 ? 'red' : 'blue'}
+            sublabel={
+              agentList.filter((a) => a?.status === 'error').length > 0
+                ? `${agentList.filter((a) => a?.status === 'error').length} in error`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Active Runs"
+            value={formatNumber(activeRuns)}
+            accent={activeRuns > 0 ? 'green' : undefined}
+            sublabel={`${formatNumber(totalRuns)} total`}
+          />
+          <StatCard
+            label="Active Sessions"
+            value={String(activeSessionCount)}
+            accent={activeSessionCount > 0 ? 'green' : undefined}
+            sublabel={`${sessionList.length} total`}
+          />
+          <StatCard
+            label="Total Cost"
+            value={formatCost(totalAgentCost)}
+            accent="purple"
+            tooltip="Cumulative API costs across all sessions"
+            sublabel={
+              agentCostBreakdown.length > 0
+                ? `top: ${agentCostBreakdown[0]?.name ?? 'N/A'}`
+                : undefined
+            }
+          />
+        </div>
+      )}
 
       {/* Two-column layout: Recent Sessions Activity + Machine Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -300,9 +308,15 @@ export function DashboardPage(): React.JSX.Element {
         <div>
           <SectionHeader title="Recent Sessions" href="/sessions" />
           <div className="border border-border/50 rounded-lg overflow-hidden">
-            {recentActivity.length === 0 ? (
+            {sessions.isLoading ? (
+              <div className="p-4 bg-card space-y-2" data-testid="recent-sessions-skeleton">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <Skeleton key={i} className="h-12 rounded-md" />
+                ))}
+              </div>
+            ) : recentActivity.length === 0 ? (
               <DashboardEmptyPanel
-                loading={sessions.isLoading}
+                loading={false}
                 message="No sessions yet. Create a session to get started."
               />
             ) : (
@@ -367,9 +381,15 @@ export function DashboardPage(): React.JSX.Element {
           <div>
             <SectionHeader title="Fleet Status" href="/machines" />
             <div className="border border-border/50 rounded-lg overflow-hidden">
-              {machineList.length === 0 ? (
+              {machines.isLoading ? (
+                <div className="p-4 bg-card space-y-2" data-testid="fleet-status-skeleton">
+                  {Array.from({ length: 3 }, (_, i) => (
+                    <Skeleton key={i} className="h-10 rounded-md" />
+                  ))}
+                </div>
+              ) : machineList.length === 0 ? (
                 <DashboardEmptyPanel
-                  loading={machines.isLoading}
+                  loading={false}
                   message="No machines registered. Run setup-machine.sh on a host to register it."
                 />
               ) : (
@@ -452,7 +472,7 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Cost Overview */}
-      <CostOverview sessionList={sessionList} agentCostBreakdown={agentCostBreakdown} />
+      <CostOverview sessionList={sessionList} agentCostBreakdown={agentCostBreakdown} isLoading={sessions.isLoading || agents.isLoading} />
 
       {/* Platform summary bar */}
       <div className="mt-5 bg-card border border-border/50 rounded-lg overflow-hidden">
@@ -519,7 +539,17 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Dependencies */}
-      {health.data?.dependencies && (
+      {health.isLoading && (
+        <div className="mt-6" data-testid="dependencies-skeleton">
+          <SectionHeader title="Dependencies" />
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={i} className="h-12 rounded-lg" />
+            ))}
+          </div>
+        </div>
+      )}
+      {!health.isLoading && health.data?.dependencies && (
         <div className="mt-6">
           <SectionHeader title="Dependencies" />
           <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
@@ -660,6 +690,7 @@ function ActivityIcon({ status }: { status: string }): React.JSX.Element {
 function CostOverview({
   sessionList,
   agentCostBreakdown,
+  isLoading,
 }: {
   sessionList: {
     id: string;
@@ -668,6 +699,7 @@ function CostOverview({
     metadata: { costUsd?: number; [key: string]: unknown };
   }[];
   agentCostBreakdown: { id: string; name: string; totalCostUsd: number }[];
+  isLoading: boolean;
 }): React.JSX.Element {
   const totalCost = useMemo(
     () => sessionList.reduce((sum, s) => sum + (s.metadata?.costUsd ?? 0), 0),
@@ -685,6 +717,19 @@ function CostOverview({
 
   const maxAgentCost =
     agentCostBreakdown.length > 0 ? (agentCostBreakdown[0]?.totalCostUsd ?? 0) : 0;
+
+  if (isLoading) {
+    return (
+      <div className="mt-5 mb-0" data-testid="cost-overview-skeleton">
+        <SectionHeader title="Cost Overview" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} className="h-32 rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (totalCost === 0 && agentCostBreakdown.length === 0) {
     return <></>;
