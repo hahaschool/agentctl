@@ -56,6 +56,15 @@ const AGENT_TYPES = [
 ] as const;
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
+const MODEL_OPTIONS = [
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6', tier: 'flagship' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', tier: 'balanced' },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', tier: 'fast' },
+  { value: 'claude-sonnet-4-5-20250514', label: 'Claude Sonnet 4.5', tier: 'balanced' },
+  { value: 'claude-opus-4-0-20250514', label: 'Claude Opus 4', tier: 'flagship' },
+  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', tier: 'balanced' },
+] as const;
+
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
 
@@ -577,13 +586,44 @@ export function AgentsPage(): React.JSX.Element {
                     <label className="text-sm font-medium" htmlFor="create-task-model">
                       Model
                     </label>
-                    <Input
-                      id="create-task-model"
-                      placeholder={DEFAULT_MODEL}
-                      value={createModel}
-                      onChange={(e) => setCreateModel(e.target.value)}
+                    <Select
+                      value={MODEL_OPTIONS.some((m) => m.value === createModel) ? createModel : '__custom__'}
+                      onValueChange={(v) => {
+                        if (v !== '__custom__') setCreateModel(v);
+                      }}
                       disabled={createAgent.isPending}
-                    />
+                    >
+                      <SelectTrigger className="w-full" id="create-task-model">
+                        <SelectValue>
+                          {MODEL_OPTIONS.find((m) => m.value === createModel)?.label ?? createModel}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={4}>
+                        {MODEL_OPTIONS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            <span className="font-medium">{m.label}</span>
+                            <span className={cn(
+                              'ml-2 text-[10px]',
+                              m.tier === 'flagship' ? 'text-amber-400' : m.tier === 'fast' ? 'text-green-400' : 'text-blue-400',
+                            )}>
+                              {m.tier}
+                            </span>
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__custom__">
+                          <span className="text-muted-foreground">Custom model ID...</span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {!MODEL_OPTIONS.some((m) => m.value === createModel) && (
+                      <Input
+                        placeholder="Enter custom model ID"
+                        value={createModel}
+                        onChange={(e) => setCreateModel(e.target.value)}
+                        disabled={createAgent.isPending}
+                        className="mt-1.5"
+                      />
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
