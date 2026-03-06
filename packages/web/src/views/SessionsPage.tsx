@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { MarkdownContent } from '../components/MarkdownContent';
 import { TerminalView } from '../components/TerminalView';
 import { ProgressIndicator } from '../components/ProgressIndicator';
 import { SubagentBlock } from '../components/SubagentBlock';
@@ -1417,6 +1418,7 @@ function SessionContent({
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [viewMode, setViewMode] = useState<'messages' | 'terminal'>('messages');
+  const [renderMarkdown, setRenderMarkdown] = useState(true);
   const [showTools, setShowTools] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const [showProgress, setShowProgress] = useState(isActive ?? false);
@@ -1727,6 +1729,18 @@ function SessionContent({
               </button>
               <button
                 type="button"
+                onClick={() => setRenderMarkdown(!renderMarkdown)}
+                aria-label={renderMarkdown ? 'Show raw text' : 'Render markdown'}
+                aria-pressed={renderMarkdown}
+                className={cn(
+                  'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
+                  renderMarkdown ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-muted text-muted-foreground',
+                )}
+              >
+                Markdown
+              </button>
+              <button
+                type="button"
                 onClick={() => void fetchLatest()}
                 aria-label="Refresh conversation"
                 className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer transition-colors min-h-[28px]"
@@ -1791,7 +1805,7 @@ function SessionContent({
                 case 'todo':
                   return <TodoBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
                 default:
-                  return <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />;
+                  return <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} renderMarkdown={renderMarkdown} />;
               }
             })}
 
@@ -1843,10 +1857,11 @@ function SessionContent({
 
 const TRUNCATE_THRESHOLD = 800;
 
-function InlineMessage({ message }: { message: SessionContentMessage }): React.JSX.Element {
+function InlineMessage({ message, renderMarkdown }: { message: SessionContentMessage; renderMarkdown?: boolean }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const msgStyle = getMessageStyle(message.type);
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
+  const isRenderable = renderMarkdown && (message.type === 'assistant' || message.type === 'human');
   const content = message.content ?? '';
   const isLong = content.length > TRUNCATE_THRESHOLD;
   const displayContent =
@@ -1869,13 +1884,18 @@ function InlineMessage({ message }: { message: SessionContentMessage }): React.J
       </div>
       <div
         className={cn(
-          'leading-6 text-foreground whitespace-pre-wrap break-words',
-          isTool ? 'text-[11px] font-mono' : 'text-xs',
+          'leading-6 text-foreground break-words',
+          isTool ? 'text-[11px] font-mono whitespace-pre-wrap' : 'text-xs',
+          isRenderable ? '' : 'whitespace-pre-wrap',
           !expanded && (isTool ? 'max-h-[150px] overflow-auto' : 'max-h-[400px] overflow-auto'),
           expanded && 'max-h-none overflow-visible',
         )}
       >
-        <AnsiSpan>{displayContent}</AnsiSpan>
+        {isRenderable ? (
+          <MarkdownContent className="text-xs leading-6">{displayContent}</MarkdownContent>
+        ) : (
+          <AnsiSpan>{displayContent}</AnsiSpan>
+        )}
       </div>
       {isLong && (
         <button
