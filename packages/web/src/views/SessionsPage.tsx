@@ -1155,7 +1155,7 @@ export function SessionsPage(): React.JSX.Element {
                     label="End Session"
                     confirmLabel="End Session?"
                     onConfirm={() => void handleStop()}
-                    className="h-8 px-3.5 bg-red-900/60 text-red-300 border border-red-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-900"
+                    className="h-8 px-3.5 bg-red-100/60 dark:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-300/40 dark:border-red-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-200 dark:hover:bg-red-900"
                     confirmClassName="h-8 px-3.5 bg-red-700 text-white rounded-md text-xs font-medium cursor-pointer animate-pulse"
                   />
                 )}
@@ -1205,7 +1205,7 @@ export function SessionsPage(): React.JSX.Element {
 
               {/* Error message display */}
               {selected.status === 'error' && selected.metadata && (
-                <div className="mt-3 px-3 py-2.5 bg-red-900/20 border border-red-500/20 rounded-md text-red-300 text-xs">
+                <div className="mt-3 px-3 py-2.5 bg-red-100/20 dark:bg-red-900/20 border border-red-500/20 rounded-md text-red-700 dark:text-red-300 text-xs">
                   <span className="font-semibold">Error: </span>
                   {selected.metadata.errorMessage ?? 'Unknown error'}
                 </div>
@@ -1892,7 +1892,7 @@ function SessionContent({
                 aria-pressed={showThinking}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  showThinking ? 'bg-purple-500/15 text-purple-300 border-purple-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  showThinking ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Thinking
@@ -1904,7 +1904,7 @@ function SessionContent({
                 aria-pressed={showTools}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  showTools ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  showTools ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Tools
@@ -1916,7 +1916,7 @@ function SessionContent({
                 aria-pressed={showProgress}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  showProgress ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  showProgress ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Progress
@@ -1928,7 +1928,7 @@ function SessionContent({
                 aria-pressed={renderMarkdown}
                 className={cn(
                   'px-2.5 py-0.5 rounded-md border text-[11px] cursor-pointer transition-all duration-200 h-7',
-                  renderMarkdown ? 'bg-blue-500/15 text-blue-300 border-blue-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
+                  renderMarkdown ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25 font-medium' : 'bg-muted text-muted-foreground border-border hover:bg-accent',
                 )}
               >
                 Markdown
@@ -2021,7 +2021,7 @@ function SessionContent({
 
             {/* Live streaming output */}
             {stream.connected && stream.streamOutput.length > 0 && (
-              <div className="rounded-sm border border-green-500/20 bg-green-950/20 px-2.5 py-1.5 mb-1.5">
+              <div className="rounded-md border border-green-500/20 bg-green-50/20 dark:bg-green-950/20 px-2.5 py-1.5 mb-1.5">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                   <span className="text-[9px] font-semibold text-green-500">Streaming</span>

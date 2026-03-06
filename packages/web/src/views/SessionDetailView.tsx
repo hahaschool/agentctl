@@ -495,7 +495,7 @@ function SessionHeader({
               label="End Session"
               confirmLabel="Confirm End?"
               onConfirm={handleEnd}
-              className="px-3 py-1 bg-red-900/50 text-red-300 border border-red-800/50 rounded-md text-xs cursor-pointer hover:bg-red-900"
+              className="px-3 py-1 bg-red-100/50 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300/50 dark:border-red-800/50 rounded-md text-xs cursor-pointer hover:bg-red-200 dark:hover:bg-red-900"
               confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-md text-xs cursor-pointer animate-pulse"
             />
           )}
@@ -533,11 +533,11 @@ function SessionHeader({
             const errMsg = (session.metadata?.errorMessage ?? '').toLowerCase();
             const isQuotaOrAuth = /quota|rate.?limit|authentication|unauthorized|key\b/.test(errMsg);
             return isQuotaOrAuth ? (
-              <div className="px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-md text-[11px] text-red-300">
+              <div className="px-3 py-2 bg-red-100/30 dark:bg-red-900/30 border border-red-300/50 dark:border-red-700/50 rounded-md text-[11px] text-red-700 dark:text-red-300">
                 This session failed due to quota or authentication issues. Resolve the underlying issue before forking.
               </div>
             ) : (
-              <div className="px-3 py-2 bg-yellow-900/30 border border-yellow-700/50 rounded-md text-[11px] text-yellow-300">
+              <div className="px-3 py-2 bg-yellow-100/30 dark:bg-yellow-900/30 border border-yellow-300/50 dark:border-yellow-700/50 rounded-md text-[11px] text-yellow-700 dark:text-yellow-300">
                 This session ended with an error. The forked session may also fail if the error is unresolved.
               </div>
             );
@@ -609,13 +609,13 @@ function SessionHeader({
 
       {/* Error details */}
       {session.status === 'error' && (
-        <div className="mt-2 px-3 py-2 rounded-md bg-red-950/50 border border-red-900/50 text-[12px] text-red-300 space-y-1">
+        <div className="mt-2 px-3 py-2 rounded-md bg-red-100/50 dark:bg-red-950/50 border border-red-300/50 dark:border-red-900/50 text-[12px] text-red-700 dark:text-red-300 space-y-1">
           <div>
             <span className="font-semibold text-red-600 dark:text-red-400">Error:</span>
             {session.metadata?.errorMessage ?? 'Session ended with an error (no details available)'}
           </div>
           {session.metadata?.errorHint && (
-            <div className="text-yellow-300/90">
+            <div className="text-yellow-700/90 dark:text-yellow-300/90">
               <span className="font-semibold text-yellow-600 dark:text-yellow-400">Hint:</span>
               {session.metadata.errorHint}
             </div>
@@ -625,7 +625,7 @@ function SessionHeader({
 
       {/* Starting indicator */}
       {session.status === 'starting' && (
-        <div className="mt-2 px-3 py-2 rounded-md bg-yellow-950/40 border border-yellow-900/40 text-[12px] text-yellow-300 animate-pulse">
+        <div className="mt-2 px-3 py-2 rounded-md bg-yellow-100/40 dark:bg-yellow-950/40 border border-yellow-300/40 dark:border-yellow-900/40 text-[12px] text-yellow-700 dark:text-yellow-300 animate-pulse">
           Waiting for worker to start session...
         </div>
       )}
@@ -831,7 +831,7 @@ function MessageList({
           aria-pressed={showThinking}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            showThinking ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
+            showThinking ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
           Thinking
@@ -843,7 +843,7 @@ function MessageList({
           aria-pressed={showTools}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            showTools ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
+            showTools ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
           Tools
@@ -855,7 +855,7 @@ function MessageList({
           aria-pressed={showProgress}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            showProgress ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
+            showProgress ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
           Progress
@@ -867,7 +867,7 @@ function MessageList({
           aria-pressed={renderMarkdown}
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
-            renderMarkdown ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-muted text-muted-foreground',
+            renderMarkdown ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30' : 'bg-muted text-muted-foreground',
           )}
         >
           Markdown
