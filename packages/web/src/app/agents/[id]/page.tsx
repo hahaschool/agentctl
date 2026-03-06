@@ -47,6 +47,7 @@ import {
   useStopAgent,
   useUpdateAgent,
 } from '@/lib/queries';
+import type { AgentRun } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -490,6 +491,9 @@ export default function AgentDetailPage(): React.JSX.Element {
         </CardContent>
       </Card>
 
+      {/* Run history visualization */}
+      <RunHistoryBar runs={runList} />
+
       {/* Recent runs */}
       <Card>
         <CardHeader>
@@ -798,6 +802,49 @@ function InfoField({
     <div>
       <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
       <div className="text-foreground">{children}</div>
+    </div>
+  );
+}
+
+function getRunColor(status: string): { bg: string; label: string } {
+  if (status === 'completed' || status === 'ended') {
+    return { bg: 'bg-green-500', label: 'success' };
+  }
+  if (status === 'error' || status === 'timeout') {
+    return { bg: 'bg-red-500', label: 'error' };
+  }
+  return { bg: 'bg-yellow-500', label: 'other' };
+}
+
+function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null {
+  const last20 = runs.slice(0, 20);
+  if (last20.length === 0) return null;
+
+  const successCount = last20.filter(
+    (r) => r.status === 'completed' || r.status === 'ended',
+  ).length;
+  const successRate = Math.round((successCount / last20.length) * 100);
+
+  return (
+    <div className="mb-4" data-testid="run-history-bar">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-medium text-muted-foreground">Run History</span>
+        <span className="text-[11px] text-muted-foreground">{successRate}% success rate</span>
+      </div>
+      <div className="flex gap-0.5">
+        {last20.map((run) => {
+          const { bg, label } = getRunColor(run.status);
+          const tooltip = `${formatDate(run.startedAt)} — ${run.status}`;
+          return (
+            <div
+              key={run.id}
+              className={cn('h-5 flex-1 rounded-sm transition-opacity hover:opacity-80', bg)}
+              title={tooltip}
+              aria-label={`Run ${label}: ${run.status}`}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
