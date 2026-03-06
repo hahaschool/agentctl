@@ -118,6 +118,10 @@ export function AgentsPage(): React.JSX.Element {
   const [editType, setEditType] = useState<string>('adhoc');
   const [editModel, setEditModel] = useState('');
   const [editInitialPrompt, setEditInitialPrompt] = useState('');
+  const [editSchedule, setEditSchedule] = useState('');
+  const [editMaxTurns, setEditMaxTurns] = useState('');
+  const [editPermissionMode, setEditPermissionMode] = useState('default');
+  const [editSystemPrompt, setEditSystemPrompt] = useState('');
 
   // New task dialog state
   const [createPrompt, setCreatePrompt] = useState('');
@@ -131,6 +135,10 @@ export function AgentsPage(): React.JSX.Element {
       (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
       DEFAULT_MODEL,
   );
+  const [createSchedule, setCreateSchedule] = useState('');
+  const [createMaxTurns, setCreateMaxTurns] = useState('');
+  const [createPermissionMode, setCreatePermissionMode] = useState('default');
+  const [createSystemPrompt, setCreateSystemPrompt] = useState('');
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -268,6 +276,10 @@ export function AgentsPage(): React.JSX.Element {
     );
     setCreateProjectPath('');
     setCreateAdvancedOpen(false);
+    setCreateSchedule('');
+    setCreateMaxTurns('');
+    setCreatePermissionMode('default');
+    setCreateSystemPrompt('');
     setProjectSearchQuery('');
     setShowProjectDropdown(false);
   }
@@ -279,6 +291,18 @@ export function AgentsPage(): React.JSX.Element {
     setEditType(agent.type);
     setEditModel((agent.config as Record<string, unknown>)?.model as string ?? '');
     setEditInitialPrompt((agent.config as Record<string, unknown>)?.initialPrompt as string ?? '');
+    setEditSchedule(agent.schedule ?? '');
+    setEditMaxTurns(
+      (agent.config as Record<string, unknown>)?.maxTurns != null
+        ? String((agent.config as Record<string, unknown>).maxTurns)
+        : '',
+    );
+    setEditPermissionMode(
+      ((agent.config as Record<string, unknown>)?.permissionMode as string) ?? 'default',
+    );
+    setEditSystemPrompt(
+      ((agent.config as Record<string, unknown>)?.systemPrompt as string) ?? '',
+    );
     setEditingAgent(agent);
   }
 
@@ -296,6 +320,21 @@ export function AgentsPage(): React.JSX.Element {
     } else {
       delete config.initialPrompt;
     }
+    if (editMaxTurns.trim() && Number(editMaxTurns) > 0) {
+      config.maxTurns = Number(editMaxTurns);
+    } else {
+      delete config.maxTurns;
+    }
+    if (editPermissionMode && editPermissionMode !== 'default') {
+      config.permissionMode = editPermissionMode;
+    } else {
+      delete config.permissionMode;
+    }
+    if (editSystemPrompt.trim()) {
+      config.systemPrompt = editSystemPrompt.trim();
+    } else {
+      delete config.systemPrompt;
+    }
 
     updateAgent.mutate(
       {
@@ -303,6 +342,7 @@ export function AgentsPage(): React.JSX.Element {
         name: editName.trim(),
         machineId: editMachineId,
         type: editType,
+        schedule: editType === 'cron' && editSchedule.trim() ? editSchedule.trim() : null,
         ...(Object.keys(config).length > 0 ? { config } : {}),
       },
       {
@@ -326,6 +366,9 @@ export function AgentsPage(): React.JSX.Element {
     const config: Record<string, unknown> = {};
     if (createModel.trim()) config.model = createModel.trim();
     if (createPrompt.trim()) config.initialPrompt = createPrompt.trim();
+    if (createMaxTurns.trim() && Number(createMaxTurns) > 0) config.maxTurns = Number(createMaxTurns);
+    if (createPermissionMode && createPermissionMode !== 'default') config.permissionMode = createPermissionMode;
+    if (createSystemPrompt.trim()) config.systemPrompt = createSystemPrompt.trim();
 
     // Remember last-used machine
     if (typeof window !== 'undefined') {
@@ -337,6 +380,7 @@ export function AgentsPage(): React.JSX.Element {
         name: agentName,
         machineId: createMachineId,
         type: createType,
+        ...(createType === 'cron' && createSchedule.trim() ? { schedule: createSchedule.trim() } : {}),
         ...(createProjectPath.trim() ? { projectPath: createProjectPath.trim() } : {}),
         ...(Object.keys(config).length > 0 ? { config } : {}),
       },
@@ -559,7 +603,7 @@ export function AgentsPage(): React.JSX.Element {
               >
                 <span className="text-xs">{createAdvancedOpen ? '\u25BE' : '\u25B8'}</span>
                 Advanced
-                {(createName.trim() || createModel !== DEFAULT_MODEL || createType !== 'adhoc') && (
+                {(createName.trim() || createModel !== DEFAULT_MODEL || createType !== 'adhoc' || createSchedule.trim() || createMaxTurns.trim() || createPermissionMode !== 'default' || createSystemPrompt.trim()) && (
                   <span className="text-[10px] text-primary">(customized)</span>
                 )}
               </button>
@@ -647,6 +691,103 @@ export function AgentsPage(): React.JSX.Element {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Schedule — only for cron type */}
+                  {createType === 'cron' && (
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium" htmlFor="create-task-schedule">
+                        Schedule (cron)
+                      </label>
+                      <Input
+                        id="create-task-schedule"
+                        placeholder="0 */6 * * *"
+                        value={createSchedule}
+                        onChange={(e) => setCreateSchedule(e.target.value)}
+                        disabled={createAgent.isPending}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Cron expression. Examples: <code className="text-[10px]">*/30 * * * *</code> (every 30 min),{' '}
+                        <code className="text-[10px]">0 9 * * 1-5</code> (weekdays 9am),{' '}
+                        <code className="text-[10px]">0 */6 * * *</code> (every 6h)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Max Turns */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="create-task-maxturns">
+                      Max Turns
+                    </label>
+                    <Input
+                      id="create-task-maxturns"
+                      type="number"
+                      min={1}
+                      placeholder="unlimited"
+                      value={createMaxTurns}
+                      onChange={(e) => setCreateMaxTurns(e.target.value)}
+                      disabled={createAgent.isPending}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Maximum interaction turns before the agent stops. Leave empty for unlimited.
+                    </p>
+                  </div>
+
+                  {/* Permission Mode */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="create-task-permission">
+                      Permission Mode
+                    </label>
+                    <Select
+                      value={createPermissionMode}
+                      onValueChange={setCreatePermissionMode}
+                      disabled={createAgent.isPending}
+                    >
+                      <SelectTrigger className="w-full" id="create-task-permission">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={4}>
+                        <SelectItem value="default">
+                          <span className="font-medium">Default</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">Ask before risky actions</span>
+                        </SelectItem>
+                        <SelectItem value="acceptEdits">
+                          <span className="font-medium">Accept Edits</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve file edits</span>
+                        </SelectItem>
+                        <SelectItem value="plan">
+                          <span className="font-medium">Plan Only</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">No file changes, planning mode</span>
+                        </SelectItem>
+                        <SelectItem value="bypassPermissions">
+                          <span className="font-medium">Bypass Permissions</span>
+                          <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve everything</span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* System Prompt */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="create-task-sysprompt">
+                      System Prompt
+                    </label>
+                    <textarea
+                      id="create-task-sysprompt"
+                      rows={3}
+                      placeholder="Custom system instructions..."
+                      value={createSystemPrompt}
+                      onChange={(e) => setCreateSystemPrompt(e.target.value)}
+                      disabled={createAgent.isPending}
+                      className={cn(
+                        'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+                        'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                        'dark:bg-input/30',
+                      )}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Custom system instructions appended to the base prompt.
+                    </p>
                   </div>
                 </div>
               )}
@@ -770,6 +911,103 @@ export function AgentsPage(): React.JSX.Element {
               />
               <p className="text-[11px] text-muted-foreground">
                 Stored in agent config. Can be used as the default prompt when starting the agent.
+              </p>
+            </div>
+
+            {/* Schedule — only for cron type */}
+            {editType === 'cron' && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="edit-agent-schedule">
+                  Schedule (cron)
+                </label>
+                <Input
+                  id="edit-agent-schedule"
+                  placeholder="0 */6 * * *"
+                  value={editSchedule}
+                  onChange={(e) => setEditSchedule(e.target.value)}
+                  disabled={updateAgent.isPending}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Cron expression. Examples: <code className="text-[10px]">*/30 * * * *</code> (every 30 min),{' '}
+                  <code className="text-[10px]">0 9 * * 1-5</code> (weekdays 9am),{' '}
+                  <code className="text-[10px]">0 */6 * * *</code> (every 6h)
+                </p>
+              </div>
+            )}
+
+            {/* Max Turns */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-maxturns">
+                Max Turns
+              </label>
+              <Input
+                id="edit-agent-maxturns"
+                type="number"
+                min={1}
+                placeholder="unlimited"
+                value={editMaxTurns}
+                onChange={(e) => setEditMaxTurns(e.target.value)}
+                disabled={updateAgent.isPending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Maximum interaction turns before the agent stops. Leave empty for unlimited.
+              </p>
+            </div>
+
+            {/* Permission Mode */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-permission">
+                Permission Mode
+              </label>
+              <Select
+                value={editPermissionMode}
+                onValueChange={setEditPermissionMode}
+                disabled={updateAgent.isPending}
+              >
+                <SelectTrigger className="w-full" id="edit-agent-permission">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  <SelectItem value="default">
+                    <span className="font-medium">Default</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">Ask before risky actions</span>
+                  </SelectItem>
+                  <SelectItem value="acceptEdits">
+                    <span className="font-medium">Accept Edits</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve file edits</span>
+                  </SelectItem>
+                  <SelectItem value="plan">
+                    <span className="font-medium">Plan Only</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">No file changes, planning mode</span>
+                  </SelectItem>
+                  <SelectItem value="bypassPermissions">
+                    <span className="font-medium">Bypass Permissions</span>
+                    <span className="ml-2 text-muted-foreground text-[10px]">Auto-approve everything</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* System Prompt */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-agent-sysprompt">
+                System Prompt
+              </label>
+              <textarea
+                id="edit-agent-sysprompt"
+                rows={3}
+                placeholder="Custom system instructions..."
+                value={editSystemPrompt}
+                onChange={(e) => setEditSystemPrompt(e.target.value)}
+                disabled={updateAgent.isPending}
+                className={cn(
+                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  'dark:bg-input/30',
+                )}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Custom system instructions appended to the base prompt.
               </p>
             </div>
           </div>

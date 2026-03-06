@@ -290,6 +290,7 @@ export const api = {
     name: string;
     machineId: string;
     type: string;
+    schedule?: string;
     projectPath?: string;
     config?: Record<string, unknown>;
   }) =>
