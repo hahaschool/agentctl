@@ -820,6 +820,42 @@ describe('AgentDetailPage', () => {
     });
   });
 
+  it('populates edit dialog with systemPrompt from config', async () => {
+    mockAgentQuery.mockReturnValue(
+      makeQueryResult(
+        'agent',
+        createAgent({
+          config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Always be polite' },
+        }),
+      ),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Edit')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Edit'));
+    await waitFor(() => {
+      const textarea = screen.getByDisplayValue('Always be polite') as HTMLTextAreaElement;
+      expect(textarea).toBeDefined();
+      expect(textarea.tagName).toBe('TEXTAREA');
+    });
+  });
+
+  it('shows empty systemPrompt when config has no systemPrompt', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Edit')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Edit'));
+    await waitFor(() => {
+      const label = screen.getByText('System Prompt');
+      expect(label).toBeDefined();
+      const textarea = document.getElementById('edit-agent-sysprompt') as HTMLTextAreaElement;
+      expect(textarea).not.toBeNull();
+      expect(textarea.value).toBe('');
+    });
+  });
+
   it('shows Save Changes and Cancel buttons in edit dialog', async () => {
     renderPage();
     await waitFor(() => {
@@ -1413,6 +1449,47 @@ describe('AgentDetailPage', () => {
     fireEvent.click(screen.getByText('Save Changes'));
     const callArgs = mutateFn.mock.calls[0]![0];
     expect(callArgs.config.maxTurns).toBeUndefined();
+  });
+
+  it('updateAgent.mutate includes systemPrompt when provided', async () => {
+    const mutateFn = vi.fn();
+    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
+    mockAgentQuery.mockReturnValue(
+      makeQueryResult('agent', createAgent({
+        config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Be helpful' },
+      })),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Edit')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Edit'));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Be helpful')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Save Changes'));
+    const callArgs = mutateFn.mock.calls[0]![0] as { config: Record<string, unknown> };
+    expect(callArgs.config.systemPrompt).toBe('Be helpful');
+  });
+
+  it('updateAgent.mutate removes systemPrompt when cleared', async () => {
+    const mutateFn = vi.fn();
+    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
+    mockAgentQuery.mockReturnValue(
+      makeQueryResult('agent', createAgent({
+        config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Old prompt' },
+      })),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Edit')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Edit'));
+    const textarea = await waitFor(() => screen.getByDisplayValue('Old prompt'));
+    fireEvent.change(textarea, { target: { value: '' } });
+    fireEvent.click(screen.getByText('Save Changes'));
+    const callArgs = mutateFn.mock.calls[0]![0] as { config: Record<string, unknown> };
+    expect(callArgs.config.systemPrompt).toBeUndefined();
   });
 
   it('does not call updateAgent.mutate when name is whitespace only', async () => {
