@@ -127,17 +127,17 @@ export function DashboardPage(): React.JSX.Element {
       <FetchingBar isFetching={anyFetching} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-        <h1 className="text-[22px] font-bold">Command Center</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight">Command center</h1>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Link
             href="/sessions"
-            className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-xs font-medium no-underline hover:bg-primary/90 transition-colors"
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium no-underline hover:bg-primary/90 transition-colors"
           >
             New Session
           </Link>
           <Link
             href="/agents"
-            className="px-3 py-1.5 bg-transparent text-primary border border-primary rounded text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
+            className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
           >
             View Agents
           </Link>
@@ -428,7 +428,7 @@ export function DashboardPage(): React.JSX.Element {
         </div>
         {/* Cost breakdown by agent */}
         <div className="border-t border-border px-4 py-2.5">
-          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+          <div className="text-[11px] font-medium text-muted-foreground mb-2">
             Cost by Agent
           </div>
           {agentCostBreakdown.length > 0 ? (
@@ -572,7 +572,7 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      className="px-3 py-1.5 bg-transparent text-primary border border-primary rounded text-xs font-medium cursor-pointer"
+      className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium cursor-pointer hover:bg-primary/10 transition-colors"
     >
       {label}
     </button>
@@ -631,7 +631,7 @@ function CostOverview({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total cost */}
         <div className="border border-border rounded-lg bg-card p-4 flex flex-col justify-center">
-          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+          <div className="text-[11px] font-medium text-muted-foreground mb-1">
             Total Session Cost
           </div>
           <div className="text-2xl font-bold font-mono text-foreground">
@@ -644,7 +644,7 @@ function CostOverview({
 
         {/* Bar chart: cost per agent */}
         <div className="border border-border rounded-lg bg-card p-4">
-          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
+          <div className="text-[11px] font-medium text-muted-foreground mb-3">
             Cost by Agent
           </div>
           {agentCostBreakdown.length > 0 ? (
@@ -682,7 +682,7 @@ function CostOverview({
 
         {/* Top 5 most expensive sessions */}
         <div className="border border-border rounded-lg bg-card p-4">
-          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
+          <div className="text-[11px] font-medium text-muted-foreground mb-3">
             Most Expensive Sessions
           </div>
           {topSessions.length > 0 ? (

@@ -238,7 +238,7 @@ export function Sidebar(): React.JSX.Element {
         <div className="flex-1" />
 
         <div className="px-5 py-2 text-[11px] text-muted-foreground leading-relaxed hidden md:block">
-          <div className="mb-0.5 font-medium text-[10px] uppercase tracking-wider">Shortcuts</div>
+          <div className="mb-0.5 font-medium text-[10px] text-muted-foreground/70">Shortcuts</div>
           <div>
             <Kbd>1</Kbd>-<Kbd>7</Kbd> Navigate
           </div>

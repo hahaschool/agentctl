@@ -1385,7 +1385,7 @@ function DetailRow({
 
   return (
     <div className="group py-0.5">
-      <span className="text-muted-foreground/70 text-[10px] font-medium uppercase tracking-wider">{label}</span>
+      <span className="text-muted-foreground/70 text-[10px] font-medium">{label}</span>
       <div className={cn('text-xs break-all flex items-start gap-1 mt-0.5 text-foreground/90', mono && 'font-mono')}>
         <span className="flex-1">{value}</span>
         {mono && value !== '-' && (

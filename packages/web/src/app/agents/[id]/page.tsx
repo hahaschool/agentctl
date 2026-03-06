@@ -395,7 +395,7 @@ export default function AgentDetailPage(): React.JSX.Element {
       <div className="grid grid-cols-2 gap-4 mb-4">
         <Card>
           <CardContent className="p-4">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
               Last Run Cost
             </div>
             <div className="text-2xl font-bold text-foreground">{formatCost(data.lastCostUsd)}</div>
@@ -403,7 +403,7 @@ export default function AgentDetailPage(): React.JSX.Element {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
               Total Cost
             </div>
             <div className="text-2xl font-bold text-foreground">
