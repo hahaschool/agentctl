@@ -96,6 +96,8 @@ export function GitStatusBadge({
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Hide worktrees' : `Show ${worktrees.length} worktrees`}
             className="text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-0 underline"
           >
             {expanded ? 'hide' : `${worktrees.length} worktrees`}
