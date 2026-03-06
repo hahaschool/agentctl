@@ -1,5 +1,18 @@
 'use client';
 
+import {
+  Gauge,
+  Server,
+  Bot,
+  MessageSquare,
+  Compass,
+  ScrollText,
+  Settings,
+  Moon,
+  Sun,
+  Menu,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -19,18 +32,18 @@ import { WsStatusIndicator } from './WsStatusIndicator';
 type NavItem = {
   href: string;
   label: string;
-  icon: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   shortcut: string;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: '\u25A0', shortcut: '1' },
-  { href: '/machines', label: 'Machines', icon: '\u2302', shortcut: '2' },
-  { href: '/agents', label: 'Agents', icon: '\u2699', shortcut: '3' },
-  { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4' },
-  { href: '/discover', label: 'Discover', icon: '\u2315', shortcut: '5' },
-  { href: '/logs', label: 'Logs', icon: '\u2261', shortcut: '6' },
-  { href: '/settings', label: 'Settings', icon: '\u2630', shortcut: '7' },
+  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1' },
+  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2' },
+  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3' },
+  { href: '/sessions', label: 'Sessions', icon: MessageSquare, shortcut: '4' },
+  { href: '/discover', label: 'Discover', icon: Compass, shortcut: '5' },
+  { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6' },
+  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
@@ -163,10 +176,10 @@ export function Sidebar(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-foreground text-lg p-1 -ml-1"
+          className="text-foreground p-1 -ml-1"
           aria-label="Toggle navigation"
         >
-          {mobileOpen ? '\u2715' : '\u2630'}
+          {mobileOpen ? <X size={18} /> : <Menu size={18} />}
         </button>
         <span className="text-sm font-bold text-foreground tracking-tight">AgentCTL</span>
         <span className="text-[9px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
@@ -208,6 +221,7 @@ export function Sidebar(): React.JSX.Element {
 
         {NAV_ITEMS.map((item) => {
           const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+          const Icon = item.icon;
           return (
             <Link
               key={item.href}
@@ -221,7 +235,7 @@ export function Sidebar(): React.JSX.Element {
                   : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
               )}
             >
-              <span className="text-base w-5 text-center">{item.icon}</span>
+              <Icon size={16} className="shrink-0" />
               <span className="flex-1">{item.label}</span>
               <span
                 className={cn(
@@ -273,11 +287,11 @@ export function Sidebar(): React.JSX.Element {
             <button
               type="button"
               onClick={toggleTheme}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-150 px-1.5 py-0.5 rounded-sm hover:bg-muted"
+              className="text-muted-foreground hover:text-foreground transition-colors duration-150 p-1 rounded-sm hover:bg-muted"
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
-              {theme === 'dark' ? '\u263D' : '\u2600'}
+              {theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
             </button>
           ) : (
             <span className="w-6 h-5" />
