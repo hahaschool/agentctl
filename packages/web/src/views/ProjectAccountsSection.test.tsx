@@ -44,7 +44,7 @@ vi.mock('@/components/ui/button', () => ({
 }));
 
 vi.mock('@/components/ui/input', () => ({
-  Input: (props: any) => {
+  Input: (props: Record<string, unknown>) => {
     const { ref: _ref, ...rest } = props;
     return <input {...rest} />;
   },
@@ -60,13 +60,14 @@ vi.mock('@/components/ui/select', () => ({
     value?: string;
     onValueChange?: (v: string) => void;
   }) => (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: test-only mock
     <div data-testid="select" data-value={value} onClick={() => onValueChange?.('')}>
       {children}
     </div>
   ),
-  SelectTrigger: ({ children, ...props }: any) => (
-    <div data-testid="select-trigger" {...(props.id ? { id: props.id } : {})}>
-      {children}
+  SelectTrigger: ({ children, ...props }: Record<string, unknown>) => (
+    <div data-testid="select-trigger" {...(props.id ? { id: props.id as string } : {})}>
+      {children as React.ReactNode}
     </div>
   ),
   SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
