@@ -699,6 +699,40 @@ export function SessionsPage(): React.JSX.Element {
           })}
         </div>
 
+        {/* Status distribution bar */}
+        {sessionList.length > 0 && (
+          <div className="flex h-1 mx-3 mt-1 mb-0 rounded-full overflow-hidden bg-muted">
+            {statusCounts.active > 0 && (
+              <div
+                className="bg-green-500 transition-all duration-500"
+                style={{ width: `${(statusCounts.active / sessionList.length) * 100}%` }}
+                title={`${statusCounts.active} active`}
+              />
+            )}
+            {statusCounts.starting > 0 && (
+              <div
+                className="bg-yellow-500 transition-all duration-500"
+                style={{ width: `${(statusCounts.starting / sessionList.length) * 100}%` }}
+                title={`${statusCounts.starting} starting`}
+              />
+            )}
+            {statusCounts.error > 0 && (
+              <div
+                className="bg-red-500 transition-all duration-500"
+                style={{ width: `${(statusCounts.error / sessionList.length) * 100}%` }}
+                title={`${statusCounts.error} error`}
+              />
+            )}
+            {statusCounts.ended > 0 && (
+              <div
+                className="bg-muted-foreground/30 transition-all duration-500"
+                style={{ width: `${(statusCounts.ended / sessionList.length) * 100}%` }}
+                title={`${statusCounts.ended} ended`}
+              />
+            )}
+          </div>
+        )}
+
         {/* Sort / Bulk / Group controls */}
         <div className="px-2 py-1 border-b border-border flex items-center gap-1">
           <label
