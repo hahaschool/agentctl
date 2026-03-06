@@ -177,10 +177,10 @@ export function Sidebar(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-foreground p-1 -ml-1"
+          className="text-foreground p-2.5 -ml-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md active:bg-accent/10"
           aria-label="Toggle navigation"
         >
-          {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
         <span className="text-sm font-bold text-foreground tracking-tight">AgentCTL</span>
         <span className="text-[9px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
@@ -235,7 +235,7 @@ export function Sidebar(): React.JSX.Element {
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0 flex-1',
+                  'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0 flex-1 active:bg-accent/10',
                   'border-l-[3px]',
                   isActive
                     ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
@@ -243,10 +243,10 @@ export function Sidebar(): React.JSX.Element {
                 )}
               >
                 <Icon size={16} className="shrink-0" />
-                <span className="flex-1 hidden lg:inline">{item.label}</span>
+                <span className="flex-1 max-md:inline hidden lg:inline">{item.label}</span>
                 <span
                   className={cn(
-                    'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm hidden lg:inline',
+                    'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm max-md:inline hidden lg:inline',
                     isActive ? 'opacity-80' : 'opacity-50',
                   )}
                 >
@@ -276,11 +276,11 @@ export function Sidebar(): React.JSX.Element {
         <div className="flex-1" />
 
         {/* Bottom section */}
-        <div className="hidden md:block border-t border-border px-4 lg:px-4 md:px-2 py-3 space-y-2.5">
+        <div className="border-t border-border px-4 lg:px-4 md:px-2 py-3 space-y-2.5">
           {/* Connection + Notifications row */}
           <div className="flex items-center gap-3 md:flex-col md:gap-2 lg:flex-row lg:gap-3">
             <WsStatusIndicator status={wsStatus} compact />
-            <div className="flex-1 hidden lg:block" />
+            <div className="flex-1 max-md:block hidden lg:block" />
             <NotificationBell
               notifications={notifications}
               unreadCount={unreadCount}
@@ -289,7 +289,7 @@ export function Sidebar(): React.JSX.Element {
               onClearAll={clearAll}
             />
             {unreadCount > 0 && (
-              <span className="text-[10px] text-primary font-medium hidden lg:inline">
+              <span className="text-[10px] text-primary font-medium max-md:inline hidden lg:inline">
                 {unreadCount}
               </span>
             )}
@@ -310,19 +310,19 @@ export function Sidebar(): React.JSX.Element {
 
           {/* Version + theme */}
           <div className="flex items-center justify-between md:justify-center lg:justify-between">
-            <span className="text-[10px] text-muted-foreground/50 hidden lg:inline">v0.1.0</span>
+            <span className="text-[10px] text-muted-foreground/50 max-md:inline hidden lg:inline">v0.1.0</span>
             {mounted ? (
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="text-muted-foreground/60 hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted"
+                className="text-muted-foreground/60 hover:text-foreground transition-colors p-2.5 md:p-1 rounded-md hover:bg-muted active:bg-muted min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
                 aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               >
-                {theme === 'dark' ? <Moon size={13} /> : <Sun size={13} />}
+                {theme === 'dark' ? <Moon size={16} className="md:w-[13px] md:h-[13px]" /> : <Sun size={16} className="md:w-[13px] md:h-[13px]" />}
               </button>
             ) : (
-              <span className="w-6 h-5" />
+              <span className="w-[44px] h-[44px] md:w-6 md:h-5" />
             )}
           </div>
         </div>

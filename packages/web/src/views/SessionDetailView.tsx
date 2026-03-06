@@ -324,6 +324,7 @@ export function SessionDetailView(): React.JSX.Element {
       <SessionHeader
         session={s}
         messages={content.data?.messages ?? []}
+        totalMessages={content.data?.totalMessages}
         dataUpdatedAt={content.dataUpdatedAt || session.dataUpdatedAt}
         isFetching={(content.isFetching || session.isFetching) && !content.isLoading}
         onRefresh={refetchAll}
@@ -389,6 +390,7 @@ export function SessionDetailView(): React.JSX.Element {
 function SessionHeader({
   session,
   messages,
+  totalMessages,
   dataUpdatedAt,
   isFetching,
   onRefresh,
@@ -400,6 +402,7 @@ function SessionHeader({
 }: {
   session: Session;
   messages: SessionContentMessage[];
+  totalMessages?: number;
   dataUpdatedAt: number;
   isFetching: boolean;
   onRefresh: () => void;
@@ -701,6 +704,11 @@ function SessionHeader({
         {(streamCost || session.metadata?.costUsd) && (
           <span className="font-mono bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-sm border border-amber-500/30">
             ${(streamCost?.totalCostUsd ?? session.metadata?.costUsd ?? 0).toFixed(4)}
+          </span>
+        )}
+        {totalMessages !== undefined && totalMessages > 0 && (
+          <span className="text-[11px] text-muted-foreground">
+            Messages: {totalMessages}
           </span>
         )}
       </div>

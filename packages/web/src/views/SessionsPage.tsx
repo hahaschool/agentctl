@@ -1497,9 +1497,11 @@ function LiveDuration({
     return () => clearInterval(timer);
   }, [isActive]);
 
+  const formatted = formatDuration(startedAt, endedAt);
+
   return (
-    <span className="text-muted-foreground" title={isActive ? 'Running' : 'Total duration'}>
-      {formatDuration(startedAt, endedAt)}
+    <span className="text-[11px] text-muted-foreground" title={isActive ? 'Running' : 'Total duration'}>
+      {isActive ? `Running for ${formatted}` : `Duration: ${formatted}`}
     </span>
   );
 }

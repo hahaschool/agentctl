@@ -9,11 +9,13 @@ import {
   HelpCircle,
   MessageSquare,
   Moon,
+  Plus,
   RefreshCw,
   ScrollText,
   Server,
   Settings,
   Sun,
+  Terminal,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -197,6 +199,34 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     }
 
     // ----- Action commands -----
+    items.push({
+      id: 'action-new-session',
+      label: 'New Session',
+      description: 'Create a new agent session',
+      icon: Plus,
+      section: 'Actions',
+      action: () => {
+        router.push('/sessions?create=true');
+        onClose();
+      },
+    });
+
+    if (machines && machines.length > 0) {
+      for (const machine of machines.filter(m => m.status === 'online')) {
+        items.push({
+          id: `terminal-${machine.id}`,
+          label: `Terminal: ${machine.hostname}`,
+          description: 'Open interactive terminal',
+          icon: Terminal,
+          section: 'Actions',
+          action: () => {
+            router.push(`/machines/${machine.id}/terminal`);
+            onClose();
+          },
+        });
+      }
+    }
+
     items.push({
       id: 'action-refresh',
       label: 'Refresh All Data',
