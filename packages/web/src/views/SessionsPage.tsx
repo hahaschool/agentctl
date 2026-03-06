@@ -458,16 +458,15 @@ export function SessionsPage(): React.JSX.Element {
 
   const handleBulkDelete = useCallback(async () => {
     if (checkedIds.size === 0) return;
-    if (!window.confirm(`Delete ${checkedIds.size} session(s)? This cannot be undone.`)) return;
     setBulkDeleting(true);
     try {
       const ids = Array.from(checkedIds);
       const results = await Promise.allSettled(ids.map((id) => api.deleteSession(id)));
       const failed = results.filter((r) => r.status === 'rejected').length;
       if (failed > 0) {
-        toast.error(`${failed} of ${ids.length} deletion(s) failed`);
+        toast.error(`${failed} of ${ids.length} deletions failed`);
       } else {
-        toast.success(`Deleted ${ids.length} session(s)`);
+        toast.success(`Deleted ${ids.length} ${ids.length === 1 ? 'session' : 'sessions'}`);
       }
       setCheckedIds(new Set());
       resetAndInvalidateSessions();
@@ -1132,9 +1131,9 @@ export function SessionsPage(): React.JSX.Element {
             </button>
             <ConfirmButton
               label={`Delete (${checkedIds.size})`}
-              confirmLabel={`Delete ${checkedIds.size} sessions?`}
+              confirmLabel={`Delete ${checkedIds.size} ${checkedIds.size === 1 ? 'session' : 'sessions'}?`}
               onConfirm={() => void handleBulkDelete()}
-              disabled={bulkDeleting}
+              disabled={bulkDeleting || checkedIds.size === 0}
               className="h-7 px-3 border border-destructive/50 rounded-md text-[11px] font-medium bg-destructive/10 text-destructive-foreground cursor-pointer transition-all duration-200 hover:bg-destructive/20"
               confirmClassName="h-7 px-3 border border-destructive rounded-md text-[11px] font-medium bg-destructive text-destructive-foreground cursor-pointer animate-pulse"
             />
