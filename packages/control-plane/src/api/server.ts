@@ -38,6 +38,7 @@ import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { streamRoutes } from './routes/stream.js';
+import { terminalProxyRoutes } from './routes/terminal.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { wsRoutes } from './routes/ws.js';
 
@@ -324,6 +325,16 @@ export async function createServer({
       prefix: '/api/machines',
       dbRegistry,
       workerPort,
+    });
+  }
+
+  // Register terminal proxy routes when dbRegistry is available.
+  if (dbRegistry) {
+    await app.register(terminalProxyRoutes, {
+      prefix: '/api/machines',
+      dbRegistry,
+      workerPort,
+      logger,
     });
   }
 

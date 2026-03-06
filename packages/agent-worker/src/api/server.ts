@@ -1,9 +1,11 @@
 import { AgentError, WorkerError } from '@agentctl/shared';
+import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from '../runtime/agent-pool.js';
 import type { CliSessionManager } from '../runtime/cli-session-manager.js';
+import { TerminalManager } from '../runtime/terminal-manager.js';
 import { agentRoutes } from './routes/agents.js';
 import { emergencyStopRoutes } from './routes/emergency-stop.js';
 import { fileRoutes } from './routes/files.js';
@@ -12,6 +14,7 @@ import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
+import { terminalRoutes } from './routes/terminal.js';
 
 const HEALTH_CHECK_TIMEOUT_MS = 2_000;
 
@@ -21,6 +24,7 @@ type CreateWorkerServerOptions = {
   machineId: string;
   controlPlaneUrl?: string;
   sessionManager?: CliSessionManager;
+  maxTerminals?: number;
 };
 
 type DependencyStatus = {
@@ -65,8 +69,15 @@ export async function createWorkerServer({
   machineId,
   controlPlaneUrl,
   sessionManager,
+  maxTerminals,
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+
+  // Register @fastify/websocket before any WebSocket route plugins.
+  await app.register(fastifyWebsocket);
+
+  // Instantiate the terminal PTY manager for remote shell access.
+  const terminalManager = new TerminalManager({ logger, maxTerminals });
 
   app.addHook('onRequest', async (request) => {
     logger.debug({ method: request.method, url: request.url }, 'incoming request');
@@ -188,6 +199,12 @@ export async function createWorkerServer({
     logger,
   });
 
+  await app.register(terminalRoutes, {
+    prefix: '/api/terminal',
+    terminalManager,
+    logger,
+  });
+
   if (sessionManager) {
     await app.register(sessionRoutes, {
       prefix: '/api/sessions',
@@ -221,6 +238,11 @@ export async function createWorkerServer({
     });
   });
 
+  // --- Graceful shutdown: kill all terminals ---
+  app.addHook('onClose', async () => {
+    terminalManager.killAll();
+  });
+
   // --- Structured request logging ---
   app.addHook('onSend', async (request, reply) => {
     const logData = {
@@ -251,6 +273,12 @@ function workerErrorToStatus(code: string): number {
   }
   if (code.startsWith('INVALID_')) {
     return 400;
+  }
+  if (code === 'TERMINAL_LIMIT_REACHED') {
+    return 429;
+  }
+  if (code === 'TERMINAL_ALREADY_EXISTS') {
+    return 409;
   }
   return 500;
 }
