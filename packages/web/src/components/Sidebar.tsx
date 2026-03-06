@@ -37,7 +37,7 @@ type NavItem = {
   shortcut: string;
 };
 
-const SIDEBAR_SIDEBAR_GO_MAP: Record<string, string> = {
+const SIDEBAR_GO_MAP: Record<string, string> = {
   d: '/',
   s: '/sessions',
   a: '/agents',

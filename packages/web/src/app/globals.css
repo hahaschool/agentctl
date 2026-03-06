@@ -307,7 +307,9 @@ a:hover {
   .animate-toast-out,
   .animate-banner-pulse,
   .animate-stagger-in > * {
+    /* biome-ignore lint/complexity/noImportantStyles: necessary to override animations for reduced-motion */
     animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: necessary to override animations for reduced-motion */
     animation-delay: 0ms !important;
   }
 }

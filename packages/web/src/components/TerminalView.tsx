@@ -135,7 +135,7 @@ export const TerminalView = React.memo(function TerminalView({
   }, [handleResize]);
 
   return (
-    <div role="region" aria-label="Terminal output" className={cn('relative flex-1 min-h-0', className)}>
+    <section aria-label="Terminal output" className={cn('relative flex-1 min-h-0', className)}>
       <div ref={containerRef} className="absolute inset-0 bg-[#0a0a0a]" />
       {isActive && rawOutput.length > 0 && (
         <div className="absolute top-2 right-3 flex items-center gap-1.5 z-10">
@@ -154,6 +154,6 @@ export const TerminalView = React.memo(function TerminalView({
           </span>
         </div>
       )}
-    </div>
+    </section>
   );
 });

@@ -85,6 +85,7 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
           if (!highlighted.includes('\x00KW')) {
             return <span key={i}>{part}</span>;
           }
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control char delimiters for syntax highlighting
           const kParts = highlighted.split(/\x00KW[\x01\x02]/g);
           return (
             <span key={i}>

@@ -488,7 +488,7 @@ export function SessionsPage(): React.JSX.Element {
     } finally {
       setSending(false);
     }
-  }, [selected, prompt, queryClient, toast]);
+  }, [selected, prompt, resumeModel, queryClient, toast]);
 
   const handleStop = useCallback(async () => {
     if (!selected) return;
@@ -1305,10 +1305,11 @@ export function SessionsPage(): React.JSX.Element {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
                   <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">
+                    <label htmlFor="convert-agent-name" className="text-[11px] text-muted-foreground block mb-1">
                       Agent Name
                     </label>
                     <input
+                      id="convert-agent-name"
                       type="text"
                       value={convertName}
                       onChange={(e) => setConvertName(e.target.value)}
@@ -1317,13 +1318,13 @@ export function SessionsPage(): React.JSX.Element {
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-muted-foreground block mb-1">
+                    <label htmlFor="convert-agent-type" className="text-[11px] text-muted-foreground block mb-1">
                       Agent Type
                     </label>
                     <select
+                      id="convert-agent-type"
                       value={convertType}
                       onChange={(e) => setConvertType(e.target.value)}
-                      aria-label="Agent type"
                       className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
                     >
                       <option value="autonomous">Autonomous (long-running)</option>
@@ -1538,6 +1539,7 @@ function SessionListItem({
     <div
       role="option"
       id={`session-${s.id}`}
+      tabIndex={isFocused ? 0 : -1}
       aria-selected={isSelected}
       className={cn(
         'group flex w-full text-left border-b border-border transition-all duration-200 hover:border-border/80',

@@ -702,6 +702,7 @@ function SessionHeader({
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
+              aria-hidden="true"
             >
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
@@ -1174,7 +1175,7 @@ function MessageList({
         {isActive && autoScroll && !userScrolledUp && (
           <span
             className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 ml-1"
-            aria-label="Auto-scroll active"
+            title="Auto-scroll active"
           >
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             Following
