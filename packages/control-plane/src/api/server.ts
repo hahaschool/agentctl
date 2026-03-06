@@ -121,9 +121,11 @@ export async function createServer({
   });
 
   // --- Rate Limiting ---
+  const rateLimitMax = Number(process.env.RATE_LIMIT_MAX) || 100;
+  const rateLimitWindow = process.env.RATE_LIMIT_WINDOW || '1 minute';
   await app.register(fastifyRateLimit, {
-    max: 100,
-    timeWindow: '1 minute',
+    max: rateLimitMax,
+    timeWindow: rateLimitWindow,
     allowList: (request) => {
       return request.url === '/health' || request.url === '/metrics';
     },

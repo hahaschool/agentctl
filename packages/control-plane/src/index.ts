@@ -85,6 +85,17 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
     name: 'CORS_ORIGINS',
     description: 'Comma-separated list of allowed CORS origins (production only)',
   },
+  {
+    name: 'RATE_LIMIT_MAX',
+    default: '100',
+    validate: isNumericString,
+    description: 'Maximum requests per time window per client',
+  },
+  {
+    name: 'RATE_LIMIT_WINDOW',
+    default: '1 minute',
+    description: 'Rate limit time window (e.g., "1 minute", "30 seconds")',
+  },
 ];
 
 const logger = createLogger('control-plane');

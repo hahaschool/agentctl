@@ -9,6 +9,7 @@ import {
   generateSummary,
 } from '../../audit/session-replay.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { PAGINATION, clampLimit } from '../constants.js';
 
 export type ReplayRoutesOptions = {
   dbRegistry: DbAgentRegistry;
@@ -28,8 +29,6 @@ type ReplayQuerystring = {
   offset?: string;
 };
 
-const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 1000;
 
 export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app, opts) => {
   const { dbRegistry } = opts;
@@ -54,7 +53,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
       try {
         const result = await dbRegistry.queryActions({
           runId: sessionId,
-          limit: MAX_LIMIT,
+          limit: PAGINATION.replay.maxLimit,
           offset: 0,
         });
 
@@ -126,7 +125,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
       try {
         const result = await dbRegistry.queryActions({
           runId: sessionId,
-          limit: MAX_LIMIT,
+          limit: PAGINATION.replay.maxLimit,
           offset: 0,
         });
 
@@ -191,7 +190,7 @@ export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app,
       try {
         const result = await dbRegistry.queryActions({
           runId: sessionId,
-          limit: MAX_LIMIT,
+          limit: PAGINATION.replay.maxLimit,
           offset: 0,
         });
 
@@ -271,7 +270,7 @@ function parseQueryFilter(
   if (qs.limit) {
     const parsed = Number(qs.limit);
     if (Number.isFinite(parsed) && parsed >= 1) {
-      filter.limit = Math.min(Math.floor(parsed), DEFAULT_LIMIT);
+      filter.limit = clampLimit(parsed, PAGINATION.replay);
     }
   }
 

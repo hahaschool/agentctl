@@ -13,6 +13,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { MemoryInjector } from '../../memory/memory-injector.js';
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import { AgentRegistry } from '../../registry/agent-registry.js';
+import { PAGINATION, clampLimit } from '../constants.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { RepeatableJobManager } from '../../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
@@ -151,11 +152,8 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      const DEFAULT_LIMIT = 100;
-      const MAX_LIMIT = 500;
-
       // Validate limit
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.agents.defaultLimit;
       if (request.query.limit !== undefined) {
         const parsed = Number(request.query.limit);
         if (!Number.isFinite(parsed) || parsed < 1) {
@@ -163,7 +161,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
             .code(400)
             .send({ error: 'INVALID_PARAMS', message: '"limit" must be a positive integer' });
         }
-        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+        limit = clampLimit(parsed, PAGINATION.agents);
       }
 
       // Validate offset
@@ -356,19 +354,11 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      const DEFAULT_LIMIT = 20;
-      const MAX_RUNS_LIMIT = 500;
       const raw = request.query.limit;
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.agentRuns.defaultLimit;
 
       if (raw !== undefined) {
-        const parsed = Number(raw);
-
-        if (!Number.isInteger(parsed) || parsed < 1) {
-          limit = DEFAULT_LIMIT;
-        } else {
-          limit = Math.min(parsed, MAX_RUNS_LIMIT);
-        }
+        limit = clampLimit(Number(raw), PAGINATION.agentRuns);
       }
 
       return await dbRegistry.getRecentRuns(request.params.agentId, limit);

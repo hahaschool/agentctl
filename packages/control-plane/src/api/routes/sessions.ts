@@ -9,9 +9,7 @@ import { agents as agentsTable, apiAccounts, rcSessions, settings } from '../../
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
-
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+import { PAGINATION, clampLimit } from '../constants.js';
 const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
 /** Timeout for fetch() calls that dispatch commands to worker machines. */
@@ -320,12 +318,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       const rawLimit = request.query.limit;
       const rawOffset = request.query.offset;
 
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.sessions.defaultLimit;
       if (rawLimit !== undefined) {
-        const parsed = Number(rawLimit);
-        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_LIMIT) {
-          limit = parsed;
-        }
+        limit = clampLimit(Number(rawLimit), PAGINATION.sessions);
       }
 
       let offset = 0;
