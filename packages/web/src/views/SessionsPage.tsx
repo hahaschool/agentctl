@@ -978,6 +978,7 @@ export function SessionsPage(): React.JSX.Element {
                 <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1">
                   <span>Agent: {selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}</span>
                   <span>Machine: {selected.machineId}</span>
+                  {selected.model && <span className="text-purple-400">Model: {selected.model}</span>}
                   <StatusBadge status={selected.status} />
                 </div>
               </div>
@@ -1312,6 +1313,7 @@ function SessionListItem({
       <div className="text-xs text-muted-foreground flex gap-2">
         <span>{s.agentName ? s.agentName : s.agentId.slice(0, 8)}</span>
         <span>{s.machineId}</span>
+        {s.model && <span className="text-purple-400/80">{s.model.replace('claude-', '').replace(/-\d{8}$/, '')}</span>}
       </div>
       {s.projectPath && (
         <div className="mt-0.5">
