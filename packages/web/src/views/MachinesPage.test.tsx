@@ -791,4 +791,101 @@ describe('MachinesPage', () => {
       expect(screen.getByTestId('error-banner')).toBeDefined();
     });
   });
+
+  // =========================================================================
+  // Compact View Toggle
+  // =========================================================================
+
+  it('renders Compact toggle button', async () => {
+    renderMachines();
+    await waitFor(() => {
+      expect(screen.getByText('Compact')).toBeDefined();
+    });
+  });
+
+  it('switches to compact view when Compact is clicked', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([createMachine()]),
+    });
+    renderMachines();
+    await waitFor(() => {
+      expect(screen.getByText('test-machine')).toBeDefined();
+    });
+    // Toggle to compact
+    fireEvent.click(screen.getByText('Compact'));
+    // Button text changes to "Detailed"
+    await waitFor(() => {
+      expect(screen.getByText('Detailed')).toBeDefined();
+    });
+    // Hostname is still shown
+    expect(screen.getByText('test-machine')).toBeDefined();
+  });
+
+  it('hides detail fields in compact mode', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([
+        createMachine({ tailscaleIp: '100.64.0.1' }),
+      ]),
+    });
+    renderMachines();
+    await waitFor(() => {
+      expect(screen.getByText('100.64.0.1')).toBeDefined();
+    });
+    // Toggle to compact
+    fireEvent.click(screen.getByText('Compact'));
+    await waitFor(() => {
+      expect(screen.getByText('Detailed')).toBeDefined();
+    });
+    // Tailscale IP should be hidden in compact mode
+    expect(screen.queryByText('100.64.0.1')).toBeNull();
+  });
+
+  // =========================================================================
+  // Sorting
+  // =========================================================================
+
+  it('renders sort dropdown', async () => {
+    renderMachines();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Sort by')).toBeDefined();
+    });
+  });
+
+  it('sorts machines by hostname when Name sort is selected', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([
+        createMachine({ id: 'm1', hostname: 'zebra' }),
+        createMachine({ id: 'm2', hostname: 'alpha' }),
+      ]),
+    });
+    renderMachines();
+    await waitFor(() => {
+      expect(screen.getByText('alpha')).toBeDefined();
+    });
+    // Default sort is by name, so alpha should come before zebra
+    const links = screen.getAllByRole('link');
+    const hostnames = links.map((l) => l.textContent).filter(Boolean);
+    expect(hostnames.indexOf('alpha')).toBeLessThan(hostnames.indexOf('zebra'));
+  });
+
+  // =========================================================================
+  // Capability Tooltips
+  // =========================================================================
+
+  it('wraps capability badges with SimpleTooltip', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([
+        createMachine({ capabilities: { gpu: true, docker: true, maxConcurrentAgents: 8 } }),
+      ]),
+    });
+    renderMachines();
+    await waitFor(() => {
+      const tooltips = screen.getAllByTestId('simple-tooltip');
+      expect(tooltips.length).toBeGreaterThanOrEqual(3);
+    });
+  });
 });
