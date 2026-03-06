@@ -21,6 +21,15 @@ const LS_AUTO_REFRESH = 'agentctl:autoRefreshInterval';
 const LS_MAX_MESSAGES = 'agentctl:maxDisplayMessages';
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const MODEL_OPTIONS = [
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+  { value: 'claude-sonnet-4-5-20250514', label: 'Claude Sonnet 4.5' },
+  { value: 'claude-opus-4-0-20250514', label: 'Claude Opus 4' },
+  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+] as const;
+
 const DEFAULT_AUTO_REFRESH = '10000';
 const DEFAULT_MAX_MESSAGES = '100';
 
@@ -70,8 +79,7 @@ export function PreferencesSection(): React.JSX.Element {
     readLS(LS_MAX_MESSAGES, DEFAULT_MAX_MESSAGES),
   );
 
-  const handleModelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
+  const handleModelChange = useCallback((v: string) => {
     setDefaultModel(v);
     writeLS(LS_DEFAULT_MODEL, v);
   }, []);
@@ -116,12 +124,18 @@ export function PreferencesSection(): React.JSX.Element {
           <label className="text-[13px] font-medium" htmlFor="pref-default-model">
             Default Model
           </label>
-          <Input
-            id="pref-default-model"
-            placeholder={DEFAULT_MODEL}
-            value={defaultModel}
-            onChange={handleModelChange}
-          />
+          <Select value={defaultModel} onValueChange={handleModelChange}>
+            <SelectTrigger className="w-full" id="pref-default-model">
+              <SelectValue placeholder="Select model" />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={4}>
+              {MODEL_OPTIONS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <p className="text-[11px] text-muted-foreground">
             Model used when creating new sessions or agents.
           </p>
