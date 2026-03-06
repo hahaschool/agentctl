@@ -21,8 +21,10 @@ export function EmptyState({ icon, title, description, action, variant = 'defaul
     const Icon = icon;
     return (
       <div className={cn(
-        'rounded-full flex items-center justify-center',
-        isCompact ? 'w-10 h-10 bg-muted/50' : 'w-16 h-16 bg-muted/50',
+        'rounded-full flex items-center justify-center ring-1 ring-border/30 shadow-sm',
+        isCompact
+          ? 'w-10 h-10 bg-muted/50'
+          : 'w-16 h-16 bg-gradient-to-b from-muted/70 to-muted/30',
       )}>
         <Icon size={isCompact ? 20 : 28} className="text-muted-foreground/40" />
       </div>
@@ -31,7 +33,7 @@ export function EmptyState({ icon, title, description, action, variant = 'defaul
 
   return (
     <div className={cn(
-      'text-center flex flex-col items-center',
+      'text-center flex flex-col items-center animate-fade-in',
       isCompact ? 'py-6 px-4 gap-1.5' : 'py-16 px-6 gap-3',
     )}>
       {renderIcon()}
