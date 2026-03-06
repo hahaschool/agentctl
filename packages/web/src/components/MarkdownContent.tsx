@@ -32,11 +32,11 @@ export function MarkdownContent({ children, className }: MarkdownContentProps): 
               target="_blank"
               rel="noopener noreferrer"
               title={href}
-              className="text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 underline underline-offset-2 break-all"
             >
               {linkChildren}
               {!isUrlVisible && href && (
-                <span className="text-[10px] text-blue-400/60 ml-1 no-underline">({href})</span>
+                <span className="text-[10px] text-blue-600/60 dark:text-blue-400/60 ml-1 no-underline">({href})</span>
               )}
             </a>
           );
@@ -59,13 +59,13 @@ export function MarkdownContent({ children, className }: MarkdownContentProps): 
           const isInline = !codeClass;
           if (isInline) {
             return (
-              <code className="px-1 py-0.5 bg-muted rounded text-[11px] font-mono text-orange-300/90">
+              <code className="px-1 py-0.5 bg-muted rounded text-[11px] font-mono text-orange-600 dark:text-orange-300/90">
                 {codeChildren}
               </code>
             );
           }
           return (
-            <code className={cn('block bg-muted/50 rounded-sm px-2.5 py-2 text-[11px] font-mono overflow-x-auto my-1.5', codeClass)} {...props}>
+            <code className={cn('block bg-muted/50 rounded-md px-2.5 py-2 text-[11px] font-mono overflow-x-auto my-1.5', codeClass)} {...props}>
               {codeChildren}
             </code>
           );

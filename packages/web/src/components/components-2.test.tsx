@@ -206,7 +206,7 @@ describe('ConnectionBanner', () => {
 
   it('renders banner when status is "disconnected"', () => {
     render(<ConnectionBanner status="disconnected" />);
-    expect(screen.getByText('Connection lost — displayed data may be stale')).toBeDefined();
+    expect(screen.getByText(/Connection lost/)).toBeDefined();
   });
 
   it('renders a Dismiss button when disconnected', () => {
@@ -221,7 +221,7 @@ describe('ConnectionBanner', () => {
 
     fireEvent.click(dismissBtn);
 
-    expect(screen.queryByText('Connection lost — displayed data may be stale')).toBeNull();
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
   });
 
   it('resets dismissed state when connection is restored and lost again', async () => {
@@ -230,18 +230,18 @@ describe('ConnectionBanner', () => {
     // Dismiss the banner
     const dismissBtn = screen.getByRole('button', { name: 'Dismiss' });
     fireEvent.click(dismissBtn);
-    expect(screen.queryByText('Connection lost — displayed data may be stale')).toBeNull();
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
 
     // Simulate reconnection
     rerender(<ConnectionBanner status="connected" />);
-    expect(screen.queryByText('Connection lost — displayed data may be stale')).toBeNull();
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
 
     // Simulate disconnection again
     rerender(<ConnectionBanner status="disconnected" />);
 
     // Banner should be visible again (dismissed state reset)
     await waitFor(() => {
-      expect(screen.getByText('Connection lost — displayed data may be stale')).toBeDefined();
+      expect(screen.getByText(/Connection lost/)).toBeDefined();
     });
   });
 

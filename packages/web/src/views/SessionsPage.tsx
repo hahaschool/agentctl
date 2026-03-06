@@ -140,6 +140,7 @@ export function SessionsPage(): React.JSX.Element {
   }, [sessions.data]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const [prompt, setPrompt] = useState('');
   const [resumeModel, setResumeModel] = useState('');
   const [sending, setSending] = useState(false);
@@ -386,6 +387,11 @@ export function SessionsPage(): React.JSX.Element {
     return groups;
   }, [filteredSessions, groupBy]);
 
+  // Reset keyboard focus when the visible list changes (filter/search/sort)
+  useEffect(() => {
+    setFocusedIndex(-1);
+  }, [statusFilter, searchQuery, sortOrder, hideEmpty, groupBy]);
+
   const toggleGroupCollapsed = useCallback((key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -564,29 +570,44 @@ export function SessionsPage(): React.JSX.Element {
     [selected, forkPickerMessages, createAgent, toast],
   );
 
-  // Keyboard navigation: arrow up/down to move through sessions, Escape to deselect
+  // Keyboard navigation: arrow up/down to move focus, Enter to open, Escape to deselect
   const handleListKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setFocusedIndex(-1);
         setSelectedId(null);
         return;
       }
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-      e.preventDefault();
       const list = filteredSessions;
       if (list.length === 0) return;
-      const idx = selectedId ? list.findIndex((s) => s.id === selectedId) : -1;
-      let next: number;
+
       if (e.key === 'ArrowDown') {
-        next = idx < list.length - 1 ? idx + 1 : 0;
-      } else {
-        next = idx > 0 ? idx - 1 : list.length - 1;
+        e.preventDefault();
+        setFocusedIndex((prev) => Math.min(prev + 1, list.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex((prev) => Math.max(prev - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const focused = list[focusedIndex];
+        if (focused) {
+          setSelectedId(focused.id);
+        }
       }
-      const nextSession = list[next];
-      if (nextSession) setSelectedId(nextSession.id);
     },
-    [filteredSessions, selectedId],
+    [filteredSessions, focusedIndex],
   );
+
+  // Scroll the focused session item into view
+  useEffect(() => {
+    if (focusedIndex < 0) return;
+    const focused = filteredSessions[focusedIndex];
+    if (!focused) return;
+    const el = document.getElementById(`session-${focused.id}`);
+    if (el) {
+      el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [focusedIndex, filteredSessions]);
 
   const isFormDisabled =
     formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim();
@@ -926,7 +947,7 @@ export function SessionsPage(): React.JSX.Element {
           tabIndex={0}
           onKeyDown={handleListKeyDown}
           aria-label="Session list"
-          aria-activedescendant={selectedId ? `session-${selectedId}` : undefined}
+          aria-activedescendant={focusedIndex >= 0 && filteredSessions[focusedIndex] ? `session-${filteredSessions[focusedIndex].id}` : selectedId ? `session-${selectedId}` : undefined}
         >
           {sessions.isLoading ? (
             <div className="p-3 space-y-1">
@@ -991,6 +1012,7 @@ export function SessionsPage(): React.JSX.Element {
                       key={s.id}
                       session={s}
                       isSelected={selectedId === s.id}
+                      isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
                       onSelect={setSelectedId}
                       isChecked={checkedIds.has(s.id)}
                       onToggleCheck={toggleChecked}
@@ -999,11 +1021,12 @@ export function SessionsPage(): React.JSX.Element {
               </div>
             ))
           ) : (
-            filteredSessions.map((s) => (
+            filteredSessions.map((s, i) => (
               <SessionListItem
                 key={s.id}
                 session={s}
                 isSelected={selectedId === s.id}
+                isFocused={focusedIndex === i}
                 onSelect={setSelectedId}
                 isChecked={checkedIds.has(s.id)}
                 onToggleCheck={toggleChecked}
@@ -1392,12 +1415,14 @@ function LiveDuration({
 function SessionListItem({
   session: s,
   isSelected,
+  isFocused,
   onSelect,
   isChecked,
   onToggleCheck,
 }: {
   session: Session;
   isSelected: boolean;
+  isFocused: boolean;
   onSelect: (id: string) => void;
   isChecked: boolean;
   onToggleCheck: (id: string) => void;
@@ -1414,7 +1439,7 @@ function SessionListItem({
       aria-selected={isSelected}
       className={cn(
         'flex w-full text-left border-b border-border transition-colors hover:border-border',
-        isSelected ? 'bg-accent/15' : 'bg-transparent hover:bg-accent/8',
+        isSelected ? 'bg-accent/15' : isFocused ? 'bg-accent/10 ring-1 ring-inset ring-primary/40' : 'bg-transparent hover:bg-accent/8',
         s.status === 'error'
           ? 'border-l-[3px] border-l-red-500'
           : s.status === 'starting'
