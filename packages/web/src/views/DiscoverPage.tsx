@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Compass, Filter } from 'lucide-react';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -400,7 +401,7 @@ export function DiscoverPage(): React.JSX.Element {
   );
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
       <FetchingBar isFetching={query.isFetching && !query.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
@@ -688,7 +689,7 @@ export function DiscoverPage(): React.JSX.Element {
         </div>
       ) : allSessions.length === 0 ? (
         <EmptyState
-          icon={'\u25B6'}
+          icon={Compass}
           title="No sessions discovered"
           description={
             data
@@ -697,7 +698,7 @@ export function DiscoverPage(): React.JSX.Element {
           }
         />
       ) : filtered.length === 0 ? (
-        <EmptyState icon={'\u2315'} title="No sessions match the current filters" />
+        <EmptyState icon={Filter} title="No sessions match the current filters" />
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((group) => {

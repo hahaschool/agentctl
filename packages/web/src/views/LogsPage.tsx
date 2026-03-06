@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { ScrollText, Server } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -161,7 +162,7 @@ export function LogsPage(): React.JSX.Element {
     health.isFetching || metrics.isFetching || machines.isFetching || audit.isFetching;
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
       <FetchingBar isFetching={isFetching && !health.isLoading} />
 
       {/* Header */}
@@ -407,7 +408,7 @@ export function LogsPage(): React.JSX.Element {
             </div>
           ) : machineList.length === 0 ? (
             <EmptyState
-              icon={'\u2302'}
+              icon={Server}
               title="No workers registered"
               description="Run setup-machine.sh on a host to register it as a worker."
             />
@@ -596,7 +597,7 @@ export function LogsPage(): React.JSX.Element {
               />
             ) : filteredActions.length === 0 ? (
               <EmptyState
-                icon={'\u2699'}
+                icon={ScrollText}
                 title="No audit actions found"
                 description={
                   auditSearch || auditAgentFilter || auditToolFilter || actionTypeFilter !== 'all'

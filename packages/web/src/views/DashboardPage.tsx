@@ -123,7 +123,7 @@ export function DashboardPage(): React.JSX.Element {
   const healthLabel = healthStatus ?? 'unknown';
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
       <FetchingBar isFetching={anyFetching} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">

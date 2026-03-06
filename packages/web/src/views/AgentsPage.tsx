@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Bot, Filter } from 'lucide-react';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
@@ -430,7 +431,7 @@ export function AgentsPage(): React.JSX.Element {
   const isCreateDisabled = createAgent.isPending || !createPrompt.trim() || !createMachineId;
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
       <FetchingBar isFetching={agents.isFetching && !agents.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
@@ -1107,12 +1108,12 @@ export function AgentsPage(): React.JSX.Element {
       ) : filteredAgents.length === 0 ? (
         agentList.length === 0 ? (
           <EmptyState
-            icon={'\u2699'}
+            icon={Bot}
             title="No agents registered"
             description="Create an agent using the button above to get started."
           />
         ) : (
-          <EmptyState icon={'\u2315'} title="No agents match the current filters" />
+          <EmptyState icon={Filter} title="No agents match the current filters" />
         )
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">

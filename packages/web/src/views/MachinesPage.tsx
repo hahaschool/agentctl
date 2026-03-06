@@ -6,6 +6,7 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Filter, Server } from 'lucide-react';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -58,7 +59,7 @@ export function MachinesPage(): React.JSX.Element {
   }, [list, statusFilter, search]);
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
       <FetchingBar isFetching={machines.isFetching && !machines.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
@@ -156,10 +157,10 @@ export function MachinesPage(): React.JSX.Element {
         </div>
       ) : filteredList.length === 0 ? (
         list.length > 0 ? (
-          <EmptyState icon={'\u2315'} title="No machines match the current filters" />
+          <EmptyState icon={Filter} title="No machines match the current filters" />
         ) : (
           <EmptyState
-            icon={'\u2302'}
+            icon={Server}
             title="No machines registered"
             description="Register a machine by running ./scripts/setup-machine.sh on the target host."
           />

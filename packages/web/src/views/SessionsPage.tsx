@@ -14,6 +14,7 @@ import { ProgressIndicator } from '../components/ProgressIndicator';
 import { SubagentBlock } from '../components/SubagentBlock';
 import { ThinkingBlock } from '../components/ThinkingBlock';
 import { TodoBlock } from '../components/TodoBlock';
+import { Filter, MessageSquare } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { ForkContextPicker } from '../components/ForkContextPicker';
@@ -591,7 +592,7 @@ export function SessionsPage(): React.JSX.Element {
     formSubmitting || !formMachineId || !formProjectPath.trim() || !formPrompt.trim();
 
   return (
-    <div className="relative flex h-full">
+    <div className="relative flex h-full animate-page-enter">
       <FetchingBar isFetching={sessions.isFetching && !sessions.isLoading} />
       {/* Session list panel */}
       <div
@@ -940,13 +941,13 @@ export function SessionsPage(): React.JSX.Element {
           ) : filteredSessions.length === 0 ? (
             sessionList.length === 0 ? (
               <EmptyState
-                icon={'▶'}
+                icon={MessageSquare}
                 title="No sessions yet"
                 description="Create a new session using the form above to get started."
               />
             ) : (
               <EmptyState
-                icon={'\u2315'}
+                icon={Filter}
                 title="No sessions match the filters"
                 action={
                   <button
