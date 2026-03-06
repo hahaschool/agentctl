@@ -169,6 +169,7 @@ export function SessionDetailView(): React.JSX.Element {
   // We need the Claude session ID (not the RC session ID) to fetch content
   const claudeSessionId = s?.claudeSessionId ?? '';
   const [contentLimit, setContentLimit] = useState(2000);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const content = useQuery({
     ...sessionContentQuery(claudeSessionId, {
       machineId: s?.machineId ?? '',
@@ -176,7 +177,7 @@ export function SessionDetailView(): React.JSX.Element {
       limit: contentLimit,
     }),
     enabled: !!claudeSessionId && !!s?.machineId,
-    refetchInterval: s?.status === 'active' || s?.status === 'starting' ? 2_000 : false,
+    refetchInterval: (s?.status === 'active' || s?.status === 'starting') && autoRefresh ? 2_000 : false,
     refetchOnWindowFocus: true,
   });
 
@@ -275,10 +276,6 @@ export function SessionDetailView(): React.JSX.Element {
 
   // View mode toggle (messages vs terminal)
   const [viewMode, setViewMode] = useState<'messages' | 'terminal'>('messages');
-  const toggleViewMode = useCallback(
-    () => setViewMode((prev) => (prev === 'messages' ? 'terminal' : 'messages')),
-    [],
-  );
 
   // File browser panel toggle
   const [showFiles, setShowFiles] = useState(false);
@@ -299,13 +296,11 @@ export function SessionDetailView(): React.JSX.Element {
     useMemo(
       () => ({
         r: refetchAll,
-        f: toggleFiles,
-        t: toggleViewMode,
         e: handleExportJson,
         m: handleExportMarkdown,
         Escape: () => escapeRef.current(),
       }),
-      [refetchAll, toggleFiles, toggleViewMode, handleExportJson, handleExportMarkdown],
+      [refetchAll, handleExportJson, handleExportMarkdown],
     ),
   );
 
@@ -346,6 +341,9 @@ export function SessionDetailView(): React.JSX.Element {
               isLoading={content.isLoading}
               error={content.error?.message}
               isActive={s.status === 'active'}
+              isActiveOrStarting={isActive}
+              autoRefresh={autoRefresh}
+              onAutoRefreshChange={setAutoRefresh}
               streamOutput={stream.streamOutput}
               streamConnected={stream.connected}
               pendingUserMessages={stream.pendingUserMessages}
@@ -486,6 +484,17 @@ function SessionHeader({
     !!session.claudeSessionId &&
     (session.status === 'ended' || session.status === 'error' || session.status === 'paused');
 
+  useHotkeys(
+    useMemo(
+      () => ({
+        f: () => {
+          if (canFork) setShowFork((prev) => !prev);
+        },
+      }),
+      [canFork],
+    ),
+  );
+
   return (
     <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
       <div className="flex items-center gap-3 mb-2">
@@ -538,7 +547,7 @@ function SessionHeader({
               type="button"
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
-              title="Export session"
+              title="Export session (E: JSON, M: Markdown)"
             >
               Export
             </button>
@@ -577,6 +586,7 @@ function SessionHeader({
             <button
               type="button"
               onClick={() => setShowFork(!showFork)}
+              title="Fork session (F)"
               className="px-3 py-1 bg-blue-100/50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-300/50 dark:border-blue-800/50 rounded-md text-xs cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900"
             >
               Fork
@@ -883,6 +893,9 @@ function MessageList({
   isLoading,
   error,
   isActive,
+  isActiveOrStarting,
+  autoRefresh,
+  onAutoRefreshChange,
   streamOutput,
   streamConnected,
   pendingUserMessages,
@@ -896,6 +909,9 @@ function MessageList({
   isLoading: boolean;
   error?: string;
   isActive: boolean;
+  isActiveOrStarting?: boolean;
+  autoRefresh?: boolean;
+  onAutoRefreshChange?: (value: boolean) => void;
   streamOutput?: string[];
   streamConnected?: boolean;
   pendingUserMessages?: string[];
@@ -913,6 +929,18 @@ function MessageList({
   const [autoScroll, setAutoScroll] = useState(true);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [search, setSearch] = useState('');
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        t: () => setShowTools((prev) => !prev),
+        k: () => setShowThinking((prev) => !prev),
+        p: () => setShowProgress((prev) => !prev),
+        d: () => setRenderMarkdown((prev) => !prev),
+      }),
+      [],
+    ),
+  );
 
   // Always show: human, assistant, subagent, todo
   // Toggle: tool_use/tool_result (showTools), thinking (showThinking), progress (showProgress)
@@ -1042,6 +1070,7 @@ function MessageList({
           onClick={() => setShowThinking(!showThinking)}
           aria-label={showThinking ? 'Hide thinking' : 'Show thinking'}
           aria-pressed={showThinking}
+          title="Toggle thinking (K)"
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showThinking
@@ -1056,6 +1085,7 @@ function MessageList({
           onClick={() => setShowTools(!showTools)}
           aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
           aria-pressed={showTools}
+          title="Toggle tools (T)"
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showTools
@@ -1070,6 +1100,7 @@ function MessageList({
           onClick={() => setShowProgress(!showProgress)}
           aria-label={showProgress ? 'Hide progress' : 'Show progress'}
           aria-pressed={showProgress}
+          title="Toggle progress (P)"
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showProgress
@@ -1084,6 +1115,7 @@ function MessageList({
           onClick={() => setRenderMarkdown(!renderMarkdown)}
           aria-label={renderMarkdown ? 'Show raw text' : 'Render markdown'}
           aria-pressed={renderMarkdown}
+          title="Toggle markdown rendering (D)"
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             renderMarkdown
@@ -1092,6 +1124,45 @@ function MessageList({
           )}
         >
           Markdown
+        </button>
+        {isActiveOrStarting && (
+          <button
+            type="button"
+            onClick={() => onAutoRefreshChange?.(!autoRefresh)}
+            aria-label={autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'}
+            aria-pressed={autoRefresh}
+            className={cn(
+              'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors inline-flex items-center gap-1',
+              autoRefresh
+                ? 'bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30'
+                : 'bg-muted text-muted-foreground',
+            )}
+          >
+            <span className="text-[10px]">{autoRefresh ? '\u23F8' : '\u25B6'}</span>
+            Auto-refresh
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            const next = !autoScroll;
+            setAutoScroll(next);
+            setUserScrolledUp(!next);
+            if (next && scrollRef.current) {
+              scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            }
+          }}
+          aria-label={autoScroll ? 'Pause auto-scroll' : 'Resume auto-scroll'}
+          aria-pressed={autoScroll}
+          className={cn(
+            'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors inline-flex items-center gap-1',
+            autoScroll
+              ? 'bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30'
+              : 'bg-muted text-muted-foreground',
+          )}
+        >
+          <span className="text-[10px]">{autoScroll ? '\u23F8' : '\u25B6'}</span>
+          Auto-scroll
         </button>
         {isActive && autoScroll && !userScrolledUp && (
           <span
