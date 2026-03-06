@@ -1538,20 +1538,99 @@ function MessageInput({ session, onOptimisticSend }: { session: Session; onOptim
 // ---------------------------------------------------------------------------
 
 function LoadingState(): React.JSX.Element {
+  // Alternating widths to simulate realistic user/assistant conversation
+  const messageBubbles: Array<{ role: 'user' | 'assistant'; lines: number }> = [
+    { role: 'user', lines: 1 },
+    { role: 'assistant', lines: 4 },
+    { role: 'user', lines: 1 },
+    { role: 'assistant', lines: 6 },
+    { role: 'assistant', lines: 2 },
+    { role: 'user', lines: 1 },
+    { role: 'assistant', lines: 3 },
+  ];
+
   return (
-    <div className="p-4 md:p-6 max-w-[900px]">
-      <Skeleton className="h-4 w-28 mb-4" />
-      <div className="flex items-center gap-3 mb-6">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-5 w-16 rounded-full" />
+    <div className="relative h-full flex flex-col">
+      {/* Header bar skeleton */}
+      <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
+        {/* Breadcrumb + status + buttons */}
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-1.5">
+            <Skeleton className="h-4 w-16" />
+            <span className="text-muted-foreground/30">/</span>
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <Skeleton className="h-5 w-14 rounded-full" />
+          <div className="ml-auto flex items-center gap-2">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-7 w-7 rounded-md" />
+            <Skeleton className="h-7 w-14 rounded-md" />
+            <Skeleton className="h-7 w-16 rounded-md" />
+          </div>
+        </div>
+        {/* Metadata row */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-3.5 w-32" />
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-4 w-16 rounded-sm" />
+          <Skeleton className="h-3.5 w-28" />
+        </div>
       </div>
-      <div className="space-y-3">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div key={`sk-${String(i)}`} className="flex gap-3">
-            <Skeleton className="h-4 w-12 shrink-0" />
-            <Skeleton className="h-16 flex-1 rounded" />
+
+      {/* Toolbar skeleton */}
+      <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 shrink-0 bg-background">
+        <Skeleton className="h-5 w-[120px] rounded-md" />
+        <Skeleton className="h-3.5 w-24" />
+        <Skeleton className="h-5 w-16 rounded-md" />
+        <Skeleton className="h-5 w-12 rounded-md" />
+        <Skeleton className="h-5 w-16 rounded-md" />
+        <Skeleton className="h-5 w-[100px] rounded-md ml-auto" />
+      </div>
+
+      {/* Messages area skeleton */}
+      <div className="flex-1 overflow-hidden px-5 py-4 space-y-4">
+        {messageBubbles.map((bubble, i) => (
+          <div
+            key={`sk-msg-${String(i)}`}
+            className={cn(
+              'rounded-lg border-l-[3px] px-3 py-2',
+              bubble.role === 'user'
+                ? 'border-l-blue-500/40 bg-blue-500/5'
+                : 'border-l-emerald-500/40 bg-emerald-500/5',
+            )}
+          >
+            {/* Label + timestamp */}
+            <div className="flex justify-between items-center mb-1.5">
+              <Skeleton
+                className={cn(
+                  'h-3 w-14',
+                  bubble.role === 'user' ? 'bg-blue-500/15' : 'bg-emerald-500/15',
+                )}
+              />
+              <Skeleton className="h-2.5 w-12 bg-muted" />
+            </div>
+            {/* Content lines */}
+            <div className="space-y-1.5">
+              {Array.from({ length: bubble.lines }, (_, j) => (
+                <Skeleton
+                  key={`sk-line-${String(i)}-${String(j)}`}
+                  className="h-3"
+                  style={{
+                    width: j === bubble.lines - 1
+                      ? `${40 + ((i * 17 + j * 23) % 35)}%`
+                      : `${75 + ((i * 13 + j * 7) % 20)}%`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         ))}
+      </div>
+
+      {/* Input area skeleton */}
+      <div className="px-5 py-3 border-t border-border bg-card shrink-0">
+        <Skeleton className="h-[60px] w-full rounded-md" />
       </div>
     </div>
   );

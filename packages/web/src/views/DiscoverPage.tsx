@@ -511,7 +511,7 @@ export function DiscoverPage(): React.JSX.Element {
             onClick={() => void handleNewSession()}
             disabled={!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating}
             className={cn(
-              'px-[18px] py-1.5 bg-primary text-white rounded-sm text-[13px] font-medium border-none cursor-pointer',
+              'px-[18px] py-1.5 bg-primary text-white rounded-md text-[13px] font-medium border-none cursor-pointer',
               (!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating) && 'opacity-50',
             )}
           >
@@ -606,7 +606,7 @@ export function DiscoverPage(): React.JSX.Element {
             type="button"
             onClick={toggleAll}
             aria-label={allExpanded ? 'Collapse all groups' : 'Expand all groups'}
-            className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer whitespace-nowrap"
+            className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer whitespace-nowrap"
           >
             {allExpanded ? 'Collapse All' : 'Expand All'}
           </button>
@@ -629,7 +629,7 @@ export function DiscoverPage(): React.JSX.Element {
           <button
             type="button"
             onClick={selectAllFiltered}
-            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] cursor-pointer whitespace-nowrap"
+            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] cursor-pointer whitespace-nowrap"
           >
             {selectedIds.size > 0 &&
             selectedIds.size === filtered.filter((s) => !importedSessionIds.has(s.sessionId)).length
@@ -642,7 +642,7 @@ export function DiscoverPage(): React.JSX.Element {
               onClick={() => void handleBulkImport()}
               disabled={bulkImporting}
               className={cn(
-                'px-3 py-1 bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap',
+                'px-3 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap',
                 bulkImporting && 'opacity-50',
               )}
             >
@@ -741,7 +741,7 @@ export function DiscoverPage(): React.JSX.Element {
                       <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                         last active: <LiveTimeAgo date={group.latestActivity} />
                       </span>
-                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-sm font-medium">
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-md font-medium">
                         {group.sessions.length} session
                         {group.sessions.length !== 1 ? 's' : ''}
                       </span>
@@ -818,7 +818,7 @@ export function DiscoverPage(): React.JSX.Element {
                             {/* Branch badge */}
                             {s.branch && (
                               <SimpleTooltip content={`Branch: ${s.branch}`}>
-                                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-green-500 bg-green-500/10 border border-green-500/20 px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
+                                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-green-500 bg-green-500/10 border border-green-500/20 px-1.5 py-px rounded-md whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
                                   <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                                     <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" />
                                   </svg>
@@ -829,13 +829,13 @@ export function DiscoverPage(): React.JSX.Element {
 
                             {/* Imported badge */}
                             {isImported && (
-                              <span className="hidden sm:inline text-[10px] font-medium text-green-600 bg-green-600/10 border border-green-600/20 px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
+                              <span className="hidden sm:inline text-[10px] font-medium text-green-600 bg-green-600/10 border border-green-600/20 px-1.5 py-px rounded-md whitespace-nowrap shrink-0">
                                 Imported
                               </span>
                             )}
 
                             {/* Hostname */}
-                            <span className="hidden sm:inline text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
+                            <span className="hidden sm:inline text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-md whitespace-nowrap shrink-0">
                               {s.hostname}
                             </span>
 
@@ -860,7 +860,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 disabled={importingSessionId === s.sessionId}
                                 aria-label={`Import session ${s.sessionId.slice(0, 8)}`}
                                 className={cn(
-                                  'px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0',
+                                  'px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0',
                                   importingSessionId === s.sessionId && 'opacity-50 cursor-not-allowed',
                                 )}
                               >
@@ -878,7 +878,7 @@ export function DiscoverPage(): React.JSX.Element {
                                   setResumePrompt('');
                                 }}
                                 aria-label={`Resume session ${s.sessionId.slice(0, 8)}`}
-                                className="px-2.5 py-1 bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
+                                className="px-2.5 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
                               >
                                 Resume
                               </button>
@@ -911,7 +911,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 disabled={!resumePrompt.trim()}
                                 aria-label="Submit resume prompt"
                                 className={cn(
-                                  'py-[5px] px-3 bg-primary text-white rounded-sm text-xs border-none cursor-pointer',
+                                  'py-[5px] px-3 bg-primary text-white rounded-md text-xs border-none cursor-pointer',
                                   !resumePrompt.trim() && 'opacity-50',
                                 )}
                               >
@@ -921,7 +921,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 type="button"
                                 onClick={() => setResuming(null)}
                                 aria-label="Cancel resume"
-                                className="py-[5px] px-2.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
+                                className="py-[5px] px-2.5 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer"
                               >
                                 Cancel
                               </button>

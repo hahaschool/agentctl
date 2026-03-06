@@ -636,11 +636,11 @@ function CostOverview({
       <SectionHeader title="Cost Overview" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total cost */}
-        <div className="border border-border/50 rounded-lg bg-card p-4 flex flex-col justify-center">
+        <div className="border border-border/50 rounded-lg bg-card p-4 transition-colors hover:border-border flex flex-col justify-center">
           <div className="text-[11px] font-medium text-muted-foreground mb-1">
             Total Session Cost
           </div>
-          <div className="text-2xl font-bold font-mono text-foreground">
+          <div className="text-2xl font-semibold font-mono text-foreground">
             {formatCost(totalCost)}
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
@@ -649,7 +649,7 @@ function CostOverview({
         </div>
 
         {/* Bar chart: cost per agent */}
-        <div className="border border-border/50 rounded-lg bg-card p-4">
+        <div className="border border-border/50 rounded-lg bg-card p-4 transition-colors hover:border-border">
           <div className="text-[11px] font-medium text-muted-foreground mb-3">
             Cost by Agent
           </div>
@@ -687,7 +687,7 @@ function CostOverview({
         </div>
 
         {/* Top 5 most expensive sessions */}
-        <div className="border border-border/50 rounded-lg bg-card p-4">
+        <div className="border border-border/50 rounded-lg bg-card p-4 transition-colors hover:border-border">
           <div className="text-[11px] font-medium text-muted-foreground mb-3">
             Most Expensive Sessions
           </div>

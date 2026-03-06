@@ -134,7 +134,7 @@ export function ForkContextPicker({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-muted-foreground hover:text-foreground rounded-sm hover:bg-muted transition-colors cursor-pointer"
+            className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors cursor-pointer"
             aria-label="Close"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -155,14 +155,14 @@ export function ForkContextPicker({
               <button
                 type="button"
                 onClick={selectAll}
-                className="px-2 py-0.5 text-[10px] text-blue-400 hover:text-blue-300 border border-blue-800/50 rounded-sm hover:bg-blue-900/30 cursor-pointer transition-colors"
+                className="px-2 py-0.5 text-[10px] text-blue-400 hover:text-blue-300 border border-blue-800/50 rounded-md hover:bg-blue-900/30 cursor-pointer transition-colors"
               >
                 Select All
               </button>
               <button
                 type="button"
                 onClick={deselectAll}
-                className="px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground border border-border rounded-sm hover:bg-muted cursor-pointer transition-colors"
+                className="px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-muted cursor-pointer transition-colors"
               >
                 Deselect All
               </button>
@@ -182,7 +182,7 @@ export function ForkContextPicker({
                   <label
                     key={idx}
                     className={cn(
-                      'flex items-start gap-2.5 px-2.5 py-2 rounded-sm cursor-pointer transition-colors border-l-2',
+                      'flex items-start gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors border-l-2',
                       checked
                         ? 'bg-muted/50 border-l-blue-500'
                         : 'border-l-transparent hover:bg-muted/30',
@@ -234,7 +234,7 @@ export function ForkContextPicker({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="my-agent"
-                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none focus:border-blue-600 transition-colors"
+                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors"
                 />
               </div>
 
@@ -247,7 +247,7 @@ export function ForkContextPicker({
                   id="fork-type"
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none focus:border-blue-600 transition-colors"
+                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors"
                 >
                   {AGENT_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>
@@ -266,7 +266,7 @@ export function ForkContextPicker({
                   id="fork-model"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none focus:border-blue-600 transition-colors"
+                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors"
                 >
                   {MODEL_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -287,7 +287,7 @@ export function ForkContextPicker({
                   onChange={(e) => setSystemPrompt(e.target.value)}
                   placeholder="Additional instructions for the agent..."
                   rows={6}
-                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none focus:border-blue-600 transition-colors resize-y leading-relaxed"
+                  className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors resize-y leading-relaxed"
                 />
               </div>
 
@@ -321,7 +321,7 @@ export function ForkContextPicker({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-3.5 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-sm hover:bg-muted cursor-pointer disabled:opacity-50 transition-colors"
+              className="px-3.5 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-muted cursor-pointer disabled:opacity-50 transition-colors"
             >
               Cancel
             </button>
@@ -329,7 +329,7 @@ export function ForkContextPicker({
               type="button"
               onClick={handleSubmit}
               disabled={!name.trim() || contextStats.count === 0 || isSubmitting}
-              className="px-3.5 py-1.5 text-xs text-white bg-blue-700 hover:bg-blue-600 rounded-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-3.5 py-1.5 text-xs text-white bg-blue-700 hover:bg-blue-600 rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? 'Creating...' : 'Create Agent'}
             </button>
