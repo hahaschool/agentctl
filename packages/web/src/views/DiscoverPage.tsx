@@ -93,6 +93,32 @@ export function DiscoverPage(): React.JSX.Element {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkImporting, setBulkImporting] = useState(false);
 
+  // Single-session import state
+  const [importingSessionId, setImportingSessionId] = useState<string | null>(null);
+
+  const handleSingleImport = useCallback(
+    async (session: DiscoveredSession) => {
+      setImportingSessionId(session.sessionId);
+      try {
+        await api.createSession({
+          agentId: 'adhoc',
+          machineId: session.machineId,
+          projectPath: session.projectPath,
+          prompt: 'Imported from discover — continue previous work.',
+          resumeSessionId: session.sessionId,
+        });
+        toast.success(`Imported session from ${session.hostname}`);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+      } finally {
+        setImportingSessionId(null);
+      }
+    },
+    [queryClient, toast],
+  );
+
   // Filter state
   const [search, setSearch] = useState('');
   const [minMessages, setMinMessages] = useState<MinMessages>(1);
@@ -822,6 +848,25 @@ export function DiscoverPage(): React.JSX.Element {
                             <span className="hidden md:inline">
                               <CopyableText value={s.sessionId} />
                             </span>
+
+                            {/* Import button */}
+                            {!isImported && !isResuming && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleSingleImport(s);
+                                }}
+                                disabled={importingSessionId === s.sessionId}
+                                aria-label={`Import session ${s.sessionId.slice(0, 8)}`}
+                                className={cn(
+                                  'px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0',
+                                  importingSessionId === s.sessionId && 'opacity-50 cursor-not-allowed',
+                                )}
+                              >
+                                {importingSessionId === s.sessionId ? 'Importing...' : 'Import'}
+                              </button>
+                            )}
 
                             {/* Resume button */}
                             {!isResuming && (
