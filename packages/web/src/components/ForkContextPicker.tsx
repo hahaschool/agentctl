@@ -111,13 +111,13 @@ export function ForkContextPicker({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm border-none p-0 cursor-default"
         onClick={onClose}
         onKeyDown={(e) => {
           if (e.key === 'Escape') onClose();
         }}
-        role="button"
         tabIndex={-1}
         aria-label="Close dialog"
       />
@@ -144,7 +144,9 @@ export function ForkContextPicker({
               viewBox="0 0 14 14"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
+              role="img"
             >
+              <title>Close</title>
               <path
                 d="M1 1L13 13M1 13L13 1"
                 stroke="currentColor"
