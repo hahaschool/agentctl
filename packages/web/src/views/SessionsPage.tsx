@@ -8,8 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnsiSpan, AnsiText } from '../components/AnsiText';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { ProgressIndicator } from '../components/ProgressIndicator';
+import { SubagentBlock } from '../components/SubagentBlock';
+import { ThinkingBlock } from '../components/ThinkingBlock';
+import { TodoBlock } from '../components/TodoBlock';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { GitStatusBadge } from '../components/GitStatusBadge';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
@@ -133,6 +138,7 @@ export function SessionsPage(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
+  const [lastSentMessage, setLastSentMessage] = useState<{ text: string; ts: number } | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
@@ -419,12 +425,14 @@ export function SessionsPage(): React.JSX.Element {
 
   const handleSend = useCallback(async () => {
     if (!selected || !prompt.trim()) return;
+    const messageText = prompt.trim();
     setSending(true);
+    setLastSentMessage({ text: messageText, ts: Date.now() });
     try {
       if (selected.status === 'active') {
-        await api.sendMessage(selected.id, prompt.trim());
+        await api.sendMessage(selected.id, messageText);
       } else {
-        await api.resumeSession(selected.id, prompt.trim());
+        await api.resumeSession(selected.id, messageText);
       }
       setPrompt('');
       // Only invalidate queries — don't clear the session list (causes "0 sessions" flash)
@@ -1001,6 +1009,13 @@ export function SessionsPage(): React.JSX.Element {
                 />
               </div>
 
+              {/* Git status */}
+              {selected.projectPath && selected.machineId && (
+                <div className="mt-2.5 col-span-full">
+                  <GitStatusBadge machineId={selected.machineId} projectPath={selected.projectPath} />
+                </div>
+              )}
+
               {/* Error message display */}
               {selected.status === 'error' && selected.metadata && (
                 <div className="mt-2.5 px-2.5 py-2 bg-red-900/30 border border-red-500/30 rounded-sm text-red-300 text-xs">
@@ -1026,6 +1041,7 @@ export function SessionsPage(): React.JSX.Element {
                 machineId={selected.machineId}
                 projectPath={selected.projectPath ?? undefined}
                 isActive={selected.status === 'active' || selected.status === 'starting'}
+                lastSentMessage={lastSentMessage}
               />
             )}
 
@@ -1281,17 +1297,26 @@ function SessionContent({
   machineId,
   projectPath,
   isActive,
+  lastSentMessage,
 }: {
   sessionId: string;
   rcSessionId: string;
   machineId: string;
   projectPath?: string;
   isActive?: boolean;
+  lastSentMessage?: { text: string; ts: number } | null;
 }): React.JSX.Element {
   const [data, setData] = useState<SessionContentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showTools, setShowTools] = useState(false);
+  const [showThinking, setShowThinking] = useState(false);
+  const [showProgress, setShowProgress] = useState(isActive ?? false);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    { id: string; text: string; timestamp: number }[]
+  >([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
 
@@ -1312,7 +1337,7 @@ function SessionContent({
       const result = await api.getSessionContent(sessionId, {
         machineId,
         projectPath,
-        limit: 100,
+        limit: 500,
       });
       setData(result);
       setError(null);
@@ -1349,21 +1374,71 @@ function SessionContent({
     };
   }, [isActive, fetchContent]);
 
-  // Auto-scroll when new messages arrive
+  // Auto-scroll when new messages arrive (only if autoScroll is true)
   useEffect(() => {
     if (data && scrollRef.current) {
       const newCount = data.messages.length;
-      if (newCount > prevMsgCountRef.current) {
+      if (newCount > prevMsgCountRef.current && autoScroll) {
         scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
       }
       prevMsgCountRef.current = newCount;
     }
-  }, [data]);
+  }, [data, autoScroll]);
+
+  // Clear optimistic messages when they appear in the real data
+  useEffect(() => {
+    if (!data || optimisticMessages.length === 0) return;
+    const realTexts = data.messages
+      .filter((m) => m.type === 'human')
+      .map((m) => (m.content ?? '').trim());
+    setOptimisticMessages((prev) =>
+      prev.filter((om) => !realTexts.includes(om.text.trim())),
+    );
+  }, [data, optimisticMessages.length]);
+
+  // Scroll handler for user-scrolled-up detection
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    setUserScrolledUp(!atBottom);
+    setAutoScroll(atBottom);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    setAutoScroll(true);
+    setUserScrolledUp(false);
+  }, []);
+
+  // React to parent sending a message — add optimistic entry
+  const lastSentRef = useRef<number>(0);
+  useEffect(() => {
+    if (!lastSentMessage || lastSentMessage.ts <= lastSentRef.current) return;
+    lastSentRef.current = lastSentMessage.ts;
+    setOptimisticMessages((prev) => [
+      ...prev,
+      { id: `opt-${lastSentMessage.ts}`, text: lastSentMessage.text, timestamp: lastSentMessage.ts },
+    ]);
+    // Auto-scroll when user sends
+    setAutoScroll(true);
+    setUserScrolledUp(false);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current?.scrollHeight ?? 0, behavior: 'smooth' });
+    }, 50);
+  }, [lastSentMessage]);
 
   const messages = data
-    ? showTools
-      ? data.messages
-      : data.messages.filter((m) => m.type === 'human' || m.type === 'assistant')
+    ? data.messages.filter((m) => {
+        // Always show these types
+        if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo') return true;
+        // Toggle-controlled types
+        if (m.type === 'tool_use' || m.type === 'tool_result') return showTools;
+        if (m.type === 'thinking') return showThinking;
+        if (m.type === 'progress') return showProgress;
+        // Hide unknown types unless tools are shown
+        return showTools;
+      })
     : [];
 
   return (
@@ -1387,21 +1462,45 @@ function SessionContent({
         <div className="flex gap-1.5">
           <button
             type="button"
+            onClick={() => setShowThinking(!showThinking)}
+            aria-label={showThinking ? 'Hide thinking' : 'Show thinking'}
+            aria-pressed={showThinking}
+            className={cn(
+              'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
+              showThinking ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-muted text-muted-foreground',
+            )}
+          >
+            Thinking
+          </button>
+          <button
+            type="button"
             onClick={() => setShowTools(!showTools)}
             aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
             aria-pressed={showTools}
             className={cn(
-              'px-2.5 py-1 border border-border rounded-sm text-[11px] cursor-pointer min-h-[28px]',
-              showTools ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+              'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
+              showTools ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-muted text-muted-foreground',
             )}
           >
-            {showTools ? 'Hide Tools' : 'Show Tools'}
+            Tools
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowProgress(!showProgress)}
+            aria-label={showProgress ? 'Hide progress' : 'Show progress'}
+            aria-pressed={showProgress}
+            className={cn(
+              'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors min-h-[28px]',
+              showProgress ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-muted text-muted-foreground',
+            )}
+          >
+            Progress
           </button>
           <button
             type="button"
             onClick={() => void fetchContent()}
             aria-label="Refresh conversation"
-            className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-[11px] cursor-pointer min-h-[28px]"
+            className="px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded-sm text-[10px] cursor-pointer transition-colors min-h-[28px]"
           >
             Refresh
           </button>
@@ -1409,40 +1508,80 @@ function SessionContent({
       </div>
 
       {/* Content */}
-      <div ref={scrollRef} className="flex-1 overflow-auto px-5 py-2 scroll-smooth">
-        {loading && (
-          <div className="p-4 space-y-3">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={`msg-sk-${String(i)}`}
-                className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
-              >
-                <Skeleton className="h-3 w-16 mb-2" />
-                <Skeleton className="h-3 w-full mb-1" />
-                <Skeleton className="h-3 w-3/4" />
-              </div>
-            ))}
-          </div>
-        )}
-        {error && <ErrorBanner message={error} onRetry={() => void fetchContent()} />}
-        {data && messages.length === 0 && !loading && (
-          <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
-        )}
-        {messages.map((msg, i) => (
-          <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />
-        ))}
-
-        {/* Live streaming output */}
-        {stream.connected && stream.streamOutput.length > 0 && (
-          <div className="rounded-sm border border-green-500/20 bg-green-950/20 px-2.5 py-1.5 mb-1.5">
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[9px] font-semibold text-green-500">Streaming</span>
+      <div className="relative flex-1 min-h-0">
+        <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-auto px-5 py-2 scroll-smooth">
+          {loading && (
+            <div className="p-4 space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={`msg-sk-${String(i)}`}
+                  className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
+                >
+                  <Skeleton className="h-3 w-16 mb-2" />
+                  <Skeleton className="h-3 w-full mb-1" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              ))}
             </div>
-            <AnsiText className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto m-0">
-              {stream.streamOutput.join('')}
-            </AnsiText>
-          </div>
+          )}
+          {error && <ErrorBanner message={error} onRetry={() => void fetchContent()} />}
+          {data && messages.length === 0 && !loading && (
+            <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
+          )}
+          {messages.map((msg, i) => {
+            switch (msg.type) {
+              case 'thinking':
+                return <ThinkingBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
+              case 'progress':
+                return <ProgressIndicator key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} timestamp={msg.timestamp} />;
+              case 'subagent':
+                return <SubagentBlock key={`${msg.type}-${String(i)}`} content={msg.content} toolName={msg.toolName} subagentId={(msg as Record<string, unknown>).subagentId as string | undefined} timestamp={msg.timestamp} />;
+              case 'todo':
+                return <TodoBlock key={`${msg.type}-${String(i)}`} content={msg.content} timestamp={msg.timestamp} />;
+              default:
+                return <InlineMessage key={`${msg.type}-${String(i)}`} message={msg} />;
+            }
+          })}
+
+          {/* Optimistic messages */}
+          {optimisticMessages.map((om) => (
+            <div
+              key={om.id}
+              className="mb-1.5 px-2.5 py-1.5 rounded-sm border-l-2 border-blue-500/50 bg-blue-500/10"
+            >
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-[10px] font-semibold text-blue-400">You</span>
+                <span className="text-[9px] text-blue-400/70 animate-pulse">sending...</span>
+              </div>
+              <div className="text-xs text-foreground whitespace-pre-wrap break-words">
+                {om.text}
+              </div>
+            </div>
+          ))}
+
+          {/* Live streaming output */}
+          {stream.connected && stream.streamOutput.length > 0 && (
+            <div className="rounded-sm border border-green-500/20 bg-green-950/20 px-2.5 py-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[9px] font-semibold text-green-500">Streaming</span>
+              </div>
+              <AnsiText className="text-[11px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[200px] overflow-auto m-0">
+                {stream.streamOutput.join('')}
+              </AnsiText>
+            </div>
+          )}
+        </div>
+
+        {/* Floating scroll-to-bottom button */}
+        {userScrolledUp && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="absolute bottom-3 right-5 px-3 py-1.5 bg-primary text-white text-[11px] rounded-full shadow-lg cursor-pointer opacity-90 hover:opacity-100 transition-opacity z-10"
+          >
+            Scroll to bottom
+          </button>
         )}
       </div>
     </div>
