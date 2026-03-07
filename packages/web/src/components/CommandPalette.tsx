@@ -568,6 +568,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type a command or search agents, machines, sessions..."
+            aria-label="Search commands"
             className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-mono bg-muted text-muted-foreground border border-border rounded-sm">

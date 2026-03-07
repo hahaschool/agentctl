@@ -308,6 +308,7 @@ export const FileBrowser = React.memo(function FileBrowser({
             onChange={(e) => setPathInput(e.target.value)}
             className="flex-1 px-2 py-1 bg-muted text-foreground border border-border rounded-md text-xs font-mono outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             placeholder="Absolute path..."
+            aria-label="File path"
           />
           <button
             type="submit"

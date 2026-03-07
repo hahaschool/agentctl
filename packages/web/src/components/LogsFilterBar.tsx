@@ -108,6 +108,7 @@ export function LogsFilterBar({
           <input
             type="text"
             placeholder="Search actions, tools, agents..."
+            aria-label="Search actions, tools, or agents"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full px-3 py-1.5 pl-8 pr-10 text-[13px] bg-card border border-border/50 rounded-md placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"

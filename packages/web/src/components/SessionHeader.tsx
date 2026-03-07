@@ -349,13 +349,19 @@ export function SessionHeader({
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
               title="Export session (E: JSON, M: Markdown)"
+              aria-haspopup="menu"
+              aria-expanded={showExportMenu}
             >
               Export
             </button>
             {showExportMenu && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-md shadow-lg min-w-[160px]">
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-md shadow-lg min-w-[160px]"
+              >
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     exportSessionAsJson(session, messages);
                     setShowExportMenu(false);
@@ -369,6 +375,7 @@ export function SessionHeader({
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     exportSessionAsMarkdown(session, messages);
                     setShowExportMenu(false);
@@ -422,6 +429,7 @@ export function SessionHeader({
                 }
               }}
               placeholder="Prompt for the forked session..."
+              aria-label="Prompt for forked session"
               className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-[12px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             />
             <button
