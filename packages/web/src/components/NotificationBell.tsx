@@ -5,8 +5,8 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
-import { timeAgo } from '../lib/format-utils';
 import type { Notification, NotificationType } from '../hooks/use-notifications';
+import { timeAgo } from '../lib/format-utils';
 
 type NotificationBellProps = {
   notifications: Notification[];

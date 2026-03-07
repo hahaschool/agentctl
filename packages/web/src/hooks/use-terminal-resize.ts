@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react';
 import type { RefObject } from 'react';
+import { useCallback, useEffect } from 'react';
 
 /**
  * Shared resize logic for xterm.js terminal components.

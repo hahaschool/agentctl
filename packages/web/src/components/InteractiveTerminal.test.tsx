@@ -127,8 +127,8 @@ Object.defineProperty(navigator, 'clipboard', {
 // Component import (after mocks)
 // ---------------------------------------------------------------------------
 
-import { InteractiveTerminal } from './InteractiveTerminal';
 import { useTerminalResize as mockUseTerminalResize } from '@/hooks/use-terminal-resize';
+import { InteractiveTerminal } from './InteractiveTerminal';
 
 // ---------------------------------------------------------------------------
 // Helpers
