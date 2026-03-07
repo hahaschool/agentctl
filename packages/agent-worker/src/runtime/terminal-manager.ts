@@ -105,6 +105,10 @@ export class TerminalManager {
     const cols = opts.cols ?? 120;
     const rows = opts.rows ?? 30;
 
+    // Build a clean environment for the PTY shell. Remove Claude Code's
+    // nesting-detection variable so the user can launch `claude` from the terminal.
+    const { CLAUDECODE: _, ...cleanEnv } = process.env;
+
     let pty: import('node-pty').IPty;
     try {
       pty = nodePty.spawn(command, args, {
@@ -112,7 +116,7 @@ export class TerminalManager {
         cols,
         rows,
         cwd: opts.cwd ?? process.env.HOME ?? '/',
-        env: { ...process.env, ...opts.env, TERM: 'xterm-256color' } as Record<string, string>,
+        env: { ...cleanEnv, ...opts.env, TERM: 'xterm-256color' } as Record<string, string>,
       });
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
