@@ -1098,3 +1098,47 @@ test.describe('Dark mode persistence', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sessions page interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Sessions page interactions', () => {
+  test('sessions page has sort and group-by dropdowns', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.getByRole('heading', { name: /sessions/i }).waitFor({ timeout: 15_000 });
+
+    // Sort dropdown (rendered as <select> → combobox role)
+    const sortSelect = page.getByRole('combobox', { name: 'Sort by' });
+    await expect(sortSelect).toBeVisible({ timeout: 5_000 });
+    const sortOptions = sortSelect.getByRole('option');
+    expect(await sortOptions.count()).toBeGreaterThanOrEqual(3);
+
+    // Group-by dropdown
+    const groupSelect = page.getByRole('combobox', { name: 'Group by' });
+    await expect(groupSelect).toBeVisible({ timeout: 5_000 });
+    const groupOptions = groupSelect.getByRole('option');
+    expect(await groupOptions.count()).toBeGreaterThanOrEqual(2);
+  });
+
+  test('sessions page has status filter tabs', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.getByRole('heading', { name: /sessions/i }).waitFor({ timeout: 15_000 });
+
+    // Status filter tabs rendered as buttons: All, Starting, Active, Ended, Error
+    const allTab = page.locator('button').filter({ hasText: /^All/ }).first();
+    await expect(allTab).toBeVisible({ timeout: 5_000 });
+    const endedTab = page.locator('button').filter({ hasText: /^Ended/ }).first();
+    await expect(endedTab).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('sessions page search input accepts text', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.getByRole('heading', { name: /sessions/i }).waitFor({ timeout: 15_000 });
+
+    const search = page.getByRole('searchbox', { name: 'Search sessions' });
+    await expect(search).toBeVisible({ timeout: 5_000 });
+    await search.fill('test query');
+    await expect(search).toHaveValue('test query');
+  });
+});
