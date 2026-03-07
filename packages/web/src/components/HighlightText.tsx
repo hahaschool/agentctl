@@ -1,6 +1,6 @@
 'use client';
 
-import type React from 'react';
+import { memo } from 'react';
 
 type Props = {
   text: string;
@@ -12,7 +12,11 @@ type Props = {
  * Renders text with matching substrings highlighted in yellow.
  * Case-insensitive matching. Returns plain text if no highlight or no match.
  */
-export function HighlightText({ text, highlight, className }: Props): React.JSX.Element {
+export const HighlightText = memo(function HighlightText({
+  text,
+  highlight,
+  className,
+}: Props): React.JSX.Element {
   if (!highlight.trim()) {
     return <span className={className}>{text}</span>;
   }
@@ -33,7 +37,7 @@ export function HighlightText({ text, highlight, className }: Props): React.JSX.
       )}
     </span>
   );
-}
+});
 
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
