@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 
 import { WorkerError } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import {
   type AuditEntryPostTool,
   type AuditEntryPreTool,
@@ -36,14 +36,7 @@ const mockReadFile = vi.mocked(readFile);
 
 // ── Mock logger ─────────────────────────────────────────────────────
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

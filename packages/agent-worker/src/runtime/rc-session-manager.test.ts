@@ -4,6 +4,7 @@ import { Readable, Writable } from 'node:stream';
 import { WorkerError } from '@agentctl/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import { RcSessionManager } from './rc-session-manager.js';
 
 // ── Mock child_process.spawn at module level ─────────────────────────
@@ -13,20 +14,6 @@ const spawnSpy = vi.fn();
 vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => spawnSpy(...args),
 }));
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function createMockLogger() {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-    fatal: vi.fn(),
-    trace: vi.fn(),
-  } as unknown as import('pino').Logger;
-}
 
 type MockChild = EventEmitter & {
   stdout: Readable;

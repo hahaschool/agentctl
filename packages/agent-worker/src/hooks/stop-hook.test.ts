@@ -1,19 +1,12 @@
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import type { AuditLogger } from './audit-logger.js';
 import { createStopHook, type StopInput } from './stop-hook.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 function makeInput(overrides?: Partial<StopInput>): StopInput {
   return {

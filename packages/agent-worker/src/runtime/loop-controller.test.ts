@@ -2,22 +2,15 @@ import { EventEmitter } from 'node:events';
 
 import type { AgentEvent, LoopConfig } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import type { AgentInstance } from './agent-instance.js';
 import { LoopController } from './loop-controller.js';
 
 // ── Mock helpers ────────────────────────────────────────────────────
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 /**
  * Create a mock AgentInstance that simulates completing after start() is called.

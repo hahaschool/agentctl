@@ -1,9 +1,9 @@
 import path from 'node:path';
 
 import { AgentError } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import { WorktreeManager, type WorktreeManagerOptions } from './worktree-manager.js';
 
 // ── Mock child_process.execFile ────────────────────────────────────────────
@@ -94,14 +94,7 @@ function mockExecFileSequence(
 
 // ── Mock logger ────────────────────────────────────────────────────────────
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
