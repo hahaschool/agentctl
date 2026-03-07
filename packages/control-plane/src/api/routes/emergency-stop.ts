@@ -2,8 +2,8 @@ import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
-import { EMERGENCY_STOP_TIMEOUT_MS } from '../constants.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { EMERGENCY_STOP_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
 

@@ -315,8 +315,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
         return;
       }
 
-      const wsUrl =
-        workerBaseUrl.replace(/^http/, 'ws') + `/api/terminal/${encodeURIComponent(termId)}/ws`;
+      const wsUrl = `${workerBaseUrl.replace(/^http/, 'ws')}/api/terminal/${encodeURIComponent(termId)}/ws`;
 
       const { WebSocket } = await import('ws');
       const upstream = new WebSocket(wsUrl);

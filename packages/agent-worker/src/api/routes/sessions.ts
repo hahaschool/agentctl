@@ -13,13 +13,12 @@ import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
-
-import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 import type {
   CliSession,
   CliSessionEvent,
   CliSessionManager,
 } from '../../runtime/cli-session-manager.js';
+import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 
 // ---------------------------------------------------------------------------
 // Constants

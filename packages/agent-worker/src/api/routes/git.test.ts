@@ -79,7 +79,7 @@ function mockGitCommands(commandMap: Record<string, string>): void {
 
       for (const [pattern, stdout] of Object.entries(commandMap)) {
         if (key.includes(pattern)) {
-          callback(null, { stdout: stdout + '\n' });
+          callback(null, { stdout: `${stdout}\n` });
           return {} as ReturnType<typeof execFile>;
         }
       }

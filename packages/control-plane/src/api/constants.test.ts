@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BATCH_LIMITS,
+  clampLimit,
   EMERGENCY_STOP_TIMEOUT_MS,
   LOOP_PROXY_TIMEOUT_MS,
+  PAGINATION,
   WORKER_REQUEST_TIMEOUT_MS,
   WS_HEARTBEAT_INTERVAL_MS,
-  clampLimit,
-  PAGINATION,
 } from './constants.js';
 
 describe('PAGINATION', () => {
