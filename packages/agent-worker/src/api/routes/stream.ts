@@ -3,9 +3,9 @@ import { WorkerError } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { AgentPool } from '../../runtime/agent-pool.js';
+import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 
 const SSE_CATCH_UP_LIMIT = 50;
-const HEARTBEAT_INTERVAL_MS = 15_000;
 
 export type StreamRoutesOptions = {
   agentPool: AgentPool;
@@ -72,7 +72,7 @@ export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app,
       if (!raw.destroyed) {
         raw.write(`: heartbeat\n\n`);
       }
-    }, HEARTBEAT_INTERVAL_MS);
+    }, SSE_HEARTBEAT_INTERVAL_MS);
 
     // 4. Clean up when the client disconnects.
     request.raw.on('close', () => {

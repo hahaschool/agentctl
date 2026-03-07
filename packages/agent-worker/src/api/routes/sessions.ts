@@ -14,6 +14,7 @@ import { AgentError, WorkerError } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
+import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 import type {
   CliSession,
   CliSessionEvent,
@@ -92,7 +93,6 @@ const MAX_SEARCH_DEPTH = 3;
 // ---------------------------------------------------------------------------
 
 const SSE_BUFFER_LIMIT = Number(process.env.SSE_BUFFER_LIMIT) || 100;
-const HEARTBEAT_INTERVAL_MS = 15_000;
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -977,7 +977,7 @@ export async function sessionRoutes(
       if (!raw.destroyed) {
         raw.write(`: heartbeat\n\n`);
       }
-    }, HEARTBEAT_INTERVAL_MS);
+    }, SSE_HEARTBEAT_INTERVAL_MS);
 
     // 4. Cleanup on disconnect
     request.raw.on('close', () => {
