@@ -4,57 +4,16 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { fileProxyRoutes } from './files.js';
+import {
+  createMockDbRegistry,
+  makeMachine,
+  mockFetchError,
+  mockFetchOk,
+  mockFetchThrow,
+  saveOriginalFetch,
+} from './test-helpers.js';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const NOW = new Date().toISOString();
-
-function makeMachine(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'machine-1',
-    hostname: 'test-host',
-    tailscaleIp: '100.64.0.1',
-    os: 'linux',
-    arch: 'x64',
-    status: 'online',
-    lastHeartbeat: NOW,
-    capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
-    createdAt: NOW,
-    ...overrides,
-  };
-}
-
-function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}) {
-  return {
-    getMachine: vi.fn().mockResolvedValue(makeMachine()),
-    ...overrides,
-  } as unknown as DbAgentRegistry;
-}
-
-const originalFetch = globalThis.fetch;
-
-function mockFetchOk(body: Record<string, unknown> = { entries: [] }) {
-  globalThis.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => body,
-  });
-}
-
-function mockFetchError(status = 500) {
-  globalThis.fetch = vi.fn().mockResolvedValue({
-    ok: false,
-    status,
-    json: async () => ({ error: 'WORKER_ERROR', message: 'Something went wrong' }),
-    statusText: 'Internal Server Error',
-  });
-}
-
-function mockFetchThrow(message = 'Connection refused') {
-  globalThis.fetch = vi.fn().mockRejectedValue(new Error(message));
-}
+const originalFetch = saveOriginalFetch();
 
 // ---------------------------------------------------------------------------
 // App builder
