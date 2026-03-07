@@ -91,9 +91,13 @@ export class TerminalManager {
     try {
       nodePty = await import('node-pty');
     } catch (err) {
-      throw new WorkerError('TERMINAL_SPAWN_FAILED', 'node-pty is not available on this machine', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.error({ error: detail }, 'node-pty import failed');
+      throw new WorkerError(
+        'TERMINAL_SPAWN_FAILED',
+        `node-pty is not available on this machine: ${detail}`,
+        { error: detail },
+      );
     }
 
     const command = opts.command ?? process.env.SHELL ?? '/bin/zsh';
@@ -111,9 +115,11 @@ export class TerminalManager {
         env: { ...process.env, ...opts.env, TERM: 'xterm-256color' } as Record<string, string>,
       });
     } catch (err) {
-      throw new WorkerError('TERMINAL_SPAWN_FAILED', 'Failed to spawn PTY process', {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.error({ command, error: detail }, 'Failed to spawn PTY process');
+      throw new WorkerError('TERMINAL_SPAWN_FAILED', `Failed to spawn PTY process: ${detail}`, {
         command,
-        error: err instanceof Error ? err.message : String(err),
+        error: detail,
       });
     }
 

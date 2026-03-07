@@ -101,15 +101,35 @@ export default function MachineTerminalPage() {
         )}
         {error && (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-3">
               <p className="text-sm text-destructive">{error}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push(`/machines/${machineId}`)}
-              >
-                Go Back
-              </Button>
+              <div className="flex items-center gap-2 justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setError(null);
+                    setSpawning(true);
+                    spawnedRef.current = false;
+                    api
+                      .spawnTerminal(machineId, { cols: 120, rows: 30 })
+                      .then((info) => setTerminalId(info.id))
+                      .catch((err: unknown) => {
+                        setError(err instanceof Error ? err.message : String(err));
+                      })
+                      .finally(() => setSpawning(false));
+                  }}
+                >
+                  Retry
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/machines/${machineId}`)}
+                >
+                  Go Back
+                </Button>
+              </div>
             </div>
           </div>
         )}
