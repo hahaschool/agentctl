@@ -17,44 +17,57 @@ export default function MachineTerminalPage() {
   const [terminalId, setTerminalId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [spawning, setSpawning] = useState(true);
-  const spawnedIdRef = useRef<string | null>(null);
 
-  // Auto-spawn terminal on mount
+  // Ref survives React Strict Mode's unmount/remount cycle.
+  // We use it to share the spawn result across mounts so we only spawn once.
+  const spawnStateRef = useRef<{
+    pending: boolean;
+    termId: string | null;
+    error: string | null;
+  }>({ pending: false, termId: null, error: null });
+
+  // Auto-spawn terminal on mount — Strict Mode safe
   useEffect(() => {
-    let cancelled = false;
+    const state = spawnStateRef.current;
+
+    // If a previous mount already got a result, reuse it
+    if (state.termId) {
+      setTerminalId(state.termId);
+      setSpawning(false);
+      return;
+    }
+    if (state.error) {
+      setError(state.error);
+      setSpawning(false);
+      return;
+    }
+
+    // If a spawn is already in-flight from a previous mount, wait for it
+    if (state.pending) return;
+    state.pending = true;
 
     api
       .spawnTerminal(machineId, { cols: 120, rows: 30 })
       .then((info) => {
-        if (cancelled) {
-          // Strict mode re-mount: kill the terminal spawned by the first mount
-          api.killTerminal(machineId, info.id).catch(() => {});
-          return;
-        }
-        spawnedIdRef.current = info.id;
+        state.termId = info.id;
         setTerminalId(info.id);
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
         const message = err instanceof Error ? err.message : String(err);
+        state.error = message;
         setError(message);
         toast.error('Failed to spawn terminal');
       })
       .finally(() => {
-        if (!cancelled) setSpawning(false);
+        state.pending = false;
+        setSpawning(false);
       });
 
-    return () => {
-      cancelled = true;
-      // Kill terminal from this mount if it was already spawned
-      if (spawnedIdRef.current) {
-        api.killTerminal(machineId, spawnedIdRef.current).catch(() => {});
-        spawnedIdRef.current = null;
-      }
-    };
+    // No cleanup — the terminal persists across Strict Mode remounts.
+    // Real unmount cleanup is handled by the next effect.
   }, [machineId, toast]);
 
-  // Cleanup terminal on unmount
+  // Cleanup terminal when component truly unmounts (navigation away)
   useEffect(() => {
     return () => {
       if (terminalId) {
@@ -115,17 +128,22 @@ export default function MachineTerminalPage() {
                   onClick={() => {
                     setError(null);
                     setSpawning(true);
-                    spawnedIdRef.current = null;
+                    spawnStateRef.current = { pending: true, termId: null, error: null };
                     api
                       .spawnTerminal(machineId, { cols: 120, rows: 30 })
                       .then((info) => {
-                        spawnedIdRef.current = info.id;
+                        spawnStateRef.current.termId = info.id;
                         setTerminalId(info.id);
                       })
                       .catch((err: unknown) => {
-                        setError(err instanceof Error ? err.message : String(err));
+                        const msg = err instanceof Error ? err.message : String(err);
+                        spawnStateRef.current.error = msg;
+                        setError(msg);
                       })
-                      .finally(() => setSpawning(false));
+                      .finally(() => {
+                        spawnStateRef.current.pending = false;
+                        setSpawning(false);
+                      });
                   }}
                 >
                   Retry
