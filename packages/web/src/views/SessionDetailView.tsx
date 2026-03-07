@@ -208,19 +208,40 @@ export function SessionDetailView(): React.JSX.Element {
   }, [contentMessages, stream.pendingUserMessages, stream.clearPendingMessages]);
 
   // Optimistic messages — shown immediately when user sends, cleared when JSONL catches up
-  const [optimisticMessages, setOptimisticMessages] = useState<string[]>([]);
-  const addOptimisticMessage = useCallback((text: string) => {
-    setOptimisticMessages((prev) => [...prev, text]);
-  }, []);
+  // Uses count-based clearing: record how many human messages exist at send time,
+  // and clear once the real count exceeds that baseline.
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    { text: string; expectedHumanCount: number; timestamp: number }[]
+  >([]);
+  const addOptimisticMessage = useCallback(
+    (text: string) => {
+      const currentHumanCount = contentMessages.filter((m) => m.type === 'human').length;
+      setOptimisticMessages((prev) => [
+        ...prev,
+        { text, expectedHumanCount: currentHumanCount, timestamp: Date.now() },
+      ]);
+    },
+    [contentMessages],
+  );
 
-  // Clear optimistic messages when they appear in JSONL content
+  // Clear optimistic messages when human count exceeds baseline
   useEffect(() => {
     if (optimisticMessages.length === 0) return;
-    const humanTexts = contentMessages
-      .filter((m) => m.type === 'human')
-      .map((m) => m.content?.trim());
-    setOptimisticMessages((prev) => prev.filter((text) => !humanTexts.includes(text.trim())));
+    const humanCount = contentMessages.filter((m) => m.type === 'human').length;
+    setOptimisticMessages((prev) => prev.filter((om) => humanCount <= om.expectedHumanCount));
   }, [contentMessages, optimisticMessages.length]);
+
+  // Safety net: 30-second absolute timeout for stuck optimistic messages
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return;
+    const timer = setTimeout(() => {
+      setOptimisticMessages((prev) => {
+        const cutoff = Date.now() - 30_000;
+        return prev.filter((om) => om.timestamp > cutoff);
+      });
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [optimisticMessages]);
 
   // Terminal replay — reconstruct pseudo-terminal output from JSONL content
   // for ended/paused sessions that have no live rawOutput.
@@ -322,7 +343,7 @@ export function SessionDetailView(): React.JSX.Element {
               streamOutput={stream.streamOutput}
               streamConnected={stream.connected}
               pendingUserMessages={stream.pendingUserMessages}
-              optimisticMessages={optimisticMessages}
+              optimisticMessages={optimisticMessages.map((om) => om.text)}
               onLoadMore={() => setContentLimit((prev) => prev * 2)}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
