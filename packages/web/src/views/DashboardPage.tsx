@@ -255,7 +255,7 @@ export function DashboardPage(): React.JSX.Element {
           data-testid="stat-cards-skeleton"
         >
           {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-20 rounded-lg" />
+            <Skeleton key={`sk-${String(i)}`} className="h-20 rounded-lg" />
           ))}
         </div>
       ) : (
@@ -326,7 +326,7 @@ export function DashboardPage(): React.JSX.Element {
             {sessions.isLoading ? (
               <div className="p-4 bg-card space-y-2" data-testid="recent-sessions-skeleton">
                 {Array.from({ length: 3 }, (_, i) => (
-                  <Skeleton key={i} className="h-12 rounded-md" />
+                  <Skeleton key={`sk-${String(i)}`} className="h-12 rounded-md" />
                 ))}
               </div>
             ) : recentActivity.length === 0 ? (
@@ -399,7 +399,7 @@ export function DashboardPage(): React.JSX.Element {
               {machines.isLoading ? (
                 <div className="p-4 bg-card space-y-2" data-testid="fleet-status-skeleton">
                   {Array.from({ length: 3 }, (_, i) => (
-                    <Skeleton key={i} className="h-10 rounded-md" />
+                    <Skeleton key={`sk-${String(i)}`} className="h-10 rounded-md" />
                   ))}
                 </div>
               ) : machineList.length === 0 ? (
@@ -575,7 +575,7 @@ export function DashboardPage(): React.JSX.Element {
           <DashboardSectionHeader title="Dependencies" />
           <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
             {Array.from({ length: 3 }, (_, i) => (
-              <Skeleton key={i} className="h-12 rounded-lg" />
+              <Skeleton key={`sk-${String(i)}`} className="h-12 rounded-lg" />
             ))}
           </div>
         </div>

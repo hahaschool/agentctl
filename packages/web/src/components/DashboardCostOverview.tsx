@@ -45,7 +45,7 @@ export function DashboardCostOverview({
         <DashboardSectionHeader title="Cost Overview" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-32 rounded-lg" />
+            <Skeleton key={`sk-${String(i)}`} className="h-32 rounded-lg" />
           ))}
         </div>
       </div>

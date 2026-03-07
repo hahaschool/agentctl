@@ -79,9 +79,9 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
                   <div key={s.desc} className="flex justify-between items-center gap-4">
                     <span className="text-[13px] text-foreground/80">{s.desc}</span>
                     <div className="flex gap-1 shrink-0">
-                      {s.keys.map((k, i) => (
+                      {s.keys.map((k) => (
                         <kbd
-                          key={`${k}-${i}`}
+                          key={k}
                           className={cn(
                             'inline-flex items-center justify-center',
                             'bg-muted border border-border rounded px-1.5 py-0.5',

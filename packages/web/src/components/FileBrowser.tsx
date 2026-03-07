@@ -72,7 +72,7 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
           // String literals
           if (/^['"`]/.test(part)) {
             return (
-              <span key={i} className="text-amber-600 dark:text-amber-400">
+              <span key={`p-${String(i)}`} className="text-amber-600 dark:text-amber-400">
                 {part}
               </span>
             );
@@ -83,19 +83,19 @@ function highlightLine(line: string, ext: string): React.JSX.Element {
             '\x00KW\x01$1\x00KW\x02',
           );
           if (!highlighted.includes('\x00KW')) {
-            return <span key={i}>{part}</span>;
+            return <span key={`p-${String(i)}`}>{part}</span>;
           }
           // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control char delimiters for syntax highlighting
           const kParts = highlighted.split(/\x00KW[\x01\x02]/g);
           return (
-            <span key={i}>
+            <span key={`p-${String(i)}`}>
               {kParts.map((kp, ki) =>
                 ki % 2 === 1 ? (
-                  <span key={ki} className="text-purple-600 dark:text-purple-400">
+                  <span key={`kw-${String(ki)}`} className="text-purple-600 dark:text-purple-400">
                     {kp}
                   </span>
                 ) : (
-                  <span key={ki}>{kp}</span>
+                  <span key={`kw-${String(ki)}`}>{kp}</span>
                 ),
               )}
             </span>
@@ -415,7 +415,7 @@ export const FileBrowser = React.memo(function FileBrowser({
                       {/* Line numbers gutter */}
                       <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
                         {lines.map((_, i) => (
-                          <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>
+                          <div key={`ln-${String(i)}`} style={{ minWidth: `${gutterWidth}ch` }}>
                             {i + 1}
                           </div>
                         ))}
@@ -423,7 +423,10 @@ export const FileBrowser = React.memo(function FileBrowser({
                       {/* Code content */}
                       <div className="flex-1 py-3 pl-3 pr-3 overflow-x-auto">
                         {lines.map((line, i) => (
-                          <div key={i} className="whitespace-pre hover:bg-accent/30">
+                          <div
+                            key={`cd-${String(i)}`}
+                            className="whitespace-pre hover:bg-accent/30"
+                          >
                             {highlightLine(line, ext)}
                           </div>
                         ))}
@@ -440,7 +443,7 @@ export const FileBrowser = React.memo(function FileBrowser({
                       {/* Line numbers gutter */}
                       <div className="shrink-0 select-none text-right pr-3 pl-2 py-3 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
                         {lines.map((_, i) => (
-                          <div key={i} style={{ minWidth: `${gutterWidth}ch` }}>
+                          <div key={`ln-${String(i)}`} style={{ minWidth: `${gutterWidth}ch` }}>
                             {i + 1}
                           </div>
                         ))}
@@ -487,7 +490,7 @@ export const FileBrowser = React.memo(function FileBrowser({
                 </thead>
                 <tbody>
                   {Array.from({ length: 5 }, (_, i) => (
-                    <tr key={i} className="border-b border-border/50">
+                    <tr key={`sk-${String(i)}`} className="border-b border-border/50">
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-2">
                           <Skeleton className="h-4 w-4 rounded shrink-0" />

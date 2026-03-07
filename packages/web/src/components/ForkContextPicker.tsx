@@ -184,7 +184,7 @@ export function ForkContextPicker({
                 const checked = selectedIds.has(idx);
                 return (
                   <label
-                    key={idx}
+                    key={`msg-${String(idx)}`}
                     className={cn(
                       'flex items-start gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors border-l-2',
                       checked
