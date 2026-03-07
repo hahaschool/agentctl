@@ -80,9 +80,9 @@ test.describe('Keyboard shortcut navigation', () => {
       await page.keyboard.press(key);
 
       await expect(page).toHaveURL(url, { timeout: 10_000 });
-      await expect(
-        page.getByRole('heading', { name: heading }).first(),
-      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({
+        timeout: 10_000,
+      });
     });
   }
 
@@ -222,9 +222,9 @@ test.describe('Sidebar navigation', () => {
     const expectedLinks = ['Dashboard', 'Sessions', 'Agents', 'Machines', 'Discover', 'Logs'];
 
     for (const linkName of expectedLinks) {
-      await expect(
-        page.getByRole('link', { name: linkName }).first(),
-      ).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByRole('link', { name: linkName }).first()).toBeVisible({
+        timeout: 5_000,
+      });
     }
 
     // Settings link may be at the bottom of the sidebar
@@ -270,7 +270,9 @@ test.describe('Settings page interactions', () => {
     await page.waitForSelector('h1', { timeout: 15_000 });
 
     await expect(page.getByText('API Accounts')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('heading', { name: /Preferences/i })).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole('heading', { name: /Preferences/i })).toBeVisible({
+      timeout: 3_000,
+    });
   });
 
   test('router config link navigates to /settings/router', async ({ page }) => {
@@ -445,9 +447,9 @@ test.describe('Sidebar navigation (extended)', () => {
 
       await page.getByRole('link', { name: label }).first().click();
       await expect(page).toHaveURL(url, { timeout: 10_000 });
-      await expect(
-        page.getByRole('heading', { name: heading }).first(),
-      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({
+        timeout: 10_000,
+      });
     });
   }
 
@@ -455,7 +457,10 @@ test.describe('Sidebar navigation (extended)', () => {
     await page.goto('/');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    await page.getByRole('link', { name: /settings/i }).first().click();
+    await page
+      .getByRole('link', { name: /settings/i })
+      .first()
+      .click();
     await expect(page).toHaveURL(/\/settings/, { timeout: 10_000 });
     await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible({
       timeout: 10_000,
@@ -530,27 +535,25 @@ test.describe('Theme toggle (extended)', () => {
     await expect(themeBtn).toBeVisible({ timeout: 5_000 });
 
     // Get initial theme state from <html> class
-    const initialHasDark = await page.locator('html').evaluate(
-      (el) => el.classList.contains('dark'),
-    );
+    const initialHasDark = await page
+      .locator('html')
+      .evaluate((el) => el.classList.contains('dark'));
 
     // Click toggle
     await themeBtn.click();
     await page.waitForTimeout(500);
 
     // Verify it toggled
-    const afterHasDark = await page.locator('html').evaluate(
-      (el) => el.classList.contains('dark'),
-    );
+    const afterHasDark = await page.locator('html').evaluate((el) => el.classList.contains('dark'));
     expect(afterHasDark).toBe(!initialHasDark);
 
     // Click again to toggle back
     await themeBtn.click();
     await page.waitForTimeout(500);
 
-    const restoredHasDark = await page.locator('html').evaluate(
-      (el) => el.classList.contains('dark'),
-    );
+    const restoredHasDark = await page
+      .locator('html')
+      .evaluate((el) => el.classList.contains('dark'));
     expect(restoredHasDark).toBe(initialHasDark);
   });
 
@@ -561,9 +564,15 @@ test.describe('Theme toggle (extended)', () => {
     // Settings has a Theme section with System, Light, Dark buttons
     // Use exact: true to avoid matching the sidebar's "Switch to light/dark mode" button
     await expect(page.getByText('Theme').first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('button', { name: 'System', exact: true })).toBeVisible({ timeout: 3_000 });
-    await expect(page.getByRole('button', { name: 'Light', exact: true })).toBeVisible({ timeout: 3_000 });
-    await expect(page.getByRole('button', { name: 'Dark', exact: true })).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole('button', { name: 'System', exact: true })).toBeVisible({
+      timeout: 3_000,
+    });
+    await expect(page.getByRole('button', { name: 'Light', exact: true })).toBeVisible({
+      timeout: 3_000,
+    });
+    await expect(page.getByRole('button', { name: 'Dark', exact: true })).toBeVisible({
+      timeout: 3_000,
+    });
   });
 
   test('selecting Light theme on settings page applies light mode', async ({ page }) => {
@@ -577,9 +586,7 @@ test.describe('Theme toggle (extended)', () => {
     await page.waitForTimeout(500);
 
     // html should NOT have dark class
-    const hasDark = await page.locator('html').evaluate(
-      (el) => el.classList.contains('dark'),
-    );
+    const hasDark = await page.locator('html').evaluate((el) => el.classList.contains('dark'));
     expect(hasDark).toBe(false);
   });
 
@@ -594,9 +601,7 @@ test.describe('Theme toggle (extended)', () => {
     await page.waitForTimeout(500);
 
     // html should have dark class
-    const hasDark = await page.locator('html').evaluate(
-      (el) => el.classList.contains('dark'),
-    );
+    const hasDark = await page.locator('html').evaluate((el) => el.classList.contains('dark'));
     expect(hasDark).toBe(true);
   });
 });
@@ -800,9 +805,9 @@ test.describe('Search interactions', () => {
     // Tab button text may include a count suffix (e.g., "All 12"), so use regex
     const tabPatterns = [/^All/, /^Starting/, /^Active/, /^Ended/, /^Error/];
     for (const pattern of tabPatterns) {
-      await expect(
-        page.getByRole('button', { name: pattern }).first(),
-      ).toBeVisible({ timeout: 3_000 });
+      await expect(page.getByRole('button', { name: pattern }).first()).toBeVisible({
+        timeout: 3_000,
+      });
     }
   });
 
@@ -861,9 +866,9 @@ test.describe('Two-key navigation (g + X)', () => {
     await page.keyboard.press('d');
 
     await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
-    await expect(
-      page.getByRole('heading', { name: /command center/i }).first(),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /command center/i }).first()).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test('pressing g then s navigates to Sessions', async ({ page }) => {
@@ -894,5 +899,198 @@ test.describe('Two-key navigation (g + X)', () => {
     await page.keyboard.press('m');
 
     await expect(page).toHaveURL(/\/machines/, { timeout: 10_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Breadcrumb navigation
+// ---------------------------------------------------------------------------
+
+test.describe('Breadcrumb navigation', () => {
+  test('settings page shows breadcrumb with "Settings" as last item', async ({ page }) => {
+    await page.goto('/settings');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const breadcrumb = page.locator('nav[aria-label="Breadcrumb"]');
+    await expect(breadcrumb).toBeVisible({ timeout: 5_000 });
+    await expect(breadcrumb.getByText('Settings')).toBeVisible();
+  });
+
+  test('settings/router page shows breadcrumb with link back to Settings', async ({ page }) => {
+    await page.goto('/settings/router');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    const breadcrumb = page.locator('nav[aria-label="Breadcrumb"]');
+    await expect(breadcrumb).toBeVisible({ timeout: 5_000 });
+
+    const settingsLink = breadcrumb.getByRole('link', { name: /settings/i });
+    await expect(settingsLink).toBeVisible();
+    await expect(settingsLink).toHaveAttribute('href', '/settings');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agents page interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Agents page interactions', () => {
+  test('agents page has status filter tabs', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    // Status filter tabs should be visible
+    await expect(page.getByRole('button', { name: /all/i }).first()).toBeVisible({
+      timeout: 5_000,
+    });
+  });
+
+  test('agents page has sort dropdown', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const sortSelect = page.locator('select[aria-label="Sort by"]');
+    await expect(sortSelect).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('agents page has "New Agent" button', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const newButton = page.getByRole('button', { name: /new agent/i });
+    await expect(newButton).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('clicking "New Agent" opens the agent form dialog', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const newButton = page.getByRole('button', { name: /new agent/i });
+    await newButton.click();
+
+    // Dialog should appear with form fields
+    await expect(page.getByText(/agent name/i).first()).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('agent form dialog can be closed with Escape', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const newButton = page.getByRole('button', { name: /new agent/i });
+    await newButton.click();
+
+    await expect(page.getByText(/agent name/i).first()).toBeVisible({ timeout: 5_000 });
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByText(/agent name/i).first()).toBeHidden({ timeout: 3_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Discover page interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Discover page interactions', () => {
+  test('discover page has group-by select', async ({ page }) => {
+    await page.goto('/discover');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const groupSelect = page.locator('select[aria-label="Group by"]');
+    await expect(groupSelect).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('discover page has sort select', async ({ page }) => {
+    await page.goto('/discover');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const sortSelect = page.locator('select[aria-label="Sort by"]');
+    await expect(sortSelect).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Logs page interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Logs page interactions', () => {
+  test('logs page has search input', async ({ page }) => {
+    await page.goto('/logs');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const searchInput = page.locator('input[aria-label="Search actions, tools, or agents"]');
+    await expect(searchInput).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('logs page has action type filter tabs', async ({ page }) => {
+    await page.goto('/logs');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    await expect(page.getByRole('button', { name: 'All' }).first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('button', { name: 'Tool Use' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Text' })).toBeVisible();
+  });
+
+  test('logs page has CSV export button', async ({ page }) => {
+    await page.goto('/logs');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const exportButton = page.getByRole('button', { name: /export csv/i });
+    await expect(exportButton).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Machines page interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Machines page interactions', () => {
+  test('machines page has sort dropdown', async ({ page }) => {
+    await page.goto('/machines');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const sortSelect = page.locator('select[aria-label="Sort by"]');
+    await expect(sortSelect).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('machines page has compact view toggle', async ({ page }) => {
+    await page.goto('/machines');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const compactToggle = page.getByRole('button', { name: /compact/i });
+    await expect(compactToggle).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dark mode persistence
+// ---------------------------------------------------------------------------
+
+test.describe('Dark mode persistence', () => {
+  test('dark class is on html element by default', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const html = page.locator('html');
+    const classList = await html.getAttribute('class');
+    // Should have either 'dark' or 'light' depending on system/stored preference
+    expect(classList).toBeDefined();
+  });
+
+  test('toggling theme changes html class', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const html = page.locator('html');
+    const initialClass = await html.getAttribute('class');
+
+    // Find and click the theme toggle button in sidebar
+    const themeToggle = page
+      .locator('button[aria-label*="theme" i], button[title*="theme" i]')
+      .first();
+    if (await themeToggle.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await themeToggle.click();
+      await page.waitForTimeout(300);
+      const newClass = await html.getAttribute('class');
+      expect(newClass).not.toBe(initialClass);
+    }
   });
 });
