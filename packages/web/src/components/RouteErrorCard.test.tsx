@@ -54,13 +54,7 @@ describe('RouteErrorCard', () => {
   });
 
   it('renders custom fallback link', () => {
-    render(
-      <RouteErrorCard
-        {...defaultProps}
-        fallbackHref="/agents"
-        fallbackLabel="All Agents"
-      />,
-    );
+    render(<RouteErrorCard {...defaultProps} fallbackHref="/agents" fallbackLabel="All Agents" />);
     const link = screen.getByText('All Agents');
     expect(link).toBeTruthy();
     expect(link.closest('a')?.getAttribute('href')).toBe('/agents');
