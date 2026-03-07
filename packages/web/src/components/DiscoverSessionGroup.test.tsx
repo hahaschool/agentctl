@@ -12,6 +12,7 @@ vi.mock('@/lib/utils', () => ({
 
 vi.mock('../lib/format-utils', () => ({
   formatNumber: (n: number) => String(n),
+  shortenPath: (p: string | null | undefined) => p ?? '-',
 }));
 
 vi.mock('./LiveTimeAgo', () => ({
@@ -135,9 +136,9 @@ describe('DiscoverSessionGroup', () => {
     expect(screen.getByTestId('live-time-ago')).toBeDefined();
   });
 
-  it('renders PathBadge for project groupMode', () => {
+  it('renders shortened path for project groupMode', () => {
     render(<DiscoverSessionGroup {...defaultProps({ groupMode: 'project' })} />);
-    expect(screen.getByTestId('path-badge')).toBeDefined();
+    expect(screen.getByText('/home/user/project')).toBeDefined();
   });
 
   it('renders project count text for machine groupMode', () => {

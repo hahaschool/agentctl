@@ -3,11 +3,10 @@
 import type React from 'react';
 import { cn } from '@/lib/utils';
 import type { DiscoveredSession } from '../lib/api';
-import { formatNumber } from '../lib/format-utils';
+import { formatNumber, shortenPath } from '../lib/format-utils';
 import type { GroupMode } from './DiscoverFilterBar';
 import { DiscoverSessionRow } from './DiscoverSessionRow';
 import { LiveTimeAgo } from './LiveTimeAgo';
-import { PathBadge } from './PathBadge';
 
 export type SessionGroup = {
   projectPath: string;
@@ -89,7 +88,9 @@ export function DiscoverSessionGroup({
                 {new Set(group.sessions.map((s) => s.projectPath)).size} project(s)
               </div>
             ) : (
-              <PathBadge path={group.projectPath} className="text-[11px] leading-4" />
+              <span className="font-mono text-[11px] text-muted-foreground leading-4 overflow-hidden text-ellipsis whitespace-nowrap block">
+                {shortenPath(group.projectPath)}
+              </span>
             )}
           </div>
           <div className="flex gap-2.5 items-center shrink-0">

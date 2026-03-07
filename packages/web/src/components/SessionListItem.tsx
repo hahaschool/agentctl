@@ -104,9 +104,16 @@ function SessionListItemBase({
         />
       </div>
       {/* Session card content */}
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelect(s.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect(s.id);
+          }
+        }}
         className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
       >
         <div className="flex justify-between items-center mb-1.5">
@@ -158,7 +165,7 @@ function SessionListItemBase({
           {messageCount !== undefined && <span>{messageCount} msgs</span>}
           {costUsd !== undefined && <span className="tabular-nums">${costUsd.toFixed(2)}</span>}
         </div>
-      </button>
+      </div>
     </div>
   );
 }
