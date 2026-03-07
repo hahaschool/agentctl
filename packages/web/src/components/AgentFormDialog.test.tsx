@@ -430,7 +430,7 @@ describe('AgentFormDialog', () => {
       fireEvent.change(promptTextarea, { target: { value: 'Fix the auth bug' } });
 
       // Now find name input by its id
-      const nameInput = document.getElementById('create-task-name') as HTMLInputElement;
+      const nameInput = document.getElementById('create-agent-name') as HTMLInputElement;
       fireEvent.change(nameInput, { target: { value: 'custom-name' } });
 
       fireEvent.click(screen.getByText('Start Agent'));
@@ -1269,7 +1269,7 @@ describe('AgentFormDialog', () => {
   // -----------------------------------------------------------------------
 
   describe('edge cases', () => {
-    it('slugifies prompt to "new-task" when prompt has only special characters', () => {
+    it('slugifies prompt to "new-agent" when prompt has only special characters', () => {
       const onSubmit = vi.fn();
       renderDialog({ mode: 'create', onSubmit });
 
@@ -1279,7 +1279,7 @@ describe('AgentFormDialog', () => {
       fireEvent.click(screen.getByText('Start Agent'));
 
       const data = onSubmit.mock.calls[0]?.[0] as AgentFormCreateData;
-      expect(data.name).toBe('new-task');
+      expect(data.name).toBe('new-agent');
     });
 
     it('truncates long prompt slugs to 40 characters max', () => {

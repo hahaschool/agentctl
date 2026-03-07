@@ -36,7 +36,7 @@ function slugifyPrompt(prompt: string): string {
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .slice(0, 40)
-      .replace(/-+$/, '') || 'new-task'
+      .replace(/-+$/, '') || 'new-agent'
   );
 }
 
@@ -477,7 +477,7 @@ export function AgentFormDialog({
             <div className="space-y-1.5">
               <textarea
                 ref={promptTextareaRef}
-                id="create-task-prompt"
+                id="create-agent-prompt"
                 aria-label="Agent prompt"
                 rows={4}
                 placeholder="What do you want the agent to do?"
@@ -503,13 +503,13 @@ export function AgentFormDialog({
 
             {/* Project path — combobox with recent projects */}
             <div className="space-y-1.5 relative">
-              <label className="text-sm font-medium" htmlFor="create-task-project">
+              <label className="text-sm font-medium" htmlFor="create-agent-project">
                 Project
               </label>
               <div className="relative">
                 <Input
                   ref={projectInputRef}
-                  id="create-task-project"
+                  id="create-agent-project"
                   placeholder={
                     recentProjectPaths.length > 0
                       ? 'Select or type a project path...'
@@ -583,11 +583,11 @@ export function AgentFormDialog({
               {advancedOpen && (
                 <div className="mt-3 space-y-3 pl-4 border-l-2 border-border">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium" htmlFor="create-task-name">
+                    <label className="text-sm font-medium" htmlFor="create-agent-name">
                       Name
                     </label>
                     <Input
-                      id="create-task-name"
+                      id="create-agent-name"
                       placeholder={
                         initialPrompt.trim()
                           ? slugifyPrompt(initialPrompt)
@@ -603,7 +603,7 @@ export function AgentFormDialog({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium" htmlFor="create-task-model">
+                    <label className="text-sm font-medium" htmlFor="create-agent-model">
                       Model
                     </label>
                     <Select
@@ -613,7 +613,7 @@ export function AgentFormDialog({
                       }}
                       disabled={isPending}
                     >
-                      <SelectTrigger className="w-full" id="create-task-model">
+                      <SelectTrigger className="w-full" id="create-agent-model">
                         <SelectValue>
                           {MODEL_OPTIONS.find((m) => m.value === model)?.label ?? model}
                         </SelectValue>
