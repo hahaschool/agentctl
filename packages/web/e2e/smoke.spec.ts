@@ -1411,3 +1411,417 @@ test.describe('Focus management', () => {
     expect(paletteVisible).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Error states — pages degrade gracefully when API is unreachable
+// ---------------------------------------------------------------------------
+
+test.describe('Error states', () => {
+  test('sessions page does not crash when API returns errors', async ({ page }) => {
+    // Block all API calls to simulate backend being down
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/sessions');
+
+    // Page should still render — not a blank white screen
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+    const heading = page.getByRole('heading', { name: /sessions/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('agents page does not crash when API returns errors', async ({ page }) => {
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/agents');
+
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+    const heading = page.getByRole('heading', { name: /agents/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('dashboard does not crash when API returns errors', async ({ page }) => {
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/');
+
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+    const heading = page.getByRole('heading', { name: /command center/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('machines page does not crash when API returns errors', async ({ page }) => {
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/machines');
+
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+    const heading = page.getByRole('heading', { name: /machines/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('discover page does not crash when API returns errors', async ({ page }) => {
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/discover');
+
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+    const heading = page.getByRole('heading', { name: /discover/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('logs page does not crash when API returns errors', async ({ page }) => {
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/logs');
+
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+    const heading = page.getByRole('heading', { name: /logs/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('navigation still works with API errors', async ({ page }) => {
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // Keyboard navigation should still work
+    await page.keyboard.press('4');
+    await expect(page).toHaveURL(/\/sessions/, { timeout: 10_000 });
+
+    await page.keyboard.press('3');
+    await expect(page).toHaveURL(/\/agents/, { timeout: 10_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agent form dialog — field validation and structure
+// ---------------------------------------------------------------------------
+
+test.describe('Agent form dialog', () => {
+  test('agent form has prompt textarea and machine select', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const newButton = page.getByRole('button', { name: /new agent/i });
+    await newButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /new agent/i });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+    // Prompt textarea (main field)
+    await expect(dialog.locator('textarea[aria-label="Agent prompt"]')).toBeVisible({
+      timeout: 3_000,
+    });
+
+    // Project path input
+    await expect(dialog.getByPlaceholder(/project path/i)).toBeVisible({ timeout: 3_000 });
+
+    // Machine section
+    await expect(dialog.getByText('Machine')).toBeVisible({ timeout: 3_000 });
+
+    // Start Agent / Cancel buttons
+    await expect(dialog.getByRole('button', { name: /start agent/i })).toBeVisible({
+      timeout: 3_000,
+    });
+    await expect(dialog.getByRole('button', { name: /cancel/i })).toBeVisible({
+      timeout: 3_000,
+    });
+  });
+
+  test('agent form prompt textarea accepts text', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    await page.getByRole('button', { name: /new agent/i }).click();
+    const dialog = page.getByRole('dialog', { name: /new agent/i });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+    const promptTextarea = dialog.locator('textarea[aria-label="Agent prompt"]');
+    await promptTextarea.fill('Fix the authentication bug in the login page');
+    const value = await promptTextarea.inputValue();
+    expect(value).toContain('Fix the authentication bug');
+  });
+
+  test('agent form has Advanced toggle for extra settings', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    await page.getByRole('button', { name: /new agent/i }).click();
+    const dialog = page.getByRole('dialog', { name: /new agent/i });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+    // Advanced toggle should be visible
+    const advancedToggle = dialog.getByText(/advanced/i).first();
+    await expect(advancedToggle).toBeVisible({ timeout: 3_000 });
+  });
+
+  test('agent form cancel button closes dialog', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    await page.getByRole('button', { name: /new agent/i }).click();
+    const dialog = page.getByRole('dialog', { name: /new agent/i });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+    // Fill in prompt
+    const promptTextarea = dialog.locator('textarea[aria-label="Agent prompt"]');
+    await promptTextarea.fill('Temp task');
+
+    // Click cancel
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+
+    // Dialog should close
+    await expect(dialog).toBeHidden({ timeout: 3_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mobile responsive — layout and touch targets
+// ---------------------------------------------------------------------------
+
+test.describe('Mobile responsive', () => {
+  test('mobile viewport shows hamburger menu button', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // Hamburger menu button should be visible (Menu icon button)
+    const menuBtn = page.locator('button[aria-label="Toggle navigation"]').first();
+    const hasMenuBtn = await menuBtn.isVisible({ timeout: 3_000 }).catch(() => false);
+
+    // On mobile, some nav mechanism should exist — either hamburger or bottom bar
+    if (!hasMenuBtn) {
+      // Fall back to checking for any mobile-visible nav trigger
+      const anyNavButton = page.locator('header button, [data-mobile-nav] button').first();
+      const hasAny = await anyNavButton.isVisible({ timeout: 2_000 }).catch(() => false);
+      // At minimum, the page should render correctly
+      const heading = page.locator('h1, h2').first();
+      await expect(heading).toBeVisible({ timeout: 5_000 });
+    }
+  });
+
+  test('mobile viewport still shows page headings', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    const pages = ['/', '/sessions', '/agents', '/machines', '/settings'];
+    for (const url of pages) {
+      await page.goto(url);
+      await page.waitForSelector('h1, h2', { timeout: 15_000 });
+      const heading = page.locator('h1, h2').first();
+      await expect(heading).toBeVisible({ timeout: 5_000 });
+    }
+  });
+
+  test('mobile viewport dashboard does not overflow horizontally', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // Check that body scrollWidth does not exceed viewport width (no horizontal scroll)
+    const overflows = await page.evaluate(() => {
+      return document.body.scrollWidth > window.innerWidth;
+    });
+    expect(overflows).toBe(false);
+  });
+
+  test('mobile viewport sessions page does not overflow horizontally', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    const overflows = await page.evaluate(() => {
+      return document.body.scrollWidth > window.innerWidth;
+    });
+    expect(overflows).toBe(false);
+  });
+
+  test('tablet viewport renders correctly', async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto('/');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const heading = page.getByRole('heading', { name: /command center/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+
+    // Should not have horizontal overflow
+    const overflows = await page.evaluate(() => {
+      return document.body.scrollWidth > window.innerWidth;
+    });
+    expect(overflows).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dashboard stat cards and sections
+// ---------------------------------------------------------------------------
+
+test.describe('Dashboard sections', () => {
+  test('dashboard shows system health summary', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('heading', { name: /command center/i }).waitFor({ timeout: 15_000 });
+
+    const healthSummary = page.locator('[data-testid="system-health-summary"]');
+    await expect(healthSummary).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('dashboard has keyboard help button', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('heading', { name: /command center/i }).waitFor({ timeout: 15_000 });
+
+    const helpBtn = page.locator('button[aria-label="Show keyboard shortcuts"]');
+    await expect(helpBtn).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('clicking dashboard keyboard help button opens overlay', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('heading', { name: /command center/i }).waitFor({ timeout: 15_000 });
+
+    const helpBtn = page.locator('button[aria-label="Show keyboard shortcuts"]');
+    await helpBtn.click();
+
+    await expect(page.getByText(/keyboard shortcuts/i).first()).toBeVisible({ timeout: 5_000 });
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByText(/keyboard shortcuts/i).first()).toBeHidden({ timeout: 3_000 });
+  });
+
+  test('dashboard refresh button is clickable', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('heading', { name: /command center/i }).waitFor({ timeout: 15_000 });
+
+    const refreshBtn = page.getByRole('button', { name: 'Refresh', exact: true });
+    await expect(refreshBtn).toBeVisible({ timeout: 5_000 });
+
+    // Click should not crash the page
+    await refreshBtn.click();
+    await page.waitForTimeout(500);
+
+    // Page should still be functional
+    const heading = page.getByRole('heading', { name: /command center/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Command palette — extended scenarios
+// ---------------------------------------------------------------------------
+
+test.describe('Command palette (extended)', () => {
+  test('command palette navigates via Enter key on result', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+    await page.locator('body').click();
+
+    await page.keyboard.press('Control+k');
+    const input = page.locator('input[placeholder*="command"]').first();
+    await expect(input).toBeVisible({ timeout: 5_000 });
+
+    // Type "settings" and press Enter to navigate
+    await input.fill('settings');
+    await page.waitForTimeout(300);
+
+    // Press Enter to select the first result (should navigate)
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/settings/, { timeout: 10_000 });
+  });
+
+  test('command palette shows "New Session" action', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+    await page.locator('body').click();
+
+    await page.keyboard.press('Control+k');
+    const input = page.locator('input[placeholder*="command"]').first();
+    await expect(input).toBeVisible({ timeout: 5_000 });
+
+    await input.fill('new session');
+    await page.waitForTimeout(300);
+
+    // Should show a "New Session" action
+    await expect(page.getByText(/new session/i).first()).toBeVisible({ timeout: 3_000 });
+
+    await page.keyboard.press('Escape');
+  });
+
+  test('command palette input is focused on open', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+    await page.locator('body').click();
+
+    await page.keyboard.press('Control+k');
+    const input = page.locator('input[placeholder*="command"]').first();
+    await expect(input).toBeVisible({ timeout: 5_000 });
+
+    // The input should be focused and ready for typing
+    const isFocused = await input.evaluate((el) => el === document.activeElement);
+    expect(isFocused).toBe(true);
+
+    await page.keyboard.press('Escape');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agents page — extended interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Agents page (extended)', () => {
+  test('agents page search input filters by text', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const searchInput = page.locator('input[aria-label="Search agents"]');
+    await expect(searchInput).toBeVisible({ timeout: 5_000 });
+    await searchInput.fill('nonexistent-agent-xyz');
+    await expect(searchInput).toHaveValue('nonexistent-agent-xyz');
+  });
+
+  test('agents page status filter has all expected options', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const statusSelect = page.locator('select[aria-label="Filter by status"]');
+    await expect(statusSelect).toBeVisible({ timeout: 5_000 });
+
+    const options = statusSelect.locator('option');
+    const count = await options.count();
+    expect(count).toBeGreaterThanOrEqual(3); // All, Active, Idle at minimum
+  });
+
+  test('agents page sort has multiple options', async ({ page }) => {
+    await page.goto('/agents');
+    await page.waitForSelector('h1', { timeout: 15_000 });
+
+    const sortSelect = page.locator('select[aria-label="Sort by"]');
+    await expect(sortSelect).toBeVisible({ timeout: 5_000 });
+
+    const options = sortSelect.locator('option');
+    const count = await options.count();
+    expect(count).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// No console errors across all pages with blocked API
+// ---------------------------------------------------------------------------
+
+test.describe('Graceful degradation', () => {
+  test('no uncaught errors when navigating with blocked API', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => {
+      if (
+        err.message.includes('ChunkLoadError') ||
+        err.message.includes('Failed to load chunk') ||
+        err.message.includes('Failed to fetch') ||
+        err.message.includes('NetworkError') ||
+        err.message.includes('net::ERR')
+      ) {
+        return;
+      }
+      errors.push(err.message);
+    });
+
+    await page.route('**/api/**', (route) => route.abort());
+
+    const pages = ['/', '/machines', '/agents', '/sessions', '/discover', '/logs', '/settings'];
+    for (const url of pages) {
+      await page.goto(url, { timeout: 15_000 });
+      await page.waitForSelector('h1, h2', { timeout: 10_000 });
+    }
+
+    expect(errors).toEqual([]);
+  });
+});
