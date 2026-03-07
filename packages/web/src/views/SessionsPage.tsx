@@ -2,32 +2,25 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Filter, MessageSquare } from 'lucide-react';
-import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
-import { ConvertToAgentForm } from '../components/ConvertToAgentForm';
-import { CopyableText } from '../components/CopyableText';
 import { CreateSessionForm } from '../components/CreateSessionForm';
-import { DetailRow } from '../components/DetailRow';
 import { EmptyState } from '../components/EmptyState';
 import { FetchingBar } from '../components/FetchingBar';
 import { ForkContextPicker } from '../components/ForkContextPicker';
-import { GitStatusBadge } from '../components/GitStatusBadge';
 import { LastUpdated } from '../components/LastUpdated';
 import { RefreshButton } from '../components/RefreshButton';
-import { SessionContent } from '../components/SessionContent';
+import { SessionDetailPanel } from '../components/SessionDetailPanel';
 import { SessionListItem } from '../components/SessionListItem';
 import { SimpleTooltip } from '../components/SimpleTooltip';
-import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AgentConfig, ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
-import { downloadCsv, formatDateTime, formatDuration, shortenPath } from '../lib/format-utils';
-import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '../lib/model-options';
+import { downloadCsv, shortenPath } from '../lib/format-utils';
 import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
@@ -917,255 +910,33 @@ export function SessionsPage(): React.JSX.Element {
         )}
       >
         {selected ? (
-          <>
-            {/* Header */}
-            <div className="px-5 py-4 border-b border-border flex justify-between items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  {/* Mobile back button */}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(null)}
-                    className="md:hidden text-muted-foreground text-sm shrink-0 hover:text-foreground transition-colors duration-200"
-                    aria-label="Back to session list"
-                  >
-                    {'\u2190'}
-                  </button>
-                  <div className="flex items-center gap-2.5">
-                    <CopyableText
-                      value={selected.id}
-                      maxDisplay={16}
-                      className="font-mono text-[13px] font-semibold text-foreground/90"
-                    />
-                    <StatusBadge status={selected.status} />
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1.5 items-center">
-                  <span className="font-medium text-foreground/70">
-                    {selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}
-                  </span>
-                  <span className="text-muted-foreground/40">|</span>
-                  <span>{selected.machineId}</span>
-                  <span className="text-muted-foreground/40">|</span>
-                  <span className="text-purple-600/80 dark:text-purple-400/80">
-                    {selected.model ?? 'default'}
-                  </span>
-                </div>
-              </div>
-              <div className="flex gap-2 items-center shrink-0 flex-wrap">
-                <Link
-                  href={`/sessions/${selected.id}`}
-                  className="h-8 px-3.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-accent hover:text-foreground inline-flex items-center"
-                >
-                  Open Full View
-                </Link>
-                {selected.claudeSessionId && (
-                  <Link
-                    href={`/sessions/${selected.id}`}
-                    className="h-8 px-3.5 bg-blue-100/50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-300/40 dark:border-blue-800/40 rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-blue-200/70 dark:hover:bg-blue-900/70 inline-flex items-center"
-                    title="Fork this session in Full View"
-                  >
-                    Fork
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selected.claudeSessionId && selected.machineId) {
-                      void openForkPicker();
-                    } else {
-                      setConvertName(selected.agentName ?? `agent-from-${selected.id.slice(0, 8)}`);
-                      setShowConvertDialog(true);
-                    }
-                  }}
-                  disabled={forkPickerLoading}
-                  className="h-8 px-3.5 bg-emerald-900/40 text-emerald-300 border border-emerald-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-emerald-900/70 disabled:opacity-50"
-                >
-                  {forkPickerLoading ? 'Loading...' : 'Create Agent'}
-                </button>
-                {(selected.status === 'active' || selected.status === 'starting') && (
-                  <ConfirmButton
-                    label="End Session"
-                    confirmLabel="End Session?"
-                    onConfirm={() => void handleStop()}
-                    className="h-8 px-3.5 bg-red-100/60 dark:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-300/40 dark:border-red-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-200 dark:hover:bg-red-900"
-                    confirmClassName="h-8 px-3.5 bg-red-700 text-white rounded-md text-xs font-medium cursor-pointer animate-pulse"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Session metadata */}
-            <div className="px-5 py-4 border-b border-border text-[13px]">
-              <div className="bg-card rounded-lg p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <DetailRow label="ID" value={selected.id} mono />
-                <DetailRow label="Status" value={selected.status} />
-                <DetailRow
-                  label="Agent"
-                  value={selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}
-                  mono
-                />
-                <DetailRow label="Machine" value={selected.machineId} mono />
-                <DetailRow label="Project" value={selected.projectPath ?? '-'} mono />
-                <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
-                <DetailRow label="PID" value={selected.pid ? String(selected.pid) : '-'} mono />
-                {selected.accountId && (
-                  <DetailRow
-                    label="Account"
-                    value={
-                      accounts.data?.find((a) => a.id === selected.accountId)?.name ??
-                      selected.accountId
-                    }
-                    mono
-                  />
-                )}
-                <DetailRow label="Model" value={selected.model ?? '(default)'} />
-                {selected.metadata?.forkedFrom && (
-                  <DetailRow label="Forked From" value={selected.metadata.forkedFrom} mono />
-                )}
-                <DetailRow label="Started" value={formatDateTime(selected.startedAt)} />
-                {selected.endedAt && (
-                  <DetailRow label="Ended" value={formatDateTime(selected.endedAt)} />
-                )}
-                <DetailRow
-                  label="Duration"
-                  value={formatDuration(selected.startedAt, selected.endedAt)}
-                />
-              </div>
-
-              {/* Git status */}
-              {selected.projectPath && selected.machineId && (
-                <div className="mt-2.5 col-span-full">
-                  <GitStatusBadge
-                    machineId={selected.machineId}
-                    projectPath={selected.projectPath}
-                  />
-                </div>
-              )}
-
-              {/* Error message display */}
-              {selected.status === 'error' && selected.metadata && (
-                <div className="mt-3 px-3 py-2.5 bg-red-100/20 dark:bg-red-900/20 border border-red-500/20 rounded-md text-red-700 dark:text-red-300 text-xs">
-                  <span className="font-semibold">Error: </span>
-                  {selected.metadata.errorMessage ?? 'Unknown error'}
-                </div>
-              )}
-
-              {/* Starting state indicator */}
-              {selected.status === 'starting' && (
-                <div className="mt-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/15 rounded-md text-yellow-600 dark:text-yellow-400 text-xs flex items-center gap-2">
-                  <span className="animate-pulse">&#x25CF;</span>
-                  Session is starting... Waiting for worker to respond.
-                </div>
-              )}
-            </div>
-
-            {/* Convert to Agent dialog */}
-            {showConvertDialog && (
-              <ConvertToAgentForm
-                convertName={convertName}
-                onNameChange={setConvertName}
-                convertType={convertType}
-                onTypeChange={setConvertType}
-                machineId={selected.machineId}
-                projectPath={selected.projectPath}
-                model={selected.model}
-                isPending={createAgent.isPending}
-                onSubmit={handleConvertToAgent}
-                onCancel={() => setShowConvertDialog(false)}
-              />
-            )}
-
-            {/* Session content viewer */}
-            {selected.claudeSessionId && selected.machineId && (
-              <SessionContent
-                sessionId={selected.claudeSessionId}
-                rcSessionId={selected.id}
-                machineId={selected.machineId}
-                projectPath={selected.projectPath ?? undefined}
-                isActive={selected.status === 'active' || selected.status === 'starting'}
-                lastSentMessage={lastSentMessage}
-              />
-            )}
-
-            {!selected.claudeSessionId && (
-              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground text-[13px]">
-                <span>
-                  {selected.status === 'error'
-                    ? 'Session failed before the CLI process started'
-                    : selected.status === 'starting'
-                      ? 'Waiting for CLI to initialize...'
-                      : 'No conversation content available'}
-                </span>
-                {selected.status === 'error' && selected.metadata?.errorMessage && (
-                  <span className="text-xs text-muted-foreground opacity-70">
-                    {selected.metadata.errorMessage}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Prompt input — only for active sessions or ended sessions that can be resumed */}
-            {(selected.status === 'active' ||
-              selected.status === 'ended' ||
-              selected.status === 'error') && (
-              <div className="px-5 py-3.5 border-t border-border bg-background/50 space-y-2">
-                {selected.status !== 'active' && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-muted-foreground">Model:</span>
-                    <select
-                      value={resumeModel}
-                      onChange={(e) => setResumeModel(e.target.value)}
-                      aria-label="Resume model"
-                      className="px-2 h-7 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-                    >
-                      {MODEL_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.value ? opt.label : `Keep current (${selected.model ?? 'default'})`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="flex gap-2.5">
-                  <input
-                    type="text"
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        void handleSend();
-                      }
-                    }}
-                    placeholder={
-                      selected.status === 'active'
-                        ? 'Send message...'
-                        : 'Resume session with prompt...'
-                    }
-                    aria-label={
-                      selected.status === 'active'
-                        ? 'Message to send to session'
-                        : 'Prompt to resume session'
-                    }
-                    className="flex-1 px-3.5 h-9 bg-muted text-foreground border border-border rounded-md text-[13px] outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleSend()}
-                    disabled={sending || !prompt.trim()}
-                    aria-label={selected.status === 'active' ? 'Send message' : 'Resume session'}
-                    className={cn(
-                      'h-9 px-5 bg-primary text-white rounded-md text-[13px] font-medium transition-all duration-200 hover:bg-primary/90',
-                      sending || !prompt.trim() ? 'opacity-50' : 'opacity-100',
-                    )}
-                  >
-                    {sending ? '...' : selected.status === 'active' ? 'Send' : 'Resume'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
+          <SessionDetailPanel
+            session={selected}
+            accounts={(accounts.data ?? []) as ApiAccount[]}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            resumeModel={resumeModel}
+            onResumeModelChange={setResumeModel}
+            sending={sending}
+            lastSentMessage={lastSentMessage}
+            showConvertDialog={showConvertDialog}
+            convertName={convertName}
+            onConvertNameChange={setConvertName}
+            convertType={convertType}
+            onConvertTypeChange={setConvertType}
+            createAgentPending={createAgent.isPending}
+            forkPickerLoading={forkPickerLoading}
+            onBack={() => setSelectedId(null)}
+            onSend={() => void handleSend()}
+            onStop={() => void handleStop()}
+            onConvertToAgent={handleConvertToAgent}
+            onOpenConvertDialog={() => {
+              setConvertName(selected.agentName ?? `agent-from-${selected.id.slice(0, 8)}`);
+              setShowConvertDialog(true);
+            }}
+            onCloseConvertDialog={() => setShowConvertDialog(false)}
+            onOpenForkPicker={() => void openForkPicker()}
+          />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             <span className="text-sm">Select a session to view details</span>
