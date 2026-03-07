@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useNotificationContext } from '../contexts/notification-context';
@@ -294,6 +294,43 @@ export function SessionContent({
 
   const hasMore = allMessages.length < totalMessages;
 
+  // For ended sessions, reconstruct terminal-like output from loaded messages
+  // so the Terminal tab has content even when SSE is disabled.
+  const terminalOutput = useMemo(() => {
+    if (stream.rawOutput.length > 0) return stream.rawOutput;
+    if (allMessages.length === 0) return [];
+
+    const lines: string[] = [];
+    for (const msg of allMessages) {
+      const text = msg.content ?? '';
+      if (!text) continue;
+
+      switch (msg.type) {
+        case 'human':
+          lines.push(`\x1b[1;34m❯ ${text}\x1b[0m\r\n`);
+          break;
+        case 'assistant':
+          lines.push(`${text}\r\n\r\n`);
+          break;
+        case 'thinking':
+          lines.push(`\x1b[2;35m💭 ${text.slice(0, 200)}${text.length > 200 ? '…' : ''}\x1b[0m\r\n`);
+          break;
+        case 'tool_use':
+          lines.push(`\x1b[33m⚡ ${msg.toolName ?? 'tool'}\x1b[0m ${text.slice(0, 300)}${text.length > 300 ? '…' : ''}\r\n`);
+          break;
+        case 'tool_result':
+          lines.push(`\x1b[2m${text.slice(0, 500)}${text.length > 500 ? '…' : ''}\x1b[0m\r\n`);
+          break;
+        case 'progress':
+          lines.push(`\x1b[36m⏳ ${msg.toolName ?? ''} ${text}\x1b[0m\r\n`);
+          break;
+        default:
+          lines.push(`${text}\r\n`);
+      }
+    }
+    return lines;
+  }, [allMessages, stream.rawOutput]);
+
   const messages = allMessages.filter((m) => {
     // Always show these types
     if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo')
@@ -429,7 +466,7 @@ export function SessionContent({
 
       {/* Content */}
       {viewMode === 'terminal' ? (
-        <TerminalView rawOutput={stream.rawOutput} isActive={isActive} />
+        <TerminalView rawOutput={terminalOutput} isActive={isActive} />
       ) : (
         <div className="relative flex-1 min-h-0">
           <div
