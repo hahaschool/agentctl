@@ -55,7 +55,7 @@ export function SessionContent({
   const [autoScroll, setAutoScroll] = useState(true);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [optimisticMessages, setOptimisticMessages] = useState<
-    { id: string; text: string; timestamp: number }[]
+    { id: string; text: string; timestamp: number; expectedHumanCount: number }[]
   >([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
@@ -211,35 +211,24 @@ export function SessionContent({
     }
   }, [allMessages.length, autoScroll]);
 
-  // Clear optimistic messages when they appear in real data or after timeout
-  const prevHumanCountRef = useRef(0);
+  // Clear optimistic messages when the real human message arrives (count-based)
   useEffect(() => {
     if (optimisticMessages.length === 0) return;
-    const humanMessages = allMessages.filter((m) => m.type === 'human');
-    const newHumanCount = humanMessages.length;
-    // Only check when new human messages appeared
-    if (newHumanCount <= prevHumanCountRef.current) {
-      prevHumanCountRef.current = newHumanCount;
-      return;
-    }
-    prevHumanCountRef.current = newHumanCount;
-    // Check the latest few human messages (new ones since last check)
-    const recentHumanTexts = humanMessages.slice(-5).map((m) => (m.content ?? '').trim());
+    const humanCount = allMessages.filter((m) => m.type === 'human').length;
     setOptimisticMessages((prev) =>
-      prev.filter((om) => !recentHumanTexts.includes(om.text.trim())),
+      prev.filter((om) => humanCount <= om.expectedHumanCount),
     );
   }, [allMessages, optimisticMessages.length]);
 
-  // Safety net: clear stale optimistic messages after 8 seconds
-  // This handles cases where text matching fails (encoding, format differences)
+  // Safety net: 30-second absolute timeout for stuck optimistic messages
   useEffect(() => {
     if (optimisticMessages.length === 0) return;
     const timer = setTimeout(() => {
       setOptimisticMessages((prev) => {
-        const cutoff = Date.now() - 8_000;
+        const cutoff = Date.now() - 30_000;
         return prev.filter((om) => om.timestamp > cutoff);
       });
-    }, 8_000);
+    }, 30_000);
     return () => clearTimeout(timer);
   }, [optimisticMessages]);
 
@@ -273,12 +262,14 @@ export function SessionContent({
   useEffect(() => {
     if (!lastSentMessage || lastSentMessage.ts <= lastSentRef.current) return;
     lastSentRef.current = lastSentMessage.ts;
+    const currentHumanCount = allMessages.filter((m) => m.type === 'human').length;
     setOptimisticMessages((prev) => [
       ...prev,
       {
         id: `opt-${lastSentMessage.ts}`,
         text: lastSentMessage.text,
         timestamp: lastSentMessage.ts,
+        expectedHumanCount: currentHumanCount,
       },
     ]);
     // Auto-scroll when user sends

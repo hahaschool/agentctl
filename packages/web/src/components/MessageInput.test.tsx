@@ -692,8 +692,8 @@ describe('MessageInput', () => {
       fireEvent.compositionStart(textarea);
       fireEvent.compositionEnd(textarea);
 
-      // Wait for the setTimeout(0) that clears composingRef
-      await vi.advanceTimersByTimeAsync(1);
+      // Wait for the setTimeout(100) that clears composingRef
+      await vi.advanceTimersByTimeAsync(100);
 
       fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 

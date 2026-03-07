@@ -176,8 +176,11 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
   // IME composition tracking — prevent Enter from submitting during Chinese/Japanese input
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Skip if IME is composing (e.g. Chinese input confirming with Enter)
-      if (e.nativeEvent.isComposing || composingRef.current) return;
+      // Guard against IME composition — multiple checks for cross-browser safety:
+      // 1. isComposing: standard API, reliable in Firefox/Safari
+      // 2. keyCode 229: legacy "process" key, reliable in Chrome during composition
+      // 3. composingRef: manual tracking via compositionstart/end events
+      if (e.nativeEvent.isComposing || e.keyCode === 229 || composingRef.current) return;
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
@@ -404,11 +407,11 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
             }}
             onCompositionEnd={() => {
               // Delay clearing — in Chromium, compositionend fires BEFORE the
-              // Enter keydown that confirmed the IME selection, so the ref must
-              // still be true when keydown runs in the same event loop turn.
+              // Enter keydown that confirmed the IME selection. Use 100ms to
+              // ensure the keydown has fired and been blocked before we clear.
               setTimeout(() => {
                 composingRef.current = false;
-              }, 0);
+              }, 100);
             }}
             onPaste={handlePaste}
             placeholder={
