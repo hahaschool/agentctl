@@ -99,9 +99,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const connect = (): void => {
       if (cancelled) return;
 
-      // Resolve the SSE URL — in dev, connect directly to control-plane
-      const baseUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : '';
-      const url = `${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/stream`;
+      // Use relative URL so SSE goes through the Next.js proxy (same-origin).
+      // Direct cross-origin connections fail because reply.hijack() in the
+      // control-plane bypasses Fastify's CORS middleware.
+      const url = `/api/sessions/${encodeURIComponent(sessionId)}/stream`;
 
       const es = new EventSource(url);
       eventSourceRef.current = es;
