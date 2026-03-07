@@ -1193,9 +1193,10 @@ describe('AgentFormDialog', () => {
       const projectInput = screen.getByPlaceholderText('Select or type a project path...');
       fireEvent.focus(projectInput);
 
-      expect(screen.getByText('/home/user/project-a')).toBeDefined();
-      expect(screen.getByText('/home/user/project-b')).toBeDefined();
-      expect(screen.getByText('/opt/code/service')).toBeDefined();
+      // Full paths appear as muted subtext in each dropdown item
+      expect(screen.getByTitle('/home/user/project-a')).toBeDefined();
+      expect(screen.getByTitle('/home/user/project-b')).toBeDefined();
+      expect(screen.getByTitle('/opt/code/service')).toBeDefined();
     });
 
     it('does not show dropdown when there are no recent paths', () => {
@@ -1245,8 +1246,10 @@ describe('AgentFormDialog', () => {
       const projectInput = screen.getByPlaceholderText('Select or type a project path...');
       fireEvent.focus(projectInput);
 
-      expect(screen.getByText('~/user/project-a')).toBeDefined();
-      expect(screen.getByText('~/code/service')).toBeDefined();
+      // shortenPath replaces /home/user/ with ~/
+      expect(screen.getByText('~/project-a')).toBeDefined();
+      // /opt/code/service has <=3 segments so stays unchanged
+      expect(screen.getAllByText('/opt/code/service').length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows correct placeholder based on recent paths availability', () => {

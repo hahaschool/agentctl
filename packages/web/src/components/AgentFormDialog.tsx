@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { Agent, AgentConfig, Machine } from '../lib/api';
+import { shortenPath } from '../lib/format-utils';
 import { AGENT_TYPES, DEFAULT_MODEL, ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
@@ -38,12 +39,6 @@ function slugifyPrompt(prompt: string): string {
       .slice(0, 40)
       .replace(/-+$/, '') || 'new-agent'
   );
-}
-
-/** Show last 2 path segments for compact display */
-function shortPath(fullPath: string): string {
-  const segments = fullPath.replace(/\/+$/, '').split('/');
-  return segments.length <= 2 ? fullPath : `~/${segments.slice(-2).join('/')}`;
 }
 
 /** Pick the first online machine, or fallback to last-used, or first available */
@@ -546,7 +541,7 @@ export function AgentFormDialog({
                           setShowProjectDropdown(false);
                         }}
                       >
-                        <span className="font-medium">{shortPath(p)}</span>
+                        <span className="font-medium">{shortenPath(p)}</span>
                         <span className="text-[11px] text-muted-foreground ml-2 font-mono">
                           {p}
                         </span>
