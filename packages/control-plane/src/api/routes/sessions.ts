@@ -896,10 +896,17 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       const targetMachineId = overrideMachineId ?? parent.machineId;
       const machine = await dbRegistry.getMachine(targetMachineId);
 
-      if (!machine || machine.status === 'offline') {
+      if (!machine) {
+        return reply.code(404).send({
+          error: 'MACHINE_NOT_FOUND',
+          message: `Machine '${targetMachineId}' is not registered`,
+        });
+      }
+
+      if (machine.status === 'offline') {
         return reply.code(503).send({
-          error: 'MACHINE_UNAVAILABLE',
-          message: `Machine '${targetMachineId}' is offline or not registered`,
+          error: 'MACHINE_OFFLINE',
+          message: `Machine '${targetMachineId}' (${machine.hostname}) is offline`,
         });
       }
 
@@ -1253,10 +1260,17 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const machine = await dbRegistry.getMachine(session.machineId);
 
-      if (!machine || machine.status === 'offline') {
+      if (!machine) {
+        return reply.code(404).send({
+          error: 'MACHINE_NOT_FOUND',
+          message: `Machine '${session.machineId}' is not registered`,
+        });
+      }
+
+      if (machine.status === 'offline') {
         return reply.code(503).send({
-          error: 'MACHINE_UNAVAILABLE',
-          message: `Machine '${session.machineId}' is offline`,
+          error: 'MACHINE_OFFLINE',
+          message: `Machine '${session.machineId}' (${machine.hostname}) is offline`,
         });
       }
 
