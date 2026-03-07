@@ -350,7 +350,12 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
               composingRef.current = true;
             }}
             onCompositionEnd={() => {
-              composingRef.current = false;
+              // Delay clearing — in Chromium, compositionend fires BEFORE the
+              // Enter keydown that confirmed the IME selection, so the ref must
+              // still be true when keydown runs in the same event loop turn.
+              setTimeout(() => {
+                composingRef.current = false;
+              }, 0);
             }}
             onPaste={handlePaste}
             placeholder={

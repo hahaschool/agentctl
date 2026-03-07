@@ -669,16 +669,36 @@ describe('MessageInput', () => {
       expect(mockSendMessageMutate).not.toHaveBeenCalled();
     });
 
-    it('sends after IME composition ends', () => {
+    it('does not send on Enter immediately after compositionEnd (Chrome IME behavior)', () => {
+      renderInput();
+      const textarea = getTextarea();
+      fireEvent.change(textarea, { target: { value: 'composed text' } });
+
+      // In Chrome, compositionEnd fires before keyDown — the Enter that
+      // confirmed the IME selection should NOT submit the form.
+      fireEvent.compositionStart(textarea);
+      fireEvent.compositionEnd(textarea);
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+      expect(mockSendMessageMutate).not.toHaveBeenCalled();
+    });
+
+    it('sends on Enter after compositionEnd has fully settled', async () => {
+      vi.useFakeTimers();
       renderInput();
       const textarea = getTextarea();
       fireEvent.change(textarea, { target: { value: 'composed text' } });
 
       fireEvent.compositionStart(textarea);
       fireEvent.compositionEnd(textarea);
+
+      // Wait for the setTimeout(0) that clears composingRef
+      await vi.advanceTimersByTimeAsync(1);
+
       fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
       expect(mockSendMessageMutate).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
     });
   });
 
