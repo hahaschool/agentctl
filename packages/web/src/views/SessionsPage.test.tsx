@@ -1161,11 +1161,11 @@ describe('SessionsPage', () => {
     });
   });
 
-  it('group by dropdown has all three options', () => {
+  it('group by dropdown has all options', () => {
     renderSessions();
     const groupSelect = screen.getByLabelText('Group by') as HTMLSelectElement;
     const opts = Array.from(groupSelect.options).map((o) => o.value);
-    expect(opts).toEqual(['none', 'project', 'machine']);
+    expect(opts).toEqual(['none', 'project', 'machine', 'agent']);
   });
 
   // =========================================================================

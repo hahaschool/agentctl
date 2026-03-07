@@ -25,7 +25,7 @@ import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
 type SortOrder = 'newest' | 'oldest' | 'status' | 'cost' | 'duration';
-type GroupBy = 'none' | 'project' | 'machine';
+type GroupBy = 'none' | 'project' | 'machine' | 'agent';
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -276,7 +276,11 @@ export function SessionsPage(): React.JSX.Element {
     const groups = new Map<string, Session[]>();
     for (const s of filteredSessions) {
       const key =
-        groupBy === 'project' ? (shortenPath(s.projectPath) ?? '(no project)') : s.machineId;
+        groupBy === 'project'
+          ? (shortenPath(s.projectPath) ?? '(no project)')
+          : groupBy === 'agent'
+            ? (s.agentName ?? s.agentId.slice(0, 12))
+            : s.machineId;
       const existing = groups.get(key);
       if (existing) {
         existing.push(s);
@@ -717,6 +721,7 @@ export function SessionsPage(): React.JSX.Element {
             <option value="none">Flat</option>
             <option value="project">By Project</option>
             <option value="machine">By Machine</option>
+            <option value="agent">By Agent</option>
           </select>
           <span className="flex-1" />
           <label
