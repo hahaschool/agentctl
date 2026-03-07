@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session, SessionContentMessage } from './api';
 import { exportSessionAsJson, exportSessionAsMarkdown, formatMessageLabel } from './session-export';
 
@@ -113,7 +113,12 @@ describe('exportSessionAsJson', () => {
   it('maps message fields correctly', () => {
     const session = makeSession();
     const messages = [
-      makeMessage({ type: 'tool_use', content: 'Read file', toolName: 'Read', timestamp: '2026-03-07T10:00:02Z' }),
+      makeMessage({
+        type: 'tool_use',
+        content: 'Read file',
+        toolName: 'Read',
+        timestamp: '2026-03-07T10:00:02Z',
+      }),
     ];
 
     exportSessionAsJson(session, messages);

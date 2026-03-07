@@ -24,7 +24,6 @@ import { LiveTimeAgo } from './LiveTimeAgo';
 import { PathBadge } from './PathBadge';
 import { RefreshButton } from './RefreshButton';
 
-
 // ---------------------------------------------------------------------------
 // ErrorDetailPanel (co-located — used only by SessionHeader)
 // ---------------------------------------------------------------------------

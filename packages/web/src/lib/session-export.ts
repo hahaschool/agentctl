@@ -61,10 +61,7 @@ export function exportSessionAsJson(session: Session, messages: SessionContentMe
   downloadFile(json, filename, 'application/json');
 }
 
-export function exportSessionAsMarkdown(
-  session: Session,
-  messages: SessionContentMessage[],
-): void {
+export function exportSessionAsMarkdown(session: Session, messages: SessionContentMessage[]): void {
   const lines: string[] = [];
 
   lines.push(`# Session ${session.id}`);

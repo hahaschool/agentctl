@@ -103,7 +103,9 @@ function SessionListItemBase({
           className="w-3.5 h-3.5 cursor-pointer"
         />
       </div>
-      {/* Session card content */}
+      {/* Session card content — uses div+role instead of <button> to avoid
+         invalid nested buttons (CopyableText and PathBadge render <button>). */}
+      {/* biome-ignore lint/a11y/useSemanticElements: contains nested interactive children */}
       <div
         role="button"
         tabIndex={0}
