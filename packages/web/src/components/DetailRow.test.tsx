@@ -136,7 +136,7 @@ describe('DetailRow', () => {
       expect(button.textContent).toBe('Copied');
 
       act(() => {
-        vi.advanceTimersByTime(1500);
+        vi.advanceTimersByTime(2000);
       });
       expect(button.textContent).toBe('Copy');
 

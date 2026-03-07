@@ -258,7 +258,7 @@ describe('CopyableText', () => {
     expect(btn.getAttribute('title')).toBe('Copied!');
   });
 
-  it('reverts back to original display text after 1500ms', async () => {
+  it('reverts back to original display text after copy feedback timeout', async () => {
     vi.useFakeTimers();
     render(<CopyableText value="test-value" />);
     const btn = screen.getByRole('button');
@@ -270,7 +270,7 @@ describe('CopyableText', () => {
     expect(screen.getByText('Copied!')).toBeDefined();
 
     await act(async () => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(2000);
     });
 
     expect(screen.getByText('test-val')).toBeDefined();

@@ -616,7 +616,7 @@ describe('CopyableText', () => {
     expect(screen.getByTestId('icon-copy')).toBeDefined();
   });
 
-  it('reverts to original state after 1500ms', async () => {
+  it('reverts to original state after copy feedback timeout', async () => {
     vi.useFakeTimers();
     render(<CopyableText value="test-value" />);
     const button = screen.getByRole('button');
@@ -628,7 +628,7 @@ describe('CopyableText', () => {
     expect(screen.getByText('Copied!')).toBeDefined();
 
     await act(async () => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(2000);
     });
 
     // Should revert to showing the truncated value

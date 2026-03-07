@@ -8,6 +8,7 @@ import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionContentMessage } from '../lib/api';
 import { formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
+import { COPY_FEEDBACK_MS } from '../lib/ui-constants';
 import { AnsiSpan, AnsiText } from './AnsiText';
 import { ErrorBanner } from './ErrorBanner';
 import { MarkdownContent } from './MarkdownContent';
@@ -694,7 +695,7 @@ function ToolPairBlock({
   const handleCopyOutput = useCallback(() => {
     void navigator.clipboard.writeText(outputContent).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     });
   }, [outputContent]);
 

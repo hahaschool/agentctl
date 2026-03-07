@@ -2,9 +2,10 @@
 
 import { ClipboardCopy } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
-import { TERMINAL_FONT_FAMILY, TERMINAL_THEME } from '@/lib/terminal-theme';
 import { useTerminalResize } from '@/hooks/use-terminal-resize';
+import { TERMINAL_FONT_FAMILY, TERMINAL_THEME } from '@/lib/terminal-theme';
+import { COPY_FEEDBACK_MS } from '@/lib/ui-constants';
+import { cn } from '@/lib/utils';
 import '@xterm/xterm/css/xterm.css';
 
 // Dynamic import for xterm — it accesses DOM globals and cannot be imported at SSR time.
@@ -169,7 +170,7 @@ export function InteractiveTerminal({
     if (text) {
       void navigator.clipboard.writeText(text).then(() => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
       });
     }
   }, []);

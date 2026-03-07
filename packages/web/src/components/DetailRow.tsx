@@ -2,6 +2,7 @@
 
 import type React from 'react';
 import { useCallback, useState } from 'react';
+import { COPY_FEEDBACK_MS } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 import { useToast } from './Toast';
 
@@ -23,7 +24,7 @@ export function DetailRow({
       .writeText(value)
       .then(() => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
       })
       .catch(() => toast.error('Failed to copy'));
   }, [mono, value, toast]);

@@ -3,6 +3,7 @@
 import { Check, Copy } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
+import { COPY_FEEDBACK_MS } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 import { useToast } from './Toast';
 
@@ -32,7 +33,7 @@ function CopyableTextBase({ value, maxDisplay = 8, label, className }: Props): R
         .then(() => {
           setCopied(true);
           if (timerRef.current) clearTimeout(timerRef.current);
-          timerRef.current = setTimeout(() => setCopied(false), 1500);
+          timerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
         })
         .catch(() => toast.error('Failed to copy'));
     },

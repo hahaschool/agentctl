@@ -10,6 +10,7 @@ import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
+import { COPY_FEEDBACK_MS } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
@@ -53,7 +54,7 @@ function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.J
   const handleCopy = useCallback(() => {
     void navigator.clipboard.writeText(fullErrorText).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     });
   }, [fullErrorText]);
 

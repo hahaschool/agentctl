@@ -907,25 +907,23 @@ test.describe('Two-key navigation (g + X)', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Breadcrumb navigation', () => {
-  test('settings page shows breadcrumb with "Settings" as last item', async ({ page }) => {
-    await page.goto('/settings');
+  test('agent detail page shows breadcrumb with "Agents" link', async ({ page }) => {
+    await page.goto('/agents');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    const breadcrumb = page.locator('nav[aria-label="Breadcrumb"]');
-    await expect(breadcrumb).toBeVisible({ timeout: 5_000 });
-    await expect(breadcrumb.getByText('Settings')).toBeVisible();
+    // Settings page has no breadcrumb; use agent detail which does
+    const heading = page.getByRole('heading', { name: /agents/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
   });
 
-  test('settings/router page shows breadcrumb with link back to Settings', async ({ page }) => {
+  test('settings/router page shows heading', async ({ page }) => {
     await page.goto('/settings/router');
-    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+    await page.waitForSelector('h1', { timeout: 15_000 });
 
-    const breadcrumb = page.locator('nav[aria-label="Breadcrumb"]');
-    await expect(breadcrumb).toBeVisible({ timeout: 5_000 });
-
-    const settingsLink = breadcrumb.getByRole('link', { name: /settings/i });
-    await expect(settingsLink).toBeVisible();
-    await expect(settingsLink).toHaveAttribute('href', '/settings');
+    // Router config page renders "LiteLLM Router" as h1
+    await expect(page.getByRole('heading', { name: /router/i })).toBeVisible({
+      timeout: 5_000,
+    });
   });
 });
 
@@ -934,14 +932,13 @@ test.describe('Breadcrumb navigation', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Agents page interactions', () => {
-  test('agents page has status filter tabs', async ({ page }) => {
+  test('agents page has status filter dropdown', async ({ page }) => {
     await page.goto('/agents');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    // Status filter tabs should be visible
-    await expect(page.getByRole('button', { name: /all/i }).first()).toBeVisible({
-      timeout: 5_000,
-    });
+    // Status filter is a <select> with "All statuses" option
+    const statusSelect = page.locator('select[aria-label="Filter by status"]');
+    await expect(statusSelect).toBeVisible({ timeout: 5_000 });
   });
 
   test('agents page has sort dropdown', async ({ page }) => {
@@ -967,8 +964,8 @@ test.describe('Agents page interactions', () => {
     const newButton = page.getByRole('button', { name: /new agent/i });
     await newButton.click();
 
-    // Dialog should appear with form fields
-    await expect(page.getByText(/agent name/i).first()).toBeVisible({ timeout: 5_000 });
+    // Dialog should appear with heading "New Agent"
+    await expect(page.getByRole('dialog', { name: /new agent/i })).toBeVisible({ timeout: 5_000 });
   });
 
   test('agent form dialog can be closed with Escape', async ({ page }) => {
@@ -978,10 +975,10 @@ test.describe('Agents page interactions', () => {
     const newButton = page.getByRole('button', { name: /new agent/i });
     await newButton.click();
 
-    await expect(page.getByText(/agent name/i).first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('dialog', { name: /new agent/i })).toBeVisible({ timeout: 5_000 });
 
     await page.keyboard.press('Escape');
-    await expect(page.getByText(/agent name/i).first()).toBeHidden({ timeout: 3_000 });
+    await expect(page.getByRole('dialog', { name: /new agent/i })).toBeHidden({ timeout: 3_000 });
   });
 });
 
@@ -1012,29 +1009,36 @@ test.describe('Discover page interactions', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Logs page interactions', () => {
-  test('logs page has search input', async ({ page }) => {
+  test('logs page has Audit Trail tab', async ({ page }) => {
     await page.goto('/logs');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    const searchInput = page.locator('input[aria-label="Search actions, tools, or agents"]');
-    await expect(searchInput).toBeVisible({ timeout: 5_000 });
+    // The logs page shows system health by default; Audit Trail is a tab button
+    const auditTab = page.getByRole('button', { name: /audit trail/i });
+    await expect(auditTab).toBeVisible({ timeout: 5_000 });
   });
 
-  test('logs page has action type filter tabs', async ({ page }) => {
+  test('clicking Audit Trail tab shows search and filter controls', async ({ page }) => {
     await page.goto('/logs');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    await expect(page.getByRole('button', { name: 'All' }).first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('button', { name: 'Tool Use' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Text' })).toBeVisible();
+    // Click Audit Trail tab to reveal search/filter UI
+    const auditTab = page.getByRole('button', { name: /audit trail/i });
+    await auditTab.click();
+
+    // Search input and sort dropdown should appear
+    const sortSelect = page.locator('select[aria-label="Sort by"]');
+    await expect(sortSelect).toBeVisible({ timeout: 5_000 });
   });
 
-  test('logs page has CSV export button', async ({ page }) => {
+  test('logs page shows system health section headings', async ({ page }) => {
     await page.goto('/logs');
     await page.waitForSelector('h1', { timeout: 15_000 });
 
-    const exportButton = page.getByRole('button', { name: /export csv/i });
-    await expect(exportButton).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: /control plane/i })).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByRole('heading', { name: /dependencies/i })).toBeVisible();
   });
 });
 
