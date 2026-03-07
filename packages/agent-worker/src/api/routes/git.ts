@@ -18,6 +18,7 @@ const execFileAsync = promisify(execFile);
 // ---------------------------------------------------------------------------
 
 const GIT_COMMAND_TIMEOUT_MS = 5_000;
+const GIT_MAX_BUFFER = 1024 * 1024; // 1 MB
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,7 +68,7 @@ async function runGit(args: string[], cwd: string): Promise<string> {
   const { stdout } = await execFileAsync('git', args, {
     cwd,
     timeout: GIT_COMMAND_TIMEOUT_MS,
-    maxBuffer: 1024 * 1024,
+    maxBuffer: GIT_MAX_BUFFER,
   });
   return stdout.trim();
 }

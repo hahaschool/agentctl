@@ -102,6 +102,8 @@ const CLI_ERROR_TRUNCATE = 300;
 const MSG_TEXT_TRUNCATE = 8_000;
 /** Max chars for tool inputs/outputs and subagent content in content parsing */
 const TOOL_CONTENT_TRUNCATE = 4_000;
+/** Max JSONL file size in bytes (100 MB) before skipping content parsing */
+const MAX_JSONL_FILE_SIZE = 100 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // SSE constants
@@ -405,7 +407,7 @@ export async function sessionRoutes(
 
       try {
         const stat = statSync(jsonlPath);
-        if (stat.size > 100 * 1024 * 1024) {
+        if (stat.size > MAX_JSONL_FILE_SIZE) {
           // 100MB limit
           return reply.status(413).send({
             error: 'Session JSONL file too large (> 100 MB)',
