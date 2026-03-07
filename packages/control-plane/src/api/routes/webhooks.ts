@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { type Database, extractRows } from '../../db/index.js';
-import { PAGINATION, clampLimit } from '../constants.js';
+import { clampLimit, PAGINATION } from '../constants.js';
 
 // NOTE: This module uses the existing WebhookProvider and WebhookEventType
 // types from @agentctl/shared (packages/shared/src/types/webhook.ts).

@@ -39,7 +39,9 @@ function createMockLogger(): pino.Logger {
  * Build a minimal Fastify app with just the terminal routes registered.
  * Includes a simple error handler that maps WorkerError codes to HTTP status.
  */
-async function buildApp(maxTerminals?: number): Promise<{ app: FastifyInstance; terminalManager: TerminalManager }> {
+async function buildApp(
+  maxTerminals?: number,
+): Promise<{ app: FastifyInstance; terminalManager: TerminalManager }> {
   const Fastify = await import('fastify');
   const app = Fastify.default({ logger: false });
 

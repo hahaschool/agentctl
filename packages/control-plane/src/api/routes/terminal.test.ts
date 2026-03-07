@@ -104,9 +104,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
   describe('GET /:machineId/terminal', () => {
     it('proxies terminal listing to the worker', async () => {
       const mockBody = {
-        terminals: [
-          { id: 'term-1', shell: '/bin/bash', cols: 80, rows: 24 },
-        ],
+        terminals: [{ id: 'term-1', shell: '/bin/bash', cols: 80, rows: 24 }],
       };
       mockFetchOk(mockBody);
 

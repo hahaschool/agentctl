@@ -36,7 +36,7 @@ type AuditSummaryQuerystring = {
   to?: string;
 };
 
-import { BATCH_LIMITS, PAGINATION, clampLimit } from '../constants.js';
+import { BATCH_LIMITS, clampLimit, PAGINATION } from '../constants.js';
 
 export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, opts) => {
   const { dbRegistry } = opts;

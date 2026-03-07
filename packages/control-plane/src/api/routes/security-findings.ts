@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { type Database, extractRows } from '../../db/index.js';
-import { BATCH_LIMITS, PAGINATION, clampLimit } from '../constants.js';
+import { BATCH_LIMITS, clampLimit, PAGINATION } from '../constants.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,7 +91,6 @@ type CategoryCountRow = {
 function isValidSeverity(value: string): value is Severity {
   return (VALID_SEVERITIES as readonly string[]).includes(value);
 }
-
 
 function formatFinding(row: SecurityFindingRow): Record<string, unknown> {
   return {

@@ -48,7 +48,10 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         });
       }
 
-      if (body.config !== undefined && (typeof body.config !== 'object' || body.config === null || Array.isArray(body.config))) {
+      if (
+        body.config !== undefined &&
+        (typeof body.config !== 'object' || body.config === null || Array.isArray(body.config))
+      ) {
         return reply.status(400).send({
           error: 'INVALID_CONFIG',
           message: '"config" must be a plain object',

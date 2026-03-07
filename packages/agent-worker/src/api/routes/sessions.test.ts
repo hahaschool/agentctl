@@ -36,7 +36,7 @@ vi.mock('node:os', async (importOriginal) => {
   };
 });
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 // ---------------------------------------------------------------------------
@@ -1705,9 +1705,7 @@ describe('parseJsonlEntry', () => {
       const entry = {
         type: 'user',
         message: {
-          content: [
-            { type: 'tool_result', tool_use_id: 'toolu_abc', content: longContent },
-          ],
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_abc', content: longContent }],
         },
       };
 
@@ -1723,9 +1721,7 @@ describe('parseJsonlEntry', () => {
       const entry = {
         type: 'user',
         message: {
-          content: [
-            { type: 'tool_result', tool_use_id: 'toolu_xyz', content: bigArray },
-          ],
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_xyz', content: bigArray }],
         },
       };
 
@@ -1740,9 +1736,7 @@ describe('parseJsonlEntry', () => {
       const entry = {
         type: 'assistant',
         message: {
-          content: [
-            { type: 'tool_use', name: 'Bash', id: 'toolu_001', input: longInput },
-          ],
+          content: [{ type: 'tool_use', name: 'Bash', id: 'toolu_001', input: longInput }],
         },
       };
 
@@ -1760,9 +1754,7 @@ describe('parseJsonlEntry', () => {
       const entry = {
         type: 'assistant',
         message: {
-          content: [
-            { type: 'tool_use', name: 'Write', id: 'toolu_002', input: bigObject },
-          ],
+          content: [{ type: 'tool_use', name: 'Write', id: 'toolu_002', input: bigObject }],
         },
       };
 

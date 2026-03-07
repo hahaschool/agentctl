@@ -32,7 +32,12 @@ export type TerminalEvent =
 
 /** Internal record for a managed terminal. */
 type TerminalEntry = {
-  pty: { write: (data: string) => void; resize: (cols: number, rows: number) => void; kill: () => void; pid: number };
+  pty: {
+    write: (data: string) => void;
+    resize: (cols: number, rows: number) => void;
+    kill: () => void;
+    pid: number;
+  };
   info: TerminalInfo;
   listeners: Set<(event: TerminalEvent) => void>;
 };
@@ -86,11 +91,9 @@ export class TerminalManager {
     try {
       nodePty = await import('node-pty');
     } catch (err) {
-      throw new WorkerError(
-        'TERMINAL_SPAWN_FAILED',
-        'node-pty is not available on this machine',
-        { error: err instanceof Error ? err.message : String(err) },
-      );
+      throw new WorkerError('TERMINAL_SPAWN_FAILED', 'node-pty is not available on this machine', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     const command = opts.command ?? process.env.SHELL ?? '/bin/zsh';

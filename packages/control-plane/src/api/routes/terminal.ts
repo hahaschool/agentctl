@@ -308,14 +308,16 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
         workerBaseUrl = await resolveWorker(machineId);
       } catch (err) {
         const message = err instanceof ControlPlaneError ? err.message : String(err);
-        logger.error({ err: message, machineId, termId }, 'Failed to resolve worker for terminal WS');
+        logger.error(
+          { err: message, machineId, termId },
+          'Failed to resolve worker for terminal WS',
+        );
         socket.close(1011, message);
         return;
       }
 
       const wsUrl =
-        workerBaseUrl.replace(/^http/, 'ws') +
-        `/api/terminal/${encodeURIComponent(termId)}/ws`;
+        workerBaseUrl.replace(/^http/, 'ws') + `/api/terminal/${encodeURIComponent(termId)}/ws`;
 
       const { WebSocket } = await import('ws');
       const upstream = new WebSocket(wsUrl);

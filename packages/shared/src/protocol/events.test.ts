@@ -107,7 +107,12 @@ describe('AgentEvent union', () => {
 
 describe('AgentOutputEvent', () => {
   it('accepts all valid output types', () => {
-    const types: AgentOutputEvent['data']['type'][] = ['text', 'tool_use', 'tool_result', 'tool_blocked'];
+    const types: AgentOutputEvent['data']['type'][] = [
+      'text',
+      'tool_use',
+      'tool_result',
+      'tool_blocked',
+    ];
 
     for (const type of types) {
       const event: AgentOutputEvent = {

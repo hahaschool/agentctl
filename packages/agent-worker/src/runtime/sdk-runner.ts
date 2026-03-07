@@ -41,10 +41,7 @@ export type SdkRunResult = {
  * installed.
  */
 type ClaudeAgentSdk = {
-  query: (args: {
-    prompt: string;
-    options: Record<string, unknown>;
-  }) => AsyncIterable<SdkMessage>;
+  query: (args: { prompt: string; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 };
 
 /**

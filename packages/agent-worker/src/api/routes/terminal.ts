@@ -148,75 +148,72 @@ export async function terminalRoutes(
   // GET /:id/ws — WebSocket for terminal I/O
   // -------------------------------------------------------------------------
 
-  app.get<{ Params: TerminalParams }>(
-    '/:id/ws',
-    { websocket: true },
-    (socket, request) => {
-      const { id } = request.params;
+  app.get<{ Params: TerminalParams }>('/:id/ws', { websocket: true }, (socket, request) => {
+    const { id } = request.params;
 
-      const info = terminalManager.get(id);
-      if (!info) {
-        socket.send(
-          JSON.stringify({ type: 'error', message: `Terminal ${id} not found` }),
-        );
-        socket.close();
-        return;
-      }
+    const info = terminalManager.get(id);
+    if (!info) {
+      socket.send(JSON.stringify({ type: 'error', message: `Terminal ${id} not found` }));
+      socket.close();
+      return;
+    }
 
-      logger.info({ terminalId: id }, 'WebSocket connected to terminal');
+    logger.info({ terminalId: id }, 'WebSocket connected to terminal');
 
-      // Subscribe to terminal events and relay to WebSocket
-      let unsubscribe: (() => void) | undefined;
+    // Subscribe to terminal events and relay to WebSocket
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = terminalManager.subscribe(id, (event) => {
+        if (socket.readyState === 1 /* OPEN */) {
+          socket.send(JSON.stringify(event));
+        }
+      });
+    } catch {
+      socket.send(JSON.stringify({ type: 'error', message: `Terminal ${id} not found` }));
+      socket.close();
+      return;
+    }
+
+    // Handle incoming messages from WebSocket
+    socket.on('message', (rawData) => {
       try {
-        unsubscribe = terminalManager.subscribe(id, (event) => {
-          if (socket.readyState === 1 /* OPEN */) {
-            socket.send(JSON.stringify(event));
+        const data = typeof rawData === 'string' ? rawData : rawData.toString();
+        const message = JSON.parse(data) as {
+          type: string;
+          data?: string;
+          cols?: number;
+          rows?: number;
+        };
+
+        if (message.type === 'input' && typeof message.data === 'string') {
+          try {
+            terminalManager.write(id, message.data);
+          } catch {
+            // Terminal may have exited — ignore write errors
           }
-        });
+        } else if (
+          message.type === 'resize' &&
+          typeof message.cols === 'number' &&
+          typeof message.rows === 'number'
+        ) {
+          try {
+            terminalManager.resize(id, message.cols, message.rows);
+          } catch {
+            // Terminal may have exited — ignore resize errors
+          }
+        }
       } catch {
-        socket.send(
-          JSON.stringify({ type: 'error', message: `Terminal ${id} not found` }),
-        );
-        socket.close();
-        return;
+        // Ignore malformed JSON messages
+        logger.debug({ terminalId: id }, 'Received malformed WebSocket message');
       }
+    });
 
-      // Handle incoming messages from WebSocket
-      socket.on('message', (rawData) => {
-        try {
-          const data = typeof rawData === 'string' ? rawData : rawData.toString();
-          const message = JSON.parse(data) as { type: string; data?: string; cols?: number; rows?: number };
-
-          if (message.type === 'input' && typeof message.data === 'string') {
-            try {
-              terminalManager.write(id, message.data);
-            } catch {
-              // Terminal may have exited — ignore write errors
-            }
-          } else if (
-            message.type === 'resize' &&
-            typeof message.cols === 'number' &&
-            typeof message.rows === 'number'
-          ) {
-            try {
-              terminalManager.resize(id, message.cols, message.rows);
-            } catch {
-              // Terminal may have exited — ignore resize errors
-            }
-          }
-        } catch {
-          // Ignore malformed JSON messages
-          logger.debug({ terminalId: id }, 'Received malformed WebSocket message');
-        }
-      });
-
-      // Cleanup on WebSocket close
-      socket.on('close', () => {
-        logger.info({ terminalId: id }, 'WebSocket disconnected from terminal');
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      });
-    },
-  );
+    // Cleanup on WebSocket close
+    socket.on('close', () => {
+      logger.info({ terminalId: id }, 'WebSocket disconnected from terminal');
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    });
+  });
 }

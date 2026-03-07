@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BATCH_LIMITS, PAGINATION, clampLimit } from './constants.js';
+import { BATCH_LIMITS, clampLimit, PAGINATION } from './constants.js';
 
 describe('PAGINATION', () => {
   it('defines expected resource types', () => {

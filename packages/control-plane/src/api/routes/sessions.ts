@@ -9,7 +9,8 @@ import { agents as agentsTable, apiAccounts, rcSessions, settings } from '../../
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
-import { PAGINATION, clampLimit } from '../constants.js';
+import { clampLimit, PAGINATION } from '../constants.js';
+
 const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
 /** Timeout for fetch() calls that dispatch commands to worker machines. */

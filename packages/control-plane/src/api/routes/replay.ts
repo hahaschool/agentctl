@@ -9,7 +9,7 @@ import {
   generateSummary,
 } from '../../audit/session-replay.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
-import { PAGINATION, clampLimit } from '../constants.js';
+import { clampLimit, PAGINATION } from '../constants.js';
 
 export type ReplayRoutesOptions = {
   dbRegistry: DbAgentRegistry;
@@ -28,7 +28,6 @@ type ReplayQuerystring = {
   limit?: string;
   offset?: string;
 };
-
 
 export const replayRoutes: FastifyPluginAsync<ReplayRoutesOptions> = async (app, opts) => {
   const { dbRegistry } = opts;

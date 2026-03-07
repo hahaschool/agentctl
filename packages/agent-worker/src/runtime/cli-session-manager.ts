@@ -629,8 +629,7 @@ export class CliSessionManager extends EventEmitter {
       if ('entries' in parsed && Array.isArray(parsed.entries)) {
         const originalPath = 'originalPath' in parsed ? parsed.originalPath : undefined;
         const projectPath =
-          (typeof originalPath === 'string' ? originalPath : null) ??
-          decodeProjectPath(dirName);
+          (typeof originalPath === 'string' ? originalPath : null) ?? decodeProjectPath(dirName);
 
         if (projectPathFilter && !projectPath.includes(projectPathFilter)) {
           return;
@@ -664,12 +663,25 @@ export class CliSessionManager extends EventEmitter {
         }
         // Access optional properties safely via 'in' checks
         const e: SessionIndexEntry = {
-          summary: 'summary' in entry && typeof entry.summary === 'string' ? entry.summary : undefined,
+          summary:
+            'summary' in entry && typeof entry.summary === 'string' ? entry.summary : undefined,
           title: 'title' in entry && typeof entry.title === 'string' ? entry.title : undefined,
-          messageCount: 'messageCount' in entry && typeof entry.messageCount === 'number' ? entry.messageCount : undefined,
-          lastActiveAt: 'lastActiveAt' in entry && typeof entry.lastActiveAt === 'string' ? entry.lastActiveAt : undefined,
-          updatedAt: 'updatedAt' in entry && typeof entry.updatedAt === 'string' ? entry.updatedAt : undefined,
-          gitBranch: 'gitBranch' in entry && typeof entry.gitBranch === 'string' ? entry.gitBranch : undefined,
+          messageCount:
+            'messageCount' in entry && typeof entry.messageCount === 'number'
+              ? entry.messageCount
+              : undefined,
+          lastActiveAt:
+            'lastActiveAt' in entry && typeof entry.lastActiveAt === 'string'
+              ? entry.lastActiveAt
+              : undefined,
+          updatedAt:
+            'updatedAt' in entry && typeof entry.updatedAt === 'string'
+              ? entry.updatedAt
+              : undefined,
+          gitBranch:
+            'gitBranch' in entry && typeof entry.gitBranch === 'string'
+              ? entry.gitBranch
+              : undefined,
         };
         out.push({
           sessionId,
