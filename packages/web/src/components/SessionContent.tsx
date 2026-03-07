@@ -331,7 +331,7 @@ export function SessionContent({
     return lines;
   }, [allMessages, stream.rawOutput]);
 
-  const messages = allMessages.filter((m) => {
+  const filteredMessages = allMessages.filter((m) => {
     // Always show these types
     if (m.type === 'human' || m.type === 'assistant' || m.type === 'subagent' || m.type === 'todo')
       return true;
@@ -342,6 +342,23 @@ export function SessionContent({
     // Hide unknown types unless tools are shown
     return showTools;
   });
+
+  // Merge optimistic messages into the message list as regular human entries
+  // so the transition from "sending..." to real message is seamless (same position,
+  // same styling). The _optimistic flag adds a subtle "sending..." indicator.
+  const messages = useMemo(() => {
+    if (optimisticMessages.length === 0) return filteredMessages;
+    const merged: (SessionContentMessage & { _optimistic?: boolean })[] = [...filteredMessages];
+    for (const om of optimisticMessages) {
+      merged.push({
+        type: 'human',
+        content: om.text,
+        timestamp: new Date(om.timestamp).toISOString(),
+        _optimistic: true,
+      });
+    }
+    return merged;
+  }, [filteredMessages, optimisticMessages]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -377,7 +394,7 @@ export function SessionContent({
           </div>
           <span className="text-[11px] text-muted-foreground">
             {viewMode === 'messages' && allMessages.length > 0
-              ? `${messages.length}${hasMore ? ` / ${totalMessages}` : ''} messages`
+              ? `${filteredMessages.length}${hasMore ? ` / ${totalMessages}` : ''} messages`
               : ''}
             {isActive && (
               <span
@@ -489,7 +506,7 @@ export function SessionContent({
               </div>
             )}
             {error && <ErrorBanner message={error} onRetry={() => void fetchLatest()} />}
-            {allMessages.length > 0 && messages.length === 0 && !loading && (
+            {allMessages.length > 0 && filteredMessages.length === 0 && !loading && (
               <div className="p-5 text-center text-muted-foreground text-xs">
                 No messages match current filters
               </div>
@@ -555,30 +572,13 @@ export function SessionContent({
                       key={`${msg.type}-${String(i)}`}
                       message={msg}
                       renderMarkdown={renderMarkdown}
+                      isOptimistic={'_optimistic' in msg && (msg as { _optimistic?: boolean })._optimistic}
                     />
                   );
               }
             })}
 
-            {/* Optimistic messages */}
-            {optimisticMessages.map((om) => (
-              <div
-                key={om.id}
-                className="mb-1.5 px-2.5 py-1.5 rounded-md border-l-2 border-blue-500/50 bg-blue-500/10"
-              >
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
-                    You
-                  </span>
-                  <span className="text-[9px] text-blue-600/70 dark:text-blue-400/70 animate-pulse">
-                    sending...
-                  </span>
-                </div>
-                <div className="text-xs text-foreground whitespace-pre-wrap break-words">
-                  {om.text}
-                </div>
-              </div>
-            ))}
+            {/* (optimistic messages are now merged into the messages array above) */}
 
             {/* Live streaming output */}
             {stream.connected && stream.streamOutput.length > 0 && (
@@ -615,9 +615,11 @@ const TRUNCATE_THRESHOLD = 800;
 export function InlineMessage({
   message,
   renderMarkdown,
+  isOptimistic,
 }: {
   message: SessionContentMessage;
   renderMarkdown?: boolean;
+  isOptimistic?: boolean;
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const msgStyle = getMessageStyle(message.type);
@@ -629,15 +631,18 @@ export function InlineMessage({
     isLong && !expanded ? `${content.slice(0, TRUNCATE_THRESHOLD)}...` : content;
 
   return (
-    <div className={cn('mb-2 px-3 py-2 rounded-md border-l-2', msgStyle.bubbleClass)}>
+    <div className={cn('mb-2 px-3 py-2 rounded-md border-l-2', msgStyle.bubbleClass, isOptimistic && 'opacity-70')}>
       <div className="flex items-center gap-1.5 mb-0.5">
         <span className={cn('text-[10px] font-semibold', msgStyle.textClass)}>
           {msgStyle.label}
         </span>
+        {isOptimistic && (
+          <span className="text-[9px] text-blue-500 animate-pulse">sending...</span>
+        )}
         {message.toolName && (
           <span className="text-[10px] font-mono text-muted-foreground">{message.toolName}</span>
         )}
-        {message.timestamp && (
+        {!isOptimistic && message.timestamp && (
           <span className="text-[9px] text-muted-foreground ml-auto">
             {formatTime(message.timestamp)}
           </span>
