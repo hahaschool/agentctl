@@ -215,9 +215,7 @@ export function SessionContent({
   useEffect(() => {
     if (optimisticMessages.length === 0) return;
     const humanCount = allMessages.filter((m) => m.type === 'human').length;
-    setOptimisticMessages((prev) =>
-      prev.filter((om) => humanCount <= om.expectedHumanCount),
-    );
+    setOptimisticMessages((prev) => prev.filter((om) => humanCount <= om.expectedHumanCount));
   }, [allMessages, optimisticMessages.length]);
 
   // Safety net: 30-second absolute timeout for stuck optimistic messages
@@ -259,17 +257,20 @@ export function SessionContent({
 
   // React to parent sending a message — add optimistic entry
   const lastSentRef = useRef<number>(0);
+  // Track human count via ref so the send effect doesn't depend on allMessages
+  const humanCountRef = useRef(0);
+  humanCountRef.current = allMessages.filter((m) => m.type === 'human').length;
+
   useEffect(() => {
     if (!lastSentMessage || lastSentMessage.ts <= lastSentRef.current) return;
     lastSentRef.current = lastSentMessage.ts;
-    const currentHumanCount = allMessages.filter((m) => m.type === 'human').length;
     setOptimisticMessages((prev) => [
       ...prev,
       {
         id: `opt-${lastSentMessage.ts}`,
         text: lastSentMessage.text,
         timestamp: lastSentMessage.ts,
-        expectedHumanCount: currentHumanCount,
+        expectedHumanCount: humanCountRef.current,
       },
     ]);
     // Auto-scroll when user sends
@@ -304,10 +305,14 @@ export function SessionContent({
           lines.push(`${text}\r\n\r\n`);
           break;
         case 'thinking':
-          lines.push(`\x1b[2;35m💭 ${text.slice(0, 200)}${text.length > 200 ? '…' : ''}\x1b[0m\r\n`);
+          lines.push(
+            `\x1b[2;35m💭 ${text.slice(0, 200)}${text.length > 200 ? '…' : ''}\x1b[0m\r\n`,
+          );
           break;
         case 'tool_use':
-          lines.push(`\x1b[33m⚡ ${msg.toolName ?? 'tool'}\x1b[0m ${text.slice(0, 300)}${text.length > 300 ? '…' : ''}\r\n`);
+          lines.push(
+            `\x1b[33m⚡ ${msg.toolName ?? 'tool'}\x1b[0m ${text.slice(0, 300)}${text.length > 300 ? '…' : ''}\r\n`,
+          );
           break;
         case 'tool_result':
           lines.push(`\x1b[2m${text.slice(0, 500)}${text.length > 500 ? '…' : ''}\x1b[0m\r\n`);
@@ -563,7 +568,9 @@ export function SessionContent({
                       key={`${msg.type}-${String(i)}`}
                       message={msg}
                       renderMarkdown={renderMarkdown}
-                      isOptimistic={'_optimistic' in msg && (msg as { _optimistic?: boolean })._optimistic}
+                      isOptimistic={
+                        '_optimistic' in msg && (msg as { _optimistic?: boolean })._optimistic
+                      }
                     />
                   );
               }
@@ -622,14 +629,18 @@ export function InlineMessage({
     isLong && !expanded ? `${content.slice(0, TRUNCATE_THRESHOLD)}...` : content;
 
   return (
-    <div className={cn('mb-2 px-3 py-2 rounded-md border-l-2', msgStyle.bubbleClass, isOptimistic && 'opacity-70')}>
+    <div
+      className={cn(
+        'mb-2 px-3 py-2 rounded-md border-l-2',
+        msgStyle.bubbleClass,
+        isOptimistic && 'opacity-70',
+      )}
+    >
       <div className="flex items-center gap-1.5 mb-0.5">
         <span className={cn('text-[10px] font-semibold', msgStyle.textClass)}>
           {msgStyle.label}
         </span>
-        {isOptimistic && (
-          <span className="text-[9px] text-blue-500 animate-pulse">sending...</span>
-        )}
+        {isOptimistic && <span className="text-[9px] text-blue-500 animate-pulse">sending...</span>}
         {message.toolName && (
           <span className="text-[10px] font-mono text-muted-foreground">{message.toolName}</span>
         )}

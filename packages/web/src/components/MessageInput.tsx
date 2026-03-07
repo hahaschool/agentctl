@@ -302,7 +302,8 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
   }
 
   return (
-    <div
+    <section
+      aria-label="Message input area"
       className={cn(
         'px-5 py-3 border-t border-border bg-card shrink-0 transition-colors',
         draggingOver && 'bg-primary/5 border-t-primary/40',
@@ -314,7 +315,15 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
       {/* Drop zone overlay */}
       {draggingOver && (
         <div className="mb-2 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-primary/40 rounded-md bg-primary/5 text-primary text-xs font-medium pointer-events-none">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
             <line x1="12" y1="3" x2="12" y2="15" />
@@ -471,6 +480,6 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
       <div className="mt-1 text-[10px] text-muted-foreground">
         Enter to send · Shift+Enter for newline · {'\u2318'}V paste images · Drag &amp; drop files
       </div>
-    </div>
+    </section>
   );
 }
