@@ -5,11 +5,12 @@
 // Mounted at /api/machines/:machineId/git
 // ---------------------------------------------------------------------------
 
-import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type GitProxyRoutesOptions = {
@@ -47,29 +48,19 @@ export const gitProxyRoutes: FastifyPluginAsync<GitProxyRoutesOptions> = async (
 
       const workerBaseUrl = await resolveWorker(machineId);
       const qs = new URLSearchParams({ path });
-      const url = `${workerBaseUrl}/api/git/status?${qs.toString()}`;
 
-      try {
-        const res = await fetch(url, {
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/git/status?${qs.toString()}`,
+        method: 'GET',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        return await res.json();
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to get git status from worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 };

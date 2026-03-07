@@ -10,6 +10,7 @@ import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
 import { clampLimit, PAGINATION } from '../constants.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
 
 const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
@@ -1210,15 +1211,16 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
         const workerSessionRef = session.claudeSessionId ?? sessionId;
 
-        try {
-          await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}`, {
-            method: 'DELETE',
-            signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+        const result = await proxyWorkerRequest({
+          workerBaseUrl,
+          path: `/api/sessions/${encodeURIComponent(workerSessionRef)}`,
+          method: 'DELETE',
+          timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+        });
+
+        if (!result.ok) {
           app.log.warn(
-            { sessionId, machineId: session.machineId, err: message },
+            { sessionId, machineId: session.machineId, err: result.message },
             'Failed to notify worker of session end — session marked ended in control plane',
           );
         }

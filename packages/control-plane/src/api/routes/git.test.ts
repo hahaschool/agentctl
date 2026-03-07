@@ -193,8 +193,8 @@ describe('Git proxy routes — /api/machines/:machineId/git', () => {
         url: '/api/machines/machine-1/git/status?path=/tmp',
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 });

@@ -6,11 +6,12 @@
 // Mounted at /api/machines/:machineId/files
 // ---------------------------------------------------------------------------
 
-import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 const MAX_FILE_CONTENT_LENGTH = 5_000_000; // 5 MB
@@ -50,29 +51,19 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
 
       const workerBaseUrl = await resolveWorker(machineId);
       const qs = new URLSearchParams({ path });
-      const url = `${workerBaseUrl}/api/files?${qs.toString()}`;
 
-      try {
-        const res = await fetch(url, {
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/files?${qs.toString()}`,
+        method: 'GET',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        return await res.json();
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to list files on worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 
@@ -99,29 +90,19 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
 
       const workerBaseUrl = await resolveWorker(machineId);
       const qs = new URLSearchParams({ path });
-      const url = `${workerBaseUrl}/api/files/content?${qs.toString()}`;
 
-      try {
-        const res = await fetch(url, {
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/files/content?${qs.toString()}`,
+        method: 'GET',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        return await res.json();
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to read file from worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 
@@ -164,32 +145,20 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
       }
 
       const workerBaseUrl = await resolveWorker(machineId);
-      const url = `${workerBaseUrl}/api/files/content`;
 
-      try {
-        const res = await fetch(url, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: body.path, content: body.content }),
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: '/api/files/content',
+        method: 'PUT',
+        body: { path: body.path, content: body.content },
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const resBody = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(resBody);
-        }
-
-        return await res.json();
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to write file on worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 };

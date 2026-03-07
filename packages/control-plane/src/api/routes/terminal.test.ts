@@ -159,7 +159,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       expect(res.json().error).toBe('WORKER_ERROR');
     });
 
-    it('returns WORKER_UNREACHABLE when fetch throws', async () => {
+    it('returns 502 WORKER_UNREACHABLE when fetch throws', async () => {
       mockFetchThrow('ECONNREFUSED');
 
       const res = await app.inject({
@@ -167,8 +167,8 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
         url: '/api/machines/machine-1/terminal',
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 
@@ -301,7 +301,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       expect(res.json().error).toBe('WORKER_ERROR');
     });
 
-    it('returns WORKER_UNREACHABLE when fetch throws', async () => {
+    it('returns 502 WORKER_UNREACHABLE when fetch throws', async () => {
       mockFetchThrow();
 
       const res = await app.inject({
@@ -310,8 +310,8 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
         payload: { id: 'term-1' },
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 
@@ -361,7 +361,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       expect(res.json().error).toBe('WORKER_ERROR');
     });
 
-    it('returns WORKER_UNREACHABLE when fetch throws', async () => {
+    it('returns 502 WORKER_UNREACHABLE when fetch throws', async () => {
       mockFetchThrow();
 
       const res = await app.inject({
@@ -369,8 +369,8 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
         url: '/api/machines/machine-1/terminal/term-1',
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 
@@ -480,7 +480,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       expect(res.json().error).toBe('WORKER_ERROR');
     });
 
-    it('returns WORKER_UNREACHABLE when fetch throws', async () => {
+    it('returns 502 WORKER_UNREACHABLE when fetch throws', async () => {
       mockFetchThrow();
 
       const res = await app.inject({
@@ -489,8 +489,8 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
         payload: { cols: 80, rows: 24 },
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 
@@ -557,7 +557,7 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
       expect(res.json().error).toBe('WORKER_ERROR');
     });
 
-    it('returns WORKER_UNREACHABLE when fetch throws', async () => {
+    it('returns 502 WORKER_UNREACHABLE when fetch throws', async () => {
       mockFetchThrow();
 
       const res = await app.inject({
@@ -565,8 +565,8 @@ describe('Terminal proxy routes — /api/machines/:machineId/terminal', () => {
         url: '/api/machines/machine-1/terminal/term-1',
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 });

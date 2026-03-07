@@ -12,6 +12,7 @@ import type { Logger } from 'pino';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type TerminalRouteOptions = {
@@ -39,29 +40,19 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
     async (request, reply) => {
       const { machineId } = request.params;
       const workerBaseUrl = await resolveWorker(machineId);
-      const url = `${workerBaseUrl}/api/terminal`;
 
-      try {
-        const res = await fetch(url, {
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: '/api/terminal',
+        method: 'GET',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        return await res.json();
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to list terminals on worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 
@@ -132,33 +123,20 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
       }
 
       const workerBaseUrl = await resolveWorker(machineId);
-      const url = `${workerBaseUrl}/api/terminal`;
 
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(request.body ?? {}),
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: '/api/terminal',
+        method: 'POST',
+        body: request.body ?? {},
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        const data = await res.json();
-        return reply.code(res.status).send(data);
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to spawn terminal on worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 
@@ -174,29 +152,19 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
     async (request, reply) => {
       const { machineId, termId } = request.params;
       const workerBaseUrl = await resolveWorker(machineId);
-      const url = `${workerBaseUrl}/api/terminal/${encodeURIComponent(termId)}`;
 
-      try {
-        const res = await fetch(url, {
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/terminal/${encodeURIComponent(termId)}`,
+        method: 'GET',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        return await res.json();
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to get terminal info from worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId, termId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 
@@ -222,33 +190,20 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
       }
 
       const workerBaseUrl = await resolveWorker(machineId);
-      const url = `${workerBaseUrl}/api/terminal/${encodeURIComponent(termId)}/resize`;
 
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(request.body ?? {}),
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/terminal/${encodeURIComponent(termId)}/resize`,
+        method: 'POST',
+        body: request.body ?? {},
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        const data = await res.json();
-        return reply.code(res.status).send(data);
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to resize terminal on worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId, termId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 
@@ -264,31 +219,19 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
     async (request, reply) => {
       const { machineId, termId } = request.params;
       const workerBaseUrl = await resolveWorker(machineId);
-      const url = `${workerBaseUrl}/api/terminal/${encodeURIComponent(termId)}`;
 
-      try {
-        const res = await fetch(url, {
-          method: 'DELETE',
-          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
-        });
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/terminal/${encodeURIComponent(termId)}`,
+        method: 'DELETE',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
 
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
-          return reply.code(res.status).send(body);
-        }
-
-        const data = await res.json();
-        return reply.code(res.status).send(data);
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        throw new ControlPlaneError(
-          'WORKER_UNREACHABLE',
-          `Failed to kill terminal on worker at ${workerBaseUrl}: ${errMessage}`,
-          { machineId, termId },
-        );
+      if (!result.ok) {
+        return reply.status(result.status).send({ error: result.error, message: result.message });
       }
+
+      return reply.status(result.status).send(result.data);
     },
   );
 

@@ -184,7 +184,7 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
       expect(res.json().error).toBe('WORKER_ERROR');
     });
 
-    it('returns 500 when worker is unreachable', async () => {
+    it('returns 502 when worker is unreachable', async () => {
       mockFetchThrow('ECONNREFUSED');
 
       const res = await app.inject({
@@ -192,8 +192,8 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
         url: '/api/machines/machine-1/files?path=/tmp',
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 
@@ -232,7 +232,7 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
       expect(res.statusCode).toBe(403);
     });
 
-    it('returns 500 when worker is unreachable', async () => {
+    it('returns 502 when worker is unreachable', async () => {
       mockFetchThrow();
 
       const res = await app.inject({
@@ -240,8 +240,8 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
         url: '/api/machines/machine-1/files/content?path=/tmp/test.ts',
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 
@@ -312,7 +312,7 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
       expect(res.statusCode).toBe(500);
     });
 
-    it('returns WORKER_UNREACHABLE when fetch throws', async () => {
+    it('returns 502 WORKER_UNREACHABLE when fetch throws', async () => {
       mockFetchThrow();
 
       const res = await app.inject({
@@ -321,8 +321,8 @@ describe('File proxy routes — /api/machines/:machineId/files', () => {
         payload: { path: '/tmp/test.ts', content: 'hello' },
       });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json().code).toBe('WORKER_UNREACHABLE');
+      expect(res.statusCode).toBe(502);
+      expect(res.json().error).toBe('WORKER_UNREACHABLE');
     });
   });
 });
