@@ -16,29 +16,29 @@ export default function MachineTerminalPage() {
   const toast = useToast();
   const [terminalId, setTerminalId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [spawning, setSpawning] = useState(false);
-  const spawnedRef = useRef(false);
+  const [spawning, setSpawning] = useState(true);
+  const spawnedIdRef = useRef<string | null>(null);
 
   // Auto-spawn terminal on mount
   useEffect(() => {
-    // Prevent double-spawn in React strict mode
-    if (spawnedRef.current) return;
-    spawnedRef.current = true;
-
     let cancelled = false;
-    setSpawning(true);
 
     api
       .spawnTerminal(machineId, { cols: 120, rows: 30 })
       .then((info) => {
-        if (!cancelled) setTerminalId(info.id);
+        if (cancelled) {
+          // Strict mode re-mount: kill the terminal spawned by the first mount
+          api.killTerminal(machineId, info.id).catch(() => {});
+          return;
+        }
+        spawnedIdRef.current = info.id;
+        setTerminalId(info.id);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : String(err);
-          setError(message);
-          toast.error('Failed to spawn terminal');
-        }
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+        toast.error('Failed to spawn terminal');
       })
       .finally(() => {
         if (!cancelled) setSpawning(false);
@@ -46,6 +46,11 @@ export default function MachineTerminalPage() {
 
     return () => {
       cancelled = true;
+      // Kill terminal from this mount if it was already spawned
+      if (spawnedIdRef.current) {
+        api.killTerminal(machineId, spawnedIdRef.current).catch(() => {});
+        spawnedIdRef.current = null;
+      }
     };
   }, [machineId, toast]);
 
@@ -110,10 +115,13 @@ export default function MachineTerminalPage() {
                   onClick={() => {
                     setError(null);
                     setSpawning(true);
-                    spawnedRef.current = false;
+                    spawnedIdRef.current = null;
                     api
                       .spawnTerminal(machineId, { cols: 120, rows: 30 })
-                      .then((info) => setTerminalId(info.id))
+                      .then((info) => {
+                        spawnedIdRef.current = info.id;
+                        setTerminalId(info.id);
+                      })
                       .catch((err: unknown) => {
                         setError(err instanceof Error ? err.message : String(err));
                       })
