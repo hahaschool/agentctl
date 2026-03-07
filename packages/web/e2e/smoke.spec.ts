@@ -1062,6 +1062,15 @@ test.describe('Machines page interactions', () => {
     const compactToggle = page.getByRole('button', { name: /compact/i });
     await expect(compactToggle).toBeVisible({ timeout: 5_000 });
   });
+
+  test('machines page shows fleet status section', async ({ page }) => {
+    await page.goto('/machines');
+    await page.getByRole('heading', { name: /fleet machines/i }).waitFor({ timeout: 15_000 });
+
+    // Should show at least one machine card or the heading
+    const heading = page.getByRole('heading', { name: /fleet machines/i });
+    await expect(heading).toBeVisible();
+  });
 });
 
 // ---------------------------------------------------------------------------
