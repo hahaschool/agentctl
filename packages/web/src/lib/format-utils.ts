@@ -159,16 +159,9 @@ export function escapeCsvValue(value: string | number | null | undefined): strin
   return str;
 }
 
-/** Build a CSV string from headers and rows, and trigger a browser download. */
-export function downloadCsv(
-  headers: string[],
-  rows: (string | number | null | undefined)[][],
-  filename: string,
-): void {
-  const headerLine = headers.join(',');
-  const dataLines = rows.map((row) => row.map(escapeCsvValue).join(','));
-  const csv = [headerLine, ...dataLines].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
+/** Trigger a browser file download from a string. Works in all browsers including Firefox. */
+export function triggerDownload(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -178,6 +171,18 @@ export function downloadCsv(
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Build a CSV string from headers and rows, and trigger a browser download. */
+export function downloadCsv(
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+  filename: string,
+): void {
+  const headerLine = headers.join(',');
+  const dataLines = rows.map((row) => row.map(escapeCsvValue).join(','));
+  const csv = [headerLine, ...dataLines].join('\n');
+  triggerDownload(csv, filename, 'text/csv');
 }
 
 /**

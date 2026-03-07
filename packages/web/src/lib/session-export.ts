@@ -1,17 +1,5 @@
 import type { Session, SessionContentMessage } from './api';
-
-function downloadFile(content: string, filename: string, mimeType: string): void {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.append(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+import { triggerDownload } from './format-utils';
 
 export function formatMessageLabel(type: string): string {
   switch (type) {
@@ -61,7 +49,7 @@ export function exportSessionAsJson(session: Session, messages: SessionContentMe
   };
   const json = JSON.stringify(data, null, 2);
   const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.json`;
-  downloadFile(json, filename, 'application/json');
+  triggerDownload(json, filename, 'application/json');
 }
 
 export function exportSessionAsMarkdown(session: Session, messages: SessionContentMessage[]): void {
@@ -105,5 +93,5 @@ export function exportSessionAsMarkdown(session: Session, messages: SessionConte
 
   const md = lines.join('\n');
   const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.md`;
-  downloadFile(md, filename, 'text/markdown');
+  triggerDownload(md, filename, 'text/markdown');
 }

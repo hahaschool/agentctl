@@ -12,6 +12,7 @@ import {
   recencyColorClass,
   shortenPath,
   timeAgo,
+  triggerDownload,
   truncate,
 } from './format-utils';
 
@@ -314,6 +315,42 @@ describe('escapeCsvValue', () => {
 
   it('handles number values', () => {
     expect(escapeCsvValue(42)).toBe('42');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// triggerDownload
+// ---------------------------------------------------------------------------
+
+describe('triggerDownload', () => {
+  it('creates a blob, appends anchor to DOM, clicks it, cleans up', () => {
+    const clicks: string[] = [];
+    const removeCalls: string[] = [];
+    const revokedUrls: string[] = [];
+
+    const mockElement = {
+      href: '',
+      download: '',
+      style: {} as CSSStyleDeclaration,
+      click: () => clicks.push('clicked'),
+      remove: () => removeCalls.push('removed'),
+    };
+
+    vi.spyOn(document, 'createElement').mockReturnValue(mockElement as unknown as HTMLElement);
+    vi.spyOn(document.body, 'append').mockImplementation(() => {});
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => revokedUrls.push(url));
+
+    triggerDownload('hello world', 'test.txt', 'text/plain');
+
+    expect(clicks).toHaveLength(1);
+    expect(removeCalls).toHaveLength(1);
+    expect(mockElement.download).toBe('test.txt');
+    expect(mockElement.href).toBe('blob:test');
+    expect(mockElement.style.display).toBe('none');
+    expect(revokedUrls).toEqual(['blob:test']);
+
+    vi.restoreAllMocks();
   });
 });
 
