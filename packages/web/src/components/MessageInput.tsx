@@ -43,6 +43,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [draggingOver, setDraggingOver] = useState(false);
 
   // Draft persistence — survive page refreshes
   const storageKey = `draft:${session.id}`;
@@ -187,7 +188,8 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent) => {
-      const items = e.clipboardData.items;
+      // Use Array.from — DataTransferItemList may not support for..of in all browsers
+      const items = Array.from(e.clipboardData.items);
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           e.preventDefault();
@@ -212,7 +214,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
-      for (const file of files) {
+      for (const file of Array.from(files)) {
         if (file.size > 10 * 1024 * 1024) {
           toast.error(`${file.name} is too large (max 10 MB)`);
           continue;
@@ -232,6 +234,38 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
 
   const removeAttachment = useCallback((index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      setDraggingOver(false);
+      const files = Array.from(e.dataTransfer.files);
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`${file.name} is too large (max 10 MB)`);
+          continue;
+        }
+        try {
+          const attachment = await fileToAttachment(file);
+          setAttachments((prev) => [...prev, attachment]);
+        } catch {
+          toast.error(`Failed to read ${file.name}`);
+        }
+      }
+    },
+    [toast],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggingOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear when leaving the container (not entering a child)
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDraggingOver(false);
   }, []);
 
   if (sessionLost) {
@@ -265,7 +299,26 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
   }
 
   return (
-    <div className="px-5 py-3 border-t border-border bg-card shrink-0">
+    <div
+      className={cn(
+        'px-5 py-3 border-t border-border bg-card shrink-0 transition-colors',
+        draggingOver && 'bg-primary/5 border-t-primary/40',
+      )}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
+      {/* Drop zone overlay */}
+      {draggingOver && (
+        <div className="mb-2 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-primary/40 rounded-md bg-primary/5 text-primary text-xs font-medium pointer-events-none">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Drop files here
+        </div>
+      )}
       {canResume && (
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[11px] text-muted-foreground">Model:</span>
@@ -371,9 +424,9 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="absolute right-2 bottom-2 text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer"
+            className="absolute right-2 bottom-1.5 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
             aria-label="Attach file"
-            title="Attach file"
+            title="Attach file (or drag &amp; drop)"
           >
             <svg
               width="16"
@@ -413,7 +466,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
         </button>
       </div>
       <div className="mt-1 text-[10px] text-muted-foreground">
-        Enter to send · Shift+Enter for newline · Paste images with {'\u2318'}V
+        Enter to send · Shift+Enter for newline · {'\u2318'}V paste images · Drag &amp; drop files
       </div>
     </div>
   );
