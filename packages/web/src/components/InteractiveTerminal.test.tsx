@@ -104,10 +104,10 @@ const MockWebSocketClass = vi.fn().mockImplementation((url: string) => {
 });
 
 // Attach static constants
-(MockWebSocketClass as Record<string, unknown>).CONNECTING = 0;
-(MockWebSocketClass as Record<string, unknown>).OPEN = 1;
-(MockWebSocketClass as Record<string, unknown>).CLOSING = 2;
-(MockWebSocketClass as Record<string, unknown>).CLOSED = 3;
+(MockWebSocketClass as unknown as Record<string, unknown>).CONNECTING = 0;
+(MockWebSocketClass as unknown as Record<string, unknown>).OPEN = 1;
+(MockWebSocketClass as unknown as Record<string, unknown>).CLOSING = 2;
+(MockWebSocketClass as unknown as Record<string, unknown>).CLOSED = 3;
 
 vi.stubGlobal('WebSocket', MockWebSocketClass);
 
@@ -334,8 +334,7 @@ describe('InteractiveTerminal', () => {
   // =========================================================================
   describe('WebSocket connection', () => {
     it('constructs dev URL with localhost:8080 in development mode', async () => {
-      const origEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      vi.stubEnv('NODE_ENV', 'development');
 
       render(<InteractiveTerminal {...defaultProps} />);
       await flushAsyncInit();
@@ -344,12 +343,11 @@ describe('InteractiveTerminal', () => {
         'ws://localhost:8080/api/machines/machine-1/terminal/term-abc/ws',
       );
 
-      process.env.NODE_ENV = origEnv;
+      vi.unstubAllEnvs();
     });
 
     it('encodes machineId and terminalId in the URL', async () => {
-      const origEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      vi.stubEnv('NODE_ENV', 'development');
 
       render(<InteractiveTerminal machineId="machine/special" terminalId="term&id" />);
       await flushAsyncInit();
@@ -358,12 +356,11 @@ describe('InteractiveTerminal', () => {
       expect(url).toContain(encodeURIComponent('machine/special'));
       expect(url).toContain(encodeURIComponent('term&id'));
 
-      process.env.NODE_ENV = origEnv;
+      vi.unstubAllEnvs();
     });
 
     it('constructs production URL using window.location', async () => {
-      const origEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+      vi.stubEnv('NODE_ENV', 'production');
 
       // window.location in jsdom defaults to http://localhost
       render(<InteractiveTerminal {...defaultProps} />);
@@ -373,7 +370,7 @@ describe('InteractiveTerminal', () => {
       expect(url).toContain('ws://');
       expect(url).toContain('/api/machines/machine-1/terminal/term-abc/ws');
 
-      process.env.NODE_ENV = origEnv;
+      vi.unstubAllEnvs();
     });
 
     it('sends initial resize on WebSocket open', async () => {

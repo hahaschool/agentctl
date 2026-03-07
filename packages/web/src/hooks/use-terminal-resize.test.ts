@@ -1,4 +1,5 @@
 import { cleanup, renderHook } from '@testing-library/react';
+import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTerminalResize } from './use-terminal-resize';
 
@@ -7,7 +8,9 @@ import { useTerminalResize } from './use-terminal-resize';
 // ---------------------------------------------------------------------------
 
 function makeFitAddonRef(fit = vi.fn()) {
-  return { current: { fit } };
+  return { current: { fit } } as unknown as React.RefObject<
+    import('@xterm/addon-fit').FitAddon | null
+  >;
 }
 
 function makeContainerRef(parentElement?: HTMLElement) {
@@ -159,12 +162,12 @@ describe('useTerminalResize', () => {
     });
 
     it('calls fit when ResizeObserver callback fires', () => {
-      let resizeCallback: ResizeObserverCallback | null = null;
+      const captured: { cb: ResizeObserverCallback | null } = { cb: null };
 
       vi.stubGlobal(
         'ResizeObserver',
         vi.fn().mockImplementation((cb: ResizeObserverCallback) => {
-          resizeCallback = cb;
+          captured.cb = cb;
           return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn() };
         }),
       );
@@ -177,7 +180,7 @@ describe('useTerminalResize', () => {
       renderHook(() => useTerminalResize(fitAddonRef, containerRef));
       fit.mockClear();
 
-      resizeCallback?.([], {} as ResizeObserver);
+      captured.cb?.([], {} as ResizeObserver);
 
       expect(fit).toHaveBeenCalled();
     });
