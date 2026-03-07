@@ -43,10 +43,11 @@ describe('proxyWorkerRequest', () => {
     );
   });
 
-  it('returns ok:true even for non-2xx status codes (passes through)', async () => {
+  it('returns ok:false for non-2xx status codes with error details', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 409,
+      statusText: 'Conflict',
       json: async () => ({ error: 'CONFLICT', message: 'already running' }),
     });
 
@@ -57,9 +58,10 @@ describe('proxyWorkerRequest', () => {
     });
 
     expect(result).toEqual({
-      ok: true,
+      ok: false,
       status: 409,
-      data: { error: 'CONFLICT', message: 'already running' },
+      error: 'CONFLICT',
+      message: 'already running',
     });
   });
 

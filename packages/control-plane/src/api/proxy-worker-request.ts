@@ -61,5 +61,16 @@ export async function proxyWorkerRequest(
   }
 
   const data: unknown = await response.json();
+
+  if (!response.ok) {
+    const errBody = data as Record<string, unknown> | null;
+    return {
+      ok: false,
+      status: response.status,
+      error: typeof errBody?.error === 'string' ? errBody.error : 'WORKER_ERROR',
+      message: typeof errBody?.message === 'string' ? errBody.message : response.statusText,
+    };
+  }
+
   return { ok: true, status: response.status, data };
 }
