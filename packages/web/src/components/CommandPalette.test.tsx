@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommandPalette, fuzzyScore, levenshtein } from './CommandPalette';
@@ -55,10 +55,12 @@ const mockAgentsQuery = vi.fn();
 const mockMachinesQuery = vi.fn();
 const mockSessionsQuery = vi.fn();
 
+const mockDeleteMutate = vi.fn();
 vi.mock('@/lib/queries', () => ({
   agentsQuery: () => mockAgentsQuery(),
   machinesQuery: () => mockMachinesQuery(),
   sessionsQuery: () => mockSessionsQuery(),
+  useDeleteSession: () => ({ mutate: mockDeleteMutate, isPending: false }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -462,6 +464,113 @@ describe('CommandPalette', () => {
     // "Agents" (exact substring on label) should come first
     const agentsIdx = options.findIndex((opt) => opt.textContent?.includes('Agents'));
     expect(agentsIdx).toBe(0);
+  });
+
+  // -----------------------------------------------------------------------
+  // Stop Session actions
+  // -----------------------------------------------------------------------
+
+  it('shows Stop Session actions for active sessions', async () => {
+    const activeSession = {
+      id: 'sess-active-001',
+      agentId: 'a1',
+      agentName: 'my-agent',
+      machineId: 'm1',
+      sessionUrl: null,
+      claudeSessionId: null,
+      status: 'active',
+      projectPath: '/home/user/project',
+      pid: null,
+      startedAt: '2026-03-07T10:00:00Z',
+      endedAt: null,
+      lastHeartbeat: null,
+      metadata: {},
+      accountId: null,
+      model: null,
+    };
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: () => ({ sessions: [activeSession] }),
+    });
+
+    renderPalette({ open: true });
+
+    await waitFor(() => {
+      const input = screen.getByPlaceholderText(/type a command or search/i);
+      fireEvent.change(input, { target: { value: 'stop' } });
+      expect(screen.getByText(/Stop: my-agent/)).toBeDefined();
+    });
+  });
+
+  it('calls deleteSession.mutate when Stop action is clicked', async () => {
+    const activeSession = {
+      id: 'sess-active-002',
+      agentId: 'a2',
+      agentName: null,
+      machineId: 'm1',
+      sessionUrl: null,
+      claudeSessionId: null,
+      status: 'active',
+      projectPath: null,
+      pid: null,
+      startedAt: '2026-03-07T10:00:00Z',
+      endedAt: null,
+      lastHeartbeat: null,
+      metadata: {},
+      accountId: null,
+      model: null,
+    };
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: () => ({ sessions: [activeSession] }),
+    });
+
+    const { onClose } = renderPalette({ open: true });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Stop: sess-act/)).not.toBeNull();
+    });
+
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: 'stop' } });
+    const stopBtn = screen.getByText(/Stop: sess-act/);
+    fireEvent.click(stopBtn);
+    expect(mockDeleteMutate).toHaveBeenCalledWith('sess-active-002', expect.any(Object));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not show Stop actions for ended sessions', async () => {
+    const endedSession = {
+      id: 'sess-ended-001',
+      agentId: 'a1',
+      agentName: 'ended-agent',
+      machineId: 'm1',
+      sessionUrl: null,
+      claudeSessionId: null,
+      status: 'ended',
+      projectPath: null,
+      pid: null,
+      startedAt: '2026-03-07T10:00:00Z',
+      endedAt: '2026-03-07T10:30:00Z',
+      lastHeartbeat: null,
+      metadata: {},
+      accountId: null,
+      model: null,
+    };
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: () => ({ sessions: [endedSession] }),
+    });
+
+    renderPalette({ open: true });
+
+    // Wait for query to resolve, then verify no Stop actions appear
+    await waitFor(() => {
+      // The session data should have loaded by now
+      const input = screen.getByPlaceholderText(/type a command or search/i);
+      fireEvent.change(input, { target: { value: 'stop' } });
+    });
+    expect(screen.queryByText(/Stop:/)).toBeNull();
   });
 });
 

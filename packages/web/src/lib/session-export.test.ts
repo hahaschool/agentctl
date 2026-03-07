@@ -8,7 +8,7 @@ import { exportSessionAsJson, exportSessionAsMarkdown, formatMessageLabel } from
 
 const mockClick = vi.fn();
 const mockRevokeObjectURL = vi.fn();
-const mockCreateObjectURL = vi.fn(() => 'blob:mock-url');
+const mockCreateObjectURL = vi.fn<(obj: Blob) => string>(() => 'blob:mock-url');
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -34,17 +34,19 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   return {
     id: 'sess-abc-123',
     agentId: 'agent-1',
+    agentName: 'test-agent',
     machineId: 'machine-1',
+    sessionUrl: null,
     claudeSessionId: 'claude-sess-1',
     status: 'ended',
     projectPath: '/home/user/project',
+    pid: null,
     model: 'claude-sonnet-4-20250514',
     accountId: 'acc-1',
     startedAt: '2026-03-07T10:00:00Z',
     endedAt: '2026-03-07T10:30:00Z',
-    metadata: {},
     lastHeartbeat: '2026-03-07T10:30:00Z',
-    agentName: 'test-agent',
+    metadata: {},
     ...overrides,
   };
 }
@@ -104,9 +106,10 @@ describe('exportSessionAsJson', () => {
     exportSessionAsJson(session, messages);
 
     // Verify a Blob was created with application/json type
-    const blobArg = mockCreateObjectURL.mock.calls[0]?.[0] as Blob;
+    const blobArg = mockCreateObjectURL.mock.calls[0]?.[0];
+    expect(blobArg).toBeDefined();
     expect(blobArg).toBeInstanceOf(Blob);
-    expect(blobArg.type).toBe('application/json');
+    expect(blobArg?.type).toBe('application/json');
     expect(mockClick).toHaveBeenCalledOnce();
   });
 

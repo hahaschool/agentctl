@@ -14,6 +14,7 @@ import {
   ScrollText,
   Server,
   Settings,
+  StopCircle,
   Sun,
   Terminal,
 } from 'lucide-react';
@@ -23,7 +24,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '@/components/Toast';
 
-import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
+import { agentsQuery, machinesQuery, sessionsQuery, useDeleteSession } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
@@ -222,6 +223,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
   const router = useRouter();
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
+  const deleteSession = useDeleteSession();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
@@ -330,6 +332,34 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       }
     }
 
+    // ----- Stop active sessions -----
+    if (sessionList.length > 0) {
+      const activeSessions = sessionList.filter(
+        (s) => s.status === 'active' || s.status === 'starting',
+      );
+      for (const session of activeSessions.slice(0, 5)) {
+        const shortId = session.id.length > 12 ? `${session.id.slice(0, 8)}...` : session.id;
+        const label = session.agentName
+          ? `Stop: ${session.agentName} — ${shortId}`
+          : `Stop: ${shortId}`;
+        items.push({
+          id: `stop-${session.id}`,
+          label,
+          description: session.projectPath ? shortPath(session.projectPath) : undefined,
+          icon: StopCircle,
+          badge: { text: session.status, variant: badgeVariant(session.status) },
+          section: 'Actions',
+          action: () => {
+            deleteSession.mutate(session.id, {
+              onSuccess: () => toast.success(`Session ${shortId} stopped`),
+              onError: (err) => toast.error(err.message),
+            });
+            onClose();
+          },
+        });
+      }
+    }
+
     // ----- Action commands -----
     items.push({
       id: 'action-new-session',
@@ -410,7 +440,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     });
 
     return items;
-  }, [router, onClose, theme, setTheme, agents, machines, sessions, queryClient]);
+  }, [router, onClose, theme, setTheme, agents, machines, sessions, queryClient, deleteSession]);
 
   // Filter commands by fuzzy query and sort by match score
   const filtered = useMemo(() => {
