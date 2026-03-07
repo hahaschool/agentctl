@@ -67,7 +67,6 @@ export function SessionDetailView(): React.JSX.Element {
           clearStreamRef.current();
         }
       },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       [content.refetch, session.refetch],
     ),
   });

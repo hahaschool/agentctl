@@ -84,7 +84,6 @@ function getNumber(value: unknown, fallback: number): number {
  */
 async function loadSdk(): Promise<ClaudeAgentSdk | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = await (import('@anthropic-ai/claude-agent-sdk' as string) as Promise<
       Record<string, unknown>
     >);
