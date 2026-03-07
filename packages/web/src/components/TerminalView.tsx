@@ -1,7 +1,7 @@
 'use client';
 
-import { Terminal as TerminalIcon } from 'lucide-react';
-import React, { useCallback, useEffect, useRef } from 'react';
+import { ClipboardCopy, Terminal as TerminalIcon } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import '@xterm/xterm/css/xterm.css';
 
@@ -134,13 +134,48 @@ export const TerminalView = React.memo(function TerminalView({
     return () => observer.disconnect();
   }, [handleResize]);
 
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    // Select all content in the terminal buffer
+    terminal.selectAll();
+    const text = terminal.getSelection();
+    terminal.clearSelection();
+    if (text) {
+      void navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  }, []);
+
   return (
     <section aria-label="Terminal output" className={cn('relative flex-1 min-h-0', className)}>
       <div ref={containerRef} className="absolute inset-0 bg-[#0a0a0a]" />
-      {isActive && rawOutput.length > 0 && (
+      {rawOutput.length > 0 && (
         <div className="absolute top-2 right-3 flex items-center gap-1.5 z-10">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-[9px] font-semibold text-green-500">Live</span>
+          {isActive && (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[9px] font-semibold text-green-500 mr-2">Live</span>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="px-1.5 py-0.5 text-[9px] font-medium text-zinc-400 bg-zinc-800/80 border border-zinc-700/50 rounded hover:bg-zinc-700/80 hover:text-zinc-200 transition-colors cursor-pointer"
+            aria-label="Copy terminal output"
+          >
+            {copied ? (
+              'Copied!'
+            ) : (
+              <span className="flex items-center gap-1">
+                <ClipboardCopy size={10} />
+                Copy
+              </span>
+            )}
+          </button>
         </div>
       )}
       {rawOutput.length === 0 && (
