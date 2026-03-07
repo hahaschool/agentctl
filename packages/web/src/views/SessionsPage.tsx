@@ -114,6 +114,7 @@ export function SessionsPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [resumeModel, setResumeModel] = useState('');
   const [sending, setSending] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [lastSentMessage, setLastSentMessage] = useState<{ text: string; ts: number } | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -374,15 +375,18 @@ export function SessionsPage(): React.JSX.Element {
   }, [selected, prompt, resumeModel, queryClient, toast]);
 
   const handleStop = useCallback(async () => {
-    if (!selected) return;
+    if (!selected || stopping) return;
+    setStopping(true);
     try {
       await api.deleteSession(selected.id);
       toast.success('Session ended');
       resetAndInvalidateSessions();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStopping(false);
     }
-  }, [selected, resetAndInvalidateSessions, toast]);
+  }, [selected, stopping, resetAndInvalidateSessions, toast]);
 
   const handleConvertToAgent = useCallback(() => {
     if (!selected) return;
@@ -926,6 +930,7 @@ export function SessionsPage(): React.JSX.Element {
             onConvertTypeChange={setConvertType}
             createAgentPending={createAgent.isPending}
             forkPickerLoading={forkPickerLoading}
+            stopping={stopping}
             onBack={() => setSelectedId(null)}
             onSend={() => void handleSend()}
             onStop={() => void handleStop()}

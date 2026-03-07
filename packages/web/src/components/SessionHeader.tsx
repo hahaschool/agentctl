@@ -501,10 +501,11 @@ export function SessionHeader({
           )}
           {(session.status === 'active' || session.status === 'starting') && (
             <ConfirmButton
-              label="End Session"
+              label={deleteSession.isPending ? 'Ending...' : 'End Session'}
               confirmLabel="Confirm End?"
               onConfirm={handleEnd}
-              className="px-3 py-1 bg-red-100/50 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300/50 dark:border-red-800/50 rounded-md text-xs cursor-pointer hover:bg-red-200 dark:hover:bg-red-900"
+              disabled={deleteSession.isPending}
+              className="px-3 py-1 bg-red-100/50 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300/50 dark:border-red-800/50 rounded-md text-xs cursor-pointer hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50"
               confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-md text-xs cursor-pointer animate-pulse"
             />
           )}

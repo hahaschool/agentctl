@@ -105,73 +105,53 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
 
     if (!finalMessage.trim()) return;
 
+    // Clear input immediately for instant feedback — restore on error
+    const savedMessage = message;
+    const savedAttachments = [...attachments];
+    setMessage('');
+    setAttachments([]);
+    sessionStorage.removeItem(storageKey);
+
     // Show optimistic message immediately
     onOptimisticSend?.(finalMessage);
+
+    const handleError = (err: Error): void => {
+      if (isSessionLostError(err)) {
+        markSessionLost();
+      }
+      toast.error(err.message);
+      // Restore message so user doesn't lose their text
+      setMessage(savedMessage);
+      setAttachments(savedAttachments);
+      // Refresh session data so the UI reflects any status change
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.session(session.id),
+      });
+    };
+
+    const handleSuccess = (toastMsg?: string): void => {
+      if (toastMsg) toast.success(toastMsg);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.session(session.id),
+      });
+      // Delay content invalidation to allow CLI time to write JSONL file to disk
+      setTimeout(() => {
+        void queryClient.invalidateQueries({
+          queryKey: ['session-content'],
+          exact: false,
+        });
+      }, 500);
+    };
 
     if (isActive) {
       sendMessage.mutate(
         { id: session.id, message: finalMessage },
-        {
-          onSuccess: () => {
-            setMessage('');
-            setAttachments([]);
-            sessionStorage.removeItem(storageKey);
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-            // Delay content invalidation to allow CLI time to write JSONL file to disk
-            setTimeout(() => {
-              void queryClient.invalidateQueries({
-                queryKey: ['session-content'],
-                exact: false,
-              });
-            }, 500);
-          },
-          onError: (err) => {
-            if (isSessionLostError(err)) {
-              markSessionLost();
-            }
-            toast.error(err.message);
-            // Refresh session data so the UI reflects any status change
-            // (e.g. session marked as ended after worker restart)
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-          },
-        },
+        { onSuccess: () => handleSuccess(), onError: handleError },
       );
     } else if (canResume) {
       resumeSession.mutate(
         { id: session.id, prompt: finalMessage, model: resumeModel || undefined },
-        {
-          onSuccess: () => {
-            setMessage('');
-            setAttachments([]);
-            sessionStorage.removeItem(storageKey);
-            toast.success('Session resumed');
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-            // Delay content invalidation to allow CLI time to write JSONL file to disk
-            setTimeout(() => {
-              void queryClient.invalidateQueries({
-                queryKey: ['session-content'],
-                exact: false,
-              });
-            }, 500);
-          },
-          onError: (err) => {
-            if (isSessionLostError(err)) {
-              markSessionLost();
-            }
-            toast.error(err.message);
-            // Refresh session data so the UI reflects any status change
-            // (e.g. session marked as ended after worker restart)
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-          },
-        },
+        { onSuccess: () => handleSuccess('Session resumed'), onError: handleError },
       );
     }
   }, [

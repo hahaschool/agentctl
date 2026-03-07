@@ -31,6 +31,7 @@ type SessionDetailPanelProps = {
   onConvertTypeChange: (type: string) => void;
   createAgentPending: boolean;
   forkPickerLoading: boolean;
+  stopping: boolean;
   onBack: () => void;
   onSend: () => void;
   onStop: () => void;
@@ -56,6 +57,7 @@ export function SessionDetailPanel({
   onConvertTypeChange,
   createAgentPending,
   forkPickerLoading,
+  stopping,
   onBack,
   onSend,
   onStop,
@@ -132,10 +134,11 @@ export function SessionDetailPanel({
           </button>
           {(selected.status === 'active' || selected.status === 'starting') && (
             <ConfirmButton
-              label="End Session"
+              label={stopping ? 'Ending...' : 'End Session'}
               confirmLabel="End Session?"
               onConfirm={onStop}
-              className="h-8 px-3.5 bg-red-100/60 dark:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-300/40 dark:border-red-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-200 dark:hover:bg-red-900"
+              disabled={stopping}
+              className="h-8 px-3.5 bg-red-100/60 dark:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-300/40 dark:border-red-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50"
               confirmClassName="h-8 px-3.5 bg-red-700 text-white rounded-md text-xs font-medium cursor-pointer animate-pulse"
             />
           )}

@@ -184,6 +184,7 @@ function defaultProps(overrides: Partial<SessionDetailPanelProps> = {}): Session
     onConvertTypeChange: vi.fn(),
     createAgentPending: false,
     forkPickerLoading: false,
+    stopping: false,
     onBack: vi.fn(),
     onSend: vi.fn(),
     onStop: vi.fn(),

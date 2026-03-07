@@ -234,9 +234,11 @@ export function SessionContent({
   // This handles cases where text matching fails (encoding, format differences)
   useEffect(() => {
     if (optimisticMessages.length === 0) return;
-    const now = Date.now();
     const timer = setTimeout(() => {
-      setOptimisticMessages((prev) => prev.filter((om) => now - om.timestamp < 8_000));
+      setOptimisticMessages((prev) => {
+        const cutoff = Date.now() - 8_000;
+        return prev.filter((om) => om.timestamp > cutoff);
+      });
     }, 8_000);
     return () => clearTimeout(timer);
   }, [optimisticMessages]);
