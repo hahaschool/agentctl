@@ -1,6 +1,6 @@
 'use client';
 
-import type React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 import type { DiscoveredSession } from '../lib/api';
 import { formatNumber, recencyColorClass } from '../lib/format-utils';
@@ -39,7 +39,7 @@ type DiscoverSessionRowProps = {
   onCancelResume: () => void;
 };
 
-export function DiscoverSessionRow({
+export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
   session: s,
   isFlat,
   isSelected,
@@ -228,4 +228,4 @@ export function DiscoverSessionRow({
       )}
     </div>
   );
-}
+});

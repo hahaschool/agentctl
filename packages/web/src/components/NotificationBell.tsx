@@ -5,6 +5,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
+import { timeAgo } from '../lib/format-utils';
 import type { Notification, NotificationType } from '../hooks/use-notifications';
 
 type NotificationBellProps = {
@@ -28,16 +29,6 @@ const TYPE_COLORS: Record<NotificationType, string> = {
   warning: 'text-yellow-500',
   info: 'text-blue-500',
 };
-
-function formatTimeAgo(ts: number): string {
-  const seconds = Math.floor((Date.now() - ts) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 export function NotificationBell({
   notifications,
@@ -159,7 +150,7 @@ export function NotificationBell({
                       {n.message}
                     </p>
                     <span className="text-[10px] text-muted-foreground">
-                      {formatTimeAgo(n.timestamp)}
+                      {timeAgo(new Date(n.timestamp).toISOString())}
                     </span>
                   </div>
                   <button

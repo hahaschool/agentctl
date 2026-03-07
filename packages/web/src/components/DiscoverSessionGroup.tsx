@@ -1,6 +1,6 @@
 'use client';
 
-import type React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 import type { DiscoveredSession } from '../lib/api';
 import { formatNumber, shortenPath } from '../lib/format-utils';
@@ -38,7 +38,7 @@ type DiscoverSessionGroupProps = {
   onCancelResume: () => void;
 };
 
-export function DiscoverSessionGroup({
+export const DiscoverSessionGroup = React.memo(function DiscoverSessionGroup({
   group,
   groupMode,
   isCollapsed,
@@ -68,6 +68,7 @@ export function DiscoverSessionGroup({
           type="button"
           onClick={() => onToggleGroup(group.projectPath)}
           aria-expanded={!isCollapsed}
+          aria-label={`Toggle group: ${group.projectName}`}
           className={cn(
             'w-full flex items-center gap-3 px-4 py-2.5 bg-card border-none cursor-pointer text-left text-foreground transition-colors hover:bg-accent/5 focus:ring-2 focus:ring-primary/20 focus:ring-inset',
             !isCollapsed && 'border-b border-border',
@@ -136,4 +137,4 @@ export function DiscoverSessionGroup({
       )}
     </div>
   );
-}
+});

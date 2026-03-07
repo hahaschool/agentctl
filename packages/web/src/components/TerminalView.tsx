@@ -3,6 +3,8 @@
 import { ClipboardCopy, Terminal as TerminalIcon } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { TERMINAL_FONT_FAMILY, TERMINAL_THEME } from '@/lib/terminal-theme';
+import { useTerminalResize } from '@/hooks/use-terminal-resize';
 import '@xterm/xterm/css/xterm.css';
 
 // Dynamic import for xterm — it accesses DOM globals and cannot be imported at SSR time.
@@ -48,29 +50,8 @@ export const TerminalView = React.memo(function TerminalView({
         convertEol: true,
         scrollback: 10_000,
         fontSize: 12,
-        fontFamily: 'ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Code", Consolas, monospace',
-        theme: {
-          background: '#0a0a0a',
-          foreground: '#e4e4e7',
-          cursor: '#e4e4e7',
-          selectionBackground: '#3f3f46',
-          black: '#09090b',
-          red: '#ef4444',
-          green: '#22c55e',
-          yellow: '#eab308',
-          blue: '#3b82f6',
-          magenta: '#a855f7',
-          cyan: '#06b6d4',
-          white: '#e4e4e7',
-          brightBlack: '#52525b',
-          brightRed: '#f87171',
-          brightGreen: '#4ade80',
-          brightYellow: '#facc15',
-          brightBlue: '#60a5fa',
-          brightMagenta: '#c084fc',
-          brightCyan: '#22d3ee',
-          brightWhite: '#fafafa',
-        },
+        fontFamily: TERMINAL_FONT_FAMILY,
+        theme: TERMINAL_THEME,
       });
 
       terminal.loadAddon(fitAddon);
@@ -106,33 +87,8 @@ export const TerminalView = React.memo(function TerminalView({
     }
   }, [rawOutput]);
 
-  // Handle resize
-  const handleResize = useCallback(() => {
-    try {
-      fitAddonRef.current?.fit();
-    } catch {
-      // Terminal may not be ready yet
-    }
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('resize', handleResize);
-    // Also fit when the component first gets rawOutput
-    const timer = setTimeout(handleResize, 100);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(timer);
-    };
-  }, [handleResize]);
-
-  // Re-fit when parent layout might change
-  useEffect(() => {
-    const observer = new ResizeObserver(() => handleResize());
-    if (containerRef.current?.parentElement) {
-      observer.observe(containerRef.current.parentElement);
-    }
-    return () => observer.disconnect();
-  }, [handleResize]);
+  // Shared resize handling
+  useTerminalResize(fitAddonRef, containerRef);
 
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(() => {

@@ -1,7 +1,10 @@
 'use client';
 
+import { ClipboardCopy } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { TERMINAL_FONT_FAMILY, TERMINAL_THEME } from '@/lib/terminal-theme';
+import { useTerminalResize } from '@/hooks/use-terminal-resize';
 import '@xterm/xterm/css/xterm.css';
 
 // Dynamic import for xterm — it accesses DOM globals and cannot be imported at SSR time.
@@ -60,29 +63,8 @@ export function InteractiveTerminal({
         convertEol: true,
         scrollback: 10_000,
         fontSize: 13,
-        fontFamily: 'ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Code", Consolas, monospace',
-        theme: {
-          background: '#0a0a0a',
-          foreground: '#e4e4e7',
-          cursor: '#e4e4e7',
-          selectionBackground: '#3f3f46',
-          black: '#09090b',
-          red: '#ef4444',
-          green: '#22c55e',
-          yellow: '#eab308',
-          blue: '#3b82f6',
-          magenta: '#a855f7',
-          cyan: '#06b6d4',
-          white: '#e4e4e7',
-          brightBlack: '#52525b',
-          brightRed: '#f87171',
-          brightGreen: '#4ade80',
-          brightYellow: '#facc15',
-          brightBlue: '#60a5fa',
-          brightMagenta: '#c084fc',
-          brightCyan: '#22d3ee',
-          brightWhite: '#fafafa',
-        },
+        fontFamily: TERMINAL_FONT_FAMILY,
+        theme: TERMINAL_THEME,
       });
 
       terminal.loadAddon(fitAddon);
@@ -174,32 +156,23 @@ export function InteractiveTerminal({
     };
   }, [machineId, terminalId]);
 
-  // Handle resize
-  const handleResize = useCallback(() => {
-    try {
-      fitAddonRef.current?.fit();
-    } catch {
-      // Terminal may not be ready yet
+  // Shared resize handling
+  useTerminalResize(fitAddonRef, containerRef);
+
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.selectAll();
+    const text = terminal.getSelection();
+    terminal.clearSelection();
+    if (text) {
+      void navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
     }
   }, []);
-
-  useEffect(() => {
-    window.addEventListener('resize', handleResize);
-    const timer = setTimeout(handleResize, 100);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(timer);
-    };
-  }, [handleResize]);
-
-  // Re-fit when parent layout might change
-  useEffect(() => {
-    const observer = new ResizeObserver(() => handleResize());
-    if (containerRef.current?.parentElement) {
-      observer.observe(containerRef.current.parentElement);
-    }
-    return () => observer.disconnect();
-  }, [handleResize]);
 
   return (
     <div className={cn('relative flex-1 min-h-0', className)}>
@@ -213,6 +186,21 @@ export function InteractiveTerminal({
         >
           {connected ? 'Connected' : 'Disconnected'}
         </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="ml-2 px-1.5 py-0.5 text-[9px] font-medium text-zinc-400 bg-zinc-800/80 border border-zinc-700/50 rounded hover:bg-zinc-700/80 hover:text-zinc-200 transition-colors cursor-pointer"
+          aria-label="Copy terminal output"
+        >
+          {copied ? (
+            'Copied!'
+          ) : (
+            <span className="flex items-center gap-1">
+              <ClipboardCopy size={10} />
+              Copy
+            </span>
+          )}
+        </button>
       </div>
     </div>
   );
