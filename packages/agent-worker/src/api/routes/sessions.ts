@@ -91,6 +91,19 @@ const DEFAULT_CONTENT_LIMIT = 100;
 const MAX_SEARCH_DEPTH = 3;
 
 // ---------------------------------------------------------------------------
+// Truncation limits
+// ---------------------------------------------------------------------------
+
+/** Max chars for stderr/error messages in logs and error responses */
+const STDERR_TRUNCATE = 500;
+/** Max chars for CLI error messages in structured error responses */
+const CLI_ERROR_TRUNCATE = 300;
+/** Max chars for user/assistant message text in content parsing */
+const MSG_TEXT_TRUNCATE = 8_000;
+/** Max chars for tool inputs/outputs and subagent content in content parsing */
+const TOOL_CONTENT_TRUNCATE = 4_000;
+
+// ---------------------------------------------------------------------------
 // SSE constants
 // ---------------------------------------------------------------------------
 
@@ -267,7 +280,7 @@ export async function sessionRoutes(
           errorMessage:
             status === 'error'
               ? session?.lastError
-                ? `CLI process exited with code ${event.exitCode}: ${session.lastError.slice(0, 500)}`
+                ? `CLI process exited with code ${event.exitCode}: ${session.lastError.slice(0, STDERR_TRUNCATE)}`
                 : `CLI process exited with code ${event.exitCode}`
               : undefined,
         });
@@ -595,11 +608,13 @@ export async function sessionRoutes(
         }
 
         logger.warn(
-          { sessionId: session.id, cpSessionId, stderr: stderr.slice(0, 500) },
+          { sessionId: session.id, cpSessionId, stderr: stderr.slice(0, STDERR_TRUNCATE) },
           'CLI session failed to start',
         );
         return reply.status(502).send({
-          error: stderr ? `CLI failed: ${stderr.slice(0, 300)}` : 'CLI process exited immediately.',
+          error: stderr
+            ? `CLI failed: ${stderr.slice(0, CLI_ERROR_TRUNCATE)}`
+            : 'CLI process exited immediately.',
           code: 'CLI_STARTUP_FAILED',
           hint,
         });
@@ -751,13 +766,13 @@ export async function sessionRoutes(
               newSessionId: newSession.id,
               resumedFrom: resumeId,
               status: failedSession?.status,
-              stderr: stderr.slice(0, 500),
+              stderr: stderr.slice(0, STDERR_TRUNCATE),
             },
             'Resumed CLI process failed to start',
           );
           return reply.status(502).send({
             error: stderr
-              ? `CLI failed: ${stderr.slice(0, 300)}`
+              ? `CLI failed: ${stderr.slice(0, CLI_ERROR_TRUNCATE)}`
               : 'CLI process exited immediately after resume.',
             code: 'CLI_STARTUP_FAILED',
             hint,
@@ -1121,7 +1136,7 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
       if (content.trim().length > 0) {
         const msg: ContentMessage = {
           type: 'subagent',
-          content: content.slice(0, 4000),
+          content: content.slice(0, TOOL_CONTENT_TRUNCATE),
           toolName: agentType,
           timestamp,
         };
@@ -1210,13 +1225,13 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
           continue;
         }
         if (text.length > 0) {
-          results.push({ type: 'human', content: text.slice(0, 8000), timestamp });
+          results.push({ type: 'human', content: text.slice(0, MSG_TEXT_TRUNCATE), timestamp });
         }
       } else if (blockType === 'tool_result') {
         const content =
           typeof b.content === 'string'
-            ? b.content.slice(0, 4000)
-            : JSON.stringify(b.content ?? '').slice(0, 4000);
+            ? b.content.slice(0, TOOL_CONTENT_TRUNCATE)
+            : JSON.stringify(b.content ?? '').slice(0, TOOL_CONTENT_TRUNCATE);
         results.push({
           type: 'tool_result',
           content,
@@ -1230,7 +1245,7 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
       if (blockType === 'text' && typeof b.text === 'string') {
         const text = b.text.trim();
         if (text.length > 0) {
-          results.push({ type: 'assistant', content: text.slice(0, 8000), timestamp });
+          results.push({ type: 'assistant', content: text.slice(0, MSG_TEXT_TRUNCATE), timestamp });
         }
       } else if (blockType === 'thinking' && typeof b.thinking === 'string') {
         const text = b.thinking as string;
@@ -1240,8 +1255,8 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
       } else if (blockType === 'tool_use' && typeof b.name === 'string') {
         const input =
           typeof b.input === 'string'
-            ? b.input.slice(0, 4000)
-            : JSON.stringify(b.input ?? '', null, 2).slice(0, 4000);
+            ? b.input.slice(0, TOOL_CONTENT_TRUNCATE)
+            : JSON.stringify(b.input ?? '', null, 2).slice(0, TOOL_CONTENT_TRUNCATE);
         results.push({
           type: 'tool_use',
           content: input,
