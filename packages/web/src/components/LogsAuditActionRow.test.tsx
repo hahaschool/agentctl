@@ -376,7 +376,7 @@ describe('LogsAuditActionRow', () => {
   });
 
   it('applies yellow color for slow durations (> 5000ms)', () => {
-    const { container } = render(
+    render(
       <LogsAuditActionRow
         action={makeAction({ durationMs: 6000 })}
         isFirst={true}
@@ -390,7 +390,7 @@ describe('LogsAuditActionRow', () => {
   });
 
   it('applies muted color for normal durations (<= 5000ms)', () => {
-    const { container } = render(
+    render(
       <LogsAuditActionRow
         action={makeAction({ durationMs: 2000 })}
         isFirst={true}

@@ -318,7 +318,8 @@ describe('LogsFilterBar', () => {
       renderBar({ sortedActions: [action] });
       fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
       expect(downloadCsv).toHaveBeenCalledTimes(1);
-      const [headers, rows, filename] = (downloadCsv as ReturnType<typeof vi.fn>).mock.calls[0];
+      const [headers, rows, filename] =
+        (downloadCsv as ReturnType<typeof vi.fn>).mock.calls[0] ?? [];
       expect(headers).toEqual([
         'timestamp',
         'actionType',
@@ -372,7 +373,7 @@ describe('LogsFilterBar', () => {
       ];
       renderBar({ sortedActions: actions });
       fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
-      const [, rows] = (downloadCsv as ReturnType<typeof vi.fn>).mock.calls[0];
+      const [, rows] = (downloadCsv as ReturnType<typeof vi.fn>).mock.calls[0] ?? [];
       expect(rows.length).toBe(3);
     });
   });

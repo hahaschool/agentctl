@@ -184,7 +184,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     machineId: 'machine-1',
     name: 'test-agent',
     type: 'adhoc',
-    status: 'idle',
+    status: 'registered',
     schedule: null,
     projectPath: '/home/user/project',
     worktreeBranch: null,

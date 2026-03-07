@@ -45,8 +45,8 @@ describe('ConvertToAgentForm', () => {
       render(<ConvertToAgentForm {...defaultProps} />);
       const options = screen.getAllByRole('option');
       expect(options.length).toBe(2);
-      expect(options[0].textContent).toBe('Autonomous (long-running)');
-      expect(options[1].textContent).toBe('Ad-hoc (one-shot)');
+      expect(options[0]?.textContent).toBe('Autonomous (long-running)');
+      expect(options[1]?.textContent).toBe('Ad-hoc (one-shot)');
     });
 
     it('renders machineId', () => {

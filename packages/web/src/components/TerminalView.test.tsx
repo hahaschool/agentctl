@@ -524,7 +524,8 @@ describe('TerminalView', () => {
       await flushAsyncInit();
       mockFit.mockClear();
 
-      resizeCallback?.([], {} as ResizeObserver);
+      // biome-ignore lint/style/noNonNullAssertion: TS can't narrow let across closures
+      resizeCallback!([], {} as ResizeObserver);
 
       expect(mockFit).toHaveBeenCalled();
 
