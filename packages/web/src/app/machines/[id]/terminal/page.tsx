@@ -26,6 +26,29 @@ export default function MachineTerminalPage() {
     error: string | null;
   }>({ pending: false, termId: null, error: null });
 
+  const doSpawn = useCallback(() => {
+    const state = spawnStateRef.current;
+    state.pending = true;
+    setError(null);
+    setSpawning(true);
+    api
+      .spawnTerminal(machineId, { cols: 120, rows: 30 })
+      .then((info) => {
+        state.termId = info.id;
+        setTerminalId(info.id);
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        state.error = message;
+        setError(message);
+        toast.error('Failed to spawn terminal');
+      })
+      .finally(() => {
+        state.pending = false;
+        setSpawning(false);
+      });
+  }, [machineId, toast]);
+
   // Auto-spawn terminal on mount — Strict Mode safe
   useEffect(() => {
     const state = spawnStateRef.current;
@@ -44,28 +67,12 @@ export default function MachineTerminalPage() {
 
     // If a spawn is already in-flight from a previous mount, wait for it
     if (state.pending) return;
-    state.pending = true;
 
-    api
-      .spawnTerminal(machineId, { cols: 120, rows: 30 })
-      .then((info) => {
-        state.termId = info.id;
-        setTerminalId(info.id);
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        state.error = message;
-        setError(message);
-        toast.error('Failed to spawn terminal');
-      })
-      .finally(() => {
-        state.pending = false;
-        setSpawning(false);
-      });
+    doSpawn();
 
     // No cleanup — the terminal persists across Strict Mode remounts.
     // Real unmount cleanup is handled by the next effect.
-  }, [machineId, toast]);
+  }, [doSpawn]);
 
   // Cleanup terminal when component truly unmounts (navigation away)
   useEffect(() => {
@@ -126,24 +133,8 @@ export default function MachineTerminalPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setError(null);
-                    setSpawning(true);
-                    spawnStateRef.current = { pending: true, termId: null, error: null };
-                    api
-                      .spawnTerminal(machineId, { cols: 120, rows: 30 })
-                      .then((info) => {
-                        spawnStateRef.current.termId = info.id;
-                        setTerminalId(info.id);
-                      })
-                      .catch((err: unknown) => {
-                        const msg = err instanceof Error ? err.message : String(err);
-                        spawnStateRef.current.error = msg;
-                        setError(msg);
-                      })
-                      .finally(() => {
-                        spawnStateRef.current.pending = false;
-                        setSpawning(false);
-                      });
+                    spawnStateRef.current = { pending: false, termId: null, error: null };
+                    doSpawn();
                   }}
                 >
                   Retry
