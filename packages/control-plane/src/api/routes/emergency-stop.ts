@@ -2,11 +2,10 @@ import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
+import { EMERGENCY_STOP_TIMEOUT_MS } from '../constants.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
-
-const PROXY_TIMEOUT_MS = 15_000;
 
 export type EmergencyStopRoutesOptions = {
   registry: MachineRegistryLike;
@@ -53,7 +52,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
         workerBaseUrl: resolved.url,
         path: `/api/agents/${encodeURIComponent(agentId)}/emergency-stop`,
         method: 'POST',
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: EMERGENCY_STOP_TIMEOUT_MS,
       });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
@@ -115,7 +114,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
           workerBaseUrl: workerUrl,
           path: '/api/agents/emergency-stop-all',
           method: 'POST',
-          timeoutMs: PROXY_TIMEOUT_MS,
+          timeoutMs: EMERGENCY_STOP_TIMEOUT_MS,
         });
 
         if (!result.ok) {

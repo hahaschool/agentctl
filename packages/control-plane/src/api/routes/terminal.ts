@@ -11,9 +11,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
-
-const TERMINAL_REQUEST_TIMEOUT_MS = 10_000;
 
 export type TerminalRouteOptions = {
   logger: Logger;
@@ -44,7 +43,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
 
       try {
         const res = await fetch(url, {
-          signal: AbortSignal.timeout(TERMINAL_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
@@ -140,7 +139,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request.body ?? {}),
-          signal: AbortSignal.timeout(TERMINAL_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
@@ -179,7 +178,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
 
       try {
         const res = await fetch(url, {
-          signal: AbortSignal.timeout(TERMINAL_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
@@ -230,7 +229,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request.body ?? {}),
-          signal: AbortSignal.timeout(TERMINAL_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
@@ -270,7 +269,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
       try {
         const res = await fetch(url, {
           method: 'DELETE',
-          signal: AbortSignal.timeout(TERMINAL_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {

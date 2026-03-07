@@ -2,11 +2,10 @@ import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
+import { LOOP_PROXY_TIMEOUT_MS } from '../constants.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
-
-const PROXY_TIMEOUT_MS = 30_000;
 
 export type LoopRoutesOptions = {
   registry: MachineRegistryLike;
@@ -74,7 +73,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'POST',
         body: request.body,
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
@@ -119,7 +118,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'PUT',
         body: request.body,
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
@@ -154,7 +153,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         workerBaseUrl: resolved.url,
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'DELETE',
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });
@@ -189,7 +188,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         workerBaseUrl: resolved.url,
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'GET',
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
       if (!result.ok) {
         return reply.status(result.status).send({ error: result.error, message: result.message });

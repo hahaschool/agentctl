@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { BATCH_LIMITS, clampLimit, PAGINATION } from './constants.js';
+import {
+  BATCH_LIMITS,
+  EMERGENCY_STOP_TIMEOUT_MS,
+  LOOP_PROXY_TIMEOUT_MS,
+  WORKER_REQUEST_TIMEOUT_MS,
+  WS_HEARTBEAT_INTERVAL_MS,
+  clampLimit,
+  PAGINATION,
+} from './constants.js';
 
 describe('PAGINATION', () => {
   it('defines expected resource types', () => {
@@ -57,5 +65,35 @@ describe('clampLimit', () => {
   it('floors floating point values', () => {
     expect(clampLimit(10.7, config)).toBe(10);
     expect(clampLimit(50.99, config)).toBe(50);
+  });
+});
+
+describe('timeout constants', () => {
+  it('WORKER_REQUEST_TIMEOUT_MS is 10 seconds', () => {
+    expect(WORKER_REQUEST_TIMEOUT_MS).toBe(10_000);
+  });
+
+  it('LOOP_PROXY_TIMEOUT_MS is 30 seconds', () => {
+    expect(LOOP_PROXY_TIMEOUT_MS).toBe(30_000);
+  });
+
+  it('EMERGENCY_STOP_TIMEOUT_MS is 15 seconds', () => {
+    expect(EMERGENCY_STOP_TIMEOUT_MS).toBe(15_000);
+  });
+
+  it('WS_HEARTBEAT_INTERVAL_MS is 30 seconds', () => {
+    expect(WS_HEARTBEAT_INTERVAL_MS).toBe(30_000);
+  });
+
+  it('all timeouts are positive finite numbers', () => {
+    for (const ms of [
+      WORKER_REQUEST_TIMEOUT_MS,
+      LOOP_PROXY_TIMEOUT_MS,
+      EMERGENCY_STOP_TIMEOUT_MS,
+      WS_HEARTBEAT_INTERVAL_MS,
+    ]) {
+      expect(ms).toBeGreaterThan(0);
+      expect(Number.isFinite(ms)).toBe(true);
+    }
   });
 });

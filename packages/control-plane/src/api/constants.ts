@@ -41,3 +41,17 @@ export function clampLimit(
   if (!Number.isFinite(parsed) || parsed < 1) return defaults.defaultLimit;
   return Math.min(Math.floor(parsed), defaults.maxLimit);
 }
+
+// --- Proxy/request timeout defaults (used by route handlers) ---
+
+/** Timeout for worker requests that proxy files, git, and terminal ops. */
+export const WORKER_REQUEST_TIMEOUT_MS = 10_000;
+
+/** Timeout for loop proxy operations (start/stop/prompt/config). */
+export const LOOP_PROXY_TIMEOUT_MS = 30_000;
+
+/** Timeout for emergency stop proxy operations. */
+export const EMERGENCY_STOP_TIMEOUT_MS = 15_000;
+
+/** Heartbeat interval for WebSocket and SSE connections. */
+export const WS_HEARTBEAT_INTERVAL_MS = 30_000;

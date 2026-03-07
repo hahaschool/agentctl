@@ -7,9 +7,8 @@ import type { WebSocket } from 'ws';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
+import { WS_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 import { resolveWorkerUrlOrThrow } from '../resolve-worker-url.js';
-
-const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // Incoming message types (client -> server)
@@ -229,7 +228,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
       if (socket.readyState === socket.OPEN) {
         socket.ping();
       }
-    }, HEARTBEAT_INTERVAL_MS);
+    }, WS_HEARTBEAT_INTERVAL_MS);
 
     // -----------------------------------------------------------------------
     // Message handler

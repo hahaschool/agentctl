@@ -9,9 +9,8 @@ import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
-
-const GIT_REQUEST_TIMEOUT_MS = 10_000;
 
 export type GitProxyRoutesOptions = {
   dbRegistry: DbAgentRegistry;
@@ -52,7 +51,7 @@ export const gitProxyRoutes: FastifyPluginAsync<GitProxyRoutesOptions> = async (
 
       try {
         const res = await fetch(url, {
-          signal: AbortSignal.timeout(GIT_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {

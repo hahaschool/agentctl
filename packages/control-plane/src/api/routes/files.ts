@@ -10,9 +10,8 @@ import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
-
-const FILE_REQUEST_TIMEOUT_MS = 10_000;
 const MAX_FILE_CONTENT_LENGTH = 5_000_000; // 5 MB
 
 export type FileProxyRoutesOptions = {
@@ -54,7 +53,7 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
 
       try {
         const res = await fetch(url, {
-          signal: AbortSignal.timeout(FILE_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
@@ -103,7 +102,7 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
 
       try {
         const res = await fetch(url, {
-          signal: AbortSignal.timeout(FILE_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
@@ -171,7 +170,7 @@ export const fileProxyRoutes: FastifyPluginAsync<FileProxyRoutesOptions> = async
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: body.path, content: body.content }),
-          signal: AbortSignal.timeout(FILE_REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
