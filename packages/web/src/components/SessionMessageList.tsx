@@ -15,6 +15,7 @@ import { MarkdownContent } from './MarkdownContent';
 import { ProgressIndicator } from './ProgressIndicator';
 import { SubagentBlock } from './SubagentBlock';
 import { ThinkingBlock } from './ThinkingBlock';
+import { useToast } from './Toast';
 import { TodoBlock } from './TodoBlock';
 
 // ---------------------------------------------------------------------------
@@ -683,6 +684,7 @@ function ToolPairBlock({
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
   const reactId = useId();
   const contentId = toolUse.toolId ? `tool-pair-${toolUse.toolId}` : `tool-pair-${reactId}`;
 
@@ -699,8 +701,8 @@ function ToolPairBlock({
         setCopied(true);
         setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
       })
-      .catch(() => {});
-  }, [outputContent]);
+      .catch(() => toast.error('Failed to copy'));
+  }, [outputContent, toast]);
 
   if (!expanded) {
     return (

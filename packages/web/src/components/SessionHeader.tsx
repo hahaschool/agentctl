@@ -30,6 +30,7 @@ import { RefreshButton } from './RefreshButton';
 // ---------------------------------------------------------------------------
 
 function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.JSX.Element {
+  const toast = useToast();
   const errorMessage =
     metadata?.errorMessage ?? 'Session ended with an error (no details available)';
   const errorCode = metadata?.errorCode as string | undefined;
@@ -58,8 +59,8 @@ function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.J
         setCopied(true);
         setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
       })
-      .catch(() => {});
-  }, [fullErrorText]);
+      .catch(() => toast.error('Failed to copy'));
+  }, [fullErrorText, toast]);
 
   return (
     <div className="mt-2 bg-red-500/5 border border-red-500/20 rounded-md px-3 py-2 text-[12px] text-red-700 dark:text-red-300">

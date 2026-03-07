@@ -6,6 +6,7 @@ import { useTerminalResize } from '@/hooks/use-terminal-resize';
 import { TERMINAL_FONT_FAMILY, TERMINAL_THEME } from '@/lib/terminal-theme';
 import { COPY_FEEDBACK_MS } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
+import { useToast } from './Toast';
 import '@xterm/xterm/css/xterm.css';
 
 // Dynamic import for xterm — it accesses DOM globals and cannot be imported at SSR time.
@@ -31,6 +32,7 @@ export function InteractiveTerminal({
   onError,
   className,
 }: InteractiveTerminalProps): React.JSX.Element {
+  const toast = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
@@ -174,9 +176,9 @@ export function InteractiveTerminal({
           setCopied(true);
           setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
         })
-        .catch(() => {});
+        .catch(() => toast.error('Failed to copy'));
     }
-  }, []);
+  }, [toast]);
 
   return (
     <div className={cn('relative flex-1 min-h-0', className)}>
