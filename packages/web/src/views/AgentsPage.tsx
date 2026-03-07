@@ -272,7 +272,7 @@ export function AgentsPage(): React.JSX.Element {
             isFetching={agents.isFetching && !agents.isLoading}
           />
           <Button size="sm" onClick={() => setShowCreateDialog(true)}>
-            New Task
+            New Agent
           </Button>
         </div>
       </div>
@@ -282,7 +282,7 @@ export function AgentsPage(): React.JSX.Element {
         <ErrorBanner message={agents.error.message} onRetry={() => void agents.refetch()} />
       )}
 
-      {/* New Task Dialog */}
+      {/* New Agent Dialog */}
       <AgentFormDialog
         mode="create"
         open={showCreateDialog}
@@ -330,7 +330,7 @@ export function AgentsPage(): React.JSX.Element {
         <select
           value={sortOrder}
           onChange={(e) => setSortOrder(e.target.value as AgentSortOrder)}
-          aria-label="Sort order"
+          aria-label="Sort by"
           className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
           <option value="name">{'\u2191'} Name (A-Z)</option>

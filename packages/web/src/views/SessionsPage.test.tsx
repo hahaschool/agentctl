@@ -392,7 +392,7 @@ describe('SessionsPage', () => {
 
   it('renders sort order dropdown', () => {
     renderSessions();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     expect(sortSelect).toBeDefined();
     expect(sortSelect.value).toBe('newest');
   });
@@ -682,7 +682,7 @@ describe('SessionsPage', () => {
 
   it('changes sort order option', async () => {
     renderSessions();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     expect(sortSelect.value).toBe('newest');
     fireEvent.change(sortSelect, { target: { value: 'oldest' } });
     expect(sortSelect.value).toBe('oldest');
@@ -1174,7 +1174,7 @@ describe('SessionsPage', () => {
 
   it('sort order dropdown has all sort options', () => {
     renderSessions();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     const opts = Array.from(sortSelect.options).map((o) => o.value);
     expect(opts).toEqual(['newest', 'oldest', 'status', 'cost', 'duration']);
   });
@@ -1204,7 +1204,7 @@ describe('SessionsPage', () => {
     });
     let items = getSessionItems();
     expect(items[0]?.textContent).toContain('agt-new-so');
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     fireEvent.change(sortSelect, { target: { value: 'oldest' } });
     await waitFor(() => {
       items = getSessionItems();
@@ -1242,7 +1242,7 @@ describe('SessionsPage', () => {
       refetch: vi.fn(),
     });
     renderSessions();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     fireEvent.change(sortSelect, { target: { value: 'status' } });
     await waitFor(() => {
       const items = getSessionItems();

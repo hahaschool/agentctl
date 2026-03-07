@@ -714,7 +714,7 @@ export function SessionsPage(): React.JSX.Element {
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-            aria-label="Sort order"
+            aria-label="Sort by"
             className="h-5 px-1 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             <option value="newest">New</option>

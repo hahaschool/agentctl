@@ -261,9 +261,9 @@ describe('AgentFormDialog', () => {
   // -----------------------------------------------------------------------
 
   describe('create mode rendering', () => {
-    it('renders "New Task" dialog title in create mode', () => {
+    it('renders "New Agent" dialog title in create mode', () => {
       renderDialog({ mode: 'create' });
-      expect(screen.getByText('New Task')).toBeDefined();
+      expect(screen.getByText('New Agent')).toBeDefined();
     });
 
     it('renders prompt textarea with correct placeholder', () => {

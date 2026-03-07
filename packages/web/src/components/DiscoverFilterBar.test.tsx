@@ -65,12 +65,12 @@ describe('DiscoverFilterBar', () => {
 
   it('renders the sort select', () => {
     render(<DiscoverFilterBar {...defaultProps()} />);
-    expect(screen.getByLabelText('Sort order')).toBeDefined();
+    expect(screen.getByLabelText('Sort by')).toBeDefined();
   });
 
   it('renders all sort options', () => {
     render(<DiscoverFilterBar {...defaultProps()} />);
-    const select = screen.getByLabelText('Sort order');
+    const select = screen.getByLabelText('Sort by');
     const options = select.querySelectorAll('option');
     expect(options.length).toBe(3);
   });
@@ -184,7 +184,7 @@ describe('DiscoverFilterBar', () => {
   it('calls onSortChange when selecting a sort option', () => {
     const onSortChange = vi.fn();
     render(<DiscoverFilterBar {...defaultProps({ onSortChange })} />);
-    fireEvent.change(screen.getByLabelText('Sort order'), {
+    fireEvent.change(screen.getByLabelText('Sort by'), {
       target: { value: 'messages' },
     });
     expect(onSortChange).toHaveBeenCalledWith('messages');
@@ -238,7 +238,7 @@ describe('DiscoverFilterBar', () => {
 
   it('reflects the current sort value', () => {
     render(<DiscoverFilterBar {...defaultProps({ sort: 'messages' })} />);
-    const select = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const select = screen.getByLabelText('Sort by') as HTMLSelectElement;
     expect(select.value).toBe('messages');
   });
 

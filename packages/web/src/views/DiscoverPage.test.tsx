@@ -411,14 +411,14 @@ describe('DiscoverPage', () => {
 
   it('renders sort dropdown', () => {
     renderDiscover();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     expect(sortSelect).toBeDefined();
     expect(sortSelect.value).toBe('recent');
   });
 
   it('changes sort order', () => {
     renderDiscover();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     fireEvent.change(sortSelect, { target: { value: 'messages' } });
     expect(sortSelect.value).toBe('messages');
   });

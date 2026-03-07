@@ -469,7 +469,7 @@ export function AgentFormDialog({
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>New Task</DialogTitle>
+            <DialogTitle>New Agent</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">

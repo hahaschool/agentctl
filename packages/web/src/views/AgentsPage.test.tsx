@@ -353,9 +353,9 @@ describe('AgentsPage', () => {
     });
   });
 
-  it('renders New Task button', () => {
+  it('renders New Agent button', () => {
     renderAgentsPage();
-    expect(screen.getByText('New Task')).toBeDefined();
+    expect(screen.getByText('New Agent')).toBeDefined();
   });
 
   it('renders refresh button', () => {
@@ -501,18 +501,18 @@ describe('AgentsPage', () => {
   // 4. Create new agent dialog
   // =========================================================================
 
-  it('opens create dialog when New Task button is clicked', async () => {
+  it('opens create dialog when New Agent button is clicked', async () => {
     renderAgentsPage();
-    const newTaskBtn = screen.getByText('New Task');
+    const newTaskBtn = screen.getByText('New Agent');
     fireEvent.click(newTaskBtn);
     await waitFor(() => {
-      expect(screen.getByText('New Task', { selector: 'h2' })).toBeDefined();
+      expect(screen.getByText('New Agent', { selector: 'h2' })).toBeDefined();
     });
   });
 
   it('shows prompt textarea in create dialog', async () => {
     renderAgentsPage();
-    fireEvent.click(screen.getByText('New Task'));
+    fireEvent.click(screen.getByText('New Agent'));
     await waitFor(() => {
       expect(screen.getByPlaceholderText('What do you want the agent to do?')).toBeDefined();
     });
@@ -520,7 +520,7 @@ describe('AgentsPage', () => {
 
   it('shows project input in create dialog', async () => {
     renderAgentsPage();
-    fireEvent.click(screen.getByText('New Task'));
+    fireEvent.click(screen.getByText('New Agent'));
     await waitFor(() => {
       expect(screen.getByLabelText('Project')).toBeDefined();
     });
@@ -528,7 +528,7 @@ describe('AgentsPage', () => {
 
   it('shows machine selector in create dialog', async () => {
     renderAgentsPage();
-    fireEvent.click(screen.getByText('New Task'));
+    fireEvent.click(screen.getByText('New Agent'));
     await waitFor(() => {
       // The Machine label is associated with a Radix Select (not a native input),
       // so we look for the label text directly.
@@ -538,7 +538,7 @@ describe('AgentsPage', () => {
 
   it('shows Advanced toggle in create dialog', async () => {
     renderAgentsPage();
-    fireEvent.click(screen.getByText('New Task'));
+    fireEvent.click(screen.getByText('New Agent'));
     await waitFor(() => {
       expect(screen.getByText('Advanced')).toBeDefined();
     });
@@ -546,7 +546,7 @@ describe('AgentsPage', () => {
 
   it('shows Start Agent and Cancel buttons in create dialog', async () => {
     renderAgentsPage();
-    fireEvent.click(screen.getByText('New Task'));
+    fireEvent.click(screen.getByText('New Agent'));
     await waitFor(() => {
       expect(screen.getByText('Start Agent')).toBeDefined();
       expect(screen.getByText('Cancel')).toBeDefined();
@@ -763,7 +763,7 @@ describe('AgentsPage', () => {
 
   it('renders sort order dropdown', () => {
     renderAgentsPage();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     expect(sortSelect).toBeDefined();
     expect(sortSelect.value).toBe('name');
   });
@@ -838,7 +838,7 @@ describe('AgentsPage', () => {
 
   it('changes sort order', () => {
     renderAgentsPage();
-    const sortSelect = screen.getByLabelText('Sort order') as HTMLSelectElement;
+    const sortSelect = screen.getByLabelText('Sort by') as HTMLSelectElement;
     fireEvent.change(sortSelect, { target: { value: 'cost' } });
     expect(sortSelect.value).toBe('cost');
   });

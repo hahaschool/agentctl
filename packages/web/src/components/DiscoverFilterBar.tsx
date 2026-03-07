@@ -96,7 +96,7 @@ export function DiscoverFilterBar({
           id="discover-sort"
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SortOption)}
-          aria-label="Sort order"
+          aria-label="Sort by"
           className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
           {SORT_OPTIONS.map((opt) => (
