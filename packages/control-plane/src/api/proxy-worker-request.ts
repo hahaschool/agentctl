@@ -69,7 +69,9 @@ export async function proxyWorkerRequest(
         ok: false,
         status: response.status,
         error: 'WORKER_ERROR',
-        message: response.statusText || `Worker returned non-JSON response with HTTP ${String(response.status)}`,
+        message:
+          response.statusText ||
+          `Worker returned non-JSON response with HTTP ${String(response.status)}`,
       };
     }
     return {

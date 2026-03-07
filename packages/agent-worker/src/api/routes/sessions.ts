@@ -28,6 +28,9 @@ import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 const SESSION_BUFFER_CLEANUP_DELAY_MS =
   Number(process.env.SESSION_BUFFER_CLEANUP_DELAY_MS) || 60_000;
 
+/** How long to wait after dispatching a session start/resume before returning success. */
+const SESSION_STARTUP_VERIFY_MS = 3_000;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -549,7 +552,7 @@ export async function sessionRoutes(
           sessionManager.off('session_error', onError);
           sessionManager.off('session_ended', onEnd);
           resolve(true);
-        }, 3000);
+        }, SESSION_STARTUP_VERIFY_MS);
 
         const onError = (evt: { sessionId: string }): void => {
           if (evt.sessionId === session.id) {
@@ -699,7 +702,7 @@ export async function sessionRoutes(
             // After 3s the process is still alive — good enough
             sessionManager.off('session_error', onError);
             resolve(true);
-          }, 3000);
+          }, SESSION_STARTUP_VERIFY_MS);
 
           const onError = (evt: { sessionId: string; error?: string }): void => {
             if (evt.sessionId === newSession.id) {
