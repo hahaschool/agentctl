@@ -187,8 +187,10 @@ export default function AgentDetailPage(): React.JSX.Element {
       config: d.config,
       projectPath: d.projectPath,
     };
-    void navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
-    toast.success('Agent config copied to clipboard');
+    void navigator.clipboard
+      .writeText(JSON.stringify(exportData, null, 2))
+      .then(() => toast.success('Agent config copied to clipboard'))
+      .catch(() => toast.error('Failed to copy'));
   }, [agent.data, toast]);
 
   // -- Loading state --

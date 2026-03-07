@@ -52,10 +52,13 @@ function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.J
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(fullErrorText).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
-    });
+    void navigator.clipboard
+      .writeText(fullErrorText)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+      })
+      .catch(() => {});
   }, [fullErrorText]);
 
   return (

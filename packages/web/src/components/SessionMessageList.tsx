@@ -693,10 +693,13 @@ function ToolPairBlock({
     inputContent.replace(/\n/g, ' ').slice(0, 80) + (inputContent.length > 80 ? '...' : '');
 
   const handleCopyOutput = useCallback(() => {
-    void navigator.clipboard.writeText(outputContent).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
-    });
+    void navigator.clipboard
+      .writeText(outputContent)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+      })
+      .catch(() => {});
   }, [outputContent]);
 
   if (!expanded) {

@@ -168,10 +168,13 @@ export function InteractiveTerminal({
     const text = terminal.getSelection();
     terminal.clearSelection();
     if (text) {
-      void navigator.clipboard.writeText(text).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
-      });
+      void navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+        })
+        .catch(() => {});
     }
   }, []);
 
