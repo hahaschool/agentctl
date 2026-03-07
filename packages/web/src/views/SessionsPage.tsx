@@ -117,7 +117,10 @@ export function SessionsPage(): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
   const [lastSentMessage, setLastSentMessage] = useState<{ text: string; ts: number } | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('agentId') ?? '';
+  });
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -164,12 +167,20 @@ export function SessionsPage(): React.JSX.Element {
     return new URLSearchParams(window.location.search).get('create') === 'true';
   });
 
-  // Clean up ?create=true from the URL after reading it
+  // Clean up ?create=true and ?agentId= from the URL after reading them
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    let changed = false;
     if (params.get('create') === 'true') {
       params.delete('create');
+      changed = true;
+    }
+    if (params.has('agentId')) {
+      params.delete('agentId');
+      changed = true;
+    }
+    if (changed) {
       const newUrl = params.toString()
         ? `${window.location.pathname}?${params.toString()}`
         : window.location.pathname;
