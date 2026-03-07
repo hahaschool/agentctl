@@ -60,7 +60,25 @@ export async function proxyWorkerRequest(
     };
   }
 
-  const data: unknown = await response.json();
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: 'WORKER_ERROR',
+        message: response.statusText || `Worker returned non-JSON response with HTTP ${String(response.status)}`,
+      };
+    }
+    return {
+      ok: false,
+      status: 502,
+      error: 'INVALID_RESPONSE',
+      message: `Worker returned non-JSON response with HTTP ${String(response.status)}`,
+    };
+  }
 
   if (!response.ok) {
     const errBody = data as Record<string, unknown> | null;

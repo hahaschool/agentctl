@@ -9,13 +9,11 @@ import { agents as agentsTable, apiAccounts, rcSessions, settings } from '../../
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
-import { clampLimit, PAGINATION } from '../constants.js';
+import { clampLimit, PAGINATION, WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
 
 const DISCOVER_TIMEOUT_MS = 5_000;
 const CONTENT_TIMEOUT_MS = 10_000;
-/** Timeout for fetch() calls that dispatch commands to worker machines. */
-const WORKER_REQUEST_TIMEOUT_MS = 10_000;
 /** Matches a valid UUID v4 string. Used to skip non-UUID agentIds like 'adhoc'. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

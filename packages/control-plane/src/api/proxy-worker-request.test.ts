@@ -268,6 +268,106 @@ describe('proxyWorkerRequest', () => {
     expect(requestInit.signal).toBeDefined();
   });
 
+  // ---------------------------------------------------------------------------
+  // Non-JSON response handling
+  // ---------------------------------------------------------------------------
+
+  it('returns INVALID_RESPONSE when successful response is not valid JSON', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => {
+        throw new SyntaxError('Unexpected token');
+      },
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/agents/a1/loop',
+      method: 'GET',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 502,
+      error: 'INVALID_RESPONSE',
+      message: 'Worker returned non-JSON response with HTTP 200',
+    });
+  });
+
+  it('returns WORKER_ERROR when error response is not valid JSON', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => {
+        throw new SyntaxError('Unexpected token');
+      },
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/agents/a1/loop',
+      method: 'POST',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 500,
+      error: 'WORKER_ERROR',
+      message: 'Internal Server Error',
+    });
+  });
+
+  it('falls back to generic message when error body lacks error and message fields', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      statusText: 'Unprocessable Entity',
+      json: async () => ({ details: 'some irrelevant field' }),
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/agents/a1/loop',
+      method: 'POST',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 422,
+      error: 'WORKER_ERROR',
+      message: 'Unprocessable Entity',
+    });
+  });
+
+  it('handles null JSON error body gracefully', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => null,
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/test',
+      method: 'GET',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 500,
+      error: 'WORKER_ERROR',
+      message: 'Internal Server Error',
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Timeout configuration
+  // ---------------------------------------------------------------------------
+
   it('uses custom timeout when timeoutMs is provided', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
