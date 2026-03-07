@@ -14,6 +14,10 @@ vi.mock('../lib/format-utils', () => ({
     if (!end) return '5m 30s';
     return '10m 0s';
   },
+  formatCost: (value: number | null | undefined) => {
+    if (value == null) return '$0.00';
+    return `$${value.toFixed(2)}`;
+  },
 }));
 
 vi.mock('./CopyableText', () => ({

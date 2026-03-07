@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { Session } from '../lib/api';
-import { formatDuration } from '../lib/format-utils';
+import { formatCost, formatDuration } from '../lib/format-utils';
 import { CopyableText } from './CopyableText';
 import { LiveTimeAgo } from './LiveTimeAgo';
 import { PathBadge } from './PathBadge';
@@ -165,7 +165,7 @@ function SessionListItemBase({
           <LiveTimeAgo date={s.startedAt} />
           <LiveDuration startedAt={s.startedAt} endedAt={s.endedAt} />
           {messageCount !== undefined && <span>{messageCount} msgs</span>}
-          {costUsd !== undefined && <span className="tabular-nums">${costUsd.toFixed(2)}</span>}
+          {costUsd !== undefined && <span className="tabular-nums">{formatCost(costUsd)}</span>}
         </div>
       </div>
     </div>
