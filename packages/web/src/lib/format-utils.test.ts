@@ -329,10 +329,13 @@ describe('downloadCsv', () => {
     const mockElement = {
       href: '',
       download: '',
+      style: {} as CSSStyleDeclaration,
       click: () => clicks.push('clicked'),
+      remove: vi.fn(),
     };
 
     vi.spyOn(document, 'createElement').mockReturnValue(mockElement as unknown as HTMLElement);
+    vi.spyOn(document.body, 'append').mockImplementation(() => {});
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-url');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => revokedUrls.push(url));
 

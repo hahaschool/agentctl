@@ -6,7 +6,10 @@ function downloadFile(content: string, filename: string, mimeType: string): void
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.style.display = 'none';
+  document.body.append(a);
   a.click();
+  a.remove();
   URL.revokeObjectURL(url);
 }
 

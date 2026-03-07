@@ -25,7 +25,7 @@ export type ShortcutGroup = {
  * Navigation page shortcuts (number keys 1-7).
  * Order must match the sidebar nav order.
  */
-export const NAV_SHORTCUTS: ShortcutEntry[] = [
+const NAV_SHORTCUTS: ShortcutEntry[] = [
   { keys: ['1'], desc: 'Dashboard' },
   { keys: ['2'], desc: 'Machines' },
   { keys: ['3'], desc: 'Agents' },
@@ -36,7 +36,7 @@ export const NAV_SHORTCUTS: ShortcutEntry[] = [
 ];
 
 /** Global (non-navigation) shortcuts. */
-export const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
+const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
   { keys: ['\u2318K'], desc: 'Command palette' },
   { keys: ['r'], desc: 'Refresh current page' },
   { keys: ['/'], desc: 'Focus search (Discover)' },
@@ -49,15 +49,6 @@ export const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
  * Used by SettingsView's Keyboard Shortcuts section.
  */
 export const ALL_SHORTCUTS: ShortcutEntry[] = [...NAV_SHORTCUTS, ...GLOBAL_SHORTCUTS];
-
-/**
- * Condensed shortcut list — nav keys collapsed into a single "1-7" entry.
- * Used by the KeyboardHelpOverlay (the `?` pop-up).
- */
-export const CONDENSED_SHORTCUTS: ShortcutEntry[] = [
-  { keys: ['1\u20137'], desc: 'Navigate to page' },
-  ...GLOBAL_SHORTCUTS,
-];
 
 /**
  * Grouped shortcuts for the help overlay — organized by context/page.

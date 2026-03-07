@@ -22,8 +22,11 @@ beforeEach(() => {
   vi.spyOn(document, 'createElement').mockReturnValue({
     href: '',
     download: '',
+    style: {} as CSSStyleDeclaration,
     click: mockClick,
+    remove: vi.fn(),
   } as unknown as HTMLAnchorElement);
+  vi.spyOn(document.body, 'append').mockImplementation(() => {});
 });
 
 // ---------------------------------------------------------------------------
