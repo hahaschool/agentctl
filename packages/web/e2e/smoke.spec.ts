@@ -1142,3 +1142,54 @@ test.describe('Sessions page interactions', () => {
     await expect(search).toHaveValue('test query');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Dashboard interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Dashboard interactions', () => {
+  test('dashboard shows stat cards', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('heading', { name: /command center/i }).waitFor({ timeout: 15_000 });
+
+    // Dashboard should have stat cards for Machines, Agents, Sessions
+    const heading = page.getByRole('heading', { name: /command center/i });
+    await expect(heading).toBeVisible();
+  });
+
+  test('dashboard has stat cards and refresh', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('heading', { name: /command center/i }).waitFor({ timeout: 15_000 });
+
+    // Refresh button in top bar (exact match to avoid "Refresh All")
+    const refreshBtn = page.getByRole('button', { name: 'Refresh', exact: true });
+    await expect(refreshBtn).toBeVisible({ timeout: 5_000 });
+
+    // Recent Sessions section heading
+    const recentHeading = page.getByRole('heading', { name: /recent sessions/i });
+    await expect(recentHeading).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Settings page interactions
+// ---------------------------------------------------------------------------
+
+test.describe('Settings page interactions', () => {
+  test('settings page has section headings', async ({ page }) => {
+    await page.goto('/settings');
+    await page.getByRole('heading', { name: /settings/i }).first().waitFor({ timeout: 15_000 });
+
+    // Settings page should have Preferences section
+    const preferencesHeading = page.getByRole('heading', { name: /preferences/i });
+    await expect(preferencesHeading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('settings page has API Accounts section', async ({ page }) => {
+    await page.goto('/settings');
+    await page.getByRole('heading', { name: /settings/i }).first().waitFor({ timeout: 15_000 });
+
+    const accountsHeading = page.getByRole('heading', { name: /api accounts/i });
+    await expect(accountsHeading).toBeVisible({ timeout: 5_000 });
+  });
+});
