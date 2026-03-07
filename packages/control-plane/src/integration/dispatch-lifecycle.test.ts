@@ -1,8 +1,8 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { Job } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import { createServer } from '../api/server.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
@@ -31,17 +31,7 @@ vi.mock('bullmq', () => ({
 // Mock logger — shared across Fastify server and task worker
 // ---------------------------------------------------------------------------
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
 // Helpers — factories for mock data

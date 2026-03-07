@@ -1,47 +1,12 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
+import { createFullMockDbRegistry, createMockLogger } from './test-helpers.js';
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
-
-function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}): DbAgentRegistry {
-  return {
-    registerMachine: vi.fn(),
-    heartbeat: vi.fn(),
-    listMachines: vi.fn().mockResolvedValue([]),
-    createAgent: vi.fn().mockResolvedValue('agent-new'),
-    getAgent: vi.fn().mockResolvedValue(undefined),
-    updateAgentStatus: vi.fn(),
-    listAgents: vi.fn().mockResolvedValue([]),
-    getRecentRuns: vi.fn().mockResolvedValue([]),
-    completeRun: vi.fn(),
-    createRun: vi.fn().mockResolvedValue('run-001'),
-    insertActions: vi.fn().mockResolvedValue(3),
-    getMachine: vi.fn(),
-    queryActions: vi.fn().mockResolvedValue({ actions: [], total: 0, hasMore: false }),
-    getAuditSummary: vi.fn().mockResolvedValue({
-      totalActions: 0,
-      topTools: [],
-      topAgents: [],
-      errorCount: 0,
-    }),
-    ...overrides,
-  } as unknown as DbAgentRegistry;
-}
+const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
 // Sample data fixtures
@@ -95,7 +60,7 @@ describe('Replay routes — /api/audit/replay (configured)', () => {
   let mockDbRegistry: DbAgentRegistry;
 
   beforeAll(async () => {
-    mockDbRegistry = createMockDbRegistry();
+    mockDbRegistry = createFullMockDbRegistry();
     app = await createServer({ logger, dbRegistry: mockDbRegistry });
     await app.ready();
   });

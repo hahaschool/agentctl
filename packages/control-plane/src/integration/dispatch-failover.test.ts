@@ -1,7 +1,7 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { Job } from 'bullmq';
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import { MachineCircuitBreaker } from '../scheduler/circuit-breaker.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
@@ -30,17 +30,7 @@ vi.mock('bullmq', () => ({
 // Mock logger
 // ---------------------------------------------------------------------------
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
 // Helpers — factories for mock data

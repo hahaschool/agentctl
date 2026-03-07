@@ -1,28 +1,8 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createMockLogger } from './routes/test-helpers.js';
 import { createServer } from './server.js';
-
-// ---------------------------------------------------------------------------
-// Mock logger
-// ---------------------------------------------------------------------------
-
-function createMockLogger() {
-  const logger = {
-    child: () => logger,
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-    fatal: vi.fn(),
-    trace: vi.fn(),
-    silent: vi.fn(),
-    level: 'silent',
-  } as unknown as Logger;
-  return logger;
-}
 
 const logger = createMockLogger();
 
