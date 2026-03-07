@@ -86,13 +86,19 @@ export function ProjectAccountsSection(): React.JSX.Element {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    <th
+                      scope="col"
+                      className="text-left px-3 py-2 font-medium text-muted-foreground"
+                    >
                       Project Path
                     </th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    <th
+                      scope="col"
+                      className="text-left px-3 py-2 font-medium text-muted-foreground"
+                    >
                       Account
                     </th>
-                    <th className="w-10 px-3 py-2" />
+                    <th scope="col" className="w-10 px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody>

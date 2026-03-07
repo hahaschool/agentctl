@@ -90,7 +90,10 @@ export function MarkdownContent({ children, className }: MarkdownContentProps): 
             </div>
           ),
           th: ({ children: thChildren }) => (
-            <th className="border border-border px-2 py-1 text-left font-semibold bg-muted/50">
+            <th
+              scope="col"
+              className="border border-border px-2 py-1 text-left font-semibold bg-muted/50"
+            >
               {thChildren}
             </th>
           ),

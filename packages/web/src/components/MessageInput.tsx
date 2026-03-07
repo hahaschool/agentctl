@@ -9,13 +9,15 @@ import { cn } from '@/lib/utils';
 import type { Attachment, Session } from '../lib/api';
 import { clipboardImageToAttachment, fileToAttachment } from '../lib/api';
 import { formatFileSize } from '../lib/format-utils';
-import { queryKeys, useResumeSession, useSendMessage } from '../lib/queries';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 import { RESUME_MODEL_OPTIONS } from '../lib/model-options';
+import { queryKeys, useResumeSession, useSendMessage } from '../lib/queries';
+import {
+  CONTENT_INVALIDATION_DELAY_MS,
+  DRAFT_SAVE_DEBOUNCE_MS,
+  IME_COMPOSITION_GUARD_MS,
+  INLINE_ATTACHMENT_LIMIT,
+  MAX_ATTACHMENT_SIZE_BYTES,
+} from '../lib/ui-constants';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -62,7 +64,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
       } else {
         sessionStorage.removeItem(storageKey);
       }
-    }, 300);
+    }, DRAFT_SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [message, storageKey]);
 
@@ -96,7 +98,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
         if (a.type === 'image') {
           return `[Attached image: ${a.name} (${formatFileSize(a.size)})]`;
         }
-        if (!a.isBase64 && a.content.length < 5000) {
+        if (!a.isBase64 && a.content.length < INLINE_ATTACHMENT_LIMIT) {
           return `[Attached file: ${a.name}]\n\`\`\`\n${a.content}\n\`\`\``;
         }
         return `[Attached file: ${a.name} (${formatFileSize(a.size)})]`;
@@ -141,7 +143,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
           queryKey: ['session-content'],
           exact: false,
         });
-      }, 500);
+      }, CONTENT_INVALIDATION_DELAY_MS);
     };
 
     if (isActive) {
@@ -218,7 +220,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
       const files = e.target.files;
       if (!files) return;
       for (const file of Array.from(files)) {
-        if (file.size > 10 * 1024 * 1024) {
+        if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
           toast.error(`${file.name} is too large (max 10 MB)`);
           continue;
         }
@@ -245,7 +247,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
       setDraggingOver(false);
       const files = Array.from(e.dataTransfer.files);
       for (const file of files) {
-        if (file.size > 10 * 1024 * 1024) {
+        if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
           toast.error(`${file.name} is too large (max 10 MB)`);
           continue;
         }
@@ -420,7 +422,7 @@ export function MessageInput({ session, onOptimisticSend }: MessageInputProps): 
               // ensure the keydown has fired and been blocked before we clear.
               setTimeout(() => {
                 composingRef.current = false;
-              }, 100);
+              }, IME_COMPOSITION_GUARD_MS);
             }}
             onPaste={handlePaste}
             placeholder={
