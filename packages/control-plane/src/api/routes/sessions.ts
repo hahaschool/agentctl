@@ -855,7 +855,20 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
   app.post<{
     Params: { sessionId: string };
-    Body: { prompt: string; machineId?: string; accountId?: string; model?: string };
+    Body: {
+      prompt: string;
+      machineId?: string;
+      accountId?: string;
+      model?: string;
+      strategy?: 'jsonl-truncation' | 'context-injection' | 'resume';
+      forkAtIndex?: number;
+      selectedMessages?: Array<{
+        type: string;
+        content: string;
+        toolName?: string;
+        timestamp?: string;
+      }>;
+    };
   }>(
     '/:sessionId/fork',
     { schema: { tags: ['sessions'], summary: 'Fork a session into a new one' } },
@@ -866,6 +879,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         machineId: overrideMachineId,
         accountId: overrideAccountId,
         model: overrideModel,
+        strategy = 'resume',
+        forkAtIndex,
+        selectedMessages,
       } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
@@ -948,27 +964,57 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             initialPrompt: prompt,
             forkedFrom: sessionId,
             parentClaudeSessionId: parent.claudeSessionId,
+            forkStrategy: strategy,
           },
         })
         .returning();
 
-      // Dispatch to worker — use resumeSessionId to continue from parent
+      // Dispatch to worker — build body based on fork strategy
       const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
+
+      let workerBody: Record<string, unknown> = {
+        sessionId: newSessionId,
+        agentId: parent.agentId,
+        projectPath: parent.projectPath,
+        model: overrideModel ?? parent.model ?? null,
+        prompt,
+        resumeSessionId: parent.claudeSessionId,
+        accountCredential,
+        accountProvider,
+      };
+
+      if (strategy === 'jsonl-truncation') {
+        // Pass forkAtIndex so the worker can truncate the JSONL before resuming
+        workerBody.forkAtIndex = forkAtIndex;
+      } else if (strategy === 'context-injection' && selectedMessages?.length) {
+        // Build a system prompt from selected messages and start a fresh session
+        const contextLines = ['## Previous Conversation Context\n'];
+        for (const msg of selectedMessages) {
+          const role =
+            msg.type === 'human' ? 'User' : msg.type === 'assistant' ? 'Assistant' : 'Tool';
+          contextLines.push(`### ${role}${msg.timestamp ? ` (${msg.timestamp})` : ''}`);
+          if (msg.toolName) contextLines.push(`Tool: ${msg.toolName}`);
+          contextLines.push(msg.content, '');
+        }
+        workerBody = {
+          sessionId: newSessionId,
+          agentId: parent.agentId,
+          projectPath: parent.projectPath,
+          model: overrideModel ?? parent.model ?? null,
+          prompt,
+          systemPrompt: contextLines.join('\n'),
+          // No resumeSessionId — fresh session with context injected
+          accountCredential,
+          accountProvider,
+        };
+      }
+      // For 'resume' (default), workerBody already includes resumeSessionId
 
       try {
         const workerResponse = await fetch(`${workerBaseUrl}/api/sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: newSessionId,
-            agentId: parent.agentId,
-            projectPath: parent.projectPath,
-            model: overrideModel ?? parent.model ?? null,
-            prompt,
-            resumeSessionId: parent.claudeSessionId,
-            accountCredential,
-            accountProvider,
-          }),
+          body: JSON.stringify(workerBody),
           signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
