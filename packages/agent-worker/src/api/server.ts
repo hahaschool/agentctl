@@ -1,4 +1,5 @@
-import { AgentError, WorkerError } from '@agentctl/shared';
+import { AgentError, WorkerError, checkWithTimeout } from '@agentctl/shared';
+import type { DependencyStatus } from '@agentctl/shared';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
@@ -6,6 +7,7 @@ import type { Logger } from 'pino';
 import type { AgentPool } from '../runtime/agent-pool.js';
 import type { CliSessionManager } from '../runtime/cli-session-manager.js';
 import { TerminalManager } from '../runtime/terminal-manager.js';
+import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
 import { agentRoutes } from './routes/agents.js';
 import { emergencyStopRoutes } from './routes/emergency-stop.js';
 import { fileRoutes } from './routes/files.js';
@@ -16,8 +18,6 @@ import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
 import { terminalRoutes } from './routes/terminal.js';
 
-const HEALTH_CHECK_TIMEOUT_MS = 2_000;
-
 type CreateWorkerServerOptions = {
   logger: Logger;
   agentPool: AgentPool;
@@ -26,42 +26,6 @@ type CreateWorkerServerOptions = {
   sessionManager?: CliSessionManager;
   maxTerminals?: number;
 };
-
-type DependencyStatus = {
-  status: 'ok' | 'error';
-  latencyMs: number;
-  error?: string;
-};
-
-/**
- * Execute a health check with a timeout. Returns a DependencyStatus indicating
- * success or failure along with the measured latency.
- */
-async function checkWithTimeout(name: string, fn: () => Promise<void>): Promise<DependencyStatus> {
-  const start = performance.now();
-
-  try {
-    await Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => {
-        setTimeout(
-          () =>
-            reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
-          HEALTH_CHECK_TIMEOUT_MS,
-        );
-      }),
-    ]);
-
-    return { status: 'ok', latencyMs: Math.round(performance.now() - start) };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      status: 'error',
-      latencyMs: Math.round(performance.now() - start),
-      error: message,
-    };
-  }
-}
 
 export async function createWorkerServer({
   logger,
@@ -110,7 +74,7 @@ export async function createWorkerServer({
                 { httpStatus: response.status },
               );
             }
-          })
+          }, HEALTH_CHECK_TIMEOUT_MS)
         : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
     ]);
 

@@ -10,6 +10,8 @@
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
+import { DEFAULT_MAX_TERMINALS, DEFAULT_TERMINAL_COLS, DEFAULT_TERMINAL_ROWS } from './constants.js';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -53,7 +55,7 @@ export class TerminalManager {
 
   constructor(opts: { logger: Logger; maxTerminals?: number }) {
     this.logger = opts.logger;
-    this.maxTerminals = opts.maxTerminals ?? 5;
+    this.maxTerminals = opts.maxTerminals ?? DEFAULT_MAX_TERMINALS;
   }
 
   /**
@@ -102,8 +104,8 @@ export class TerminalManager {
 
     const command = opts.command ?? process.env.SHELL ?? '/bin/zsh';
     const args = opts.args ?? [];
-    const cols = opts.cols ?? 120;
-    const rows = opts.rows ?? 30;
+    const cols = opts.cols ?? DEFAULT_TERMINAL_COLS;
+    const rows = opts.rows ?? DEFAULT_TERMINAL_ROWS;
 
     // Build a clean environment for the PTY shell. Remove Claude Code's
     // nesting-detection variable so the user can launch `claude` from the terminal.
