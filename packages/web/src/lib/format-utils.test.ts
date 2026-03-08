@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   downloadCsv,
   escapeCsvValue,
+  estimateTokenCost,
   formatCost,
   formatDuration,
   formatDurationMs,
   formatFileSize,
   formatNumber,
+  formatTokens,
   isStaleHeartbeat,
   recencyColorClass,
   shortenPath,
@@ -204,6 +206,37 @@ describe('formatCost', () => {
 
   it('formats large values', () => {
     expect(formatCost(1234.567)).toBe('$1234.57');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatTokens
+// ---------------------------------------------------------------------------
+
+describe('formatTokens', () => {
+  it('returns raw number for < 1000', () => {
+    expect(formatTokens(500)).toBe('500');
+    expect(formatTokens(0)).toBe('0');
+    expect(formatTokens(999)).toBe('999');
+  });
+
+  it('returns ~Xk format for >= 1000', () => {
+    expect(formatTokens(1000)).toBe('~1.0k');
+    expect(formatTokens(12345)).toBe('~12.3k');
+    expect(formatTokens(100_000)).toBe('~100.0k');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// estimateTokenCost
+// ---------------------------------------------------------------------------
+
+describe('estimateTokenCost', () => {
+  it('estimates cost at $0.003/1k tokens', () => {
+    expect(estimateTokenCost(0)).toBe('$0.00');
+    expect(estimateTokenCost(1000)).toBe('$0.00');
+    expect(estimateTokenCost(100_000)).toBe('$0.30');
+    expect(estimateTokenCost(1_000_000)).toBe('$3.00');
   });
 });
 

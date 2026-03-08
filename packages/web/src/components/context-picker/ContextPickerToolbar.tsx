@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { formatTokens } from '@/lib/format-utils';
 import { cn } from '@/lib/utils';
 
 export type ContextPickerToolbarProps = {
@@ -24,11 +25,6 @@ const FILTER_OPTIONS = [
   { value: 'tool_result', label: 'Tool Result' },
   { value: 'thinking', label: 'Thinking' },
 ] as const;
-
-function formatTokens(tokens: number): string {
-  if (tokens < 1000) return String(tokens);
-  return `~${(tokens / 1000).toFixed(1)}k`;
-}
 
 function getTokenColorClass(tokens: number): string {
   if (tokens >= 100_000) return 'text-red-500';

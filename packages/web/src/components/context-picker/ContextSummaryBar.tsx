@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { estimateTokenCost, formatTokens } from '@/lib/format-utils';
 import { cn } from '@/lib/utils';
 
 export type ContextSummaryBarProps = {
@@ -11,16 +12,6 @@ export type ContextSummaryBarProps = {
   onToggleHideToolResults: () => void;
   onToggleCollapseThinking: () => void;
 };
-
-function formatTokens(tokens: number): string {
-  if (tokens < 1000) return String(tokens);
-  return `~${(tokens / 1000).toFixed(1)}k`;
-}
-
-function formatCost(tokens: number): string {
-  const cost = (tokens * 0.003) / 1000;
-  return `$${cost.toFixed(2)}`;
-}
 
 export const ContextSummaryBar = React.memo(function ContextSummaryBar({
   selectedCount,
@@ -38,7 +29,7 @@ export const ContextSummaryBar = React.memo(function ContextSummaryBar({
         <span className="mx-1.5 text-border">|</span>
         <span className="font-medium text-foreground">{formatTokens(estimatedTokens)}</span> tokens
         <span className="mx-1.5 text-border">|</span>
-        <span className="font-medium text-foreground">{`~${formatCost(estimatedTokens)}`}</span>{' '}
+        <span className="font-medium text-foreground">{`~${estimateTokenCost(estimatedTokens)}`}</span>{' '}
         est.
       </div>
 

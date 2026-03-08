@@ -125,6 +125,18 @@ export function formatCost(value: number | null | undefined): string {
   return `$${value.toFixed(2)}`;
 }
 
+/** Format a token count as "123" or "~12.3k". */
+export function formatTokens(tokens: number): string {
+  if (tokens < 1000) return String(tokens);
+  return `~${(tokens / 1000).toFixed(1)}k`;
+}
+
+/** Estimate cost from a token count at $0.003/1k tokens (Claude input pricing). */
+export function estimateTokenCost(tokens: number): string {
+  const cost = (tokens * 0.003) / 1000;
+  return `$${cost.toFixed(2)}`;
+}
+
 /** Format a number with locale-appropriate thousands separators. */
 export function formatNumber(n: number | string | null | undefined): string {
   if (n == null) return '0';
