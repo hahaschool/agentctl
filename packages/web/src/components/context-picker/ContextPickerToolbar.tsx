@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 export type ContextPickerToolbarProps = {
@@ -35,7 +36,7 @@ function getTokenColorClass(tokens: number): string {
   return 'text-green-500';
 }
 
-export function ContextPickerToolbar({
+export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
   totalMessages,
   selectedCount,
   estimatedTokens,
@@ -78,6 +79,7 @@ export function ContextPickerToolbar({
         <button
           type="button"
           onClick={onSelectAll}
+          aria-label="Select all messages"
           className="px-2 py-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 border border-blue-300/50 dark:border-blue-800/50 rounded-md hover:bg-blue-100/50 dark:hover:bg-blue-900/30 cursor-pointer transition-colors"
         >
           Select All
@@ -85,6 +87,7 @@ export function ContextPickerToolbar({
         <button
           type="button"
           onClick={onDeselectAll}
+          aria-label="Deselect all messages"
           className="px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-muted cursor-pointer transition-colors"
         >
           Deselect All
@@ -92,6 +95,7 @@ export function ContextPickerToolbar({
         <button
           type="button"
           onClick={onInvert}
+          aria-label="Invert message selection"
           className="px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-muted cursor-pointer transition-colors"
         >
           Invert
@@ -110,4 +114,4 @@ export function ContextPickerToolbar({
       </div>
     </div>
   );
-}
+});

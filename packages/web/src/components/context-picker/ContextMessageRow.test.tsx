@@ -296,10 +296,10 @@ describe('ContextMessageRow', () => {
       expect(forkBtn).toBeDefined();
     });
 
-    it('checkbox is readOnly (controlled via onClick)', () => {
+    it('checkbox is controlled via onClick (not readOnly)', () => {
       renderRow();
       const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
-      expect(checkbox.readOnly).toBe(true);
+      expect(checkbox.readOnly).toBe(false);
     });
   });
 });

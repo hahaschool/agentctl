@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 export type ContextSummaryBarProps = {
@@ -21,7 +22,7 @@ function formatCost(tokens: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
-export function ContextSummaryBar({
+export const ContextSummaryBar = React.memo(function ContextSummaryBar({
   selectedCount,
   estimatedTokens,
   hideToolResults,
@@ -70,4 +71,4 @@ export function ContextSummaryBar({
       </div>
     </div>
   );
-}
+});

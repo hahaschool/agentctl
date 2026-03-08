@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import type { Session } from '@/lib/api';
 import { MODEL_OPTIONS_WITH_DEFAULT } from '@/lib/model-options';
 import { cn } from '@/lib/utils';
@@ -39,7 +40,7 @@ const STRATEGY_MAP: Record<string, StrategyDisplay> = {
   },
 };
 
-export function ForkConfigPanel({
+export const ForkConfigPanel = React.memo(function ForkConfigPanel({
   session,
   forkPrompt,
   onForkPromptChange,
@@ -86,7 +87,7 @@ export function ForkConfigPanel({
             id="fork-model"
             value={model}
             onChange={(e) => onModelChange(e.target.value)}
-            aria-label="Model"
+            aria-label="Fork session model"
             className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors"
           >
             {MODEL_OPTIONS_WITH_DEFAULT.map((opt) => (
@@ -138,4 +139,4 @@ export function ForkConfigPanel({
       </div>
     </div>
   );
-}
+});

@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import type { SessionContentMessage } from '@/lib/api';
 import { getMessageStyle } from '@/lib/message-styles';
 import { cn } from '@/lib/utils';
@@ -33,7 +34,7 @@ function getContentPreview(message: SessionContentMessage): string {
   return truncate(message.content, 120);
 }
 
-export function ContextMessageRow({
+export const ContextMessageRow = React.memo(function ContextMessageRow({
   message,
   index,
   checked,
@@ -71,7 +72,7 @@ export function ContextMessageRow({
       <input
         type="checkbox"
         checked={checked}
-        readOnly
+        onChange={() => {}}
         onClick={handleCheckboxClick}
         className="mt-0.5 accent-blue-500 shrink-0 cursor-pointer"
         aria-label={`Select message ${String(index + 1)}`}
@@ -104,4 +105,4 @@ export function ContextMessageRow({
       </button>
     </div>
   );
-}
+});
