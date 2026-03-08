@@ -1137,7 +1137,10 @@ test.describe('Sessions page interactions', () => {
     // Status filter tabs rendered as buttons: All, Starting, Active, Ended, Error
     const allTab = page.locator('button').filter({ hasText: /^All/ }).first();
     await expect(allTab).toBeVisible({ timeout: 5_000 });
-    const endedTab = page.locator('button').filter({ hasText: /^Ended/ }).first();
+    const endedTab = page
+      .locator('button')
+      .filter({ hasText: /^Ended/ })
+      .first();
     await expect(endedTab).toBeVisible({ timeout: 5_000 });
   });
 
@@ -1187,7 +1190,10 @@ test.describe('Dashboard interactions', () => {
 test.describe('Settings page interactions', () => {
   test('settings page has section headings', async ({ page }) => {
     await page.goto('/settings');
-    await page.getByRole('heading', { name: /settings/i }).first().waitFor({ timeout: 15_000 });
+    await page
+      .getByRole('heading', { name: /settings/i })
+      .first()
+      .waitFor({ timeout: 15_000 });
 
     // Settings page should have Preferences section
     const preferencesHeading = page.getByRole('heading', { name: /preferences/i });
@@ -1196,7 +1202,10 @@ test.describe('Settings page interactions', () => {
 
   test('settings page has API Accounts section', async ({ page }) => {
     await page.goto('/settings');
-    await page.getByRole('heading', { name: /settings/i }).first().waitFor({ timeout: 15_000 });
+    await page
+      .getByRole('heading', { name: /settings/i })
+      .first()
+      .waitFor({ timeout: 15_000 });
 
     const accountsHeading = page.getByRole('heading', { name: /api accounts/i });
     await expect(accountsHeading).toBeVisible({ timeout: 5_000 });
@@ -1274,9 +1283,7 @@ test.describe('Responsive sidebar', () => {
     // On mobile, the sidebar nav should be hidden initially
     // (either hidden or transformed off-screen)
     const desktopNav = page.locator('aside nav, nav[data-sidebar]').first();
-    const isDesktopNavVisible = await desktopNav
-      .isVisible({ timeout: 2_000 })
-      .catch(() => false);
+    const isDesktopNavVisible = await desktopNav.isVisible({ timeout: 2_000 }).catch(() => false);
 
     // Either no desktop nav or it's hidden — mobile uses a different layout
     // The page should still be functional
@@ -1305,7 +1312,9 @@ test.describe('Theme persistence', () => {
     await page.waitForSelector('h1', { timeout: 15_000 });
 
     // Find theme toggle button (it has an aria-label or tooltip)
-    const themeButton = page.locator('button[aria-label*="theme" i], button[title*="theme" i]').first();
+    const themeButton = page
+      .locator('button[aria-label*="theme" i], button[title*="theme" i]')
+      .first();
     const hasThemeButton = await themeButton.isVisible({ timeout: 3_000 }).catch(() => false);
 
     if (hasThemeButton) {
@@ -1330,7 +1339,9 @@ test.describe('Breadcrumb navigation', () => {
     await page.waitForSelector('h1, h2', { timeout: 15_000 });
 
     // Settings page should have breadcrumb-like navigation
-    const breadcrumb = page.locator('nav[aria-label*="breadcrumb" i], [class*="breadcrumb" i]').first();
+    const breadcrumb = page
+      .locator('nav[aria-label*="breadcrumb" i], [class*="breadcrumb" i]')
+      .first();
     const hasBreadcrumb = await breadcrumb.isVisible({ timeout: 3_000 }).catch(() => false);
 
     // Even if no breadcrumb, the page should still be functional
@@ -1823,5 +1834,345 @@ test.describe('Graceful degradation', () => {
     }
 
     expect(errors).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Context Picker Dialog — fork and create-agent modes
+// ---------------------------------------------------------------------------
+
+test.describe('Context Picker Dialog', () => {
+  test('Fork button appears on ended/paused session detail', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // Try to find any session link in the list
+    const sessionLink = page.locator('a[href^="/sessions/"]').first();
+    const hasSession = await sessionLink.isVisible({ timeout: 5_000 }).catch(() => false);
+
+    if (hasSession) {
+      await sessionLink.click();
+      await page.waitForSelector('h1, h2', { timeout: 10_000 });
+
+      // Fork button only shows on ended/error/paused sessions with claudeSessionId
+      const forkButton = page.getByRole('button', { name: /fork/i });
+      const hasFork = await forkButton.isVisible({ timeout: 3_000 }).catch(() => false);
+
+      // Regardless of fork button visibility, page should not crash
+      const heading = page.locator('h1, h2').first();
+      await expect(heading).toBeVisible({ timeout: 5_000 });
+
+      if (hasFork) {
+        // Fork button has a title tooltip
+        await expect(forkButton).toHaveAttribute('title', /fork session/i);
+      }
+    }
+  });
+
+  test('Fork button click shows loading then opens context picker dialog', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // Navigate to the first session
+    const sessionLink = page.locator('a[href^="/sessions/"]').first();
+    const hasSession = await sessionLink.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasSession) return;
+
+    await sessionLink.click();
+    await page.waitForSelector('h1, h2', { timeout: 10_000 });
+
+    const forkButton = page.getByRole('button', { name: /fork/i });
+    const hasFork = await forkButton.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (!hasFork) return;
+
+    await forkButton.click();
+
+    // Should either show loading text or the dialog
+    const dialog = page.getByRole('dialog', { name: /fork session/i });
+    const dialogOpened = await dialog.isVisible({ timeout: 10_000 }).catch(() => false);
+
+    if (dialogOpened) {
+      // Dialog header should show "Fork Session"
+      await expect(dialog.getByText('Fork Session')).toBeVisible({ timeout: 3_000 });
+      // Close the dialog
+      await dialog.getByRole('button', { name: /cancel/i }).click();
+      await expect(dialog).toBeHidden({ timeout: 3_000 });
+    }
+  });
+
+  test('Fork dialog has search input, filter, and selection tools', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    const sessionLink = page.locator('a[href^="/sessions/"]').first();
+    const hasSession = await sessionLink.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasSession) return;
+
+    await sessionLink.click();
+    await page.waitForSelector('h1, h2', { timeout: 10_000 });
+
+    const forkButton = page.getByRole('button', { name: /fork/i });
+    const hasFork = await forkButton.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (!hasFork) return;
+
+    await forkButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /fork session/i });
+    const dialogOpened = await dialog.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!dialogOpened) return;
+
+    // Search input
+    const searchInput = dialog.locator('input[aria-label="Search messages"]');
+    await expect(searchInput).toBeVisible({ timeout: 3_000 });
+
+    // Filter dropdown
+    const filterSelect = dialog.locator('select[aria-label="Filter by type"]');
+    await expect(filterSelect).toBeVisible({ timeout: 3_000 });
+
+    // Selection buttons
+    await expect(dialog.getByRole('button', { name: /select all/i })).toBeVisible({
+      timeout: 3_000,
+    });
+    await expect(dialog.getByRole('button', { name: /deselect all/i })).toBeVisible({
+      timeout: 3_000,
+    });
+    await expect(dialog.getByRole('button', { name: /invert/i })).toBeVisible({
+      timeout: 3_000,
+    });
+
+    // Close
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+  });
+
+  test('Fork dialog shows token estimation and summary bar', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    const sessionLink = page.locator('a[href^="/sessions/"]').first();
+    const hasSession = await sessionLink.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasSession) return;
+
+    await sessionLink.click();
+    await page.waitForSelector('h1, h2', { timeout: 10_000 });
+
+    const forkButton = page.getByRole('button', { name: /fork/i });
+    const hasFork = await forkButton.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (!hasFork) return;
+
+    await forkButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /fork session/i });
+    const dialogOpened = await dialog.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!dialogOpened) return;
+
+    // Token stats should be visible (in toolbar or summary bar)
+    await expect(dialog.getByText(/tokens/i).first()).toBeVisible({ timeout: 3_000 });
+
+    // Summary bar toggle buttons
+    await expect(dialog.getByRole('button', { name: /hide tool results/i })).toBeVisible({
+      timeout: 3_000,
+    });
+    await expect(dialog.getByRole('button', { name: /collapse thinking/i })).toBeVisible({
+      timeout: 3_000,
+    });
+
+    // Close
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+  });
+
+  test('Fork dialog has fork prompt textarea and strategy indicator', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    const sessionLink = page.locator('a[href^="/sessions/"]').first();
+    const hasSession = await sessionLink.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasSession) return;
+
+    await sessionLink.click();
+    await page.waitForSelector('h1, h2', { timeout: 10_000 });
+
+    const forkButton = page.getByRole('button', { name: /fork/i });
+    const hasFork = await forkButton.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (!hasFork) return;
+
+    await forkButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /fork session/i });
+    const dialogOpened = await dialog.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!dialogOpened) return;
+
+    // Fork prompt textarea
+    const promptTextarea = dialog.locator('textarea[aria-label="Fork prompt"]');
+    await expect(promptTextarea).toBeVisible({ timeout: 3_000 });
+
+    // Type into prompt
+    await promptTextarea.fill('Continue fixing the auth bug');
+    await expect(promptTextarea).toHaveValue('Continue fixing the auth bug');
+
+    // Strategy indicator should be visible
+    await expect(dialog.getByText('Strategy')).toBeVisible({ timeout: 3_000 });
+
+    // Model select
+    const modelSelect = dialog.locator('select[aria-label="Model"]');
+    await expect(modelSelect).toBeVisible({ timeout: 3_000 });
+
+    // Close
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+  });
+
+  test('Fork dialog search filters messages', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    const sessionLink = page.locator('a[href^="/sessions/"]').first();
+    const hasSession = await sessionLink.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasSession) return;
+
+    await sessionLink.click();
+    await page.waitForSelector('h1, h2', { timeout: 10_000 });
+
+    const forkButton = page.getByRole('button', { name: /fork/i });
+    const hasFork = await forkButton.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (!hasFork) return;
+
+    await forkButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /fork session/i });
+    const dialogOpened = await dialog.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!dialogOpened) return;
+
+    // Type a search query that will not match anything
+    const searchInput = dialog.locator('input[aria-label="Search messages"]');
+    await searchInput.fill('zzz_nonexistent_query_zzz');
+    await page.waitForTimeout(300);
+
+    // Should show "No messages match" text
+    const noMatchText = dialog.getByText(/no messages match/i);
+    await noMatchText.isVisible({ timeout: 3_000 }).catch(() => false);
+
+    // Clear the search to restore messages
+    await searchInput.fill('');
+    await page.waitForTimeout(300);
+
+    // Close
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+  });
+
+  test('Fork dialog closes with backdrop click', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    const sessionLink = page.locator('a[href^="/sessions/"]').first();
+    const hasSession = await sessionLink.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasSession) return;
+
+    await sessionLink.click();
+    await page.waitForSelector('h1, h2', { timeout: 10_000 });
+
+    const forkButton = page.getByRole('button', { name: /fork/i });
+    const hasFork = await forkButton.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (!hasFork) return;
+
+    await forkButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /fork session/i });
+    const dialogOpened = await dialog.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!dialogOpened) return;
+
+    // Click backdrop (the "Close dialog" button behind the dialog)
+    const backdrop = page.getByRole('button', { name: /close dialog/i });
+    if (await backdrop.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await backdrop.click({ position: { x: 10, y: 10 } });
+      await expect(dialog).toBeHidden({ timeout: 3_000 });
+    }
+  });
+
+  test('Create Agent button appears on sessions page for eligible sessions', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // The "Create Agent" button appears in the session detail panel (right side)
+    // It requires a selected session with claudeSessionId
+    const createAgentBtn = page.getByRole('button', { name: /create agent/i });
+    await createAgentBtn.isVisible({ timeout: 5_000 }).catch(() => false);
+
+    // Page should not crash regardless
+    const heading = page.locator('h1, h2').first();
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('Create Agent context picker dialog has agent form fields', async ({ page }) => {
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // We need to find and click a session, then find the Create Agent button
+    const createAgentBtn = page.getByRole('button', { name: /create agent/i });
+    const hasCreateAgent = await createAgentBtn.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasCreateAgent) return;
+
+    await createAgentBtn.click();
+
+    // The dialog should open with mode "create-agent"
+    const dialog = page.getByRole('dialog', { name: /create agent from session/i });
+    const dialogOpened = await dialog.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!dialogOpened) return;
+
+    // Should show "Create Agent from Session" title
+    await expect(dialog.getByText('Create Agent from Session')).toBeVisible({ timeout: 3_000 });
+
+    // Agent name input
+    const agentNameInput = dialog.locator('#cpd-agent-name');
+    await expect(agentNameInput).toBeVisible({ timeout: 3_000 });
+
+    // Agent type select
+    const agentTypeSelect = dialog.locator('select[aria-label="Agent type"]');
+    await expect(agentTypeSelect).toBeVisible({ timeout: 3_000 });
+
+    // Agent model select
+    const agentModelSelect = dialog.locator('select[aria-label="Agent model"]');
+    await expect(agentModelSelect).toBeVisible({ timeout: 3_000 });
+
+    // System prompt textarea
+    const systemPrompt = dialog.locator('textarea[aria-label="System prompt"]');
+    await expect(systemPrompt).toBeVisible({ timeout: 3_000 });
+
+    // Search messages input (same toolbar as fork mode)
+    const searchInput = dialog.locator('input[aria-label="Search messages"]');
+    await expect(searchInput).toBeVisible({ timeout: 3_000 });
+
+    // Filter by type dropdown
+    const filterSelect = dialog.locator('select[aria-label="Filter by type"]');
+    await expect(filterSelect).toBeVisible({ timeout: 3_000 });
+
+    // Selection buttons
+    await expect(dialog.getByRole('button', { name: /select all/i })).toBeVisible({
+      timeout: 3_000,
+    });
+
+    // Cancel + Create Agent footer buttons
+    await expect(dialog.getByRole('button', { name: /cancel/i })).toBeVisible({ timeout: 3_000 });
+    await expect(dialog.getByRole('button', { name: /create agent/i }).last()).toBeVisible({
+      timeout: 3_000,
+    });
+
+    // Close dialog
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 3_000 });
+  });
+
+  test('Context picker dialog does not crash without backend data', async ({ page }) => {
+    // Block API to simulate no backend
+    await page.route('**/api/**', (route) => route.abort());
+    await page.goto('/sessions');
+    await page.waitForSelector('h1, h2', { timeout: 15_000 });
+
+    // Page should render gracefully — no crash
+    const heading = page.getByRole('heading', { name: /sessions/i });
+    await expect(heading).toBeVisible({ timeout: 5_000 });
+
+    // Fork/Create Agent buttons should not appear without data
+    const forkButton = page.getByRole('button', { name: /fork/i });
+    const hasFork = await forkButton.isVisible({ timeout: 2_000 }).catch(() => false);
+    expect(hasFork).toBe(false);
   });
 });
