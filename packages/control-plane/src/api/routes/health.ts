@@ -1,4 +1,5 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, checkWithTimeout } from '@agentctl/shared';
+import type { DependencyStatus } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -12,12 +13,6 @@ export type HealthRoutesOptions = {
   redis?: { ping: () => Promise<string> };
   mem0Client?: Mem0Client;
   litellmClient?: LiteLLMClient;
-};
-
-type DependencyStatus = {
-  status: 'ok' | 'error';
-  latencyMs: number;
-  error?: string;
 };
 
 type MemoryUsage = {
@@ -40,36 +35,6 @@ type HealthResponse = {
   };
 };
 
-/**
- * Execute a health check with a timeout. Returns a DependencyStatus indicating
- * success or failure along with the measured latency.
- */
-async function checkWithTimeout(name: string, fn: () => Promise<void>): Promise<DependencyStatus> {
-  const start = performance.now();
-
-  try {
-    await Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => {
-        setTimeout(
-          () =>
-            reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
-          HEALTH_CHECK_TIMEOUT_MS,
-        );
-      }),
-    ]);
-
-    return { status: 'ok', latencyMs: Math.round(performance.now() - start) };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      status: 'error',
-      latencyMs: Math.round(performance.now() - start),
-      error: message,
-    };
-  }
-}
-
 const OK_STATUS: DependencyStatus = { status: 'ok', latencyMs: 0 };
 
 export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app, opts) => {
@@ -88,12 +53,12 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
       db
         ? checkWithTimeout('postgres', async () => {
             await db.execute(sql`SELECT 1`);
-          })
+          }, HEALTH_CHECK_TIMEOUT_MS)
         : Promise.resolve(OK_STATUS),
       redis
         ? checkWithTimeout('redis', async () => {
             await redis.ping();
-          })
+          }, HEALTH_CHECK_TIMEOUT_MS)
         : Promise.resolve(OK_STATUS),
       mem0Client
         ? checkWithTimeout('mem0', async () => {
@@ -104,7 +69,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
                 'Mem0 health endpoint returned non-OK',
                 { component: 'mem0' },
               );
-          })
+          }, HEALTH_CHECK_TIMEOUT_MS)
         : Promise.resolve(OK_STATUS),
       litellmClient
         ? checkWithTimeout('litellm', async () => {
@@ -115,7 +80,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
                 'LiteLLM health endpoint returned non-OK',
                 { component: 'litellm' },
               );
-          })
+          }, HEALTH_CHECK_TIMEOUT_MS)
         : Promise.resolve(OK_STATUS),
     ]) as Promise<
       [
