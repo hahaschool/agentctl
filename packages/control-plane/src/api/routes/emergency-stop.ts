@@ -126,7 +126,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
         results.push({ machineId, stoppedCount: data.stoppedCount ?? 0 });
       });
 
-      await Promise.all(proxyPromises);
+      await Promise.allSettled(proxyPromises);
 
       app.log.error({ results }, 'Emergency stop ALL completed across all machines');
 

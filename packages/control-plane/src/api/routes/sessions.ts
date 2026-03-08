@@ -1397,7 +1397,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
         // Cleanup on client disconnect
         request.raw.on('close', () => {
-          reader.cancel().catch(() => {});
+          reader.cancel().catch((cancelErr) => {
+            app.log.debug({ err: cancelErr instanceof Error ? cancelErr.message : String(cancelErr) }, 'Stream reader cancel on disconnect');
+          });
         });
       } catch (err) {
         const errMessage = err instanceof Error ? err.message : String(err);
