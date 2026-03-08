@@ -12,7 +12,7 @@ import type { Logger } from 'pino';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
-import { proxyWorkerRequest } from '../proxy-worker-request.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type TerminalRouteOptions = {
@@ -48,11 +48,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
 
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -132,11 +128,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
 
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -160,11 +152,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
 
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -199,11 +187,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
 
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -227,11 +211,7 @@ export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = asy
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
 
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 

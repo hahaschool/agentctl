@@ -7,6 +7,9 @@ import {
   IME_COMPOSITION_GUARD_MS,
   INLINE_ATTACHMENT_LIMIT,
   MAX_ATTACHMENT_SIZE_BYTES,
+  MESSAGE_TRUNCATE_THRESHOLD,
+  MESSAGE_WINDOWING_THRESHOLD,
+  SESSION_CONTENT_PAGE_SIZE,
 } from './ui-constants';
 
 describe('ui-constants', () => {
@@ -37,5 +40,20 @@ describe('ui-constants', () => {
   it('IME_COMPOSITION_GUARD_MS is a positive number', () => {
     expect(IME_COMPOSITION_GUARD_MS).toBeGreaterThan(0);
     expect(typeof IME_COMPOSITION_GUARD_MS).toBe('number');
+  });
+
+  it('SESSION_CONTENT_PAGE_SIZE is a positive number', () => {
+    expect(SESSION_CONTENT_PAGE_SIZE).toBeGreaterThan(0);
+    expect(typeof SESSION_CONTENT_PAGE_SIZE).toBe('number');
+  });
+
+  it('MESSAGE_TRUNCATE_THRESHOLD is a positive number', () => {
+    expect(MESSAGE_TRUNCATE_THRESHOLD).toBeGreaterThan(0);
+    expect(typeof MESSAGE_TRUNCATE_THRESHOLD).toBe('number');
+  });
+
+  it('MESSAGE_WINDOWING_THRESHOLD is a positive number', () => {
+    expect(MESSAGE_WINDOWING_THRESHOLD).toBeGreaterThan(0);
+    expect(typeof MESSAGE_WINDOWING_THRESHOLD).toBe('number');
   });
 });

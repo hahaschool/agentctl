@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { LOOP_PROXY_TIMEOUT_MS } from '../constants.js';
-import { proxyWorkerRequest } from '../proxy-worker-request.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
 
 export type LoopRoutesOptions = {
@@ -75,11 +75,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         body: request.body,
         timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -120,11 +116,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         body: request.body,
         timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -155,11 +147,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         method: 'DELETE',
         timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -190,11 +178,7 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         method: 'GET',
         timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 };

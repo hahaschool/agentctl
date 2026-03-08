@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { proxyWorkerRequest } from './proxy-worker-request.js';
+import type { FastifyReply } from 'fastify';
+
+import {
+  type ProxyWorkerResult,
+  proxyWorkerRequest,
+  replyWithProxyResult,
+} from './proxy-worker-request.js';
 
 describe('proxyWorkerRequest', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -385,5 +391,61 @@ describe('proxyWorkerRequest', () => {
     const callArgs = vi.mocked(globalThis.fetch).mock.calls[0];
     const requestInit = callArgs[1] as RequestInit;
     expect(requestInit.signal).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// replyWithProxyResult
+// ---------------------------------------------------------------------------
+
+describe('replyWithProxyResult', () => {
+  function createMockReply(): FastifyReply {
+    const reply = {
+      status: vi.fn().mockReturnThis(),
+      send: vi.fn().mockReturnThis(),
+    } as unknown as FastifyReply;
+    return reply;
+  }
+
+  it('sends error fields for a failure result', () => {
+    const reply = createMockReply();
+    const result: ProxyWorkerResult = {
+      ok: false,
+      status: 502,
+      error: 'WORKER_UNREACHABLE',
+      message: 'connection refused',
+    };
+
+    replyWithProxyResult(reply, result);
+
+    expect(reply.status).toHaveBeenCalledWith(502);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: 'WORKER_UNREACHABLE',
+      message: 'connection refused',
+    });
+  });
+
+  it('sends data for a success result', () => {
+    const reply = createMockReply();
+    const result: ProxyWorkerResult = {
+      ok: true,
+      status: 200,
+      data: { sessions: [] },
+    };
+
+    replyWithProxyResult(reply, result);
+
+    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(reply.send).toHaveBeenCalledWith({ sessions: [] });
+  });
+
+  it('preserves non-200 success status codes', () => {
+    const reply = createMockReply();
+    const result: ProxyWorkerResult = { ok: true, status: 201, data: { id: 'new' } };
+
+    replyWithProxyResult(reply, result);
+
+    expect(reply.status).toHaveBeenCalledWith(201);
+    expect(reply.send).toHaveBeenCalledWith({ id: 'new' });
   });
 });

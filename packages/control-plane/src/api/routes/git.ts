@@ -10,7 +10,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
-import { proxyWorkerRequest } from '../proxy-worker-request.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type GitProxyRoutesOptions = {
@@ -56,11 +56,7 @@ export const gitProxyRoutes: FastifyPluginAsync<GitProxyRoutesOptions> = async (
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
 
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 };

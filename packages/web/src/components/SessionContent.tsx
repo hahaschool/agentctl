@@ -11,6 +11,7 @@ import type { SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import { formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
+import { MESSAGE_TRUNCATE_THRESHOLD, SESSION_CONTENT_PAGE_SIZE } from '../lib/ui-constants';
 import { AnsiSpan, AnsiText } from './AnsiText';
 import { ErrorBanner } from './ErrorBanner';
 import { MarkdownContent } from './MarkdownContent';
@@ -37,7 +38,6 @@ export function SessionContent({
   isActive?: boolean;
   lastSentMessage?: { text: string; ts: number } | null;
 }): React.JSX.Element {
-  const PAGE_SIZE = 200;
   const { addNotification } = useNotificationContext();
   const addNotificationRef = useRef(addNotification);
   addNotificationRef.current = addNotification;
@@ -108,12 +108,12 @@ export function SessionContent({
       const result = await api.getSessionContent(sessionId, {
         machineId,
         projectPath,
-        limit: PAGE_SIZE,
+        limit: SESSION_CONTENT_PAGE_SIZE,
       });
       setTotalMessages(result.totalMessages);
       // If we had older messages loaded, keep them and replace the tail
       setAllMessages((prev) => {
-        const olderCount = Math.max(0, prev.length - PAGE_SIZE);
+        const olderCount = Math.max(0, prev.length - SESSION_CONTENT_PAGE_SIZE);
         const olderMessages = prev.slice(0, olderCount);
         return [...olderMessages, ...result.messages];
       });
@@ -141,7 +141,7 @@ export function SessionContent({
       const result = await api.getSessionContent(sessionId, {
         machineId,
         projectPath,
-        limit: PAGE_SIZE,
+        limit: SESSION_CONTENT_PAGE_SIZE,
         offset,
       });
       setTotalMessages(result.totalMessages);
@@ -608,8 +608,6 @@ export function SessionContent({
   );
 }
 
-const TRUNCATE_THRESHOLD = 800;
-
 export function InlineMessage({
   message,
   renderMarkdown,
@@ -624,9 +622,9 @@ export function InlineMessage({
   const isTool = message.type === 'tool_use' || message.type === 'tool_result';
   const isRenderable = renderMarkdown && (message.type === 'assistant' || message.type === 'human');
   const content = message.content ?? '';
-  const isLong = content.length > TRUNCATE_THRESHOLD;
+  const isLong = content.length > MESSAGE_TRUNCATE_THRESHOLD;
   const displayContent =
-    isLong && !expanded ? `${content.slice(0, TRUNCATE_THRESHOLD)}...` : content;
+    isLong && !expanded ? `${content.slice(0, MESSAGE_TRUNCATE_THRESHOLD)}...` : content;
 
   return (
     <div

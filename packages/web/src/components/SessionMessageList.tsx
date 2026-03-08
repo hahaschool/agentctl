@@ -8,7 +8,7 @@ import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionContentMessage } from '../lib/api';
 import { formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
-import { COPY_FEEDBACK_MS } from '../lib/ui-constants';
+import { COPY_FEEDBACK_MS, MESSAGE_WINDOWING_THRESHOLD } from '../lib/ui-constants';
 import { AnsiSpan, AnsiText } from './AnsiText';
 import { ErrorBanner } from './ErrorBanner';
 import { MarkdownContent } from './MarkdownContent';
@@ -155,8 +155,7 @@ export function MessageList({
   const WINDOW_SIZE = 50;
   const OVERSCAN = 10;
   const EST_MSG_HEIGHT = 60; // estimated px per message
-  const WINDOWING_THRESHOLD = 200;
-  const shouldWindow = searchFiltered.length > WINDOWING_THRESHOLD;
+  const shouldWindow = searchFiltered.length > MESSAGE_WINDOWING_THRESHOLD;
   const [windowEnd, setWindowEnd] = useState(searchFiltered.length);
   const windowDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

@@ -15,3 +15,12 @@ export const CONTENT_INVALIDATION_DELAY_MS = 500;
 
 /** Delay (ms) after compositionend before clearing the IME guard flag. */
 export const IME_COMPOSITION_GUARD_MS = 100;
+
+/** Number of session content messages to fetch per page in session detail views. */
+export const SESSION_CONTENT_PAGE_SIZE = 200;
+
+/** Character threshold above which long message content is truncated with "show more". */
+export const MESSAGE_TRUNCATE_THRESHOLD = 800;
+
+/** Number of messages above which the message list enables virtual windowing. */
+export const MESSAGE_WINDOWING_THRESHOLD = 200;

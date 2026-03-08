@@ -1,3 +1,5 @@
+import type { FastifyReply } from 'fastify';
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type ProxyWorkerSuccess = {
@@ -93,4 +95,18 @@ export async function proxyWorkerRequest(
   }
 
   return { ok: true, status: response.status, data };
+}
+
+/**
+ * Send a proxy worker result directly via Fastify reply.
+ *
+ * Replaces the repeated if/else pattern:
+ *   if (!result.ok) return reply.status(result.status).send({ error, message });
+ *   return reply.status(result.status).send(result.data);
+ */
+export function replyWithProxyResult(reply: FastifyReply, result: ProxyWorkerResult): FastifyReply {
+  if (!result.ok) {
+    return reply.status(result.status).send({ error: result.error, message: result.message });
+  }
+  return reply.status(result.status).send(result.data);
 }
