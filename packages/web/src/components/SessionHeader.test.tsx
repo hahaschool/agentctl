@@ -165,6 +165,18 @@ vi.mock('../hooks/use-hotkeys', () => ({
   useHotkeys: vi.fn(),
 }));
 
+const mockGetSessionContent = vi.fn();
+
+vi.mock('../lib/api', () => ({
+  api: {
+    getSessionContent: (...args: unknown[]) => mockGetSessionContent(...args),
+  },
+}));
+
+vi.mock('./context-picker', () => ({
+  ContextPickerDialog: () => null,
+}));
+
 // ---------------------------------------------------------------------------
 // Component import (AFTER mocks)
 // ---------------------------------------------------------------------------
@@ -235,6 +247,7 @@ beforeEach(() => {
   mockToast.success.mockReset();
   mockToast.error.mockReset();
   mockUseQueryClient.invalidateQueries.mockReset();
+  mockGetSessionContent.mockReset();
   mockAccountsData.length = 0;
 });
 
@@ -541,7 +554,8 @@ describe('SessionHeader', () => {
       expect(screen.queryByText('Fork')).toBeNull();
     });
 
-    it('shows fork input when Fork button is clicked', () => {
+    it('calls api.getSessionContent when Fork button is clicked', async () => {
+      mockGetSessionContent.mockResolvedValue({ messages: [] });
       renderHeader({
         session: makeSession({
           status: 'ended',
@@ -550,31 +564,24 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      expect(screen.getByPlaceholderText('Prompt for the forked session...')).toBeDefined();
-      expect(screen.getByText('Fork Session')).toBeDefined();
+
+      await vi.waitFor(() => {
+        expect(mockGetSessionContent).toHaveBeenCalledTimes(1);
+        expect(mockGetSessionContent).toHaveBeenCalledWith('claude-sess-abc', {
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+          limit: 10000,
+        });
+      });
     });
 
-    it('calls forkSession.mutate with prompt on fork submit', () => {
-      renderHeader({
-        session: makeSession({
-          status: 'ended',
-          claudeSessionId: 'claude-sess-abc',
-          endedAt: '2026-03-06T01:00:00Z',
+    it('shows Loading... text while fetching messages', async () => {
+      let resolvePromise: (val: { messages: SessionContentMessage[] }) => void = () => {};
+      mockGetSessionContent.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePromise = resolve;
         }),
-      });
-      fireEvent.click(screen.getByText('Fork'));
-      const input = screen.getByPlaceholderText('Prompt for the forked session...');
-      fireEvent.change(input, { target: { value: 'Continue the work' } });
-      fireEvent.click(screen.getByText('Fork Session'));
-
-      expect(mockForkMutate).toHaveBeenCalledTimes(1);
-      expect(mockForkMutate).toHaveBeenCalledWith(
-        { id: 'sess-1234567890abcdef1234567890abcdef', prompt: 'Continue the work', strategy: 'resume' },
-        expect.any(Object),
       );
-    });
-
-    it('does not fork with empty prompt', () => {
       renderHeader({
         session: makeSession({
           status: 'ended',
@@ -583,12 +590,17 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      fireEvent.click(screen.getByText('Fork Session'));
 
-      expect(mockForkMutate).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(screen.getByText('Loading...')).toBeDefined();
+      });
+
+      // Resolve to clean up
+      resolvePromise({ messages: [] });
     });
 
-    it('does not fork with whitespace-only prompt', () => {
+    it('shows error toast when message loading fails', async () => {
+      mockGetSessionContent.mockRejectedValue(new Error('Network error'));
       renderHeader({
         session: makeSession({
           status: 'ended',
@@ -597,24 +609,10 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      const input = screen.getByPlaceholderText('Prompt for the forked session...');
-      fireEvent.change(input, { target: { value: '   ' } });
-      fireEvent.click(screen.getByText('Fork Session'));
 
-      expect(mockForkMutate).not.toHaveBeenCalled();
-    });
-
-    it('Fork Session button is disabled when prompt is empty', () => {
-      renderHeader({
-        session: makeSession({
-          status: 'ended',
-          claudeSessionId: 'claude-sess-abc',
-          endedAt: '2026-03-06T01:00:00Z',
-        }),
+      await vi.waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith('Failed to load session messages');
       });
-      fireEvent.click(screen.getByText('Fork'));
-      const btn = screen.getByText('Fork Session') as HTMLButtonElement;
-      expect(btn.disabled).toBe(true);
     });
   });
 
@@ -983,37 +981,17 @@ describe('SessionHeader', () => {
   });
 
   // -----------------------------------------------------------------------
-  // 17. Fork error warnings
+  // 17. Fork opens ContextPickerDialog (old inline fork warnings are now in the dialog)
   // -----------------------------------------------------------------------
 
-  describe('fork error warnings', () => {
-    it('shows quota warning for error sessions with quota-related errors', () => {
-      renderHeader({
-        session: makeSession({
-          status: 'error',
-          claudeSessionId: 'claude-sess-abc',
-          endedAt: '2026-03-06T01:00:00Z',
-          metadata: { errorMessage: 'Rate limit exceeded' },
+  describe('fork context picker integration', () => {
+    it('Fork button is disabled while messages are loading', async () => {
+      let resolvePromise: (val: { messages: SessionContentMessage[] }) => void = () => {};
+      mockGetSessionContent.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePromise = resolve;
         }),
-      });
-      fireEvent.click(screen.getByText('Fork'));
-      expect(screen.getByText(/quota or authentication issues/)).toBeDefined();
-    });
-
-    it('shows general error warning for error sessions with non-quota errors', () => {
-      renderHeader({
-        session: makeSession({
-          status: 'error',
-          claudeSessionId: 'claude-sess-abc',
-          endedAt: '2026-03-06T01:00:00Z',
-          metadata: { errorMessage: 'Process crashed unexpectedly' },
-        }),
-      });
-      fireEvent.click(screen.getByText('Fork'));
-      expect(screen.getByText(/ended with an error.*forked session may also fail/)).toBeDefined();
-    });
-
-    it('does not show error warning for ended (non-error) sessions', () => {
+      );
       renderHeader({
         session: makeSession({
           status: 'ended',
@@ -1022,47 +1000,26 @@ describe('SessionHeader', () => {
         }),
       });
       fireEvent.click(screen.getByText('Fork'));
-      expect(screen.queryByText(/quota or authentication/)).toBeNull();
-      expect(screen.queryByText(/ended with an error/)).toBeNull();
+
+      await vi.waitFor(() => {
+        const btn = screen.getByText('Loading...') as HTMLButtonElement;
+        expect(btn.disabled).toBe(true);
+      });
+
+      resolvePromise({ messages: [] });
     });
-  });
 
-  // -----------------------------------------------------------------------
-  // 18. Fork via Enter key
-  // -----------------------------------------------------------------------
-
-  describe('fork via keyboard', () => {
-    it('submits fork on Enter keypress in the fork input', () => {
+    it('does not call api when claudeSessionId is missing', () => {
       renderHeader({
         session: makeSession({
           status: 'ended',
-          claudeSessionId: 'claude-sess-abc',
+          claudeSessionId: null,
           endedAt: '2026-03-06T01:00:00Z',
         }),
       });
-      fireEvent.click(screen.getByText('Fork'));
-      const input = screen.getByPlaceholderText('Prompt for the forked session...');
-      fireEvent.change(input, { target: { value: 'Continue work' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-
-      expect(mockForkMutate).toHaveBeenCalledTimes(1);
-    });
-
-    it('closes fork input on Escape keypress', () => {
-      renderHeader({
-        session: makeSession({
-          status: 'ended',
-          claudeSessionId: 'claude-sess-abc',
-          endedAt: '2026-03-06T01:00:00Z',
-        }),
-      });
-      fireEvent.click(screen.getByText('Fork'));
-      expect(screen.getByPlaceholderText('Prompt for the forked session...')).toBeDefined();
-
-      const input = screen.getByPlaceholderText('Prompt for the forked session...');
-      fireEvent.keyDown(input, { key: 'Escape' });
-
-      expect(screen.queryByPlaceholderText('Prompt for the forked session...')).toBeNull();
+      // Fork button should not even appear
+      expect(screen.queryByText('Fork')).toBeNull();
+      expect(mockGetSessionContent).not.toHaveBeenCalled();
     });
   });
 });

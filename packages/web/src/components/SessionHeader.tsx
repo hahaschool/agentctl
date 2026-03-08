@@ -14,10 +14,13 @@ import { COPY_FEEDBACK_MS } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
+import { api } from '../lib/api';
 import { formatNumber } from '../lib/format-utils';
 import { accountsQuery, queryKeys, useDeleteSession, useForkSession } from '../lib/queries';
 import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-export';
 import { ConfirmButton } from './ConfirmButton';
+import type { ForkSubmitConfig } from './context-picker';
+import { ContextPickerDialog } from './context-picker';
 import { GitStatusBadge } from './GitStatusBadge';
 import { LastUpdated } from './LastUpdated';
 import { LiveDuration } from './LiveDuration';
@@ -225,8 +228,9 @@ export function SessionHeader({
   const forkSession = useForkSession();
   const queryClient = useQueryClient();
   const accounts = useQuery(accountsQuery());
-  const [forkPrompt, setForkPrompt] = useState('');
-  const [showFork, setShowFork] = useState(false);
+  const [showContextPicker, setShowContextPicker] = useState(false);
+  const [contextPickerMessages, setContextPickerMessages] = useState<SessionContentMessage[]>([]);
+  const [contextPickerLoading, setContextPickerLoading] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
@@ -241,12 +245,12 @@ export function SessionHeader({
     if (!escapeRef) return;
     escapeRef.current = () => {
       if (showExportMenu) setShowExportMenu(false);
-      if (showFork) {
-        setShowFork(false);
-        setForkPrompt('');
+      if (showContextPicker) {
+        setShowContextPicker(false);
+        setContextPickerMessages([]);
       }
     };
-  }, [escapeRef, showExportMenu, showFork]);
+  }, [escapeRef, showExportMenu, showContextPicker]);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -270,24 +274,55 @@ export function SessionHeader({
     });
   }, [session.id, deleteSession, toast, queryClient]);
 
-  const handleFork = useCallback(() => {
-    if (!forkPrompt.trim()) return;
-    forkSession.mutate(
-      { id: session.id, prompt: forkPrompt.trim(), strategy: 'resume' as const },
-      {
-        onSuccess: (data) => {
-          toast.success(`Forked! New session: ${data.sessionId.slice(0, 12)}...`);
-          setShowFork(false);
-          setForkPrompt('');
-          // Navigate to the new session after a brief delay to let the toast appear
-          setTimeout(() => {
-            router.push(`/sessions/${data.sessionId}`);
-          }, 500);
+  const handleOpenForkPicker = useCallback(async () => {
+    if (!session.claudeSessionId || !session.machineId) return;
+    setContextPickerLoading(true);
+    try {
+      const result = await api.getSessionContent(session.claudeSessionId, {
+        machineId: session.machineId,
+        projectPath: session.projectPath ?? undefined,
+        limit: 10000,
+      });
+      setContextPickerMessages(result.messages);
+      setShowContextPicker(true);
+    } catch {
+      toast.error('Failed to load session messages');
+    } finally {
+      setContextPickerLoading(false);
+    }
+  }, [session, toast]);
+
+  const handleForkSubmit = useCallback(
+    (config: ForkSubmitConfig) => {
+      forkSession.mutate(
+        {
+          id: session.id,
+          prompt: config.prompt,
+          model: config.model,
+          strategy: config.strategy,
+          forkAtIndex: config.forkAtIndex,
+          selectedMessages: config.selectedMessages?.map((m) => ({
+            type: m.type,
+            content: m.content,
+            toolName: m.toolName,
+            timestamp: m.timestamp,
+          })),
         },
-        onError: (err) => toast.error(err.message),
-      },
-    );
-  }, [session.id, forkPrompt, forkSession, toast, router]);
+        {
+          onSuccess: (data) => {
+            toast.success(`Forked! New session: ${data.sessionId.slice(0, 12)}...`);
+            setShowContextPicker(false);
+            setContextPickerMessages([]);
+            setTimeout(() => {
+              router.push(`/sessions/${data.sessionId}`);
+            }, 500);
+          },
+          onError: (err) => toast.error(err.message),
+        },
+      );
+    },
+    [session.id, forkSession, toast, router],
+  );
 
   const canFork =
     !!session.claudeSessionId &&
@@ -297,10 +332,10 @@ export function SessionHeader({
     useMemo(
       () => ({
         f: () => {
-          if (canFork) setShowFork((prev) => !prev);
+          if (canFork) void handleOpenForkPicker();
         },
       }),
-      [canFork],
+      [canFork, handleOpenForkPicker],
     ),
   );
 
@@ -398,11 +433,12 @@ export function SessionHeader({
           {canFork && (
             <button
               type="button"
-              onClick={() => setShowFork(!showFork)}
+              onClick={() => void handleOpenForkPicker()}
+              disabled={contextPickerLoading}
               title="Fork session (F)"
-              className="px-3 py-1 bg-blue-100/50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-300/50 dark:border-blue-800/50 rounded-md text-xs cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900"
+              className="px-3 py-1 bg-blue-100/50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-300/50 dark:border-blue-800/50 rounded-md text-xs cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900 disabled:opacity-50"
             >
-              Fork
+              {contextPickerLoading ? 'Loading...' : 'Fork'}
             </button>
           )}
           {(session.status === 'active' || session.status === 'starting') && (
@@ -418,54 +454,19 @@ export function SessionHeader({
         </div>
       </div>
 
-      {/* Fork input */}
-      {showFork && (
-        <div className="mb-2 space-y-2">
-          <div className="flex gap-2 items-end">
-            <input
-              type="text"
-              value={forkPrompt}
-              onChange={(e) => setForkPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleFork();
-                if (e.key === 'Escape') {
-                  setShowFork(false);
-                  setForkPrompt('');
-                }
-              }}
-              placeholder="Prompt for the forked session..."
-              aria-label="Prompt for forked session"
-              className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-[12px] outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-            />
-            <button
-              type="button"
-              onClick={handleFork}
-              disabled={!forkPrompt.trim() || forkSession.isPending}
-              className="px-3 py-1.5 bg-blue-700 text-white rounded-md text-xs cursor-pointer disabled:opacity-50"
-            >
-              {forkSession.isPending ? 'Forking...' : 'Fork Session'}
-            </button>
-          </div>
-          {session.status === 'error' &&
-            (() => {
-              const errMsg = (session.metadata?.errorMessage ?? '').toLowerCase();
-              const isQuotaOrAuth = /quota|rate.?limit|authentication|unauthorized|key\b/.test(
-                errMsg,
-              );
-              return isQuotaOrAuth ? (
-                <div className="px-3 py-2 bg-red-100/30 dark:bg-red-900/30 border border-red-300/50 dark:border-red-700/50 rounded-md text-[11px] text-red-700 dark:text-red-300">
-                  This session failed due to quota or authentication issues. Resolve the underlying
-                  issue before forking.
-                </div>
-              ) : (
-                <div className="px-3 py-2 bg-yellow-100/30 dark:bg-yellow-900/30 border border-yellow-300/50 dark:border-yellow-700/50 rounded-md text-[11px] text-yellow-700 dark:text-yellow-300">
-                  This session ended with an error. The forked session may also fail if the error is
-                  unresolved.
-                </div>
-              );
-            })()}
-        </div>
-      )}
+      {/* Fork context picker dialog */}
+      <ContextPickerDialog
+        mode="fork"
+        session={session}
+        messages={contextPickerMessages}
+        open={showContextPicker}
+        onClose={() => {
+          setShowContextPicker(false);
+          setContextPickerMessages([]);
+        }}
+        onForkSubmit={handleForkSubmit}
+        isSubmitting={forkSession.isPending}
+      />
 
       {/* Metadata row */}
       <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">

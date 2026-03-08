@@ -8,9 +8,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { CreateSessionForm } from '../components/CreateSessionForm';
+import { ContextPickerDialog } from '../components/context-picker';
 import { EmptyState } from '../components/EmptyState';
 import { FetchingBar } from '../components/FetchingBar';
-import { ForkContextPicker } from '../components/ForkContextPicker';
 import { LastUpdated } from '../components/LastUpdated';
 import { RefreshButton } from '../components/RefreshButton';
 import { SessionDetailPanel } from '../components/SessionDetailPanel';
@@ -132,7 +132,7 @@ export function SessionsPage(): React.JSX.Element {
   const [convertType, setConvertType] = useState('autonomous');
   const createAgent = useCreateAgent();
 
-  // ForkContextPicker modal state
+  // ContextPickerDialog modal state
   const [showForkPicker, setShowForkPicker] = useState(false);
   const [forkPickerMessages, setForkPickerMessages] = useState<SessionContentMessage[]>([]);
   const [forkPickerLoading, setForkPickerLoading] = useState(false);
@@ -437,7 +437,7 @@ export function SessionsPage(): React.JSX.Element {
     try {
       const result = await api.getSessionContent(selected.claudeSessionId, {
         machineId: selected.machineId,
-        limit: 200,
+        limit: 10000,
         projectPath: selected.projectPath ?? undefined,
       });
       setForkPickerMessages(result.messages);
@@ -968,9 +968,10 @@ export function SessionsPage(): React.JSX.Element {
         )}
       </div>
 
-      {/* ForkContextPicker modal */}
+      {/* ContextPickerDialog — create-agent mode */}
       {selected && (
-        <ForkContextPicker
+        <ContextPickerDialog
+          mode="create-agent"
           session={selected}
           messages={forkPickerMessages}
           open={showForkPicker}
@@ -978,7 +979,7 @@ export function SessionsPage(): React.JSX.Element {
             setShowForkPicker(false);
             setForkPickerMessages([]);
           }}
-          onSubmit={handleForkSubmit}
+          onCreateAgentSubmit={handleForkSubmit}
           isSubmitting={createAgent.isPending}
         />
       )}

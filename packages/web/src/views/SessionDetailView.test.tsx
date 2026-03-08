@@ -209,8 +209,14 @@ vi.mock('@/components/TodoBlock', () => ({
   TodoBlock: ({ content }: { content: string }) => <div data-testid="todo-block">{content}</div>,
 }));
 
-vi.mock('@/components/ForkContextPicker', () => ({
-  ForkContextPicker: () => <div data-testid="fork-context-picker" />,
+vi.mock('@/components/context-picker', () => ({
+  ContextPickerDialog: () => <div data-testid="context-picker-dialog" />,
+}));
+
+vi.mock('@/lib/api', () => ({
+  api: {
+    getSessionContent: vi.fn().mockResolvedValue({ messages: [] }),
+  },
 }));
 
 vi.mock('@/lib/queries', () => ({
@@ -832,7 +838,7 @@ describe('SessionDetailView', () => {
     expect(screen.queryByText('Fork')).toBeNull();
   });
 
-  it('shows fork input with prompt field when Fork button is clicked', async () => {
+  it('calls api.getSessionContent when Fork button is clicked', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
       queryFn: vi.fn().mockResolvedValue(
@@ -851,9 +857,10 @@ describe('SessionDetailView', () => {
 
     fireEvent.click(screen.getByText('Fork'));
 
+    // The Fork button now opens the ContextPickerDialog after loading messages
+    const { api } = await import('@/lib/api');
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Prompt for the forked session...')).toBeDefined();
-      expect(screen.getByText('Fork Session')).toBeDefined();
+      expect(api.getSessionContent).toHaveBeenCalled();
     });
   });
 
@@ -1238,7 +1245,7 @@ describe('SessionDetailView', () => {
     });
   });
 
-  it('shows error warning when forking an error session due to quota', async () => {
+  it('shows Fork button for error sessions (context picker handles warnings)', async () => {
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
       queryFn: vi.fn().mockResolvedValue(
@@ -1253,36 +1260,6 @@ describe('SessionDetailView', () => {
     renderView();
     await waitFor(() => {
       expect(screen.getByText('Fork')).toBeDefined();
-    });
-
-    fireEvent.click(screen.getByText('Fork'));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Resolve the underlying issue before forking/)).toBeDefined();
-    });
-  });
-
-  it('shows general error warning when forking a non-quota error session', async () => {
-    mockSessionQuery.mockReturnValue({
-      queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(
-        createSession({
-          status: 'error',
-          claudeSessionId: 'claude-ses-abc',
-          metadata: { errorMessage: 'Something went wrong' },
-        }),
-      ),
-    });
-
-    renderView();
-    await waitFor(() => {
-      expect(screen.getByText('Fork')).toBeDefined();
-    });
-
-    fireEvent.click(screen.getByText('Fork'));
-
-    await waitFor(() => {
-      expect(screen.getByText(/The forked session may also fail/)).toBeDefined();
     });
   });
 
