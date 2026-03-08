@@ -273,7 +273,7 @@ export function SessionHeader({
   const handleFork = useCallback(() => {
     if (!forkPrompt.trim()) return;
     forkSession.mutate(
-      { id: session.id, prompt: forkPrompt.trim() },
+      { id: session.id, prompt: forkPrompt.trim(), strategy: 'resume' as const },
       {
         onSuccess: (data) => {
           toast.success(`Forked! New session: ${data.sessionId.slice(0, 12)}...`);

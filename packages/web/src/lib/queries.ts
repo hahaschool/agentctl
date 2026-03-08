@@ -326,7 +326,22 @@ export function useDeleteSession() {
 export function useForkSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.forkSession(id, prompt),
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      prompt: string;
+      model?: string;
+      strategy?: 'jsonl-truncation' | 'context-injection' | 'resume';
+      forkAtIndex?: number;
+      selectedMessages?: Array<{
+        type: string;
+        content: string;
+        toolName?: string;
+        timestamp?: string;
+      }>;
+    }) => api.forkSession(id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },

@@ -377,10 +377,24 @@ export const api = {
     }),
   deleteSession: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
-  forkSession: (id: string, prompt: string) =>
+  forkSession: (
+    id: string,
+    body: {
+      prompt: string;
+      model?: string;
+      strategy?: 'jsonl-truncation' | 'context-injection' | 'resume';
+      forkAtIndex?: number;
+      selectedMessages?: Array<{
+        type: string;
+        content: string;
+        toolName?: string;
+        timestamp?: string;
+      }>;
+    },
+  ) =>
     request<{ ok: boolean; sessionId: string; session: Session; forkedFrom: string }>(
       `/api/sessions/${id}/fork`,
-      { method: 'POST', body: JSON.stringify({ prompt }) },
+      { method: 'POST', body: JSON.stringify(body) },
     ),
   discoverSessions: () =>
     request<{

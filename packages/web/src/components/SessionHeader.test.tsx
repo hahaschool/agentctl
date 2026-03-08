@@ -569,7 +569,7 @@ describe('SessionHeader', () => {
 
       expect(mockForkMutate).toHaveBeenCalledTimes(1);
       expect(mockForkMutate).toHaveBeenCalledWith(
-        { id: 'sess-1234567890abcdef1234567890abcdef', prompt: 'Continue the work' },
+        { id: 'sess-1234567890abcdef1234567890abcdef', prompt: 'Continue the work', strategy: 'resume' },
         expect.any(Object),
       );
     });

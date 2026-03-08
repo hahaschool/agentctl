@@ -350,7 +350,7 @@ describe('api.forkSession', () => {
     const responsePayload = { ok: true, sessionId: 'forked', session: {}, forkedFrom: 's1' };
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse(responsePayload));
 
-    const result = await api.forkSession('s1', 'try different approach');
+    const result = await api.forkSession('s1', { prompt: 'try different approach' });
 
     const [url, init] = lastFetchCall();
     expect(url).toBe('/api/sessions/s1/fork');
