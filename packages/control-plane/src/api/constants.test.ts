@@ -4,8 +4,10 @@ import {
   BATCH_LIMITS,
   clampLimit,
   EMERGENCY_STOP_TIMEOUT_MS,
+  HEALTH_CHECK_TIMEOUT_MS,
   LOOP_PROXY_TIMEOUT_MS,
   PAGINATION,
+  SESSION_DISCOVER_TIMEOUT_MS,
   WORKER_REQUEST_TIMEOUT_MS,
   WS_HEARTBEAT_INTERVAL_MS,
 } from './constants.js';
@@ -85,12 +87,22 @@ describe('timeout constants', () => {
     expect(WS_HEARTBEAT_INTERVAL_MS).toBe(30_000);
   });
 
+  it('HEALTH_CHECK_TIMEOUT_MS is 2 seconds', () => {
+    expect(HEALTH_CHECK_TIMEOUT_MS).toBe(2_000);
+  });
+
+  it('SESSION_DISCOVER_TIMEOUT_MS is 5 seconds', () => {
+    expect(SESSION_DISCOVER_TIMEOUT_MS).toBe(5_000);
+  });
+
   it('all timeouts are positive finite numbers', () => {
     for (const ms of [
       WORKER_REQUEST_TIMEOUT_MS,
       LOOP_PROXY_TIMEOUT_MS,
       EMERGENCY_STOP_TIMEOUT_MS,
       WS_HEARTBEAT_INTERVAL_MS,
+      HEALTH_CHECK_TIMEOUT_MS,
+      SESSION_DISCOVER_TIMEOUT_MS,
     ]) {
       expect(ms).toBeGreaterThan(0);
       expect(Number.isFinite(ms)).toBe(true);

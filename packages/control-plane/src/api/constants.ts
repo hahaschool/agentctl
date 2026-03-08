@@ -55,3 +55,9 @@ export const EMERGENCY_STOP_TIMEOUT_MS = 15_000;
 
 /** Heartbeat interval for WebSocket and SSE connections. */
 export const WS_HEARTBEAT_INTERVAL_MS = 30_000;
+
+/** Timeout for dependency health checks (DB, Redis, Mem0, LiteLLM). */
+export const HEALTH_CHECK_TIMEOUT_MS = 2_000;
+
+/** Timeout for session discovery requests to workers. */
+export const SESSION_DISCOVER_TIMEOUT_MS = 5_000;

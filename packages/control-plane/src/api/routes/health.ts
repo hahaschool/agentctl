@@ -5,8 +5,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Database } from '../../db/index.js';
 import type { Mem0Client } from '../../memory/mem0-client.js';
 import type { LiteLLMClient } from '../../router/litellm-client.js';
-
-const HEALTH_CHECK_TIMEOUT_MS = 2_000;
+import { HEALTH_CHECK_TIMEOUT_MS } from '../constants.js';
 
 export type HealthRoutesOptions = {
   db?: Database;

@@ -9,11 +9,8 @@ import { agents as agentsTable, apiAccounts, rcSessions, settings } from '../../
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
-import { clampLimit, PAGINATION, WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
-import { proxyWorkerRequest } from '../proxy-worker-request.js';
-
-const DISCOVER_TIMEOUT_MS = 5_000;
-const CONTENT_TIMEOUT_MS = 10_000;
+import { clampLimit, PAGINATION, SESSION_DISCOVER_TIMEOUT_MS, WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
 /** Matches a valid UUID v4 string. Used to skip non-UUID agentIds like 'adhoc'. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -151,7 +148,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             : `${workerBaseUrl}/api/sessions/discover`;
 
           const response = await fetch(discoverUrl, {
-            signal: AbortSignal.timeout(DISCOVER_TIMEOUT_MS),
+            signal: AbortSignal.timeout(SESSION_DISCOVER_TIMEOUT_MS),
           });
 
           if (!response.ok) {
@@ -260,7 +257,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       try {
         const workerResponse = await fetch(contentUrl, {
-          signal: AbortSignal.timeout(CONTENT_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!workerResponse.ok) {
