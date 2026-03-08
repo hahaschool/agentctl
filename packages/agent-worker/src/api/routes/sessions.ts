@@ -5,9 +5,9 @@
 // Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
 // ---------------------------------------------------------------------------
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
@@ -51,6 +51,8 @@ type CreateSessionBody = {
   resumeSessionId?: string | null;
   accountCredential?: string | null;
   accountProvider?: string | null;
+  forkAtIndex?: number;
+  systemPrompt?: string;
 };
 
 type ResumeSessionBody = {
@@ -516,6 +518,8 @@ export async function sessionRoutes(
       resumeSessionId,
       accountCredential,
       accountProvider,
+      forkAtIndex,
+      systemPrompt: bodySystemPrompt,
     } = request.body;
 
     if (!agentId || typeof agentId !== 'string') {
@@ -532,15 +536,62 @@ export async function sessionRoutes(
       });
     }
 
+    // Handle JSONL truncation fork: copy + truncate parent JSONL
+    let effectiveResumeSessionId = resumeSessionId;
+
+    if (forkAtIndex !== undefined && forkAtIndex >= 0 && resumeSessionId) {
+      const parentJsonlPath = findSessionJsonl(resumeSessionId, projectPath);
+      if (parentJsonlPath) {
+        const raw = readFileSync(parentJsonlPath, 'utf-8');
+        const allLines = raw.split('\n').filter((l) => l.trim());
+
+        // Count parsed messages to determine where to truncate
+        let msgCount = 0;
+        const truncatedLines: string[] = [];
+        for (const line of allLines) {
+          try {
+            const parsed = JSON.parse(line);
+            const msgs = parseJsonlEntry(parsed);
+            truncatedLines.push(line);
+            msgCount += msgs.length;
+            if (msgCount > forkAtIndex) break;
+          } catch {
+            truncatedLines.push(line); // Keep unparseable lines
+          }
+        }
+
+        // Write truncated JSONL next to parent
+        const dir = dirname(parentJsonlPath);
+        const newJsonlPath = join(dir, `${cpSessionId}.jsonl`);
+        writeFileSync(newJsonlPath, `${truncatedLines.join('\n')}\n`);
+
+        // Resume from the truncated copy (which uses the CP session ID)
+        effectiveResumeSessionId = cpSessionId;
+        logger.info(
+          {
+            sessionId: cpSessionId,
+            parentJsonlPath,
+            newJsonlPath,
+            forkAtIndex,
+            linesKept: truncatedLines.length,
+          },
+          'Created truncated JSONL fork',
+        );
+      } else {
+        logger.warn({ resumeSessionId, projectPath }, 'Parent JSONL not found for truncation fork');
+      }
+    }
+
     try {
       const session = sessionManager.startSession({
         agentId,
         projectPath,
         prompt: prompt ?? 'Continue working.',
         model: model ?? undefined,
-        resumeSessionId: resumeSessionId ?? undefined,
+        resumeSessionId: effectiveResumeSessionId ?? undefined,
         accountCredential: accountCredential ?? undefined,
         accountProvider: accountProvider ?? undefined,
+        ...(bodySystemPrompt ? { config: { systemPrompt: bodySystemPrompt } } : {}),
       });
 
       // Store CP→worker session ID mapping for status callbacks

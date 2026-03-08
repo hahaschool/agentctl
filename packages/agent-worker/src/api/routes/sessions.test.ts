@@ -25,6 +25,7 @@ vi.mock('node:fs', async (importOriginal) => {
     statSync: vi.fn(actual.statSync),
     readFileSync: vi.fn(actual.readFileSync),
     readdirSync: vi.fn(actual.readdirSync),
+    writeFileSync: vi.fn(),
   };
 });
 
@@ -36,7 +37,7 @@ vi.mock('node:os', async (importOriginal) => {
   };
 });
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 // ---------------------------------------------------------------------------
@@ -353,6 +354,195 @@ describe('Worker session routes', () => {
         accountCredential: 'bedrock-profile-prod',
         accountProvider: 'bedrock',
       });
+    });
+  });
+
+  // ── POST / — JSONL truncation fork ────────────────────────────
+
+  describe('POST / — JSONL truncation fork', () => {
+    const FAKE_HOME = '/fake-home';
+    const PROJECT_PATH = '/home/user/myproject';
+    const ENCODED_PATH = PROJECT_PATH.replace(/\//g, '-');
+    const PARENT_CLAUDE_ID = 'parent-claude-session-id';
+    const JSONL_DIR = `${FAKE_HOME}/.claude/projects/${ENCODED_PATH}`;
+    const PARENT_JSONL = `${JSONL_DIR}/${PARENT_CLAUDE_ID}.jsonl`;
+
+    function setupTruncationMocks(opts: { fileContent: string }): void {
+      vi.mocked(homedir).mockReturnValue(FAKE_HOME);
+
+      vi.mocked(existsSync).mockImplementation((p: string | URL) => {
+        const path = String(p);
+        if (path === `${FAKE_HOME}/.claude/projects`) return true;
+        if (path === PARENT_JSONL) return true;
+        return false;
+      });
+
+      vi.mocked(readFileSync).mockImplementation((p: string | URL | number) => {
+        if (String(p) === PARENT_JSONL) return opts.fileContent;
+        throw new Error(`ENOENT: ${String(p)}`);
+      });
+
+      vi.mocked(readdirSync).mockReturnValue([]);
+    }
+
+    afterEach(() => {
+      vi.mocked(existsSync).mockReset();
+      vi.mocked(readFileSync).mockReset();
+      vi.mocked(writeFileSync).mockReset();
+      vi.mocked(readdirSync).mockReset();
+      vi.mocked(homedir).mockReset();
+    });
+
+    it('truncates JSONL and uses new session ID for resume when forkAtIndex provided', async () => {
+      const lines = [
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: 'Hello' }] },
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'Hi there' }] },
+        }),
+        JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: 'Fix bug' }] },
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'Done' }] },
+        }),
+      ].join('\n');
+
+      setupTruncationMocks({ fileContent: lines });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'fork-session-1',
+          agentId: 'agent-1',
+          projectPath: PROJECT_PATH,
+          prompt: 'Continue from message 2',
+          resumeSessionId: PARENT_CLAUDE_ID,
+          forkAtIndex: 2,
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+
+      // Should have written a truncated JSONL file
+      expect(writeFileSync).toHaveBeenCalledTimes(1);
+      const [writePath, writeContent] = vi.mocked(writeFileSync).mock.calls[0] as [string, string];
+      expect(writePath).toBe(`${JSONL_DIR}/fork-session-1.jsonl`);
+
+      // The truncated content should contain fewer lines than the original
+      const writtenLines = (writeContent as string).trim().split('\n');
+      expect(writtenLines.length).toBeLessThanOrEqual(4);
+      expect(writtenLines.length).toBeGreaterThanOrEqual(1);
+
+      // The session should be started with the fork session ID as resumeSessionId
+      expect(manager.startSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeSessionId: 'fork-session-1',
+        }),
+      );
+    });
+
+    it('does not truncate when forkAtIndex is not provided (backward compat)', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'no-fork-session',
+          agentId: 'agent-1',
+          projectPath: PROJECT_PATH,
+          prompt: 'Normal resume',
+          resumeSessionId: PARENT_CLAUDE_ID,
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(writeFileSync).not.toHaveBeenCalled();
+
+      // Should use original resumeSessionId
+      expect(manager.startSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeSessionId: PARENT_CLAUDE_ID,
+        }),
+      );
+    });
+
+    it('falls back to original resumeSessionId when parent JSONL not found', async () => {
+      vi.mocked(homedir).mockReturnValue(FAKE_HOME);
+      vi.mocked(existsSync).mockReturnValue(false);
+      vi.mocked(readdirSync).mockReturnValue([]);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'fork-no-jsonl',
+          agentId: 'agent-1',
+          projectPath: PROJECT_PATH,
+          prompt: 'Fork with missing JSONL',
+          resumeSessionId: PARENT_CLAUDE_ID,
+          forkAtIndex: 3,
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(writeFileSync).not.toHaveBeenCalled();
+
+      // Should fall back to original resumeSessionId
+      expect(manager.startSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeSessionId: PARENT_CLAUDE_ID,
+        }),
+      );
+    });
+  });
+
+  // ── POST / — systemPrompt injection ─────────────────────────────
+
+  describe('POST / — systemPrompt injection', () => {
+    it('passes systemPrompt as config.systemPrompt to session manager', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'ctx-inject-1',
+          agentId: 'agent-1',
+          projectPath: '/tmp/project',
+          prompt: 'Continue with context',
+          systemPrompt: '## Previous Conversation Context\n\n### User\nFix the bug',
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(manager.startSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: {
+            systemPrompt: '## Previous Conversation Context\n\n### User\nFix the bug',
+          },
+        }),
+      );
+    });
+
+    it('does not pass config when systemPrompt is not provided', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: 'no-ctx-1',
+          agentId: 'agent-1',
+          projectPath: '/tmp/project',
+          prompt: 'Normal session',
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const callArgs = vi.mocked(manager.startSession).mock.calls[0][0] as Record<string, unknown>;
+      expect(callArgs.config).toBeUndefined();
     });
   });
 
