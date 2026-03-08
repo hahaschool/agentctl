@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentPool } from '../runtime/agent-pool.js';
+import { createSilentLogger } from '../test-helpers.js';
 import { createWorkerServer } from './server.js';
 
 // Mock the SDK runner so agents fall back to stub simulation immediately
@@ -26,10 +27,6 @@ vi.mock('../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-server';
 
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
-
 // ---------------------------------------------------------------------------
 // Global error handler — WorkerError, AgentError, validation, generic errors
 // ---------------------------------------------------------------------------
@@ -40,7 +37,7 @@ describe('Global error handler', () => {
   let logger: pino.Logger;
 
   beforeEach(async () => {
-    logger = createMockLogger();
+    logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
 
@@ -351,7 +348,7 @@ describe('workerErrorToStatus mapping via error handler', () => {
   let logger: pino.Logger;
 
   beforeEach(async () => {
-    logger = createMockLogger();
+    logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
 
@@ -414,7 +411,7 @@ describe('Health endpoint — no controlPlaneUrl', () => {
   let logger: pino.Logger;
 
   beforeEach(async () => {
-    logger = createMockLogger();
+    logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 5 });
     app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
     await app.ready();
@@ -471,7 +468,7 @@ describe('Route registration', () => {
   let logger: pino.Logger;
 
   beforeEach(async () => {
-    logger = createMockLogger();
+    logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
     await app.ready();

@@ -1,7 +1,7 @@
 import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSilentLogger } from '../../test-helpers.js';
 import { fileRoutes } from './files.js';
 
 // ---------------------------------------------------------------------------
@@ -28,10 +28,6 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
-
 /**
  * Build a minimal Fastify app with just the file routes registered.
  * Includes a simple error handler that maps WorkerError codes to HTTP status.
@@ -56,7 +52,7 @@ async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(fileRoutes, {
     prefix: '/api/files',
-    logger: createMockLogger(),
+    logger: createSilentLogger(),
   });
 
   return app;

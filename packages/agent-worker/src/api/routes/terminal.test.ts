@@ -1,9 +1,9 @@
 import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TerminalManager } from '../../runtime/terminal-manager.js';
+import { createSilentLogger } from '../../test-helpers.js';
 import { terminalRoutes } from './terminal.js';
 
 // ---------------------------------------------------------------------------
@@ -31,10 +31,6 @@ vi.mock('node-pty', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
-
 /**
  * Build a minimal Fastify app with just the terminal routes registered.
  * Includes a simple error handler that maps WorkerError codes to HTTP status.
@@ -45,7 +41,7 @@ async function buildApp(
   const Fastify = await import('fastify');
   const app = Fastify.default({ logger: false });
 
-  const logger = createMockLogger();
+  const logger = createSilentLogger();
   const terminalManager = new TerminalManager({ logger, maxTerminals });
 
   // Replicate the error handler from server.ts so WorkerErrors get proper HTTP codes

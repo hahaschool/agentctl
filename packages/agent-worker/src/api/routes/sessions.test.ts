@@ -1,7 +1,6 @@
 import { EventEmitter } from 'node:events';
 
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -10,6 +9,7 @@ import type {
   CliSessionStatus,
   DiscoveredSession,
 } from '../../runtime/cli-session-manager.js';
+import { createSilentLogger } from '../../test-helpers.js';
 import { parseJsonlEntry, sessionRoutes } from './sessions.js';
 
 // ---------------------------------------------------------------------------
@@ -44,10 +44,6 @@ import { homedir } from 'node:os';
 // ---------------------------------------------------------------------------
 
 const MACHINE_ID = 'test-worker-001';
-
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
 
 function makeSession(overrides?: Partial<CliSession>): CliSession {
   return {
@@ -145,7 +141,7 @@ async function buildApp(
     prefix: '/api/sessions',
     sessionManager,
     machineId: MACHINE_ID,
-    logger: createMockLogger(),
+    logger: createSilentLogger(),
   });
 
   return app;

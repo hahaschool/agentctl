@@ -1,7 +1,7 @@
 import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSilentLogger } from '../../test-helpers.js';
 import { gitRoutes } from './git.js';
 
 // ---------------------------------------------------------------------------
@@ -22,10 +22,6 @@ import { statSync } from 'node:fs';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
 
 async function buildApp(): Promise<FastifyInstance> {
   const Fastify = await import('fastify');
@@ -51,7 +47,7 @@ async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(gitRoutes, {
     prefix: '/api/git',
-    logger: createMockLogger(),
+    logger: createSilentLogger(),
   });
 
   return app;

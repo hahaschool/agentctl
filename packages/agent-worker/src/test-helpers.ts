@@ -3,7 +3,9 @@
  *
  * Eliminates duplicated mock logger factories across hook, runtime, and IPC tests.
  */
+
 import type { Logger } from 'pino';
+import pino from 'pino';
 import { vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -24,4 +26,9 @@ export function createMockLogger(): Logger {
     level: 'silent',
   } as unknown as Logger;
   return logger;
+}
+
+/** Create a real silent pino logger for route integration tests. */
+export function createSilentLogger(): pino.Logger {
+  return pino({ level: 'silent' });
 }

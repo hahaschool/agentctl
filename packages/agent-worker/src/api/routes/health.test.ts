@@ -1,10 +1,10 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AgentPool } from '../../runtime/agent-pool.js';
+import { createSilentLogger } from '../../test-helpers.js';
 import { createWorkerServer } from '../server.js';
 
 // Mock the SDK runner so agents fall back to stub simulation immediately
@@ -27,10 +27,6 @@ vi.mock('../../hooks/audit-logger.js', () => {
 });
 
 const MACHINE_ID = 'test-machine-health';
-
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
 
 // ── Control plane reachable ──────────────────────────────────────────────
 describe('GET /health (control plane reachable)', () => {
@@ -58,7 +54,7 @@ describe('GET /health (control plane reachable)', () => {
     const addr = fakeServer.address() as AddressInfo;
     fakeServerUrl = `http://127.0.0.1:${addr.port}`;
 
-    const logger = createMockLogger();
+    const logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     app = await createWorkerServer({
       logger,
@@ -130,7 +126,7 @@ describe('GET /health (control plane unreachable)', () => {
   let pool: AgentPool;
 
   beforeAll(async () => {
-    const logger = createMockLogger();
+    const logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     // Point to a port that nothing is listening on
     app = await createWorkerServer({
@@ -213,7 +209,7 @@ describe('GET /health (control plane returns HTTP error)', () => {
     const addr = fakeServer.address() as AddressInfo;
     fakeServerUrl = `http://127.0.0.1:${addr.port}`;
 
-    const logger = createMockLogger();
+    const logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     app = await createWorkerServer({
       logger,
@@ -288,7 +284,7 @@ describe('GET /health (no control plane configured)', () => {
   let pool: AgentPool;
 
   beforeAll(async () => {
-    const logger = createMockLogger();
+    const logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     app = await createWorkerServer({
       logger,
