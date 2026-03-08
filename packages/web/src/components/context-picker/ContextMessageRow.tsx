@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { SessionContentMessage } from '@/lib/api';
+import { truncate } from '@/lib/format-utils';
 import { getMessageStyle } from '@/lib/message-styles';
 import { cn } from '@/lib/utils';
 
@@ -14,11 +15,6 @@ export type ContextMessageRowProps = {
   onShiftClick: (index: number) => void;
   style?: React.CSSProperties;
 };
-
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen)}...`;
-}
 
 function formatTime(timestamp: string): string {
   const d = new Date(timestamp);

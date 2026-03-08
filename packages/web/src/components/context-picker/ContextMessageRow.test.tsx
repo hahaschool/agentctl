@@ -237,10 +237,10 @@ describe('ContextMessageRow', () => {
       const longContent = 'A'.repeat(200);
       renderRow({ message: makeMessage({ content: longContent }) });
 
-      const truncated = screen.getByText(/^A+\.\.\.$/);
+      const truncated = screen.getByText(/^A+\u2026$/);
       expect(truncated).toBeDefined();
-      // 120 chars of A + "..."
-      expect(truncated.textContent).toBe(`${'A'.repeat(120)}...`);
+      // 119 chars of A + unicode ellipsis (shared truncate uses maxLen - 1)
+      expect(truncated.textContent).toBe(`${'A'.repeat(119)}\u2026`);
     });
 
     it('does not truncate short content', () => {
