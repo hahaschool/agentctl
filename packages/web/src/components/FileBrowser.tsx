@@ -454,6 +454,7 @@ export const FileBrowser = React.memo(function FileBrowser({
                         ref={textareaRef}
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
+                        aria-label="File editor"
                         className="flex-1 py-3 pl-3 pr-3 font-mono text-[12px] whitespace-pre bg-transparent text-foreground border-none outline-none resize-none leading-5"
                         spellCheck={false}
                       />
@@ -536,7 +537,14 @@ export const FileBrowser = React.memo(function FileBrowser({
                 {/* Go up entry */}
                 {currentPath !== '/' && (
                   <tr
+                    tabIndex={0}
                     onClick={handleGoUp}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleGoUp();
+                      }
+                    }}
                     className="border-b border-border/50 hover:bg-accent/50 cursor-pointer"
                   >
                     <td className="px-3 py-1.5 text-muted-foreground" colSpan={3}>
@@ -547,7 +555,14 @@ export const FileBrowser = React.memo(function FileBrowser({
                 {entries.map((entry) => (
                   <tr
                     key={entry.name}
+                    tabIndex={0}
                     onClick={() => handleEntryClick(entry)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleEntryClick(entry);
+                      }
+                    }}
                     className={cn(
                       'border-b border-border/50 hover:bg-accent/50 cursor-pointer',
                       openFile?.path.endsWith(`/${entry.name}`) && 'bg-accent',

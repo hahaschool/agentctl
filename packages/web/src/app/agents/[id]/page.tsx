@@ -499,6 +499,10 @@ export default function AgentDetailPage(): React.JSX.Element {
                         type="button"
                         className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline mt-1"
                         onClick={() => setSystemPromptExpanded((prev) => !prev)}
+                        aria-expanded={systemPromptExpanded}
+                        aria-label={
+                          systemPromptExpanded ? 'Collapse system prompt' : 'Expand system prompt'
+                        }
                       >
                         {systemPromptExpanded ? 'Show less' : 'Show more'}
                       </button>

@@ -58,6 +58,7 @@ export function LogsDependencyCard({ name, dep }: LogsDependencyCardProps): Reac
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
+            aria-expanded={expanded}
             className="text-[11px] text-red-500 mt-1 cursor-pointer hover:underline focus-visible:outline-none focus-visible:underline bg-transparent border-none p-0 text-left"
           >
             {expanded ? 'Hide error' : 'Show error'}

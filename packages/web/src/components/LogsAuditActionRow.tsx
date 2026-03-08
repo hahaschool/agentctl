@@ -47,6 +47,7 @@ export function LogsAuditActionRow({
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={isExpanded}
         className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left bg-transparent hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-inset transition-colors cursor-pointer border-none"
       >
         {/* Action type badge */}
