@@ -8,6 +8,7 @@ import { InteractiveTerminal } from '@/components/InteractiveTerminal';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { TERMINAL_SPAWN_COLS, TERMINAL_SPAWN_ROWS } from '@/lib/ui-constants';
 
 export default function MachineTerminalPage() {
   const params = useParams<{ id: string }>();
@@ -32,7 +33,7 @@ export default function MachineTerminalPage() {
     setError(null);
     setSpawning(true);
     api
-      .spawnTerminal(machineId, { cols: 120, rows: 30 })
+      .spawnTerminal(machineId, { cols: TERMINAL_SPAWN_COLS, rows: TERMINAL_SPAWN_ROWS })
       .then((info) => {
         state.termId = info.id;
         setTerminalId(info.id);
@@ -78,6 +79,7 @@ export default function MachineTerminalPage() {
   useEffect(() => {
     return () => {
       if (terminalId) {
+        // Best-effort cleanup — component is unmounting, nowhere to report errors
         api.killTerminal(machineId, terminalId).catch(() => {});
       }
     };

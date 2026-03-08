@@ -3,6 +3,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { CONFIRM_BUTTON_TIMEOUT_MS } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -12,7 +13,7 @@ type Props = {
   confirmLabel?: string;
   /** Called when confirmed (second click) */
   onConfirm: () => void;
-  /** Time in ms before reverting to default state (default: 3000) */
+  /** Time in ms before reverting to default state (default: CONFIRM_BUTTON_TIMEOUT_MS) */
   timeout?: number;
   className?: string;
   confirmClassName?: string;
@@ -29,7 +30,7 @@ export function ConfirmButton({
   label,
   confirmLabel = 'Confirm?',
   onConfirm,
-  timeout = 3000,
+  timeout = CONFIRM_BUTTON_TIMEOUT_MS,
   className,
   confirmClassName,
   disabled = false,

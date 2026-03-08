@@ -10,6 +10,7 @@ import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
 import { formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
+import { SESSION_PREVIEW_FETCH_LIMIT } from '../lib/ui-constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,7 +58,7 @@ export function SessionPreview({
       const result = await api.getSessionContent(sessionId, {
         machineId,
         projectPath,
-        limit: 200,
+        limit: SESSION_PREVIEW_FETCH_LIMIT,
       });
       setData(result);
     } catch (err) {

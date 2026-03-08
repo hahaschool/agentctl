@@ -3,6 +3,12 @@
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
+import {
+  TOAST_DISMISS_ANIMATION_MS,
+  TOAST_DURATION_MS,
+  TOAST_ERROR_DURATION_MS,
+} from '@/lib/ui-constants';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -38,7 +44,7 @@ function emit(): void {
   for (const fn of listeners) fn();
 }
 
-function addToast(type: ToastType, message: string, duration = 5000): string {
+function addToast(type: ToastType, message: string, duration = TOAST_DURATION_MS): string {
   const id = `toast-${++nextId}`;
   toasts = [...toasts, { id, type, message, duration, createdAt: Date.now(), dismissing: false }];
   emit();
@@ -53,7 +59,7 @@ function dismissToast(id: string): void {
   setTimeout(() => {
     toasts = toasts.filter((t) => t.id !== id);
     emit();
-  }, 300);
+  }, TOAST_DISMISS_ANIMATION_MS);
 }
 
 function dismissAll(): void {
@@ -62,7 +68,7 @@ function dismissAll(): void {
   setTimeout(() => {
     toasts = [];
     emit();
-  }, 300);
+  }, TOAST_DISMISS_ANIMATION_MS);
 }
 
 function subscribe(cb: () => void): () => void {
@@ -80,7 +86,7 @@ function getSnapshot(): ToastItem[] {
 
 export const toast = {
   success: (message: string) => addToast('success', message),
-  error: (message: string) => addToast('error', message, 8000),
+  error: (message: string) => addToast('error', message, TOAST_ERROR_DURATION_MS),
   info: (message: string) => addToast('info', message),
   dismiss: () => dismissAll(),
 };
@@ -92,13 +98,13 @@ export const toast = {
 export function useToast(): ToastContextValue {
   return {
     toast(type, message) {
-      addToast(type, message, type === 'error' ? 8000 : 5000);
+      addToast(type, message, type === 'error' ? TOAST_ERROR_DURATION_MS : TOAST_DURATION_MS);
     },
     success: (message: string) => {
       addToast('success', message);
     },
     error: (message: string) => {
-      addToast('error', message, 8000);
+      addToast('error', message, TOAST_ERROR_DURATION_MS);
     },
     info: (message: string) => {
       addToast('info', message);
