@@ -48,7 +48,7 @@ describe('checkWithTimeout', () => {
     const result = await checkWithTimeout(
       'test',
       async () => {
-        throw 'raw string error'; // eslint-disable-line no-throw-literal
+        throw 'raw string error';
       },
       1_000,
     );
