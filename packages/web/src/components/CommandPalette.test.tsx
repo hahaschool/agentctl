@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CommandPalette, fuzzyScore, levenshtein } from './CommandPalette';
+import { fuzzyScore, levenshtein } from '@/lib/fuzzy-search';
+import { CommandPalette } from './CommandPalette';
 
 // ---------------------------------------------------------------------------
 // Mock next/navigation
