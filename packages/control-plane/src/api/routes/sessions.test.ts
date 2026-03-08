@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { sessionRoutes } from './sessions.js';
+import { makeMachine } from './test-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Module mocks for account credential resolution
@@ -46,20 +47,6 @@ function makeSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeMachine(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'machine-1',
-    hostname: 'test-host',
-    tailscaleIp: '100.64.0.1',
-    os: 'linux',
-    arch: 'x64',
-    status: 'online',
-    lastHeartbeat: NOW,
-    capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
-    createdAt: NOW,
-    ...overrides,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Chainable Drizzle query builder mock

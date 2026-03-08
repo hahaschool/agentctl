@@ -7,6 +7,13 @@ import { createServer } from '../api/server.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { createTaskWorker } from '../scheduler/task-worker.js';
+import {
+  createMockDbRegistry,
+  makeAgent,
+  makeMachine,
+  mockFetchFailure,
+  mockFetchSuccess,
+} from './test-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Mock bullmq — capture the processor function passed to Worker constructor
@@ -34,85 +41,8 @@ vi.mock('bullmq', () => ({
 const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
-// Helpers — factories for mock data
+// Helpers
 // ---------------------------------------------------------------------------
-
-function makeAgent(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'agent-abc',
-    machineId: 'machine-xyz',
-    name: 'Test Agent',
-    type: 'manual' as const,
-    status: 'registered' as const,
-    schedule: null,
-    projectPath: '/home/user/project',
-    worktreeBranch: null,
-    currentSessionId: null,
-    config: { model: 'claude-sonnet-4-20250514' },
-    lastRunAt: null,
-    lastCostUsd: null,
-    totalCostUsd: 0,
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function makeMachine(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'machine-xyz',
-    hostname: 'ec2-worker.tailnet',
-    tailscaleIp: '100.64.0.1',
-    os: 'linux' as const,
-    arch: 'x64' as const,
-    status: 'online' as const,
-    lastHeartbeat: new Date(),
-    capabilities: { gpu: false, docker: true, maxConcurrentAgents: 5 },
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}): DbAgentRegistry {
-  return {
-    getAgent: vi.fn().mockResolvedValue(makeAgent()),
-    getMachine: vi.fn().mockResolvedValue(makeMachine()),
-    createRun: vi.fn().mockResolvedValue('run-001'),
-    completeRun: vi.fn().mockResolvedValue(undefined),
-    registerMachine: vi.fn(),
-    heartbeat: vi.fn(),
-    listMachines: vi.fn().mockResolvedValue([]),
-    createAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    listAgents: vi.fn().mockResolvedValue([]),
-    getRecentRuns: vi.fn().mockResolvedValue([]),
-    insertActions: vi.fn(),
-    ...overrides,
-  } as unknown as DbAgentRegistry;
-}
-
-function mockFetchSuccess(body: Record<string, unknown> = { ok: true, message: 'dispatched' }) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue(body),
-      text: vi.fn().mockResolvedValue(JSON.stringify(body)),
-    }),
-  );
-}
-
-function mockFetchFailure(status = 500, body = 'Internal Server Error') {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: false,
-      status,
-      json: vi.fn().mockRejectedValue(new Error('not json')),
-      text: vi.fn().mockResolvedValue(body),
-    }),
-  );
-}
 
 function getProcessor(): ProcessorFn {
   if (!capturedProcessor) {
