@@ -10,7 +10,11 @@
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
-import { DEFAULT_MAX_TERMINALS, DEFAULT_TERMINAL_COLS, DEFAULT_TERMINAL_ROWS } from './constants.js';
+import {
+  DEFAULT_MAX_TERMINALS,
+  DEFAULT_TERMINAL_COLS,
+  DEFAULT_TERMINAL_ROWS,
+} from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Types

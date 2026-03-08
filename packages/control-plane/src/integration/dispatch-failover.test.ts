@@ -52,7 +52,6 @@ function getProcessor(): ProcessorFn {
   return capturedProcessor;
 }
 
-
 // ===========================================================================
 // Integration: multi-machine dispatch with circuit breaker failover
 // ===========================================================================

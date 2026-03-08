@@ -9,8 +9,14 @@ import { agents as agentsTable, apiAccounts, rcSessions, settings } from '../../
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
-import { clampLimit, PAGINATION, SESSION_DISCOVER_TIMEOUT_MS, WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
-import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
+import {
+  clampLimit,
+  PAGINATION,
+  SESSION_DISCOVER_TIMEOUT_MS,
+  WORKER_REQUEST_TIMEOUT_MS,
+} from '../constants.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
+
 /** Matches a valid UUID v4 string. Used to skip non-UUID agentIds like 'adhoc'. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1398,7 +1404,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         // Cleanup on client disconnect
         request.raw.on('close', () => {
           reader.cancel().catch((cancelErr) => {
-            app.log.debug({ err: cancelErr instanceof Error ? cancelErr.message : String(cancelErr) }, 'Stream reader cancel on disconnect');
+            app.log.debug(
+              { err: cancelErr instanceof Error ? cancelErr.message : String(cancelErr) },
+              'Stream reader cancel on disconnect',
+            );
           });
         });
       } catch (err) {

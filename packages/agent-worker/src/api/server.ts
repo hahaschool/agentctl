@@ -1,5 +1,5 @@
-import { AgentError, WorkerError, checkWithTimeout } from '@agentctl/shared';
 import type { DependencyStatus } from '@agentctl/shared';
+import { AgentError, checkWithTimeout, WorkerError } from '@agentctl/shared';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
@@ -62,19 +62,23 @@ export async function createWorkerServer({
     // Run dependency checks in parallel.
     const [controlPlaneResult] = await Promise.allSettled([
       controlPlaneUrl
-        ? checkWithTimeout('controlPlane', async () => {
-            const response = await fetch(`${controlPlaneUrl}/health`, {
-              method: 'GET',
-              signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
-            });
-            if (!response.ok) {
-              throw new WorkerError(
-                'HEALTH_CHECK_FAILED',
-                `Control plane returned HTTP ${response.status}`,
-                { httpStatus: response.status },
-              );
-            }
-          }, HEALTH_CHECK_TIMEOUT_MS)
+        ? checkWithTimeout(
+            'controlPlane',
+            async () => {
+              const response = await fetch(`${controlPlaneUrl}/health`, {
+                method: 'GET',
+                signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+              });
+              if (!response.ok) {
+                throw new WorkerError(
+                  'HEALTH_CHECK_FAILED',
+                  `Control plane returned HTTP ${response.status}`,
+                  { httpStatus: response.status },
+                );
+              }
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
         : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
     ]);
 

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-
-import { checkWithTimeout } from './check-with-timeout.js';
 import type { DependencyStatus } from './check-with-timeout.js';
+import { checkWithTimeout } from './check-with-timeout.js';
 
 describe('checkWithTimeout', () => {
   it('returns ok status when the check succeeds', async () => {

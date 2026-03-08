@@ -9,7 +9,6 @@ import { createMockDbRegistry, makeAgent, makeMachine } from './test-helpers.js'
 
 const logger = createMockLogger();
 
-
 // ===========================================================================
 // Integration: WebSocket full lifecycle (iOS-to-agent flow)
 // ===========================================================================

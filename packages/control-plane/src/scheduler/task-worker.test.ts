@@ -12,7 +12,6 @@ import {
   mockFetchSuccess,
 } from '../integration/test-helpers.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
-import type { DbAgentRegistry } from '../registry/db-registry.js';
 import { AGENT_TASKS_QUEUE, type AgentTaskJobData, type AgentTaskJobName } from './task-queue.js';
 import { createTaskWorker } from './task-worker.js';
 

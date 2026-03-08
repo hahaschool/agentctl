@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import type { FastifyReply } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type ProxyWorkerResult,

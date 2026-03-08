@@ -59,9 +59,7 @@ export function makeMachine(overrides: Record<string, unknown> = {}): Record<str
 // DbAgentRegistry mock
 // ---------------------------------------------------------------------------
 
-export function createMockDbRegistry(
-  overrides: Partial<DbAgentRegistry> = {},
-): DbAgentRegistry {
+export function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}): DbAgentRegistry {
   return {
     getAgent: vi.fn().mockResolvedValue(makeAgent()),
     getMachine: vi.fn().mockResolvedValue(makeMachine()),

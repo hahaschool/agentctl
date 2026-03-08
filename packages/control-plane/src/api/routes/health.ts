@@ -1,5 +1,5 @@
-import { ControlPlaneError, checkWithTimeout } from '@agentctl/shared';
 import type { DependencyStatus } from '@agentctl/shared';
+import { ControlPlaneError, checkWithTimeout } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -51,36 +51,52 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
   > {
     return Promise.allSettled([
       db
-        ? checkWithTimeout('postgres', async () => {
-            await db.execute(sql`SELECT 1`);
-          }, HEALTH_CHECK_TIMEOUT_MS)
+        ? checkWithTimeout(
+            'postgres',
+            async () => {
+              await db.execute(sql`SELECT 1`);
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
         : Promise.resolve(OK_STATUS),
       redis
-        ? checkWithTimeout('redis', async () => {
-            await redis.ping();
-          }, HEALTH_CHECK_TIMEOUT_MS)
+        ? checkWithTimeout(
+            'redis',
+            async () => {
+              await redis.ping();
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
         : Promise.resolve(OK_STATUS),
       mem0Client
-        ? checkWithTimeout('mem0', async () => {
-            const healthy = await mem0Client.health();
-            if (!healthy)
-              throw new ControlPlaneError(
-                'HEALTH_CHECK_FAILED',
-                'Mem0 health endpoint returned non-OK',
-                { component: 'mem0' },
-              );
-          }, HEALTH_CHECK_TIMEOUT_MS)
+        ? checkWithTimeout(
+            'mem0',
+            async () => {
+              const healthy = await mem0Client.health();
+              if (!healthy)
+                throw new ControlPlaneError(
+                  'HEALTH_CHECK_FAILED',
+                  'Mem0 health endpoint returned non-OK',
+                  { component: 'mem0' },
+                );
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
         : Promise.resolve(OK_STATUS),
       litellmClient
-        ? checkWithTimeout('litellm', async () => {
-            const healthy = await litellmClient.health();
-            if (!healthy)
-              throw new ControlPlaneError(
-                'HEALTH_CHECK_FAILED',
-                'LiteLLM health endpoint returned non-OK',
-                { component: 'litellm' },
-              );
-          }, HEALTH_CHECK_TIMEOUT_MS)
+        ? checkWithTimeout(
+            'litellm',
+            async () => {
+              const healthy = await litellmClient.health();
+              if (!healthy)
+                throw new ControlPlaneError(
+                  'HEALTH_CHECK_FAILED',
+                  'LiteLLM health endpoint returned non-OK',
+                  { component: 'litellm' },
+                );
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
         : Promise.resolve(OK_STATUS),
     ]) as Promise<
       [
