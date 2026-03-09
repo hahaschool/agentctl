@@ -35,10 +35,18 @@ export {
   discoverLocalSessions,
 } from './session-discovery.js';
 export {
+  type ForkManagedSessionInput,
   type ManagedSessionHandle,
   type ResumeManagedSessionInput,
   type RuntimeAdapter,
   type RuntimeCapabilities,
   type StartManagedSessionInput,
 } from './runtime-adapter.js';
+export { CodexRuntimeAdapter } from './codex-runtime-adapter.js';
+export {
+  CodexSessionManager,
+  type CodexSession,
+  type CodexSessionManagerOptions,
+  type CodexSessionStatus,
+} from './codex-session-manager.js';
 export { RuntimeRegistry } from './runtime-registry.js';

@@ -14,6 +14,9 @@ describe('RuntimeRegistry', () => {
       resumeSession: async () => {
         throw new Error('not needed');
       },
+      forkSession: async () => {
+        throw new Error('not needed');
+      },
       getCapabilities: async () => ({
         runtime: 'claude-code',
         supportsResume: true,

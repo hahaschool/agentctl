@@ -1,5 +1,7 @@
+import { AgentError } from '@agentctl/shared';
 import type { CliSessionManager } from './cli-session-manager.js';
 import type {
+  ForkManagedSessionInput,
   ManagedSessionHandle,
   ResumeManagedSessionInput,
   RuntimeAdapter,
@@ -34,6 +36,14 @@ export class ClaudeRuntimeAdapter implements RuntimeAdapter {
     });
 
     return mapCliSession(session, this.runtime);
+  }
+
+  async forkSession(_input: ForkManagedSessionInput): Promise<ManagedSessionHandle> {
+    throw new AgentError(
+      'RUNTIME_FORK_UNSUPPORTED',
+      'Claude runtime adapter does not support native fork in this worker path',
+      { runtime: this.runtime },
+    );
   }
 
   async getCapabilities(): Promise<RuntimeCapabilities> {

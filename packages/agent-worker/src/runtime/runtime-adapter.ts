@@ -24,6 +24,14 @@ export type ResumeManagedSessionInput = StartManagedSessionInput & {
   nativeSessionId: string;
 };
 
+export type ForkManagedSessionInput = {
+  agentId: string;
+  projectPath: string;
+  nativeSessionId: string;
+  prompt?: string | null;
+  model?: string | null;
+};
+
 export type RuntimeCapabilities = {
   runtime: ManagedRuntime;
   supportsResume: boolean;
@@ -34,5 +42,6 @@ export interface RuntimeAdapter {
   readonly runtime: ManagedRuntime;
   startSession(input: StartManagedSessionInput): Promise<ManagedSessionHandle>;
   resumeSession(input: ResumeManagedSessionInput): Promise<ManagedSessionHandle>;
+  forkSession(input: ForkManagedSessionInput): Promise<ManagedSessionHandle>;
   getCapabilities(): Promise<RuntimeCapabilities>;
 }
