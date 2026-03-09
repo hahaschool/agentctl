@@ -190,16 +190,25 @@ export function SessionsPage(): React.JSX.Element {
   const accounts = useQuery(accountsQuery());
 
   // Reset pagination and invalidate all session queries so the list starts fresh.
+  // Used after destructive operations (delete, cleanup) where data actually changes.
   const resetAndInvalidateSessions = useCallback(() => {
     setOffset(0);
     setAccumulatedSessions([]);
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
   }, [queryClient]);
 
+  // Refresh without clearing accumulated sessions — avoids empty flash.
+  // React Query's structural sharing means if data is unchanged the useEffect
+  // won't re-fire, so we must NOT eagerly clear accumulatedSessions here.
+  const refreshSessions = useCallback(async () => {
+    setOffset(0);
+    await queryClient.refetchQueries({ queryKey: queryKeys.sessions() });
+  }, [queryClient]);
+
   useHotkeys(
     useMemo(
       () => ({
-        r: () => resetAndInvalidateSessions(),
+        r: () => void refreshSessions(),
         n: () => setShowCreateForm(true),
         Escape: () => {
           if (checkedIds.size > 0) setCheckedIds(new Set());
@@ -207,7 +216,7 @@ export function SessionsPage(): React.JSX.Element {
           else setSelectedId(null);
         },
       }),
-      [resetAndInvalidateSessions, showCreateForm, checkedIds.size],
+      [refreshSessions, showCreateForm, checkedIds.size],
     ),
   );
 
@@ -568,7 +577,7 @@ export function SessionsPage(): React.JSX.Element {
               {showCreateForm ? 'Cancel' : '+ New'}
             </button>
             <RefreshButton
-              onClick={() => resetAndInvalidateSessions()}
+              onClick={() => void refreshSessions()}
               isFetching={sessions.isFetching && !sessions.isLoading}
               label=""
               className="h-7 w-7 p-0 text-[11px] justify-center"
@@ -895,9 +904,9 @@ export function SessionsPage(): React.JSX.Element {
           )}
         </div>
 
-        {/* Floating bulk action bar */}
+        {/* Floating bulk action bar — sticky so always visible when scrolled */}
         {checkedIds.size > 0 && (
-          <div className="border-t border-border bg-card px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-sm">
+          <div className="sticky bottom-0 z-10 border-t border-border bg-card px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.1)]">
             <span className="text-xs font-medium tabular-nums text-foreground">
               {checkedIds.size} selected
             </span>
