@@ -17,6 +17,7 @@ import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
+import { ManagedSessionStore, type ManagedSessionRecord } from '../runtime-management/managed-session-store.js';
 import { RuntimeConfigStore } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
@@ -37,6 +38,7 @@ import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { runtimeConfigRoutes, type RuntimeConfigRouteStore } from './routes/runtime-config.js';
+import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -88,6 +90,9 @@ export async function createServer({
   const runtimeConfigStore =
     externalRuntimeConfigStore ??
     (db ? new RuntimeConfigStore(db, logger) : createFallbackRuntimeConfigStore());
+  const managedSessionStore = db
+    ? new ManagedSessionStore(db, logger)
+    : createFallbackManagedSessionStore();
 
   // --- Metrics request tracking ---
   // Registered at the root level so it captures requests to all routes.
@@ -158,6 +163,7 @@ export async function createServer({
         { name: 'memory', description: 'Mem0 memory search' },
         { name: 'router', description: 'LiteLLM model routing' },
         { name: 'runtime-config', description: 'Managed Claude/Codex configuration sync state' },
+        { name: 'runtime-sessions', description: 'Unified Claude/Codex managed session lifecycle' },
         { name: 'audit', description: 'Action audit log and replay' },
         { name: 'dashboard', description: 'Analytics and cost dashboards' },
         { name: 'webhooks', description: 'Webhook subscription management' },
@@ -227,6 +233,13 @@ export async function createServer({
   await app.register(runtimeConfigRoutes, {
     prefix: '/api/runtime-config',
     runtimeConfigStore,
+  });
+  await app.register(runtimeSessionRoutes, {
+    prefix: '/api/runtime-sessions',
+    managedSessionStore,
+    runtimeConfigStore,
+    dbRegistry,
+    workerPort,
   });
   await app.register(agentRoutes, {
     prefix: '/api/agents',
@@ -456,6 +469,58 @@ function createFallbackRuntimeConfigStore(): RuntimeConfigRouteStore {
     },
     async listMachineStates() {
       return [];
+    },
+  };
+}
+
+function createFallbackManagedSessionStore(): Pick<
+  ManagedSessionStore,
+  'list' | 'create' | 'get' | 'updateStatus'
+> {
+  const sessions = new Map<string, ManagedSessionRecord>();
+  return {
+    async list() {
+      return [...sessions.values()];
+    },
+    async create(input) {
+      const session: ManagedSessionRecord = {
+        id: crypto.randomUUID(),
+        runtime: input.runtime,
+        nativeSessionId: input.nativeSessionId,
+        machineId: input.machineId,
+        agentId: input.agentId,
+        projectPath: input.projectPath,
+        worktreePath: input.worktreePath,
+        status: input.status,
+        configRevision: input.configRevision,
+        handoffStrategy: input.handoffStrategy,
+        handoffSourceSessionId: input.handoffSourceSessionId,
+        metadata: input.metadata,
+        startedAt: input.startedAt ?? new Date(),
+        lastHeartbeat: input.lastHeartbeat ?? null,
+        endedAt: input.endedAt ?? null,
+      };
+      sessions.set(session.id, session);
+      return session;
+    },
+    async get(id) {
+      return sessions.get(id) ?? null;
+    },
+    async updateStatus(id, status, patch = {}) {
+      const existing = sessions.get(id);
+      if (!existing) {
+        throw new Error(`Managed session '${id}' not found`);
+      }
+      const updated: ManagedSessionRecord = {
+        ...existing,
+        status,
+        nativeSessionId: patch.nativeSessionId ?? existing.nativeSessionId,
+        metadata: patch.metadata ?? existing.metadata,
+        lastHeartbeat: patch.lastHeartbeat ?? existing.lastHeartbeat,
+        endedAt: patch.endedAt ?? existing.endedAt,
+      };
+      sessions.set(id, updated);
+      return updated;
     },
   };
 }

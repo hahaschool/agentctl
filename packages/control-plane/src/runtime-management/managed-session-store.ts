@@ -106,6 +106,17 @@ export class ManagedSessionStore {
     return rows.map(mapManagedSessionRow);
   }
 
+  async get(sessionId: string): Promise<ManagedSessionRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(managedSessions)
+      .where(eq(managedSessions.id, sessionId))
+      .limit(1);
+
+    const row = rows[0];
+    return row ? mapManagedSessionRow(row) : null;
+  }
+
   async updateStatus(
     sessionId: string,
     status: ManagedSessionStatus,

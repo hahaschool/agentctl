@@ -146,4 +146,34 @@ describe('ManagedSessionStore', () => {
     );
     expect(session.status).toBe('ended');
   });
+
+  it('returns a managed session by id when it exists', async () => {
+    mockDb.limit.mockResolvedValue([
+      {
+        id: 'ms-lookup',
+        runtime: 'codex',
+        nativeSessionId: 'codex-native-1',
+        machineId: 'machine-1',
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+        worktreePath: null,
+        status: 'active',
+        configVersion: 7,
+        handoffStrategy: null,
+        handoffSourceSessionId: null,
+        metadata: {},
+        startedAt: new Date('2026-03-09T10:00:00Z'),
+        lastHeartbeat: new Date('2026-03-09T10:05:00Z'),
+        endedAt: null,
+      },
+    ]);
+
+    const session = await store.get('ms-lookup');
+
+    expect(mockDb.select).toHaveBeenCalledOnce();
+    expect(mockDb.where).toHaveBeenCalledOnce();
+    expect(mockDb.limit).toHaveBeenCalledWith(1);
+    expect(session?.id).toBe('ms-lookup');
+    expect(session?.runtime).toBe('codex');
+  });
 });
