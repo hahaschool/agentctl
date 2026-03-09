@@ -12,10 +12,12 @@
     }
   },
   "scripts": {
+    "prebuild": "pnpm --filter @agentctl/shared build",
     "start": "expo start",
     "ios": "expo run:ios",
     "build": "tsc",
     "dev": "tsc --watch",
+    "pretest": "pnpm --filter @agentctl/shared build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "biome check src/"
