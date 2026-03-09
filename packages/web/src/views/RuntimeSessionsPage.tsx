@@ -2,7 +2,10 @@
 
 import { useQuery } from '@tanstack/react-query';
 import {
+  describeHandoffCompletion,
+  describeHandoffExecution,
   formatMachineSelectionLabel,
+  formatHandoffStrategyLabel,
   isMachineSelectable,
   pickPreferredMachineId,
   sortMachinesForSelection,
@@ -203,13 +206,21 @@ function HandoffHistoryItem({ handoff }: { handoff: RuntimeSessionHandoff }): Re
   const nativeImportSummary = describeNativeImportAttempt(handoff.nativeImportAttempt);
 
   return (
-    <div className="rounded-lg border border-border bg-card/70 p-3 space-y-2">
+      <div className="rounded-lg border border-border bg-card/70 p-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={handoff.status} />
-        <span className="text-xs text-muted-foreground font-medium">{handoff.strategy}</span>
+        <span className="text-xs text-muted-foreground font-medium">
+          {formatHandoffStrategyLabel(handoff.strategy)}
+        </span>
         <span className="text-xs text-muted-foreground">
           {runtimeLabel(handoff.sourceRuntime)} to {runtimeLabel(handoff.targetRuntime)}
         </span>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {describeHandoffExecution({
+          strategy: handoff.strategy,
+          nativeImportAttempt: handoff.nativeImportAttempt,
+        })}
       </div>
       <div className="text-sm text-foreground">
         Reason: <span className="font-medium">{handoff.reason}</span>
@@ -482,9 +493,11 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         ...(handoffPrompt.trim() ? { prompt: handoffPrompt.trim() } : {}),
       });
       toast.success(
-        result.nativeImportAttempt && !result.nativeImportAttempt.ok
-          ? `Handed off to ${runtimeLabel(result.session.runtime)} after native import fallback`
-          : `Handed off to ${runtimeLabel(result.session.runtime)}`,
+        describeHandoffCompletion({
+          targetRuntime: result.session.runtime,
+          strategy: result.strategy,
+          nativeImportAttempt: result.nativeImportAttempt,
+        }),
       );
       setSelectedId(result.session.id);
       setHandoffPrompt('');

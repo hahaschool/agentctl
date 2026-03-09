@@ -7,6 +7,9 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  describeHandoffCompletion,
+  describeHandoffExecution,
+  formatHandoffStrategyLabel,
   isMachineSelectable,
   pickPreferredMachineId,
   sortMachinesForSelection,
@@ -383,11 +386,16 @@ export function RuntimeSessionScreen(): React.JSX.Element {
       });
       setHandoffPrompt('');
       const nativeImportSummary = describeNativeImportAttempt(response?.nativeImportAttempt);
+      const completionSummary = response
+        ? describeHandoffCompletion({
+            targetRuntime: response.session.runtime,
+            strategy: response.strategy,
+            nativeImportAttempt: response.nativeImportAttempt,
+          })
+        : `${truncateId(selectedSession.id)} switched`;
       Alert.alert(
         'Handed Off',
-        `${truncateId(selectedSession.id)} switched via ${response?.strategy ?? 'handoff'}.${
-          nativeImportSummary ? `\n\n${nativeImportSummary}` : ''
-        }`,
+        `${completionSummary}.${nativeImportSummary ? `\n\n${nativeImportSummary}` : ''}`,
       );
     } catch (err: unknown) {
       Alert.alert('Handoff Failed', err instanceof Error ? err.message : String(err));
@@ -454,7 +462,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
     (handoff: RuntimeSessionHandoff, index: number) => (
       <View key={`${handoff.id}-${index}`} style={styles.handoffCard}>
         <View style={styles.handoffHeader}>
-          <Text style={styles.handoffStrategy}>{handoff.strategy}</Text>
+          <Text style={styles.handoffStrategy}>{formatHandoffStrategyLabel(handoff.strategy)}</Text>
           <View
             style={[
               styles.handoffStatusBadge,
@@ -466,6 +474,12 @@ export function RuntimeSessionScreen(): React.JSX.Element {
         </View>
         <Text style={styles.handoffText}>
           {runtimeLabel(handoff.sourceRuntime)} to {runtimeLabel(handoff.targetRuntime)}
+        </Text>
+        <Text style={styles.handoffText}>
+          {describeHandoffExecution({
+            strategy: handoff.strategy,
+            nativeImportAttempt: handoff.nativeImportAttempt,
+          })}
         </Text>
         <Text style={styles.handoffText}>Reason: {handoff.reason}</Text>
         <Text style={styles.handoffSummary} numberOfLines={3}>

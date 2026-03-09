@@ -14,6 +14,7 @@ const {
   mockResumeMutateAsync,
   mockForkMutateAsync,
   mockHandoffMutateAsync,
+  mockToast,
 } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(),
   mockRuntimeSessionsQuery: vi.fn(),
@@ -24,6 +25,12 @@ const {
   mockResumeMutateAsync: vi.fn(),
   mockForkMutateAsync: vi.fn(),
   mockHandoffMutateAsync: vi.fn(),
+  mockToast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }));
 
 vi.mock('@tanstack/react-query', async () => {
@@ -81,6 +88,10 @@ vi.mock('@/components/RefreshButton', () => ({
 
 vi.mock('@/components/StatusBadge', () => ({
   StatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
+}));
+
+vi.mock('@/components/Toast', () => ({
+  useToast: () => mockToast,
 }));
 
 vi.mock('@/lib/queries', () => ({
@@ -313,7 +324,8 @@ describe('RuntimeSessionsPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('ms-1').length).toBeGreaterThanOrEqual(2);
       expect(screen.getAllByText('mac-mini').length).toBeGreaterThanOrEqual(2);
-      expect(screen.getByText('snapshot-handoff')).toBeDefined();
+      expect(screen.getByText('Snapshot Handoff')).toBeDefined();
+      expect(screen.getByText('Completed via snapshot handoff')).toBeDefined();
       expect(screen.getByText('Added runtime handoff support.')).toBeDefined();
     });
   });
@@ -499,6 +511,7 @@ describe('RuntimeSessionsPage', () => {
         targetMachineId: 'machine-2',
         prompt: 'Continue from the existing diff',
       });
+      expect(mockToast.success).toHaveBeenCalledWith('Handed off to Claude Code via snapshot handoff');
     });
   });
 
