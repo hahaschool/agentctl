@@ -381,6 +381,29 @@ describe('RuntimeSessionsPage', () => {
     });
   });
 
+  it('prefers selectable machines and disables offline targets in selectors', async () => {
+    setupUseQuery({
+      machines: [
+        createMachine({ id: 'machine-offline', hostname: 'backup-box', status: 'offline' }),
+        createMachine({ id: 'machine-2', hostname: 'ec2-runner', status: 'online' }),
+      ],
+    });
+
+    render(<RuntimeSessionsPage />);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Create machine') as HTMLSelectElement).value).toBe('machine-2');
+    });
+
+    const [createOfflineOption, forkOfflineOption, handoffOfflineOption] = screen.getAllByRole('option', {
+      name: 'backup-box (offline)',
+    }) as HTMLOptionElement[];
+
+    expect(createOfflineOption.disabled).toBe(true);
+    expect(forkOfflineOption.disabled).toBe(true);
+    expect(handoffOfflineOption.disabled).toBe(true);
+  });
+
   it('filters runtime sessions by runtime and search query', async () => {
     setupUseQuery({
       sessions: [

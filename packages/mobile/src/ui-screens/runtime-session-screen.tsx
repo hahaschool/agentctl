@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Machine } from '@agentctl/shared';
+import { isMachineSelectable, pickPreferredMachineId, sortMachinesForSelection, type Machine } from '@agentctl/shared';
 import {
   Alert,
   FlatList,
@@ -238,12 +238,13 @@ export function RuntimeSessionScreen(): React.JSX.Element {
 
   useEffect(() => {
     if (!state.selectedSession) return;
-    setForkMachineId(state.selectedSession.machineId);
-    setHandoffMachineId(state.selectedSession.machineId);
+    const preferredMachineId = pickPreferredMachineId(state.machines, state.selectedSession.machineId);
+    setForkMachineId(preferredMachineId);
+    setHandoffMachineId(preferredMachineId);
     setHandoffTargetRuntime(
       state.selectedSession.runtime === 'codex' ? 'claude-code' : 'codex',
     );
-  }, [state.selectedSession]);
+  }, [state.machines, state.selectedSession]);
 
   useEffect(() => {
     if (!state.selectedSession) return;
@@ -260,15 +261,20 @@ export function RuntimeSessionScreen(): React.JSX.Element {
 
   useEffect(() => {
     if (createMachineId) return;
-    const preferred = state.machines.find((machine) => machine.status === 'online') ?? state.machines[0];
-    if (preferred) {
-      setCreateMachineId(preferred.id);
+    const preferredMachineId = pickPreferredMachineId(state.machines);
+    if (preferredMachineId) {
+      setCreateMachineId(preferredMachineId);
     }
   }, [createMachineId, state.machines]);
 
-  const machineLookup = useMemo(
-    () => new Map(state.machines.map((machine) => [machine.id, machine] as const)),
+  const selectableMachines = useMemo(
+    () => sortMachinesForSelection(state.machines),
     [state.machines],
+  );
+
+  const machineLookup = useMemo(
+    () => new Map(selectableMachines.map((machine) => [machine.id, machine] as const)),
+    [selectableMachines],
   );
 
   const onRefresh = useCallback(() => {
@@ -542,13 +548,15 @@ export function RuntimeSessionScreen(): React.JSX.Element {
             <Text style={styles.fieldLabel}>Machine</Text>
             {state.machines.length > 0 ? (
               <View style={styles.machinePickerList}>
-                {state.machines.map((machine) => (
+                {selectableMachines.map((machine) => (
                   <TouchableOpacity
                     key={machine.id}
                     style={[
                       styles.machinePickerButton,
                       createMachineId === machine.id && styles.machinePickerButtonActive,
+                      !isMachineSelectable(machine) && styles.machinePickerButtonDisabled,
                     ]}
+                    disabled={!isMachineSelectable(machine)}
                     onPress={() => setCreateMachineId(machine.id)}
                   >
                     <View
@@ -559,7 +567,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                     />
                     <View style={styles.machinePickerTextBlock}>
                       <Text style={styles.machinePickerTitle}>{machine.hostname}</Text>
-                      <Text style={styles.machinePickerSubtitle}>{machine.id}</Text>
+                      <Text style={styles.machinePickerSubtitle}>
+                        {machine.id} · {machine.status}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -720,13 +730,15 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                       />
                       {state.machines.length > 0 ? (
                         <View style={styles.machinePickerList}>
-                          {state.machines.map((machine) => (
+                          {selectableMachines.map((machine) => (
                             <TouchableOpacity
                               key={machine.id}
                               style={[
                                 styles.machinePickerButton,
                                 forkMachineId === machine.id && styles.machinePickerButtonActive,
+                                !isMachineSelectable(machine) && styles.machinePickerButtonDisabled,
                               ]}
+                              disabled={!isMachineSelectable(machine)}
                               onPress={() => setForkMachineId(machine.id)}
                             >
                               <View
@@ -737,7 +749,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                               />
                               <View style={styles.machinePickerTextBlock}>
                                 <Text style={styles.machinePickerTitle}>{machine.hostname}</Text>
-                                <Text style={styles.machinePickerSubtitle}>{machine.id}</Text>
+                                <Text style={styles.machinePickerSubtitle}>
+                                  {machine.id} · {machine.status}
+                                </Text>
                               </View>
                             </TouchableOpacity>
                           ))}
@@ -780,13 +794,15 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                       </View>
                       {state.machines.length > 0 ? (
                         <View style={styles.machinePickerList}>
-                          {state.machines.map((machine) => (
+                          {selectableMachines.map((machine) => (
                             <TouchableOpacity
                               key={machine.id}
                               style={[
                                 styles.machinePickerButton,
                                 handoffMachineId === machine.id && styles.machinePickerButtonActive,
+                                !isMachineSelectable(machine) && styles.machinePickerButtonDisabled,
                               ]}
+                              disabled={!isMachineSelectable(machine)}
                               onPress={() => setHandoffMachineId(machine.id)}
                             >
                               <View
@@ -797,7 +813,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                               />
                               <View style={styles.machinePickerTextBlock}>
                                 <Text style={styles.machinePickerTitle}>{machine.hostname}</Text>
-                                <Text style={styles.machinePickerSubtitle}>{machine.id}</Text>
+                                <Text style={styles.machinePickerSubtitle}>
+                                  {machine.id} · {machine.status}
+                                </Text>
                               </View>
                             </TouchableOpacity>
                           ))}
@@ -1091,6 +1109,9 @@ const styles = StyleSheet.create({
   machinePickerButtonActive: {
     borderColor: '#1e40af',
     backgroundColor: '#172554',
+  },
+  machinePickerButtonDisabled: {
+    opacity: 0.45,
   },
   machineStatusDot: {
     width: 8,

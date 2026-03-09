@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { formatMachineSelectionLabel, isMachineSelectable, pickPreferredMachineId, sortMachinesForSelection } from '@agentctl/shared';
 import { ArrowRightLeft, Cable, Cpu, GitBranch, History, Layers3 } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
@@ -264,11 +265,15 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const resumeMutation = useResumeRuntimeSession();
   const forkMutation = useForkRuntimeSession();
   const handoffMutation = useHandoffRuntimeSession();
+  const availableMachines = useMemo(
+    () => sortMachinesForSelection(machines.data ?? []),
+    [machines.data],
+  );
 
   const machineNames = useMemo(() => {
-    const entries = (machines.data ?? []).map((machine) => [machine.id, machine.hostname] as const);
+    const entries = availableMachines.map((machine) => [machine.id, machine.hostname] as const);
     return new Map(entries);
-  }, [machines.data]);
+  }, [availableMachines]);
 
   const filteredSessions = useMemo(() => {
     const list = sessions.data?.sessions ?? [];
@@ -347,18 +352,18 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   useEffect(() => {
     if (!selectedSession) return;
     setHandoffTargetRuntime(selectedSession.runtime === 'codex' ? 'claude-code' : 'codex');
-    setForkMachineId(selectedSession.machineId);
-    setHandoffMachineId(selectedSession.machineId);
-  }, [selectedSession]);
+    const preferredMachineId = pickPreferredMachineId(availableMachines, selectedSession.machineId);
+    setForkMachineId(preferredMachineId);
+    setHandoffMachineId(preferredMachineId);
+  }, [availableMachines, selectedSession]);
 
   useEffect(() => {
-    const list = machines.data ?? [];
     if (createMachineId) return;
-    const preferred = list.find((machine) => machine.status === 'online') ?? list[0];
-    if (preferred) {
-      setCreateMachineId(preferred.id);
+    const preferredMachineId = pickPreferredMachineId(availableMachines);
+    if (preferredMachineId) {
+      setCreateMachineId(preferredMachineId);
     }
-  }, [createMachineId, machines.data]);
+  }, [availableMachines, createMachineId]);
 
   const handleCreateSession = useCallback(async () => {
     if (!createMachineId || !createProjectPath.trim() || !createPrompt.trim()) {
@@ -596,9 +601,13 @@ export function RuntimeSessionsPage(): React.JSX.Element {
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none"
             >
               <option value="">Select machine</option>
-              {(machines.data ?? []).map((machine) => (
-                <option key={machine.id} value={machine.id}>
-                  {machine.hostname}
+              {availableMachines.map((machine) => (
+                <option
+                  key={machine.id}
+                  value={machine.id}
+                  disabled={!isMachineSelectable(machine)}
+                >
+                  {formatMachineSelectionLabel(machine)}
                 </option>
               ))}
             </select>
@@ -879,9 +888,13 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                         onChange={(event) => setForkMachineId(event.target.value)}
                         className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {(machines.data ?? []).map((machine) => (
-                          <option key={machine.id} value={machine.id}>
-                            {machine.hostname}
+                        {availableMachines.map((machine) => (
+                          <option
+                            key={machine.id}
+                            value={machine.id}
+                            disabled={!isMachineSelectable(machine)}
+                          >
+                            {formatMachineSelectionLabel(machine)}
                           </option>
                         ))}
                       </select>
@@ -935,9 +948,13 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                       onChange={(event) => setHandoffMachineId(event.target.value)}
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {(machines.data ?? []).map((machine) => (
-                        <option key={machine.id} value={machine.id}>
-                          {machine.hostname}
+                      {availableMachines.map((machine) => (
+                        <option
+                          key={machine.id}
+                          value={machine.id}
+                          disabled={!isMachineSelectable(machine)}
+                        >
+                          {formatMachineSelectionLabel(machine)}
                         </option>
                       ))}
                     </select>
