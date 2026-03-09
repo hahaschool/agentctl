@@ -17,6 +17,7 @@ import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
+import { RuntimeConfigStore } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
@@ -35,6 +36,7 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
+import { runtimeConfigRoutes, type RuntimeConfigRouteStore } from './routes/runtime-config.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -57,6 +59,7 @@ type CreateServerOptions = {
   workerPort?: number;
   isProduction?: boolean;
   corsOrigins?: string;
+  runtimeConfigStore?: RuntimeConfigRouteStore;
 };
 
 export async function createServer({
@@ -73,6 +76,7 @@ export async function createServer({
   workerPort = 9000,
   isProduction: isProductionOverride,
   corsOrigins: corsOriginsOverride,
+  runtimeConfigStore: externalRuntimeConfigStore,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -81,6 +85,9 @@ export async function createServer({
 
   const registry = externalRegistry ?? new AgentRegistry();
   const requestTracker = createRequestTracker();
+  const runtimeConfigStore =
+    externalRuntimeConfigStore ??
+    (db ? new RuntimeConfigStore(db, logger) : createFallbackRuntimeConfigStore());
 
   // --- Metrics request tracking ---
   // Registered at the root level so it captures requests to all routes.
@@ -150,6 +157,7 @@ export async function createServer({
         { name: 'scheduler', description: 'Repeatable job scheduling' },
         { name: 'memory', description: 'Mem0 memory search' },
         { name: 'router', description: 'LiteLLM model routing' },
+        { name: 'runtime-config', description: 'Managed Claude/Codex configuration sync state' },
         { name: 'audit', description: 'Action audit log and replay' },
         { name: 'dashboard', description: 'Analytics and cost dashboards' },
         { name: 'webhooks', description: 'Webhook subscription management' },
@@ -215,6 +223,10 @@ export async function createServer({
     mem0Client,
     litellmClient,
     requestTracker,
+  });
+  await app.register(runtimeConfigRoutes, {
+    prefix: '/api/runtime-config',
+    runtimeConfigStore,
   });
   await app.register(agentRoutes, {
     prefix: '/api/agents',
@@ -426,6 +438,26 @@ export async function createServer({
   });
 
   return app;
+}
+
+function createFallbackRuntimeConfigStore(): RuntimeConfigRouteStore {
+  return {
+    async getLatestRevision() {
+      return null;
+    },
+    async saveRevision(config) {
+      return {
+        id: 'ephemeral-default',
+        version: config.version,
+        hash: config.hash,
+        config,
+        createdAt: new Date(),
+      };
+    },
+    async listMachineStates() {
+      return [];
+    },
+  };
 }
 
 function controlPlaneErrorToStatus(code: string): number {
