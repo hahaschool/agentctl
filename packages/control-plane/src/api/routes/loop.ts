@@ -1,12 +1,11 @@
+import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
-import { proxyWorkerRequest } from '../proxy-worker-request.js';
+import { LOOP_PROXY_TIMEOUT_MS } from '../constants.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
-
-const DEFAULT_WORKER_PORT = 9000;
-const PROXY_TIMEOUT_MS = 30_000;
 
 export type LoopRoutesOptions = {
   registry: MachineRegistryLike;
@@ -25,13 +24,38 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
   // POST /api/agents/:id/loop — Start a loop (proxy to worker)
   app.post<{
     Params: { id: string };
-    Body: { prompt: string; config: Record<string, unknown> };
+    Body: { prompt?: unknown; config?: unknown };
     Querystring: { workerUrl?: string; machineId?: string };
   }>(
     '/:id/loop',
     { schema: { tags: ['agents'], summary: 'Start an agent loop' } },
     async (request, reply) => {
       const agentId = request.params.id;
+      const body = request.body ?? {};
+
+      if (!body.prompt || typeof body.prompt !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_PROMPT',
+          message: 'Request body must include a non-empty "prompt" string',
+        });
+      }
+
+      if ((body.prompt as string).length > 32_000) {
+        return reply.status(400).send({
+          error: 'PROMPT_TOO_LONG',
+          message: `Prompt length ${(body.prompt as string).length} exceeds maximum of 32000 characters`,
+        });
+      }
+
+      if (
+        body.config !== undefined &&
+        (typeof body.config !== 'object' || body.config === null || Array.isArray(body.config))
+      ) {
+        return reply.status(400).send({
+          error: 'INVALID_CONFIG',
+          message: '"config" must be a plain object',
+        });
+      }
 
       const resolved = await resolveWorkerUrl(agentId, request.query, {
         registry,
@@ -49,13 +73,9 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'POST',
         body: request.body,
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -69,6 +89,14 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
     { schema: { tags: ['agents'], summary: 'Pause or resume an agent loop' } },
     async (request, reply) => {
       const agentId = request.params.id;
+      const { action } = request.body;
+
+      if (action !== 'pause' && action !== 'resume') {
+        return reply.status(400).send({
+          error: 'INVALID_ACTION',
+          message: `Invalid loop action "${String(action)}". Must be "pause" or "resume".`,
+        });
+      }
 
       const resolved = await resolveWorkerUrl(agentId, request.query, {
         registry,
@@ -86,13 +114,9 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'PUT',
         body: request.body,
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -121,13 +145,9 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         workerBaseUrl: resolved.url,
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'DELETE',
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -156,13 +176,9 @@ export const loopProxyRoutes: FastifyPluginAsync<LoopRoutesOptions> = async (app
         workerBaseUrl: resolved.url,
         path: `/api/agents/${encodeURIComponent(agentId)}/loop`,
         method: 'GET',
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: LOOP_PROXY_TIMEOUT_MS,
       });
-      if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
-      }
-
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 };

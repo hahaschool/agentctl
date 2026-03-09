@@ -10,6 +10,7 @@ type CreateAgentData = {
   machineId: string;
   name: string;
   type: string;
+  runtime?: string;
   schedule?: string | null;
   projectPath?: string | null;
   worktreeBranch?: string | null;
@@ -179,6 +180,7 @@ export class DbAgentRegistry {
         machineId: data.machineId,
         name: data.name,
         type: data.type,
+        runtime: data.runtime ?? 'claude-code',
         status: 'registered',
         schedule: data.schedule ?? null,
         projectPath: data.projectPath ?? null,
@@ -665,6 +667,7 @@ export class DbAgentRegistry {
       machineId: row.machineId ?? '',
       name: row.name,
       type: row.type as Agent['type'],
+      runtime: (row.runtime ?? 'claude-code') as Agent['runtime'],
       status: (row.status ?? 'registered') as Agent['status'],
       schedule: row.schedule,
       projectPath: row.projectPath,

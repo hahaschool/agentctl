@@ -6,7 +6,6 @@ export {
   CliSessionManager,
   type CliSessionManagerOptions,
   type CliSessionStatus,
-  type DiscoveredSession,
   type StartCliSessionOptions,
 } from './cli-session-manager.js';
 export {
@@ -29,3 +28,8 @@ export {
   type SdkRunnerOptions,
   type SdkRunResult,
 } from './sdk-runner.js';
+export {
+  type DiscoveredSession,
+  decodeProjectPath,
+  discoverLocalSessions,
+} from './session-discovery.js';

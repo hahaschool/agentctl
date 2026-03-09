@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
+import type pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentPool } from '../../runtime/agent-pool.js';
+import { createSilentLogger } from '../../test-helpers.js';
 import { createWorkerServer } from '../server.js';
 
 // Mock the SDK runner so agents fall back to stub simulation immediately.
@@ -26,10 +27,6 @@ vi.mock('../../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-stream';
 
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
-
 describe('SSE streaming routes', () => {
   let app: FastifyInstance;
   let pool: AgentPool;
@@ -37,7 +34,7 @@ describe('SSE streaming routes', () => {
   let address: string;
 
   beforeEach(async () => {
-    logger = createMockLogger();
+    logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 5 });
     app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
     // Start a real HTTP server for SSE tests. reply.hijack() does not

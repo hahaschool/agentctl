@@ -16,7 +16,7 @@ export default function Loading() {
       </div>
 
       {/* Agent Details Card */}
-      <div className="mb-4 p-4 bg-card border border-border rounded-lg">
+      <div className="mb-4 p-4 bg-card border border-border/50 rounded-lg">
         <Skeleton className="h-4 w-32 mb-4" />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
           {Array.from({ length: 6 }, (_, i) => (
@@ -31,7 +31,10 @@ export default function Loading() {
       {/* Cost cards */}
       <div className="grid grid-cols-2 gap-4 mb-4">
         {Array.from({ length: 2 }, (_, i) => (
-          <div key={`cost-sk-${String(i)}`} className="p-4 bg-card border border-border rounded-lg">
+          <div
+            key={`cost-sk-${String(i)}`}
+            className="p-4 bg-card border border-border/50 rounded-lg"
+          >
             <Skeleton className="h-3 w-20 mb-2" />
             <Skeleton className="h-7 w-16" />
           </div>
@@ -39,7 +42,7 @@ export default function Loading() {
       </div>
 
       {/* Recent Runs Card */}
-      <div className="p-4 bg-card border border-border rounded-lg">
+      <div className="p-4 bg-card border border-border/50 rounded-lg">
         <Skeleton className="h-4 w-32 mb-4" />
         <div className="space-y-2">
           {Array.from({ length: 3 }, (_, i) => (

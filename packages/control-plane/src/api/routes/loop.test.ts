@@ -1,22 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AgentRegistry } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
+import { createMockLogger } from './test-helpers.js';
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
 // Tests WITHOUT dbRegistry — REGISTRY_UNAVAILABLE is expected
@@ -270,6 +260,103 @@ describe('Loop proxy routes — with dbRegistry', () => {
 
     const body = response.json();
     expect(body.error).toBe('AGENT_NOT_FOUND');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when prompt is missing', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { config: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_PROMPT');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when prompt is empty', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: '', config: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_PROMPT');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when prompt exceeds 32000 chars', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: 'x'.repeat(32_001), config: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('PROMPT_TOO_LONG');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when config is not an object', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: 'Do work', config: 'not-an-object' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_CONFIG');
+  });
+
+  it('POST /api/agents/:id/loop returns 400 when config is an array', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/loop',
+      payload: { prompt: 'Do work', config: [1, 2, 3] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_CONFIG');
+  });
+
+  it('PUT /api/agents/:id/loop returns 400 for invalid action', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/agents/agent-1/loop',
+      payload: { action: 'invalid' },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    const body = response.json();
+    expect(body.error).toBe('INVALID_ACTION');
+    expect(body.message).toContain('invalid');
+  });
+
+  it('PUT /api/agents/:id/loop accepts pause action and proxies to worker', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/agents/agent-1/loop',
+      payload: { action: 'pause' },
+    });
+
+    // Validation passes — reaches the proxy step which returns 502 (worker not running)
+    expect(response.statusCode).toBe(502);
+
+    const body = response.json();
+    expect(body.error).toBe('WORKER_UNREACHABLE');
+  });
+
+  it('PUT /api/agents/:id/loop accepts resume action and proxies to worker', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/agents/agent-1/loop',
+      payload: { action: 'resume' },
+    });
+
+    // Validation passes — reaches the proxy step which returns 502 (worker not running)
+    expect(response.statusCode).toBe(502);
+
+    const body = response.json();
+    expect(body.error).toBe('WORKER_UNREACHABLE');
   });
 
   it('returns 503 when machine is offline', async () => {

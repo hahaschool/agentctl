@@ -1,12 +1,12 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import type { DependencyStatus } from '@agentctl/shared';
+import { ControlPlaneError, checkWithTimeout } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
 import type { Mem0Client } from '../../memory/mem0-client.js';
 import type { LiteLLMClient } from '../../router/litellm-client.js';
-
-const HEALTH_CHECK_TIMEOUT_MS = 2_000;
+import { HEALTH_CHECK_TIMEOUT_MS } from '../constants.js';
 
 export type HealthRoutesOptions = {
   db?: Database;
@@ -15,15 +15,18 @@ export type HealthRoutesOptions = {
   litellmClient?: LiteLLMClient;
 };
 
-type DependencyStatus = {
-  status: 'ok' | 'error';
-  latencyMs: number;
-  error?: string;
+type MemoryUsage = {
+  rss: number;
+  heapUsed: number;
+  heapTotal: number;
 };
 
 type HealthResponse = {
   status: 'ok' | 'degraded';
   timestamp: string;
+  uptime: number;
+  nodeVersion: string;
+  memoryUsage: MemoryUsage;
   dependencies?: {
     postgres: DependencyStatus;
     redis: DependencyStatus;
@@ -32,38 +35,78 @@ type HealthResponse = {
   };
 };
 
-/**
- * Execute a health check with a timeout. Returns a DependencyStatus indicating
- * success or failure along with the measured latency.
- */
-async function checkWithTimeout(name: string, fn: () => Promise<void>): Promise<DependencyStatus> {
-  const start = performance.now();
-
-  try {
-    await Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => {
-        setTimeout(
-          () =>
-            reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
-          HEALTH_CHECK_TIMEOUT_MS,
-        );
-      }),
-    ]);
-
-    return { status: 'ok', latencyMs: Math.round(performance.now() - start) };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      status: 'error',
-      latencyMs: Math.round(performance.now() - start),
-      error: message,
-    };
-  }
-}
+const OK_STATUS: DependencyStatus = { status: 'ok', latencyMs: 0 };
 
 export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app, opts) => {
   const { db, redis, mem0Client, litellmClient } = opts;
+
+  /** Run all dependency health checks in parallel. */
+  function runHealthChecks(): Promise<
+    [
+      PromiseSettledResult<DependencyStatus>,
+      PromiseSettledResult<DependencyStatus>,
+      PromiseSettledResult<DependencyStatus>,
+      PromiseSettledResult<DependencyStatus>,
+    ]
+  > {
+    return Promise.allSettled([
+      db
+        ? checkWithTimeout(
+            'postgres',
+            async () => {
+              await db.execute(sql`SELECT 1`);
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
+        : Promise.resolve(OK_STATUS),
+      redis
+        ? checkWithTimeout(
+            'redis',
+            async () => {
+              await redis.ping();
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
+        : Promise.resolve(OK_STATUS),
+      mem0Client
+        ? checkWithTimeout(
+            'mem0',
+            async () => {
+              const healthy = await mem0Client.health();
+              if (!healthy)
+                throw new ControlPlaneError(
+                  'HEALTH_CHECK_FAILED',
+                  'Mem0 health endpoint returned non-OK',
+                  { component: 'mem0' },
+                );
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
+        : Promise.resolve(OK_STATUS),
+      litellmClient
+        ? checkWithTimeout(
+            'litellm',
+            async () => {
+              const healthy = await litellmClient.health();
+              if (!healthy)
+                throw new ControlPlaneError(
+                  'HEALTH_CHECK_FAILED',
+                  'LiteLLM health endpoint returned non-OK',
+                  { component: 'litellm' },
+                );
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
+        : Promise.resolve(OK_STATUS),
+    ]) as Promise<
+      [
+        PromiseSettledResult<DependencyStatus>,
+        PromiseSettledResult<DependencyStatus>,
+        PromiseSettledResult<DependencyStatus>,
+        PromiseSettledResult<DependencyStatus>,
+      ]
+    >;
+  }
 
   app.get<{ Querystring: { detail?: string } }>(
     '/health',
@@ -78,90 +121,15 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
     async (request) => {
       const detail = request.query.detail === 'true';
       const timestamp = new Date().toISOString();
+      const mem = process.memoryUsage();
+      const toMb = (bytes: number): number => Math.round((bytes / 1_048_576) * 100) / 100;
+      const memoryUsage: MemoryUsage = {
+        rss: toMb(mem.rss),
+        heapUsed: toMb(mem.heapUsed),
+        heapTotal: toMb(mem.heapTotal),
+      };
 
-      if (!detail) {
-        // Fast path for load balancer polls — no dependency checks.
-        // Still compute overall status based on configured dependencies
-        // so that callers can distinguish between healthy and degraded.
-        const [pgResult, redisResult, mem0Result, litellmResult] = await Promise.allSettled([
-          db
-            ? checkWithTimeout('postgres', async () => {
-                await db.execute(sql`SELECT 1`);
-              })
-            : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-          redis
-            ? checkWithTimeout('redis', async () => {
-                await redis.ping();
-              })
-            : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-          mem0Client
-            ? checkWithTimeout('mem0', async () => {
-                const healthy = await mem0Client.health();
-                if (!healthy)
-                  throw new ControlPlaneError(
-                    'HEALTH_CHECK_FAILED',
-                    'Mem0 health endpoint returned non-OK',
-                    { component: 'mem0' },
-                  );
-              })
-            : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-          litellmClient
-            ? checkWithTimeout('litellm', async () => {
-                const healthy = await litellmClient.health();
-                if (!healthy)
-                  throw new ControlPlaneError(
-                    'HEALTH_CHECK_FAILED',
-                    'LiteLLM health endpoint returned non-OK',
-                    { component: 'litellm' },
-                  );
-              })
-            : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-        ]);
-
-        const results = [pgResult, redisResult, mem0Result, litellmResult];
-        const anyError = results.some(
-          (r) =>
-            r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'error'),
-        );
-
-        return { status: anyError ? 'degraded' : 'ok', timestamp } satisfies HealthResponse;
-      }
-
-      // Detailed path — run all checks in parallel and return per-dependency results.
-      const [pgResult, redisResult, mem0Result, litellmResult] = await Promise.allSettled([
-        db
-          ? checkWithTimeout('postgres', async () => {
-              await db.execute(sql`SELECT 1`);
-            })
-          : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-        redis
-          ? checkWithTimeout('redis', async () => {
-              await redis.ping();
-            })
-          : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-        mem0Client
-          ? checkWithTimeout('mem0', async () => {
-              const healthy = await mem0Client.health();
-              if (!healthy)
-                throw new ControlPlaneError(
-                  'HEALTH_CHECK_FAILED',
-                  'Mem0 health endpoint returned non-OK',
-                  { component: 'mem0' },
-                );
-            })
-          : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-        litellmClient
-          ? checkWithTimeout('litellm', async () => {
-              const healthy = await litellmClient.health();
-              if (!healthy)
-                throw new ControlPlaneError(
-                  'HEALTH_CHECK_FAILED',
-                  'LiteLLM health endpoint returned non-OK',
-                  { component: 'litellm' },
-                );
-            })
-          : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
-      ]);
+      const [pgResult, redisResult, mem0Result, litellmResult] = await runHealthChecks();
 
       const toDepStatus = (result: PromiseSettledResult<DependencyStatus>): DependencyStatus => {
         if (result.status === 'fulfilled') return result.value;
@@ -170,19 +138,31 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
         return { status: 'error', latencyMs: 0, error: message };
       };
 
-      const dependencies = {
-        postgres: toDepStatus(pgResult),
-        redis: toDepStatus(redisResult),
-        mem0: toDepStatus(mem0Result),
-        litellm: toDepStatus(litellmResult),
+      const results = [pgResult, redisResult, mem0Result, litellmResult];
+      const anyError = results.some(
+        (r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'error'),
+      );
+
+      const base = {
+        status: anyError ? ('degraded' as const) : ('ok' as const),
+        timestamp,
+        uptime: process.uptime(),
+        nodeVersion: process.version,
+        memoryUsage,
       };
 
-      const anyError = Object.values(dependencies).some((d) => d.status === 'error');
+      if (!detail) {
+        return base satisfies HealthResponse;
+      }
 
       return {
-        status: anyError ? 'degraded' : 'ok',
-        timestamp,
-        dependencies,
+        ...base,
+        dependencies: {
+          postgres: toDepStatus(pgResult),
+          redis: toDepStatus(redisResult),
+          mem0: toDepStatus(mem0Result),
+          litellm: toDepStatus(litellmResult),
+        },
       } satisfies HealthResponse;
     },
   );

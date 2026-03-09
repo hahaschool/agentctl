@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
-import { projectAccountMappings, settings } from '../../db/schema.js';
+import { apiAccounts, projectAccountMappings, settings } from '../../db/schema.js';
 
 export type SettingsRoutesOptions = { db: Database };
 
@@ -74,6 +74,20 @@ export const settingsRoutes: FastifyPluginAsync<SettingsRoutesOptions> = async (
         error: 'INVALID_FAILOVER_POLICY',
         message: `failoverPolicy must be one of: ${VALID_FAILOVER_POLICIES.join(', ')}`,
       });
+    }
+
+    if (defaultAccountId !== undefined && defaultAccountId !== null) {
+      const [account] = await db
+        .select({ id: apiAccounts.id })
+        .from(apiAccounts)
+        .where(eq(apiAccounts.id, defaultAccountId));
+
+      if (!account) {
+        return reply.code(400).send({
+          error: 'INVALID_ACCOUNT',
+          message: `Account '${defaultAccountId}' does not exist`,
+        });
+      }
     }
 
     if (defaultAccountId !== undefined) {

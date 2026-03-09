@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { type Database, extractRows } from '../../db/index.js';
+import { clampLimit, PAGINATION } from '../constants.js';
 
 // NOTE: This module uses the existing WebhookProvider and WebhookEventType
 // types from @agentctl/shared (packages/shared/src/types/webhook.ts).
@@ -223,10 +224,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
     '/',
     { schema: { tags: ['webhooks'], summary: 'List all webhook subscriptions' } },
     async (request, reply) => {
-      const DEFAULT_LIMIT = 50;
-      const MAX_LIMIT = 200;
-
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.webhooks.defaultLimit;
       if (request.query.limit !== undefined) {
         const parsed = Number(request.query.limit);
         if (!Number.isFinite(parsed) || parsed < 1) {
@@ -235,7 +233,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
             message: '"limit" must be a positive integer',
           });
         }
-        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+        limit = clampLimit(parsed, PAGINATION.webhooks);
       }
 
       let offset = 0;

@@ -58,11 +58,77 @@ export type LoopCompleteEvent = {
   };
 };
 
+export type AgentRawOutputEvent = {
+  event: 'raw_output';
+  data: {
+    text: string;
+  };
+};
+
+export type AgentUserMessageEvent = {
+  event: 'user_message';
+  data: {
+    text: string;
+  };
+};
+
 export type AgentEvent =
   | AgentOutputEvent
+  | AgentRawOutputEvent
   | AgentStatusEvent
   | AgentCostEvent
   | AgentApprovalEvent
   | AgentHeartbeatEvent
   | LoopIterationEvent
-  | LoopCompleteEvent;
+  | LoopCompleteEvent
+  | AgentUserMessageEvent;
+
+// ---------------------------------------------------------------------------
+// Session content messages — parsed from JSONL session files and served via
+// the REST API. Used by both the worker (producer) and web (consumer).
+// ---------------------------------------------------------------------------
+
+/**
+ * Content type discriminants for parsed session messages.
+ *
+ * - `human`     — user-authored text
+ * - `assistant` — model text output
+ * - `thinking`  — model reasoning / chain-of-thought block
+ * - `tool_use`  — tool invocation request
+ * - `tool_result` — tool execution output
+ * - `progress`  — bash/mcp/hook/task progress indicators
+ * - `subagent`  — delegated sub-agent output
+ * - `todo`      — TodoWrite block
+ */
+export type ContentMessageType =
+  | 'human'
+  | 'assistant'
+  | 'thinking'
+  | 'tool_use'
+  | 'tool_result'
+  | 'progress'
+  | 'subagent'
+  | 'todo';
+
+/**
+ * A single parsed message from a Claude Code JSONL session file.
+ *
+ * This is the wire type returned by the worker's session content endpoint
+ * and consumed by the web frontend for rendering.
+ */
+export type ContentMessage = {
+  /** Discriminant indicating what kind of content this message represents. */
+  type: ContentMessageType | (string & {});
+  /** The textual content of the message (may be truncated for large outputs). */
+  content: string;
+  /** ISO 8601 timestamp of when this message was recorded. */
+  timestamp?: string;
+  /** Tool name for tool_use / tool_result / progress entries. */
+  toolName?: string;
+  /** Unique tool invocation ID, used to pair tool_use with its tool_result. */
+  toolId?: string;
+  /** Sub-agent identifier when this message originated from a delegated agent. */
+  subagentId?: string;
+  /** Additional context that doesn't fit into the fixed fields above. */
+  metadata?: Record<string, unknown>;
+};

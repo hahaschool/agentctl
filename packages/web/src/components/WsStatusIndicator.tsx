@@ -36,7 +36,13 @@ export function WsStatusIndicator({
         compact ? 'text-[10px]' : 'text-[11px]',
       )}
     >
-      <span className={cn('w-[7px] h-[7px] rounded-full shrink-0', bgClass)} />
+      <span
+        className={cn(
+          'w-[7px] h-[7px] rounded-full shrink-0',
+          bgClass,
+          status === 'connecting' && 'animate-pulse',
+        )}
+      />
       {!compact && label}
     </span>
   );

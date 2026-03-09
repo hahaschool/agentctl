@@ -46,8 +46,8 @@ export default function Loading() {
         {/* Input area */}
         <div className="px-5 py-3 border-t border-border bg-card shrink-0">
           <div className="flex gap-2 items-end">
-            <Skeleton className="flex-1 h-9 rounded-sm" />
-            <Skeleton className="h-9 w-16 rounded-sm" />
+            <Skeleton className="flex-1 h-9 rounded-md" />
+            <Skeleton className="h-9 w-16 rounded-md" />
           </div>
         </div>
       </div>

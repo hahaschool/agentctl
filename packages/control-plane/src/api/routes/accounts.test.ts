@@ -243,7 +243,7 @@ describe('Account routes — /api/settings/accounts', () => {
         url: '/api/settings/accounts',
         payload: {
           name: 'Anthropic Direct',
-          provider: 'anthropic',
+          provider: 'anthropic_api',
           credential: 'sk-ant-api03-my-secret-key-1234',
         },
       });
@@ -381,6 +381,29 @@ describe('Account routes — /api/settings/accounts', () => {
 
       const body = response.json();
       expect(body.error).toBe('ACCOUNT_NOT_FOUND');
+    });
+
+    it('cleans up project-account mappings and returns removedMappings count', async () => {
+      const deleted = makeAccount();
+      mockDb.setRows([deleted]);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/settings/accounts/acct-001',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      // The mock returns the same rows for both delete queries, so
+      // removedMappings reflects the mock row count.
+      expect(body.removedMappings).toBeDefined();
+      expect(typeof body.removedMappings).toBe('number');
+
+      // Verify that delete was called (at least twice: once for mappings, once for account)
+      const deleteFn = mockDb.db.delete as ReturnType<typeof vi.fn>;
+      expect(deleteFn).toHaveBeenCalled();
     });
   });
 

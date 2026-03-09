@@ -18,7 +18,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import { formatDate } from '@/lib/format-utils';
+import { formatDate, isStaleHeartbeat } from '@/lib/format-utils';
 import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +58,7 @@ export function MachineDetailView(): React.JSX.Element {
   );
 
   const recentSessions = useMemo(() => {
-    const list = sessions.data ?? [];
+    const list = sessions.data?.sessions ?? [];
     return [...list].sort(
       (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
     );
@@ -109,20 +109,69 @@ export function MachineDetailView(): React.JSX.Element {
   }
 
   const anyFetching = machines.isFetching || agents.isFetching || sessions.isFetching;
+  const heartbeatStale = machine.lastHeartbeat ? isStaleHeartbeat(machine.lastHeartbeat) : false;
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1000px]">
+    <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
       <FetchingBar isFetching={anyFetching && !machines.isLoading} />
       <Breadcrumb items={[{ label: 'Machines', href: '/machines' }, { label: machine.hostname }]} />
+
+      {/* Stale heartbeat warning banner */}
+      {heartbeatStale && (
+        <div
+          className="px-4 py-2.5 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300 rounded-md mb-4 flex items-start justify-between gap-3"
+          role="alert"
+        >
+          <div>
+            <div className="text-[13px] font-medium">
+              Machine appears offline — last heartbeat was{' '}
+              {machine.lastHeartbeat ? (
+                <LiveTimeAgo date={machine.lastHeartbeat} />
+              ) : (
+                'never received'
+              )}
+            </div>
+            <div className="text-[12px] text-yellow-600 dark:text-yellow-400 mt-1">
+              The machine has not sent a heartbeat in over 60 seconds. It may be unreachable or the
+              worker process may have stopped.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-[22px] font-bold">{machine.hostname}</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">{machine.hostname}</h1>
           <StatusBadge status={machine.status} />
+          {heartbeatStale && (
+            <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-800">
+              Unresponsive
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <LastUpdated dataUpdatedAt={machines.dataUpdatedAt} />
+          <Link
+            href={`/machines/${machineId}/terminal`}
+            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md text-foreground hover:bg-accent transition-colors no-underline inline-flex items-center gap-1.5"
+          >
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+            Terminal
+          </Link>
           <RefreshButton
             onClick={() => {
               void machines.refetch();
@@ -339,13 +388,19 @@ export function MachineDetailView(): React.JSX.Element {
                 <tbody>
                   {recentSessions.map((session) => (
                     <tr key={session.id} className="border-b border-border/50 last:border-0">
-                      <td className="py-2.5 pr-4">
+                      <td className="py-2.5 pr-4 flex items-center gap-1">
                         <Link
                           href={`/sessions/${session.id}`}
                           className="text-foreground hover:text-primary transition-colors font-mono text-xs no-underline"
                         >
                           {session.id.slice(0, 12)}...
                         </Link>
+                        <CopyableText
+                          value={session.id}
+                          maxDisplay={0}
+                          label=""
+                          className="text-[11px] px-0.5"
+                        />
                       </td>
                       <td className="py-2.5 pr-4">
                         <StatusBadge status={session.status} />
@@ -372,17 +427,6 @@ export function MachineDetailView(): React.JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const STALE_HEARTBEAT_MS = 60_000;
-
-function isStaleHeartbeat(dateStr: string): boolean {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  return diffMs > STALE_HEARTBEAT_MS;
-}
-
-// ---------------------------------------------------------------------------
 // Subcomponents
 // ---------------------------------------------------------------------------
 
@@ -395,9 +439,7 @@ function InfoField({
 }): React.JSX.Element {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground mb-1">
-        {label}
-      </div>
+      <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
       <div className="text-foreground">{children}</div>
     </div>
   );
@@ -442,5 +484,11 @@ function AgentName({
     );
   }
 
-  return <span className="text-xs font-mono text-muted-foreground">{agentId.slice(0, 12)}...</span>;
+  return (
+    <CopyableText
+      value={agentId}
+      maxDisplay={12}
+      className="text-xs font-mono text-muted-foreground"
+    />
+  );
 }

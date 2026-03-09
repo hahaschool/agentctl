@@ -21,10 +21,13 @@ import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
 import { agentRoutes } from './routes/agents.js';
+import { claudeMemRoutes } from './routes/claude-mem.js';
 import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
+import { fileProxyRoutes } from './routes/files.js';
+import { gitProxyRoutes } from './routes/git.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -36,6 +39,7 @@ import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { streamRoutes } from './routes/stream.js';
+import { terminalProxyRoutes } from './routes/terminal.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { wsRoutes } from './routes/ws.js';
 
@@ -118,9 +122,11 @@ export async function createServer({
   });
 
   // --- Rate Limiting ---
+  const rateLimitMax = Number(process.env.RATE_LIMIT_MAX) || 100;
+  const rateLimitWindow = process.env.RATE_LIMIT_WINDOW || '1 minute';
   await app.register(fastifyRateLimit, {
-    max: 100,
-    timeWindow: '1 minute',
+    max: rateLimitMax,
+    timeWindow: rateLimitWindow,
     allowList: (request) => {
       return request.url === '/health' || request.url === '/metrics';
     },
@@ -273,6 +279,11 @@ export async function createServer({
     });
   }
 
+  // Register claude-mem routes for querying the local claude-mem SQLite database.
+  await app.register(claudeMemRoutes, {
+    prefix: '/api/claude-mem',
+  });
+
   // Register scheduler routes for managing repeatable jobs.
   await app.register(schedulerRoutes, {
     prefix: '/api/scheduler',
@@ -304,6 +315,34 @@ export async function createServer({
       dbRegistry,
       workerPort,
       encryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY ?? '',
+    });
+  }
+
+  // Register file browsing proxy routes when dbRegistry is available.
+  if (dbRegistry) {
+    await app.register(fileProxyRoutes, {
+      prefix: '/api/machines',
+      dbRegistry,
+      workerPort,
+    });
+  }
+
+  // Register git status proxy routes when dbRegistry is available.
+  if (dbRegistry) {
+    await app.register(gitProxyRoutes, {
+      prefix: '/api/machines',
+      dbRegistry,
+      workerPort,
+    });
+  }
+
+  // Register terminal proxy routes when dbRegistry is available.
+  if (dbRegistry) {
+    await app.register(terminalProxyRoutes, {
+      prefix: '/api/machines',
+      dbRegistry,
+      workerPort,
+      logger,
     });
   }
 

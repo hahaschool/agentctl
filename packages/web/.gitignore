@@ -1,3 +1,4 @@
 .next/
 next-env.d.ts
 test-results/
+e2e-results/

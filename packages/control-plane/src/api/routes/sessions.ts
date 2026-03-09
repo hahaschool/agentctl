@@ -1,25 +1,29 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError } from '@agentctl/shared';
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
-import { agents as agentsTable, apiAccounts, rcSessions } from '../../db/schema.js';
+import { agents as agentsTable, apiAccounts, rcSessions, settings } from '../../db/schema.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { decryptCredential } from '../../utils/credential-crypto.js';
 import { resolveAccountId } from '../../utils/resolve-account.js';
+import {
+  clampLimit,
+  PAGINATION,
+  SESSION_DISCOVER_TIMEOUT_MS,
+  WORKER_REQUEST_TIMEOUT_MS,
+} from '../constants.js';
+import { proxyWorkerRequest } from '../proxy-worker-request.js';
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
-const DEFAULT_WORKER_PORT = 9000;
-const DISCOVER_TIMEOUT_MS = 5_000;
-const CONTENT_TIMEOUT_MS = 10_000;
+/** Matches a valid UUID v4 string. Used to skip non-UUID agentIds like 'adhoc'. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** How long a session can stay in 'starting' or 'active' without a heartbeat before being reaped. */
-const STALE_SESSION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+const STALE_SESSION_TIMEOUT_MS = Number(process.env.STALE_SESSION_TIMEOUT_MS) || 2 * 60 * 1000;
 /** How often the stale session reaper runs. */
-const REAPER_INTERVAL_MS = 60 * 1000; // 60 seconds
+const REAPER_INTERVAL_MS = Number(process.env.REAPER_INTERVAL_MS) || 60 * 1000;
 
 const RC_SESSION_STATUSES = ['starting', 'active', 'paused', 'ended', 'error'] as const;
 type RcSessionStatus = (typeof RC_SESSION_STATUSES)[number];
@@ -87,7 +91,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .where(
           and(
             inArray(rcSessions.status, ['starting', 'active']),
-            lt(rcSessions.lastHeartbeat, cutoff),
+            or(isNull(rcSessions.lastHeartbeat), lt(rcSessions.lastHeartbeat, cutoff)),
+            lt(rcSessions.startedAt, cutoff),
           ),
         );
 
@@ -98,7 +103,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           .set({
             status: 'error',
             endedAt: new Date(),
-            metadata: sql`${rcSessions.metadata} || '{"errorMessage":"Session timed out — no heartbeat from worker"}'::jsonb`,
+            metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || '{"errorMessage":"Session timed out — no heartbeat from worker","errorHint":"Try resuming or forking this session to continue."}'::jsonb`,
           })
           .where(inArray(rcSessions.id, ids));
 
@@ -149,7 +154,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             : `${workerBaseUrl}/api/sessions/discover`;
 
           const response = await fetch(discoverUrl, {
-            signal: AbortSignal.timeout(DISCOVER_TIMEOUT_MS),
+            signal: AbortSignal.timeout(SESSION_DISCOVER_TIMEOUT_MS),
           });
 
           if (!response.ok) {
@@ -258,7 +263,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       try {
         const workerResponse = await fetch(contentUrl, {
-          signal: AbortSignal.timeout(CONTENT_TIMEOUT_MS),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (!workerResponse.ok) {
@@ -302,6 +307,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   app.get<{
     Querystring: {
       machineId?: string;
+      agentId?: string;
       status?: string;
       limit?: string;
       offset?: string;
@@ -310,17 +316,14 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
     '/',
     { schema: { tags: ['sessions'], summary: 'List all sessions across the fleet' } },
     async (request, reply) => {
-      const { machineId, status } = request.query;
+      const { machineId, agentId, status } = request.query;
 
       const rawLimit = request.query.limit;
       const rawOffset = request.query.offset;
 
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.sessions.defaultLimit;
       if (rawLimit !== undefined) {
-        const parsed = Number(rawLimit);
-        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_LIMIT) {
-          limit = parsed;
-        }
+        limit = clampLimit(Number(rawLimit), PAGINATION.sessions);
       }
 
       let offset = 0;
@@ -337,6 +340,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         conditions.push(eq(rcSessions.machineId, machineId));
       }
 
+      if (agentId) {
+        conditions.push(eq(rcSessions.agentId, agentId));
+      }
+
       if (status) {
         if (!RC_SESSION_STATUSES.includes(status as RcSessionStatus)) {
           return reply.code(400).send({
@@ -347,7 +354,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         conditions.push(eq(rcSessions.status, status));
       }
 
-      const query =
+      const baseQuery =
         conditions.length > 0
           ? db
               .select()
@@ -355,9 +362,48 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               .where(and(...conditions))
           : db.select().from(rcSessions);
 
-      const rows = await query.orderBy(desc(rcSessions.startedAt)).limit(limit).offset(offset);
+      const countQuery =
+        conditions.length > 0
+          ? db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(rcSessions)
+              .where(and(...conditions))
+          : db.select({ count: sql<number>`count(*)::int` }).from(rcSessions);
 
-      return rows;
+      const [sessionRows, countRows] = await Promise.all([
+        baseQuery.orderBy(desc(rcSessions.startedAt)).limit(limit).offset(offset),
+        countQuery,
+      ]);
+
+      // Resolve agent names in a single batch query (skip non-UUID values like 'adhoc')
+      const agentIds = [
+        ...new Set(sessionRows.map((s) => s.agentId).filter((id) => id && UUID_RE.test(id))),
+      ] as string[];
+      const agentNameMap = new Map<string, string>();
+      if (agentIds.length > 0) {
+        const agentRows = await db
+          .select({ id: agentsTable.id, name: agentsTable.name })
+          .from(agentsTable)
+          .where(inArray(agentsTable.id, agentIds));
+        for (const a of agentRows) {
+          agentNameMap.set(a.id, a.name);
+        }
+      }
+
+      const rows = sessionRows.map((s) => ({
+        ...s,
+        agentName: agentNameMap.get(s.agentId) ?? null,
+      }));
+
+      const total = countRows[0]?.count ?? 0;
+
+      return {
+        sessions: rows,
+        total,
+        limit,
+        offset,
+        hasMore: offset + rows.length < total,
+      };
     },
   );
 
@@ -380,7 +426,19 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
       }
 
-      return rows[0];
+      const session = rows[0];
+
+      // Resolve agent name (skip non-UUID values like 'adhoc')
+      let agentName: string | null = null;
+      if (session.agentId && UUID_RE.test(session.agentId)) {
+        const [agentRow] = await db
+          .select({ name: agentsTable.name })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, session.agentId));
+        agentName = agentRow?.name ?? null;
+      }
+
+      return { ...session, agentName };
     },
   );
 
@@ -423,6 +481,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         return reply.code(400).send({
           error: 'INVALID_PROJECT_PATH',
           message: 'A non-empty "projectPath" string is required',
+        });
+      }
+
+      if (projectPath && !projectPath.startsWith('/')) {
+        return reply.code(400).send({
+          error: 'INVALID_PROJECT_PATH',
+          message: 'projectPath must be an absolute path starting with /',
         });
       }
 
@@ -476,6 +541,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           projectPath,
         },
         db,
+        app.log,
       );
 
       if (resolvedAccountId && encryptionKey) {
@@ -525,6 +591,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             accountCredential,
             accountProvider,
           }),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (workerResponse.ok) {
@@ -547,7 +614,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           );
           await db
             .update(rcSessions)
-            .set({ status: 'error', endedAt: new Date() })
+            .set({
+              status: 'error',
+              endedAt: new Date(),
+              metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || ${JSON.stringify({ errorMessage: errorText, errorHint: 'Check that the worker is running and the machine is online.' })}::jsonb`,
+            })
             .where(eq(rcSessions.id, sessionId));
         }
       } catch (err) {
@@ -558,7 +629,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         );
         await db
           .update(rcSessions)
-          .set({ status: 'error', endedAt: new Date() })
+          .set({
+            status: 'error',
+            endedAt: new Date(),
+            metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || ${JSON.stringify({ errorMessage: message, errorHint: 'Check that the worker is running and the machine is online.' })}::jsonb`,
+          })
           .where(eq(rcSessions.id, sessionId));
       }
 
@@ -589,13 +664,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
   app.post<{
     Params: { sessionId: string };
-    Body: { prompt: string };
+    Body: { prompt: string; model?: string };
   }>(
     '/:sessionId/resume',
     { schema: { tags: ['sessions'], summary: 'Resume a paused or ended session' } },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt } = request.body;
+      const { prompt, model: newModel } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.code(400).send({
@@ -636,7 +711,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       // 'active' once the worker confirms the CLI process is actually running)
       const [updated] = await db
         .update(rcSessions)
-        .set({ status: 'starting', endedAt: null, lastHeartbeat: new Date() })
+        .set({
+          status: 'starting',
+          endedAt: null,
+          lastHeartbeat: new Date(),
+          ...(newModel !== undefined ? { model: newModel || null } : {}),
+        })
         .where(eq(rcSessions.id, sessionId))
         .returning();
 
@@ -678,11 +758,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                 claudeSessionId: session.claudeSessionId,
                 projectPath: session.projectPath,
                 agentId: session.agentId,
-                model: session.model ?? null,
+                model: newModel ?? session.model ?? null,
                 cpSessionId: sessionId,
                 accountCredential,
                 accountProvider,
               }),
+              signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
             },
           );
 
@@ -777,13 +858,34 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
   app.post<{
     Params: { sessionId: string };
-    Body: { prompt: string; machineId?: string; accountId?: string };
+    Body: {
+      prompt: string;
+      machineId?: string;
+      accountId?: string;
+      model?: string;
+      strategy?: 'jsonl-truncation' | 'context-injection' | 'resume';
+      forkAtIndex?: number;
+      selectedMessages?: Array<{
+        type: string;
+        content: string;
+        toolName?: string;
+        timestamp?: string;
+      }>;
+    };
   }>(
     '/:sessionId/fork',
     { schema: { tags: ['sessions'], summary: 'Fork a session into a new one' } },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { prompt, machineId: overrideMachineId, accountId: overrideAccountId } = request.body;
+      const {
+        prompt,
+        machineId: overrideMachineId,
+        accountId: overrideAccountId,
+        model: overrideModel,
+        strategy = 'resume',
+        forkAtIndex,
+        selectedMessages,
+      } = request.body;
 
       if (!prompt || typeof prompt !== 'string') {
         return reply.code(400).send({
@@ -813,10 +915,17 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       const targetMachineId = overrideMachineId ?? parent.machineId;
       const machine = await dbRegistry.getMachine(targetMachineId);
 
-      if (!machine || machine.status === 'offline') {
+      if (!machine) {
+        return reply.code(404).send({
+          error: 'MACHINE_NOT_FOUND',
+          message: `Machine '${targetMachineId}' is not registered`,
+        });
+      }
+
+      if (machine.status === 'offline') {
         return reply.code(503).send({
-          error: 'MACHINE_UNAVAILABLE',
-          message: `Machine '${targetMachineId}' is offline or not registered`,
+          error: 'MACHINE_OFFLINE',
+          message: `Machine '${targetMachineId}' (${machine.hostname}) is offline`,
         });
       }
 
@@ -852,33 +961,64 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           machineId: targetMachineId,
           status: 'starting',
           projectPath: parent.projectPath,
-          model: parent.model,
+          model: overrideModel ?? parent.model,
           accountId: resolvedAccountId ?? null,
           metadata: {
             initialPrompt: prompt,
             forkedFrom: sessionId,
             parentClaudeSessionId: parent.claudeSessionId,
+            forkStrategy: strategy,
           },
         })
         .returning();
 
-      // Dispatch to worker — use resumeSessionId to continue from parent
+      // Dispatch to worker — build body based on fork strategy
       const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
+
+      let workerBody: Record<string, unknown> = {
+        sessionId: newSessionId,
+        agentId: parent.agentId,
+        projectPath: parent.projectPath,
+        model: overrideModel ?? parent.model ?? null,
+        prompt,
+        resumeSessionId: parent.claudeSessionId,
+        accountCredential,
+        accountProvider,
+      };
+
+      if (strategy === 'jsonl-truncation') {
+        // Pass forkAtIndex so the worker can truncate the JSONL before resuming
+        workerBody.forkAtIndex = forkAtIndex;
+      } else if (strategy === 'context-injection' && selectedMessages?.length) {
+        // Build a system prompt from selected messages and start a fresh session
+        const contextLines = ['## Previous Conversation Context\n'];
+        for (const msg of selectedMessages) {
+          const role =
+            msg.type === 'human' ? 'User' : msg.type === 'assistant' ? 'Assistant' : 'Tool';
+          contextLines.push(`### ${role}${msg.timestamp ? ` (${msg.timestamp})` : ''}`);
+          if (msg.toolName) contextLines.push(`Tool: ${msg.toolName}`);
+          contextLines.push(msg.content, '');
+        }
+        workerBody = {
+          sessionId: newSessionId,
+          agentId: parent.agentId,
+          projectPath: parent.projectPath,
+          model: overrideModel ?? parent.model ?? null,
+          prompt,
+          systemPrompt: contextLines.join('\n'),
+          // No resumeSessionId — fresh session with context injected
+          accountCredential,
+          accountProvider,
+        };
+      }
+      // For 'resume' (default), workerBody already includes resumeSessionId
 
       try {
         const workerResponse = await fetch(`${workerBaseUrl}/api/sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: newSessionId,
-            agentId: parent.agentId,
-            projectPath: parent.projectPath,
-            model: parent.model ?? null,
-            prompt,
-            resumeSessionId: parent.claudeSessionId,
-            accountCredential,
-            accountProvider,
-          }),
+          body: JSON.stringify(workerBody),
+          signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });
 
         if (workerResponse.ok) {
@@ -1017,13 +1157,18 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message, accountCredential, accountProvider }),
+            signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
           },
         );
 
         if (!workerResponse.ok) {
-          let workerError: { error?: string; code?: string } = {};
+          let workerError: { error?: string; code?: string; hint?: string } = {};
           try {
-            workerError = (await workerResponse.json()) as { error?: string; code?: string };
+            workerError = (await workerResponse.json()) as {
+              error?: string;
+              code?: string;
+              hint?: string;
+            };
           } catch {
             /* ignore parse errors */
           }
@@ -1059,6 +1204,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           return reply.code(workerResponse.status === 409 ? 409 : 502).send({
             error: code,
             message: msg,
+            ...(workerError.hint && { hint: workerError.hint }),
           });
         }
 
@@ -1082,14 +1228,15 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   );
 
   // ---------------------------------------------------------------------------
-  // DELETE /:sessionId — end/close a session
+  // DELETE /:sessionId — end/close a session, optionally purge from DB
   // ---------------------------------------------------------------------------
 
-  app.delete<{ Params: { sessionId: string } }>(
+  app.delete<{ Params: { sessionId: string }; Querystring: { purge?: string } }>(
     '/:sessionId',
     { schema: { tags: ['sessions'], summary: 'End/close a session' } },
     async (request, reply) => {
       const { sessionId } = request.params;
+      const purge = request.query.purge === 'true';
 
       const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
 
@@ -1102,6 +1249,35 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const session = rows[0];
 
+      // Best-effort: notify worker to clean up the session (for active sessions)
+      if (session.status !== 'ended' && session.status !== 'error') {
+        const machine = await dbRegistry.getMachine(session.machineId);
+
+        if (machine && machine.status !== 'offline') {
+          const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
+          const workerSessionRef = session.claudeSessionId ?? sessionId;
+
+          const result = await proxyWorkerRequest({
+            workerBaseUrl,
+            path: `/api/sessions/${encodeURIComponent(workerSessionRef)}`,
+            method: 'DELETE',
+            timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+          });
+
+          if (!result.ok) {
+            app.log.warn(
+              { sessionId, machineId: session.machineId, err: result.message },
+              'Failed to notify worker of session end — session marked ended in control plane',
+            );
+          }
+        }
+      }
+
+      if (purge) {
+        await db.delete(rcSessions).where(eq(rcSessions.id, sessionId));
+        return { ok: true, sessionId, purged: true };
+      }
+
       if (session.status === 'ended') {
         return { ok: true, sessionId, message: 'Session was already ended' };
       }
@@ -1111,26 +1287,6 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .set({ status: 'ended', endedAt: new Date() })
         .where(eq(rcSessions.id, sessionId))
         .returning();
-
-      // Best-effort: notify worker to clean up the session
-      const machine = await dbRegistry.getMachine(session.machineId);
-
-      if (machine && machine.status !== 'offline') {
-        const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
-        const workerSessionRef = session.claudeSessionId ?? sessionId;
-
-        try {
-          await fetch(`${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}`, {
-            method: 'DELETE',
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          app.log.warn(
-            { sessionId, machineId: session.machineId, err: message },
-            'Failed to notify worker of session end — session marked ended in control plane',
-          );
-        }
-      }
 
       return { ok: true, sessionId, session: updated };
     },
@@ -1161,10 +1317,17 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const machine = await dbRegistry.getMachine(session.machineId);
 
-      if (!machine || machine.status === 'offline') {
+      if (!machine) {
+        return reply.code(404).send({
+          error: 'MACHINE_NOT_FOUND',
+          message: `Machine '${session.machineId}' is not registered`,
+        });
+      }
+
+      if (machine.status === 'offline') {
         return reply.code(503).send({
-          error: 'MACHINE_UNAVAILABLE',
-          message: `Machine '${session.machineId}' is offline`,
+          error: 'MACHINE_OFFLINE',
+          message: `Machine '${session.machineId}' (${machine.hostname}) is offline`,
         });
       }
 
@@ -1172,6 +1335,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       const workerSessionRef = session.claudeSessionId ?? sessionId;
 
       try {
+        // SSE streams stay open indefinitely — do NOT use a timeout here.
+        // The 10s WORKER_REQUEST_TIMEOUT_MS is only for RPC-style requests.
         const workerResponse = await fetch(
           `${workerBaseUrl}/api/sessions/${encodeURIComponent(workerSessionRef)}/stream`,
         );
@@ -1246,7 +1411,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
         // Cleanup on client disconnect
         request.raw.on('close', () => {
-          reader.cancel().catch(() => {});
+          reader.cancel().catch((cancelErr) => {
+            app.log.debug(
+              { err: cancelErr instanceof Error ? cancelErr.message : String(cancelErr) },
+              'Stream reader cancel on disconnect',
+            );
+          });
         });
       } catch (err) {
         const errMessage = err instanceof Error ? err.message : String(err);
@@ -1276,13 +1446,14 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       pid?: number | null;
       costUsd?: number;
       errorMessage?: string;
+      messageCount?: number;
     };
   }>(
     '/:sessionId/status',
     { schema: { tags: ['sessions'], summary: 'Worker reports session status update' } },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const { status, claudeSessionId, pid, costUsd, errorMessage } = request.body;
+      const { status, claudeSessionId, pid, costUsd, errorMessage, messageCount } = request.body;
 
       const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
 
@@ -1320,8 +1491,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         updateSet.pid = pid;
       }
 
-      // Store cost and error in metadata (merge with existing)
-      if (costUsd !== undefined || errorMessage !== undefined) {
+      // Store cost, error, and messageCount in metadata (merge with existing)
+      if (costUsd !== undefined || errorMessage !== undefined || messageCount !== undefined) {
         const existingMeta = (rows[0].metadata ?? {}) as Record<string, unknown>;
         const newMeta = { ...existingMeta };
 
@@ -1330,6 +1501,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         }
         if (errorMessage !== undefined) {
           newMeta.errorMessage = errorMessage;
+        }
+        if (messageCount !== undefined) {
+          newMeta.messageCount = messageCount;
         }
 
         updateSet.metadata = newMeta;
@@ -1343,7 +1517,161 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       app.log.info({ sessionId, status, claudeSessionId, pid }, 'Session status updated by worker');
 
+      // ── Account failover ──────────────────────────────────────────
+      // When a session fails with a quota/auth error, check the failover
+      // policy and try the next active account if applicable.
+      if (
+        status === 'error' &&
+        errorMessage &&
+        updated.accountId &&
+        encryptionKey &&
+        isQuotaOrAuthError(errorMessage)
+      ) {
+        try {
+          const [policySetting] = await db
+            .select()
+            .from(settings)
+            .where(eq(settings.key, 'failover_policy'));
+          const policy = (policySetting?.value as { value?: string })?.value ?? 'none';
+
+          if (policy === 'priority' || policy === 'round_robin') {
+            // Get all active accounts sorted by priority
+            const activeAccounts = await db
+              .select()
+              .from(apiAccounts)
+              .where(eq(apiAccounts.isActive, true))
+              .orderBy(apiAccounts.priority);
+
+            // Find next account after the current one
+            const currentIdx = activeAccounts.findIndex((a) => a.id === updated.accountId);
+            const nextAccount =
+              currentIdx >= 0 && currentIdx + 1 < activeAccounts.length
+                ? activeAccounts[currentIdx + 1]
+                : null;
+
+            if (nextAccount) {
+              app.log.info(
+                {
+                  sessionId,
+                  failedAccountId: updated.accountId,
+                  nextAccountId: nextAccount.id,
+                  nextAccountName: nextAccount.name,
+                  policy,
+                },
+                'Failover: switching to next account after quota/auth error',
+              );
+
+              // Store failover metadata on the failed session
+              const failMeta = (updated.metadata ?? {}) as Record<string, unknown>;
+              failMeta.failoverTo = nextAccount.id;
+              failMeta.failoverReason = errorMessage;
+              await db
+                .update(rcSessions)
+                .set({ metadata: failMeta })
+                .where(eq(rcSessions.id, sessionId));
+
+              // Decrypt the next account's credential
+              const nextCredential = decryptCredential(
+                nextAccount.credential,
+                nextAccount.credentialIv,
+                encryptionKey,
+              );
+
+              // Re-dispatch: resume the same Claude session with the new account
+              const machine = await dbRegistry.getMachine(updated.machineId);
+              if (machine) {
+                const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
+                const resumePayload = {
+                  prompt: 'Continue from where you left off.',
+                  claudeSessionId: updated.claudeSessionId,
+                  cpSessionId: sessionId,
+                  agentId: updated.agentId,
+                  model: updated.model,
+                  projectPath: updated.projectPath,
+                  accountId: nextAccount.id,
+                  accountCredential: nextCredential,
+                  accountProvider: nextAccount.provider,
+                };
+
+                const resumeResp = await fetch(
+                  `${workerBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/resume`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(resumePayload),
+                    signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
+                  },
+                );
+
+                if (resumeResp.ok) {
+                  // Update the session to point to the new account
+                  await db
+                    .update(rcSessions)
+                    .set({
+                      status: 'starting',
+                      endedAt: null,
+                      accountId: nextAccount.id,
+                      lastHeartbeat: new Date(),
+                    })
+                    .where(eq(rcSessions.id, sessionId));
+
+                  app.log.info(
+                    { sessionId, newAccountId: nextAccount.id },
+                    'Failover: session resumed with new account',
+                  );
+                } else {
+                  app.log.warn(
+                    { sessionId, status: resumeResp.status },
+                    'Failover: worker resume request failed',
+                  );
+                }
+              }
+            } else {
+              app.log.warn(
+                { sessionId, accountId: updated.accountId },
+                'Failover: no more active accounts available to try',
+              );
+            }
+          }
+        } catch (failoverErr) {
+          app.log.error(
+            {
+              sessionId,
+              error: failoverErr instanceof Error ? failoverErr.message : String(failoverErr),
+            },
+            'Failover: unexpected error during account switch',
+          );
+        }
+      }
+
       return { ok: true, session: updated };
     },
   );
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Patterns in error messages that indicate quota exhaustion or auth failure. */
+const QUOTA_AUTH_PATTERNS = [
+  'out of extra usage',
+  'exceeded your',
+  'rate limit',
+  'quota exceeded',
+  'usage limit',
+  'too many requests',
+  '429',
+  'unauthorized',
+  'authentication',
+  'invalid api key',
+  'invalid_api_key',
+  'permission denied',
+  '401',
+  '403',
+];
+
+function isQuotaOrAuthError(errorMessage: string): boolean {
+  const lower = errorMessage.toLowerCase();
+  return QUOTA_AUTH_PATTERNS.some((pattern) => lower.includes(pattern));
+}

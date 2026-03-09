@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { type Database, extractRows } from '../../db/index.js';
+import { BATCH_LIMITS, clampLimit, PAGINATION } from '../constants.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,10 +92,6 @@ function isValidSeverity(value: string): value is Severity {
   return (VALID_SEVERITIES as readonly string[]).includes(value);
 }
 
-const MAX_BATCH_SIZE = 500;
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 500;
-
 function formatFinding(row: SecurityFindingRow): Record<string, unknown> {
   return {
     id: row.id,
@@ -156,10 +153,10 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         });
       }
 
-      if (findings.length > MAX_BATCH_SIZE) {
+      if (findings.length > BATCH_LIMITS.securityFindings) {
         return reply.code(400).send({
           error: 'BATCH_SIZE_EXCEEDED',
-          message: `Batch size ${findings.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
+          message: `Batch size ${findings.length} exceeds maximum of ${BATCH_LIMITS.securityFindings}`,
         });
       }
 
@@ -285,7 +282,7 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
       }
 
       // Validate limit
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.securityFindings.defaultLimit;
       if (limitStr !== undefined) {
         const parsed = Number(limitStr);
         if (!Number.isFinite(parsed) || parsed < 1) {
@@ -294,7 +291,7 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
             message: '"limit" must be a positive integer',
           });
         }
-        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+        limit = clampLimit(parsed, PAGINATION.securityFindings);
       }
 
       // Validate offset

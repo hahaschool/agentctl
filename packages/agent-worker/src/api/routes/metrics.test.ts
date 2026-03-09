@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AgentPool } from '../../runtime/agent-pool.js';
+import { createSilentLogger } from '../../test-helpers.js';
 import { createWorkerServer } from '../server.js';
 
 // Mock the SDK runner so agents fall back to stub simulation immediately
@@ -26,16 +26,12 @@ vi.mock('../../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-metrics';
 
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
-
 describe('GET /metrics (agent-worker)', () => {
   let app: FastifyInstance;
   let pool: AgentPool;
 
   beforeAll(async () => {
-    const logger = createMockLogger();
+    const logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 3 });
     app = await createWorkerServer({
       logger,

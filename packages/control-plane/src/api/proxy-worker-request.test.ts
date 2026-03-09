@@ -1,6 +1,11 @@
+import type { FastifyReply } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { proxyWorkerRequest } from './proxy-worker-request.js';
+import {
+  type ProxyWorkerResult,
+  proxyWorkerRequest,
+  replyWithProxyResult,
+} from './proxy-worker-request.js';
 
 describe('proxyWorkerRequest', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -43,10 +48,11 @@ describe('proxyWorkerRequest', () => {
     );
   });
 
-  it('returns ok:true even for non-2xx status codes (passes through)', async () => {
+  it('returns ok:false for non-2xx status codes with error details', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 409,
+      statusText: 'Conflict',
       json: async () => ({ error: 'CONFLICT', message: 'already running' }),
     });
 
@@ -57,9 +63,10 @@ describe('proxyWorkerRequest', () => {
     });
 
     expect(result).toEqual({
-      ok: true,
+      ok: false,
       status: 409,
-      data: { error: 'CONFLICT', message: 'already running' },
+      error: 'CONFLICT',
+      message: 'already running',
     });
   });
 
@@ -266,6 +273,106 @@ describe('proxyWorkerRequest', () => {
     expect(requestInit.signal).toBeDefined();
   });
 
+  // ---------------------------------------------------------------------------
+  // Non-JSON response handling
+  // ---------------------------------------------------------------------------
+
+  it('returns INVALID_RESPONSE when successful response is not valid JSON', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => {
+        throw new SyntaxError('Unexpected token');
+      },
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/agents/a1/loop',
+      method: 'GET',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 502,
+      error: 'INVALID_RESPONSE',
+      message: 'Worker returned non-JSON response with HTTP 200',
+    });
+  });
+
+  it('returns WORKER_ERROR when error response is not valid JSON', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => {
+        throw new SyntaxError('Unexpected token');
+      },
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/agents/a1/loop',
+      method: 'POST',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 500,
+      error: 'WORKER_ERROR',
+      message: 'Internal Server Error',
+    });
+  });
+
+  it('falls back to generic message when error body lacks error and message fields', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      statusText: 'Unprocessable Entity',
+      json: async () => ({ details: 'some irrelevant field' }),
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/agents/a1/loop',
+      method: 'POST',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 422,
+      error: 'WORKER_ERROR',
+      message: 'Unprocessable Entity',
+    });
+  });
+
+  it('handles null JSON error body gracefully', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => null,
+    });
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://worker:9000',
+      path: '/api/test',
+      method: 'GET',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 500,
+      error: 'WORKER_ERROR',
+      message: 'Internal Server Error',
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Timeout configuration
+  // ---------------------------------------------------------------------------
+
   it('uses custom timeout when timeoutMs is provided', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -283,5 +390,61 @@ describe('proxyWorkerRequest', () => {
     const callArgs = vi.mocked(globalThis.fetch).mock.calls[0];
     const requestInit = callArgs[1] as RequestInit;
     expect(requestInit.signal).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// replyWithProxyResult
+// ---------------------------------------------------------------------------
+
+describe('replyWithProxyResult', () => {
+  function createMockReply(): FastifyReply {
+    const reply = {
+      status: vi.fn().mockReturnThis(),
+      send: vi.fn().mockReturnThis(),
+    } as unknown as FastifyReply;
+    return reply;
+  }
+
+  it('sends error fields for a failure result', () => {
+    const reply = createMockReply();
+    const result: ProxyWorkerResult = {
+      ok: false,
+      status: 502,
+      error: 'WORKER_UNREACHABLE',
+      message: 'connection refused',
+    };
+
+    replyWithProxyResult(reply, result);
+
+    expect(reply.status).toHaveBeenCalledWith(502);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: 'WORKER_UNREACHABLE',
+      message: 'connection refused',
+    });
+  });
+
+  it('sends data for a success result', () => {
+    const reply = createMockReply();
+    const result: ProxyWorkerResult = {
+      ok: true,
+      status: 200,
+      data: { sessions: [] },
+    };
+
+    replyWithProxyResult(reply, result);
+
+    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(reply.send).toHaveBeenCalledWith({ sessions: [] });
+  });
+
+  it('preserves non-200 success status codes', () => {
+    const reply = createMockReply();
+    const result: ProxyWorkerResult = { ok: true, status: 201, data: { id: 'new' } };
+
+    replyWithProxyResult(reply, result);
+
+    expect(reply.status).toHaveBeenCalledWith(201);
+    expect(reply.send).toHaveBeenCalledWith({ id: 'new' });
   });
 });

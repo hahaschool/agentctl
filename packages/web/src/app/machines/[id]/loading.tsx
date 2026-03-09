@@ -19,7 +19,7 @@ export default function Loading() {
       </div>
 
       {/* Machine Details Card */}
-      <div className="mb-4 p-4 bg-card border border-border rounded-lg">
+      <div className="mb-4 p-4 bg-card border border-border/50 rounded-lg">
         <Skeleton className="h-4 w-32 mb-4" />
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
           {Array.from({ length: 5 }, (_, i) => (
@@ -32,7 +32,7 @@ export default function Loading() {
       </div>
 
       {/* Capabilities Card */}
-      <div className="mb-4 p-4 bg-card border border-border rounded-lg">
+      <div className="mb-4 p-4 bg-card border border-border/50 rounded-lg">
         <Skeleton className="h-4 w-28 mb-4" />
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
           {Array.from({ length: 3 }, (_, i) => (
@@ -45,7 +45,7 @@ export default function Loading() {
       </div>
 
       {/* Agents on this Machine Card */}
-      <div className="mb-4 p-4 bg-card border border-border rounded-lg">
+      <div className="mb-4 p-4 bg-card border border-border/50 rounded-lg">
         <Skeleton className="h-4 w-40 mb-4" />
         <div className="space-y-2">
           {Array.from({ length: 3 }, (_, i) => (
@@ -55,7 +55,7 @@ export default function Loading() {
       </div>
 
       {/* Recent Sessions Card */}
-      <div className="p-4 bg-card border border-border rounded-lg">
+      <div className="p-4 bg-card border border-border/50 rounded-lg">
         <Skeleton className="h-4 w-40 mb-4" />
         <div className="space-y-2">
           {Array.from({ length: 3 }, (_, i) => (

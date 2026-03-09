@@ -1,28 +1,18 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Bot, Filter } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import {
+  type AgentFormCreateData,
+  AgentFormDialog,
+  type AgentFormEditData,
+} from '../components/AgentFormDialog';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
@@ -31,20 +21,22 @@ import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { RefreshButton } from '../components/RefreshButton';
+import { SimpleTooltip } from '../components/SimpleTooltip';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import { formatCost } from '../lib/format-utils';
+import type { Agent } from '../lib/api';
+import { downloadCsv, formatCost } from '../lib/format-utils';
 import {
   agentsQuery,
   machinesQuery,
+  sessionsQuery,
   useCreateAgent,
   useStartAgent,
   useStopAgent,
+  useUpdateAgent,
 } from '../lib/queries';
-
-const AGENT_TYPES = ['autonomous', 'adhoc', 'scheduled'] as const;
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
@@ -57,25 +49,30 @@ export function AgentsPage(): React.JSX.Element {
   const toast = useToast();
   const agents = useQuery(agentsQuery());
   const machines = useQuery(machinesQuery());
+  const recentSessions = useQuery(sessionsQuery({ limit: 100 }));
 
   const createAgent = useCreateAgent();
+  const updateAgent = useUpdateAgent();
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [createName, setCreateName] = useState('');
-  const [createMachineId, setCreateMachineId] = useState('');
-  const [createType, setCreateType] = useState<string>('autonomous');
-  const [createModel, setCreateModel] = useState(
-    () =>
-      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
-      'claude-sonnet-4-6',
-  );
-  const [createProjectPath, setCreateProjectPath] = useState('');
-  const [createInitialPrompt, setCreateInitialPrompt] = useState('');
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
 
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+
+  // Extract unique project paths from recent sessions
+  const recentProjectPaths = useMemo(() => {
+    const sessions = recentSessions.data?.sessions ?? [];
+    const pathSet = new Set<string>();
+    for (const s of sessions) {
+      if (s.projectPath) pathSet.add(s.projectPath);
+    }
+    return Array.from(pathSet).sort();
+  }, [recentSessions.data]);
+
+  const machineList = machines.data ?? [];
 
   // -- Filter / Sort state --
   const [search, setSearch] = useState('');
@@ -88,15 +85,15 @@ export function AgentsPage(): React.JSX.Element {
         r: () => void agents.refetch(),
         Escape: () => {
           if (promptAgentId) setPromptAgentId(null);
+          else if (editingAgent) setEditingAgent(null);
           else if (showCreateDialog) setShowCreateDialog(false);
         },
       }),
-      [agents, promptAgentId, showCreateDialog],
+      [agents, promptAgentId, editingAgent, showCreateDialog],
     ),
   );
 
   const agentList = agents.data ?? [];
-  const machineList = machines.data ?? [];
 
   // Summary stats
   const statusCounts = useMemo(() => {
@@ -152,39 +149,29 @@ export function AgentsPage(): React.JSX.Element {
     return sorted;
   }, [agentList, statusFilter, search, sortOrder]);
 
-  // -- Create agent handler --
-  function resetCreateForm(): void {
-    setCreateName('');
-    setCreateMachineId('');
-    setCreateType('autonomous');
-    setCreateModel(
-      (typeof window !== 'undefined' ? localStorage.getItem('agentctl:defaultModel') : null) ??
-        'claude-sonnet-4-6',
-    );
-    setCreateProjectPath('');
-    setCreateInitialPrompt('');
-  }
-
-  const handleCreate = (): void => {
-    if (!createName.trim() || !createMachineId) return;
-
-    const config: Record<string, unknown> = {};
-    if (createModel.trim()) config.model = createModel.trim();
-    if (createInitialPrompt.trim()) config.initialPrompt = createInitialPrompt.trim();
-
-    createAgent.mutate(
-      {
-        name: createName.trim(),
-        machineId: createMachineId,
-        type: createType,
-        ...(createProjectPath.trim() ? { projectPath: createProjectPath.trim() } : {}),
-        ...(Object.keys(config).length > 0 ? { config } : {}),
+  // -- Create agent handler (delegated to AgentFormDialog) --
+  const handleCreateSubmit = (data: AgentFormCreateData | AgentFormEditData): void => {
+    createAgent.mutate(data as AgentFormCreateData, {
+      onSuccess: () => {
+        toast.success(`Agent "${data.name}" created`);
+        setShowCreateDialog(false);
       },
+      onError: (err) => {
+        toast.error(err instanceof Error ? err.message : String(err));
+      },
+    });
+  };
+
+  // -- Edit agent handler (delegated to AgentFormDialog) --
+  const handleEditSubmit = (data: AgentFormCreateData | AgentFormEditData): void => {
+    if (!('id' in data)) return;
+    const { id, ...body } = data;
+    updateAgent.mutate(
+      { id, ...body },
       {
         onSuccess: () => {
-          toast.success(`Agent "${createName.trim()}" created`);
-          resetCreateForm();
-          setShowCreateDialog(false);
+          toast.success(`Agent "${data.name}" updated`);
+          setEditingAgent(null);
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : String(err));
@@ -223,15 +210,48 @@ export function AgentsPage(): React.JSX.Element {
     });
   };
 
-  const isCreateDisabled = createAgent.isPending || !createName.trim() || !createMachineId;
+  // -- Stop all running agents --
+  const [stoppingAll, setStoppingAll] = useState(false);
+  const runningAgents = useMemo(() => agentList.filter((a) => a.status === 'running'), [agentList]);
+
+  const handleStopAll = (): void => {
+    if (runningAgents.length === 0) return;
+    setStoppingAll(true);
+    let completed = 0;
+    let errors = 0;
+    for (const agent of runningAgents) {
+      stopAgent.mutate(agent.id, {
+        onSuccess: () => {
+          completed++;
+          if (completed + errors === runningAgents.length) {
+            setStoppingAll(false);
+            if (errors === 0) {
+              toast.success(`Stopped ${completed} agent${completed !== 1 ? 's' : ''}`);
+            } else {
+              toast.error(`Stopped ${completed}, failed ${errors}`);
+            }
+          }
+        },
+        onError: (err) => {
+          errors++;
+          if (completed + errors === runningAgents.length) {
+            setStoppingAll(false);
+            toast.error(
+              `Stopped ${completed}, failed ${errors}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        },
+      });
+    }
+  };
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
       <FetchingBar isFetching={agents.isFetching && !agents.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
-          <h1 className="text-[22px] font-bold">Agents</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">Agents</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
             {agentList.length} agent{agentList.length !== 1 ? 's' : ''} registered
             {Object.keys(statusCounts).length > 0 && (
@@ -262,158 +282,44 @@ export function AgentsPage(): React.JSX.Element {
         <ErrorBanner message={agents.error.message} onRetry={() => void agents.refetch()} />
       )}
 
-      {/* Create Agent Dialog */}
-      <Dialog
+      {/* New Agent Dialog */}
+      <AgentFormDialog
+        mode="create"
         open={showCreateDialog}
-        onOpenChange={(open) => {
-          if (!open) resetCreateForm();
-          setShowCreateDialog(open);
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>New Agent</DialogTitle>
-          </DialogHeader>
+        onClose={() => setShowCreateDialog(false)}
+        onSubmit={handleCreateSubmit}
+        isPending={createAgent.isPending}
+        machines={machineList}
+        recentProjectPaths={recentProjectPaths}
+      />
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-name">
-                Name <span className="text-destructive">*</span>
-              </label>
-              <Input
-                id="create-agent-name"
-                placeholder="my-agent"
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                disabled={createAgent.isPending}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-machine">
-                Machine <span className="text-destructive">*</span>
-              </label>
-              <Select
-                value={createMachineId}
-                onValueChange={setCreateMachineId}
-                disabled={createAgent.isPending}
-              >
-                <SelectTrigger className="w-full" id="create-agent-machine">
-                  <SelectValue placeholder="Select a machine" />
-                </SelectTrigger>
-                <SelectContent position="popper" sideOffset={4}>
-                  {machineList.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.hostname} ({m.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-type">
-                Type
-              </label>
-              <Select
-                value={createType}
-                onValueChange={setCreateType}
-                disabled={createAgent.isPending}
-              >
-                <SelectTrigger className="w-full" id="create-agent-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper" sideOffset={4}>
-                  {AGENT_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-model">
-                Model
-              </label>
-              <Input
-                id="create-agent-model"
-                placeholder="claude-sonnet-4-6"
-                value={createModel}
-                onChange={(e) => setCreateModel(e.target.value)}
-                disabled={createAgent.isPending}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                The Claude model to use for this agent.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-project">
-                Project Path
-              </label>
-              <Input
-                id="create-agent-project"
-                placeholder="/home/user/projects/my-app"
-                value={createProjectPath}
-                onChange={(e) => setCreateProjectPath(e.target.value)}
-                disabled={createAgent.isPending}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Absolute path to the project directory on the target machine.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="create-agent-prompt">
-                Initial Prompt
-              </label>
-              <textarea
-                id="create-agent-prompt"
-                rows={3}
-                placeholder="Describe what this agent should do..."
-                value={createInitialPrompt}
-                onChange={(e) => setCreateInitialPrompt(e.target.value)}
-                disabled={createAgent.isPending}
-                className={cn(
-                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
-                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                  'dark:bg-input/30',
-                )}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Stored in agent config. Can be used as the default prompt when starting the agent.
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreate} disabled={isCreateDisabled}>
-              {createAgent.isPending ? 'Creating...' : 'Create Agent'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Edit Agent Dialog */}
+      <AgentFormDialog
+        mode="edit"
+        open={editingAgent !== null}
+        onClose={() => setEditingAgent(null)}
+        onSubmit={handleEditSubmit}
+        isPending={updateAgent.isPending}
+        agent={editingAgent}
+        machines={machineList}
+        recentProjectPaths={recentProjectPaths}
+      />
 
       {/* Filter / Sort controls */}
       <div className="flex gap-2.5 items-center mb-4 flex-wrap">
         <input
-          type="text"
+          type="search"
           placeholder="Search agents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search agents"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as AgentStatusFilter)}
           aria-label="Filter by status"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
           <option value="all">All statuses</option>
           <option value="running">Running</option>
@@ -424,14 +330,67 @@ export function AgentsPage(): React.JSX.Element {
         <select
           value={sortOrder}
           onChange={(e) => setSortOrder(e.target.value as AgentSortOrder)}
-          aria-label="Sort order"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs"
+          aria-label="Sort by"
+          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
         >
           <option value="name">{'\u2191'} Name (A-Z)</option>
           <option value="status">{'\u2191'} Status</option>
           <option value="lastRun">{'\u2193'} Last run</option>
           <option value="cost">{'\u2193'} Total cost</option>
         </select>
+        <SimpleTooltip
+          content={filteredAgents.length === 0 ? 'No agents to export' : 'Download agents as CSV'}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              const agents = filteredAgents;
+              if (agents.length === 0) return;
+              downloadCsv(
+                [
+                  'name',
+                  'id',
+                  'type',
+                  'status',
+                  'machineId',
+                  'projectPath',
+                  'lastRunAt',
+                  'totalCostUsd',
+                ],
+                agents.map((a) => [
+                  a.name,
+                  a.id,
+                  a.type,
+                  a.status,
+                  a.machineId,
+                  a.projectPath,
+                  a.lastRunAt,
+                  a.totalCostUsd,
+                ]),
+                `agents-${new Date().toISOString().slice(0, 10)}.csv`,
+              );
+            }}
+            disabled={filteredAgents.length === 0}
+            className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
+          >
+            Export CSV
+          </button>
+        </SimpleTooltip>
+        {runningAgents.length > 0 && (
+          <ConfirmButton
+            label={stoppingAll ? 'Stopping...' : `Stop All (${runningAgents.length})`}
+            confirmLabel={`Stop ${runningAgents.length} running?`}
+            onConfirm={handleStopAll}
+            disabled={stoppingAll}
+            className={cn(
+              'px-2.5 py-1.5 text-[12px] font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md transition-colors whitespace-nowrap',
+              stoppingAll
+                ? 'cursor-not-allowed opacity-50'
+                : 'cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/60',
+            )}
+            confirmClassName="px-2.5 py-1.5 text-[12px] font-medium bg-red-700 text-white border border-red-600 rounded-md cursor-pointer animate-pulse whitespace-nowrap"
+          />
+        )}
         <span className="text-[11px] text-muted-foreground ml-auto">
           {filteredAgents.length}/{agentList.length} agents
         </span>
@@ -439,12 +398,21 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Summary stats */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-6">
-        <StatCard label="Total Agents" value={String(agentList.length)} />
+        <StatCard label="Total Agents" value={String(agentList.length)} accent="blue" />
         {Object.entries(statusCounts).map(([status, count]) => (
           <StatCard
             key={status}
             label={status.charAt(0).toUpperCase() + status.slice(1)}
             value={String(count)}
+            accent={
+              status === 'running'
+                ? 'green'
+                : status === 'error'
+                  ? 'red'
+                  : status === 'idle'
+                    ? 'yellow'
+                    : 'purple'
+            }
           />
         ))}
       </div>
@@ -455,7 +423,7 @@ export function AgentsPage(): React.JSX.Element {
           {Array.from({ length: 4 }, (_, i) => (
             <div
               key={`sk-${String(i)}`}
-              className="p-4 bg-card border border-border rounded-lg space-y-3"
+              className="p-4 bg-card border border-border/50 rounded-lg space-y-3 transition-colors hover:border-border"
             >
               <div className="flex justify-between items-center">
                 <Skeleton className="h-5 w-32" />
@@ -474,17 +442,29 @@ export function AgentsPage(): React.JSX.Element {
       ) : filteredAgents.length === 0 ? (
         agentList.length === 0 ? (
           <EmptyState
-            icon={'\u2699'}
+            icon={Bot}
             title="No agents registered"
             description="Create an agent using the button above to get started."
           />
         ) : (
-          <EmptyState icon={'\u2315'} title="No agents match the current filters" />
+          <EmptyState icon={Filter} title="No agents match the current filters" />
         )
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+        <div
+          className={cn(
+            'grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 transition-opacity duration-200',
+            agents.isFetching && !agents.isLoading && 'opacity-60',
+          )}
+        >
           {filteredAgents.map((agent) => (
-            <div key={agent.id} className="p-4 bg-card border border-border rounded-lg">
+            <div
+              key={agent.id}
+              className={cn(
+                'group p-4 bg-card border border-border/50 rounded-lg transition-all duration-200 hover:border-border/80 hover:shadow-sm',
+                agent.status === 'running' && 'border-l-2 border-l-green-500',
+                (agent.status === 'starting' || agent.status === 'stopping') && 'animate-pulse',
+              )}
+            >
               {/* Card header: name + status */}
               <div className="flex justify-between items-center mb-3">
                 <Link
@@ -523,13 +503,25 @@ export function AgentsPage(): React.JSX.Element {
 
               {/* Actions */}
               <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() => setEditingAgent(agent)}
+                  aria-label={`Edit agent ${agent.name}`}
+                  className="px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                >
+                  Edit
+                </button>
                 {agent.status === 'running' ? (
                   <ConfirmButton
-                    label="Stop"
+                    label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
                     confirmLabel="Stop Agent?"
                     onConfirm={() => handleStop(agent.id)}
-                    className="px-3.5 py-1.5 bg-red-900 text-red-300 border border-red-800 rounded-sm text-xs font-medium cursor-pointer"
-                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white border border-red-600 rounded-sm text-xs font-medium cursor-pointer animate-pulse"
+                    disabled={stopAgent.isPending}
+                    className={cn(
+                      'px-3.5 py-1.5 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md text-xs font-medium',
+                      stopAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                    )}
+                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white border border-red-600 rounded-md text-xs font-medium cursor-pointer animate-pulse"
                   />
                 ) : promptAgentId === agent.id ? (
                   <>
@@ -546,21 +538,22 @@ export function AgentsPage(): React.JSX.Element {
                         }
                       }}
                       placeholder="Enter prompt..."
-                      className="flex-1 px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-sm text-xs outline-none"
+                      disabled={startAgent.isPending}
+                      className="flex-1 px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                     />
                     <button
                       type="button"
                       onClick={() => handleStart(agent.id)}
-                      disabled={!prompt.trim()}
+                      disabled={!prompt.trim() || startAgent.isPending}
                       aria-label="Start agent with entered prompt"
                       className={cn(
-                        'px-3 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium',
-                        prompt.trim()
-                          ? 'cursor-pointer opacity-100'
-                          : 'cursor-not-allowed opacity-50',
+                        'px-3 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium focus:ring-2 focus:ring-primary/20',
+                        !prompt.trim() || startAgent.isPending
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer opacity-100',
                       )}
                     >
-                      Go
+                      {startAgent.isPending ? 'Starting...' : 'Go'}
                     </button>
                     <button
                       type="button"
@@ -568,8 +561,12 @@ export function AgentsPage(): React.JSX.Element {
                         setPromptAgentId(null);
                         setPrompt('');
                       }}
+                      disabled={startAgent.isPending}
                       aria-label="Cancel agent start"
-                      className="px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
+                      className={cn(
+                        'px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-md text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
+                        startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      )}
                     >
                       Cancel
                     </button>
@@ -581,7 +578,11 @@ export function AgentsPage(): React.JSX.Element {
                       setPromptAgentId(agent.id);
                       setPrompt('');
                     }}
-                    className="px-3.5 py-1.5 bg-primary text-white border-none rounded-sm text-xs font-medium cursor-pointer"
+                    disabled={startAgent.isPending}
+                    className={cn(
+                      'px-3.5 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium focus:ring-2 focus:ring-primary/20',
+                      startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                    )}
                   >
                     Start
                   </button>
@@ -612,7 +613,7 @@ function Info({
 }): React.JSX.Element {
   return (
     <div>
-      <span className="text-[10px] text-muted-foreground uppercase tracking-[0.04em]">{label}</span>
+      <span className="text-[10px] text-muted-foreground">{label}</span>
       <div className={cn('mt-px text-xs break-all', mono && 'font-mono')}>
         {copyable ? <CopyableText value={value} maxDisplay={12} /> : value}
       </div>

@@ -21,7 +21,7 @@ export default function Loading() {
               {Array.from({ length: 3 }, (_, j) => (
                 <div
                   key={`settings-item-${String(i)}-${String(j)}`}
-                  className="p-4 bg-card border border-border rounded-lg"
+                  className="p-4 bg-card border border-border/50 rounded-lg"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">

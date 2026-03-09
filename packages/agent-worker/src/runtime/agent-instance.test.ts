@@ -1,8 +1,8 @@
 import type { AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 
 // Mock the sdk-runner module so start() doesn't launch a real agent.
@@ -44,14 +44,7 @@ vi.mock('../hooks/stop-hook.js', () => ({
   createStopHook: vi.fn().mockReturnValue(vi.fn().mockResolvedValue(undefined)),
 }));
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 function makeOptions(overrides?: Partial<AgentInstanceOptions>): AgentInstanceOptions {
   return {

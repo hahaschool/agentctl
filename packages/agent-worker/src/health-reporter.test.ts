@@ -1,7 +1,7 @@
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HealthReporter } from './health-reporter.js';
 import type { AgentPool } from './runtime/agent-pool.js';
+import { createMockLogger } from './test-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -11,14 +11,7 @@ vi.mock('node:child_process', () => ({
   execSync: vi.fn().mockReturnValue('100.64.0.1\n'),
 }));
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 function makeMockAgentPool(
   agents: Array<{ agentId: string; status: string; sessionId: string | null }> = [],

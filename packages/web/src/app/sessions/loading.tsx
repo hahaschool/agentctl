@@ -27,7 +27,7 @@ export default function Loading() {
         {Array.from({ length: 5 }, (_, i) => (
           <div
             key={`session-sk-${String(i)}`}
-            className="p-4 bg-card border border-border rounded-lg"
+            className="p-4 bg-card border border-border/50 rounded-lg"
           >
             <div className="flex items-center gap-4">
               <Skeleton className="h-6 w-24" />

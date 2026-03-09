@@ -23,7 +23,7 @@ export default function Loading() {
         {Array.from({ length: 6 }, (_, i) => (
           <div
             key={`discover-sk-${String(i)}`}
-            className="p-4 bg-card border border-border rounded-lg space-y-3"
+            className="p-4 bg-card border border-border/50 rounded-lg space-y-3"
           >
             <Skeleton className="h-6 w-32" />
             <Skeleton className="h-4 w-full" />

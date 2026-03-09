@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -6,7 +8,10 @@ const STATUS_VARIANTS: Record<string, string> = {
   running: 'bg-green-500/10 text-green-500 border-green-500/20',
   active: 'bg-green-500/10 text-green-500 border-green-500/20',
   ok: 'bg-green-500/10 text-green-500 border-green-500/20',
+  success: 'bg-green-500/10 text-green-500 border-green-500/20',
+  completed: 'bg-green-500/10 text-green-500 border-green-500/20',
   registered: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  restarting: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   starting: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   stopping: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   degraded: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
@@ -15,13 +20,15 @@ const STATUS_VARIANTS: Record<string, string> = {
   stopped: 'bg-muted text-muted-foreground border-transparent',
   idle: 'bg-muted text-muted-foreground border-transparent',
   ended: 'bg-muted text-muted-foreground border-transparent',
+  cancelled: 'bg-muted text-muted-foreground border-transparent',
   error: 'bg-red-500/10 text-red-500 border-red-500/20',
+  failure: 'bg-red-500/10 text-red-500 border-red-500/20',
   timeout: 'bg-red-500/10 text-red-500 border-red-500/20',
 };
 
-const PULSE_STATUSES = new Set(['running', 'active', 'starting', 'online']);
+const PULSE_STATUSES = new Set(['running', 'active', 'starting', 'online', 'restarting']);
 
-export function StatusBadge({ status }: { status: string }): React.JSX.Element {
+function StatusBadgeBase({ status }: { status: string }): React.JSX.Element {
   const variant = STATUS_VARIANTS[status] ?? 'bg-muted text-muted-foreground';
   const shouldPulse = PULSE_STATUSES.has(status);
 
@@ -37,3 +44,5 @@ export function StatusBadge({ status }: { status: string }): React.JSX.Element {
     </Badge>
   );
 }
+
+export const StatusBadge = React.memo(StatusBadgeBase);

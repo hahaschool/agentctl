@@ -1,0 +1,284 @@
+// ---------------------------------------------------------------------------
+// Control-plane terminal proxy routes — forwards terminal management requests
+// to the correct worker machine and proxies WebSocket connections for
+// interactive terminal I/O.
+//
+// Mounted at /api/machines/:machineId/terminal
+// ---------------------------------------------------------------------------
+
+import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import type { FastifyPluginAsync } from 'fastify';
+import type { Logger } from 'pino';
+
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
+import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
+
+export type TerminalRouteOptions = {
+  logger: Logger;
+  dbRegistry: DbAgentRegistry;
+  workerPort?: number;
+};
+
+export const terminalProxyRoutes: FastifyPluginAsync<TerminalRouteOptions> = async (app, opts) => {
+  const { dbRegistry, logger, workerPort = DEFAULT_WORKER_PORT } = opts;
+
+  /** Resolve the worker base URL for a machine. */
+  const resolveWorker = (machineId: string): Promise<string> =>
+    resolveWorkerUrlByMachineIdOrThrow(machineId, { dbRegistry, workerPort });
+
+  // -------------------------------------------------------------------------
+  // GET /:machineId/terminal — list terminals on machine
+  // -------------------------------------------------------------------------
+
+  app.get<{
+    Params: { machineId: string };
+  }>(
+    '/:machineId/terminal',
+    { schema: { tags: ['terminal'], summary: 'List terminals on a worker machine' } },
+    async (request, reply) => {
+      const { machineId } = request.params;
+      const workerBaseUrl = await resolveWorker(machineId);
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: '/api/terminal',
+        method: 'GET',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
+
+      return replyWithProxyResult(reply, result);
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // POST /:machineId/terminal — spawn terminal on machine
+  // -------------------------------------------------------------------------
+
+  app.post<{
+    Params: { machineId: string };
+    Body: {
+      id?: unknown;
+      command?: unknown;
+      args?: unknown;
+      cols?: unknown;
+      rows?: unknown;
+      cwd?: unknown;
+    };
+  }>(
+    '/:machineId/terminal',
+    { schema: { tags: ['terminal'], summary: 'Spawn a terminal on a worker machine' } },
+    async (request, reply) => {
+      const { machineId } = request.params;
+      const body = request.body ?? {};
+
+      // --- input validation ---
+      if (!body.id || typeof body.id !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_TERMINAL_ID',
+          message: 'Request body must include a non-empty "id" string field',
+        });
+      }
+
+      if (body.command !== undefined && typeof body.command !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_COMMAND',
+          message: '"command" must be a string',
+        });
+      }
+
+      if (body.args !== undefined) {
+        if (!Array.isArray(body.args) || body.args.some((a: unknown) => typeof a !== 'string')) {
+          return reply.status(400).send({
+            error: 'INVALID_ARGS',
+            message: '"args" must be an array of strings',
+          });
+        }
+      }
+
+      if (body.cols !== undefined && (typeof body.cols !== 'number' || body.cols < 1)) {
+        return reply.status(400).send({
+          error: 'INVALID_DIMENSIONS',
+          message: '"cols" must be a positive number',
+        });
+      }
+
+      if (body.rows !== undefined && (typeof body.rows !== 'number' || body.rows < 1)) {
+        return reply.status(400).send({
+          error: 'INVALID_DIMENSIONS',
+          message: '"rows" must be a positive number',
+        });
+      }
+
+      if (body.cwd !== undefined && typeof body.cwd !== 'string') {
+        return reply.status(400).send({
+          error: 'INVALID_CWD',
+          message: '"cwd" must be a string',
+        });
+      }
+
+      const workerBaseUrl = await resolveWorker(machineId);
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: '/api/terminal',
+        method: 'POST',
+        body: request.body ?? {},
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
+
+      return replyWithProxyResult(reply, result);
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // GET /:machineId/terminal/:termId — get terminal info
+  // -------------------------------------------------------------------------
+
+  app.get<{
+    Params: { machineId: string; termId: string };
+  }>(
+    '/:machineId/terminal/:termId',
+    { schema: { tags: ['terminal'], summary: 'Get terminal info from a worker machine' } },
+    async (request, reply) => {
+      const { machineId, termId } = request.params;
+      const workerBaseUrl = await resolveWorker(machineId);
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/terminal/${encodeURIComponent(termId)}`,
+        method: 'GET',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
+
+      return replyWithProxyResult(reply, result);
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // POST /:machineId/terminal/:termId/resize — resize terminal
+  // -------------------------------------------------------------------------
+
+  app.post<{
+    Params: { machineId: string; termId: string };
+    Body: { cols: number; rows: number };
+  }>(
+    '/:machineId/terminal/:termId/resize',
+    { schema: { tags: ['terminal'], summary: 'Resize a terminal on a worker machine' } },
+    async (request, reply) => {
+      const { machineId, termId } = request.params;
+      const { cols, rows } = request.body;
+
+      if (typeof cols !== 'number' || typeof rows !== 'number' || cols < 1 || rows < 1) {
+        return reply.status(400).send({
+          error: 'INVALID_DIMENSIONS',
+          message: 'cols and rows must be positive numbers',
+        });
+      }
+
+      const workerBaseUrl = await resolveWorker(machineId);
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/terminal/${encodeURIComponent(termId)}/resize`,
+        method: 'POST',
+        body: request.body ?? {},
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
+
+      return replyWithProxyResult(reply, result);
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // DELETE /:machineId/terminal/:termId — kill terminal
+  // -------------------------------------------------------------------------
+
+  app.delete<{
+    Params: { machineId: string; termId: string };
+  }>(
+    '/:machineId/terminal/:termId',
+    { schema: { tags: ['terminal'], summary: 'Kill a terminal on a worker machine' } },
+    async (request, reply) => {
+      const { machineId, termId } = request.params;
+      const workerBaseUrl = await resolveWorker(machineId);
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl,
+        path: `/api/terminal/${encodeURIComponent(termId)}`,
+        method: 'DELETE',
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
+
+      return replyWithProxyResult(reply, result);
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // GET /:machineId/terminal/:termId/ws — WebSocket proxy to worker terminal
+  // -------------------------------------------------------------------------
+
+  app.get<{ Params: { machineId: string; termId: string } }>(
+    '/:machineId/terminal/:termId/ws',
+    { websocket: true },
+    async (socket, request) => {
+      const { machineId, termId } = request.params;
+
+      let workerBaseUrl: string;
+      try {
+        workerBaseUrl = await resolveWorker(machineId);
+      } catch (err) {
+        const message = err instanceof ControlPlaneError ? err.message : String(err);
+        logger.error(
+          { err: message, machineId, termId },
+          'Failed to resolve worker for terminal WS',
+        );
+        socket.close(1011, message);
+        return;
+      }
+
+      const wsUrl = `${workerBaseUrl.replace(/^http/, 'ws')}/api/terminal/${encodeURIComponent(termId)}/ws`;
+
+      const { WebSocket } = await import('ws');
+      const upstream = new WebSocket(wsUrl);
+
+      upstream.on('open', () => {
+        logger.info({ machineId, termId, wsUrl }, 'Upstream terminal WS connected');
+
+        socket.on('message', (data) => {
+          if (upstream.readyState === WebSocket.OPEN) {
+            upstream.send(data.toString());
+          }
+        });
+
+        upstream.on('message', (data) => {
+          if (socket.readyState === 1) {
+            // OPEN
+            socket.send(data.toString());
+          }
+        });
+      });
+
+      upstream.on('close', () => {
+        logger.info({ machineId, termId }, 'Upstream terminal WS closed');
+        socket.close();
+      });
+
+      upstream.on('error', (err) => {
+        logger.error({ err: err.message, machineId, termId }, 'Upstream terminal WS error');
+        socket.close();
+      });
+
+      socket.on('close', () => {
+        logger.info({ machineId, termId }, 'Client terminal WS closed');
+        upstream.close();
+      });
+
+      socket.on('error', (err) => {
+        logger.warn({ err: err.message, machineId, termId }, 'Client terminal WS error');
+        upstream.close();
+      });
+    },
+  );
+};

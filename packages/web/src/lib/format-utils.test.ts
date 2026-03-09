@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  downloadCsv,
+  escapeCsvValue,
+  estimateTokenCost,
   formatCost,
   formatDuration,
   formatDurationMs,
+  formatFileSize,
   formatNumber,
+  formatTokens,
+  isStaleHeartbeat,
   recencyColorClass,
   shortenPath,
   timeAgo,
+  triggerDownload,
   truncate,
 } from './format-utils';
 
@@ -203,6 +210,37 @@ describe('formatCost', () => {
 });
 
 // ---------------------------------------------------------------------------
+// formatTokens
+// ---------------------------------------------------------------------------
+
+describe('formatTokens', () => {
+  it('returns raw number for < 1000', () => {
+    expect(formatTokens(500)).toBe('500');
+    expect(formatTokens(0)).toBe('0');
+    expect(formatTokens(999)).toBe('999');
+  });
+
+  it('returns ~Xk format for >= 1000', () => {
+    expect(formatTokens(1000)).toBe('~1.0k');
+    expect(formatTokens(12345)).toBe('~12.3k');
+    expect(formatTokens(100_000)).toBe('~100.0k');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// estimateTokenCost
+// ---------------------------------------------------------------------------
+
+describe('estimateTokenCost', () => {
+  it('estimates cost at $0.003/1k tokens', () => {
+    expect(estimateTokenCost(0)).toBe('$0.00');
+    expect(estimateTokenCost(1000)).toBe('$0.00');
+    expect(estimateTokenCost(100_000)).toBe('$0.30');
+    expect(estimateTokenCost(1_000_000)).toBe('$3.00');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // formatNumber
 // ---------------------------------------------------------------------------
 
@@ -225,6 +263,167 @@ describe('formatNumber', () => {
 
   it('returns original string for NaN input', () => {
     expect(formatNumber('not-a-number')).toBe('not-a-number');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatFileSize
+// ---------------------------------------------------------------------------
+
+describe('formatFileSize', () => {
+  it('returns empty string for null', () => {
+    expect(formatFileSize(null)).toBe('');
+  });
+
+  it('returns empty string for undefined', () => {
+    expect(formatFileSize(undefined)).toBe('');
+  });
+
+  it('returns bytes for small values', () => {
+    expect(formatFileSize(512)).toBe('512 B');
+  });
+
+  it('returns KB for medium values', () => {
+    expect(formatFileSize(2048)).toBe('2.0 KB');
+  });
+
+  it('returns MB for large values', () => {
+    expect(formatFileSize(5_242_880)).toBe('5.0 MB');
+  });
+
+  it('returns 0 B for zero', () => {
+    expect(formatFileSize(0)).toBe('0 B');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isStaleHeartbeat
+// ---------------------------------------------------------------------------
+
+describe('isStaleHeartbeat', () => {
+  it('returns false for recent heartbeat (< 60s)', () => {
+    const recent = new Date(Date.now() - 30_000).toISOString();
+    expect(isStaleHeartbeat(recent)).toBe(false);
+  });
+
+  it('returns true for stale heartbeat (> 60s)', () => {
+    const stale = new Date(Date.now() - 120_000).toISOString();
+    expect(isStaleHeartbeat(stale)).toBe(true);
+  });
+
+  it('returns true for very old heartbeat', () => {
+    const old = new Date(Date.now() - 3_600_000).toISOString();
+    expect(isStaleHeartbeat(old)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// escapeCsvValue
+// ---------------------------------------------------------------------------
+
+describe('escapeCsvValue', () => {
+  it('returns empty string for null', () => {
+    expect(escapeCsvValue(null)).toBe('');
+  });
+
+  it('returns empty string for undefined', () => {
+    expect(escapeCsvValue(undefined)).toBe('');
+  });
+
+  it('returns plain string unchanged', () => {
+    expect(escapeCsvValue('hello')).toBe('hello');
+  });
+
+  it('wraps strings with commas in quotes', () => {
+    expect(escapeCsvValue('hello, world')).toBe('"hello, world"');
+  });
+
+  it('escapes double quotes', () => {
+    expect(escapeCsvValue('say "hi"')).toBe('"say ""hi"""');
+  });
+
+  it('wraps strings with newlines in quotes', () => {
+    expect(escapeCsvValue('line1\nline2')).toBe('"line1\nline2"');
+  });
+
+  it('handles number values', () => {
+    expect(escapeCsvValue(42)).toBe('42');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// triggerDownload
+// ---------------------------------------------------------------------------
+
+describe('triggerDownload', () => {
+  it('creates a blob, appends anchor to DOM, clicks it, cleans up', () => {
+    const clicks: string[] = [];
+    const removeCalls: string[] = [];
+    const revokedUrls: string[] = [];
+
+    const mockElement = {
+      href: '',
+      download: '',
+      style: {} as CSSStyleDeclaration,
+      click: () => clicks.push('clicked'),
+      remove: () => removeCalls.push('removed'),
+    };
+
+    vi.spyOn(document, 'createElement').mockReturnValue(mockElement as unknown as HTMLElement);
+    vi.spyOn(document.body, 'append').mockImplementation(() => {});
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => revokedUrls.push(url));
+
+    triggerDownload('hello world', 'test.txt', 'text/plain');
+
+    expect(clicks).toHaveLength(1);
+    expect(removeCalls).toHaveLength(1);
+    expect(mockElement.download).toBe('test.txt');
+    expect(mockElement.href).toBe('blob:test');
+    expect(mockElement.style.display).toBe('none');
+    expect(revokedUrls).toEqual(['blob:test']);
+
+    vi.restoreAllMocks();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// downloadCsv
+// ---------------------------------------------------------------------------
+
+describe('downloadCsv', () => {
+  it('creates a CSV blob and triggers download', () => {
+    const clicks: string[] = [];
+    const revokedUrls: string[] = [];
+
+    const mockElement = {
+      href: '',
+      download: '',
+      style: {} as CSSStyleDeclaration,
+      click: () => clicks.push('clicked'),
+      remove: vi.fn(),
+    };
+
+    vi.spyOn(document, 'createElement').mockReturnValue(mockElement as unknown as HTMLElement);
+    vi.spyOn(document.body, 'append').mockImplementation(() => {});
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-url');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => revokedUrls.push(url));
+
+    downloadCsv(
+      ['name', 'value'],
+      [
+        ['Alice', 42],
+        ['Bob, Jr', null],
+      ],
+      'test.csv',
+    );
+
+    expect(clicks).toHaveLength(1);
+    expect(mockElement.download).toBe('test.csv');
+    expect(mockElement.href).toBe('blob:test-url');
+    expect(revokedUrls).toEqual(['blob:test-url']);
+
+    vi.restoreAllMocks();
   });
 });
 

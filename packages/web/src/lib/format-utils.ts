@@ -125,12 +125,76 @@ export function formatCost(value: number | null | undefined): string {
   return `$${value.toFixed(2)}`;
 }
 
+/** Format a token count as "123" or "~12.3k". */
+export function formatTokens(tokens: number): string {
+  if (tokens < 1000) return String(tokens);
+  return `~${(tokens / 1000).toFixed(1)}k`;
+}
+
+/** Estimate cost from a token count at $0.003/1k tokens (Claude input pricing). */
+export function estimateTokenCost(tokens: number): string {
+  const cost = (tokens * 0.003) / 1000;
+  return `$${cost.toFixed(2)}`;
+}
+
 /** Format a number with locale-appropriate thousands separators. */
 export function formatNumber(n: number | string | null | undefined): string {
   if (n == null) return '0';
   const num = typeof n === 'string' ? Number(n) : n;
   if (Number.isNaN(num)) return String(n);
   return num.toLocaleString('en-US');
+}
+
+/** Format a byte count as "1.2 KB", "3.5 MB", etc. */
+export function formatFileSize(bytes?: number | null): string {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+}
+
+const STALE_HEARTBEAT_MS = 60_000;
+
+/** Check if a heartbeat timestamp is stale (>60 s ago). */
+export function isStaleHeartbeat(dateStr: string): boolean {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  return diffMs > STALE_HEARTBEAT_MS;
+}
+
+/** Escape a value for CSV output — wraps in quotes if it contains commas, quotes, or newlines. */
+export function escapeCsvValue(value: string | number | null | undefined): string {
+  if (value == null) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/** Trigger a browser file download from a string. Works in all browsers including Firefox. */
+export function triggerDownload(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Build a CSV string from headers and rows, and trigger a browser download. */
+export function downloadCsv(
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+  filename: string,
+): void {
+  const headerLine = headers.join(',');
+  const dataLines = rows.map((row) => row.map(escapeCsvValue).join(','));
+  const csv = [headerLine, ...dataLines].join('\n');
+  triggerDownload(csv, filename, 'text/csv');
 }
 
 /**

@@ -6,8 +6,7 @@ import type { Mem0Client } from '../../memory/mem0-client.js';
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { LiteLLMClient } from '../../router/litellm-client.js';
-
-const HEALTH_CHECK_TIMEOUT_MS = 2_000;
+import { HEALTH_CHECK_TIMEOUT_MS } from '../constants.js';
 
 const HISTOGRAM_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 

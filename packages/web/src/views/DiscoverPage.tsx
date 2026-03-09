@@ -1,65 +1,28 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Compass, Filter } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
-
-import { Skeleton } from '@/components/ui/skeleton';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { CopyableText } from '../components/CopyableText';
+import type { GroupMode, MinMessages, SortOption } from '../components/DiscoverFilterBar';
+import { DiscoverFilterBar } from '../components/DiscoverFilterBar';
+import { DiscoverLoadingSkeleton } from '../components/DiscoverLoadingSkeleton';
+import { DiscoverNewSessionForm } from '../components/DiscoverNewSessionForm';
+import type { SessionGroup } from '../components/DiscoverSessionGroup';
+import { DiscoverSessionGroup } from '../components/DiscoverSessionGroup';
+import { DiscoverStatsBar } from '../components/DiscoverStatsBar';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
-import { HighlightText } from '../components/HighlightText';
 import { LastUpdated } from '../components/LastUpdated';
-import { LiveTimeAgo } from '../components/LiveTimeAgo';
-import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
 import { SessionPreview } from '../components/SessionPreview';
-import { SimpleTooltip } from '../components/SimpleTooltip';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
-import { formatNumber, recencyColorClass } from '../lib/format-utils';
-import { discoverQuery, queryKeys } from '../lib/queries';
-
-type MinMessages = 0 | 1 | 5 | 10 | 50;
-type SortOption = 'recent' | 'messages' | 'project';
-type GroupMode = 'project' | 'machine' | 'flat';
-
-type SessionGroup = {
-  projectPath: string;
-  projectName: string;
-  sessions: DiscoveredSession[];
-  totalMessages: number;
-  latestActivity: string;
-};
-
-const MIN_MESSAGE_OPTIONS: { label: string; value: MinMessages }[] = [
-  { label: 'All', value: 0 },
-  { label: '1+', value: 1 },
-  { label: '5+', value: 5 },
-  { label: '10+', value: 10 },
-  { label: '50+', value: 50 },
-];
-
-const SORT_OPTIONS: { label: string; value: SortOption }[] = [
-  { label: '\u2193 Recent activity', value: 'recent' },
-  { label: '\u2193 Most messages', value: 'messages' },
-  { label: '\u2191 Project name', value: 'project' },
-];
-
-/** Compute a human-readable recency label directly from a date string. */
-function recencyTitle(dateStr: string): string {
-  if (!dateStr) return 'Older';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const oneHour = 60 * 60 * 1000;
-  const oneDay = 24 * oneHour;
-  if (diff < oneHour) return 'Active in last hour';
-  if (diff < oneDay) return 'Active today';
-  return 'Older';
-}
+import { discoverQuery, queryKeys, sessionsQuery } from '../lib/queries';
 
 export function DiscoverPage(): React.JSX.Element {
   const toast = useToast();
@@ -78,6 +41,49 @@ export function DiscoverPage(): React.JSX.Element {
   const [newPrompt, setNewPrompt] = useState('');
   const [newMachineId, setNewMachineId] = useState('');
   const [newSessionCreating, setNewSessionCreating] = useState(false);
+
+  // Existing sessions query — used to mark already-imported sessions
+  const existingSessionsQuery = useQuery(sessionsQuery({ limit: 1000 }));
+  const importedSessionIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of existingSessionsQuery.data?.sessions ?? []) {
+      if (s.claudeSessionId) set.add(s.claudeSessionId);
+    }
+    return set;
+  }, [existingSessionsQuery.data]);
+
+  // Selection state for bulk import
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  );
+
+  // Single-session import state
+  const [importingSessionId, setImportingSessionId] = useState<string | null>(null);
+
+  const handleSingleImport = useCallback(
+    async (session: DiscoveredSession) => {
+      setImportingSessionId(session.sessionId);
+      try {
+        await api.createSession({
+          agentId: 'adhoc',
+          machineId: session.machineId,
+          projectPath: session.projectPath,
+          prompt: 'Imported from discover — continue previous work.',
+          resumeSessionId: session.sessionId,
+        });
+        toast.success(`Imported session from ${session.hostname}`);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+      } finally {
+        setImportingSessionId(null);
+      }
+    },
+    [queryClient, toast],
+  );
 
   // Filter state
   const [search, setSearch] = useState('');
@@ -249,6 +255,73 @@ export function DiscoverPage(): React.JSX.Element {
     }
   }, [allExpanded, groups]);
 
+  // Clear selection when filters change — deps are intentionally the filter values, not setSelectedIds
+  // biome-ignore lint/correctness/useExhaustiveDependencies: effect intentionally tracks filter values
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search, minMessages, machineFilter]);
+
+  const toggleSelect = useCallback((sessionId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  }, []);
+
+  const notImportedFiltered = useMemo(
+    () => filtered.filter((s) => !importedSessionIds.has(s.sessionId)),
+    [filtered, importedSessionIds],
+  );
+
+  const selectAllFiltered = useCallback(() => {
+    if (selectedIds.size === notImportedFiltered.length && notImportedFiltered.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(notImportedFiltered.map((s) => s.sessionId)));
+    }
+  }, [notImportedFiltered, selectedIds.size]);
+
+  const handleBulkImport = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setBulkImporting(true);
+    const sessionsToImport = filtered.filter((s) => selectedIds.has(s.sessionId));
+    setImportProgress({ current: 0, total: sessionsToImport.length });
+    let successCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < sessionsToImport.length; i++) {
+      const s = sessionsToImport[i];
+      if (!s) continue;
+      try {
+        await api.createSession({
+          agentId: 'adhoc',
+          machineId: s.machineId,
+          projectPath: s.projectPath,
+          prompt: 'Imported from discover — continue previous work.',
+          resumeSessionId: s.sessionId,
+        });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+      setImportProgress({ current: i + 1, total: sessionsToImport.length });
+    }
+    setImportProgress(null);
+    setBulkImporting(false);
+    setSelectedIds(new Set());
+    if (failCount === 0) {
+      toast.success(`Imported ${successCount} session${successCount !== 1 ? 's' : ''}`);
+    } else {
+      toast.error(`Imported ${successCount}, failed ${failCount}`);
+    }
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.discover });
+  }, [selectedIds, filtered, queryClient, toast]);
+
   const handleNewSession = useCallback(async () => {
     if (!newProjectPath.trim() || !newPrompt.trim()) return;
     const machineId = newMachineId || machines[0]?.id;
@@ -302,13 +375,22 @@ export function DiscoverPage(): React.JSX.Element {
     [resumePrompt, queryClient, toast],
   );
 
+  const handleStartResume = useCallback((sessionId: string) => {
+    setResuming(sessionId);
+    setResumePrompt('');
+  }, []);
+
+  const handleCancelResume = useCallback(() => {
+    setResuming(null);
+  }, []);
+
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
       <FetchingBar isFetching={query.isFetching && !query.isLoading} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div>
-          <h1 className="text-[22px] font-bold">Discover Sessions</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">Discover Sessions</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
             Browse Claude Code sessions across all fleet machines.
             {data && (
@@ -330,8 +412,10 @@ export function DiscoverPage(): React.JSX.Element {
             aria-label={showNewSession ? 'Cancel new session form' : 'Show new session form'}
             aria-expanded={showNewSession}
             className={cn(
-              'px-3.5 py-1.5 border border-border rounded-sm text-[13px] cursor-pointer font-medium',
-              showNewSession ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+              'px-3.5 py-1.5 border border-border rounded-md text-[13px] cursor-pointer font-medium transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
+              showNewSession
+                ? 'bg-primary text-white hover:bg-primary/90'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80',
             )}
           >
             {showNewSession ? 'Cancel' : '+ New Session'}
@@ -346,218 +430,62 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Quick new session form */}
       {showNewSession && (
-        <div className="p-4 bg-card border border-border rounded-lg mb-4 flex gap-3 items-end flex-wrap">
-          <div className="min-w-[120px]">
-            <label
-              htmlFor="new-session-machine"
-              className="text-[11px] text-muted-foreground mb-1 block"
-            >
-              Machine
-            </label>
-            <select
-              id="new-session-machine"
-              value={newMachineId}
-              onChange={(e) => setNewMachineId(e.target.value)}
-              disabled={newSessionCreating}
-              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
-            >
-              {machines.length === 0 ? (
-                <option value="">No machines</option>
-              ) : (
-                machines.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.hostname}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-          <div className="flex-1 min-w-[150px]">
-            <label
-              htmlFor="new-session-project-path"
-              className="text-[11px] text-muted-foreground mb-1 block"
-            >
-              Project Path
-            </label>
-            <input
-              id="new-session-project-path"
-              type="text"
-              value={newProjectPath}
-              onChange={(e) => setNewProjectPath(e.target.value)}
-              disabled={newSessionCreating}
-              placeholder="/Users/hahaschool/my-project"
-              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm font-mono text-xs outline-none box-border"
-            />
-          </div>
-          <div className="flex-[2] min-w-[200px]">
-            <label
-              htmlFor="new-session-prompt"
-              className="text-[11px] text-muted-foreground mb-1 block"
-            >
-              Prompt
-            </label>
-            <input
-              id="new-session-prompt"
-              type="text"
-              value={newPrompt}
-              onChange={(e) => setNewPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleNewSession();
-              }}
-              disabled={newSessionCreating}
-              placeholder="What should Claude work on?"
-              className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-xs outline-none box-border"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleNewSession()}
-            disabled={!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating}
-            className={cn(
-              'px-[18px] py-1.5 bg-primary text-white rounded-sm text-[13px] font-medium border-none cursor-pointer',
-              (!newProjectPath.trim() || !newPrompt.trim() || newSessionCreating) && 'opacity-50',
-            )}
-          >
-            {newSessionCreating ? 'Creating...' : 'Create'}
-          </button>
-        </div>
+        <DiscoverNewSessionForm
+          machines={machines}
+          machineId={newMachineId}
+          onMachineIdChange={setNewMachineId}
+          projectPath={newProjectPath}
+          onProjectPathChange={setNewProjectPath}
+          prompt={newPrompt}
+          onPromptChange={setNewPrompt}
+          creating={newSessionCreating}
+          onSubmit={() => void handleNewSession()}
+        />
       )}
 
       {/* Error banner */}
       {error && <ErrorBanner message={error.message} onRetry={() => void query.refetch()} />}
 
       {/* Filter bar */}
-      <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border rounded-lg mb-4">
-        <input
-          ref={searchRef}
-          id="discover-search"
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search sessions... (press /)"
-          aria-label="Search sessions"
-          className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-sm text-[13px] outline-none"
-        />
-        <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
-          <span className="text-muted-foreground">Min msgs:</span>
-          <select
-            id="discover-min-msgs"
-            value={minMessages}
-            onChange={(e) => setMinMessages(Number(e.target.value) as MinMessages)}
-            aria-label="Minimum message count"
-            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
-          >
-            {MIN_MESSAGE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label htmlFor="discover-sort" className="flex items-center gap-1.5 text-[13px]">
-          <span className="text-muted-foreground">Sort:</span>
-          <select
-            id="discover-sort"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortOption)}
-            aria-label="Sort order"
-            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {/* Machine filter */}
-        {hostnames.length > 1 && (
-          <label htmlFor="discover-machine" className="flex items-center gap-1.5 text-[13px]">
-            <span className="text-muted-foreground">Machine:</span>
-            <select
-              id="discover-machine"
-              value={machineFilter}
-              onChange={(e) => setMachineFilter(e.target.value)}
-              className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
-            >
-              <option value="all">All ({hostnames.length})</option>
-              {hostnames.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {/* Group by toggle */}
-        <label htmlFor="discover-group" className="flex items-center gap-1.5 text-[13px]">
-          <span className="text-muted-foreground">Group:</span>
-          <select
-            id="discover-group"
-            value={groupMode}
-            onChange={(e) => setGroupMode(e.target.value as GroupMode)}
-            aria-label="Group by"
-            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-sm text-[13px]"
-          >
-            <option value="project">By Project</option>
-            <option value="machine">By Machine</option>
-            <option value="flat">Flat List</option>
-          </select>
-        </label>
-        {groupMode !== 'flat' && (
-          <button
-            type="button"
-            onClick={toggleAll}
-            aria-label={allExpanded ? 'Collapse all groups' : 'Expand all groups'}
-            className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer whitespace-nowrap"
-          >
-            {allExpanded ? 'Collapse All' : 'Expand All'}
-          </button>
-        )}
-      </div>
+      <DiscoverFilterBar
+        searchRef={searchRef}
+        search={search}
+        onSearchChange={setSearch}
+        minMessages={minMessages}
+        onMinMessagesChange={setMinMessages}
+        sort={sort}
+        onSortChange={setSort}
+        hostnames={hostnames}
+        machineFilter={machineFilter}
+        onMachineFilterChange={setMachineFilter}
+        groupMode={groupMode}
+        onGroupModeChange={setGroupMode}
+        allExpanded={allExpanded}
+        onToggleAll={toggleAll}
+      />
 
-      {/* Stats line */}
-      <div className="text-[13px] text-muted-foreground mb-4">
-        Showing {formatNumber(filtered.length)} of {formatNumber(allSessions.length)} sessions
-        across {projectCount} project{projectCount !== 1 ? 's' : ''} on {machineCount} machine
-        {machineCount !== 1 ? 's' : ''}
-      </div>
+      {/* Stats line + bulk import controls */}
+      <DiscoverStatsBar
+        filteredCount={filtered.length}
+        totalCount={allSessions.length}
+        projectCount={projectCount}
+        machineCount={machineCount}
+        importedInFilterCount={filtered.filter((s) => importedSessionIds.has(s.sessionId)).length}
+        hasImported={importedSessionIds.size > 0}
+        selectedCount={selectedIds.size}
+        notImportedFilteredCount={notImportedFiltered.length}
+        onSelectAll={selectAllFiltered}
+        onBulkImport={() => void handleBulkImport()}
+        bulkImporting={bulkImporting}
+        importProgress={importProgress}
+      />
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 3 }, (_, gi) => (
-            <div
-              key={`gsk-${String(gi)}`}
-              className="border border-border rounded-lg overflow-hidden"
-            >
-              <div className="px-4 py-2.5 bg-card flex items-center gap-3">
-                <Skeleton className="w-4 h-4 shrink-0" />
-                <div className="flex-1 space-y-1">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-3 w-56" />
-                </div>
-                <Skeleton className="h-4 w-20" />
-              </div>
-              <div>
-                {Array.from({ length: gi === 0 ? 4 : 2 }, (_, si) => (
-                  <div
-                    key={`ssk-${String(si)}`}
-                    className="flex items-center gap-3 px-4 py-2 border-t border-border"
-                  >
-                    <Skeleton className="w-[7px] h-[7px] rounded-full shrink-0" />
-                    <Skeleton className="h-4 flex-1" />
-                    <Skeleton className="h-3 w-12 shrink-0" />
-                    <Skeleton className="h-3 w-16 shrink-0" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <DiscoverLoadingSkeleton />
       ) : allSessions.length === 0 ? (
         <EmptyState
-          icon={'\u25B6'}
+          icon={Compass}
           title="No sessions discovered"
           description={
             data
@@ -566,203 +494,32 @@ export function DiscoverPage(): React.JSX.Element {
           }
         />
       ) : filtered.length === 0 ? (
-        <EmptyState icon={'\u2315'} title="No sessions match the current filters" />
+        <EmptyState icon={Filter} title="No sessions match the current filters" />
       ) : (
         <div className="flex flex-col gap-3">
-          {groups.map((group) => {
-            const isFlat = group.projectPath === '__flat__';
-            const isCollapsed = collapsedGroups.has(group.projectPath);
-            return (
-              <div
-                key={group.projectPath}
-                className="border border-border rounded-lg overflow-hidden"
-              >
-                {/* Group header (hidden in flat mode) */}
-                {!isFlat && (
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.projectPath)}
-                    aria-expanded={!isCollapsed}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-4 py-2.5 bg-card border-none cursor-pointer text-left text-foreground',
-                      !isCollapsed && 'border-b border-border',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'text-xs inline-block w-4 text-center shrink-0 transition-transform duration-150',
-                        isCollapsed && '-rotate-90',
-                      )}
-                    >
-                      {'\u25BC'}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm leading-5">{group.projectName}</div>
-                      {groupMode === 'machine' ? (
-                        <div className="font-mono text-[11px] text-muted-foreground leading-4">
-                          {new Set(group.sessions.map((s) => s.projectPath)).size} project(s)
-                        </div>
-                      ) : (
-                        <PathBadge
-                          path={group.projectPath}
-                          className="text-[11px] leading-4"
-                          copyable={false}
-                        />
-                      )}
-                    </div>
-                    <div className="flex gap-2.5 items-center shrink-0">
-                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                        last active: <LiveTimeAgo date={group.latestActivity} />
-                      </span>
-                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-sm font-medium">
-                        {group.sessions.length} session
-                        {group.sessions.length !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatNumber(group.totalMessages)} msgs
-                      </span>
-                    </div>
-                  </button>
-                )}
-
-                {/* Session rows */}
-                {(isFlat || !isCollapsed) && (
-                  <div>
-                    {group.sessions.map((s) => {
-                      const isSelected = selectedSessionId === s.sessionId;
-                      const isResuming = resuming === s.sessionId;
-                      const dotClass = recencyColorClass(s.lastActivity);
-                      return (
-                        <div key={`${s.machineId}-${s.sessionId}`}>
-                          <div
-                            className={cn(
-                              'w-full flex items-center gap-3 border-b border-border transition-colors duration-100 text-foreground',
-                              'border-t-0 border-r-0',
-                              isFlat ? 'px-4 py-2' : 'py-2 pr-4 pl-[44px]',
-                              isSelected
-                                ? 'bg-muted border-l-[3px] border-l-primary'
-                                : 'bg-background border-l-[3px] border-l-transparent hover:bg-accent/10',
-                            )}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setSelectedSessionId(s.sessionId)}
-                              className="flex min-w-0 flex-1 items-center gap-3 bg-transparent border-none p-0 text-left text-foreground font-[inherit] cursor-pointer"
-                            >
-                              {/* Recency dot */}
-                              <span
-                                className={cn(
-                                  'w-[7px] h-[7px] rounded-full shrink-0 inline-block',
-                                  dotClass,
-                                )}
-                                title={recencyTitle(s.lastActivity)}
-                              />
-
-                              {/* Summary */}
-                              <SimpleTooltip content={s.summary || 'Untitled'}>
-                                <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-                                  <HighlightText
-                                    text={s.summary || 'Untitled'}
-                                    highlight={search}
-                                  />
-                                </span>
-                              </SimpleTooltip>
-
-                              {/* Message count */}
-                              <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                                {formatNumber(s.messageCount)} msgs
-                              </span>
-
-                              {/* Branch */}
-                              {s.branch && (
-                                <span className="hidden sm:inline text-[11px] font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
-                                  {s.branch}
-                                </span>
-                              )}
-
-                              {/* Hostname */}
-                              <span className="hidden sm:inline text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
-                                {s.hostname}
-                              </span>
-
-                              {/* Last activity */}
-                              <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 min-w-[60px] text-right">
-                                <LiveTimeAgo date={s.lastActivity} />
-                              </span>
-                            </button>
-
-                            {/* Session ID (copyable) */}
-                            <span className="hidden md:inline">
-                              <CopyableText value={s.sessionId} />
-                            </span>
-
-                            {/* Resume button */}
-                            {!isResuming && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setResuming(s.sessionId);
-                                  setResumePrompt('');
-                                }}
-                                aria-label={`Resume session ${s.sessionId.slice(0, 8)}`}
-                                className="px-2.5 py-1 bg-primary text-white rounded-sm text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0"
-                              >
-                                Resume
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Inline resume input */}
-                          {isResuming && (
-                            <div
-                              className={cn(
-                                'flex gap-1.5 bg-card border-b border-border',
-                                isFlat ? 'px-4 py-1.5' : 'py-1.5 pr-4 pl-[44px]',
-                              )}
-                            >
-                              <input
-                                type="text"
-                                value={resumePrompt}
-                                onChange={(e) => setResumePrompt(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') void handleResume(s);
-                                  if (e.key === 'Escape') setResuming(null);
-                                }}
-                                placeholder="Enter prompt to resume..."
-                                aria-label="Prompt to resume session"
-                                className="flex-1 px-2.5 py-[5px] bg-background text-foreground border border-border rounded-sm text-xs outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => void handleResume(s)}
-                                disabled={!resumePrompt.trim()}
-                                aria-label="Submit resume prompt"
-                                className={cn(
-                                  'py-[5px] px-3 bg-primary text-white rounded-sm text-xs border-none cursor-pointer',
-                                  !resumePrompt.trim() && 'opacity-50',
-                                )}
-                              >
-                                Go
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setResuming(null)}
-                                aria-label="Cancel resume"
-                                className="py-[5px] px-2.5 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {groups.map((group) => (
+            <DiscoverSessionGroup
+              key={group.projectPath}
+              group={group}
+              groupMode={groupMode}
+              isCollapsed={collapsedGroups.has(group.projectPath)}
+              onToggleGroup={toggleGroup}
+              selectedSessionId={selectedSessionId}
+              resumingSessionId={resuming}
+              resumePrompt={resumePrompt}
+              onResumePromptChange={setResumePrompt}
+              importedSessionIds={importedSessionIds}
+              selectedIds={selectedIds}
+              importingSessionId={importingSessionId}
+              search={search}
+              onSelectSession={setSelectedSessionId}
+              onToggleCheck={toggleSelect}
+              onImport={handleSingleImport}
+              onStartResume={handleStartResume}
+              onSubmitResume={handleResume}
+              onCancelResume={handleCancelResume}
+            />
+          ))}
         </div>
       )}
 

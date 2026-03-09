@@ -1,20 +1,40 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  BellOff,
+  Bot,
+  Compass,
+  Gauge,
+  HelpCircle,
+  MessageSquare,
+  Moon,
+  Plus,
+  RefreshCw,
+  ScrollText,
+  Server,
+  Settings,
+  StopCircle,
+  Sun,
+  Terminal,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/components/Toast';
 
-import { agentsQuery, sessionsQuery } from '@/lib/queries';
+import { fuzzyScore } from '@/lib/fuzzy-search';
+import { agentsQuery, machinesQuery, sessionsQuery, useDeleteSession } from '@/lib/queries';
 import { cn } from '@/lib/utils';
+
+type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
 
 type CommandItem = {
   id: string;
   label: string;
   description?: string;
-  icon: string;
+  icon: string | IconComponent;
   shortcut?: string;
   badge?: { text: string; variant: 'default' | 'success' | 'warning' | 'destructive' };
   action: () => void;
@@ -27,35 +47,58 @@ type Props = {
 };
 
 const NAV_COMMANDS = [
-  { href: '/', label: 'Dashboard', icon: '\u25A0', shortcut: '1', section: 'Navigate' },
-  { href: '/machines', label: 'Machines', icon: '\u2302', shortcut: '2', section: 'Navigate' },
-  { href: '/agents', label: 'Agents', icon: '\u2699', shortcut: '3', section: 'Navigate' },
-  { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4', section: 'Navigate' },
+  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1', section: 'Navigate' },
+  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2', section: 'Navigate' },
+  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3', section: 'Navigate' },
+  { href: '/sessions', label: 'Sessions', icon: MessageSquare, shortcut: '4', section: 'Navigate' },
   {
     href: '/discover',
     label: 'Discover Sessions',
-    icon: '\u2315',
+    icon: Compass,
     shortcut: '5',
     section: 'Navigate',
   },
-  { href: '/logs', label: 'Logs & Metrics', icon: '\u2261', shortcut: '6', section: 'Navigate' },
-  { href: '/settings', label: 'Settings', icon: '\u2630', shortcut: '7', section: 'Navigate' },
+  { href: '/logs', label: 'Logs & Metrics', icon: ScrollText, shortcut: '6', section: 'Navigate' },
+  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7', section: 'Navigate' },
 ] as const;
 
 const STATUS_BADGE_VARIANTS: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {
   running: 'success',
   active: 'success',
+  online: 'success',
   idle: 'default',
   stopped: 'default',
+  offline: 'destructive',
   error: 'destructive',
   failed: 'destructive',
   completed: 'default',
   paused: 'warning',
   starting: 'warning',
+  degraded: 'warning',
 };
 
 function badgeVariant(status: string): 'default' | 'success' | 'warning' | 'destructive' {
   return STATUS_BADGE_VARIANTS[status.toLowerCase()] ?? 'default';
+}
+
+/**
+ * Score a command item against a query by checking label, description,
+ * section, badge text, and id. Returns the best score or null.
+ */
+function scoreCommand(cmd: CommandItem, query: string): number | null {
+  let best: number | null = null;
+
+  const fields = [cmd.label, cmd.description, cmd.section, cmd.badge?.text, cmd.id];
+
+  for (const field of fields) {
+    if (!field) continue;
+    const s = fuzzyScore(query, field);
+    if (s !== null && (best === null || s > best)) {
+      best = s;
+    }
+  }
+
+  return best;
 }
 
 /** Truncate long paths to a readable suffix. */
@@ -69,14 +112,19 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
   const router = useRouter();
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
+  const deleteSession = useDeleteSession();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Fetch agents and sessions (only when palette is open)
+  // Fetch agents, machines, and sessions (only when palette is open)
   const { data: agents } = useQuery({
     ...agentsQuery(),
+    enabled: open,
+  });
+  const { data: machines } = useQuery({
+    ...machinesQuery(),
     enabled: open,
   });
   const { data: sessions } = useQuery({
@@ -115,7 +163,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           id: `agent-${agent.id}`,
           label: agent.name || agent.id,
           description: agent.projectPath ? shortPath(agent.projectPath) : agent.type,
-          icon: '\u2699',
+          icon: Bot,
           badge: { text: agent.status, variant: badgeVariant(agent.status) },
           section: 'Agents',
           action: () => {
@@ -126,18 +174,43 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       }
     }
 
+    // ----- Machines (by hostname) -----
+    if (machines && machines.length > 0) {
+      const sorted = [...machines].sort(
+        (a, b) =>
+          new Date(b.lastHeartbeat ?? b.createdAt).getTime() -
+          new Date(a.lastHeartbeat ?? a.createdAt).getTime(),
+      );
+      for (const machine of sorted.slice(0, 8)) {
+        items.push({
+          id: `machine-${machine.id}`,
+          label: machine.hostname,
+          description: `${machine.os}/${machine.arch} \u2014 ${machine.tailscaleIp}`,
+          icon: Server,
+          badge: { text: machine.status, variant: badgeVariant(machine.status) },
+          section: 'Machines',
+          action: () => {
+            router.push(`/machines/${machine.id}`);
+            onClose();
+          },
+        });
+      }
+    }
+
     // ----- Sessions (recent, up to 8) -----
-    if (sessions && sessions.length > 0) {
-      const sorted = [...sessions].sort(
+    const sessionList = sessions?.sessions ?? [];
+    if (sessionList.length > 0) {
+      const sorted = [...sessionList].sort(
         (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
       );
       for (const session of sorted.slice(0, 8)) {
         const shortId = session.id.length > 12 ? `${session.id.slice(0, 8)}...` : session.id;
+        const label = session.agentName ? `${session.agentName} \u2014 ${shortId}` : shortId;
         items.push({
           id: `session-${session.id}`,
-          label: shortId,
+          label,
           description: session.projectPath ? shortPath(session.projectPath) : undefined,
-          icon: '\u25B6',
+          icon: MessageSquare,
           badge: { text: session.status, variant: badgeVariant(session.status) },
           section: 'Sessions',
           action: () => {
@@ -148,12 +221,68 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       }
     }
 
+    // ----- Stop active sessions -----
+    if (sessionList.length > 0) {
+      const activeSessions = sessionList.filter(
+        (s) => s.status === 'active' || s.status === 'starting',
+      );
+      for (const session of activeSessions.slice(0, 5)) {
+        const shortId = session.id.length > 12 ? `${session.id.slice(0, 8)}...` : session.id;
+        const label = session.agentName
+          ? `Stop: ${session.agentName} — ${shortId}`
+          : `Stop: ${shortId}`;
+        items.push({
+          id: `stop-${session.id}`,
+          label,
+          description: session.projectPath ? shortPath(session.projectPath) : undefined,
+          icon: StopCircle,
+          badge: { text: session.status, variant: badgeVariant(session.status) },
+          section: 'Actions',
+          action: () => {
+            deleteSession.mutate(session.id, {
+              onSuccess: () => toast.success(`Session ${shortId} stopped`),
+              onError: (err) => toast.error(err.message),
+            });
+            onClose();
+          },
+        });
+      }
+    }
+
     // ----- Action commands -----
+    items.push({
+      id: 'action-new-session',
+      label: 'New Session',
+      description: 'Create a new agent session',
+      icon: Plus,
+      section: 'Actions',
+      action: () => {
+        router.push('/sessions?create=true');
+        onClose();
+      },
+    });
+
+    if (machines && machines.length > 0) {
+      for (const machine of machines.filter((m) => m.status === 'online')) {
+        items.push({
+          id: `terminal-${machine.id}`,
+          label: `Terminal: ${machine.hostname}`,
+          description: 'Open interactive terminal',
+          icon: Terminal,
+          section: 'Actions',
+          action: () => {
+            router.push(`/machines/${machine.id}/terminal`);
+            onClose();
+          },
+        });
+      }
+    }
+
     items.push({
       id: 'action-refresh',
       label: 'Refresh All Data',
       description: 'Invalidate all cached queries',
-      icon: '\u21BB',
+      icon: RefreshCw,
       section: 'Actions',
       action: () => {
         void queryClient.invalidateQueries();
@@ -165,7 +294,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     items.push({
       id: 'action-theme',
       label: 'Toggle Dark/Light Mode',
-      icon: '\u263D',
+      icon: theme === 'dark' ? Sun : Moon,
       section: 'Actions',
       shortcut: 'Theme',
       action: () => {
@@ -178,7 +307,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       id: 'action-clear-notifications',
       label: 'Clear Notifications',
       description: 'Dismiss all toast messages',
-      icon: '\u2715',
+      icon: BellOff,
       section: 'Actions',
       action: () => {
         toast.dismiss();
@@ -189,7 +318,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     items.push({
       id: 'action-help',
       label: 'Keyboard Shortcuts',
-      icon: '?',
+      icon: HelpCircle,
       section: 'Actions',
       shortcut: '?',
       action: () => {
@@ -200,25 +329,26 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     });
 
     return items;
-  }, [router, onClose, theme, setTheme, agents, sessions, queryClient]);
+  }, [router, onClose, theme, setTheme, agents, machines, sessions, queryClient, deleteSession]);
 
-  // Filter commands by query
+  // Filter commands by fuzzy query and sort by match score
   const filtered = useMemo(() => {
     if (!query.trim()) return commands;
-    const q = query.toLowerCase();
-    return commands.filter(
-      (cmd) =>
-        cmd.label.toLowerCase().includes(q) ||
-        cmd.description?.toLowerCase().includes(q) ||
-        cmd.section.toLowerCase().includes(q) ||
-        cmd.badge?.text.toLowerCase().includes(q) ||
-        cmd.id.toLowerCase().includes(q),
-    );
+    const scored: { cmd: CommandItem; score: number }[] = [];
+    for (const cmd of commands) {
+      const s = scoreCommand(cmd, query.trim());
+      if (s !== null) {
+        scored.push({ cmd, score: s });
+      }
+    }
+    // Sort descending by score (best matches first)
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((entry) => entry.cmd);
   }, [commands, query]);
 
   // Group by section with stable ordering
   const sections = useMemo(() => {
-    const sectionOrder = ['Navigate', 'Agents', 'Sessions', 'Actions'];
+    const sectionOrder = ['Navigate', 'Agents', 'Machines', 'Sessions', 'Actions'];
     const map = new Map<string, CommandItem[]>();
     for (const cmd of filtered) {
       const arr = map.get(cmd.section);
@@ -326,7 +456,8 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command or search agents, sessions..."
+            placeholder="Type a command or search agents, machines, sessions..."
+            aria-label="Search commands"
             className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-mono bg-muted text-muted-foreground border border-border rounded-sm">
@@ -371,7 +502,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
                         : 'bg-transparent text-muted-foreground hover:bg-accent/10',
                     )}
                   >
-                    <span className="w-5 text-center text-base shrink-0">{cmd.icon}</span>
+                    {typeof cmd.icon === 'string' ? (
+                      <span className="w-5 text-center text-base shrink-0">{cmd.icon}</span>
+                    ) : (
+                      <cmd.icon size={16} className="w-5 shrink-0 text-muted-foreground" />
+                    )}
                     <span className="flex-1 min-w-0">
                       <span className="font-medium">{cmd.label}</span>
                       {cmd.description && (

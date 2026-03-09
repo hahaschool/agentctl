@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
+import type pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentPool } from '../../runtime/agent-pool.js';
+import { createSilentLogger } from '../../test-helpers.js';
 import { createWorkerServer } from '../server.js';
 
 // Mock the SDK runner so agents fall back to stub simulation immediately
@@ -27,17 +28,13 @@ vi.mock('../../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-001';
 
-function createMockLogger(): pino.Logger {
-  return pino({ level: 'silent' });
-}
-
 describe('Agent CRUD routes', () => {
   let app: FastifyInstance;
   let pool: AgentPool;
   let logger: pino.Logger;
 
   beforeEach(async () => {
-    logger = createMockLogger();
+    logger = createSilentLogger();
     pool = new AgentPool({ logger, maxConcurrent: 5 });
     app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
   });
@@ -117,6 +114,37 @@ describe('Agent CRUD routes', () => {
 
       const body = response.json();
       expect(body.code).toBe('INVALID_INPUT');
+    });
+
+    it('should return 400 when prompt exceeds 32,000 characters', async () => {
+      const longPrompt = 'x'.repeat(32_001);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-long/start',
+        payload: { prompt: longPrompt },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('PROMPT_TOO_LONG');
+      expect(body.message).toBe('Prompt must be under 32,000 characters');
+    });
+
+    it('should accept a prompt that is exactly 32,000 characters', async () => {
+      const exactPrompt = 'y'.repeat(32_000);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-exact/start',
+        payload: { prompt: exactPrompt },
+      });
+
+      // Should not be rejected for length — 200 means agent started successfully
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.agentId).toBe('agent-exact');
     });
   });
 
@@ -344,8 +372,8 @@ describe('Agent CRUD routes', () => {
       expect(body.totalAgentsStarted).toBe(0);
       expect(typeof body.worktreesActive).toBe('number');
       expect(body.worktreesActive).toBe(0);
-      expect(typeof body.memoryUsage).toBe('number');
-      expect(body.memoryUsage).toBeGreaterThan(0);
+      expect(typeof body.memoryUsage).toBe('object');
+      expect(typeof body.memoryUsage.rss).toBe('number');
     });
 
     it('should not include dependencies in simple response', async () => {

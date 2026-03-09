@@ -9,6 +9,7 @@ import IORedis from 'ioredis';
 import { createServer } from './api/server.js';
 import type { Database } from './db/index.js';
 import { createDb } from './db/index.js';
+import { ensureSchemaCompatibility } from './db/schema-compat.js';
 import { createLogger } from './logger.js';
 import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
@@ -84,6 +85,17 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
   {
     name: 'CORS_ORIGINS',
     description: 'Comma-separated list of allowed CORS origins (production only)',
+  },
+  {
+    name: 'RATE_LIMIT_MAX',
+    default: '100',
+    validate: isNumericString,
+    description: 'Maximum requests per time window per client',
+  },
+  {
+    name: 'RATE_LIMIT_WINDOW',
+    default: '1 minute',
+    description: 'Rate limit time window (e.g., "1 minute", "30 seconds")',
   },
 ];
 
@@ -264,6 +276,8 @@ async function main(): Promise<void> {
         `All ${migrationFiles.length} migrations applied successfully (${totalDdl} DDL statements, all idempotent)`,
       );
     }
+
+    await ensureSchemaCompatibility(db, logger.child({ component: 'schema-compat' }));
 
     dbRegistry = new DbAgentRegistry(db, logger.child({ component: 'db-registry' }));
     logger.info('Database-backed agent registry initialised');

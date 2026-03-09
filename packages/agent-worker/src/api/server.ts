@@ -1,17 +1,22 @@
-import { AgentError, WorkerError } from '@agentctl/shared';
+import type { DependencyStatus } from '@agentctl/shared';
+import { AgentError, checkWithTimeout, WorkerError } from '@agentctl/shared';
+import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from '../runtime/agent-pool.js';
 import type { CliSessionManager } from '../runtime/cli-session-manager.js';
+import { TerminalManager } from '../runtime/terminal-manager.js';
+import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
 import { agentRoutes } from './routes/agents.js';
 import { emergencyStopRoutes } from './routes/emergency-stop.js';
+import { fileRoutes } from './routes/files.js';
+import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
-
-const HEALTH_CHECK_TIMEOUT_MS = 2_000;
+import { terminalRoutes } from './routes/terminal.js';
 
 type CreateWorkerServerOptions = {
   logger: Logger;
@@ -19,43 +24,8 @@ type CreateWorkerServerOptions = {
   machineId: string;
   controlPlaneUrl?: string;
   sessionManager?: CliSessionManager;
+  maxTerminals?: number;
 };
-
-type DependencyStatus = {
-  status: 'ok' | 'error';
-  latencyMs: number;
-  error?: string;
-};
-
-/**
- * Execute a health check with a timeout. Returns a DependencyStatus indicating
- * success or failure along with the measured latency.
- */
-async function checkWithTimeout(name: string, fn: () => Promise<void>): Promise<DependencyStatus> {
-  const start = performance.now();
-
-  try {
-    await Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => {
-        setTimeout(
-          () =>
-            reject(new Error(`${name} health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
-          HEALTH_CHECK_TIMEOUT_MS,
-        );
-      }),
-    ]);
-
-    return { status: 'ok', latencyMs: Math.round(performance.now() - start) };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      status: 'error',
-      latencyMs: Math.round(performance.now() - start),
-      error: message,
-    };
-  }
-}
 
 export async function createWorkerServer({
   logger,
@@ -63,8 +33,15 @@ export async function createWorkerServer({
   machineId,
   controlPlaneUrl,
   sessionManager,
+  maxTerminals,
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+
+  // Register @fastify/websocket before any WebSocket route plugins.
+  await app.register(fastifyWebsocket);
+
+  // Instantiate the terminal PTY manager for remote shell access.
+  const terminalManager = new TerminalManager({ logger, maxTerminals });
 
   app.addHook('onRequest', async (request) => {
     logger.debug({ method: request.method, url: request.url }, 'incoming request');
@@ -74,25 +51,34 @@ export async function createWorkerServer({
     const detail = request.query.detail === 'true';
     const timestamp = new Date().toISOString();
 
-    const rssBytes = process.memoryUsage().rss;
-    const rssMb = Math.round((rssBytes / 1_048_576) * 100) / 100;
+    const mem = process.memoryUsage();
+    const toMb = (bytes: number): number => Math.round((bytes / 1_048_576) * 100) / 100;
+    const memoryUsage = {
+      rss: toMb(mem.rss),
+      heapUsed: toMb(mem.heapUsed),
+      heapTotal: toMb(mem.heapTotal),
+    };
 
     // Run dependency checks in parallel.
     const [controlPlaneResult] = await Promise.allSettled([
       controlPlaneUrl
-        ? checkWithTimeout('controlPlane', async () => {
-            const response = await fetch(`${controlPlaneUrl}/health`, {
-              method: 'GET',
-              signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
-            });
-            if (!response.ok) {
-              throw new WorkerError(
-                'HEALTH_CHECK_FAILED',
-                `Control plane returned HTTP ${response.status}`,
-                { httpStatus: response.status },
-              );
-            }
-          })
+        ? checkWithTimeout(
+            'controlPlane',
+            async () => {
+              const response = await fetch(`${controlPlaneUrl}/health`, {
+                method: 'GET',
+                signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+              });
+              if (!response.ok) {
+                throw new WorkerError(
+                  'HEALTH_CHECK_FAILED',
+                  `Control plane returned HTTP ${response.status}`,
+                  { httpStatus: response.status },
+                );
+              }
+            },
+            HEALTH_CHECK_TIMEOUT_MS,
+          )
         : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
     ]);
 
@@ -111,36 +97,29 @@ export async function createWorkerServer({
     const anyError = cpStatus.status === 'error';
     const status: 'ok' | 'degraded' = anyError ? 'degraded' : 'ok';
 
-    if (!detail) {
-      return {
-        status,
-        timestamp,
-        uptime: process.uptime(),
-        activeAgents: agentPool.getRunningCount(),
-        totalAgentsStarted: agentPool.getTotalAgentsStarted(),
-        worktreesActive: agentPool.getWorktreeCount(),
-        memoryUsage: rssMb,
-        agents: {
-          running: agentPool.getRunningCount(),
-          total: agentPool.size,
-          maxConcurrent: agentPool.getMaxConcurrent(),
-        },
-      };
-    }
-
-    return {
+    const base = {
       status,
       timestamp,
       uptime: process.uptime(),
+      nodeVersion: process.version,
       activeAgents: agentPool.getRunningCount(),
+      activeSessions: sessionManager?.getActiveSessionCount() ?? 0,
       totalAgentsStarted: agentPool.getTotalAgentsStarted(),
       worktreesActive: agentPool.getWorktreeCount(),
-      memoryUsage: rssMb,
+      memoryUsage,
       agents: {
         running: agentPool.getRunningCount(),
         total: agentPool.size,
         maxConcurrent: agentPool.getMaxConcurrent(),
       },
+    };
+
+    if (!detail) {
+      return base;
+    }
+
+    return {
+      ...base,
       dependencies: {
         controlPlane: cpStatus,
       },
@@ -178,6 +157,22 @@ export async function createWorkerServer({
     agentPool,
   });
 
+  await app.register(fileRoutes, {
+    prefix: '/api/files',
+    logger,
+  });
+
+  await app.register(gitRoutes, {
+    prefix: '/api/git',
+    logger,
+  });
+
+  await app.register(terminalRoutes, {
+    prefix: '/api/terminal',
+    terminalManager,
+    logger,
+  });
+
   if (sessionManager) {
     await app.register(sessionRoutes, {
       prefix: '/api/sessions',
@@ -211,6 +206,11 @@ export async function createWorkerServer({
     });
   });
 
+  // --- Graceful shutdown: kill all terminals ---
+  app.addHook('onClose', async () => {
+    terminalManager.killAll();
+  });
+
   // --- Structured request logging ---
   app.addHook('onSend', async (request, reply) => {
     const logData = {
@@ -241,6 +241,12 @@ function workerErrorToStatus(code: string): number {
   }
   if (code.startsWith('INVALID_')) {
     return 400;
+  }
+  if (code === 'TERMINAL_LIMIT_REACHED') {
+    return 429;
+  }
+  if (code === 'TERMINAL_ALREADY_EXISTS') {
+    return 409;
   }
   return 500;
 }

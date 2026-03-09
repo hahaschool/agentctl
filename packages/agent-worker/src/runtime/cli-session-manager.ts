@@ -14,12 +14,13 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
+
+import {
+  type DiscoveredSession,
+  discoverLocalSessions as discoverLocalSessionsImpl,
+} from './session-discovery.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,20 +57,7 @@ export type CliSession = {
   lastError: string | null;
 };
 
-export type DiscoveredSession = {
-  /** Session ID from Claude Code's sessions-index.json. */
-  sessionId: string;
-  /** Project path this session was used in. */
-  projectPath: string;
-  /** Summary/title of the session (if available). */
-  summary: string;
-  /** Number of messages. */
-  messageCount: number;
-  /** Last activity timestamp. */
-  lastActivity: string;
-  /** Git branch (if available). */
-  branch: string | null;
-};
+export type { DiscoveredSession } from './session-discovery.js';
 
 export type StartCliSessionOptions = {
   /** Agent ID owning this session. */
@@ -99,8 +87,11 @@ export type CliSessionManagerOptions = {
   claudePath?: string;
   /** Maximum number of concurrent sessions (default: 10). */
   maxConcurrentSessions?: number;
-  /** Optional logger for debug-level diagnostics (e.g. pino instance). */
-  logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
+  /** Optional logger for diagnostics (e.g. pino instance). */
+  logger?: {
+    debug: (obj: Record<string, unknown>, msg: string) => void;
+    warn: (obj: Record<string, unknown>, msg: string) => void;
+  };
 };
 
 export type CliSessionEvent =
@@ -113,22 +104,43 @@ export type CliSessionEvent =
 // Streaming JSON message types from `claude -p --output-format stream-json`
 // ---------------------------------------------------------------------------
 
+/**
+ * Typed shape for streaming JSON messages from `claude -p --output-format stream-json`.
+ *
+ * All known properties are declared as optional so we can access them without
+ * `as` type assertions. The `type` field is the discriminant used in the
+ * `handleStreamMessage` switch statement.
+ */
 type CliStreamMessage = {
   type: string;
-  [key: string]: unknown;
+  session_id?: string;
+  content?: unknown;
+  name?: string;
+  input?: unknown;
+  result?: string;
+  total_cost_usd?: number;
+  cost_usd?: number;
+  usage?: { input_tokens?: number; output_tokens?: number };
+  tool?: string;
+  timeout_seconds?: number;
 };
+
+/** Type guard: check if a parsed JSON value is a valid CliStreamMessage. */
+function isCliStreamMessage(value: unknown): value is CliStreamMessage {
+  return isNonNullObject(value) && typeof value.type === 'string';
+}
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_CLAUDE_PATH = 'claude';
-const DEFAULT_MAX_CONCURRENT = 10;
+const DEFAULT_CLAUDE_PATH = process.env.CLAUDE_BIN_PATH ?? 'claude';
+const DEFAULT_MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT_SESSIONS) || 10;
 const DEFAULT_MODEL = 'sonnet';
-const STALE_SESSION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_SESSION_THRESHOLD_MS = Number(process.env.STALE_SESSION_THRESHOLD_MS) || 5 * 60 * 1000; // 5 minutes
 const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
 const GRACEFUL_KILL_TIMEOUT_MS = 5_000; // Wait 5s after SIGTERM before SIGKILL
-const STARTUP_WATCHDOG_MS = 30_000; // Warn if no output within 30s of start
+const STARTUP_WATCHDOG_MS = Number(process.env.STARTUP_WATCHDOG_MS) || 30_000; // Warn if no output within 30s of start
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -140,7 +152,10 @@ export class CliSessionManager extends EventEmitter {
   private readonly sessions: Map<string, CliSession> = new Map();
   private readonly processes: Map<string, ChildProcess> = new Map();
   private readonly lineBuffers: Map<string, string> = new Map();
-  private readonly logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
+  private readonly logger?: {
+    debug: (obj: Record<string, unknown>, msg: string) => void;
+    warn: (obj: Record<string, unknown>, msg: string) => void;
+  };
   private sessionCounter = 0;
   private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
@@ -183,17 +198,7 @@ export class CliSessionManager extends EventEmitter {
     }
 
     // Clean up old finished sessions to prevent memory leaks
-    const now = Date.now();
-    for (const [sid, s] of this.sessions) {
-      if (s.status === 'error' || s.status === 'ended') {
-        this.sessions.delete(sid);
-      } else if (
-        s.status === 'paused' &&
-        now - s.lastActivity.getTime() > STALE_SESSION_THRESHOLD_MS
-      ) {
-        this.sessions.delete(sid);
-      }
-    }
+    this.cleanupStaleSessions();
 
     this.sessionCounter++;
     const id = `cli-${Date.now()}-${this.sessionCounter}`;
@@ -286,6 +291,19 @@ export class CliSessionManager extends EventEmitter {
       claudeSessionId: session.claudeSessionId,
     });
 
+    // Emit the user's prompt as an SSE event so it appears immediately in the
+    // UI, before Claude Code writes it to the JSONL file on disk.
+    // Increment messageCount to track each user message sent to the session.
+    session.messageCount++;
+    this.emitSessionEvent({
+      type: 'session_output',
+      sessionId: id,
+      event: {
+        event: 'user_message',
+        data: { text: options.prompt },
+      },
+    });
+
     // Startup watchdog — warn if the CLI process produces no output within STARTUP_WATCHDOG_MS.
     // This catches cases like missing credentials, rate limits, or auth prompts that cause
     // the CLI to hang silently.
@@ -295,15 +313,10 @@ export class CliSessionManager extends EventEmitter {
         const hint = s.lastError
           ? `CLI stderr: ${s.lastError.slice(0, 200)}`
           : 'No stderr output captured — possible auth issue or rate limit';
-        this.logger?.debug(
+        this.logger?.warn(
           { sessionId: id, pid: s.pid, lastError: s.lastError },
-          `Startup watchdog: session produced no output after ${STARTUP_WATCHDOG_MS / 1000}s`,
+          `Startup watchdog: session produced no output after ${STARTUP_WATCHDOG_MS / 1000}s — ${hint}`,
         );
-        this.emitSessionEvent({
-          type: 'session_error',
-          sessionId: id,
-          error: `No output after ${STARTUP_WATCHDOG_MS / 1000}s — ${hint}`,
-        });
       }
     }, STARTUP_WATCHDOG_MS);
 
@@ -337,6 +350,10 @@ export class CliSessionManager extends EventEmitter {
 
   /**
    * Stop a running session by killing its CLI process.
+   *
+   * Cleanup is deferred to the 'close' event handler (handleProcessExit) to ensure
+   * all stream handlers have a chance to complete. However, if the process doesn't
+   * exit within the timeout, we force cleanup here.
    */
   async stopSession(sessionId: string, graceful = true): Promise<void> {
     const session = this.sessions.get(sessionId);
@@ -358,6 +375,9 @@ export class CliSessionManager extends EventEmitter {
           if (child.exitCode === null) {
             child.kill('SIGKILL');
           }
+          // Force cleanup after timeout to prevent zombie processes
+          this.processes.delete(sessionId);
+          this.lineBuffers.delete(sessionId);
           resolve();
         }, GRACEFUL_KILL_TIMEOUT_MS);
 
@@ -368,6 +388,9 @@ export class CliSessionManager extends EventEmitter {
       });
     } else {
       child.kill('SIGKILL');
+      // Force cleanup immediately for non-graceful kills
+      this.processes.delete(sessionId);
+      this.lineBuffers.delete(sessionId);
     }
   }
 
@@ -395,6 +418,15 @@ export class CliSessionManager extends EventEmitter {
    */
   listSessions(): CliSession[] {
     return Array.from(this.sessions.values());
+  }
+
+  /**
+   * Return the count of currently active (running or starting) sessions.
+   */
+  getActiveSessionCount(): number {
+    return [...this.sessions.values()].filter(
+      (s) => s.status === 'running' || s.status === 'starting',
+    ).length;
   }
 
   /**
@@ -457,224 +489,10 @@ export class CliSessionManager extends EventEmitter {
 
   /**
    * Discover existing Claude Code sessions from the local filesystem.
-   *
-   * Claude Code stores sessions under `~/.claude/projects/` in two patterns:
-   *
-   * 1. **With sessions-index.json** — contains `{ version, entries: [...], originalPath }`
-   *    where each entry has sessionId, summary, messageCount, etc.
-   *    These may be directly in a project dir or nested one level deeper
-   *    (e.g. under a `-` parent directory).
-   *
-   * 2. **Without sessions-index.json** — only `.jsonl` files exist.
-   *    We report these as sessions with minimal metadata.
+   * Delegates to the session-discovery module.
    */
   discoverLocalSessions(projectPathFilter?: string): DiscoveredSession[] {
-    const claudeDir = join(homedir(), '.claude', 'projects');
-    if (!existsSync(claudeDir)) {
-      return [];
-    }
-
-    const discovered: DiscoveredSession[] = [];
-
-    try {
-      const topDirs = readdirSync(claudeDir, { withFileTypes: true });
-
-      for (const dir of topDirs) {
-        if (!dir.isDirectory()) {
-          continue;
-        }
-
-        const dirPath = join(claudeDir, dir.name);
-
-        // Try to parse sessions-index.json at this level
-        this.parseSessionIndex(dirPath, dir.name, projectPathFilter, discovered);
-
-        // Also recurse one level deeper — Claude Code nests project dirs
-        // under a `-` parent directory (which represents `/`)
-        try {
-          const subDirs = readdirSync(dirPath, { withFileTypes: true });
-          for (const sub of subDirs) {
-            if (!sub.isDirectory()) {
-              continue;
-            }
-            this.parseSessionIndex(
-              join(dirPath, sub.name),
-              sub.name,
-              projectPathFilter,
-              discovered,
-            );
-          }
-        } catch (err) {
-          // Intentional: subdirectory may be unreadable due to permissions;
-          // skip gracefully so remaining directories are still discovered.
-          this.logger?.debug(
-            { error: err instanceof Error ? err.message : String(err), path: dirPath },
-            'Skipped unreadable subdirectory during session discovery',
-          );
-        }
-
-        // For dirs without sessions-index.json, discover from JSONL files
-        if (!existsSync(join(dirPath, 'sessions-index.json'))) {
-          this.discoverFromJsonlFiles(dirPath, dir.name, projectPathFilter, discovered);
-        }
-      }
-    } catch (err) {
-      // Intentional: the ~/.claude/projects directory itself may not exist
-      // or may be unreadable; return empty results rather than crashing.
-      this.logger?.debug(
-        { error: err instanceof Error ? err.message : String(err), path: claudeDir },
-        'Failed to read Claude projects directory during session discovery',
-      );
-    }
-
-    // Deduplicate by sessionId (subdirectory nesting may cause duplicates)
-    const seen = new Set<string>();
-    const deduped = discovered.filter((s) => {
-      if (seen.has(s.sessionId)) return false;
-      seen.add(s.sessionId);
-      return true;
-    });
-
-    // Sort by most recent activity
-    deduped.sort((a, b) => {
-      const dateA = a.lastActivity ? new Date(a.lastActivity).getTime() : 0;
-      const dateB = b.lastActivity ? new Date(b.lastActivity).getTime() : 0;
-      return dateB - dateA;
-    });
-
-    return deduped;
-  }
-
-  /**
-   * Parse a sessions-index.json file and add discovered sessions.
-   *
-   * Handles both:
-   *   - v1 format: `{ version: 1, entries: [...], originalPath }`
-   *   - Legacy format: `Record<string, SessionIndexEntry>`
-   */
-  private parseSessionIndex(
-    dirPath: string,
-    dirName: string,
-    projectPathFilter: string | undefined,
-    out: DiscoveredSession[],
-  ): void {
-    const indexPath = join(dirPath, 'sessions-index.json');
-    if (!existsSync(indexPath)) {
-      return;
-    }
-
-    try {
-      const raw = readFileSync(indexPath, 'utf-8');
-      const parsed = JSON.parse(raw) as unknown;
-
-      if (!parsed || typeof parsed !== 'object') {
-        return;
-      }
-
-      const obj = parsed as Record<string, unknown>;
-
-      // v1 format: { version, entries: [...], originalPath }
-      if (Array.isArray(obj.entries)) {
-        const projectPath =
-          (typeof obj.originalPath === 'string' ? obj.originalPath : null) ??
-          decodeProjectPath(dirName);
-
-        if (projectPathFilter && !projectPath.includes(projectPathFilter)) {
-          return;
-        }
-
-        for (const entry of obj.entries as SessionIndexEntryV1[]) {
-          if (!entry.sessionId || typeof entry.sessionId !== 'string') {
-            continue;
-          }
-          out.push({
-            sessionId: entry.sessionId,
-            projectPath,
-            summary: entry.summary ?? entry.firstPrompt ?? '',
-            messageCount: entry.messageCount ?? 0,
-            lastActivity: entry.modified ?? entry.created ?? '',
-            branch: entry.gitBranch ?? null,
-          });
-        }
-        return;
-      }
-
-      // Legacy format: Record<string, SessionIndexEntry>
-      const decodedPath = decodeProjectPath(dirName);
-      if (projectPathFilter && !decodedPath.includes(projectPathFilter)) {
-        return;
-      }
-
-      for (const [sessionId, entry] of Object.entries(obj)) {
-        if (typeof entry !== 'object' || entry === null) {
-          continue;
-        }
-        const e = entry as SessionIndexEntry;
-        out.push({
-          sessionId,
-          projectPath: decodedPath,
-          summary: e.summary ?? e.title ?? '',
-          messageCount: e.messageCount ?? 0,
-          lastActivity: e.lastActiveAt ?? e.updatedAt ?? '',
-          branch: e.gitBranch ?? null,
-        });
-      }
-    } catch (err) {
-      // Intentional: corrupted or malformed sessions-index.json should not
-      // prevent discovery of other valid session data.
-      this.logger?.debug(
-        { error: err instanceof Error ? err.message : String(err), path: indexPath },
-        'Skipped corrupted session index file',
-      );
-    }
-  }
-
-  /**
-   * Discover sessions from raw JSONL files when no sessions-index.json exists.
-   * Provides minimal metadata (sessionId, projectPath, lastActivity from file mtime).
-   */
-  private discoverFromJsonlFiles(
-    dirPath: string,
-    dirName: string,
-    projectPathFilter: string | undefined,
-    out: DiscoveredSession[],
-  ): void {
-    const decodedPath = decodeProjectPath(dirName);
-    if (projectPathFilter && !decodedPath.includes(projectPathFilter)) {
-      return;
-    }
-
-    try {
-      const files = readdirSync(dirPath, { withFileTypes: true });
-      for (const file of files) {
-        if (!file.isFile() || !file.name.endsWith('.jsonl')) {
-          continue;
-        }
-        const sessionId = file.name.replace(/\.jsonl$/, '');
-        // Validate it looks like a UUID
-        if (!/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(sessionId)) {
-          continue;
-        }
-
-        const stats = statSync(join(dirPath, file.name));
-
-        out.push({
-          sessionId,
-          projectPath: decodedPath,
-          summary: '',
-          messageCount: 0,
-          lastActivity: stats.mtime.toISOString(),
-          branch: null,
-        });
-      }
-    } catch (err) {
-      // Intentional: directory may be unreadable; skip gracefully so
-      // other project directories can still be discovered.
-      this.logger?.debug(
-        { error: err instanceof Error ? err.message : String(err), path: dirPath },
-        'Skipped unreadable directory during JSONL session discovery',
-      );
-    }
+    return discoverLocalSessionsImpl(projectPathFilter, this.logger);
   }
 
   // -----------------------------------------------------------------------
@@ -690,10 +508,6 @@ export class CliSessionManager extends EventEmitter {
       '--model',
       model,
       '--verbose',
-      // Always bypass permissions when running as a managed worker process.
-      // Without this, the CLI may hang waiting for interactive permission
-      // confirmation when stdio is piped (no TTY).
-      '--dangerously-skip-permissions',
     ];
 
     // Resume previous session
@@ -713,6 +527,11 @@ export class CliSessionManager extends EventEmitter {
       if (mapped) {
         args.push('--permission-mode', mapped);
       }
+    } else {
+      // No explicit permissionMode configured: bypass permissions so the CLI
+      // does not hang waiting for interactive confirmation when stdio is piped
+      // (no TTY) in a managed worker process.
+      args.push('--dangerously-skip-permissions');
     }
 
     if (options.config?.allowedTools && options.config.allowedTools.length > 0) {
@@ -749,8 +568,16 @@ export class CliSessionManager extends EventEmitter {
       return;
     }
 
+    // Emit raw output for terminal view consumers
+    const rawText = chunk.toString();
+    this.emitSessionEvent({
+      type: 'session_output',
+      sessionId,
+      event: { event: 'raw_output', data: { text: rawText } },
+    });
+
     const existing = this.lineBuffers.get(sessionId) ?? '';
-    const combined = existing + chunk.toString();
+    const combined = existing + rawText;
     const lines = combined.split('\n');
 
     // Keep the last incomplete line in the buffer
@@ -763,8 +590,17 @@ export class CliSessionManager extends EventEmitter {
       }
 
       try {
-        const message = JSON.parse(trimmed) as CliStreamMessage;
-        this.handleStreamMessage(sessionId, session, message);
+        const parsed: unknown = JSON.parse(trimmed);
+        if (!isCliStreamMessage(parsed)) {
+          // Valid JSON but not a recognized stream message — emit as raw text
+          const textEvent: AgentEvent = {
+            event: 'output',
+            data: { type: 'text', content: trimmed },
+          };
+          this.emitSessionEvent({ type: 'session_output', sessionId, event: textEvent });
+          continue;
+        }
+        this.handleStreamMessage(sessionId, session, parsed);
       } catch {
         // Non-JSON output line — emit as raw text
         const textEvent: AgentEvent = {
@@ -802,9 +638,8 @@ export class CliSessionManager extends EventEmitter {
       case 'init':
       case 'system': {
         // Capture Claude session ID from init message
-        const claudeId = message.session_id as string | undefined;
-        if (claudeId) {
-          session.claudeSessionId = claudeId;
+        if (message.session_id) {
+          session.claudeSessionId = message.session_id;
         }
         break;
       }
@@ -824,7 +659,7 @@ export class CliSessionManager extends EventEmitter {
       }
 
       case 'tool_use': {
-        const toolName = (message.name as string) ?? 'unknown';
+        const toolName = message.name ?? 'unknown';
         const toolInput = message.input ?? {};
         const event: AgentEvent = {
           event: 'output',
@@ -849,12 +684,11 @@ export class CliSessionManager extends EventEmitter {
 
       case 'result': {
         // Final result message — session completed
-        const resultText = (message.result as string) ?? '';
-        const totalCost = (message.total_cost_usd as number) ?? 0;
-        const claudeId = message.session_id as string | undefined;
+        const resultText = message.result ?? '';
+        const totalCost = message.total_cost_usd ?? 0;
 
-        if (claudeId) {
-          session.claudeSessionId = claudeId;
+        if (message.session_id) {
+          session.claudeSessionId = message.session_id;
         }
         session.costUsd = totalCost;
 
@@ -877,9 +711,8 @@ export class CliSessionManager extends EventEmitter {
       }
 
       case 'cost': {
-        const usage = message.usage as Record<string, number> | undefined;
-        const turnCost = (message.cost_usd as number) ?? 0;
-        const totalCost = (message.total_cost_usd as number) ?? session.costUsd + turnCost;
+        const turnCost = message.cost_usd ?? 0;
+        const totalCost = message.total_cost_usd ?? session.costUsd + turnCost;
 
         session.costUsd = totalCost;
 
@@ -888,21 +721,14 @@ export class CliSessionManager extends EventEmitter {
           data: { turnCost, totalCost },
         };
         this.emitSessionEvent({ type: 'session_output', sessionId, event });
-
-        if (usage) {
-          // Log token usage for tracking
-          const tokensIn = usage.input_tokens ?? 0;
-          const tokensOut = usage.output_tokens ?? 0;
-          void [tokensIn, tokensOut]; // consumed via events
-        }
         break;
       }
 
       case 'permission_request':
       case 'approval_needed': {
-        const tool = (message.tool as string) ?? (message.name as string) ?? 'unknown';
+        const tool = message.tool ?? message.name ?? 'unknown';
         const input = message.input ?? {};
-        const timeout = (message.timeout_seconds as number) ?? 30;
+        const timeout = message.timeout_seconds ?? 30;
 
         const event: AgentEvent = {
           event: 'approval_needed',
@@ -954,60 +780,15 @@ export class CliSessionManager extends EventEmitter {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Claude Code's `sessions-index.json` entry shape.
- */
-/**
- * Legacy sessions-index.json entry (Record<sessionId, entry> format).
- */
-type SessionIndexEntry = {
-  summary?: string;
-  title?: string;
-  messageCount?: number;
-  lastActiveAt?: string;
-  updatedAt?: string;
-  gitBranch?: string;
-};
+// ---------------------------------------------------------------------------
+// Type guards
+// ---------------------------------------------------------------------------
 
-/**
- * v1 sessions-index.json entry (entries array format).
- */
-type SessionIndexEntryV1 = {
-  sessionId: string;
-  fullPath?: string;
-  fileMtime?: number;
-  firstPrompt?: string;
-  summary?: string;
-  messageCount?: number;
-  created?: string;
-  modified?: string;
-  gitBranch?: string;
-  projectPath?: string;
-  isSidechain?: boolean;
-};
-
-/**
- * Decode a Claude Code project directory name back to its filesystem path.
- *
- * Claude Code encodes project paths by replacing `/` with `-` and
- * prepending with `-`. E.g., `/Users/foo/project` → `-Users-foo-project`.
- */
-function decodeProjectPath(encoded: string): string {
-  // The encoding replaces '/' with '-', so we reverse it
-  // The leading '-' represents the root '/'
-  if (encoded.startsWith('-')) {
-    return `/${encoded.slice(1).replace(/-/g, '/')}`;
-  }
-  return encoded.replace(/-/g, '/');
+/** Check that a value is a non-null object (useful after JSON.parse). */
+function isNonNullObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
-/**
- * Extract text content from a Claude API content block.
- *
- * Content can be:
- * - A string
- * - An array of content blocks: [{ type: "text", text: "..." }, ...]
- */
 /**
  * Build a child process environment with provider-specific credential injection.
  *
@@ -1058,6 +839,12 @@ function buildChildEnv(
   return env;
 }
 
+/**
+ * Extract text content from a Claude API content block.
+ *
+ * Content can be a string or an array of content blocks:
+ * `[{ type: "text", text: "..." }, ...]`
+ */
 function extractContentText(content: unknown): string | null {
   if (typeof content === 'string') {
     return content;
@@ -1068,8 +855,8 @@ function extractContentText(content: unknown): string | null {
     for (const block of content) {
       if (typeof block === 'string') {
         texts.push(block);
-      } else if (block && typeof block === 'object' && 'text' in block) {
-        texts.push(String((block as { text: unknown }).text));
+      } else if (isNonNullObject(block) && 'text' in block) {
+        texts.push(String(block.text));
       }
     }
     return texts.length > 0 ? texts.join('\n') : null;

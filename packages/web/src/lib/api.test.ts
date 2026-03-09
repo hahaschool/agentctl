@@ -129,6 +129,20 @@ describe('api.createAgent', () => {
     expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
     expect(result).toEqual(responsePayload);
   });
+
+  it('includes runtime when provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, agentId: 'new-id' }));
+
+    await api.createAgent({
+      name: 'new-agent',
+      machineId: 'm1',
+      type: 'adhoc',
+      runtime: 'nanoclaw',
+    });
+
+    const [, init] = lastFetchCall();
+    expect(JSON.parse(init?.body as string)).toMatchObject({ runtime: 'nanoclaw' });
+  });
 });
 
 describe('api.startAgent', () => {
@@ -205,8 +219,10 @@ describe('api.getAgentRuns', () => {
 // ---------------------------------------------------------------------------
 
 describe('api.listSessions', () => {
+  const emptyPage = { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false };
+
   it('calls GET /api/sessions with no params', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions();
 
@@ -215,7 +231,7 @@ describe('api.listSessions', () => {
   });
 
   it('appends status query param', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({ status: 'running' });
 
@@ -224,7 +240,7 @@ describe('api.listSessions', () => {
   });
 
   it('appends machineId query param', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({ machineId: 'machine-42' });
 
@@ -233,7 +249,7 @@ describe('api.listSessions', () => {
   });
 
   it('appends both status and machineId params', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({ status: 'idle', machineId: 'machine-1' });
 
@@ -244,7 +260,7 @@ describe('api.listSessions', () => {
   });
 
   it('does not append empty params', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse([]));
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
 
     await api.listSessions({});
 
@@ -348,7 +364,7 @@ describe('api.forkSession', () => {
     const responsePayload = { ok: true, sessionId: 'forked', session: {}, forkedFrom: 's1' };
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse(responsePayload));
 
-    const result = await api.forkSession('s1', 'try different approach');
+    const result = await api.forkSession('s1', { prompt: 'try different approach' });
 
     const [url, init] = lastFetchCall();
     expect(url).toBe('/api/sessions/s1/fork');

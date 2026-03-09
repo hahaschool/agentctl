@@ -113,3 +113,70 @@ export async function resolveWorkerUrlOrThrow(
 
   return result.url;
 }
+
+// ---------------------------------------------------------------------------
+// Machine-centric resolution (used by proxy routes: terminal, files, git)
+// ---------------------------------------------------------------------------
+
+export type ResolveByMachineIdDeps = {
+  dbRegistry: DbAgentRegistry;
+  workerPort: number;
+};
+
+/**
+ * Resolve the base URL of the worker running on a specific machine.
+ *
+ * Unlike {@link resolveWorkerUrl} (which resolves via agent → machine), this
+ * function resolves directly from a `machineId`. Used by machine-scoped proxy
+ * routes (terminal, files, git) that already know the target machine.
+ *
+ * Returns a discriminated union — inspect `ok` to determine success/failure.
+ */
+export async function resolveWorkerUrlByMachineId(
+  machineId: string,
+  deps: ResolveByMachineIdDeps,
+): Promise<ResolvedWorkerUrl> {
+  const { dbRegistry, workerPort } = deps;
+
+  const machine = await dbRegistry.getMachine(machineId);
+
+  if (!machine) {
+    return {
+      ok: false,
+      status: 404,
+      error: 'MACHINE_NOT_FOUND',
+      message: `Machine '${machineId}' is not registered`,
+    };
+  }
+
+  if (machine.status === 'offline') {
+    return {
+      ok: false,
+      status: 503,
+      error: 'MACHINE_OFFLINE',
+      message: `Machine '${machineId}' (${machine.hostname}) is offline`,
+    };
+  }
+
+  const address = machine.tailscaleIp ?? machine.hostname;
+  return { ok: true, url: `http://${address}:${String(workerPort)}` };
+}
+
+/**
+ * Resolve worker URL by machine ID or throw a {@link ControlPlaneError}.
+ *
+ * Convenience wrapper for callers that prefer exception-based control flow
+ * (e.g. `terminal.ts`, `files.ts`, `git.ts`).
+ */
+export async function resolveWorkerUrlByMachineIdOrThrow(
+  machineId: string,
+  deps: ResolveByMachineIdDeps,
+): Promise<string> {
+  const result = await resolveWorkerUrlByMachineId(machineId, deps);
+
+  if (!result.ok) {
+    throw new ControlPlaneError(result.error, result.message, { machineId });
+  }
+
+  return result.url;
+}

@@ -1,83 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import { createServer } from '../api/server.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
+import { createMockDbRegistry, makeAgent, makeMachine } from './test-helpers.js';
 
-// ---------------------------------------------------------------------------
-// Mock logger — matches the pattern used across the test suite
-// ---------------------------------------------------------------------------
-
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
-
-// ---------------------------------------------------------------------------
-// Helpers — factories for mock data
-// ---------------------------------------------------------------------------
-
-function makeAgent(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'agent-abc',
-    machineId: 'machine-xyz',
-    name: 'Test Agent',
-    type: 'manual' as const,
-    status: 'registered' as const,
-    schedule: null,
-    projectPath: '/home/user/project',
-    worktreeBranch: null,
-    currentSessionId: null,
-    config: { model: 'claude-sonnet-4-20250514' },
-    lastRunAt: null,
-    lastCostUsd: null,
-    totalCostUsd: 0,
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function makeMachine(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'machine-xyz',
-    hostname: 'ec2-worker.tailnet',
-    tailscaleIp: '100.64.0.1',
-    os: 'linux' as const,
-    arch: 'x64' as const,
-    status: 'online' as const,
-    lastHeartbeat: new Date(),
-    capabilities: { gpu: false, docker: true, maxConcurrentAgents: 5 },
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}): DbAgentRegistry {
-  return {
-    getAgent: vi.fn().mockResolvedValue(makeAgent()),
-    getMachine: vi.fn().mockResolvedValue(makeMachine()),
-    createRun: vi.fn().mockResolvedValue('run-001'),
-    completeRun: vi.fn().mockResolvedValue(undefined),
-    registerMachine: vi.fn(),
-    heartbeat: vi.fn(),
-    listMachines: vi.fn().mockResolvedValue([makeMachine()]),
-    createAgent: vi.fn().mockResolvedValue('new-agent-uuid'),
-    updateAgentStatus: vi.fn(),
-    listAgents: vi.fn().mockResolvedValue([]),
-    getRecentRuns: vi.fn().mockResolvedValue([]),
-    insertActions: vi.fn(),
-    ...overrides,
-  } as unknown as DbAgentRegistry;
-}
+const logger = createMockLogger();
 
 // ===========================================================================
 // Integration: WebSocket full lifecycle (iOS-to-agent flow)

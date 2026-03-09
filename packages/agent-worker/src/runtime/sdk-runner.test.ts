@@ -1,19 +1,12 @@
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import type { SdkRunnerOptions } from './sdk-runner.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 function makeOptions(overrides?: Partial<SdkRunnerOptions>): SdkRunnerOptions {
   return {

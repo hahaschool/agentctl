@@ -1,5 +1,19 @@
 'use client';
 
+import {
+  Bot,
+  Compass,
+  Gauge,
+  Menu,
+  MessageSquare,
+  Moon,
+  Plus,
+  ScrollText,
+  Server,
+  Settings,
+  Sun,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -7,28 +21,37 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
+import { useNotificationContext } from '../contexts/notification-context';
 import { useWebSocket } from '../hooks/use-websocket';
 import { CommandPalette } from './CommandPalette';
 import { ConnectionBanner } from './ConnectionBanner';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
+import { NotificationBell } from './NotificationBell';
 import { useToast } from './Toast';
 import { WsStatusIndicator } from './WsStatusIndicator';
 
 type NavItem = {
   href: string;
   label: string;
-  icon: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   shortcut: string;
 };
 
+const SIDEBAR_GO_MAP: Record<string, string> = {
+  d: '/',
+  s: '/sessions',
+  a: '/agents',
+  m: '/machines',
+};
+
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: '\u25A0', shortcut: '1' },
-  { href: '/machines', label: 'Machines', icon: '\u2302', shortcut: '2' },
-  { href: '/agents', label: 'Agents', icon: '\u2699', shortcut: '3' },
-  { href: '/sessions', label: 'Sessions', icon: '\u25B6', shortcut: '4' },
-  { href: '/discover', label: 'Discover', icon: '\u2315', shortcut: '5' },
-  { href: '/logs', label: 'Logs', icon: '\u2261', shortcut: '6' },
-  { href: '/settings', label: 'Settings', icon: '\u2630', shortcut: '7' },
+  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1' },
+  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2' },
+  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3' },
+  { href: '/sessions', label: 'Sessions', icon: MessageSquare, shortcut: '4' },
+  { href: '/discover', label: 'Discover', icon: Compass, shortcut: '5' },
+  { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6' },
+  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
@@ -45,6 +68,7 @@ export function Sidebar(): React.JSX.Element {
   const [showHelp, setShowHelp] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const toast = useToast();
+  const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotificationContext();
 
   // Track WS connection for reconnect/disconnect toasts (skip initial connect)
   const wasConnectedRef = useRef(false);
@@ -78,6 +102,10 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [pathname]);
 
+  // Two-key sequence support: "g" followed by d/s/a/m
+  const pendingKeyRef = useRef<string | null>(null);
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Keyboard shortcuts: 1-7 to navigate pages, Cmd+K for command palette, Esc to close
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
@@ -90,6 +118,32 @@ export function Sidebar(): React.JSX.Element {
 
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      // Handle second key of "g + X" sequence
+      if (pendingKeyRef.current === 'g') {
+        pendingKeyRef.current = null;
+        if (pendingTimerRef.current) {
+          clearTimeout(pendingTimerRef.current);
+          pendingTimerRef.current = null;
+        }
+        const goHref = SIDEBAR_GO_MAP[e.key];
+        if (goHref) {
+          e.preventDefault();
+          router.push(goHref);
+          return;
+        }
+      }
+
+      // Start "g" sequence
+      if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        pendingKeyRef.current = 'g';
+        if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = setTimeout(() => {
+          pendingKeyRef.current = null;
+          pendingTimerRef.current = null;
+        }, 500);
+        return;
+      }
 
       if (e.key === 'Escape') {
         setMobileOpen(false);
@@ -123,109 +177,160 @@ export function Sidebar(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-foreground text-lg p-1"
+          className="text-foreground p-2.5 -ml-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md active:bg-accent/10"
           aria-label="Toggle navigation"
         >
-          {mobileOpen ? '\u2715' : '\u2630'}
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
         <span className="text-sm font-bold text-foreground tracking-tight">AgentCTL</span>
         <span className="text-[9px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
           BETA
         </span>
+        <span className="ml-auto">
+          <WsStatusIndicator status={wsStatus} compact />
+        </span>
       </div>
 
       {/* Mobile backdrop */}
-      {mobileOpen && (
-        <button
-          type="button"
-          className="md:hidden fixed inset-0 z-40 bg-black/50"
-          onClick={() => setMobileOpen(false)}
-          aria-label="Close navigation"
-        />
-      )}
+      <button
+        type="button"
+        className={cn(
+          'md:hidden fixed inset-0 z-40 bg-black/50 transition-opacity duration-200',
+          mobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        )}
+        onClick={() => setMobileOpen(false)}
+        aria-label="Close navigation"
+      />
 
       {/* Sidebar */}
       <nav
         className={cn(
           'bg-sidebar border-r border-border flex flex-col py-4 shrink-0',
           // Desktop: always visible, fixed width
-          'hidden md:flex w-[220px] min-w-[220px]',
-          // Mobile: overlay from left
-          mobileOpen &&
-            'fixed inset-y-0 left-0 z-50 flex w-[260px] shadow-lg pt-14 md:relative md:pt-4 md:w-[220px] md:min-w-[220px] md:shadow-none',
+          'hidden md:flex md:w-[60px] md:min-w-[60px] lg:w-[220px] lg:min-w-[220px]',
+          // Mobile: always rendered, slide in/out from left
+          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:flex max-md:w-[260px] max-md:shadow-lg max-md:pt-14',
+          'max-md:transition-transform max-md:duration-200 max-md:ease-in-out',
+          mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
         )}
       >
         {/* Logo (desktop only, mobile has it in the top bar) */}
-        <div className="px-5 pb-5 items-center gap-2 hidden md:flex">
-          <span className="text-lg font-bold text-foreground tracking-tight">AgentCTL</span>
-          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
+        <div className="px-5 pb-5 items-center gap-2 hidden md:flex md:justify-center lg:justify-start">
+          <span className="text-lg font-bold text-foreground tracking-tight hidden lg:inline">
+            AgentCTL
+          </span>
+          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider hidden lg:inline">
             BETA
           </span>
+          {/* Icon-only logo for medium screens */}
+          <span className="text-lg font-bold text-foreground tracking-tight lg:hidden">A</span>
         </div>
 
         {NAV_ITEMS.map((item) => {
           const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+          const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'flex items-center gap-2.5 px-5 py-3 md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0',
-                'border-l-[3px]',
-                isActive
-                  ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
-                  : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
-              )}
-            >
-              <span className="text-base w-5 text-center">{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
-              <span
+            <div key={item.href} className="relative flex items-center group/nav">
+              <Link
+                href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm hidden md:inline',
-                  isActive ? 'opacity-80' : 'opacity-50',
+                  'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0 flex-1 active:bg-accent/10',
+                  'border-l-[3px]',
+                  isActive
+                    ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
+                    : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
                 )}
               >
-                {item.shortcut}
-              </span>
-            </Link>
+                <Icon size={16} className="shrink-0" />
+                <span className="flex-1 max-md:inline hidden lg:inline">{item.label}</span>
+                <span
+                  className={cn(
+                    'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm max-md:inline hidden lg:inline',
+                    isActive ? 'opacity-80' : 'opacity-50',
+                  )}
+                >
+                  {item.shortcut}
+                </span>
+              </Link>
+              {item.href === '/sessions' && (
+                <button
+                  type="button"
+                  aria-label="Quick session"
+                  title="Quick session"
+                  onClick={() => router.push('/sessions?create=true')}
+                  className={cn(
+                    'absolute right-2 p-0.5 rounded-md transition-all duration-150',
+                    'text-muted-foreground/60 hover:text-primary hover:bg-primary/10',
+                    'opacity-0 group-hover/nav:opacity-100 focus:opacity-100',
+                    'hidden lg:flex items-center justify-center',
+                  )}
+                >
+                  <Plus size={14} />
+                </button>
+              )}
+            </div>
           );
         })}
 
         <div className="flex-1" />
 
-        <div className="px-5 py-2 text-[11px] text-muted-foreground leading-relaxed hidden md:block">
-          <div className="mb-0.5 font-medium text-[10px] uppercase tracking-wider">Shortcuts</div>
-          <div>
-            <Kbd>1</Kbd>-<Kbd>7</Kbd> Navigate
+        {/* Bottom section */}
+        <div className="border-t border-border px-4 lg:px-4 md:px-2 py-3 space-y-2.5">
+          {/* Connection + Notifications row */}
+          <div className="flex items-center gap-3 md:flex-col md:gap-2 lg:flex-row lg:gap-3">
+            <WsStatusIndicator status={wsStatus} compact />
+            <div className="flex-1 max-md:block hidden lg:block" />
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkRead={markRead}
+              onMarkAllRead={markAllRead}
+              onClearAll={clearAll}
+            />
+            {unreadCount > 0 && (
+              <span className="text-[10px] text-primary font-medium max-md:inline hidden lg:inline">
+                {unreadCount}
+              </span>
+            )}
           </div>
-          <div>
-            <Kbd>{'\u2318'}K</Kbd> Command palette
-          </div>
-          <div>
-            <Kbd>Esc</Kbd> Close panels
-          </div>
-        </div>
 
-        <div className="px-5 py-1.5 border-t border-border hidden md:flex items-center gap-2">
-          <WsStatusIndicator status={wsStatus} compact />
-        </div>
+          {/* Keyboard hints (hidden on medium, shown on large) */}
+          <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex-wrap gap-x-3 gap-y-0.5 hidden lg:flex">
+            <span>
+              <Kbd>1</Kbd>-<Kbd>7</Kbd> Nav
+            </span>
+            <span>
+              <Kbd>{'\u2318'}K</Kbd> Search
+            </span>
+            <span>
+              <Kbd>?</Kbd> Help
+            </span>
+          </div>
 
-        <div className="px-5 py-2.5 border-t border-border flex items-center justify-between">
-          <span className="text-[11px] text-muted-foreground">AgentCTL v0.1.0</span>
-          {mounted ? (
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-150 px-1.5 py-0.5 rounded-sm hover:bg-muted"
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            >
-              {theme === 'dark' ? '\u263D' : '\u2600'}
-            </button>
-          ) : (
-            <span className="w-6 h-5" />
-          )}
+          {/* Version + theme */}
+          <div className="flex items-center justify-between md:justify-center lg:justify-between">
+            <span className="text-[10px] text-muted-foreground/50 max-md:inline hidden lg:inline">
+              v0.1.0
+            </span>
+            {mounted ? (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="text-muted-foreground/60 hover:text-foreground transition-colors p-2.5 md:p-1 rounded-md hover:bg-muted active:bg-muted min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              >
+                {theme === 'dark' ? (
+                  <Moon size={16} className="md:w-[13px] md:h-[13px]" />
+                ) : (
+                  <Sun size={16} className="md:w-[13px] md:h-[13px]" />
+                )}
+              </button>
+            ) : (
+              <span className="w-[44px] h-[44px] md:w-6 md:h-5" />
+            )}
+          </div>
         </div>
       </nav>
 

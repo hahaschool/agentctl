@@ -34,6 +34,26 @@ const STYLES: Record<string, MessageStyle> = {
     textClass: 'text-slate-400',
     bubbleClass: 'bg-slate-400/[0.04] border-l-slate-400',
   },
+  thinking: {
+    label: 'Thinking',
+    textClass: 'text-purple-400',
+    bubbleClass: 'bg-purple-500/[0.06] border-l-purple-400',
+  },
+  progress: {
+    label: 'Progress',
+    textClass: 'text-cyan-400',
+    bubbleClass: 'bg-cyan-500/[0.04] border-l-cyan-400',
+  },
+  subagent: {
+    label: 'Subagent',
+    textClass: 'text-orange-400',
+    bubbleClass: 'bg-orange-500/[0.06] border-l-orange-400',
+  },
+  todo: {
+    label: 'Tasks',
+    textClass: 'text-blue-400',
+    bubbleClass: 'bg-blue-500/[0.06] border-l-blue-400',
+  },
 };
 
 const FALLBACK: MessageStyle = {
