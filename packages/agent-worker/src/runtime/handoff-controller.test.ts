@@ -44,6 +44,87 @@ describe('HandoffController', () => {
     ).toEqual(['native-import', 'snapshot-handoff']);
   });
 
+  it('uses native import directly when the importer succeeds', async () => {
+    const startSession = vi.fn(async () => ({
+      runtime: 'codex' as const,
+      sessionId: 'worker-fallback',
+      nativeSessionId: 'codex-fallback',
+      agentId: 'agent-1',
+      projectPath: '/workspace/app',
+      model: 'gpt-5-codex',
+      status: 'active' as const,
+      pid: 3333,
+      startedAt: new Date('2026-03-09T12:00:00Z'),
+      lastActivity: new Date('2026-03-09T12:01:00Z'),
+    }));
+
+    const runtimeRegistry = new RuntimeRegistry();
+    runtimeRegistry.register({
+      runtime: 'codex',
+      startSession,
+      resumeSession: vi.fn(async () => ({
+        runtime: 'codex' as const,
+        sessionId: 'worker-native',
+        nativeSessionId: 'codex-native-1',
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+        model: 'gpt-5-codex',
+        status: 'active' as const,
+        pid: 2222,
+        startedAt: new Date('2026-03-09T11:58:00Z'),
+        lastActivity: new Date('2026-03-09T11:59:00Z'),
+      })),
+      forkSession: vi.fn(),
+      getCapabilities: vi.fn(async () => ({
+        runtime: 'codex',
+        supportsResume: true,
+        supportsFork: true,
+      })),
+    });
+
+    const controller = new HandoffController({
+      machineId: 'machine-1',
+      logger: createMockLogger(),
+      runtimeRegistry,
+      inspectWorkspace: vi.fn(),
+      allowExperimentalNativeImport: true,
+      nativeImporters: {
+        'claude-code:codex': vi.fn(async () => ({
+          ok: true,
+          sourceRuntime: 'claude-code',
+          targetRuntime: 'codex',
+          reason: 'succeeded',
+          metadata: { probe: 'claude-to-codex' },
+          session: {
+            runtime: 'codex',
+            sessionId: 'worker-native',
+            nativeSessionId: 'codex-native-1',
+            agentId: 'agent-1',
+            projectPath: '/workspace/app',
+            model: 'gpt-5-codex',
+            status: 'active',
+            pid: 2222,
+            startedAt: new Date('2026-03-09T11:58:00Z'),
+            lastActivity: new Date('2026-03-09T11:59:00Z'),
+          },
+        })),
+      },
+    });
+
+    const result = await controller.handoff({
+      targetRuntime: 'codex',
+      agentId: 'agent-1',
+      projectPath: '/workspace/app',
+      prompt: 'Continue through native import.',
+      snapshot: makeSnapshot(),
+    });
+
+    expect(result.strategy).toBe('native-import');
+    expect(result.nativeImportAttempt?.ok).toBe(true);
+    expect(result.session.nativeSessionId).toBe('codex-native-1');
+    expect(startSession).not.toHaveBeenCalled();
+  });
+
   it('exports a portable handoff snapshot from workspace inspection data', async () => {
     const inspectWorkspace = vi.fn(async () => ({
       worktreePath: '/workspace/app/.trees/agent-1',
