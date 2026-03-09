@@ -175,7 +175,7 @@ export async function terminalRoutes(
     }
 
     // Handle incoming messages from WebSocket
-    socket.on('message', (rawData) => {
+    socket.on('message', (rawData: string | Buffer) => {
       try {
         const data = typeof rawData === 'string' ? rawData : rawData.toString();
         const message = JSON.parse(data) as {
