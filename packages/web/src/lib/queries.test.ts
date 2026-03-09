@@ -100,6 +100,16 @@ describe('queryKeys', () => {
     ]);
   });
 
+  it('runtimeSessionPreflight key includes target machine when present', () => {
+    expect(queryKeys.runtimeSessionPreflight('ms-123', 'claude-code', 'machine-2')).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'preflight',
+      'claude-code',
+      'machine-2',
+    ]);
+  });
+
   it('sessionContent key includes sessionId and params', () => {
     const params = { machineId: 'machine-1', projectPath: '/home/user/project', limit: 100 };
     expect(queryKeys.sessionContent('session-1', params)).toEqual([

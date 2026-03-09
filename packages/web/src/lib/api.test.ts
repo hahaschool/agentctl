@@ -415,6 +415,32 @@ describe('api.preflightRuntimeSessionHandoff', () => {
     const [url] = lastFetchCall();
     expect(url).toBe('/api/runtime-sessions/ms-1/handoff/preflight?targetRuntime=claude-code');
   });
+
+  it('includes targetMachineId when preflighting a handoff to another machine', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({
+        ok: true,
+        nativeImportCapable: false,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'not_implemented',
+          metadata: {},
+        },
+      }),
+    );
+
+    await api.preflightRuntimeSessionHandoff('ms-1', {
+      targetRuntime: 'claude-code',
+      targetMachineId: 'machine-2',
+    });
+
+    const [url] = lastFetchCall();
+    expect(url).toBe(
+      '/api/runtime-sessions/ms-1/handoff/preflight?targetRuntime=claude-code&targetMachineId=machine-2',
+    );
+  });
 });
 
 describe('api.getSession', () => {
