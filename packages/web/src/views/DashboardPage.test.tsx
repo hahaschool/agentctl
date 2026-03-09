@@ -404,6 +404,12 @@ describe('DashboardPage', () => {
       expect(screen.getByTestId('link-/agents')).toBeDefined();
     });
 
+    it('renders "Runtime Sessions" quick action link to /runtime-sessions', () => {
+      renderDashboard();
+      expect(screen.getByText('Runtime Sessions')).toBeDefined();
+      expect(screen.getByTestId('link-/runtime-sessions')).toBeDefined();
+    });
+
     it('renders last-updated component', () => {
       renderDashboard();
       expect(screen.getByTestId('last-updated')).toBeDefined();

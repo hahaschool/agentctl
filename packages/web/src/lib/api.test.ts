@@ -269,6 +269,129 @@ describe('api.listSessions', () => {
   });
 });
 
+describe('api.listRuntimeSessions', () => {
+  const emptyPage = { sessions: [], count: 0 };
+
+  it('calls GET /api/runtime-sessions with no params', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
+
+    await api.listRuntimeSessions();
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions');
+  });
+
+  it('appends runtime, status, machineId, and limit params', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(emptyPage));
+
+    await api.listRuntimeSessions({
+      runtime: 'codex',
+      status: 'active',
+      machineId: 'machine-1',
+      limit: 25,
+    });
+
+    const [url] = lastFetchCall();
+    const parsed = new URL(url as string, 'http://localhost');
+    expect(parsed.pathname).toBe('/api/runtime-sessions');
+    expect(parsed.searchParams.get('runtime')).toBe('codex');
+    expect(parsed.searchParams.get('status')).toBe('active');
+    expect(parsed.searchParams.get('machineId')).toBe('machine-1');
+    expect(parsed.searchParams.get('limit')).toBe('25');
+  });
+});
+
+describe('api.createRuntimeSession', () => {
+  it('calls POST /api/runtime-sessions with required body fields', async () => {
+    const responsePayload = { ok: true, session: { id: 'ms-1' } };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(responsePayload));
+
+    const body = {
+      runtime: 'codex',
+      machineId: 'machine-1',
+      projectPath: '/tmp/project',
+      prompt: 'Continue the task',
+    } as const;
+
+    const result = await api.createRuntimeSession(body);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual(body);
+    expect(result).toEqual(responsePayload);
+  });
+});
+
+describe('api.resumeRuntimeSession', () => {
+  it('calls POST /api/runtime-sessions/:id/resume', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, session: { id: 'ms-1' } }));
+
+    await api.resumeRuntimeSession('ms-1', { prompt: 'Resume it', model: 'gpt-5-codex' });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/ms-1/resume');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({
+      prompt: 'Resume it',
+      model: 'gpt-5-codex',
+    });
+  });
+});
+
+describe('api.forkRuntimeSession', () => {
+  it('calls POST /api/runtime-sessions/:id/fork', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, session: { id: 'ms-2' } }));
+
+    await api.forkRuntimeSession('ms-1', {
+      prompt: 'Fork from here',
+      targetMachineId: 'machine-2',
+    });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/ms-1/fork');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({
+      prompt: 'Fork from here',
+      targetMachineId: 'machine-2',
+    });
+  });
+});
+
+describe('api.handoffRuntimeSession', () => {
+  it('calls POST /api/runtime-sessions/:id/handoff', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ ok: true, handoffId: 'handoff-1', session: { id: 'ms-2' } }),
+    );
+
+    await api.handoffRuntimeSession('ms-1', {
+      targetRuntime: 'claude-code',
+      reason: 'manual',
+      prompt: 'Take over from Codex',
+    });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/ms-1/handoff');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({
+      targetRuntime: 'claude-code',
+      reason: 'manual',
+      prompt: 'Take over from Codex',
+    });
+  });
+});
+
+describe('api.listRuntimeSessionHandoffs', () => {
+  it('calls GET /api/runtime-sessions/:id/handoffs with optional limit', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ handoffs: [], count: 0 }));
+
+    await api.listRuntimeSessionHandoffs('ms-1', 15);
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/ms-1/handoffs?limit=15');
+  });
+});
+
 describe('api.getSession', () => {
   it('calls GET /api/sessions/:id', async () => {
     const session = { id: 's1', status: 'running' };

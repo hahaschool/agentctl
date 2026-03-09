@@ -4,6 +4,8 @@ import type { AgentConfig } from './api';
 import { api } from './api';
 import { STORAGE_KEYS } from './storage-keys';
 
+type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
+
 // ---------------------------------------------------------------------------
 // Helpers — read user preferences from localStorage
 // ---------------------------------------------------------------------------
@@ -33,6 +35,12 @@ export const queryKeys = {
     limit?: number;
   }) => (params ? (['sessions', params] as const) : (['sessions'] as const)),
   session: (id: string) => ['sessions', id] as const,
+  runtimeSessions: (params?: RuntimeSessionsQueryParams) =>
+    params ? (['runtime-sessions', params] as const) : (['runtime-sessions'] as const),
+  runtimeSessionHandoffs: (id: string, limit?: number) =>
+    limit !== undefined
+      ? (['runtime-sessions', id, 'handoffs', limit] as const)
+      : (['runtime-sessions', id, 'handoffs'] as const),
   sessionContent: (
     sessionId: string,
     params: { machineId: string; projectPath?: string; limit?: number },
@@ -135,6 +143,25 @@ export function sessionQuery(id: string) {
     queryFn: () => api.getSession(id),
     enabled: !!id,
     refetchInterval: 5_000, // Poll session status to detect worker restarts / status changes
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionsQuery(params?: RuntimeSessionsQueryParams) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessions(params),
+    queryFn: () => api.listRuntimeSessions(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionHandoffsQuery(id: string, limit?: number) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessionHandoffs(id, limit),
+    queryFn: () => api.listRuntimeSessionHandoffs(id, limit),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
