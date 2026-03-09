@@ -1,255 +1,221 @@
 # AgentCTL
 
-Multi-machine AI agent orchestration platform. Remotely control Claude Code agents across EC2, Mac Mini, and laptops from iOS devices.
+AgentCTL is a monorepo for running and operating AI coding agents across multiple machines.
+It combines a control plane, per-machine worker daemon, web operator UI, shared protocol/types,
+deployment assets, and supporting scripts in one repository.
 
-## What is this?
+The long-term product vision includes mobile-first remote control and multi-provider routing.
+Today, the most complete operator surface in this repo is the web app in `packages/web`,
+backed by the Fastify control plane and the machine-local worker.
 
-AgentCTL is a unified control plane for orchestrating AI coding agents across multiple machines. It fills a gap no existing tool covers: fleet-wide agent management with mobile control, shared memory, and fault-tolerant multi-provider LLM routing.
+## What Is In This Repo Today
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  iPhone/iPad │     │   EC2       │     │  Mac Mini   │
-│  (React      │◄───►│  (Workers)  │◄───►│  (Workers)  │
-│   Native)    │     │             │     │             │
-└──────┬───────┘     └──────┬──────┘     └──────┬──────┘
-       │                    │                    │
-       │         ┌──────────┴──────────┐         │
-       └────────►│   Control Plane     │◄────────┘
-                 │  (Fastify + BullMQ) │
-                 │  ┌────────────────┐ │
-                 │  │ Task Scheduler │ │  ◄── BullMQ/Redis
-                 │  │ Agent Registry │ │  ◄── PostgreSQL
-                 │  │ Memory Sync    │ │  ◄── Mem0
-                 │  │ LLM Router     │ │  ◄── LiteLLM Proxy
-                 │  └────────────────┘ │
-                 └─────────────────────┘
-                         ▲
-                    Tailscale Mesh
-                   (all machines)
-```
+- `packages/control-plane`: Fastify API, WebSocket/SSE endpoints, BullMQ scheduling, Drizzle/PostgreSQL persistence, Swagger docs.
+- `packages/agent-worker`: per-machine daemon for agent execution, audit reporting, worktree lifecycle, and control-plane callbacks.
+- `packages/web`: Next.js operator UI for dashboard, sessions, agents, machines, discover, logs, and settings.
+- `packages/mobile`: Expo/React Native package for the future mobile client. Present, but less complete than the web UI.
+- `packages/shared`: shared types, protocol contracts, crypto helpers, validation utilities.
+- `infra/`: Docker, PM2, LiteLLM, Tailscale, Vector/ClickHouse, ZAP, and fleet config.
+- `scripts/`: CLI utilities, provisioning helpers, migration/deploy helpers, import tools.
 
-## Features
+## Current Capabilities
 
-- **iOS Remote Control** -- bidirectional real-time WebSocket control from iPhone/iPad
-- **Multi-Machine Fleet** -- manage agents on EC2, Mac Mini, laptops via Tailscale mesh
-- **Multiple Agent Types** -- autonomous (long-running) + ad-hoc (one-shot) sessions
-- **Trigger Modes** -- heartbeat, cron, manual, signal, ad-hoc
-- **Unified Memory** -- Mem0 cross-device memory with prompt injection
-- **Workspace Isolation** -- git worktree per agent, bare-repo for cross-machine sync; worktree cleanup on shutdown
-- **Multi-Provider Failover** -- LiteLLM routing across Anthropic Direct + Bedrock + Vertex AI
-- **Audit Trail** -- NDJSON action logs with SHA-256 hashes, batch ingestion API
-- **E2E Encryption** -- TweetNaCl for iOS-to-control-plane communication
-- **Rate Limiting** -- 100 requests/min per IP (health endpoint exempt)
-- **CORS Support** -- configurable per-origin allowlist in production, permissive in development
-- **Request ID Tracing** -- every response includes an `X-Request-Id` header for end-to-end tracing
-- **Environment Validation** -- startup checks for required services (Redis, PostgreSQL)
-- **Graceful Shutdown** -- drains connections and cleans up worktrees on SIGTERM/SIGINT
-- **Global Error Handling** -- typed error codes in responses, no stack traces exposed to clients
+- Register machines and track worker heartbeats.
+- Create, start, stop, signal, and inspect agents and sessions.
+- Operate the system through a web UI with dashboard, logs, machine views, and settings.
+- Persist agent, machine, run, and audit state in PostgreSQL.
+- Schedule repeatable jobs with BullMQ and Redis.
+- Route model traffic through LiteLLM and manage account-related settings in the UI.
+- Search imported memory and session-related context from the control plane.
+- Deploy with Docker, PM2, GitHub Actions, and Tailscale-based fleet workflows.
 
-## Tech Stack
+## Repository Layout
 
-| Layer | Technology |
-|-------|-----------|
-| Language | TypeScript (Node.js 20+) |
-| Agent Runtime | Claude Agent SDK |
-| API Server | Fastify v5 |
-| Task Queue | BullMQ (Redis) |
-| Database | PostgreSQL (Drizzle ORM) |
-| LLM Router | LiteLLM Proxy |
-| Memory | Mem0 |
-| Networking | Tailscale |
-| Process Mgmt | PM2 |
-| Code Quality | Biome, Vitest |
-
-## Project Structure
-
-```
+```text
 agentctl/
 ├── packages/
-│   ├── shared/           # Types, protocol, crypto (TweetNaCl)
-│   ├── control-plane/    # Fastify API, BullMQ scheduler, Drizzle ORM
-│   └── agent-worker/     # Claude Agent SDK runtime, hooks, IPC, worktrees
+│   ├── agent-worker/
+│   ├── control-plane/
+│   ├── mobile/
+│   ├── shared/
+│   └── web/
 ├── infra/
-│   ├── docker/           # Dockerfiles + compose (dev & prod)
-│   ├── litellm/          # LiteLLM proxy config
-│   └── pm2/              # PM2 ecosystem configs
+│   ├── docker/
+│   ├── litellm/
+│   ├── pm2/
+│   ├── tailscale/
+│   ├── vector/
+│   └── zap/
 ├── scripts/
-│   ├── agentctl.ts       # CLI tool for fleet management
-│   ├── setup-machine.sh  # Machine provisioning
-│   └── db-setup.ts       # Database migrations
-└── docs/                 # Architecture, research, quickstart
+├── docs/
+└── .github/workflows/
 ```
 
 ## Quick Start
 
-### Prerequisites
+### 1. Prerequisites
 
 - Node.js 20+
-- pnpm 8.15+
-- Redis
-- PostgreSQL
+- pnpm 8+
+- Docker Desktop or local Redis/PostgreSQL installs
 
-### Development Setup
+### 2. Install dependencies
 
 ```bash
-# Clone and install
 git clone https://github.com/hahaschool/agentctl.git
 cd agentctl
 pnpm install
+```
 
-# Start backing services
-cd infra/docker && docker compose -f docker-compose.dev.yml up -d && cd ../..
+### 3. Configure environment
 
-# Run database migrations
-pnpm tsx scripts/db-setup.ts
+```bash
+cp .env.example .env
+```
 
-# Build all packages
-pnpm build
+For local development, the minimum useful settings are usually:
 
-# Start control plane (port 8080)
+```bash
+DATABASE_URL=postgresql://agentctl:agentctl@localhost:5432/agentctl
+REDIS_URL=redis://localhost:6379
+CONTROL_URL=http://localhost:8080
+CONTROL_PLANE_URL=http://localhost:8080
+MACHINE_ID=machine-local
+```
+
+See [`.env.example`](.env.example) for the full list.
+
+### 4. Start backing services
+
+From the repository root:
+
+```bash
+docker compose -f infra/docker/docker-compose.dev.yml up -d
+```
+
+This brings up local Redis, PostgreSQL, and LiteLLM for development.
+
+### 5. Start the main processes
+
+In separate terminals:
+
+```bash
 pnpm dev:control
-
-# Start agent worker (port 9000) — in another terminal
 pnpm dev:worker
+pnpm --filter @agentctl/web dev
 ```
 
-### CLI Tool
+Default local endpoints:
+
+- Control plane: `http://localhost:8080`
+- Swagger / API docs: `http://localhost:8080/api/docs`
+- Web UI: `http://localhost:5173`
+- Worker health: `http://localhost:9000/health`
+
+### 6. Smoke-check the stack
 
 ```bash
-# Check control plane health
-npx tsx scripts/agentctl.ts health
-
-# List registered machines
-npx tsx scripts/agentctl.ts machines
-
-# List registered agents (requires database)
-npx tsx scripts/agentctl.ts agents
-
-# Start an agent with a task
-npx tsx scripts/agentctl.ts start agent-1 "Fix the login bug in auth.ts"
-
-# Send a signal to a running agent
-npx tsx scripts/agentctl.ts signal agent-1 "Also update the tests"
-
-# Search agent memory
-npx tsx scripts/agentctl.ts memory search "authentication flow"
-
-# List all scheduled jobs
-npx tsx scripts/agentctl.ts schedule list
-
-# Add a heartbeat job (every 30 seconds)
-npx tsx scripts/agentctl.ts schedule add-heartbeat agent-1 ec2-us-east-1 30000
-
-# Add a cron job (every 5 minutes)
-npx tsx scripts/agentctl.ts schedule add-cron agent-2 mac-mini "*/5 * * * *"
-
-# Remove a scheduled job
-npx tsx scripts/agentctl.ts schedule remove agent-1
-
-# Show recent runs for an agent
-npx tsx scripts/agentctl.ts runs agent-1 10
-
-# Stream live output from a running agent
-npx tsx scripts/agentctl.ts stream agent-1
-
-# Emergency stop an agent (abort + revoke token)
-npx tsx scripts/agentctl.ts emergency-stop agent-1
-
-# View system dashboard (agents, runs, errors)
-npx tsx scripts/agentctl.ts dashboard
-
-# View cost breakdown for the last 7 days
-npx tsx scripts/agentctl.ts dashboard costs 7d
-
-# View tool usage analytics
-npx tsx scripts/agentctl.ts dashboard tools
-
-# Check continuous loop status
-npx tsx scripts/agentctl.ts loop status agent-1
-
-# Stop a continuous loop
-npx tsx scripts/agentctl.ts loop stop agent-1
-
-# View worker pool statistics
-npx tsx scripts/agentctl.ts pool-stats
+curl http://localhost:8080/health
+curl http://localhost:9000/health
 ```
 
-### Docker Production Deployment
+## Useful Commands
+
+### Root
 
 ```bash
-cd infra/docker
-cp ../../.env.example .env  # Edit with your values
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-## API Endpoints
-
-### Control Plane (port 8080)
-
-| Method | Endpoint                         | Description                         |
-|--------|----------------------------------|-------------------------------------|
-| GET    | `/health`                        | Health check                        |
-| GET    | `/api/docs/`                     | Swagger UI (interactive API docs)   |
-| GET    | `/api/docs/json`                 | OpenAPI 3.0 JSON spec               |
-| POST   | `/api/agents/register`           | Register a machine                  |
-| POST   | `/api/agents/:id/heartbeat`      | Machine heartbeat                   |
-| GET    | `/api/agents`                    | List registered machines            |
-| POST   | `/api/agents/agents`             | Create an agent (DB required)       |
-| GET    | `/api/agents/agents/list`        | List agents (DB required)           |
-| GET    | `/api/agents/agents/:agentId`    | Get agent by ID (DB required)       |
-| PATCH  | `/api/agents/agents/:agentId/status` | Update agent status (DB required) |
-| GET    | `/api/agents/agents/:agentId/runs`   | Recent runs for agent (DB required) |
-| POST   | `/api/agents/:id/start`          | Start an agent task                 |
-| POST   | `/api/agents/:id/stop`           | Stop an agent                       |
-| POST   | `/api/agents/:id/signal`         | Signal a running agent              |
-| POST   | `/api/agents/:id/complete`       | Run completion callback             |
-| GET    | `/api/agents/:id/stream`         | SSE output stream (proxied)         |
-| WS     | `/api/ws`                        | WebSocket bidirectional control     |
-| GET    | `/api/scheduler/jobs`            | List repeatable jobs                |
-| POST   | `/api/scheduler/jobs/heartbeat`  | Create heartbeat schedule           |
-| POST   | `/api/scheduler/jobs/cron`       | Create cron schedule                |
-| DELETE | `/api/scheduler/jobs/:key`       | Remove a scheduled job by key       |
-| DELETE | `/api/scheduler/jobs`            | Remove all jobs (?confirm=true)     |
-| GET    | `/api/router/models`             | List LLM models                     |
-| POST   | `/api/memory/search`             | Search agent memory                 |
-| POST   | `/api/audit/actions`             | Batch-ingest audit events           |
-
-### Agent Worker (port 9000)
-
-| Method | Endpoint                    | Description                  |
-|--------|-----------------------------|------------------------------|
-| GET    | `/health`                   | Worker health + pool stats   |
-| GET    | `/api/agents`               | List pool agents             |
-| GET    | `/api/agents/stats`         | Aggregate pool statistics    |
-| GET    | `/api/agents/:id`           | Get single agent details     |
-| POST   | `/api/agents/:id/start`     | Start agent in pool          |
-| POST   | `/api/agents/:id/stop`      | Stop agent                   |
-| DELETE | `/api/agents/:id`           | Remove agent from pool       |
-| GET    | `/api/agents/:id/stream`    | SSE output stream            |
-
-## Testing
-
-```bash
-# Run all tests (3902 tests across 102 files)
+pnpm build
+pnpm check
 pnpm test
-
-# Run specific package tests
-pnpm --filter @agentctl/shared test
-pnpm --filter @agentctl/control-plane test
-pnpm --filter @agentctl/agent-worker test
+pnpm test:packages
 ```
 
-## Environment Variables
+### Package-specific
 
-See [`.env.example`](.env.example) for the full list of configuration variables organized by package.
+```bash
+pnpm --filter @agentctl/control-plane dev
+pnpm --filter @agentctl/agent-worker dev
+pnpm --filter @agentctl/web dev
+pnpm --filter @agentctl/mobile start
+```
 
-## Documentation
+### CLI utilities
 
-- [Architecture](docs/ARCHITECTURE.md) -- layer-by-layer design with data flow diagrams
-- [Quickstart](docs/QUICKSTART.md) -- from zero to first agent running
-- [Lessons Learned](docs/LESSONS_LEARNED.md) -- pitfalls, gotchas, trade-offs
-- [Research](docs/RESEARCH.md) -- consolidated research findings
-- [Reference Index](docs/REFERENCE_INDEX.md) -- external tools and documentation
+The repo includes a TypeScript CLI in `scripts/agentctl.ts`.
+
+Examples:
+
+```bash
+npx tsx scripts/agentctl.ts help
+npx tsx scripts/agentctl.ts health
+npx tsx scripts/agentctl.ts status
+npx tsx scripts/agentctl.ts machines
+npx tsx scripts/agentctl.ts agents
+```
+
+Other operational scripts live in [`scripts/`](scripts/), including:
+
+- machine bootstrap
+- deploy/migration helpers
+- Claude history and memory importers
+- fleet provisioning utilities
+
+## Testing And Validation
+
+This repo uses:
+
+- Vitest for package and script tests
+- Playwright specs in `packages/web/e2e`
+- Biome for formatting and lint-style checks
+- TypeScript builds as the main typecheck gate
+
+Typical commands:
+
+```bash
+pnpm test:packages
+pnpm test:scripts
+pnpm --filter @agentctl/web test
+pnpm --filter @agentctl/web exec playwright test
+pnpm --filter @agentctl/control-plane build
+```
+
+Avoid depending on exact test counts in this README; they change frequently.
+
+## Deployment And Ops
+
+The repo already includes:
+
+- CI, security audit, image build, deploy, rollback, and migration-check workflows under [`.github/workflows/`](.github/workflows/)
+- Dockerfiles and compose files under [`infra/docker/`](infra/docker/)
+- PM2 configs under [`infra/pm2/`](infra/pm2/)
+- Tailscale ACL and setup docs under [`infra/tailscale/`](infra/tailscale/)
+- Vector/ClickHouse log pipeline assets under [`infra/vector/`](infra/vector/)
+
+For production setup details, start with [QUICKSTART](docs/QUICKSTART.md) and [SECURITY_RUNBOOK](docs/SECURITY_RUNBOOK.md).
+
+## Documentation Map
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Quickstart](docs/QUICKSTART.md)
+- [Agent Quickstart](docs/QUICKSTART-AGENT.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Lessons Learned](docs/LESSONS_LEARNED.md)
+- [Research](docs/RESEARCH.md)
+- [Reference Index](docs/REFERENCE_INDEX.md)
+- [Threat Model](docs/THREAT_MODEL.md)
+- [Security Runbook](docs/SECURITY_RUNBOOK.md)
+
+## README Scope
+
+This README is intentionally high-level.
+It should answer:
+
+- what the repo contains
+- which package to start with
+- how to run the system locally
+- where to find the authoritative deeper docs
+
+It should not try to be the full API reference, deployment runbook, or roadmap changelog.
 
 ## License
 
