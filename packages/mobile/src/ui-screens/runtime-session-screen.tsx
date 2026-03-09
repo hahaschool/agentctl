@@ -6,6 +6,7 @@
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Machine } from '@agentctl/shared';
 import {
   Alert,
   FlatList,
@@ -73,6 +74,18 @@ function handoffStatusColor(status: RuntimeSessionHandoff['status']): string {
   }
 }
 
+
+function machineStatusColor(status: Machine['status']): string {
+  switch (status) {
+    case 'online':
+      return '#22c55e';
+    case 'degraded':
+      return '#f59e0b';
+    default:
+      return '#6b7280';
+  }
+}
+
 export function RuntimeSessionScreen(): React.JSX.Element {
   const { apiClient } = useAppContext();
   const presenterRef = useRef<RuntimeSessionPresenter | null>(null);
@@ -93,6 +106,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
 
   const [state, setState] = useState<RuntimeSessionScreenState>({
     sessions: [],
+    machines: [],
     selectedSession: null,
     handoffs: [],
     isLoading: false,
@@ -122,9 +136,17 @@ export function RuntimeSessionScreen(): React.JSX.Element {
     );
   }, [state.selectedSession]);
 
-  const availableMachineIds = useMemo(
-    () => Array.from(new Set(state.sessions.map((session) => session.machineId))).sort(),
-    [state.sessions],
+  useEffect(() => {
+    if (createMachineId) return;
+    const preferred = state.machines.find((machine) => machine.status === 'online') ?? state.machines[0];
+    if (preferred) {
+      setCreateMachineId(preferred.id);
+    }
+  }, [createMachineId, state.machines]);
+
+  const machineLookup = useMemo(
+    () => new Map(state.machines.map((machine) => [machine.id, machine] as const)),
+    [state.machines],
   );
 
   const onRefresh = useCallback(() => {
@@ -257,7 +279,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
 
           <View style={styles.runtimeRow}>
             <Text style={styles.runtimePill}>{runtimeLabel(item.runtime)}</Text>
-            <Text style={styles.machineText}>{item.machineId}</Text>
+            <Text style={styles.machineText}>
+              {machineLookup.get(item.machineId)?.hostname ?? item.machineId}
+            </Text>
           </View>
 
           <Text style={styles.sessionDetail} numberOfLines={1}>
@@ -383,18 +407,44 @@ export function RuntimeSessionScreen(): React.JSX.Element {
               ))}
             </View>
 
-            <Text style={styles.fieldLabel}>Machine ID</Text>
-            <TextInput
-              style={styles.input}
-              value={createMachineId}
-              onChangeText={setCreateMachineId}
-              placeholder="e.g. mac-mini-01"
-              placeholderTextColor="#6b7280"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {availableMachineIds.length > 0 && (
-              <Text style={styles.helperText}>Known machines: {availableMachineIds.join(', ')}</Text>
+            <Text style={styles.fieldLabel}>Machine</Text>
+            {state.machines.length > 0 ? (
+              <View style={styles.machinePickerList}>
+                {state.machines.map((machine) => (
+                  <TouchableOpacity
+                    key={machine.id}
+                    style={[
+                      styles.machinePickerButton,
+                      createMachineId === machine.id && styles.machinePickerButtonActive,
+                    ]}
+                    onPress={() => setCreateMachineId(machine.id)}
+                  >
+                    <View
+                      style={[
+                        styles.machineStatusDot,
+                        { backgroundColor: machineStatusColor(machine.status) },
+                      ]}
+                    />
+                    <View style={styles.machinePickerTextBlock}>
+                      <Text style={styles.machinePickerTitle}>{machine.hostname}</Text>
+                      <Text style={styles.machinePickerSubtitle}>{machine.id}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={createMachineId}
+                  onChangeText={setCreateMachineId}
+                  placeholder="e.g. mac-mini-01"
+                  placeholderTextColor="#6b7280"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Text style={styles.helperText}>No machine inventory loaded; using manual entry.</Text>
+              </>
             )}
 
             <Text style={styles.fieldLabel}>Project Path</Text>
@@ -470,7 +520,11 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                     </View>
                   </View>
                   <Text style={styles.detailInfo}>Runtime: {runtimeLabel(state.selectedSession.runtime)}</Text>
-                  <Text style={styles.detailInfo}>Machine: {state.selectedSession.machineId}</Text>
+                  <Text style={styles.detailInfo}>
+                    Machine:{' '}
+                    {machineLookup.get(state.selectedSession.machineId)?.hostname ??
+                      state.selectedSession.machineId}
+                  </Text>
                   <Text style={styles.detailInfo}>Project: {state.selectedSession.projectPath}</Text>
                   {state.selectedSession.worktreePath && (
                     <Text style={styles.detailInfo}>Worktree: {state.selectedSession.worktreePath}</Text>
@@ -532,15 +586,41 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                         autoCapitalize="none"
                         autoCorrect={false}
                       />
-                      <TextInput
-                        style={styles.input}
-                        value={forkMachineId}
-                        onChangeText={setForkMachineId}
-                        placeholder="Optional target machine ID"
-                        placeholderTextColor="#6b7280"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                      />
+                      {state.machines.length > 0 ? (
+                        <View style={styles.machinePickerList}>
+                          {state.machines.map((machine) => (
+                            <TouchableOpacity
+                              key={machine.id}
+                              style={[
+                                styles.machinePickerButton,
+                                forkMachineId === machine.id && styles.machinePickerButtonActive,
+                              ]}
+                              onPress={() => setForkMachineId(machine.id)}
+                            >
+                              <View
+                                style={[
+                                  styles.machineStatusDot,
+                                  { backgroundColor: machineStatusColor(machine.status) },
+                                ]}
+                              />
+                              <View style={styles.machinePickerTextBlock}>
+                                <Text style={styles.machinePickerTitle}>{machine.hostname}</Text>
+                                <Text style={styles.machinePickerSubtitle}>{machine.id}</Text>
+                              </View>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      ) : (
+                        <TextInput
+                          style={styles.input}
+                          value={forkMachineId}
+                          onChangeText={setForkMachineId}
+                          placeholder="Optional target machine ID"
+                          placeholderTextColor="#6b7280"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                      )}
                       <TouchableOpacity style={[styles.actionButton, styles.forkButton]} onPress={handleFork}>
                         <Text style={styles.buttonText}>Fork Session</Text>
                       </TouchableOpacity>
@@ -763,7 +843,6 @@ const styles = StyleSheet.create({
   helperText: {
     color: '#6b7280',
     fontSize: 11,
-    marginTop: -10,
     marginBottom: 14,
   },
   input: {
@@ -803,6 +882,43 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '600',
+  },
+  machinePickerList: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  machinePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#111111',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  machinePickerButtonActive: {
+    borderColor: '#1e40af',
+    backgroundColor: '#172554',
+  },
+  machineStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  machinePickerTextBlock: {
+    flex: 1,
+  },
+  machinePickerTitle: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  machinePickerSubtitle: {
+    color: '#9ca3af',
+    fontSize: 11,
+    marginTop: 2,
   },
   modalActions: {
     flexDirection: 'row',

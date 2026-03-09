@@ -4,6 +4,8 @@
 // handoff history, creating sessions, and triggering handoffs.
 // ---------------------------------------------------------------------------
 
+import type { Machine } from '@agentctl/shared';
+
 import type { ApiClient } from '../services/api-client.js';
 import { MobileClientError } from '../services/api-client.js';
 import type {
@@ -16,6 +18,7 @@ import { RuntimeSessionApi } from '../services/runtime-session-api.js';
 
 export type RuntimeSessionScreenState = {
   sessions: RuntimeSessionInfo[];
+  machines: Machine[];
   selectedSession: RuntimeSessionInfo | null;
   handoffs: RuntimeSessionHandoff[];
   isLoading: boolean;
@@ -34,11 +37,13 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000;
 
 export class RuntimeSessionPresenter {
   private readonly runtimeSessionApi: RuntimeSessionApi;
+  private readonly apiClient: ApiClient;
   private readonly pollIntervalMs: number;
   private readonly onChange?: (state: RuntimeSessionScreenState) => void;
 
   private state: RuntimeSessionScreenState = {
     sessions: [],
+    machines: [],
     selectedSession: null,
     handoffs: [],
     isLoading: false,
@@ -50,6 +55,7 @@ export class RuntimeSessionPresenter {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: RuntimeSessionPresenterConfig) {
+    this.apiClient = config.apiClient;
     this.runtimeSessionApi = new RuntimeSessionApi(config.apiClient);
     this.pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.onChange = config.onChange;
@@ -74,11 +80,15 @@ export class RuntimeSessionPresenter {
     this.setState({ isLoading: true, error: null });
 
     try {
-      const result: RuntimeSessionListResponse = await this.runtimeSessionApi.listSessions({ limit: 100 });
+      const [result, machines]: [RuntimeSessionListResponse, Machine[]] = await Promise.all([
+        this.runtimeSessionApi.listSessions({ limit: 100 }),
+        this.apiClient.listMachines(),
+      ]);
       const selectedSessionId = this.state.selectedSession?.id;
       const selectedSession = result.sessions.find((session) => session.id === selectedSessionId) ?? null;
       this.setState({
         sessions: result.sessions,
+        machines,
         selectedSession,
         isLoading: false,
         lastUpdated: new Date(),
@@ -194,6 +204,7 @@ export class RuntimeSessionPresenter {
     return {
       ...this.state,
       sessions: [...this.state.sessions],
+      machines: [...this.state.machines],
       selectedSession: this.state.selectedSession ? { ...this.state.selectedSession } : null,
       handoffs: [...this.state.handoffs],
     };
