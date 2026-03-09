@@ -124,7 +124,11 @@ export class HandoffController {
       const session = await adapter.startSession({
         agentId: input.agentId,
         projectPath: input.projectPath,
-        prompt: composeHandoffPrompt(input.snapshot, input.prompt),
+        prompt: composeHandoffPrompt(
+          input.snapshot,
+          input.prompt,
+          extractSourceSessionSummary(nativeImportAttempt?.metadata),
+        ),
         model: input.model ?? null,
       });
 
@@ -241,7 +245,13 @@ function buildConversationSummary(input: ExportSnapshotInput): string {
   return `${base} Requester note: ${input.prompt.trim()}`;
 }
 
-function composeHandoffPrompt(snapshot: HandoffSnapshot, prompt?: string | null): string {
+function composeHandoffPrompt(
+  snapshot: HandoffSnapshot,
+  prompt?: string | null,
+  sourceSessionSummary?: {
+    recentMessages?: Array<{ role?: string; text?: string }>;
+  } | null,
+): string {
   const lines = [
     prompt?.trim() || snapshot.nextSuggestedPrompt,
     '',
@@ -254,5 +264,40 @@ function composeHandoffPrompt(snapshot: HandoffSnapshot, prompt?: string | null)
     lines.push(`Open todos: ${snapshot.openTodos.join('; ')}`);
   }
 
+  const recentMessages = sourceSessionSummary?.recentMessages
+    ?.filter(
+      (
+        message,
+      ): message is {
+        role: string;
+        text: string;
+      } => typeof message?.role === 'string' && typeof message?.text === 'string',
+    )
+    .slice(-3);
+
+  if (recentMessages && recentMessages.length > 0) {
+    lines.push(
+      'Recent native messages:',
+      ...recentMessages.map((message) => `- ${message.role}: ${message.text}`),
+    );
+  }
+
   return lines.join('\n').trim();
+}
+
+function extractSourceSessionSummary(
+  metadata: Record<string, unknown> | undefined,
+): {
+  recentMessages?: Array<{ role?: string; text?: string }>;
+} | null {
+  if (!metadata) return null;
+
+  const value = metadata.sourceSessionSummary;
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  return value as {
+    recentMessages?: Array<{ role?: string; text?: string }>;
+  };
 }

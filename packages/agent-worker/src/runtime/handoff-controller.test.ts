@@ -171,7 +171,15 @@ describe('HandoffController', () => {
           sourceRuntime: 'claude-code',
           targetRuntime: 'codex',
           reason: 'not_implemented',
-          metadata: { probe: 'claude-to-codex' },
+          metadata: {
+            probe: 'claude-to-codex',
+            sourceSessionSummary: {
+              recentMessages: [
+                { role: 'user', text: 'Continue the managed runtime implementation.' },
+                { role: 'assistant', text: 'I am probing the native import path next.' },
+              ],
+            },
+          },
         })),
       },
     });
@@ -189,5 +197,10 @@ describe('HandoffController', () => {
     expect(result.nativeImportAttempt?.ok).toBe(false);
     expect(result.nativeImportAttempt?.reason).toBe('not_implemented');
     expect(result.session.nativeSessionId).toBe('codex-native-3');
+    expect(startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('Recent native messages:'),
+      }),
+    );
   });
 });
