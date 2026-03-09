@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 
 import type { AgentPool } from '../runtime/agent-pool.js';
 import type { CliSessionManager } from '../runtime/cli-session-manager.js';
+import { RuntimeConfigApplier } from '../runtime/config/runtime-config-applier.js';
 import { TerminalManager } from '../runtime/terminal-manager.js';
 import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
 import { agentRoutes } from './routes/agents.js';
@@ -14,6 +15,7 @@ import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
+import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
 import { terminalRoutes } from './routes/terminal.js';
@@ -25,6 +27,7 @@ type CreateWorkerServerOptions = {
   controlPlaneUrl?: string;
   sessionManager?: CliSessionManager;
   maxTerminals?: number;
+  runtimeConfigApplier?: RuntimeConfigApplier;
 };
 
 export async function createWorkerServer({
@@ -34,6 +37,7 @@ export async function createWorkerServer({
   controlPlaneUrl,
   sessionManager,
   maxTerminals,
+  runtimeConfigApplier = new RuntimeConfigApplier(),
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
@@ -155,6 +159,13 @@ export async function createWorkerServer({
 
   await app.register(workerMetricsRoutes, {
     agentPool,
+  });
+
+  await app.register(runtimeConfigRoutes, {
+    prefix: '/api/runtime-config',
+    machineId,
+    runtimeConfigApplier,
+    logger,
   });
 
   await app.register(fileRoutes, {

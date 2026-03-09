@@ -1,6 +1,7 @@
 export type {
   HandoffManagedSessionRequest,
   ResumeManagedSessionRequest,
+  RuntimeCapabilityState,
   RuntimeConfigSyncRequest,
   RuntimeConfigSyncResponse,
   ApplyRuntimeConfigRequest,
