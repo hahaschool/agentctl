@@ -14,7 +14,10 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Text } from 'react-native';
+import { useAppContext } from '../context/app-context.js';
+import { getRuntimeTabBadgeCount } from './runtime-tab-badge.js';
 import { AgentListScreen } from '../ui-screens/agent-list-screen.js';
 import { DashboardScreen } from '../ui-screens/dashboard-screen.js';
 import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
@@ -72,11 +75,51 @@ const NAVIGATION_THEME = {
   },
 };
 
+const RUNTIME_BADGE_POLL_INTERVAL_MS = 30_000;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function TabNavigator(): React.JSX.Element {
+  const { apiClient } = useAppContext();
+  const [runtimeBadgeCount, setRuntimeBadgeCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshRuntimeBadge(): Promise<void> {
+      try {
+        const response = await apiClient.listRuntimeSessions({ limit: 100 });
+        if (!cancelled) {
+          setRuntimeBadgeCount(getRuntimeTabBadgeCount(response.sessions));
+        }
+      } catch {
+        if (!cancelled) {
+          setRuntimeBadgeCount(0);
+        }
+      }
+    }
+
+    void refreshRuntimeBadge();
+    const timer = setInterval(() => {
+      void refreshRuntimeBadge();
+    }, RUNTIME_BADGE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [apiClient]);
+
+  const runtimesTabOptions = useMemo(
+    () => ({
+      title: 'Runtimes',
+      ...(runtimeBadgeCount > 0 ? { tabBarBadge: runtimeBadgeCount } : {}),
+    }),
+    [runtimeBadgeCount],
+  );
+
   return (
     <NavigationContainer theme={NAVIGATION_THEME}>
       <Tab.Navigator
@@ -111,7 +154,7 @@ export function TabNavigator(): React.JSX.Element {
         <Tab.Screen
           name="Runtimes"
           component={RuntimeSessionScreen}
-          options={{ title: 'Runtimes' }}
+          options={runtimesTabOptions}
         />
         <Tab.Screen name="Scheduler" component={SchedulerScreen} options={{ title: 'Scheduler' }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
