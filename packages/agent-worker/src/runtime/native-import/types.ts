@@ -1,4 +1,9 @@
-import type { HandoffSnapshot, ManagedRuntime } from '@agentctl/shared';
+import type {
+  HandoffSnapshot,
+  ManagedRuntime,
+  NativeImportAttempt,
+  NativeImportAttemptReason,
+} from '@agentctl/shared';
 
 import type { ManagedSessionHandle } from '../runtime-adapter.js';
 
@@ -10,11 +15,21 @@ export type NativeImportProbeInput = {
   snapshot: HandoffSnapshot;
 };
 
-export type NativeImportAttemptResult = {
-  ok: boolean;
-  sourceRuntime: ManagedRuntime;
-  targetRuntime: ManagedRuntime;
-  reason: string;
-  metadata: Record<string, unknown>;
+export type NativeImportAttemptResult = NativeImportAttempt & {
   session?: ManagedSessionHandle;
 };
+
+export function failedNativeImportAttempt(input: {
+  sourceRuntime: ManagedRuntime;
+  targetRuntime: ManagedRuntime;
+  reason: NativeImportAttemptReason;
+  metadata?: Record<string, unknown>;
+}): NativeImportAttemptResult {
+  return {
+    ok: false,
+    sourceRuntime: input.sourceRuntime,
+    targetRuntime: input.targetRuntime,
+    reason: input.reason,
+    metadata: input.metadata ?? {},
+  };
+}

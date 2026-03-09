@@ -1,17 +1,25 @@
-import type { NativeImportAttemptResult, NativeImportProbeInput } from './types.js';
+import { probeNativeImportPrerequisites } from './probe.js';
+import { failedNativeImportAttempt, type NativeImportAttemptResult, type NativeImportProbeInput } from './types.js';
 
 export async function tryClaudeToCodexImport(
   input: NativeImportProbeInput,
 ): Promise<NativeImportAttemptResult> {
-  return {
-    ok: false,
+  const prerequisiteResult = await probeNativeImportPrerequisites({
     sourceRuntime: 'claude-code',
     targetRuntime: 'codex',
-    reason: 'not_implemented',
+    projectPath: input.projectPath,
+    snapshot: input.snapshot,
+  });
+
+  return failedNativeImportAttempt({
+    sourceRuntime: 'claude-code',
+    targetRuntime: 'codex',
+    reason: prerequisiteResult.reason,
     metadata: {
       probe: 'claude-to-codex',
       sourceSessionId: input.snapshot.sourceSessionId,
       projectPath: input.projectPath,
+      ...prerequisiteResult.metadata,
     },
-  };
+  });
 }

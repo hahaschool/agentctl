@@ -13,6 +13,7 @@ import type {
   ManagedRuntime,
   ManagedSession,
   ManagedSessionStatus,
+  NativeImportAttempt,
   ResumeManagedSessionRequest,
 } from '@agentctl/shared';
 
@@ -41,6 +42,7 @@ export type RuntimeSessionHandoff = {
   strategy: HandoffStrategy;
   status: 'pending' | 'succeeded' | 'failed';
   snapshot: HandoffSnapshot;
+  nativeImportAttempt?: NativeImportAttempt;
   errorMessage: string | null;
   createdAt: string | null;
   completedAt: string | null;
@@ -61,6 +63,7 @@ export type RuntimeSessionHandoffResponse = {
   handoffId: string;
   strategy: HandoffStrategy;
   attemptedStrategies: HandoffStrategy[];
+  nativeImportAttempt?: NativeImportAttempt;
   snapshot: HandoffSnapshot;
   session: RuntimeSessionInfo;
 };

@@ -165,6 +165,15 @@ describe('HandoffController', () => {
       runtimeRegistry,
       inspectWorkspace: vi.fn(),
       allowExperimentalNativeImport: true,
+      nativeImporters: {
+        'claude-code:codex': vi.fn(async () => ({
+          ok: false,
+          sourceRuntime: 'claude-code',
+          targetRuntime: 'codex',
+          reason: 'not_implemented',
+          metadata: { probe: 'claude-to-codex' },
+        })),
+      },
     });
 
     const result = await controller.handoff({

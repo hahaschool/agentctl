@@ -192,6 +192,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         handoffId: handoff.id,
         strategy: handoff.strategy,
         attemptedStrategies: execution.attemptedStrategies ?? ['snapshot-handoff'],
+        nativeImportAttempt: execution.nativeImportAttempt,
         snapshot,
         session: updatedTarget,
       });

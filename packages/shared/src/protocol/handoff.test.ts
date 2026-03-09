@@ -4,6 +4,7 @@ import type {
   ExportHandoffSnapshotRequest,
   ExportHandoffSnapshotResponse,
   ManagedSessionHandoffResponse,
+  NativeImportAttempt,
   StartHandoffRequest,
   StartHandoffResponse,
 } from './handoff.js';
@@ -56,6 +57,13 @@ describe('handoff protocol', () => {
       ok: true,
       strategy: 'snapshot-handoff',
       attemptedStrategies: ['native-import', 'snapshot-handoff'],
+      nativeImportAttempt: {
+        ok: false,
+        sourceRuntime: 'codex',
+        targetRuntime: 'claude-code',
+        reason: 'not_implemented',
+        metadata: { probe: 'codex-to-claude' },
+      },
       snapshot: exportResponse.snapshot,
       session: {
         runtime: 'claude-code',
@@ -73,6 +81,7 @@ describe('handoff protocol', () => {
       handoffId: 'handoff-1',
       strategy: 'snapshot-handoff',
       attemptedStrategies: ['native-import', 'snapshot-handoff'],
+      nativeImportAttempt: startResponse.nativeImportAttempt,
       snapshot: exportResponse.snapshot,
       session: {
         id: 'ms-target',
@@ -94,6 +103,30 @@ describe('handoff protocol', () => {
     expect(exportResponse.strategy).toBe('snapshot-handoff');
     expect(startRequest.targetRuntime).toBe('claude-code');
     expect(startResponse.attemptedStrategies).toEqual(['native-import', 'snapshot-handoff']);
+    expect(startResponse.nativeImportAttempt?.reason).toBe('not_implemented');
     expect(managedResponse.session.handoffSourceSessionId).toBe('ms-source');
+  });
+
+  it('defines native import attempt reasons for experimental probe reporting', () => {
+    const attempt: NativeImportAttempt = {
+      ok: false,
+      sourceRuntime: 'claude-code',
+      targetRuntime: 'codex',
+      reason: 'target_cli_unavailable',
+      metadata: {
+        targetCli: {
+          command: 'codex',
+          available: false,
+          version: null,
+        },
+      },
+    };
+
+    expect(attempt.reason).toBe('target_cli_unavailable');
+    expect(attempt.metadata.targetCli).toEqual({
+      command: 'codex',
+      available: false,
+      version: null,
+    });
   });
 });

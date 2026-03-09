@@ -17,6 +17,25 @@ export type RuntimeSessionSummary = {
   status: ManagedSessionStatus;
 };
 
+export const NATIVE_IMPORT_ATTEMPT_REASONS = [
+  'succeeded',
+  'not_supported',
+  'not_implemented',
+  'target_cli_unavailable',
+  'source_storage_missing',
+  'source_session_missing',
+] as const;
+
+export type NativeImportAttemptReason = (typeof NATIVE_IMPORT_ATTEMPT_REASONS)[number];
+
+export type NativeImportAttempt = {
+  ok: boolean;
+  sourceRuntime: ManagedRuntime;
+  targetRuntime: ManagedRuntime;
+  reason: NativeImportAttemptReason;
+  metadata: Record<string, unknown>;
+};
+
 export type ExportHandoffSnapshotRequest = {
   sourceRuntime: ManagedRuntime;
   sourceSessionId: string;
@@ -48,6 +67,7 @@ export type StartHandoffResponse = {
   ok: true;
   strategy: HandoffStrategy;
   attemptedStrategies: HandoffStrategy[];
+  nativeImportAttempt?: NativeImportAttempt;
   snapshot: HandoffSnapshot;
   session: RuntimeSessionSummary;
 };
@@ -57,6 +77,7 @@ export type ManagedSessionHandoffResponse = {
   handoffId: string;
   strategy: HandoffStrategy;
   attemptedStrategies: HandoffStrategy[];
+  nativeImportAttempt?: NativeImportAttempt;
   snapshot: HandoffSnapshot;
   session: ManagedSession;
 };

@@ -74,10 +74,24 @@ describe('RuntimeSessionApi', () => {
 
   it('posts handoff requests to the managed runtime endpoint', async () => {
     mocks.fetch.mockResolvedValueOnce(
-      jsonResponse({ ok: true, handoffId: 'handoff-1', strategy: 'snapshot-handoff', attemptedStrategies: ['snapshot-handoff'], snapshot: {}, session: { id: 'ms-2' } }),
+      jsonResponse({
+        ok: true,
+        handoffId: 'handoff-1',
+        strategy: 'snapshot-handoff',
+        attemptedStrategies: ['snapshot-handoff'],
+        nativeImportAttempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'not_implemented',
+          metadata: { probe: 'codex-to-claude' },
+        },
+        snapshot: {},
+        session: { id: 'ms-2' },
+      }),
     );
 
-    await runtimeSessionApi.handoffSession('ms-1', {
+    const response = await runtimeSessionApi.handoffSession('ms-1', {
       targetRuntime: 'codex',
       reason: 'manual',
       prompt: 'Continue in Codex',
@@ -91,6 +105,7 @@ describe('RuntimeSessionApi', () => {
       reason: 'manual',
       prompt: 'Continue in Codex',
     });
+    expect(response.nativeImportAttempt?.reason).toBe('not_implemented');
   });
 
   it('lists handoff history with the optional limit parameter', async () => {

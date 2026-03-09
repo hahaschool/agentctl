@@ -222,6 +222,7 @@ describe('handoffRoutes', () => {
     expect(response.json().strategy).toBe('snapshot-handoff');
     expect(response.json().session.runtime).toBe('claude-code');
     expect(response.json().session.handoffSourceSessionId).toBe('ms-source');
+    expect(response.json().nativeImportAttempt.reason).toBe('not_implemented');
     expect(handoffStore.create).toHaveBeenCalledWith(
       expect.objectContaining({
         sourceSessionId: 'ms-source',

@@ -14,6 +14,8 @@ export type {
   ExportHandoffSnapshotRequest,
   ExportHandoffSnapshotResponse,
   ManagedSessionHandoffResponse,
+  NativeImportAttempt,
+  NativeImportAttemptReason,
   RuntimeSessionSummary,
   StartHandoffRequest,
   StartHandoffResponse,

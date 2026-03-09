@@ -22,6 +22,7 @@ import type {
   ManagedSession,
   ManagedSessionStatus,
   MemoryObservation,
+  NativeImportAttempt,
   ResumeManagedSessionRequest,
   ApiAccount as SharedApiAccount,
 } from '@agentctl/shared';
@@ -150,6 +151,7 @@ export type RuntimeSessionHandoff = {
   strategy: HandoffStrategy;
   status: 'pending' | 'succeeded' | 'failed';
   snapshot: HandoffSnapshot;
+  nativeImportAttempt?: NativeImportAttempt;
   errorMessage: string | null;
   createdAt: string | null;
   completedAt: string | null;
@@ -432,6 +434,7 @@ export const api = {
       handoffId: string;
       strategy: HandoffStrategy;
       attemptedStrategies: HandoffStrategy[];
+      nativeImportAttempt?: NativeImportAttempt;
       snapshot: HandoffSnapshot;
       session: RuntimeSession;
     }>(`/api/runtime-sessions/${id}/handoff`, {
