@@ -1,4 +1,11 @@
-import { mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -6,25 +13,38 @@ import { spawnSync } from 'node:child_process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageDir = resolve(__dirname, '..');
 const lockDir = resolve(packageDir, '.build-lock');
-
-acquireBuildLock(lockDir);
+const distDir = resolve(packageDir, 'dist');
+const tempSuffix = `${process.pid}-${Date.now()}`;
+const tempDistDir = resolve(packageDir, `.dist-tmp-${tempSuffix}`);
+const tempTsBuildInfoFile = resolve(packageDir, `.tsbuildinfo.${tempSuffix}`);
 
 try {
-  for (const relativePath of ['dist', '.tsbuildinfo']) {
-    rmSync(resolve(packageDir, relativePath), { recursive: true, force: true });
-  }
+  rmSync(tempDistDir, { recursive: true, force: true });
+  rmSync(tempTsBuildInfoFile, { recursive: true, force: true });
 
-  const result = spawnSync('tsc', ['--project', 'tsconfig.json'], {
+  const result = spawnSync(
+    'tsc',
+    ['--project', 'tsconfig.json', '--outDir', tempDistDir, '--tsBuildInfoFile', tempTsBuildInfoFile],
+    {
     cwd: packageDir,
     stdio: 'inherit',
     shell: process.platform === 'win32',
-  });
+    },
+  );
 
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+
+  acquireBuildLock(lockDir);
+  try {
+    syncDir(tempDistDir, distDir);
+  } finally {
+    rmSync(lockDir, { recursive: true, force: true });
+  }
 } finally {
-  rmSync(lockDir, { recursive: true, force: true });
+  rmSync(tempDistDir, { recursive: true, force: true });
+  rmSync(tempTsBuildInfoFile, { recursive: true, force: true });
 }
 
 function acquireBuildLock(lockPath) {
@@ -73,4 +93,20 @@ function isLockHeldError(error) {
 
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function syncDir(sourceDir, targetDir) {
+  mkdirSync(targetDir, { recursive: true });
+
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    const sourcePath = resolve(sourceDir, entry.name);
+    const targetPath = resolve(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      syncDir(sourcePath, targetPath);
+      continue;
+    }
+
+    copyFileSync(sourcePath, targetPath);
+  }
 }
