@@ -97,12 +97,20 @@ export class ManagedSessionStore {
       conditions.push(eq(managedSessions.agentId, filters.agentId));
     }
 
-    let query = this.db.select().from(managedSessions);
-    if (conditions.length > 0) {
-      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
-    }
+    const rows =
+      conditions.length > 0
+        ? await this.db
+            .select()
+            .from(managedSessions)
+            .where(conditions.length === 1 ? conditions[0] : and(...conditions))
+            .orderBy(desc(managedSessions.startedAt))
+            .limit(filters.limit ?? 20)
+        : await this.db
+            .select()
+            .from(managedSessions)
+            .orderBy(desc(managedSessions.startedAt))
+            .limit(filters.limit ?? 20);
 
-    const rows = await query.orderBy(desc(managedSessions.startedAt)).limit(filters.limit ?? 20);
     return rows.map(mapManagedSessionRow);
   }
 

@@ -9,9 +9,7 @@ import type { Logger } from 'pino';
 
 import type { HandoffController } from '../../runtime/handoff-controller.js';
 import type {
-  ForkManagedSessionInput,
   ManagedSessionHandle,
-  ResumeManagedSessionInput,
   RuntimeAdapter,
   StartManagedSessionInput,
 } from '../../runtime/runtime-adapter.js';

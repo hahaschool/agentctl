@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prebuild": "pnpm --filter @agentctl/shared build",
     "build": "tsc",
     "postbuild": "cp -r drizzle dist/drizzle",
     "start": "node dist/index.js",
+    "pretest": "pnpm --filter @agentctl/shared build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "db:generate": "drizzle-kit generate",
