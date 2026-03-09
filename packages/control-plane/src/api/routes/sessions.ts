@@ -1228,14 +1228,15 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   );
 
   // ---------------------------------------------------------------------------
-  // DELETE /:sessionId — end/close a session
+  // DELETE /:sessionId — end/close a session, optionally purge from DB
   // ---------------------------------------------------------------------------
 
-  app.delete<{ Params: { sessionId: string } }>(
+  app.delete<{ Params: { sessionId: string }; Querystring: { purge?: string } }>(
     '/:sessionId',
     { schema: { tags: ['sessions'], summary: 'End/close a session' } },
     async (request, reply) => {
       const { sessionId } = request.params;
+      const purge = request.query.purge === 'true';
 
       const rows = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
 
@@ -1248,6 +1249,35 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
 
       const session = rows[0];
 
+      // Best-effort: notify worker to clean up the session (for active sessions)
+      if (session.status !== 'ended' && session.status !== 'error') {
+        const machine = await dbRegistry.getMachine(session.machineId);
+
+        if (machine && machine.status !== 'offline') {
+          const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
+          const workerSessionRef = session.claudeSessionId ?? sessionId;
+
+          const result = await proxyWorkerRequest({
+            workerBaseUrl,
+            path: `/api/sessions/${encodeURIComponent(workerSessionRef)}`,
+            method: 'DELETE',
+            timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+          });
+
+          if (!result.ok) {
+            app.log.warn(
+              { sessionId, machineId: session.machineId, err: result.message },
+              'Failed to notify worker of session end — session marked ended in control plane',
+            );
+          }
+        }
+      }
+
+      if (purge) {
+        await db.delete(rcSessions).where(eq(rcSessions.id, sessionId));
+        return { ok: true, sessionId, purged: true };
+      }
+
       if (session.status === 'ended') {
         return { ok: true, sessionId, message: 'Session was already ended' };
       }
@@ -1257,28 +1287,6 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         .set({ status: 'ended', endedAt: new Date() })
         .where(eq(rcSessions.id, sessionId))
         .returning();
-
-      // Best-effort: notify worker to clean up the session
-      const machine = await dbRegistry.getMachine(session.machineId);
-
-      if (machine && machine.status !== 'offline') {
-        const workerBaseUrl = `http://${machineAddress(machine)}:${String(workerPort)}`;
-        const workerSessionRef = session.claudeSessionId ?? sessionId;
-
-        const result = await proxyWorkerRequest({
-          workerBaseUrl,
-          path: `/api/sessions/${encodeURIComponent(workerSessionRef)}`,
-          method: 'DELETE',
-          timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
-        });
-
-        if (!result.ok) {
-          app.log.warn(
-            { sessionId, machineId: session.machineId, err: result.message },
-            'Failed to notify worker of session end — session marked ended in control plane',
-          );
-        }
-      }
 
       return { ok: true, sessionId, session: updated };
     },

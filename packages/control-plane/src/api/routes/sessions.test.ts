@@ -75,6 +75,7 @@ function createMockDb() {
     'offset',
     'insert',
     'update',
+    'delete',
     'values',
     'set',
     'returning',
@@ -762,6 +763,39 @@ describe('Session routes — /api/sessions', () => {
 
       const body = response.json();
       expect(body.ok).toBe(true);
+    });
+
+    it('purges session from DB when ?purge=true', async () => {
+      const session = makeSession({ status: 'ended' });
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/sess-001?purge=true',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.purged).toBe(true);
+    });
+
+    it('purges active session after notifying worker', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/sess-001?purge=true',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.purged).toBe(true);
     });
   });
 

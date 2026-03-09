@@ -376,8 +376,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ message }),
     }),
-  deleteSession: (id: string) =>
-    request<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
+  deleteSession: (id: string, opts?: { purge?: boolean }) =>
+    request<{ ok: boolean }>(`/api/sessions/${id}${opts?.purge ? '?purge=true' : ''}`, { method: 'DELETE' }),
   forkSession: (
     id: string,
     body: {

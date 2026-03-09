@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Filter, MessageSquare } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
@@ -140,6 +140,7 @@ export function SessionsPage(): React.JSX.Element {
   // Bulk selection state
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const lastClickedIndexRef = useRef<number>(-1);
 
   const toggleChecked = useCallback((id: string) => {
     setCheckedIds((prev) => {
@@ -340,7 +341,9 @@ export function SessionsPage(): React.JSX.Element {
   const handleCleanup = useCallback(async () => {
     if (cleanupSessions.length === 0) return;
     try {
-      const results = await Promise.allSettled(cleanupSessions.map((s) => api.deleteSession(s.id)));
+      const results = await Promise.allSettled(
+        cleanupSessions.map((s) => api.deleteSession(s.id, { purge: true })),
+      );
       const failed = results.filter((r) => r.status === 'rejected').length;
       if (failed > 0) {
         toast.error(`${failed} of ${cleanupSessions.length} cleanup(s) failed`);
@@ -358,7 +361,9 @@ export function SessionsPage(): React.JSX.Element {
     setBulkDeleting(true);
     try {
       const ids = Array.from(checkedIds);
-      const results = await Promise.allSettled(ids.map((id) => api.deleteSession(id)));
+      const results = await Promise.allSettled(
+        ids.map((id) => api.deleteSession(id, { purge: true })),
+      );
       const failed = results.filter((r) => r.status === 'rejected').length;
       if (failed > 0) {
         toast.error(`${failed} of ${ids.length} deletions failed`);
@@ -373,6 +378,49 @@ export function SessionsPage(): React.JSX.Element {
       setBulkDeleting(false);
     }
   }, [checkedIds, resetAndInvalidateSessions, toast]);
+
+  // Shift+click range selection handler
+  const handleItemClick = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      if (e.shiftKey && lastClickedIndexRef.current >= 0) {
+        const currentIndex = filteredSessions.findIndex((s) => s.id === id);
+        if (currentIndex < 0) return;
+        const start = Math.min(lastClickedIndexRef.current, currentIndex);
+        const end = Math.max(lastClickedIndexRef.current, currentIndex);
+        setCheckedIds((prev) => {
+          const next = new Set(prev);
+          for (let i = start; i <= end; i++) {
+            next.add(filteredSessions[i].id);
+          }
+          return next;
+        });
+        lastClickedIndexRef.current = currentIndex;
+        return;
+      }
+      // Cmd/Ctrl click is handled in SessionListItem directly
+      const idx = filteredSessions.findIndex((s) => s.id === id);
+      if (idx >= 0) lastClickedIndexRef.current = idx;
+    },
+    [filteredSessions],
+  );
+
+  // Group-level select/deselect all sessions in a group
+  const toggleGroupChecked = useCallback(
+    (groupItems: Session[]) => {
+      setCheckedIds((prev) => {
+        const groupIds = groupItems.map((s) => s.id);
+        const allChecked = groupIds.every((gid) => prev.has(gid));
+        const next = new Set(prev);
+        if (allChecked) {
+          for (const gid of groupIds) next.delete(gid);
+        } else {
+          for (const gid of groupIds) next.add(gid);
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
@@ -834,41 +882,63 @@ export function SessionsPage(): React.JSX.Element {
               />
             )
           ) : groupedSessions ? (
-            Array.from(groupedSessions.entries()).map(([groupKey, groupItems]) => (
-              <div key={groupKey}>
-                <button
-                  type="button"
-                  onClick={() => toggleGroupCollapsed(groupKey)}
-                  aria-expanded={!collapsedGroups.has(groupKey)}
-                  className="flex items-center gap-1.5 w-full px-3 py-2 bg-card border-b border-border text-[11px] font-semibold text-muted-foreground cursor-pointer text-left"
-                >
-                  <span
-                    className={cn(
-                      'inline-block text-[10px] transition-transform duration-150',
-                      collapsedGroups.has(groupKey) ? '-rotate-90' : 'rotate-0',
-                    )}
-                  >
-                    &#x25BC;
-                  </span>
-                  <span className="font-mono flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                    {groupKey}
-                  </span>
-                  <span className="text-muted-foreground font-normal">{groupItems.length}</span>
-                </button>
-                {!collapsedGroups.has(groupKey) &&
-                  groupItems.map((s) => (
-                    <SessionListItem
-                      key={s.id}
-                      session={s}
-                      isSelected={selectedId === s.id}
-                      isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
-                      onSelect={setSelectedId}
-                      isChecked={checkedIds.has(s.id)}
-                      onToggleCheck={toggleChecked}
+            Array.from(groupedSessions.entries()).map(([groupKey, groupItems]) => {
+              const groupAllChecked =
+                groupItems.length > 0 && groupItems.every((s) => checkedIds.has(s.id));
+              const groupSomeChecked =
+                !groupAllChecked && groupItems.some((s) => checkedIds.has(s.id));
+              return (
+                <div key={groupKey}>
+                  <div className="flex items-center gap-1.5 w-full px-3 py-2 bg-card border-b border-border text-[11px] font-semibold text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={groupAllChecked}
+                      ref={(el) => {
+                        if (el) el.indeterminate = groupSomeChecked;
+                      }}
+                      onChange={() => toggleGroupChecked(groupItems)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Select all sessions in ${groupKey}`}
+                      className="w-4 h-4 cursor-pointer shrink-0"
                     />
-                  ))}
-              </div>
-            ))
+                    <button
+                      type="button"
+                      onClick={() => toggleGroupCollapsed(groupKey)}
+                      aria-expanded={!collapsedGroups.has(groupKey)}
+                      className="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer bg-transparent border-0 text-left text-[11px] font-semibold text-muted-foreground"
+                    >
+                      <span
+                        className={cn(
+                          'inline-block text-[10px] transition-transform duration-150',
+                          collapsedGroups.has(groupKey) ? '-rotate-90' : 'rotate-0',
+                        )}
+                      >
+                        &#x25BC;
+                      </span>
+                      <span className="font-mono flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                        {groupKey}
+                      </span>
+                      <span className="text-muted-foreground font-normal">{groupItems.length}</span>
+                    </button>
+                  </div>
+                  {!collapsedGroups.has(groupKey) &&
+                    groupItems.map((s) => (
+                      <SessionListItem
+                        key={s.id}
+                        session={s}
+                        isSelected={selectedId === s.id}
+                        isFocused={
+                          focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
+                        }
+                        onSelect={setSelectedId}
+                        isChecked={checkedIds.has(s.id)}
+                        onToggleCheck={toggleChecked}
+                        onItemClick={handleItemClick}
+                      />
+                    ))}
+                </div>
+              );
+            })
           ) : (
             filteredSessions.map((s, i) => (
               <SessionListItem
@@ -879,6 +949,7 @@ export function SessionsPage(): React.JSX.Element {
                 onSelect={setSelectedId}
                 isChecked={checkedIds.has(s.id)}
                 onToggleCheck={toggleChecked}
+                onItemClick={handleItemClick}
               />
             ))
           )}
@@ -906,11 +977,27 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Floating bulk action bar — sticky so always visible when scrolled */}
         {checkedIds.size > 0 && (
-          <div className="sticky bottom-0 z-10 border-t border-border bg-card px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.1)]">
+          <div className="sticky bottom-0 z-10 border-t border-border bg-card px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.1)] flex-wrap">
             <span className="text-xs font-medium tabular-nums text-foreground">
               {checkedIds.size} selected
             </span>
             <div className="flex-1" />
+            <button
+              type="button"
+              onClick={() => {
+                // Invert selection
+                setCheckedIds((prev) => {
+                  const next = new Set<string>();
+                  for (const s of filteredSessions) {
+                    if (!prev.has(s.id)) next.add(s.id);
+                  }
+                  return next;
+                });
+              }}
+              className="h-7 px-3 bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer transition-all duration-200 hover:bg-accent hover:text-foreground"
+            >
+              Invert
+            </button>
             <button
               type="button"
               onClick={() => setCheckedIds(new Set())}

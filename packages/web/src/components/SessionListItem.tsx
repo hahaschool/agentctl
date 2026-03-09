@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { Session } from '../lib/api';
@@ -19,6 +19,8 @@ export type SessionListItemProps = {
   onSelect: (id: string) => void;
   isChecked: boolean;
   onToggleCheck: (id: string) => void;
+  /** Called with the native click event so the parent can handle shift/cmd */
+  onItemClick?: (id: string, e: React.MouseEvent) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -54,6 +56,42 @@ function LiveDuration({
 }
 
 // ---------------------------------------------------------------------------
+// Long-press hook for mobile
+// ---------------------------------------------------------------------------
+
+const LONG_PRESS_MS = 500;
+
+function useLongPress(callback: () => void): {
+  onTouchStart: () => void;
+  onTouchEnd: () => void;
+  onTouchCancel: () => void;
+} {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firedRef = useRef(false);
+
+  const clear = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const onTouchStart = useCallback(() => {
+    firedRef.current = false;
+    timerRef.current = setTimeout(() => {
+      firedRef.current = true;
+      callback();
+    }, LONG_PRESS_MS);
+  }, [callback]);
+
+  const onTouchEnd = useCallback(() => {
+    clear();
+  }, [clear]);
+
+  return { onTouchStart, onTouchEnd, onTouchCancel: onTouchEnd };
+}
+
+// ---------------------------------------------------------------------------
 // SessionListItem
 // ---------------------------------------------------------------------------
 
@@ -64,11 +102,39 @@ function SessionListItemBase({
   onSelect,
   isChecked,
   onToggleCheck,
+  onItemClick,
 }: SessionListItemProps): React.JSX.Element {
   const meta = s.metadata;
   const errorMsg = meta?.errorMessage;
   const costUsd = meta?.costUsd;
   const messageCount = meta?.messageCount;
+
+  const handleToggle = useCallback(() => onToggleCheck(s.id), [onToggleCheck, s.id]);
+  const longPress = useLongPress(handleToggle);
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Cmd/Ctrl+click toggles check without opening detail
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        onToggleCheck(s.id);
+        return;
+      }
+      // Shift+click or other modifier clicks are handled by parent
+      if (onItemClick && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        onItemClick(s.id, e);
+        return;
+      }
+      if (onItemClick && e.shiftKey) {
+        e.preventDefault();
+        onItemClick(s.id, e);
+        return;
+      }
+      onSelect(s.id);
+    },
+    [s.id, onSelect, onToggleCheck, onItemClick],
+  );
 
   return (
     <div
@@ -82,7 +148,9 @@ function SessionListItemBase({
           ? 'bg-accent/15'
           : isFocused
             ? 'bg-accent/10 ring-1 ring-inset ring-primary/40'
-            : 'bg-transparent hover:bg-accent/8',
+            : isChecked
+              ? 'bg-primary/5'
+              : 'bg-transparent hover:bg-accent/8',
         s.status === 'error'
           ? 'border-l-[3px] border-l-red-500'
           : s.status === 'starting'
@@ -91,16 +159,17 @@ function SessionListItemBase({
               ? 'border-l-[3px] border-l-green-500'
               : 'border-l-[3px] border-l-transparent',
       )}
+      {...longPress}
     >
-      {/* Checkbox */}
+      {/* Checkbox — larger tap target on mobile */}
       <div className="flex items-start pt-4 pl-2.5 shrink-0">
         <input
           type="checkbox"
           checked={isChecked}
-          onChange={() => onToggleCheck(s.id)}
+          onChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Select session ${s.id.slice(0, 16)}`}
-          className="w-3.5 h-3.5 cursor-pointer"
+          className="w-4 h-4 cursor-pointer"
         />
       </div>
       {/* Session card content — uses div+role instead of <button> to avoid
@@ -109,7 +178,7 @@ function SessionListItemBase({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => onSelect(s.id)}
+        onClick={handleClick}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
