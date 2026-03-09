@@ -375,11 +375,36 @@ describe('RuntimeSessionsPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Native import ready/)).toBeDefined();
+      expect(screen.getAllByText(/Native import ready/).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByRole('button', { name: 'Start Native Import' })).toBeDefined();
       expect(mockRuntimeSessionPreflightQuery).toHaveBeenLastCalledWith('ms-1', {
         targetRuntime: 'claude-code',
         targetMachineId: 'machine-2',
       });
+    });
+  });
+
+  it('surfaces snapshot fallback mode before a handoff starts', async () => {
+    setupUseQuery({
+      preflight: {
+        nativeImportCapable: false,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'source_session_missing',
+          metadata: {
+            sourceStorage: '/Users/example/.codex/sessions',
+          },
+        },
+      },
+    });
+
+    render(<RuntimeSessionsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Snapshot fallback')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Start Snapshot Handoff' })).toBeDefined();
     });
   });
 
@@ -464,7 +489,7 @@ describe('RuntimeSessionsPage', () => {
     });
     const promptInput = await screen.findByLabelText('Takeover prompt');
     fireEvent.change(promptInput, { target: { value: 'Continue from the existing diff' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Start Handoff' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Native Import' }));
 
     await waitFor(() => {
       expect(mockHandoffMutateAsync).toHaveBeenCalledWith({

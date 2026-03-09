@@ -7,6 +7,7 @@ import {
   pickPreferredMachineId,
   sortMachinesForSelection,
   summarizeHandoffAnalytics,
+  summarizeNativeImportPreflightStatus,
 } from '@agentctl/shared';
 import { ArrowRightLeft, Cable, Cpu, GitBranch, History, Layers3 } from 'lucide-react';
 import Link from 'next/link';
@@ -354,6 +355,22 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     canHandoff && selectedSession && selectedSession.runtime !== handoffTargetRuntime
       ? describeNativeImportPreflight(preflight.data)
       : null;
+  const preflightStatus = summarizeNativeImportPreflightStatus({
+    preflight:
+      canHandoff && selectedSession && selectedSession.runtime !== handoffTargetRuntime
+        ? preflight.data
+        : null,
+    isLoading:
+      Boolean(selectedId) &&
+      preflight.isFetching &&
+      selectedSession?.runtime !== handoffTargetRuntime,
+  });
+  const handoffActionDisabled =
+    !canHandoff ||
+    handoffMutation.isPending ||
+    (Boolean(selectedId) &&
+      preflight.isFetching &&
+      selectedSession?.runtime !== handoffTargetRuntime);
   const handoffAnalytics = useMemo(
     () => summarizeHandoffAnalytics(handoffs.data?.handoffs ?? []),
     [handoffs.data?.handoffs],
@@ -969,6 +986,23 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                       ))}
                     </select>
                   </label>
+                  {canHandoff && selectedSession?.runtime !== handoffTargetRuntime && (
+                    <div className="lg:col-span-4 flex items-center">
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+                          preflightStatus.tone === 'success' &&
+                            'border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300',
+                          preflightStatus.tone === 'warning' &&
+                            'border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-300',
+                          preflightStatus.tone === 'neutral' &&
+                            'border-border bg-background/60 text-muted-foreground',
+                        )}
+                      >
+                        {preflightStatus.badgeLabel}
+                      </span>
+                    </div>
+                  )}
                   {preflightSummary && (
                     <div
                       className={cn(
@@ -995,11 +1029,11 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                   <div className="flex items-end">
                     <button
                       type="button"
-                      disabled={!canHandoff || handoffMutation.isPending}
+                      disabled={handoffActionDisabled}
                       onClick={() => void handleHandoff()}
                       className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {handoffMutation.isPending ? 'Handing Off...' : 'Start Handoff'}
+                      {handoffMutation.isPending ? 'Handing Off...' : preflightStatus.actionLabel}
                     </button>
                   </div>
                 </div>

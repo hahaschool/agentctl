@@ -6,7 +6,14 @@
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isMachineSelectable, pickPreferredMachineId, sortMachinesForSelection, summarizeHandoffAnalytics, type Machine } from '@agentctl/shared';
+import {
+  isMachineSelectable,
+  pickPreferredMachineId,
+  sortMachinesForSelection,
+  summarizeHandoffAnalytics,
+  summarizeNativeImportPreflightStatus,
+  type Machine,
+} from '@agentctl/shared';
 import {
   Alert,
   FlatList,
@@ -482,6 +489,17 @@ export function RuntimeSessionScreen(): React.JSX.Element {
   const handoffable =
     state.selectedSession?.status === 'active' || state.selectedSession?.status === 'paused';
   const preflightSummary = handoffable ? describeNativeImportPreflight(state.handoffPreflight) : null;
+  const preflightStatus = summarizeNativeImportPreflightStatus({
+    preflight:
+      handoffable && state.selectedSession?.runtime !== handoffTargetRuntime
+        ? state.handoffPreflight
+        : null,
+    isLoading:
+      state.isPreflightLoading && handoffable && state.selectedSession?.runtime !== handoffTargetRuntime,
+  });
+  const handoffActionDisabled =
+    !handoffable ||
+    (state.isPreflightLoading && state.selectedSession?.runtime !== handoffTargetRuntime);
   const handoffAnalytics = useMemo(
     () => summarizeHandoffAnalytics(state.handoffs),
     [state.handoffs],
@@ -835,21 +853,33 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                           autoCorrect={false}
                         />
                       )}
+                      {handoffable && state.selectedSession?.runtime !== handoffTargetRuntime && (
+                        <View
+                          style={[
+                            styles.preflightBadge,
+                            preflightStatus.tone === 'success' && styles.preflightBadgeReady,
+                            preflightStatus.tone === 'warning' && styles.preflightBadgeFallback,
+                            preflightStatus.tone === 'neutral' && styles.preflightBadgeNeutral,
+                          ]}
+                        >
+                          <Text style={styles.preflightBadgeText}>{preflightStatus.badgeLabel}</Text>
+                        </View>
+                      )}
                       {preflightSummary && (
                         <View
                           style={[
                             styles.preflightCard,
-                            state.handoffPreflight?.nativeImportCapable
-                              ? styles.preflightCardReady
-                              : styles.preflightCardFallback,
+                            preflightStatus.tone === 'success' && styles.preflightCardReady,
+                            preflightStatus.tone === 'warning' && styles.preflightCardFallback,
+                            preflightStatus.tone === 'neutral' && styles.preflightCardNeutral,
                           ]}
                         >
                           <Text
                             style={[
                               styles.preflightText,
-                              state.handoffPreflight?.nativeImportCapable
-                                ? styles.preflightTextReady
-                                : styles.preflightTextFallback,
+                              preflightStatus.tone === 'success' && styles.preflightTextReady,
+                              preflightStatus.tone === 'warning' && styles.preflightTextFallback,
+                              preflightStatus.tone === 'neutral' && styles.preflightTextNeutral,
                             ]}
                           >
                             {state.isPreflightLoading
@@ -867,10 +897,15 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                         multiline
                       />
                       <TouchableOpacity
-                        style={[styles.actionButton, styles.handoffButton]}
+                        style={[
+                          styles.actionButton,
+                          styles.handoffButton,
+                          handoffActionDisabled && styles.actionButtonDisabled,
+                        ]}
                         onPress={handleHandoff}
+                        disabled={handoffActionDisabled}
                       >
-                        <Text style={styles.buttonText}>Start Handoff</Text>
+                        <Text style={styles.buttonText}>{preflightStatus.actionLabel}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1237,6 +1272,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionButtonDisabled: {
+    opacity: 0.6,
+  },
   resumeButton: {
     backgroundColor: '#166534',
   },
@@ -1349,6 +1387,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(245, 158, 11, 0.28)',
     backgroundColor: 'rgba(245, 158, 11, 0.08)',
   },
+  preflightCardNeutral: {
+    borderColor: 'rgba(148, 163, 184, 0.28)',
+    backgroundColor: 'rgba(148, 163, 184, 0.08)',
+  },
   preflightText: {
     fontSize: 12,
     lineHeight: 18,
@@ -1358,6 +1400,36 @@ const styles = StyleSheet.create({
   },
   preflightTextFallback: {
     color: '#fcd34d',
+  },
+  preflightTextNeutral: {
+    color: '#cbd5e1',
+  },
+  preflightBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  preflightBadgeReady: {
+    borderColor: 'rgba(34, 197, 94, 0.28)',
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+  },
+  preflightBadgeFallback: {
+    borderColor: 'rgba(245, 158, 11, 0.28)',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+  },
+  preflightBadgeNeutral: {
+    borderColor: 'rgba(148, 163, 184, 0.28)',
+    backgroundColor: 'rgba(148, 163, 184, 0.08)',
+  },
+  preflightBadgeText: {
+    color: '#e5e7eb',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   handoffError: {
     color: '#fca5a5',
