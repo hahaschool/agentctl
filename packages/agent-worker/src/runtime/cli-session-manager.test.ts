@@ -226,14 +226,16 @@ describe('CliSessionManager', () => {
       expect(args).toContain('--json-schema');
     });
 
-    it('emits session_started event', () => {
+    it('emits session_started event followed by user_message', () => {
       const events: CliSessionEvent[] = [];
       manager.on('session-event', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
 
-      expect(events).toHaveLength(1);
+      expect(events).toHaveLength(2);
       expect(events[0].type).toBe('session_started');
+      // Synthetic user_message echoes the prompt immediately via SSE
+      expect(events[1].type).toBe('session_output');
     });
 
     it('throws when max concurrent sessions reached', () => {
@@ -352,60 +354,71 @@ describe('CliSessionManager', () => {
 
     it('emits assistant text as output event', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      // Subscribe AFTER startSession to skip the synthetic user_message event
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout('{"type":"assistant","content":[{"type":"text","text":"Hello!"}]}\n');
       await tick();
 
-      expect(events).toHaveLength(1);
-      expect(events[0].type).toBe('session_output');
-      if (events[0].type === 'session_output') {
-        expect(events[0].event.event).toBe('output');
-        if (events[0].event.event === 'output') {
-          expect(events[0].event.data.type).toBe('text');
-          expect(events[0].event.data.content).toBe('Hello!');
+      // Filter out raw_output events (emitted for terminal view)
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].type).toBe('session_output');
+      if (parsed[0].type === 'session_output') {
+        expect(parsed[0].event.event).toBe('output');
+        if (parsed[0].event.event === 'output') {
+          expect(parsed[0].event.data.type).toBe('text');
+          expect(parsed[0].event.data.content).toBe('Hello!');
         }
       }
     });
 
     it('emits tool_use as output event', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout(
         '{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/test.ts"}}\n',
       );
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         expect(agentEvent.event).toBe('output');
         if (agentEvent.event === 'output') {
           expect(agentEvent.data.type).toBe('tool_use');
-          const parsed = JSON.parse(agentEvent.data.content);
-          expect(parsed.tool).toBe('Read');
-          expect(parsed.input.file_path).toBe('/tmp/test.ts');
+          const toolData = JSON.parse(agentEvent.data.content);
+          expect(toolData.tool).toBe('Read');
+          expect(toolData.input.file_path).toBe('/tmp/test.ts');
         }
       }
     });
 
     it('emits tool_result as output event', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout('{"type":"tool_result","content":"file contents here"}\n');
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         if (agentEvent.event === 'output') {
           expect(agentEvent.data.type).toBe('tool_result');
           expect(agentEvent.data.content).toBe('file contents here');
@@ -451,18 +464,21 @@ describe('CliSessionManager', () => {
 
     it('emits approval_needed for permission requests', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout(
         '{"type":"permission_request","tool":"Bash","input":{"command":"rm -rf /"},"timeout_seconds":60}\n',
       );
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         expect(agentEvent.event).toBe('approval_needed');
         if (agentEvent.event === 'approval_needed') {
           expect(agentEvent.data.tool).toBe('Bash');
@@ -473,9 +489,9 @@ describe('CliSessionManager', () => {
 
     it('handles multi-line buffered output', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       // Send data in chunks that split across lines
       mockChild.pushStdout('{"type":"assistant","conte');
@@ -483,21 +499,28 @@ describe('CliSessionManager', () => {
       mockChild.pushStdout('nt":"Hello"}\n{"type":"assistant","content":"World"}\n');
       await tick();
 
-      expect(events).toHaveLength(2);
+      // Filter out raw_output events (emitted for terminal view)
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
+      expect(parsed).toHaveLength(2);
     });
 
     it('handles non-JSON lines gracefully', async () => {
       const events: CliSessionEvent[] = [];
-      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       manager.startSession(defaultStartOptions());
+      manager.on('session_output', (e: CliSessionEvent) => events.push(e));
 
       mockChild.pushStdout('Some non-JSON text\n');
       await tick();
 
-      expect(events).toHaveLength(1);
-      if (events[0].type === 'session_output') {
-        const agentEvent = events[0].event as AgentEvent;
+      const parsed = events.filter(
+        (e) => e.type === 'session_output' && e.event.event !== 'raw_output',
+      );
+      expect(parsed).toHaveLength(1);
+      if (parsed[0].type === 'session_output') {
+        const agentEvent = parsed[0].event as AgentEvent;
         if (agentEvent.event === 'output') {
           expect(agentEvent.data.content).toBe('Some non-JSON text');
         }
@@ -631,6 +654,48 @@ describe('CliSessionManager', () => {
       await expect(manager.stopSession('nonexistent')).rejects.toThrow(
         /Session nonexistent not found/,
       );
+    });
+
+    it('cleans up processes and lineBuffers maps after graceful stop timeout', async () => {
+      vi.useFakeTimers();
+      try {
+        const session = manager.startSession(defaultStartOptions());
+        const sessionId = session.id;
+
+        // Mock kill to never emit close (simulate hung process)
+        mockChild.kill.mockImplementation(() => {
+          // Don't emit 'close' — process hangs
+          return true;
+        });
+
+        // Start the graceful stop
+        const stopPromise = manager.stopSession(sessionId, true);
+
+        // Advance time past the GRACEFUL_KILL_TIMEOUT_MS (5s)
+        await vi.advanceTimersByTimeAsync(5100);
+
+        // stopSession should have completed with cleanup
+        await stopPromise;
+
+        // Both SIGTERM and SIGKILL should have been called
+        expect(mockChild.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('immediately cleans up processes and lineBuffers for non-graceful stop', async () => {
+      const session = manager.startSession(defaultStartOptions());
+      const sessionId = session.id;
+
+      mockChild.kill.mockImplementation(() => true);
+
+      // Non-graceful stop should immediately force cleanup
+      await manager.stopSession(sessionId, false);
+
+      // Process should be marked as killed
+      expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL');
     });
   });
 

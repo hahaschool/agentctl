@@ -1,25 +1,11 @@
 import { ControlPlaneError } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { Database } from '../db/index.js';
 import { DbAgentRegistry } from './db-registry.js';
 
-// ---------------------------------------------------------------------------
-// Shared mock logger (matches pattern from agents.test.ts)
-// ---------------------------------------------------------------------------
-
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
 // Chainable Drizzle mock factory

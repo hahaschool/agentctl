@@ -1,20 +1,13 @@
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import type { AnomalyDetector, AnomalyReport } from './anomaly-detector.js';
 import type { AuditLogger } from './audit-logger.js';
 import { sha256 } from './audit-logger.js';
 import { createPreToolUseHook, type PreToolUseInput } from './pre-tool-use.js';
 import type { RateLimitCheckResult, ToolRateLimiter } from './tool-rate-limiter.js';
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 const mockAuditLogger = {
   write: vi.fn().mockResolvedValue(undefined),

@@ -8,11 +8,14 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "postinstall": "node -e \"const p=require('path'),f=require('fs'),d=p.join(__dirname,'node_modules','node-pty','prebuilds');if(f.existsSync(d)){for(const a of f.readdirSync(d)){const h=p.join(d,a,'spawn-helper');if(f.existsSync(h))f.chmodSync(h,0o755)}}\""
   },
   "dependencies": {
     "@agentctl/shared": "workspace:*",
+    "@fastify/websocket": "^11.0.0",
     "fastify": "^5.2.0",
+    "node-pty": "^1.1.0",
     "pino": "^9.6.0"
   },
   "optionalDependencies": {

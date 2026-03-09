@@ -1,12 +1,11 @@
+import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
-import { proxyWorkerRequest } from '../proxy-worker-request.js';
+import { EMERGENCY_STOP_TIMEOUT_MS } from '../constants.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
-
-const DEFAULT_WORKER_PORT = 9000;
-const PROXY_TIMEOUT_MS = 15_000;
 
 export type EmergencyStopRoutesOptions = {
   registry: MachineRegistryLike;
@@ -53,10 +52,10 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
         workerBaseUrl: resolved.url,
         path: `/api/agents/${encodeURIComponent(agentId)}/emergency-stop`,
         method: 'POST',
-        timeoutMs: PROXY_TIMEOUT_MS,
+        timeoutMs: EMERGENCY_STOP_TIMEOUT_MS,
       });
       if (!result.ok) {
-        return reply.status(result.status).send({ error: result.error, message: result.message });
+        return replyWithProxyResult(reply, result);
       }
 
       // Update agent status in the database to 'stopped'
@@ -69,7 +68,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
         }
       }
 
-      return reply.status(result.status).send(result.data);
+      return replyWithProxyResult(reply, result);
     },
   );
 
@@ -115,7 +114,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
           workerBaseUrl: workerUrl,
           path: '/api/agents/emergency-stop-all',
           method: 'POST',
-          timeoutMs: PROXY_TIMEOUT_MS,
+          timeoutMs: EMERGENCY_STOP_TIMEOUT_MS,
         });
 
         if (!result.ok) {
@@ -127,7 +126,7 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
         results.push({ machineId, stoppedCount: data.stoppedCount ?? 0 });
       });
 
-      await Promise.all(proxyPromises);
+      await Promise.allSettled(proxyPromises);
 
       app.log.error({ results }, 'Emergency stop ALL completed across all machines');
 

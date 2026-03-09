@@ -1,14 +1,21 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
-import { useMemo } from 'react';
-
+import { useCallback, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+
+import { DashboardActionButton } from '../components/DashboardActionButton';
+import { DashboardActivityIcon } from '../components/DashboardActivityIcon';
+import { DashboardCostOverview } from '../components/DashboardCostOverview';
+import { DashboardEmptyPanel } from '../components/DashboardEmptyPanel';
+import { DashboardSectionHeader } from '../components/DashboardSectionHeader';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
+import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { PathBadge } from '../components/PathBadge';
@@ -42,17 +49,23 @@ export function DashboardPage(): React.JSX.Element {
   const sessions = useQuery(sessionsQuery());
 
   const { status: wsStatus } = useWebSocket();
+  const [showHelp, setShowHelp] = useState(false);
+  const toggleHelp = useCallback(() => setShowHelp((v) => !v), []);
 
   const machineList = machines.data ?? [];
   const agentList = agents.data ?? [];
   const discoveredSessions = discovered.data?.sessions ?? [];
-  const sessionList = sessions.data ?? [];
+  const sessionList = sessions.data?.sessions ?? [];
   const metricsData = metrics.data ?? {};
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;
   const agentsRegistered = agentList.length;
   const activeRuns = Number(metricsData.agentctl_agents_active ?? 0);
   const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
+  const totalAgentCost = useMemo(
+    () => agentList.reduce((sum, a) => sum + (a.totalCostUsd ?? 0), 0),
+    [agentList],
+  );
 
   // Active sessions (running or active status)
   const activeSessions = sessionList.filter((s) => s.status === 'running' || s.status === 'active');
@@ -68,10 +81,11 @@ export function DashboardPage(): React.JSX.Element {
 
   // Recent activity: combine sessions sorted by most recent activity
   const recentActivity = useMemo(() => {
-    return [...sessionList]
+    const safeSessionList = sessionList ?? [];
+    return [...safeSessionList]
       .sort((a, b) => {
-        const dateA = a.endedAt ?? a.lastHeartbeat ?? a.startedAt;
-        const dateB = b.endedAt ?? b.lastHeartbeat ?? b.startedAt;
+        const dateA = (a?.endedAt ?? a?.lastHeartbeat ?? a?.startedAt) || new Date().toISOString();
+        const dateB = (b?.endedAt ?? b?.lastHeartbeat ?? b?.startedAt) || new Date().toISOString();
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       })
       .slice(0, 8);
@@ -89,7 +103,7 @@ export function DashboardPage(): React.JSX.Element {
     [health, metrics, machines, agents, discovered, sessions],
   );
 
-  useHotkeys(useMemo(() => ({ r: refreshAll }), [refreshAll]));
+  useHotkeys(useMemo(() => ({ r: refreshAll, '?': toggleHelp }), [refreshAll, toggleHelp]));
 
   const anyFetching =
     health.isFetching ||
@@ -98,8 +112,17 @@ export function DashboardPage(): React.JSX.Element {
     agents.isFetching ||
     discovered.isFetching ||
     sessions.isFetching;
-  const anyError =
-    health.error ?? metrics.error ?? machines.error ?? agents.error ?? discovered.error;
+  const errorMessages = useMemo(() => {
+    const msgs: string[] = [];
+    if (health.error) msgs.push(`Control plane: ${health.error.message}`);
+    if (metrics.error) msgs.push(`Metrics: ${metrics.error.message}`);
+    if (machines.error) msgs.push(`Machines: ${machines.error.message}`);
+    if (agents.error) msgs.push(`Agents: ${agents.error.message}`);
+    if (discovered.error) msgs.push(`Discover: ${discovered.error.message}`);
+    if (sessions.error) msgs.push(`Sessions: ${sessions.error.message}`);
+    return msgs;
+  }, [health.error, metrics.error, machines.error, agents.error, discovered.error, sessions.error]);
+  const anyError = errorMessages.length > 0;
 
   // Health status — Tailwind class helpers
   const healthStatus = health.data?.status;
@@ -117,38 +140,68 @@ export function DashboardPage(): React.JSX.Element {
         : 'bg-muted-foreground';
   const healthLabel = healthStatus ?? 'unknown';
 
+  // Combined system health: CP status + WS status + machine count
+  const systemHealthLabel = useMemo(() => {
+    const parts: string[] = [];
+    if (healthStatus === 'ok') parts.push('CP up');
+    else if (healthStatus === 'degraded') parts.push('CP degraded');
+    else parts.push('CP unknown');
+    if (wsStatus === 'connected') parts.push('WS connected');
+    else parts.push(`WS ${wsStatus}`);
+    if (machinesOnline > 0)
+      parts.push(`${machinesOnline} machine${machinesOnline > 1 ? 's' : ''} online`);
+    else parts.push('no machines');
+    return parts.join(' · ');
+  }, [healthStatus, wsStatus, machinesOnline]);
+
+  const systemHealthOk = healthStatus === 'ok' && wsStatus === 'connected';
+
   return (
-    <div className="relative p-4 md:p-6 max-w-[1100px] animate-fade-in">
+    <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
+      <KeyboardHelpOverlay open={showHelp} onClose={toggleHelp} />
       <FetchingBar isFetching={anyFetching} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-        <h1 className="text-[22px] font-bold">Command Center</h1>
         <div className="flex items-center gap-3">
+          <h1 className="text-[22px] font-semibold tracking-tight">Command center</h1>
+          <SimpleTooltip content="Keyboard shortcuts (?)">
+            <button
+              type="button"
+              onClick={toggleHelp}
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
+              aria-label="Show keyboard shortcuts"
+            >
+              <Keyboard className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
+          <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Link
             href="/sessions"
-            className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-xs font-medium no-underline hover:bg-primary/90 transition-colors"
+            style={{ color: '#ffffff' }}
+            className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium no-underline transition-colors bg-blue-600 text-white border border-blue-500 hover:bg-blue-500 hover:text-white hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
           >
             New Session
           </Link>
           <Link
             href="/agents"
-            className="px-3 py-1.5 bg-transparent text-primary border border-primary rounded text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
+            className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
           >
             View Agents
           </Link>
-          <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>
       </div>
 
       {/* Error banner */}
-      {anyError && <ErrorBanner message={anyError.message} onRetry={refreshAll} />}
+      {anyError && <ErrorBanner message={errorMessages.join(' · ')} onRetry={refreshAll} />}
 
       {/* Health status card */}
       <div
         className={cn(
-          'px-5 py-4 bg-card border rounded-lg mb-5 flex items-center justify-between',
+          'px-4 sm:px-5 py-4 bg-card border rounded-lg mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3',
           healthStatus === 'ok'
             ? 'border-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.04)]'
             : 'border-border',
@@ -166,6 +219,20 @@ export function DashboardPage(): React.JSX.Element {
             <div className="text-[15px] font-semibold text-foreground">
               Control Plane: <span className={cn('uppercase', healthTextClass)}>{healthLabel}</span>
             </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span
+                className={cn(
+                  'inline-block w-1.5 h-1.5 rounded-full',
+                  systemHealthOk ? 'bg-green-500' : 'bg-yellow-500',
+                )}
+              />
+              <span
+                className="text-[11px] text-muted-foreground"
+                data-testid="system-health-summary"
+              >
+                {systemHealthLabel}
+              </span>
+            </div>
             {health.data?.timestamp && (
               <div className="text-[11px] text-muted-foreground mt-0.5">
                 Last checked: <LiveTimeAgo date={health.data.timestamp} />
@@ -174,61 +241,98 @@ export function DashboardPage(): React.JSX.Element {
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
-          <ActionButton label="Discover Sessions" onClick={() => void discovered.refetch()} />
-          <ActionButton label="Refresh All" onClick={refreshAll} />
+          <DashboardActionButton
+            label="Discover Sessions"
+            onClick={() => void discovered.refetch()}
+          />
+          <DashboardActionButton label="Refresh All" onClick={refreshAll} />
         </div>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-        <StatCard
-          label="Machines Online"
-          value={`${machinesOnline} / ${machineList.length}`}
-          sublabel={
-            machineList.length > 0
-              ? `${machineList.filter((m) => m.status === 'offline').length} offline`
-              : undefined
-          }
-        />
-        <StatCard
-          label="Sessions Discovered"
-          value={formatNumber(discovered.data?.count ?? 0)}
-          sublabel={
-            discovered.data
-              ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
-              : undefined
-          }
-        />
-        <StatCard
-          label="Agents Registered"
-          value={String(agentsRegistered)}
-          sublabel={
-            agentList.filter((a) => a.status === 'error').length > 0
-              ? `${agentList.filter((a) => a.status === 'error').length} in error`
-              : undefined
-          }
-        />
-        <StatCard
-          label="Active Runs"
-          value={formatNumber(activeRuns)}
-          sublabel={`${formatNumber(totalRuns)} total`}
-        />
-        <StatCard
-          label="Active Sessions"
-          value={String(activeSessionCount)}
-          sublabel={`${sessionList.length} total`}
-        />
-      </div>
+      {machines.isLoading || agents.isLoading || metrics.isLoading || sessions.isLoading ? (
+        <div
+          className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6"
+          data-testid="stat-cards-skeleton"
+        >
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={`sk-${String(i)}`} className="h-20 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
+          <StatCard
+            label="Machines Online"
+            value={`${machinesOnline} / ${machineList.length}`}
+            accent={machinesOnline > 0 ? 'green' : undefined}
+            tooltip="Active machines connected via Tailscale"
+            sublabel={
+              machineList.length > 0
+                ? `${machineList.filter((m) => m.status === 'offline').length} offline`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Sessions Discovered"
+            value={formatNumber(discovered.data?.count ?? 0)}
+            accent="blue"
+            sublabel={
+              discovered.data
+                ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Agents Registered"
+            value={String(agentsRegistered)}
+            accent={agentList.filter((a) => a?.status === 'error').length > 0 ? 'red' : 'blue'}
+            sublabel={
+              agentList.filter((a) => a?.status === 'error').length > 0
+                ? `${agentList.filter((a) => a?.status === 'error').length} in error`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Active Runs"
+            value={formatNumber(activeRuns)}
+            accent={activeRuns > 0 ? 'green' : undefined}
+            sublabel={`${formatNumber(totalRuns)} total`}
+          />
+          <StatCard
+            label="Active Sessions"
+            value={String(activeSessionCount)}
+            accent={activeSessionCount > 0 ? 'green' : undefined}
+            sublabel={`${sessionList.length} total`}
+          />
+          <StatCard
+            label="Total Cost"
+            value={formatCost(totalAgentCost)}
+            accent="purple"
+            tooltip="Cumulative API costs across all sessions"
+            sublabel={
+              agentCostBreakdown.length > 0
+                ? `top: ${agentCostBreakdown[0]?.name ?? 'N/A'}`
+                : undefined
+            }
+          />
+        </div>
+      )}
 
       {/* Two-column layout: Recent Sessions Activity + Machine Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Recent Sessions Activity */}
         <div>
-          <SectionHeader title="Recent Sessions" href="/sessions" />
-          <div className="border border-border rounded-lg overflow-hidden">
-            {recentActivity.length === 0 ? (
+          <DashboardSectionHeader title="Recent Sessions" href="/sessions" />
+          <div className="border border-border/50 rounded-lg overflow-hidden">
+            {sessions.isLoading ? (
+              <div className="p-4 bg-card space-y-2" data-testid="recent-sessions-skeleton">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <Skeleton key={`sk-${String(i)}`} className="h-12 rounded-md" />
+                ))}
+              </div>
+            ) : recentActivity.length === 0 ? (
               <DashboardEmptyPanel
-                loading={sessions.isLoading}
+                loading={false}
                 message="No sessions yet. Create a session to get started."
               />
             ) : (
@@ -237,37 +341,37 @@ export function DashboardPage(): React.JSX.Element {
                   key={session.id}
                   href={`/sessions/${session.id}`}
                   className={cn(
-                    'block px-4 py-3 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                    'block px-4 py-3 bg-card no-underline transition-all duration-200 hover:bg-accent/10 hover:pl-5 hover:shadow-sm',
                     idx > 0 && 'border-t border-border',
                   )}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      <ActivityIcon status={session.status} />
+                      <DashboardActivityIcon status={session?.status ?? 'unknown'} />
                       <span className="text-[13px] font-medium text-foreground truncate">
                         {truncate(
-                          session.claudeSessionId
+                          session?.claudeSessionId
                             ? `Session ${session.claudeSessionId.slice(0, 8)}`
-                            : `Session ${session.id.slice(0, 8)}`,
+                            : `Session ${(session?.id ?? 'unknown').slice(0, 8)}`,
                           40,
                         )}
                       </span>
                     </div>
-                    <StatusBadge status={session.status} />
+                    <StatusBadge status={session?.status ?? 'unknown'} />
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
-                    {session.model && (
-                      <span className="font-mono bg-muted px-1.5 py-px rounded text-[10px]">
+                    {session?.model && (
+                      <span className="font-mono bg-purple-500/15 text-purple-600 dark:text-purple-400 px-1.5 py-px rounded text-[10px]">
                         {session.model}
                       </span>
                     )}
-                    {session.projectPath && (
+                    {session?.projectPath && (
                       <PathBadge path={session.projectPath} className="text-[11px]" />
                     )}
                     <span className="ml-auto shrink-0">
-                      {session.endedAt ? (
+                      {session?.endedAt ? (
                         <SimpleTooltip
-                          content={`Duration: ${formatDuration(session.startedAt, session.endedAt)}`}
+                          content={`Duration: ${formatDuration(session.startedAt ?? new Date().toISOString(), session.endedAt)}`}
                         >
                           <span>
                             ended <LiveTimeAgo date={session.endedAt} />
@@ -275,7 +379,8 @@ export function DashboardPage(): React.JSX.Element {
                         </SimpleTooltip>
                       ) : (
                         <span>
-                          started <LiveTimeAgo date={session.startedAt} />
+                          started{' '}
+                          <LiveTimeAgo date={session?.startedAt ?? new Date().toISOString()} />
                         </span>
                       )}
                     </span>
@@ -290,11 +395,17 @@ export function DashboardPage(): React.JSX.Element {
         <div className="space-y-5">
           {/* Machine Status */}
           <div>
-            <SectionHeader title="Fleet Status" href="/machines" />
-            <div className="border border-border rounded-lg overflow-hidden">
-              {machineList.length === 0 ? (
+            <DashboardSectionHeader title="Fleet Status" href="/machines" />
+            <div className="border border-border/50 rounded-lg overflow-hidden">
+              {machines.isLoading ? (
+                <div className="p-4 bg-card space-y-2" data-testid="fleet-status-skeleton">
+                  {Array.from({ length: 3 }, (_, i) => (
+                    <Skeleton key={`sk-${String(i)}`} className="h-10 rounded-md" />
+                  ))}
+                </div>
+              ) : machineList.length === 0 ? (
                 <DashboardEmptyPanel
-                  loading={machines.isLoading}
+                  loading={false}
                   message="No machines registered. Run setup-machine.sh on a host to register it."
                 />
               ) : (
@@ -303,7 +414,7 @@ export function DashboardPage(): React.JSX.Element {
                     key={machine.id}
                     href={`/machines/${machine.id}`}
                     className={cn(
-                      'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                      'flex items-center justify-between px-4 py-2.5 bg-card no-underline transition-all duration-200 hover:bg-accent/10 hover:pl-5',
                       idx > 0 && 'border-t border-border',
                     )}
                   >
@@ -320,14 +431,14 @@ export function DashboardPage(): React.JSX.Element {
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                       <span>
-                        {machine.os}/{machine.arch}
+                        {machine?.os ?? 'unknown'}/{machine?.arch ?? 'unknown'}
                       </span>
-                      {machine.capabilities?.gpu && (
+                      {machine?.capabilities?.gpu && (
                         <span className="bg-muted px-1.5 py-px rounded text-[10px] font-semibold uppercase">
                           GPU
                         </span>
                       )}
-                      {machine.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
+                      {machine?.lastHeartbeat && <LiveTimeAgo date={machine.lastHeartbeat} />}
                     </div>
                   </Link>
                 ))
@@ -336,48 +447,67 @@ export function DashboardPage(): React.JSX.Element {
           </div>
 
           {/* Discovered Sessions (compact) */}
-          {discoveredSessions.length > 0 && (
-            <div>
-              <SectionHeader title="Discovered Sessions" href="/discover" />
-              <div className="border border-border rounded-lg overflow-hidden">
-                {discoveredSessions.slice(0, 4).map((session, idx) => (
+          <div>
+            <DashboardSectionHeader title="Discovered Sessions" href="/discover" />
+            <div className="border border-border/50 rounded-lg overflow-hidden">
+              {discoveredSessions.length === 0 ? (
+                <div className="p-6 text-center bg-card">
+                  <div className="text-[13px] text-muted-foreground mb-2">
+                    No sessions discovered yet.
+                  </div>
+                  <Link
+                    href="/discover"
+                    className="text-[12px] text-primary font-medium no-underline hover:underline"
+                  >
+                    Scan fleet for active sessions &rarr;
+                  </Link>
+                </div>
+              ) : (
+                discoveredSessions.slice(0, 4).map((session, idx) => (
                   <Link
                     key={session.sessionId}
                     href="/discover"
                     className={cn(
-                      'block px-4 py-2.5 bg-card no-underline transition-colors duration-100 hover:bg-accent/10',
+                      'block px-4 py-2.5 bg-card no-underline transition-all duration-200 hover:bg-accent/10 hover:pl-5',
                       idx > 0 && 'border-t border-border',
                     )}
                   >
                     <div className="flex justify-between items-center">
                       <span className="text-[12px] font-medium text-foreground truncate">
-                        {truncate(session.summary || 'Untitled session', 40)}
+                        {truncate(session?.summary || 'Untitled session', 40)}
                       </span>
                       <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
-                        <LiveTimeAgo date={session.lastActivity} />
+                        <LiveTimeAgo date={session?.lastActivity ?? new Date().toISOString()} />
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
                       <span className="font-mono bg-muted px-1.5 py-px rounded text-[10px]">
-                        {session.hostname}
+                        {session?.hostname ?? 'unknown'}
                       </span>
-                      {session.branch && (
+                      {session?.branch && (
                         <span className="font-mono text-green-500 text-[10px]">
                           {session.branch}
                         </span>
                       )}
-                      <span>{session.messageCount} msgs</span>
+                      <span>{session?.messageCount ?? 0} msgs</span>
                     </div>
                   </Link>
-                ))}
-              </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
+      {/* Cost Overview */}
+      <DashboardCostOverview
+        sessionList={sessionList}
+        agentCostBreakdown={agentCostBreakdown}
+        isLoading={sessions.isLoading || agents.isLoading}
+      />
+
       {/* Platform summary bar */}
-      <div className="mt-5 bg-card border border-border rounded-lg overflow-hidden">
+      <div className="mt-5 bg-card border border-border/50 rounded-lg overflow-hidden">
         <div className="flex gap-4 px-4 py-2.5 text-xs text-muted-foreground items-center flex-wrap">
           <span className="font-medium text-muted-foreground">Platform</span>
           <span className="flex items-center gap-1.5">
@@ -410,11 +540,9 @@ export function DashboardPage(): React.JSX.Element {
           </span>
         </div>
         {/* Cost breakdown by agent */}
-        {agentCostBreakdown.length > 0 && (
-          <div className="border-t border-border px-4 py-2.5">
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Cost by Agent
-            </div>
+        <div className="border-t border-border px-4 py-2.5">
+          <div className="text-[11px] font-medium text-muted-foreground mb-2">Cost by Agent</div>
+          {agentCostBreakdown.length > 0 ? (
             <div className="flex flex-wrap gap-x-5 gap-y-1.5">
               {agentCostBreakdown.map((agent) => (
                 <Link
@@ -436,14 +564,26 @@ export function DashboardPage(): React.JSX.Element {
                 </Link>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-[12px] text-muted-foreground">No cost data recorded yet</div>
+          )}
+        </div>
       </div>
 
       {/* Dependencies */}
-      {health.data?.dependencies && (
+      {health.isLoading && (
+        <div className="mt-6" data-testid="dependencies-skeleton">
+          <DashboardSectionHeader title="Dependencies" />
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={`sk-${String(i)}`} className="h-12 rounded-lg" />
+            ))}
+          </div>
+        </div>
+      )}
+      {!health.isLoading && health.data?.dependencies && (
         <div className="mt-6">
-          <SectionHeader title="Dependencies" />
+          <DashboardSectionHeader title="Dependencies" />
           <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
             {Object.entries(health.data.dependencies).map(([name, dep]) => {
               const isOk = dep.status === 'ok';
@@ -467,7 +607,7 @@ export function DashboardPage(): React.JSX.Element {
                 <div
                   key={name}
                   className={cn(
-                    'px-3.5 py-2.5 bg-card border rounded-lg flex justify-between items-center',
+                    'px-3.5 py-2.5 bg-card border rounded-lg flex justify-between items-center transition-all duration-200 hover:shadow-sm',
                     borderClass,
                   )}
                 >
@@ -506,7 +646,7 @@ export function DashboardPage(): React.JSX.Element {
             })}
           </div>
           {Object.values(health.data?.dependencies ?? {}).some((d) => d.error) && (
-            <div className="mt-2 px-3 py-2 bg-red-500/5 border border-red-500/20 rounded text-[12px] text-red-400">
+            <div className="mt-2 px-3 py-2 bg-red-500/5 border border-red-500/20 rounded text-[12px] text-red-600 dark:text-red-400">
               {Object.entries(health.data?.dependencies ?? {})
                 .filter(([, d]) => d.error)
                 .map(([name, d]) => (
@@ -520,87 +660,4 @@ export function DashboardPage(): React.JSX.Element {
       )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Subcomponents
-// ---------------------------------------------------------------------------
-
-function SectionHeader({ title, href }: { title: string; href?: string }): React.JSX.Element {
-  return (
-    <div className="flex justify-between items-center mb-2.5">
-      <h2 className="text-[15px] font-semibold text-muted-foreground">{title}</h2>
-      {href && (
-        <Link
-          href={href}
-          className="text-[11px] text-primary font-medium no-underline hover:underline"
-        >
-          View All &rarr;
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function ActionButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="px-3 py-1.5 bg-transparent text-primary border border-primary rounded text-xs font-medium cursor-pointer"
-    >
-      {label}
-    </button>
-  );
-}
-
-function ActivityIcon({ status }: { status: string }): React.JSX.Element {
-  const colorClass =
-    status === 'running' || status === 'active'
-      ? 'bg-green-500'
-      : status === 'error' || status === 'timeout'
-        ? 'bg-red-500'
-        : status === 'starting'
-          ? 'bg-yellow-500'
-          : 'bg-muted-foreground';
-
-  const shouldPulse = status === 'running' || status === 'active';
-
-  return (
-    <span
-      className={cn('w-2 h-2 rounded-full shrink-0', colorClass, shouldPulse && 'animate-pulse')}
-    />
-  );
-}
-
-function DashboardEmptyPanel({
-  loading,
-  message,
-}: {
-  loading: boolean;
-  message: string;
-}): React.JSX.Element {
-  if (loading) {
-    return (
-      <div className="p-4 bg-card space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={`sk-${String(i)}`} className="flex items-center gap-3">
-            <Skeleton className="h-3 w-3 rounded-full shrink-0" />
-            <div className="flex-1 space-y-1.5">
-              <Skeleton className="h-3 w-3/4" />
-              <Skeleton className="h-2.5 w-1/2" />
-            </div>
-            <Skeleton className="h-3 w-12 shrink-0" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return <div className="p-8 text-center text-muted-foreground bg-card text-[13px]">{message}</div>;
 }

@@ -1,8 +1,8 @@
 import type { FileHandle } from 'node:fs/promises';
 
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import type { AuditEntry } from './audit-logger.js';
 import { AuditReporter } from './audit-reporter.js';
 
@@ -19,14 +19,7 @@ import { open, stat } from 'node:fs/promises';
 const mockStat = vi.mocked(stat);
 const mockOpen = vi.mocked(open);
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 // ── Global fetch mock ──────────────────────────────────────────────────
 

@@ -5,14 +5,23 @@ import { EmptyState } from './EmptyState';
 import { StatusBadge } from './StatusBadge';
 
 // ---------------------------------------------------------------------------
-// Mock sonner (used by useToast inside CopyableText)
+// Mock Toast module (used by useToast inside CopyableText)
 // ---------------------------------------------------------------------------
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
+const mockToast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  dismiss: vi.fn(),
+}));
+vi.mock('@/components/Toast', () => ({
+  toast: mockToast,
+  useToast: () => ({
+    toast: (type: string, msg: string) => mockToast[type as 'success' | 'error' | 'info']?.(msg),
+    success: mockToast.success,
+    error: mockToast.error,
+    info: mockToast.info,
+  }),
+  ToastContainer: () => null,
 }));
 
 // ---------------------------------------------------------------------------
@@ -249,7 +258,7 @@ describe('CopyableText', () => {
     expect(btn.getAttribute('title')).toBe('Copied!');
   });
 
-  it('reverts back to original display text after 1500ms', async () => {
+  it('reverts back to original display text after copy feedback timeout', async () => {
     vi.useFakeTimers();
     render(<CopyableText value="test-value" />);
     const btn = screen.getByRole('button');
@@ -261,7 +270,7 @@ describe('CopyableText', () => {
     expect(screen.getByText('Copied!')).toBeDefined();
 
     await act(async () => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(2000);
     });
 
     expect(screen.getByText('test-val')).toBeDefined();

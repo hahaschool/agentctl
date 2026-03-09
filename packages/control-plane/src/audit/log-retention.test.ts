@@ -1417,7 +1417,7 @@ describe('error handling', () => {
 
   it('handles non-Error thrown objects gracefully', async () => {
     const mockDb = createMockDb(async () => {
-      throw 'string error'; // eslint-disable-line no-throw-literal
+      throw 'string error';
     });
 
     const manager = createLogRetentionManager(defaultConfig(), mockDb as never);

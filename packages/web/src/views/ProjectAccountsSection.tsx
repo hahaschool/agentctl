@@ -68,7 +68,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
   }
 
   return (
-    <div>
+    <div id="project-accounts" className="scroll-mt-6">
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Project Account Overrides</h3>
       </div>
@@ -82,17 +82,23 @@ export function ProjectAccountsSection(): React.JSX.Element {
         <div className="space-y-4">
           {/* Existing mappings table */}
           {mappings.data && mappings.data.length > 0 ? (
-            <div className="border border-border/50 rounded-lg overflow-hidden">
+            <div className="border border-border/50 rounded-lg overflow-hidden transition-colors hover:border-border">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    <th
+                      scope="col"
+                      className="text-left px-3 py-2 font-medium text-muted-foreground"
+                    >
                       Project Path
                     </th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                    <th
+                      scope="col"
+                      className="text-left px-3 py-2 font-medium text-muted-foreground"
+                    >
                       Account
                     </th>
-                    <th className="w-10 px-3 py-2" />
+                    <th scope="col" className="w-10 px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody>

@@ -1,11 +1,9 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { resolveWorkerUrlOrThrow } from '../resolve-worker-url.js';
-
-const DEFAULT_WORKER_PORT = 9000;
 
 export type StreamRoutesOptions = {
   registry: MachineRegistryLike;

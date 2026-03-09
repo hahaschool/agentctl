@@ -1,22 +1,12 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RepeatableJobInfo, RepeatableJobManager } from '../../scheduler/repeatable-jobs.js';
 import { createServer } from '../server.js';
+import { createMockLogger } from './test-helpers.js';
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 const SAMPLE_JOBS: RepeatableJobInfo[] = [
   {

@@ -1,5 +1,13 @@
 export type AgentType = 'heartbeat' | 'cron' | 'manual' | 'adhoc' | 'loop';
 
+export type AgentRuntime = 'claude-code' | 'nanoclaw' | 'openclaw';
+
+export const AGENT_RUNTIMES: readonly { value: AgentRuntime; label: string; desc: string }[] = [
+  { value: 'claude-code', label: 'Claude Code', desc: 'Full Claude Code CLI with built-in tools' },
+  { value: 'nanoclaw', label: 'NanoClaw', desc: 'Lightweight agent with filesystem IPC' },
+  { value: 'openclaw', label: 'OpenClaw', desc: 'Open-source agent runtime' },
+] as const;
+
 export type SessionMode = 'fresh' | 'resume';
 
 export type ScheduleConfig = {
@@ -44,6 +52,7 @@ export type AgentConfig = {
   maxTurns?: number;
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
   systemPrompt?: string;
+  initialPrompt?: string;
 };
 
 export type Agent = {
@@ -51,6 +60,7 @@ export type Agent = {
   machineId: string;
   name: string;
   type: AgentType;
+  runtime?: AgentRuntime;
   status: AgentStatus;
   schedule: string | null;
   projectPath: string | null;

@@ -3,6 +3,11 @@ import { eq } from 'drizzle-orm';
 import type { Database } from '../db/index.js';
 import { projectAccountMappings, settings } from '../db/schema.js';
 
+export type Logger = {
+  warn: (obj: Record<string, unknown>, msg: string) => void;
+  info: (obj: Record<string, unknown>, msg: string) => void;
+};
+
 export type AccountResolutionContext = {
   sessionAccountId?: string | null;
   agentAccountId?: string | null;
@@ -35,12 +40,19 @@ export function extractProjectName(pathStr: string): string {
 export async function resolveAccountId(
   ctx: AccountResolutionContext,
   db: Database,
+  logger?: Logger,
 ): Promise<string | null> {
   // Level 1: Session-level override
-  if (ctx.sessionAccountId) return ctx.sessionAccountId;
+  if (ctx.sessionAccountId) {
+    logger?.info({ accountId: ctx.sessionAccountId }, 'Account resolved from session override');
+    return ctx.sessionAccountId;
+  }
 
   // Level 2: Agent-level assignment
-  if (ctx.agentAccountId) return ctx.agentAccountId;
+  if (ctx.agentAccountId) {
+    logger?.info({ accountId: ctx.agentAccountId }, 'Account resolved from agent assignment');
+    return ctx.agentAccountId;
+  }
 
   // Level 3: Project-level mapping
   if (ctx.projectPath) {
@@ -49,18 +61,46 @@ export async function resolveAccountId(
       .select()
       .from(projectAccountMappings)
       .where(eq(projectAccountMappings.projectPath, ctx.projectPath));
-    if (exactMapping) return exactMapping.accountId;
+    if (exactMapping) {
+      logger?.info(
+        {
+          accountId: exactMapping.accountId,
+          projectPath: ctx.projectPath,
+          source: 'exact_path_match',
+        },
+        'Account resolved from project mapping (exact path)',
+      );
+      return exactMapping.accountId;
+    }
 
     // 3b: Match by project name (basename) for cross-machine portability
     const projectName = extractProjectName(ctx.projectPath);
     if (projectName) {
       const allMappings = await db.select().from(projectAccountMappings);
       const nameMatch = allMappings.find((m) => extractProjectName(m.projectPath) === projectName);
-      if (nameMatch) return nameMatch.accountId;
+      if (nameMatch) {
+        logger?.info(
+          { accountId: nameMatch.accountId, projectName, source: 'project_name_match' },
+          'Account resolved from project mapping (project name)',
+        );
+        return nameMatch.accountId;
+      }
     }
   }
 
   // Level 4: Global default
   const [setting] = await db.select().from(settings).where(eq(settings.key, 'default_account_id'));
-  return (setting?.value as { value?: string })?.value ?? null;
+  const defaultAccountId = (setting?.value as { value?: string })?.value ?? null;
+
+  if (defaultAccountId) {
+    logger?.info({ accountId: defaultAccountId }, 'Account resolved from global default');
+    return defaultAccountId;
+  }
+
+  // No account found
+  logger?.warn(
+    { projectPath: ctx.projectPath },
+    'No API account resolved — session will use system default credentials',
+  );
+  return null;
 }

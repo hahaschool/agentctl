@@ -1,8 +1,9 @@
+import { ACCOUNT_PROVIDERS } from '@agentctl/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
-import { apiAccounts } from '../../db/schema.js';
+import { apiAccounts, projectAccountMappings } from '../../db/schema.js';
 import {
   decryptCredential,
   encryptCredential,
@@ -32,20 +33,28 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
 
   app.get('/', async (_request, reply) => {
     const rows = await db.select().from(apiAccounts).orderBy(apiAccounts.priority);
-    const masked = rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      provider: r.provider,
-      credentialMasked: maskCredential(
-        decryptCredential(r.credential, r.credentialIv, encryptionKey),
-      ),
-      priority: r.priority,
-      rateLimit: r.rateLimit,
-      isActive: r.isActive,
-      metadata: r.metadata,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-    }));
+    const masked = rows.map((r) => {
+      let credentialMasked = '(decryption failed)';
+      try {
+        credentialMasked = maskCredential(
+          decryptCredential(r.credential, r.credentialIv, encryptionKey),
+        );
+      } catch {
+        // Credential couldn't be decrypted — show fallback
+      }
+      return {
+        id: r.id,
+        name: r.name,
+        provider: r.provider,
+        credentialMasked,
+        priority: r.priority,
+        rateLimit: r.rateLimit,
+        isActive: r.isActive,
+        metadata: r.metadata,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      };
+    });
     return reply.send(masked);
   });
 
@@ -58,13 +67,19 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!row) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
+    let credentialMasked = '(decryption failed)';
+    try {
+      credentialMasked = maskCredential(
+        decryptCredential(row.credential, row.credentialIv, encryptionKey),
+      );
+    } catch {
+      // Credential couldn't be decrypted — show fallback
+    }
     return reply.send({
       id: row.id,
       name: row.name,
       provider: row.provider,
-      credentialMasked: maskCredential(
-        decryptCredential(row.credential, row.credentialIv, encryptionKey),
-      ),
+      credentialMasked,
       priority: row.priority,
       rateLimit: row.rateLimit,
       isActive: row.isActive,
@@ -88,10 +103,31 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     };
   }>('/', async (request, reply) => {
     const { name, provider, credential, priority = 0, metadata = {} } = request.body;
-    if (!name || !provider || !credential) {
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return reply
         .code(400)
-        .send({ error: 'INVALID_BODY', message: 'name, provider, and credential are required' });
+        .send({ error: 'INVALID_BODY', message: 'name must be a non-empty string' });
+    }
+    if (name.length > 100) {
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'name must be 100 characters or fewer' });
+    }
+    if (!provider || !(ACCOUNT_PROVIDERS as readonly string[]).includes(provider)) {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: `provider must be one of: ${ACCOUNT_PROVIDERS.join(', ')}`,
+      });
+    }
+    if (!credential || typeof credential !== 'string' || credential.trim().length === 0) {
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'credential must be a non-empty string' });
+    }
+    if (priority !== 0 && (!Number.isInteger(priority) || priority < 0)) {
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'priority must be a non-negative integer' });
     }
     const { encrypted, iv } = encryptCredential(credential, encryptionKey);
     const [inserted] = await db
@@ -137,6 +173,37 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
   }>('/:id', async (request, reply) => {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     const { name, provider, credential, priority, isActive, rateLimit, metadata } = request.body;
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_BODY', message: 'name must be a non-empty string' });
+      }
+      if (name.length > 100) {
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_BODY', message: 'name must be 100 characters or fewer' });
+      }
+    }
+    if (provider !== undefined && !(ACCOUNT_PROVIDERS as readonly string[]).includes(provider)) {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: `provider must be one of: ${ACCOUNT_PROVIDERS.join(', ')}`,
+      });
+    }
+    if (
+      credential !== undefined &&
+      (typeof credential !== 'string' || credential.trim().length === 0)
+    ) {
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'credential must be a non-empty string' });
+    }
+    if (priority !== undefined && (!Number.isInteger(priority) || priority < 0)) {
+      return reply
+        .code(400)
+        .send({ error: 'INVALID_BODY', message: 'priority must be a non-negative integer' });
+    }
     if (name !== undefined) updates.name = name;
     if (provider !== undefined) updates.provider = provider;
     if (priority !== undefined) updates.priority = priority;
@@ -156,13 +223,19 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!updated) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
+    let credentialMasked = '(decryption failed)';
+    try {
+      credentialMasked = maskCredential(
+        decryptCredential(updated.credential, updated.credentialIv, encryptionKey),
+      );
+    } catch {
+      // Credential couldn't be decrypted — show fallback
+    }
     return reply.send({
       id: updated.id,
       name: updated.name,
       provider: updated.provider,
-      credentialMasked: maskCredential(
-        decryptCredential(updated.credential, updated.credentialIv, encryptionKey),
-      ),
+      credentialMasked,
       priority: updated.priority,
       rateLimit: updated.rateLimit,
       isActive: updated.isActive,
@@ -177,14 +250,28 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
   // ---------------------------------------------------------------------------
 
   app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
-    const [deleted] = await db
-      .delete(apiAccounts)
-      .where(eq(apiAccounts.id, request.params.id))
+    const { id } = request.params;
+
+    // Clean up orphaned project-account mappings before deleting the account.
+    // The DB schema has ON DELETE CASCADE, but we also do it explicitly so we
+    // can log the count of removed mappings.
+    const removedMappings = await db
+      .delete(projectAccountMappings)
+      .where(eq(projectAccountMappings.accountId, id))
       .returning();
+
+    if (removedMappings.length > 0) {
+      request.log.info(
+        { accountId: id, removedMappings: removedMappings.length },
+        'Cleaned up project-account mappings for deleted account',
+      );
+    }
+
+    const [deleted] = await db.delete(apiAccounts).where(eq(apiAccounts.id, id)).returning();
     if (!deleted) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
-    return reply.send({ ok: true });
+    return reply.send({ ok: true, removedMappings: removedMappings.length });
   });
 
   // ---------------------------------------------------------------------------
@@ -196,7 +283,15 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     if (!row) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
-    const credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
+    let credential: string;
+    try {
+      credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
+    } catch (_err) {
+      return reply.code(500).send({
+        error: 'ACCOUNT_TEST_ERROR',
+        message: 'Failed to decrypt account credential',
+      });
+    }
 
     switch (row.provider) {
       case 'anthropic_api': {

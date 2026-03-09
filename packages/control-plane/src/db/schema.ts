@@ -32,6 +32,7 @@ export const agents = pgTable(
     machineId: text('machine_id').references(() => machines.id),
     name: text('name').notNull(),
     type: text('type').notNull(),
+    runtime: text('runtime').default('claude-code'),
     status: text('status').default('registered'),
     schedule: text('schedule'),
     projectPath: text('project_path'),

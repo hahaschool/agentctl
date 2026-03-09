@@ -2,9 +2,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import {
   CMD_EXTENSION,
   createIpcMessage,
@@ -13,14 +13,7 @@ import {
 } from './ipc-channel.js';
 import { IpcClient, type IpcClientOptions } from './ipc-client.js';
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 function makeOptions(overrides?: Partial<IpcClientOptions>): IpcClientOptions {
   return {

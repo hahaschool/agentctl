@@ -1,6 +1,8 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
+import type { AgentConfig } from './api';
 import { api } from './api';
+import { STORAGE_KEYS } from './storage-keys';
 
 // ---------------------------------------------------------------------------
 // Helpers — read user preferences from localStorage
@@ -8,7 +10,7 @@ import { api } from './api';
 
 function getRefetchInterval(): number | false {
   if (typeof window === 'undefined') return 10_000;
-  const raw = localStorage.getItem('agentctl:autoRefreshInterval');
+  const raw = localStorage.getItem(STORAGE_KEYS.AUTO_REFRESH_INTERVAL);
   const ms = raw ? Number(raw) : 10_000;
   return ms > 0 ? ms : false;
 }
@@ -23,8 +25,13 @@ export const queryKeys = {
   agents: ['agents'] as const,
   agent: (id: string) => ['agents', id] as const,
   agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
-  sessions: (params?: { status?: string; machineId?: string }) =>
-    params ? (['sessions', params] as const) : (['sessions'] as const),
+  sessions: (params?: {
+    status?: string;
+    machineId?: string;
+    agentId?: string;
+    offset?: number;
+    limit?: number;
+  }) => (params ? (['sessions', params] as const) : (['sessions'] as const)),
   session: (id: string) => ['sessions', id] as const,
   sessionContent: (
     sessionId: string,
@@ -37,6 +44,23 @@ export const queryKeys = {
   projectAccounts: ['project-accounts'] as const,
   routerModels: ['router', 'models'] as const,
   routerModelsInfo: ['router', 'models-info'] as const,
+  audit: (params?: {
+    agentId?: string;
+    tool?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+    offset?: number;
+  }) => (params ? (['audit', params] as const) : (['audit'] as const)),
+  auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
+    params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
+  gitStatus: (machineId: string, path: string) => ['git-status', machineId, path] as const,
+  memory: {
+    search: (q: string, opts?: { project?: string; type?: string }) =>
+      ['memory', 'search', q, opts] as const,
+    timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
+    observation: (id: number) => ['memory', 'observation', id] as const,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -90,7 +114,13 @@ export function agentRunsQuery(agentId: string) {
   });
 }
 
-export function sessionsQuery(params?: { status?: string; machineId?: string }) {
+export function sessionsQuery(params?: {
+  status?: string;
+  machineId?: string;
+  agentId?: string;
+  offset?: number;
+  limit?: number;
+}) {
   return queryOptions({
     queryKey: queryKeys.sessions(params),
     queryFn: () => api.listSessions(params),
@@ -159,6 +189,31 @@ export function projectAccountsQuery() {
   });
 }
 
+export function auditQuery(params?: {
+  agentId?: string;
+  tool?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return queryOptions({
+    queryKey: queryKeys.audit(params),
+    queryFn: () => api.queryAudit(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function auditSummaryQuery(params?: { agentId?: string; from?: string; to?: string }) {
+  return queryOptions({
+    queryKey: queryKeys.auditSummary(params),
+    queryFn: () => api.getAuditSummary(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function routerModelsQuery() {
   return queryOptions({
     queryKey: queryKeys.routerModels,
@@ -172,6 +227,35 @@ export function routerModelsInfoQuery() {
     queryKey: queryKeys.routerModelsInfo,
     queryFn: api.getRouterModelsInfo,
     staleTime: 30_000,
+  });
+}
+
+export function gitStatusQuery(machineId: string, path: string) {
+  return queryOptions({
+    queryKey: queryKeys.gitStatus(machineId, path),
+    queryFn: () => api.getGitStatus(machineId, path),
+    enabled: !!machineId && !!path,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function memorySearchQuery(q: string, opts?: { project?: string; type?: string }) {
+  return queryOptions({
+    queryKey: queryKeys.memory.search(q, opts),
+    queryFn: () => api.searchMemory({ q, ...opts }),
+    enabled: q.length >= 2,
+    staleTime: 60_000,
+  });
+}
+
+export function memoryTimelineQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.memory.timeline(sessionId ?? ''),
+    queryFn: () => api.getMemoryTimeline(sessionId!),
+    enabled: !!sessionId,
+    staleTime: 60_000,
   });
 }
 
@@ -223,7 +307,7 @@ export function useUpdateAgent() {
       machineId?: string;
       type?: string;
       schedule?: string | null;
-      config?: Record<string, unknown>;
+      config?: AgentConfig;
     }) => api.updateAgent(id, body),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
@@ -235,7 +319,8 @@ export function useUpdateAgent() {
 export function useResumeSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.resumeSession(id, prompt),
+    mutationFn: ({ id, prompt, model }: { id: string; prompt: string; model?: string }) =>
+      api.resumeSession(id, prompt, model),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },
@@ -265,7 +350,22 @@ export function useDeleteSession() {
 export function useForkSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, prompt }: { id: string; prompt: string }) => api.forkSession(id, prompt),
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      prompt: string;
+      model?: string;
+      strategy?: 'jsonl-truncation' | 'context-injection' | 'resume';
+      forkAtIndex?: number;
+      selectedMessages?: Array<{
+        type: string;
+        content: string;
+        toolName?: string;
+        timestamp?: string;
+      }>;
+    }) => api.forkSession(id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
     },
@@ -285,8 +385,12 @@ export function useCreateAccount() {
 export function useUpdateAccount() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
-      api.updateAccount(id, body),
+    mutationFn: ({
+      id,
+      ...body
+    }: { id: string } & Partial<
+      Pick<import('./api').ApiAccount, 'name' | 'priority' | 'isActive'>
+    >) => api.updateAccount(id, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.accounts });
     },

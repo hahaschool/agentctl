@@ -1,20 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createServer } from '../server.js';
+import { createMockLogger } from './test-helpers.js';
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 function createMockDb(options: { shouldFail?: boolean } = {}) {
@@ -97,6 +87,23 @@ describe('GET /health (no dependencies)', () => {
     const body = response.json();
     const parsed = new Date(body.timestamp);
     expect(parsed.toISOString()).toBe(body.timestamp);
+  });
+
+  it('returns process metrics (uptime, nodeVersion, memoryUsage)', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    const body = response.json();
+    expect(typeof body.uptime).toBe('number');
+    expect(body.uptime).toBeGreaterThan(0);
+    expect(typeof body.nodeVersion).toBe('string');
+    expect(body.nodeVersion).toMatch(/^v\d+/);
+    expect(typeof body.memoryUsage).toBe('object');
+    expect(typeof body.memoryUsage.rss).toBe('number');
+    expect(typeof body.memoryUsage.heapUsed).toBe('number');
+    expect(typeof body.memoryUsage.heapTotal).toBe('number');
   });
 
   it('does not include dependencies in simple response', async () => {

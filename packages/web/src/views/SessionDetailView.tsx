@@ -2,139 +2,23 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
+import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
-import { CopyableText } from '@/components/CopyableText';
-import { StatusBadge } from '@/components/StatusBadge';
-import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { AnsiSpan, AnsiText } from '../components/AnsiText';
-import { ConfirmButton } from '../components/ConfirmButton';
-import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
-import { LastUpdated } from '../components/LastUpdated';
-import { LiveTimeAgo } from '../components/LiveTimeAgo';
-import { PathBadge } from '../components/PathBadge';
-import { RefreshButton } from '../components/RefreshButton';
+import { FileBrowser } from '../components/FileBrowser';
+import { MessageInput } from '../components/MessageInput';
+import { SessionHeader } from '../components/SessionHeader';
+import { MessageList, ViewModeToggle } from '../components/SessionMessageList';
+import { TerminalView } from '../components/TerminalView';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
-import type { Session, SessionContentMessage } from '../lib/api';
-import { formatDuration, formatNumber, formatTime } from '../lib/format-utils';
-import { getMessageStyle } from '../lib/message-styles';
-import {
-  accountsQuery,
-  queryKeys,
-  sessionContentQuery,
-  sessionQuery,
-  useDeleteSession,
-  useForkSession,
-  useResumeSession,
-  useSendMessage,
-} from '../lib/queries';
-
-// ---------------------------------------------------------------------------
-// Export helpers
-// ---------------------------------------------------------------------------
-
-function downloadFile(content: string, filename: string, mimeType: string): void {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportSessionAsJson(session: Session, messages: SessionContentMessage[]): void {
-  const data = {
-    session: {
-      id: session.id,
-      agentId: session.agentId,
-      machineId: session.machineId,
-      claudeSessionId: session.claudeSessionId,
-      status: session.status,
-      projectPath: session.projectPath,
-      model: session.model,
-      accountId: session.accountId,
-      startedAt: session.startedAt,
-      endedAt: session.endedAt,
-      metadata: session.metadata,
-    },
-    messages: messages.map((m) => ({
-      type: m.type,
-      content: m.content,
-      timestamp: m.timestamp ?? null,
-      toolName: m.toolName ?? null,
-    })),
-    exportedAt: new Date().toISOString(),
-  };
-  const json = JSON.stringify(data, null, 2);
-  const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.json`;
-  downloadFile(json, filename, 'application/json');
-}
-
-function formatMessageLabel(type: string): string {
-  switch (type) {
-    case 'human':
-      return 'Human';
-    case 'assistant':
-      return 'Assistant';
-    case 'tool_use':
-      return 'Tool Call';
-    case 'tool_result':
-      return 'Tool Result';
-    default:
-      return type;
-  }
-}
-
-function exportSessionAsMarkdown(session: Session, messages: SessionContentMessage[]): void {
-  const lines: string[] = [];
-
-  lines.push(`# Session ${session.id}`);
-  lines.push('');
-
-  const metaParts: string[] = [];
-  metaParts.push(`**Status:** ${session.status}`);
-  if (session.model) metaParts.push(`**Model:** ${session.model}`);
-  metaParts.push(`**Started:** ${session.startedAt}`);
-  if (session.endedAt) metaParts.push(`**Ended:** ${session.endedAt}`);
-  metaParts.push(`**Machine:** ${session.machineId}`);
-  if (session.projectPath) metaParts.push(`**Project:** ${session.projectPath}`);
-  lines.push(metaParts.join(' | '));
-  lines.push('');
-  lines.push('---');
-  lines.push('');
-  lines.push('## Messages');
-  lines.push('');
-
-  for (const msg of messages) {
-    const label = formatMessageLabel(msg.type);
-    const timestamp = msg.timestamp ? ` _(${msg.timestamp})_` : '';
-    const toolSuffix = msg.toolName ? ` \`${msg.toolName}\`` : '';
-
-    lines.push(`### ${label}${toolSuffix}${timestamp}`);
-    lines.push('');
-
-    const content = msg.content ?? '';
-    if (msg.type === 'tool_use' || msg.type === 'tool_result') {
-      lines.push('```');
-      lines.push(content);
-      lines.push('```');
-    } else {
-      lines.push(content);
-    }
-    lines.push('');
-  }
-
-  const md = lines.join('\n');
-  const filename = `session-${session.id.slice(0, 12)}-${Date.now()}.md`;
-  downloadFile(md, filename, 'text/markdown');
-}
+import { queryKeys, sessionContentQuery, sessionQuery } from '../lib/queries';
+import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-export';
 
 // ---------------------------------------------------------------------------
 // Session detail view
@@ -149,14 +33,17 @@ export function SessionDetailView(): React.JSX.Element {
 
   // We need the Claude session ID (not the RC session ID) to fetch content
   const claudeSessionId = s?.claudeSessionId ?? '';
+  const [contentLimit, setContentLimit] = useState(2000);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const content = useQuery({
     ...sessionContentQuery(claudeSessionId, {
       machineId: s?.machineId ?? '',
       projectPath: s?.projectPath ?? undefined,
-      limit: 500,
+      limit: contentLimit,
     }),
     enabled: !!claudeSessionId && !!s?.machineId,
-    refetchInterval: s?.status === 'active' ? 3_000 : false,
+    refetchInterval:
+      (s?.status === 'active' || s?.status === 'starting') && autoRefresh ? 2_000 : false,
     refetchOnWindowFocus: true,
   });
 
@@ -167,23 +54,141 @@ export function SessionDetailView(): React.JSX.Element {
 
   // SSE streaming — connect when session is active for real-time updates
   const isActive = s?.status === 'active' || s?.status === 'starting';
+  const clearStreamRef = useRef<() => void>(() => {});
   const stream = useSessionStream({
     sessionId,
     enabled: isActive,
     onEvent: useCallback(
       (event: SessionStreamEvent) => {
-        // When status changes (e.g., session ends), refetch the full content
         if (event.event === 'status' || event.event === 'loop_complete') {
           void session.refetch();
           void content.refetch();
+          // Clear stream output so polled messages replace it without duplication
+          clearStreamRef.current();
         }
       },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       [content.refetch, session.refetch],
     ),
   });
+  clearStreamRef.current = stream.clearStreamOutput;
 
-  useHotkeys(useMemo(() => ({ r: refetchAll }), [refetchAll]));
+  // Invalidate session query when SSE status changes (instead of waiting for poll interval)
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (stream.latestStatus) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+      // Also refetch content when status changes
+      void queryClient.invalidateQueries({ queryKey: ['session-content'] });
+    }
+  }, [stream.latestStatus, sessionId, queryClient]);
+
+  // Clear pending user messages once JSONL content includes matching human messages
+  const contentMessages = content.data?.messages ?? [];
+  useEffect(() => {
+    if (stream.pendingUserMessages.length === 0) return;
+    const humanMessages = contentMessages
+      .filter((m) => m.type === 'human')
+      .map((m) => m.content?.trim());
+    const allFound = stream.pendingUserMessages.every((text) =>
+      humanMessages.includes(text.trim()),
+    );
+    if (allFound) {
+      stream.clearPendingMessages();
+    }
+  }, [contentMessages, stream.pendingUserMessages, stream.clearPendingMessages]);
+
+  // Optimistic messages — shown immediately when user sends, cleared when JSONL catches up
+  // Uses count-based clearing: record how many human messages exist at send time,
+  // and clear once the real count exceeds that baseline.
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    { text: string; expectedHumanCount: number; timestamp: number }[]
+  >([]);
+  const addOptimisticMessage = useCallback(
+    (text: string) => {
+      const currentHumanCount = contentMessages.filter((m) => m.type === 'human').length;
+      setOptimisticMessages((prev) => [
+        ...prev,
+        { text, expectedHumanCount: currentHumanCount, timestamp: Date.now() },
+      ]);
+    },
+    [contentMessages],
+  );
+
+  // Clear optimistic messages when human count exceeds baseline
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return;
+    const humanCount = contentMessages.filter((m) => m.type === 'human').length;
+    setOptimisticMessages((prev) => prev.filter((om) => humanCount <= om.expectedHumanCount));
+  }, [contentMessages, optimisticMessages.length]);
+
+  // Safety net: 30-second absolute timeout for stuck optimistic messages
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return;
+    const timer = setTimeout(() => {
+      setOptimisticMessages((prev) => {
+        const cutoff = Date.now() - 30_000;
+        return prev.filter((om) => om.timestamp > cutoff);
+      });
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [optimisticMessages]);
+
+  // Terminal replay — reconstruct pseudo-terminal output from JSONL content
+  // for ended/paused sessions that have no live rawOutput.
+  const replayOutput = useMemo(() => {
+    if (stream.rawOutput.length > 0 || isActive) return [];
+
+    return contentMessages
+      .map((msg) => {
+        switch (msg.type) {
+          case 'assistant':
+            return `${msg.content}\n`;
+          case 'tool_use':
+            return `\x1b[36m⚡ ${msg.toolName ?? 'tool'}\x1b[0m\n${msg.content}\n`;
+          case 'tool_result':
+            return `\x1b[32m✓ Result:\x1b[0m\n${(msg.content ?? '').slice(0, 500)}\n`;
+          case 'thinking':
+            return `\x1b[35m💭 Thinking...\x1b[0m\n${(msg.content ?? '').slice(0, 200)}\n`;
+          case 'human':
+            return `\x1b[33m> ${msg.content}\x1b[0m\n`;
+          case 'progress':
+            return `\x1b[2m${msg.content}\x1b[0m\n`;
+          default:
+            return '';
+        }
+      })
+      .filter(Boolean);
+  }, [contentMessages, stream.rawOutput.length, isActive]);
+
+  // View mode toggle (messages vs terminal)
+  const [viewMode, setViewMode] = useState<'messages' | 'terminal'>('messages');
+
+  // File browser panel toggle
+  const [showFiles, setShowFiles] = useState(false);
+  const toggleFiles = useCallback(() => setShowFiles((prev) => !prev), []);
+
+  // Escape handler ref — SessionHeader populates this to close its menus
+  const escapeRef = useRef<() => void>(() => {});
+
+  const handleExportJson = useCallback(() => {
+    if (s && contentMessages.length > 0) exportSessionAsJson(s, contentMessages);
+  }, [s, contentMessages]);
+
+  const handleExportMarkdown = useCallback(() => {
+    if (s && contentMessages.length > 0) exportSessionAsMarkdown(s, contentMessages);
+  }, [s, contentMessages]);
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: refetchAll,
+        e: handleExportJson,
+        m: handleExportMarkdown,
+        Escape: () => escapeRef.current(),
+      }),
+      [refetchAll, handleExportJson, handleExportMarkdown],
+    ),
+  );
 
   if (session.isLoading) {
     return <LoadingState />;
@@ -200,716 +205,63 @@ export function SessionDetailView(): React.JSX.Element {
       <SessionHeader
         session={s}
         messages={content.data?.messages ?? []}
+        totalMessages={content.data?.totalMessages}
         dataUpdatedAt={content.dataUpdatedAt || session.dataUpdatedAt}
         isFetching={(content.isFetching || session.isFetching) && !content.isLoading}
         onRefresh={refetchAll}
         streamConnected={stream.connected}
+        streamCost={stream.latestCost}
+        showFiles={showFiles}
+        onToggleFiles={toggleFiles}
+        escapeRef={escapeRef}
       />
 
       {/* Content area */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <MessageList
-          messages={content.data?.messages ?? []}
-          totalMessages={content.data?.totalMessages ?? 0}
-          isLoading={content.isLoading}
-          error={content.error?.message}
-          isActive={s.status === 'active'}
-          streamOutput={stream.streamOutput}
-          streamConnected={stream.connected}
-        />
-
-        {/* Input area */}
-        <MessageInput session={s} />
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Header
-// ---------------------------------------------------------------------------
-
-function SessionHeader({
-  session,
-  messages,
-  dataUpdatedAt,
-  isFetching,
-  onRefresh,
-  streamConnected,
-}: {
-  session: Session;
-  messages: SessionContentMessage[];
-  dataUpdatedAt: number;
-  isFetching: boolean;
-  onRefresh: () => void;
-  streamConnected?: boolean;
-}): React.JSX.Element {
-  const toast = useToast();
-  const deleteSession = useDeleteSession();
-  const forkSession = useForkSession();
-  const queryClient = useQueryClient();
-  const accounts = useQuery(accountsQuery());
-  const [forkPrompt, setForkPrompt] = useState('');
-  const [showFork, setShowFork] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
-
-  const accountName = useMemo(() => {
-    if (!session.accountId || !accounts.data) return null;
-    const found = accounts.data.find((a) => a.id === session.accountId);
-    return found?.name ?? null;
-  }, [session.accountId, accounts.data]);
-
-  // Close export menu when clicking outside
-  useEffect(() => {
-    if (!showExportMenu) return;
-    function handleClickOutside(e: MouseEvent): void {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setShowExportMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showExportMenu]);
-
-  const handleEnd = useCallback(() => {
-    deleteSession.mutate(session.id, {
-      onSuccess: () => {
-        toast.success('Session ended');
-        void queryClient.invalidateQueries({ queryKey: queryKeys.session(session.id) });
-      },
-      onError: (err) => toast.error(err.message),
-    });
-  }, [session.id, deleteSession, toast, queryClient]);
-
-  const handleFork = useCallback(() => {
-    if (!forkPrompt.trim()) return;
-    forkSession.mutate(
-      { id: session.id, prompt: forkPrompt.trim() },
-      {
-        onSuccess: (data) => {
-          toast.success(`Forked! New session: ${data.sessionId.slice(0, 12)}...`);
-          setShowFork(false);
-          setForkPrompt('');
-        },
-        onError: (err) => toast.error(err.message),
-      },
-    );
-  }, [session.id, forkPrompt, forkSession, toast]);
-
-  const canFork = !!session.claudeSessionId;
-
-  return (
-    <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
-      <div className="flex items-center gap-3 mb-2">
-        <Breadcrumb
-          items={[{ label: 'Sessions', href: '/sessions' }, { label: session.id.slice(0, 12) }]}
-        />
-        <StatusBadge status={session.status} />
-        {session.status === 'active' && (
-          <output
-            className={cn(
-              'text-[11px] animate-pulse',
-              streamConnected ? 'text-green-500' : 'text-yellow-500',
-            )}
-            aria-live="polite"
-          >
-            {streamConnected ? 'Streaming' : 'Live'}
-          </output>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <LastUpdated dataUpdatedAt={dataUpdatedAt} />
-          <RefreshButton onClick={onRefresh} isFetching={isFetching} />
-          <div className="relative" ref={exportMenuRef}>
-            <button
-              type="button"
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
-            >
-              Export
-            </button>
-            {showExportMenu && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-sm shadow-lg min-w-[160px]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    exportSessionAsJson(session, messages);
-                    setShowExportMenu(false);
-                  }}
-                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent"
-                >
-                  Export as JSON
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    exportSessionAsMarkdown(session, messages);
-                    setShowExportMenu(false);
-                  }}
-                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent border-t border-t-border"
-                >
-                  Export as Markdown
-                </button>
-              </div>
-            )}
-          </div>
-          {canFork && (
-            <button
-              type="button"
-              onClick={() => setShowFork(!showFork)}
-              className="px-3 py-1 bg-blue-900/50 text-blue-300 border border-blue-800/50 rounded-sm text-xs cursor-pointer hover:bg-blue-900"
-            >
-              Fork
-            </button>
-          )}
-          {(session.status === 'active' || session.status === 'starting') && (
-            <ConfirmButton
-              label="End Session"
-              confirmLabel="Confirm End?"
-              onConfirm={handleEnd}
-              className="px-3 py-1 bg-red-900/50 text-red-300 border border-red-800/50 rounded-sm text-xs cursor-pointer hover:bg-red-900"
-              confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-sm text-xs cursor-pointer animate-pulse"
+      <div className="flex-1 overflow-hidden flex">
+        {/* Messages / Terminal panel */}
+        <div className={cn('flex-1 overflow-hidden flex flex-col', showFiles && 'w-1/2')}>
+          {viewMode === 'messages' ? (
+            <MessageList
+              messages={content.data?.messages ?? []}
+              totalMessages={content.data?.totalMessages ?? 0}
+              isLoading={content.isLoading}
+              error={content.error?.message}
+              isActive={s.status === 'active'}
+              isActiveOrStarting={isActive}
+              autoRefresh={autoRefresh}
+              onAutoRefreshChange={setAutoRefresh}
+              streamOutput={stream.streamOutput}
+              streamConnected={stream.connected}
+              pendingUserMessages={stream.pendingUserMessages}
+              optimisticMessages={optimisticMessages.map((om) => om.text)}
+              onLoadMore={() => setContentLimit((prev) => prev * 2)}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
             />
-          )}
-        </div>
-      </div>
-
-      {/* Fork input */}
-      {showFork && (
-        <div className="mb-2 flex gap-2 items-end">
-          <input
-            type="text"
-            value={forkPrompt}
-            onChange={(e) => setForkPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleFork();
-              if (e.key === 'Escape') {
-                setShowFork(false);
-                setForkPrompt('');
-              }
-            }}
-            placeholder="Prompt for the forked session..."
-            className="flex-1 px-3 py-1.5 bg-muted text-foreground border border-border rounded-sm text-[12px] outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleFork}
-            disabled={!forkPrompt.trim() || forkSession.isPending}
-            className="px-3 py-1.5 bg-blue-700 text-white rounded-sm text-xs cursor-pointer disabled:opacity-50"
-          >
-            {forkSession.isPending ? 'Forking...' : 'Fork Session'}
-          </button>
-        </div>
-      )}
-
-      {/* Metadata row */}
-      <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
-        <span className="flex items-center gap-1">
-          ID: <CopyableText value={session.id} maxDisplay={12} />
-        </span>
-        {session.claudeSessionId && (
-          <span className="flex items-center gap-1">
-            Claude: <CopyableText value={session.claudeSessionId} maxDisplay={12} />
-          </span>
-        )}
-        <span>
-          Machine: <CopyableText value={session.machineId} maxDisplay={12} />
-        </span>
-        {session.projectPath && <PathBadge path={session.projectPath} />}
-        {session.accountId && (
-          <span className="flex items-center gap-1">
-            Account:{' '}
-            {accountName ? (
-              <span title={session.accountId}>{accountName}</span>
-            ) : (
-              <CopyableText value={session.accountId} maxDisplay={12} />
-            )}
-          </span>
-        )}
-        {session.model && (
-          <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm border border-border">
-            {session.model}
-          </span>
-        )}
-        <span>
-          Started <LiveTimeAgo date={session.startedAt} />
-        </span>
-        {session.endedAt && (
-          <span>Duration: {formatDuration(session.startedAt, session.endedAt)}</span>
-        )}
-        {!session.endedAt && session.status === 'active' && (
-          <span>Running for {formatDuration(session.startedAt)}</span>
-        )}
-      </div>
-
-      {/* Error details */}
-      {session.status === 'error' && (
-        <div className="mt-2 px-3 py-2 rounded-sm bg-red-950/50 border border-red-900/50 text-[12px] text-red-300 space-y-1">
-          <div>
-            <span className="font-semibold text-red-400">Error: </span>
-            {typeof session.metadata?.errorMessage === 'string'
-              ? session.metadata.errorMessage
-              : 'Session ended with an error (no details available)'}
-          </div>
-          {typeof session.metadata?.errorHint === 'string' && (
-            <div className="text-yellow-300/90">
-              <span className="font-semibold text-yellow-400">Hint: </span>
-              {session.metadata.errorHint}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Starting indicator */}
-      {session.status === 'starting' && (
-        <div className="mt-2 px-3 py-2 rounded-sm bg-yellow-950/40 border border-yellow-900/40 text-[12px] text-yellow-300 animate-pulse">
-          Waiting for worker to start session...
-        </div>
-      )}
-
-      {/* Cost / Model metadata (when available) */}
-      <SessionMetadataBadges metadata={session.metadata} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Message list
-// ---------------------------------------------------------------------------
-
-function MessageList({
-  messages,
-  totalMessages,
-  isLoading,
-  error,
-  isActive,
-  streamOutput,
-  streamConnected,
-}: {
-  messages: SessionContentMessage[];
-  totalMessages: number;
-  isLoading: boolean;
-  error?: string;
-  isActive: boolean;
-  streamOutput?: string[];
-  streamConnected?: boolean;
-}): React.JSX.Element {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [showTools, setShowTools] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
-
-  const maxDisplayMessages = useMemo(
-    () =>
-      typeof window !== 'undefined'
-        ? Number(localStorage.getItem('agentctl:maxDisplayMessages')) || 100
-        : 100,
-    [],
-  );
-
-  const filteredMessages = showTools
-    ? messages
-    : messages.filter((m) => m.type === 'human' || m.type === 'assistant');
-
-  const visibleMessages = filteredMessages.slice(-maxDisplayMessages);
-
-  // Auto-scroll to bottom when new messages or stream output arrive
-  const prevCountRef = useRef(0);
-  const prevStreamLenRef = useRef(0);
-  useEffect(() => {
-    const count = visibleMessages.length;
-    const streamLen = streamOutput?.length ?? 0;
-    if (count !== prevCountRef.current || streamLen !== prevStreamLenRef.current) {
-      prevCountRef.current = count;
-      prevStreamLenRef.current = streamLen;
-      if (autoScroll && scrollRef.current) {
-        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-      }
-    }
-  }, [visibleMessages.length, streamOutput?.length, autoScroll]);
-
-  // Detect user scrolling up to pause auto-scroll
-  const handleScroll = useCallback(() => {
-    if (!scrollRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
-    setAutoScroll(isAtBottom);
-  }, []);
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Toolbar */}
-      <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
-        <span>{formatNumber(totalMessages)} total messages</span>
-        <span>{formatNumber(visibleMessages.length)} shown</span>
-        <button
-          type="button"
-          onClick={() => setShowTools(!showTools)}
-          aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
-          aria-pressed={showTools}
-          className={cn(
-            'px-2 py-0.5 rounded-sm border border-border text-[10px] cursor-pointer transition-colors',
-            showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
-          )}
-        >
-          {showTools ? 'Hide Tools' : 'Show Tools'}
-        </button>
-        {!autoScroll && isActive && (
-          <button
-            type="button"
-            onClick={() => {
-              setAutoScroll(true);
-              if (scrollRef.current) {
-                scrollRef.current.scrollTo({
-                  top: scrollRef.current.scrollHeight,
-                  behavior: 'smooth',
-                });
-              }
-            }}
-            aria-label="Jump to bottom of conversation"
-            className="ml-auto px-2 py-0.5 bg-primary text-primary-foreground rounded-sm text-[10px] cursor-pointer"
-          >
-            Jump to bottom
-          </button>
-        )}
-      </div>
-
-      {/* Messages */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-auto px-5 py-3 space-y-2"
-      >
-        {isLoading && (
-          <div className="p-4 space-y-3">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={`msg-sk-${String(i)}`}
-                className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
-              >
-                <Skeleton className="h-3 w-16 mb-2" />
-                <Skeleton className="h-3 w-full mb-1" />
-                <Skeleton className="h-3 w-3/4" />
+          ) : (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Terminal toolbar */}
+              <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
+                <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
               </div>
-            ))}
-          </div>
-        )}
-
-        {error && <ErrorBanner message={error} />}
-
-        {!isLoading && visibleMessages.length === 0 && (
-          <div className="p-8 text-center text-muted-foreground text-[13px]">No messages yet</div>
-        )}
-
-        {totalMessages > messages.length && (
-          <div className="py-2 text-center text-muted-foreground text-xs">
-            Showing last {formatNumber(messages.length)} of {formatNumber(totalMessages)} messages
-          </div>
-        )}
-
-        {visibleMessages.map((msg, i) => (
-          <MessageBubble key={`${msg.type}-${msg.timestamp ?? ''}-${msg.toolName ?? ''}-${i}`} message={msg} />
-        ))}
-
-        {/* Live streaming output */}
-        {streamConnected && streamOutput && streamOutput.length > 0 && (
-          <div className="rounded-lg border border-green-500/20 bg-green-950/20 p-3">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] font-semibold text-green-500">Streaming</span>
+              <TerminalView
+                rawOutput={stream.rawOutput.length > 0 ? stream.rawOutput : replayOutput}
+                isActive={isActive}
+                className="flex-1 min-h-0"
+              />
             </div>
-            <AnsiText className="text-[12px] text-foreground/90 whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-auto m-0">
-              {streamOutput.join('')}
-            </AnsiText>
+          )}
+
+          {/* Input area */}
+          <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
+        </div>
+
+        {/* File browser panel */}
+        {showFiles && (
+          <div className="w-1/2 overflow-hidden">
+            <FileBrowser machineId={s.machineId} initialPath={s.projectPath ?? undefined} />
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Message bubble
-// ---------------------------------------------------------------------------
-
-function MessageBubble({ message }: { message: SessionContentMessage }): React.JSX.Element {
-  const style = getMessageStyle(message.type);
-
-  const isTool = message.type === 'tool_use' || message.type === 'tool_result';
-  const [expanded, setExpanded] = useState(!isTool);
-  const isLong = (message.content?.length ?? 0) > 600;
-
-  if (isTool && !expanded) {
-    return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className={cn(
-          'w-full flex items-center gap-2 px-3 py-1 rounded-sm cursor-pointer text-left text-foreground font-[inherit] border-none border-l-2',
-          style.bubbleClass,
-        )}
-      >
-        <span className={cn('text-[10px] font-semibold shrink-0', style.textClass)}>
-          {style.label}
-        </span>
-        {message.toolName && (
-          <span className="text-[11px] font-mono text-muted-foreground">{message.toolName}</span>
-        )}
-        <span className="text-[10px] text-muted-foreground ml-auto">click to expand</span>
-      </button>
-    );
-  }
-
-  const content = message.content ?? '';
-  const displayContent = !expanded && isLong ? `${content.slice(0, 600)}...` : content;
-
-  return (
-    <div className={cn('px-3 py-2 rounded-lg border-l-[3px]', style.bubbleClass)}>
-      <div className="flex justify-between items-center mb-1">
-        <span className={cn('text-[11px] font-semibold', style.textClass)}>
-          {style.label}
-          {message.toolName && (
-            <span className="ml-1.5 font-normal font-mono text-muted-foreground">
-              {message.toolName}
-            </span>
-          )}
-        </span>
-        <div className="flex gap-2 items-center">
-          {message.timestamp && (
-            <span className="text-[10px] text-muted-foreground">
-              {formatTime(message.timestamp)}
-            </span>
-          )}
-          {isTool && (
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              className="text-[10px] text-primary bg-transparent border-none p-0 cursor-pointer"
-            >
-              collapse
-            </button>
-          )}
-        </div>
-      </div>
-      <div
-        className={cn(
-          'leading-relaxed text-foreground whitespace-pre-wrap break-words',
-          isTool ? 'text-[11px] font-mono max-h-[400px] overflow-auto' : 'text-[13px]',
-        )}
-      >
-        <AnsiSpan>{displayContent}</AnsiSpan>
-      </div>
-      {isLong && !isTool && (
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="mt-1 text-[11px] text-primary bg-transparent border-none p-0 cursor-pointer"
-          aria-label={expanded ? 'Collapse message' : 'Expand message'}
-        >
-          {expanded ? 'Show less' : 'Show more'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Message input
-// ---------------------------------------------------------------------------
-
-function MessageInput({ session }: { session: Session }): React.JSX.Element {
-  const [message, setMessage] = useState('');
-  const lostKey = `lost:${session.id}`;
-  const [sessionLost, setSessionLost] = useState(() => sessionStorage.getItem(lostKey) === '1');
-  const toast = useToast();
-  const queryClient = useQueryClient();
-  const sendMessage = useSendMessage();
-  const resumeSession = useResumeSession();
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Draft persistence — survive page refreshes
-  const storageKey = `draft:${session.id}`;
-
-  // Load draft from sessionStorage on mount (or when session changes)
-  useEffect(() => {
-    const saved = sessionStorage.getItem(storageKey);
-    if (saved) setMessage(saved);
-  }, [storageKey]);
-
-  // Save draft to sessionStorage on change (debounced 300ms)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (message) {
-        sessionStorage.setItem(storageKey, message);
-      } else {
-        sessionStorage.removeItem(storageKey);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [message, storageKey]);
-
-  const isActive = session.status === 'active';
-  const isStarting = session.status === 'starting';
-  const canResume =
-    !sessionLost &&
-    (session.status === 'ended' || session.status === 'paused' || session.status === 'error');
-  const canSend = isActive || canResume;
-  const isSending = sendMessage.isPending || resumeSession.isPending;
-
-  /** Detect SESSION_LOST errors and persist the state. */
-  const markSessionLost = useCallback(() => {
-    setSessionLost(true);
-    sessionStorage.setItem(lostKey, '1');
-  }, [lostKey]);
-
-  const isSessionLostError = useCallback((err: Error): boolean => {
-    return err.message.includes('session was lost') || err.message.includes('SESSION_LOST');
-  }, []);
-
-  const handleSubmit = useCallback(() => {
-    const text = message.trim();
-    if (!text || isSending) return;
-
-    if (isActive) {
-      sendMessage.mutate(
-        { id: session.id, message: text },
-        {
-          onSuccess: () => {
-            setMessage('');
-            sessionStorage.removeItem(storageKey);
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-            // Refetch content after a short delay to allow processing
-            setTimeout(() => {
-              void queryClient.invalidateQueries({
-                queryKey: ['session-content'],
-                exact: false,
-              });
-            }, 1_000);
-          },
-          onError: (err) => {
-            if (isSessionLostError(err)) {
-              markSessionLost();
-            }
-            toast.error(err.message);
-            // Refresh session data so the UI reflects any status change
-            // (e.g. session marked as ended after worker restart)
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-          },
-        },
-      );
-    } else if (canResume) {
-      resumeSession.mutate(
-        { id: session.id, prompt: text },
-        {
-          onSuccess: () => {
-            setMessage('');
-            sessionStorage.removeItem(storageKey);
-            toast.success('Session resumed');
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-          },
-          onError: (err) => {
-            if (isSessionLostError(err)) {
-              markSessionLost();
-            }
-            toast.error(err.message);
-            // Refresh session data so the UI reflects any status change
-            // (e.g. session marked as ended after worker restart)
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.session(session.id),
-            });
-          },
-        },
-      );
-    }
-  }, [
-    message,
-    isSending,
-    isActive,
-    canResume,
-    session.id,
-    storageKey,
-    sendMessage,
-    resumeSession,
-    isSessionLostError,
-    markSessionLost,
-    toast,
-    queryClient,
-  ]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit],
-  );
-
-  if (sessionLost) {
-    return (
-      <div className="px-5 py-3 border-t border-border bg-card shrink-0">
-        <div className="flex items-center gap-3 px-3 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-sm">
-          <span className="text-yellow-500 text-sm font-medium">!</span>
-          <div className="flex-1 text-xs text-muted-foreground">
-            This session was lost due to a worker restart. You can fork this session or create a new
-            one to continue.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isStarting) {
-    return (
-      <div className="px-5 py-3 border-t border-border text-center text-xs text-muted-foreground bg-card animate-pulse">
-        Session is starting. Please wait...
-      </div>
-    );
-  }
-
-  if (!canSend) {
-    return (
-      <div className="px-5 py-3 border-t border-border text-center text-xs text-muted-foreground bg-card">
-        Session is {session.status}. Cannot send messages.
-      </div>
-    );
-  }
-
-  return (
-    <div className="px-5 py-3 border-t border-border bg-card shrink-0">
-      <div className="flex gap-2 items-end">
-        <textarea
-          ref={inputRef}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={isActive ? 'Send a message...' : 'Resume session with a prompt...'}
-          rows={1}
-          className="flex-1 px-3 py-2 bg-muted text-foreground border border-border rounded-sm text-[13px] outline-none resize-none min-h-[36px] max-h-[120px]"
-          disabled={isSending}
-        />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!message.trim() || isSending}
-          className={cn(
-            'px-4 py-2 rounded-sm text-xs font-medium transition-colors',
-            message.trim() && !isSending
-              ? 'bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90'
-              : 'bg-muted text-muted-foreground cursor-not-allowed',
-          )}
-        >
-          {isSending ? 'Sending...' : canResume ? 'Resume' : 'Send'}
-        </button>
-      </div>
-      <div className="mt-1 text-[10px] text-muted-foreground">
-        Press Enter to send, Shift+Enter for newline
       </div>
     </div>
   );
@@ -920,59 +272,101 @@ function MessageInput({ session }: { session: Session }): React.JSX.Element {
 // ---------------------------------------------------------------------------
 
 function LoadingState(): React.JSX.Element {
+  // Alternating widths to simulate realistic user/assistant conversation
+  const messageBubbles: Array<{ role: 'user' | 'assistant'; lines: number }> = [
+    { role: 'user', lines: 1 },
+    { role: 'assistant', lines: 4 },
+    { role: 'user', lines: 1 },
+    { role: 'assistant', lines: 6 },
+    { role: 'assistant', lines: 2 },
+    { role: 'user', lines: 1 },
+    { role: 'assistant', lines: 3 },
+  ];
+
   return (
-    <div className="p-4 md:p-6 max-w-[900px]">
-      <Skeleton className="h-4 w-28 mb-4" />
-      <div className="flex items-center gap-3 mb-6">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-5 w-16 rounded-full" />
+    <div className="relative h-full flex flex-col">
+      {/* Header bar skeleton */}
+      <div className="px-5 py-3 border-b border-border shrink-0 bg-card">
+        {/* Breadcrumb + status + buttons */}
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-1.5">
+            <Skeleton className="h-4 w-16" />
+            <span className="text-muted-foreground/30">/</span>
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <Skeleton className="h-5 w-14 rounded-full" />
+          <div className="ml-auto flex items-center gap-2">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-7 w-7 rounded-md" />
+            <Skeleton className="h-7 w-14 rounded-md" />
+            <Skeleton className="h-7 w-16 rounded-md" />
+          </div>
+        </div>
+        {/* Metadata row */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-3.5 w-32" />
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-4 w-16 rounded-sm" />
+          <Skeleton className="h-3.5 w-28" />
+        </div>
       </div>
-      <div className="space-y-3">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div key={`sk-${String(i)}`} className="flex gap-3">
-            <Skeleton className="h-4 w-12 shrink-0" />
-            <Skeleton className="h-16 flex-1 rounded" />
+
+      {/* Toolbar skeleton */}
+      <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 shrink-0 bg-background">
+        <Skeleton className="h-5 w-[120px] rounded-md" />
+        <Skeleton className="h-3.5 w-24" />
+        <Skeleton className="h-5 w-16 rounded-md" />
+        <Skeleton className="h-5 w-12 rounded-md" />
+        <Skeleton className="h-5 w-16 rounded-md" />
+        <Skeleton className="h-5 w-[100px] rounded-md ml-auto" />
+      </div>
+
+      {/* Messages area skeleton */}
+      <div className="flex-1 overflow-hidden px-5 py-4 space-y-4">
+        {messageBubbles.map((bubble, i) => (
+          <div
+            key={`sk-msg-${String(i)}`}
+            className={cn(
+              'rounded-lg border-l-[3px] px-3 py-2',
+              bubble.role === 'user'
+                ? 'border-l-blue-500/40 bg-blue-500/5'
+                : 'border-l-emerald-500/40 bg-emerald-500/5',
+            )}
+          >
+            {/* Label + timestamp */}
+            <div className="flex justify-between items-center mb-1.5">
+              <Skeleton
+                className={cn(
+                  'h-3 w-14',
+                  bubble.role === 'user' ? 'bg-blue-500/15' : 'bg-emerald-500/15',
+                )}
+              />
+              <Skeleton className="h-2.5 w-12 bg-muted" />
+            </div>
+            {/* Content lines */}
+            <div className="space-y-1.5">
+              {Array.from({ length: bubble.lines }, (_, j) => (
+                <Skeleton
+                  key={`sk-line-${String(i)}-${String(j)}`}
+                  className="h-3"
+                  style={{
+                    width:
+                      j === bubble.lines - 1
+                        ? `${40 + ((i * 17 + j * 23) % 35)}%`
+                        : `${75 + ((i * 13 + j * 7) % 20)}%`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
 
-function SessionMetadataBadges({
-  metadata,
-}: {
-  metadata: Record<string, unknown>;
-}): React.JSX.Element | null {
-  const model = typeof metadata.model === 'string' ? metadata.model : null;
-  const costUsd = typeof metadata.costUsd === 'number' ? metadata.costUsd : null;
-  const inputTokens = typeof metadata.inputTokens === 'number' ? metadata.inputTokens : null;
-  const outputTokens = typeof metadata.outputTokens === 'number' ? metadata.outputTokens : null;
-
-  if (!model && costUsd === null && inputTokens === null) return null;
-
-  return (
-    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-      {model && (
-        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
-          {model}
-        </span>
-      )}
-      {costUsd !== null && (
-        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
-          ${costUsd.toFixed(4)}
-        </span>
-      )}
-      {inputTokens !== null && (
-        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
-          {formatNumber(inputTokens)} in
-        </span>
-      )}
-      {outputTokens !== null && (
-        <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border">
-          {formatNumber(outputTokens)} out
-        </span>
-      )}
+      {/* Input area skeleton */}
+      <div className="px-5 py-3 border-t border-border bg-card shrink-0">
+        <Skeleton className="h-[60px] w-full rounded-md" />
+      </div>
     </div>
   );
 }
@@ -981,7 +375,7 @@ function ErrorState({ error }: { error: string }): React.JSX.Element {
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center max-w-md">
-        <div className="text-[15px] text-red-400 mb-2">Error</div>
+        <div className="text-[15px] text-red-600 dark:text-red-400 mb-2">Error</div>
         <div className="text-[13px] text-muted-foreground mb-4">{error}</div>
         <Breadcrumb items={[{ label: 'Sessions', href: '/sessions' }, { label: 'Error' }]} />
       </div>

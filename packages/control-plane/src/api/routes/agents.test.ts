@@ -1,23 +1,13 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import type { Logger } from 'pino';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AgentRegistry } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
+import { createMockLogger } from './test-helpers.js';
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 describe('Agent routes — /api/agents', () => {
   let app: FastifyInstance;
@@ -433,6 +423,52 @@ describe('Agent routes — with dbRegistry', () => {
           machineId: 'machine-1',
           name: 'my-new-agent',
           type: 'autonomous',
+        }),
+      );
+    });
+
+    it('rejects an invalid runtime value with 400', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents',
+        payload: {
+          machineId: 'machine-1',
+          name: 'bad-runtime-agent',
+          type: 'autonomous',
+          runtime: 'invalid-runtime',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_RUNTIME');
+      expect(body.message).toContain('invalid-runtime');
+    });
+
+    it('accepts a valid runtime value', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents',
+        payload: {
+          machineId: 'machine-1',
+          name: 'nanoclaw-agent',
+          type: 'autonomous',
+          runtime: 'nanoclaw',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.agentId).toBe('agent-new');
+      expect(mockDbRegistry.createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          machineId: 'machine-1',
+          name: 'nanoclaw-agent',
+          type: 'autonomous',
+          runtime: 'nanoclaw',
         }),
       );
     });

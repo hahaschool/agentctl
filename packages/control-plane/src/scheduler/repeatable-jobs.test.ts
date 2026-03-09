@@ -1,21 +1,11 @@
 import type { ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import { createRepeatableJobManager, type RepeatableJobManager } from './repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from './task-queue.js';
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 function makeJobData(overrides: Partial<AgentTaskJobData> = {}): AgentTaskJobData {
   return {

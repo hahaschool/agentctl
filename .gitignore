@@ -36,3 +36,4 @@ credentials.json
 *.key
 packages/agent-worker/.agentctl/
 coverage/
+test-results/

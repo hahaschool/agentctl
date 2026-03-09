@@ -152,7 +152,8 @@ describe('Settings routes — /api/settings', () => {
 
   describe('PUT /api/settings/defaults', () => {
     it('upserts default_account_id setting', async () => {
-      mockDb.setRows([]);
+      // Provide a matching account row so the validation query succeeds
+      mockDb.setRows([{ id: 'acct-456' }]);
 
       const response = await app.inject({
         method: 'PUT',
@@ -186,7 +187,8 @@ describe('Settings routes — /api/settings', () => {
     });
 
     it('upserts both settings at once', async () => {
-      mockDb.setRows([]);
+      // Provide a matching account row so the validation query succeeds
+      mockDb.setRows([{ id: 'acct-789' }]);
 
       const response = await app.inject({
         method: 'PUT',

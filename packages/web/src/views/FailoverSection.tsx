@@ -66,7 +66,7 @@ export function FailoverSection(): React.JSX.Element {
   }
 
   return (
-    <div>
+    <div id="failover" className="scroll-mt-6">
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Default Account &amp; Failover</h3>
       </div>

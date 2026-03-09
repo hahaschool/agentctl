@@ -12,15 +12,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import { STORAGE_KEYS } from '../lib/storage-keys';
+
 // ---------------------------------------------------------------------------
 // localStorage keys & defaults
 // ---------------------------------------------------------------------------
 
-const LS_DEFAULT_MODEL = 'agentctl:defaultModel';
-const LS_AUTO_REFRESH = 'agentctl:autoRefreshInterval';
-const LS_MAX_MESSAGES = 'agentctl:maxDisplayMessages';
+const LS_DEFAULT_MODEL = STORAGE_KEYS.DEFAULT_MODEL;
+const LS_AUTO_REFRESH = STORAGE_KEYS.AUTO_REFRESH_INTERVAL;
+const LS_MAX_MESSAGES = STORAGE_KEYS.MAX_DISPLAY_MESSAGES;
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
+
+import { ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
+
 const DEFAULT_AUTO_REFRESH = '10000';
 const DEFAULT_MAX_MESSAGES = '100';
 
@@ -70,8 +75,7 @@ export function PreferencesSection(): React.JSX.Element {
     readLS(LS_MAX_MESSAGES, DEFAULT_MAX_MESSAGES),
   );
 
-  const handleModelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
+  const handleModelChange = useCallback((v: string) => {
     setDefaultModel(v);
     writeLS(LS_DEFAULT_MODEL, v);
   }, []);
@@ -105,7 +109,7 @@ export function PreferencesSection(): React.JSX.Element {
   }, [maxMessages]);
 
   return (
-    <div>
+    <div id="preferences" className="scroll-mt-6">
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Defaults</h3>
       </div>
@@ -116,12 +120,18 @@ export function PreferencesSection(): React.JSX.Element {
           <label className="text-[13px] font-medium" htmlFor="pref-default-model">
             Default Model
           </label>
-          <Input
-            id="pref-default-model"
-            placeholder={DEFAULT_MODEL}
-            value={defaultModel}
-            onChange={handleModelChange}
-          />
+          <Select value={defaultModel} onValueChange={handleModelChange}>
+            <SelectTrigger className="w-full" id="pref-default-model">
+              <SelectValue placeholder="Select model" />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={4}>
+              {MODEL_OPTIONS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <p className="text-[11px] text-muted-foreground">
             Model used when creating new sessions or agents.
           </p>

@@ -1,4 +1,5 @@
 import type {
+  AgentRuntime,
   AgentStatus,
   HeartbeatRequest,
   RegisterWorkerRequest,
@@ -6,7 +7,7 @@ import type {
   StartAgentRequest,
   StopAgentRequest,
 } from '@agentctl/shared';
-import { AGENT_STATUSES, ControlPlaneError } from '@agentctl/shared';
+import { AGENT_RUNTIMES, AGENT_STATUSES, ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -16,6 +17,7 @@ import { AgentRegistry } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { RepeatableJobManager } from '../../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
+import { clampLimit, PAGINATION } from '../constants.js';
 
 export type AgentRoutesOptions = {
   taskQueue?: Queue<AgentTaskJobData, void, AgentTaskJobName>;
@@ -97,53 +99,56 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Agent CRUD (only available when dbRegistry is configured)
   // ---------------------------------------------------------------------------
 
+  const VALID_RUNTIMES = AGENT_RUNTIMES.map((r) => r.value);
+
   app.post<{
     Body: {
       machineId: string;
       name: string;
       type: string;
+      runtime?: string;
       schedule?: string;
       projectPath?: string;
       worktreeBranch?: string;
       config?: Record<string, unknown>;
     };
-  }>(
-    '/',
-    { schema: { tags: ['agents'], summary: 'Create an agent' } },
-    async (request, reply) => {
-      if (!dbRegistry) {
-        return reply
-          .code(501)
-          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
-      }
+  }>('/', { schema: { tags: ['agents'], summary: 'Create an agent' } }, async (request, reply) => {
+    if (!dbRegistry) {
+      return reply
+        .code(501)
+        .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
+    }
 
-      const { machineId, name, type } = request.body;
+    const { machineId, name, type } = request.body;
 
-      if (!machineId || typeof machineId !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_BODY',
-          message: 'A non-empty "machineId" string is required',
-        });
-      }
+    if (!machineId || typeof machineId !== 'string') {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: 'A non-empty "machineId" string is required',
+      });
+    }
 
-      if (!name || typeof name !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_BODY',
-          message: 'A non-empty "name" string is required',
-        });
-      }
+    if (!name || typeof name !== 'string') {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: 'A non-empty "name" string is required',
+      });
+    }
 
-      if (!type || typeof type !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_BODY',
-          message: 'A non-empty "type" string is required',
-        });
-      }
+    if (!type || typeof type !== 'string') {
+      return reply.code(400).send({
+        error: 'INVALID_BODY',
+        message: 'A non-empty "type" string is required',
+      });
+    }
 
-      const agentId = await dbRegistry.createAgent(request.body);
-      return { ok: true, agentId };
-    },
-  );
+    if (request.body.runtime && !VALID_RUNTIMES.includes(request.body.runtime as AgentRuntime)) {
+      return reply.code(400).send({ error: 'INVALID_RUNTIME', message: `Invalid runtime: ${request.body.runtime}. Must be one of: ${VALID_RUNTIMES.join(', ')}` });
+    }
+
+    const agentId = await dbRegistry.createAgent(request.body);
+    return { ok: true, agentId };
+  });
 
   app.get<{ Querystring: { machineId?: string; limit?: string; offset?: string } }>(
     '/list',
@@ -155,11 +160,8 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      const DEFAULT_LIMIT = 100;
-      const MAX_LIMIT = 500;
-
       // Validate limit
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.agents.defaultLimit;
       if (request.query.limit !== undefined) {
         const parsed = Number(request.query.limit);
         if (!Number.isFinite(parsed) || parsed < 1) {
@@ -167,7 +169,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
             .code(400)
             .send({ error: 'INVALID_PARAMS', message: '"limit" must be a positive integer' });
         }
-        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+        limit = clampLimit(parsed, PAGINATION.agents);
       }
 
       // Validate offset
@@ -333,8 +335,16 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
-      await dbRegistry.updateAgentStatus(request.params.agentId, status);
-      return { ok: true };
+      try {
+        await dbRegistry.updateAgentStatus(request.params.agentId, status);
+        return { ok: true };
+      } catch (err) {
+        if (err instanceof ControlPlaneError && err.code === 'AGENT_NOT_FOUND') {
+          return reply.code(404).send({ error: err.code, message: err.message });
+        }
+
+        throw err;
+      }
     },
   );
 
@@ -352,19 +362,11 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
       }
 
-      const DEFAULT_LIMIT = 20;
-      const MAX_RUNS_LIMIT = 500;
       const raw = request.query.limit;
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.agentRuns.defaultLimit;
 
       if (raw !== undefined) {
-        const parsed = Number(raw);
-
-        if (!Number.isInteger(parsed) || parsed < 1) {
-          limit = DEFAULT_LIMIT;
-        } else {
-          limit = Math.min(parsed, MAX_RUNS_LIMIT);
-        }
+        limit = clampLimit(Number(raw), PAGINATION.agentRuns);
       }
 
       return await dbRegistry.getRecentRuns(request.params.agentId, limit);

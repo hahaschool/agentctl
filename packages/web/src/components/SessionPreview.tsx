@@ -10,15 +10,26 @@ import type { SessionContentMessage, SessionContentResponse } from '../lib/api';
 import { api } from '../lib/api';
 import { formatNumber, formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
+import { SESSION_PREVIEW_FETCH_LIMIT } from '../lib/ui-constants';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+type SessionStatus = 'active' | 'error' | 'ended' | 'starting';
+
+const statusBorderClass: Record<SessionStatus, string> = {
+  active: 'border-l-green-500/60',
+  error: 'border-l-red-500/60',
+  ended: 'border-l-muted-foreground/30',
+  starting: 'border-l-yellow-500/60',
+};
+
 type SessionPreviewProps = {
   sessionId: string;
   machineId: string;
   projectPath?: string;
+  status?: SessionStatus;
   onClose: () => void;
 };
 
@@ -30,6 +41,7 @@ export function SessionPreview({
   sessionId,
   machineId,
   projectPath,
+  status,
   onClose,
 }: SessionPreviewProps): React.JSX.Element {
   const [data, setData] = useState<SessionContentResponse | null>(null);
@@ -46,7 +58,7 @@ export function SessionPreview({
       const result = await api.getSessionContent(sessionId, {
         machineId,
         projectPath,
-        limit: 200,
+        limit: SESSION_PREVIEW_FETCH_LIMIT,
       });
       setData(result);
     } catch (err) {
@@ -116,7 +128,10 @@ export function SessionPreview({
         aria-modal="true"
         aria-labelledby="session-preview-title"
         tabIndex={-1}
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-3/4 md:w-1/2 md:min-w-[400px] max-w-[800px] bg-background border-l border-border flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.15)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.4)] outline-none"
+        className={cn(
+          'fixed top-0 right-0 bottom-0 w-full sm:w-3/4 md:w-1/2 md:min-w-[400px] max-w-[800px] bg-background border-l border-border border-l-[3px] flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.15)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.4)] outline-none transition-colors hover:border-border',
+          status ? statusBorderClass[status] : 'border-l-muted-foreground/30',
+        )}
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-border flex justify-between items-center shrink-0">
@@ -135,7 +150,7 @@ export function SessionPreview({
               aria-label={showTools ? 'Hide tool messages' : 'Show tool messages'}
               aria-pressed={showTools}
               className={cn(
-                'px-2.5 py-1 border border-border rounded-sm text-[11px] cursor-pointer',
+                'px-2.5 py-1 border border-border rounded-md text-[11px] cursor-pointer',
                 showTools ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
               )}
             >
@@ -144,7 +159,7 @@ export function SessionPreview({
             <button
               type="button"
               onClick={onClose}
-              className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-sm text-xs cursor-pointer"
+              className="px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer"
             >
               Close (Esc)
             </button>
@@ -221,7 +236,7 @@ function MessageBubble({ message }: { message: SessionContentMessage }): React.J
         type="button"
         onClick={() => setExpanded(true)}
         className={cn(
-          'w-full flex items-center gap-2 mb-1 px-3 py-1 rounded-sm border-none border-l-2 cursor-pointer text-left text-foreground font-[inherit]',
+          'w-full flex items-center gap-2 mb-1 px-3 py-1 rounded-md border-none border-l-2 cursor-pointer text-left text-foreground font-[inherit]',
           style.bubbleClass,
         )}
       >

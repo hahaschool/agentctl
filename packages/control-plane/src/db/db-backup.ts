@@ -63,6 +63,7 @@ export type DestructiveOperation = {
 const DEFAULT_BACKUP_DIR = './backups';
 const DEFAULT_RETENTION_COUNT = 7;
 const DEFAULT_PG_DUMP_PATH = 'pg_dump';
+const PG_DUMP_MAX_BUFFER = 1024 * 1024 * 512; // 512 MB
 
 /**
  * Pattern for backup filenames produced by this utility.
@@ -184,7 +185,7 @@ export function createBackupManager(config?: Partial<BackupConfig>): BackupManag
       try {
         const { stdout } = await execFile(resolved.pgDumpPath, args, {
           encoding: 'buffer',
-          maxBuffer: 1024 * 1024 * 512, // 512 MB
+          maxBuffer: PG_DUMP_MAX_BUFFER,
         });
 
         // Compress with gzip and write to file

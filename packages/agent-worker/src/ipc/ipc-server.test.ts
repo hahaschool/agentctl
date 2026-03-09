@@ -2,20 +2,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import { createIpcMessage, createIpcResponse, RSP_EXTENSION } from './ipc-channel.js';
 import { IpcServer, type IpcServerOptions } from './ipc-server.js';
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 function makeOptions(overrides?: Partial<IpcServerOptions>): IpcServerOptions {
   return {

@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { sessionRoutes } from './sessions.js';
+import { makeMachine } from './test-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Module mocks for account credential resolution
@@ -46,21 +47,6 @@ function makeSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeMachine(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'machine-1',
-    hostname: 'test-host',
-    tailscaleIp: '100.64.0.1',
-    os: 'linux',
-    arch: 'x64',
-    status: 'online',
-    lastHeartbeat: NOW,
-    capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
-    createdAt: NOW,
-    ...overrides,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Chainable Drizzle query builder mock
 // ---------------------------------------------------------------------------
@@ -89,6 +75,7 @@ function createMockDb() {
     'offset',
     'insert',
     'update',
+    'delete',
     'values',
     'set',
     'returning',
@@ -217,7 +204,7 @@ describe('Session routes — /api/sessions', () => {
   // ---------------------------------------------------------------------------
 
   describe('GET /api/sessions', () => {
-    it('returns 200 with an array of sessions', async () => {
+    it('returns 200 with paginated session envelope', async () => {
       const sessions = [makeSession(), makeSession({ id: 'sess-002', status: 'ended' })];
       mockDb.setRows(sessions);
 
@@ -229,11 +216,15 @@ describe('Session routes — /api/sessions', () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body).toHaveLength(2);
+      expect(body).toHaveProperty('sessions');
+      expect(Array.isArray(body.sessions)).toBe(true);
+      expect(body.sessions).toHaveLength(2);
+      expect(body).toHaveProperty('limit');
+      expect(body).toHaveProperty('offset');
+      expect(body).toHaveProperty('hasMore');
     });
 
-    it('returns empty array when no sessions exist', async () => {
+    it('returns empty sessions array when no sessions exist', async () => {
       mockDb.setRows([]);
 
       const response = await app.inject({
@@ -244,8 +235,9 @@ describe('Session routes — /api/sessions', () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body).toHaveLength(0);
+      expect(body).toHaveProperty('sessions');
+      expect(Array.isArray(body.sessions)).toBe(true);
+      expect(body.sessions).toHaveLength(0);
     });
 
     it('accepts machineId filter parameter', async () => {
@@ -772,6 +764,39 @@ describe('Session routes — /api/sessions', () => {
       const body = response.json();
       expect(body.ok).toBe(true);
     });
+
+    it('purges session from DB when ?purge=true', async () => {
+      const session = makeSession({ status: 'ended' });
+      mockDb.setRows([session]);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/sess-001?purge=true',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.purged).toBe(true);
+    });
+
+    it('purges active session after notifying worker', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/sess-001?purge=true',
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.purged).toBe(true);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -1155,6 +1180,190 @@ describe('Session routes — /api/sessions', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /api/sessions/:sessionId/fork — fork a session
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/sessions/:sessionId/fork', () => {
+    const parentSession = makeSession({
+      id: 'sess-parent',
+      claudeSessionId: 'claude-parent-abc',
+      machineId: 'machine-1',
+      agentId: 'agent-1',
+      projectPath: '/home/user/project',
+      model: 'sonnet',
+      accountId: null,
+    });
+
+    it('forks with default resume strategy (backward compat)', async () => {
+      mockDb.setRows([parentSession]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-parent/fork',
+        payload: { prompt: 'Continue from here' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.forkedFrom).toBe('sess-parent');
+
+      // Verify worker dispatch includes resumeSessionId, no forkAtIndex or systemPrompt
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      expect(fetchCalls.length).toBeGreaterThanOrEqual(1);
+      const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+      expect(workerCallBody.resumeSessionId).toBe('claude-parent-abc');
+      expect(workerCallBody.forkAtIndex).toBeUndefined();
+      expect(workerCallBody.systemPrompt).toBeUndefined();
+    });
+
+    it('forks with explicit resume strategy', async () => {
+      mockDb.setRows([parentSession]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-parent/fork',
+        payload: { prompt: 'Keep going', strategy: 'resume' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.ok).toBe(true);
+
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+      expect(workerCallBody.resumeSessionId).toBe('claude-parent-abc');
+      expect(workerCallBody.forkAtIndex).toBeUndefined();
+    });
+
+    it('forks with jsonl-truncation strategy and passes forkAtIndex', async () => {
+      mockDb.setRows([parentSession]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-parent/fork',
+        payload: {
+          prompt: 'Fork at message 5',
+          strategy: 'jsonl-truncation',
+          forkAtIndex: 5,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.ok).toBe(true);
+
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+      expect(workerCallBody.resumeSessionId).toBe('claude-parent-abc');
+      expect(workerCallBody.forkAtIndex).toBe(5);
+      expect(workerCallBody.systemPrompt).toBeUndefined();
+    });
+
+    it('forks with context-injection strategy and passes systemPrompt without resumeSessionId', async () => {
+      mockDb.setRows([parentSession]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-parent/fork',
+        payload: {
+          prompt: 'Continue with context',
+          strategy: 'context-injection',
+          selectedMessages: [
+            { type: 'human', content: 'Fix the bug', timestamp: '2026-03-01T10:00:00Z' },
+            {
+              type: 'assistant',
+              content: 'I will fix the bug.',
+              timestamp: '2026-03-01T10:01:00Z',
+            },
+            { type: 'tool_use', content: 'Ran: npx vitest', toolName: 'bash' },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.ok).toBe(true);
+
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+
+      // context-injection should NOT pass resumeSessionId
+      expect(workerCallBody.resumeSessionId).toBeUndefined();
+
+      // Should pass formatted systemPrompt
+      expect(workerCallBody.systemPrompt).toContain('## Previous Conversation Context');
+      expect(workerCallBody.systemPrompt).toContain('### User (2026-03-01T10:00:00Z)');
+      expect(workerCallBody.systemPrompt).toContain('Fix the bug');
+      expect(workerCallBody.systemPrompt).toContain('### Assistant (2026-03-01T10:01:00Z)');
+      expect(workerCallBody.systemPrompt).toContain('I will fix the bug.');
+      expect(workerCallBody.systemPrompt).toContain('### Tool');
+      expect(workerCallBody.systemPrompt).toContain('Tool: bash');
+      expect(workerCallBody.systemPrompt).toContain('Ran: npx vitest');
+    });
+
+    it('stores forkStrategy in session metadata', async () => {
+      mockDb.setRows([parentSession]);
+      mockFetchOk();
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-parent/fork',
+        payload: { prompt: 'Fork it', strategy: 'jsonl-truncation', forkAtIndex: 3 },
+      });
+
+      // Check the values() call on the DB insert chain
+      const valuesCalls = vi.mocked(mockDb.db.values as ReturnType<typeof vi.fn>).mock.calls;
+      const lastValuesCall = valuesCalls[valuesCalls.length - 1];
+      expect(lastValuesCall[0].metadata).toMatchObject({
+        forkStrategy: 'jsonl-truncation',
+        forkedFrom: 'sess-parent',
+      });
+    });
+
+    it('returns 400 when prompt is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-parent/fork',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('INVALID_PROMPT');
+    });
+
+    it('returns 404 when parent session does not exist', async () => {
+      mockDb.setRows([]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/ghost-session/fork',
+        payload: { prompt: 'Fork it' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toBe('SESSION_NOT_FOUND');
+    });
+
+    it('returns 400 when parent has no claudeSessionId', async () => {
+      mockDb.setRows([makeSession({ id: 'sess-no-claude', claudeSessionId: null })]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-no-claude/fork',
+        payload: { prompt: 'Fork it' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('NO_CLAUDE_SESSION');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Nonexistent routes
   // ---------------------------------------------------------------------------
 
@@ -1237,6 +1446,7 @@ describe('POST / — account credential resolution', () => {
       expect.objectContaining({
         sessionAccountId: 'acct-explicit-123',
       }),
+      expect.anything(),
       expect.anything(),
     );
 

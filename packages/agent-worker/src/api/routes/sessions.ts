@@ -5,27 +5,31 @@
 // Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
 // ---------------------------------------------------------------------------
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import type { AgentEvent } from '@agentctl/shared';
+import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
-
 import type {
   CliSession,
   CliSessionEvent,
   CliSessionManager,
 } from '../../runtime/cli-session-manager.js';
+import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 /** Delay before cleaning up session buffers after session ends, allowing late SSE consumers. */
-const SESSION_BUFFER_CLEANUP_DELAY_MS = 60_000;
+const SESSION_BUFFER_CLEANUP_DELAY_MS =
+  Number(process.env.SESSION_BUFFER_CLEANUP_DELAY_MS) || 60_000;
+
+/** How long to wait after dispatching a session start/resume before returning success. */
+const SESSION_STARTUP_VERIFY_MS = 3_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +51,8 @@ type CreateSessionBody = {
   resumeSessionId?: string | null;
   accountCredential?: string | null;
   accountProvider?: string | null;
+  forkAtIndex?: number;
+  systemPrompt?: string;
 };
 
 type ResumeSessionBody = {
@@ -77,24 +83,35 @@ type ContentParams = {
 type ContentQuerystring = {
   projectPath?: string;
   limit?: string;
+  offset?: string;
 };
 
-type ContentMessage = {
-  type: string;
-  content: string;
-  timestamp?: string;
-  toolName?: string;
-};
+// ContentMessage is re-exported from @agentctl/shared for downstream consumers
+export type { ContentMessage } from '@agentctl/shared';
 
 const DEFAULT_CONTENT_LIMIT = 100;
 const MAX_SEARCH_DEPTH = 3;
 
 // ---------------------------------------------------------------------------
+// Truncation limits
+// ---------------------------------------------------------------------------
+
+/** Max chars for stderr/error messages in logs and error responses */
+const STDERR_TRUNCATE = 500;
+/** Max chars for CLI error messages in structured error responses */
+const CLI_ERROR_TRUNCATE = 300;
+/** Max chars for user/assistant message text in content parsing */
+const MSG_TEXT_TRUNCATE = 8_000;
+/** Max chars for tool inputs/outputs and subagent content in content parsing */
+const TOOL_CONTENT_TRUNCATE = 4_000;
+/** Max JSONL file size in bytes (100 MB) before skipping content parsing */
+const MAX_JSONL_FILE_SIZE = 100 * 1024 * 1024;
+
+// ---------------------------------------------------------------------------
 // SSE constants
 // ---------------------------------------------------------------------------
 
-const SSE_BUFFER_LIMIT = 100;
-const HEARTBEAT_INTERVAL_MS = 15_000;
+const SSE_BUFFER_LIMIT = Number(process.env.SSE_BUFFER_LIMIT) || 100;
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -162,6 +179,7 @@ export async function sessionRoutes(
       pid?: number | null;
       costUsd?: number;
       errorMessage?: string;
+      messageCount?: number;
     },
   ): Promise<void> {
     const cpSessionId = cpSessionIdMap.get(workerSessionId);
@@ -225,13 +243,20 @@ export async function sessionRoutes(
   sessionManager.on('session_ended', (event: CliSessionEvent) => {
     if (event.type !== 'session_ended') return;
 
+    // Skip if this session was already force-cleaned by DELETE endpoint
+    if (!cpSessionIdMap.has(event.sessionId) && !sessionBuffers.has(event.sessionId)) {
+      return;
+    }
+
     const buf = sessionBuffers.get(event.sessionId);
     if (buf) {
       // Emit a synthetic "ended" event to all subscribers
+      const session = sessionManager.getSession(event.sessionId);
+      const statusValue = session?.status === 'error' ? 'error' : 'stopped';
       const endedEvent: AgentEvent = {
         event: 'status',
         data: {
-          status: 'stopped',
+          status: statusValue,
           reason: `CLI process exited with code ${String(event.exitCode)}`,
         },
       };
@@ -247,24 +272,34 @@ export async function sessionRoutes(
     const wasIntentional = intentionalStops.delete(event.sessionId);
     if (!wasIntentional) {
       const session = sessionManager.getSession(event.sessionId);
-      const status = session?.status === 'error' ? 'error' : 'ended';
-      void reportStatusToControlPlane(event.sessionId, {
-        status,
-        claudeSessionId: session?.claudeSessionId ?? null,
-        pid: null,
-        costUsd: session?.costUsd ?? undefined,
-        errorMessage:
-          status === 'error' ? `CLI process exited with code ${event.exitCode}` : undefined,
-      });
+      const cpSessionId = cpSessionIdMap.get(event.sessionId);
+      if (cpSessionId) {
+        const status = session?.status === 'error' ? 'error' : 'ended';
+        void reportStatusToControlPlane(event.sessionId, {
+          status,
+          claudeSessionId: session?.claudeSessionId ?? null,
+          pid: null,
+          costUsd: session?.costUsd ?? undefined,
+          messageCount: session?.messageCount ?? undefined,
+          errorMessage:
+            status === 'error'
+              ? session?.lastError
+                ? `CLI process exited with code ${event.exitCode}: ${session.lastError.slice(0, STDERR_TRUNCATE)}`
+                : `CLI process exited with code ${event.exitCode}`
+              : undefined,
+        });
+      }
     }
 
     // Clean up in-memory maps to prevent unbounded growth
     cpSessionIdMap.delete(event.sessionId);
     reportedClaudeIds.delete(event.sessionId);
-    // Keep sessionBuffers briefly for late SSE consumers
-    setTimeout(() => {
-      sessionBuffers.delete(event.sessionId);
-    }, SESSION_BUFFER_CLEANUP_DELAY_MS);
+    // Keep sessionBuffers briefly for late SSE consumers, unless already deleted by DELETE endpoint
+    if (sessionBuffers.has(event.sessionId)) {
+      setTimeout(() => {
+        sessionBuffers.delete(event.sessionId);
+      }, SESSION_BUFFER_CLEANUP_DELAY_MS);
+    }
   });
 
   // Track which sessions have had their claudeSessionId reported
@@ -301,6 +336,7 @@ export async function sessionRoutes(
           if (session && (session.status === 'running' || session.status === 'starting')) {
             void reportStatusToControlPlane(workerSessionId, {
               status: 'active',
+              pid: session.pid ?? undefined,
               costUsd: session.costUsd,
             });
           }
@@ -343,13 +379,22 @@ export async function sessionRoutes(
     '/content/:claudeSessionId',
     async (request, reply) => {
       const { claudeSessionId } = request.params;
-      const { projectPath, limit: limitStr } = request.query;
+      const { projectPath, limit: limitStr, offset: offsetStr } = request.query;
 
       let limit = DEFAULT_CONTENT_LIMIT;
       if (limitStr !== undefined) {
         const parsed = Number(limitStr);
         if (Number.isInteger(parsed) && parsed >= 1) {
           limit = parsed;
+        }
+      }
+
+      // offset counts backwards from the end (0 = latest messages)
+      let offset = 0;
+      if (offsetStr !== undefined) {
+        const parsed = Number(offsetStr);
+        if (Number.isInteger(parsed) && parsed >= 0) {
+          offset = parsed;
         }
       }
 
@@ -363,6 +408,14 @@ export async function sessionRoutes(
       }
 
       try {
+        const stat = statSync(jsonlPath);
+        if (stat.size > MAX_JSONL_FILE_SIZE) {
+          // 100MB limit
+          return reply.status(413).send({
+            error: 'Session JSONL file too large (> 100 MB)',
+            code: 'CONTENT_TOO_LARGE',
+          });
+        }
         const raw = readFileSync(jsonlPath, 'utf-8');
         const lines = raw.split('\n').filter((line) => line.trim().length > 0);
 
@@ -381,7 +434,10 @@ export async function sessionRoutes(
         }
 
         const totalMessages = allMessages.length;
-        const messages = allMessages.slice(-limit);
+        // offset counts backwards from end: offset=0 → latest, offset=200 → skip last 200
+        const end = totalMessages - offset;
+        const start = Math.max(0, end - limit);
+        const messages = end > 0 ? allMessages.slice(start, end) : [];
 
         return {
           messages,
@@ -462,6 +518,8 @@ export async function sessionRoutes(
       resumeSessionId,
       accountCredential,
       accountProvider,
+      forkAtIndex,
+      systemPrompt: bodySystemPrompt,
     } = request.body;
 
     if (!agentId || typeof agentId !== 'string') {
@@ -478,15 +536,62 @@ export async function sessionRoutes(
       });
     }
 
+    // Handle JSONL truncation fork: copy + truncate parent JSONL
+    let effectiveResumeSessionId = resumeSessionId;
+
+    if (forkAtIndex !== undefined && forkAtIndex >= 0 && resumeSessionId) {
+      const parentJsonlPath = findSessionJsonl(resumeSessionId, projectPath);
+      if (parentJsonlPath) {
+        const raw = readFileSync(parentJsonlPath, 'utf-8');
+        const allLines = raw.split('\n').filter((l) => l.trim());
+
+        // Count parsed messages to determine where to truncate
+        let msgCount = 0;
+        const truncatedLines: string[] = [];
+        for (const line of allLines) {
+          try {
+            const parsed = JSON.parse(line);
+            const msgs = parseJsonlEntry(parsed);
+            truncatedLines.push(line);
+            msgCount += msgs.length;
+            if (msgCount > forkAtIndex) break;
+          } catch {
+            truncatedLines.push(line); // Keep unparseable lines
+          }
+        }
+
+        // Write truncated JSONL next to parent
+        const dir = dirname(parentJsonlPath);
+        const newJsonlPath = join(dir, `${cpSessionId}.jsonl`);
+        writeFileSync(newJsonlPath, `${truncatedLines.join('\n')}\n`);
+
+        // Resume from the truncated copy (which uses the CP session ID)
+        effectiveResumeSessionId = cpSessionId;
+        logger.info(
+          {
+            sessionId: cpSessionId,
+            parentJsonlPath,
+            newJsonlPath,
+            forkAtIndex,
+            linesKept: truncatedLines.length,
+          },
+          'Created truncated JSONL fork',
+        );
+      } else {
+        logger.warn({ resumeSessionId, projectPath }, 'Parent JSONL not found for truncation fork');
+      }
+    }
+
     try {
       const session = sessionManager.startSession({
         agentId,
         projectPath,
         prompt: prompt ?? 'Continue working.',
         model: model ?? undefined,
-        resumeSessionId: resumeSessionId ?? undefined,
+        resumeSessionId: effectiveResumeSessionId ?? undefined,
         accountCredential: accountCredential ?? undefined,
         accountProvider: accountProvider ?? undefined,
+        ...(bodySystemPrompt ? { config: { systemPrompt: bodySystemPrompt } } : {}),
       });
 
       // Store CP→worker session ID mapping for status callbacks
@@ -495,19 +600,25 @@ export async function sessionRoutes(
 
         // Immediately report active status so the control plane doesn't have
         // to wait for the next periodic heartbeat (30s) to see this session.
-        void reportStatusToControlPlane(session.id, { status: 'active' });
+        void reportStatusToControlPlane(session.id, {
+          status: 'active',
+          pid: session.pid ?? undefined,
+        });
       }
 
       // Wait briefly to verify CLI process doesn't crash on startup
       const startupOk = await new Promise<boolean>((resolve) => {
         const s = sessionManager.getSession(session.id);
-        if (s && s.status === 'error') { resolve(false); return; }
+        if (s && s.status === 'error') {
+          resolve(false);
+          return;
+        }
 
         const timer = setTimeout(() => {
           sessionManager.off('session_error', onError);
           sessionManager.off('session_ended', onEnd);
           resolve(true);
-        }, 3000);
+        }, SESSION_STARTUP_VERIFY_MS);
 
         const onError = (evt: { sessionId: string }): void => {
           if (evt.sessionId === session.id) {
@@ -535,8 +646,14 @@ export async function sessionRoutes(
         const stderr = failedSession?.lastError?.trim() ?? '';
 
         let hint = 'Check project path and credentials.';
-        if (stderr.includes('authentication') || stderr.includes('API key') || stderr.includes('Unauthorized') || stderr.includes('401')) {
-          hint = 'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
+        if (
+          stderr.includes('authentication') ||
+          stderr.includes('API key') ||
+          stderr.includes('Unauthorized') ||
+          stderr.includes('401')
+        ) {
+          hint =
+            'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
         } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
           hint = 'Project path does not exist on this machine.';
         } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
@@ -544,11 +661,13 @@ export async function sessionRoutes(
         }
 
         logger.warn(
-          { sessionId: session.id, cpSessionId, stderr: stderr.slice(0, 500) },
+          { sessionId: session.id, cpSessionId, stderr: stderr.slice(0, STDERR_TRUNCATE) },
           'CLI session failed to start',
         );
         return reply.status(502).send({
-          error: stderr ? `CLI failed: ${stderr.slice(0, 300)}` : 'CLI process exited immediately.',
+          error: stderr
+            ? `CLI failed: ${stderr.slice(0, CLI_ERROR_TRUNCATE)}`
+            : 'CLI process exited immediately.',
           code: 'CLI_STARTUP_FAILED',
           hint,
         });
@@ -632,7 +751,10 @@ export async function sessionRoutes(
 
           // Immediately report active status so the control plane doesn't have
           // to wait for the next periodic heartbeat (30s) to see this session.
-          void reportStatusToControlPlane(newSession.id, { status: 'active' });
+          void reportStatusToControlPlane(newSession.id, {
+            status: 'active',
+            pid: newSession.pid ?? undefined,
+          });
         }
 
         // Wait briefly to verify the CLI process didn't crash immediately
@@ -648,7 +770,7 @@ export async function sessionRoutes(
             // After 3s the process is still alive — good enough
             sessionManager.off('session_error', onError);
             resolve(true);
-          }, 3000);
+          }, SESSION_STARTUP_VERIFY_MS);
 
           const onError = (evt: { sessionId: string; error?: string }): void => {
             if (evt.sessionId === newSession.id) {
@@ -678,8 +800,14 @@ export async function sessionRoutes(
 
           // Produce a user-friendly diagnosis from stderr
           let hint = 'Check project path and credentials.';
-          if (stderr.includes('authentication') || stderr.includes('API key') || stderr.includes('Unauthorized') || stderr.includes('401')) {
-            hint = 'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
+          if (
+            stderr.includes('authentication') ||
+            stderr.includes('API key') ||
+            stderr.includes('Unauthorized') ||
+            stderr.includes('401')
+          ) {
+            hint =
+              'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
           } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
             hint = 'Project path does not exist on this machine.';
           } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
@@ -691,12 +819,14 @@ export async function sessionRoutes(
               newSessionId: newSession.id,
               resumedFrom: resumeId,
               status: failedSession?.status,
-              stderr: stderr.slice(0, 500),
+              stderr: stderr.slice(0, STDERR_TRUNCATE),
             },
             'Resumed CLI process failed to start',
           );
           return reply.status(502).send({
-            error: stderr ? `CLI failed: ${stderr.slice(0, 300)}` : 'CLI process exited immediately after resume.',
+            error: stderr
+              ? `CLI failed: ${stderr.slice(0, CLI_ERROR_TRUNCATE)}`
+              : 'CLI process exited immediately after resume.',
             code: 'CLI_STARTUP_FAILED',
             hint,
           });
@@ -804,7 +934,10 @@ export async function sessionRoutes(
         if (cpId) {
           cpSessionIdMap.set(newSession.id, cpId);
           // Immediately report active to override any error from the killed process
-          void reportStatusToControlPlane(newSession.id, { status: 'active' });
+          void reportStatusToControlPlane(newSession.id, {
+            status: 'active',
+            pid: newSession.pid ?? undefined,
+          });
         }
 
         logger.info(
@@ -846,7 +979,11 @@ export async function sessionRoutes(
     try {
       await sessionManager.stopSession(sessionId, true);
 
-      // Clean up event buffer
+      // Force-clean all cleanup maps immediately (don't wait for session_ended handler).
+      // This ensures DELETE is synchronously complete with no lingering references.
+      cpSessionIdMap.delete(sessionId);
+      reportedClaudeIds.delete(sessionId);
+      intentionalStops.delete(sessionId);
       sessionBuffers.delete(sessionId);
 
       logger.info({ sessionId, machineId }, 'CLI session stopped');
@@ -910,7 +1047,7 @@ export async function sessionRoutes(
       if (!raw.destroyed) {
         raw.write(`: heartbeat\n\n`);
       }
-    }, HEARTBEAT_INTERVAL_MS);
+    }, SSE_HEARTBEAT_INTERVAL_MS);
 
     // 4. Cleanup on disconnect
     request.raw.on('close', () => {
@@ -924,7 +1061,7 @@ export async function sessionRoutes(
 // JSONL content helpers
 // ---------------------------------------------------------------------------
 
-const PREVIEW_TYPES = new Set(['user', 'assistant']);
+const PREVIEW_TYPES = new Set(['user', 'assistant', 'progress']);
 
 /**
  * Recursively search directories under `~/.claude/projects/` for a JSONL file
@@ -1006,12 +1143,13 @@ function searchForJsonl(dir: string, fileName: string, currentDepth: number): st
  * Claude Code JSONL format:
  * - type: "user"      → message.content[] has {type:"text"} and {type:"tool_result"} blocks
  * - type: "assistant"  → message.content[] has {type:"text"}, {type:"thinking"}, {type:"tool_use"} blocks
- * - type: "progress" / "queue-operation" / "file-history-snapshot" / "system" → skip
+ * - type: "progress"  → bash_progress, agent_progress, waiting_for_task
+ * - type: "queue-operation" / "file-history-snapshot" / "system" → skip
  *
  * Each content block becomes a separate ContentMessage so the frontend can
  * render them individually with appropriate styling.
  */
-function parseJsonlEntry(entry: unknown): ContentMessage[] {
+export function parseJsonlEntry(entry: unknown): ContentMessage[] {
   if (typeof entry !== 'object' || entry === null) {
     return [];
   }
@@ -1025,8 +1163,98 @@ function parseJsonlEntry(entry: unknown): ContentMessage[] {
 
   const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : undefined;
 
+  const isSidechain = (obj as Record<string, unknown>).isSidechain === true;
+  const agentId =
+    typeof (obj as Record<string, unknown>).agentId === 'string'
+      ? ((obj as Record<string, unknown>).agentId as string)
+      : undefined;
+
+  // Handle progress entries
+  if (entryType === 'progress') {
+    const data = obj.data as Record<string, unknown> | undefined;
+    if (!data || typeof data !== 'object') return [];
+
+    const progressType = typeof data.type === 'string' ? data.type : null;
+
+    if (progressType === 'agent_progress') {
+      // Subagent dispatch — real data uses `data.prompt`, SDK docs say `data.content`
+      const content =
+        typeof data.prompt === 'string'
+          ? data.prompt
+          : typeof data.content === 'string'
+            ? data.content
+            : '';
+      const subAgentId = typeof data.agentId === 'string' ? data.agentId : undefined;
+      const agentType = typeof data.agentType === 'string' ? data.agentType : 'subagent';
+      if (content.trim().length > 0) {
+        const msg: ContentMessage = {
+          type: 'subagent',
+          content: content.slice(0, TOOL_CONTENT_TRUNCATE),
+          toolName: agentType,
+          timestamp,
+        };
+        if (subAgentId) msg.subagentId = subAgentId;
+        else if (isSidechain) msg.subagentId = agentId;
+        return [msg];
+      }
+    } else if (progressType === 'bash_progress') {
+      const command = typeof data.command === 'string' ? data.command : '';
+      if (command.trim().length > 0) {
+        const msg: ContentMessage = {
+          type: 'progress',
+          content: command,
+          toolName: 'bash',
+          timestamp,
+        };
+        if (isSidechain) msg.subagentId = agentId;
+        return [msg];
+      }
+    } else if (progressType === 'waiting_for_task') {
+      const desc = typeof data.taskDescription === 'string' ? data.taskDescription : '';
+      const taskType = typeof data.taskType === 'string' ? data.taskType : 'task';
+      if (desc.trim().length > 0) {
+        const msg: ContentMessage = {
+          type: 'progress',
+          content: desc,
+          toolName: taskType,
+          timestamp,
+        };
+        if (isSidechain) msg.subagentId = agentId;
+        return [msg];
+      }
+    } else if (progressType === 'mcp_progress') {
+      // Only show "started" events (skip "completed" to avoid duplicates)
+      const status = typeof data.status === 'string' ? data.status : 'started';
+      if (status === 'completed') return [];
+      const server = typeof data.serverName === 'string' ? data.serverName : 'mcp';
+      const tool = typeof data.toolName === 'string' ? data.toolName : '';
+      const content = tool ? `${server}: ${tool}` : server;
+      const msg: ContentMessage = { type: 'progress', content, toolName: 'mcp', timestamp };
+      if (isSidechain) msg.subagentId = agentId;
+      return [msg];
+    } else if (progressType === 'hook_progress') {
+      const hookName = typeof data.hookName === 'string' ? data.hookName : 'hook';
+      const hookEvent = typeof data.event === 'string' ? data.event : '';
+      const content = hookEvent ? `${hookName} (${hookEvent})` : hookName;
+      const msg: ContentMessage = { type: 'progress', content, toolName: 'hook', timestamp };
+      if (isSidechain) msg.subagentId = agentId;
+      return [msg];
+    }
+
+    return [];
+  }
+
   const message = obj.message as Record<string, unknown> | undefined;
   if (!message || typeof message !== 'object') {
+    return [];
+  }
+
+  // message.content can be a plain string (e.g. resumed sessions) or an array of blocks
+  if (typeof message.content === 'string') {
+    const text = (message.content as string).trim();
+    if (text.length > 0) {
+      return [{ type: entryType === 'user' ? 'human' : 'assistant', content: text, timestamp }];
+    }
     return [];
   }
 
@@ -1050,14 +1278,19 @@ function parseJsonlEntry(entry: unknown): ContentMessage[] {
           continue;
         }
         if (text.length > 0) {
-          results.push({ type: 'human', content: text, timestamp });
+          results.push({ type: 'human', content: text.slice(0, MSG_TEXT_TRUNCATE), timestamp });
         }
       } else if (blockType === 'tool_result') {
         const content =
           typeof b.content === 'string'
-            ? b.content.slice(0, 2000)
-            : JSON.stringify(b.content ?? '').slice(0, 2000);
-        results.push({ type: 'tool_result', content, timestamp });
+            ? b.content.slice(0, TOOL_CONTENT_TRUNCATE)
+            : JSON.stringify(b.content ?? '').slice(0, TOOL_CONTENT_TRUNCATE);
+        results.push({
+          type: 'tool_result',
+          content,
+          toolId: typeof b.tool_use_id === 'string' ? (b.tool_use_id as string) : undefined,
+          timestamp,
+        });
       }
     }
 
@@ -1065,16 +1298,45 @@ function parseJsonlEntry(entry: unknown): ContentMessage[] {
       if (blockType === 'text' && typeof b.text === 'string') {
         const text = b.text.trim();
         if (text.length > 0) {
-          results.push({ type: 'assistant', content: text, timestamp });
+          results.push({ type: 'assistant', content: text.slice(0, MSG_TEXT_TRUNCATE), timestamp });
+        }
+      } else if (blockType === 'thinking' && typeof b.thinking === 'string') {
+        const text = b.thinking as string;
+        if (text.trim().length > 0) {
+          results.push({ type: 'thinking', content: text, timestamp });
         }
       } else if (blockType === 'tool_use' && typeof b.name === 'string') {
         const input =
           typeof b.input === 'string'
-            ? b.input.slice(0, 1000)
-            : JSON.stringify(b.input ?? '', null, 2).slice(0, 1000);
-        results.push({ type: 'tool_use', content: input, toolName: b.name, timestamp });
+            ? b.input.slice(0, TOOL_CONTENT_TRUNCATE)
+            : JSON.stringify(b.input ?? '', null, 2).slice(0, TOOL_CONTENT_TRUNCATE);
+        results.push({
+          type: 'tool_use',
+          content: input,
+          toolName: b.name as string,
+          toolId: typeof b.id === 'string' ? (b.id as string) : undefined,
+          timestamp,
+        });
+        // Detect TodoWrite tool — extract todos as separate message
+        if (b.name === 'TodoWrite' && typeof b.input === 'object' && b.input !== null) {
+          const inp = b.input as Record<string, unknown>;
+          if (Array.isArray(inp.todos)) {
+            results.push({
+              type: 'todo',
+              content: JSON.stringify(inp.todos),
+              toolName: 'TodoWrite',
+              timestamp,
+            });
+          }
+        }
       }
-      // Skip "thinking" blocks — they are internal reasoning and too verbose
+    }
+  }
+
+  // Tag sidechain messages with their subagent ID
+  if (isSidechain && agentId) {
+    for (const r of results) {
+      r.subagentId = agentId;
     }
   }
 

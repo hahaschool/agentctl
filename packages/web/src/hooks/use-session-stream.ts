@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type SessionStreamEvent =
   | { event: 'output'; data: { text: string; stream?: string } }
+  | { event: 'raw_output'; data: { text: string } }
+  | { event: 'user_message'; data: { text: string } }
   | { event: 'status'; data: { status: string; sessionId?: string } }
   | { event: 'cost'; data: { totalCostUsd: number; inputTokens: number; outputTokens: number } }
   | { event: 'approval_needed'; data: { toolName: string; args: Record<string, unknown> } }
@@ -33,10 +35,18 @@ type UseSessionStreamResult = {
   connected: boolean;
   /** Accumulated output text from the stream. */
   streamOutput: string[];
+  /** Raw CLI output chunks for terminal view. */
+  rawOutput: string[];
+  /** User messages received via SSE (shown before JSONL poll catches up). */
+  pendingUserMessages: string[];
   /** Latest status event, if any. */
   latestStatus: string | null;
   /** Latest cost data, if any. */
   latestCost: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
+  /** Clear accumulated stream output (e.g. after content refetch absorbs it). */
+  clearStreamOutput: () => void;
+  /** Clear pending user messages (e.g. after JSONL content includes them). */
+  clearPendingMessages: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -52,6 +62,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
   const [connected, setConnected] = useState(false);
   const [streamOutput, setStreamOutput] = useState<string[]>([]);
+  const [rawOutput, setRawOutput] = useState<string[]>([]);
+  const [pendingUserMessages, setPendingUserMessages] = useState<string[]>([]);
   const [latestStatus, setLatestStatus] = useState<string | null>(null);
   const [latestCost, setLatestCost] = useState<{
     totalCostUsd: number;
@@ -69,6 +81,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
   // Reset state when sessionId changes
   const resetState = useCallback(() => {
     setStreamOutput([]);
+    setRawOutput([]);
+    setPendingUserMessages([]);
     setLatestStatus(null);
     setLatestCost(null);
   }, []);
@@ -85,9 +99,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const connect = (): void => {
       if (cancelled) return;
 
-      // Resolve the SSE URL — in dev, connect directly to control-plane
-      const baseUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : '';
-      const url = `${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/stream`;
+      // Use relative URL so SSE goes through the Next.js proxy (same-origin).
+      // Direct cross-origin connections fail because reply.hijack() in the
+      // control-plane bypasses Fastify's CORS middleware.
+      const url = `/api/sessions/${encodeURIComponent(sessionId)}/stream`;
 
       const es = new EventSource(url);
       eventSourceRef.current = es;
@@ -127,10 +142,20 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
           onEventRef.current?.(event);
 
-          if (eventType === 'output') {
+          if (eventType === 'raw_output') {
+            const text = (data as { text?: string }).text;
+            if (text) {
+              setRawOutput((prev) => [...prev, text]);
+            }
+          } else if (eventType === 'output') {
             const text = (data as { text?: string }).text;
             if (text) {
               setStreamOutput((prev) => [...prev, text]);
+            }
+          } else if (eventType === 'user_message') {
+            const text = (data as { text?: string }).text;
+            if (text) {
+              setPendingUserMessages((prev) => [...prev, text]);
             }
           } else if (eventType === 'status') {
             setLatestStatus((data as { status?: string }).status ?? null);
@@ -145,6 +170,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       };
 
       es.addEventListener('output', handleEvent('output'));
+      es.addEventListener('raw_output', handleEvent('raw_output'));
+      es.addEventListener('user_message', handleEvent('user_message'));
       es.addEventListener('status', handleEvent('status'));
       es.addEventListener('cost', handleEvent('cost'));
       es.addEventListener('approval_needed', handleEvent('approval_needed'));
@@ -170,5 +197,24 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     };
   }, [sessionId, enabled, resetState]);
 
-  return { connected, streamOutput, latestStatus, latestCost };
+  const clearStreamOutput = useCallback(() => {
+    setStreamOutput([]);
+    // Don't clear pending user messages here — they need to persist
+    // until JSONL content includes the user's message text
+  }, []);
+
+  const clearPendingMessages = useCallback(() => {
+    setPendingUserMessages([]);
+  }, []);
+
+  return {
+    connected,
+    streamOutput,
+    rawOutput,
+    pendingUserMessages,
+    latestStatus,
+    latestCost,
+    clearStreamOutput,
+    clearPendingMessages,
+  };
 }

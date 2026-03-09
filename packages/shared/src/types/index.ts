@@ -9,13 +9,14 @@ export { ACCOUNT_PROVIDERS } from './account.js';
 export type {
   Agent,
   AgentConfig,
+  AgentRuntime,
   AgentStatus,
   AgentType,
   PromptTemplateVars,
   ScheduleConfig,
   SessionMode,
 } from './agent.js';
-export { AGENT_STATUSES } from './agent.js';
+export { AGENT_RUNTIMES, AGENT_STATUSES } from './agent.js';
 export type {
   AgentRun,
   RunStatus,
@@ -43,6 +44,7 @@ export {
   VALID_TRANSITIONS,
   validateTransition,
 } from './status-machine.js';
+export type { MemoryObservation } from './memory.js';
 export type {
   WebhookConfig,
   WebhookEventType,

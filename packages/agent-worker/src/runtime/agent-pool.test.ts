@@ -1,8 +1,8 @@
 import { AgentError } from '@agentctl/shared';
 
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../test-helpers.js';
 import type { AgentInstanceOptions } from './agent-instance.js';
 import { AgentPool } from './agent-pool.js';
 
@@ -11,14 +11,7 @@ vi.mock('./sdk-runner.js', () => ({
   runWithSdk: vi.fn().mockResolvedValue(null),
 }));
 
-const mockLogger = {
-  child: () => mockLogger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const mockLogger = createMockLogger();
 
 function makeAgentOptions(id: string): AgentInstanceOptions {
   return {

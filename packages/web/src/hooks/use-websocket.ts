@@ -22,7 +22,7 @@ type StartAgentMessage = {
   agentId: string;
   prompt: string;
   machineId?: string;
-  config?: Record<string, unknown>;
+  config?: import('../lib/api').AgentConfig;
 };
 
 type StopAgentMessage = {
@@ -303,11 +303,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRes
       queue.shift();
     }
     queue.push(message);
-
-    console.warn(
-      `[useWebSocket] Message queued (type=${message.type}, queue size=${queue.length}). ` +
-        'WebSocket is not connected — will flush on reconnect.',
-    );
 
     return false;
   }, []);

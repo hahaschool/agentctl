@@ -1,5 +1,5 @@
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
@@ -7,10 +7,8 @@ import type { WebSocket } from 'ws';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
+import { WS_HEARTBEAT_INTERVAL_MS } from '../constants.js';
 import { resolveWorkerUrlOrThrow } from '../resolve-worker-url.js';
-
-const DEFAULT_WORKER_PORT = 9000;
-const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // Incoming message types (client -> server)
@@ -230,7 +228,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
       if (socket.readyState === socket.OPEN) {
         socket.ping();
       }
-    }, HEARTBEAT_INTERVAL_MS);
+    }, WS_HEARTBEAT_INTERVAL_MS);
 
     // -----------------------------------------------------------------------
     // Message handler

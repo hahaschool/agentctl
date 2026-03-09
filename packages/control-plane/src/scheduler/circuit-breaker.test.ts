@@ -1,23 +1,9 @@
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import { MachineCircuitBreaker } from './circuit-breaker.js';
 
-// ---------------------------------------------------------------------------
-// Mock logger
-// ---------------------------------------------------------------------------
-
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
 // Tests

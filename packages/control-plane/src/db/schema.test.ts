@@ -184,8 +184,8 @@ describe('machines table columns', () => {
 describe('agents table columns', () => {
   const meta = getColumnMeta(agents);
 
-  it('has exactly 17 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(17);
+  it('has exactly 18 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(18);
   });
 
   it('has all expected column keys', () => {
@@ -194,6 +194,7 @@ describe('agents table columns', () => {
       'machineId',
       'name',
       'type',
+      'runtime',
       'status',
       'schedule',
       'projectPath',
@@ -243,6 +244,12 @@ describe('agents table columns', () => {
     expect(meta.type.columnType).toBe('PgText');
     expect(meta.type.notNull).toBe(true);
     expect(meta.type.hasDefault).toBe(false);
+  });
+
+  it('runtime is a nullable text column with default', () => {
+    expect(meta.runtime.columnType).toBe('PgText');
+    expect(meta.runtime.notNull).toBe(false);
+    expect(meta.runtime.hasDefault).toBe(true);
   });
 
   it('status is a nullable text column with default', () => {
@@ -315,6 +322,7 @@ describe('agents table columns', () => {
       'machine_id',
       'name',
       'type',
+      'runtime',
       'status',
       'schedule',
       'project_path',
@@ -630,6 +638,7 @@ describe('Required (NOT NULL) vs nullable columns', () => {
 
     expect(nullableKeys).toEqual([
       'machineId',
+      'runtime',
       'status',
       'schedule',
       'projectPath',

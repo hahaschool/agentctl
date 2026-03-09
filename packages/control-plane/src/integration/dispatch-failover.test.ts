@@ -1,11 +1,20 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { Job } from 'bullmq';
-import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import { MachineCircuitBreaker } from '../scheduler/circuit-breaker.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { createTaskWorker } from '../scheduler/task-worker.js';
+import {
+  createMockDbRegistry,
+  makeAgent,
+  makeJob,
+  makeMachine,
+  mockFetchConnectionError,
+  mockFetchFailure,
+  mockFetchSuccess,
+} from './test-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Mock bullmq — capture the processor function passed to Worker constructor
@@ -30,128 +39,17 @@ vi.mock('bullmq', () => ({
 // Mock logger
 // ---------------------------------------------------------------------------
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  silent: vi.fn(),
-  level: 'silent',
-} as unknown as Logger;
+const logger = createMockLogger();
 
 // ---------------------------------------------------------------------------
-// Helpers — factories for mock data
+// Helpers
 // ---------------------------------------------------------------------------
-
-function makeAgent(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'agent-abc',
-    machineId: 'machine-xyz',
-    name: 'Test Agent',
-    type: 'manual' as const,
-    status: 'registered' as const,
-    schedule: null,
-    projectPath: '/home/user/project',
-    worktreeBranch: null,
-    currentSessionId: null,
-    config: { model: 'claude-sonnet-4-20250514' },
-    lastRunAt: null,
-    lastCostUsd: null,
-    totalCostUsd: 0,
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function makeMachine(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'machine-xyz',
-    hostname: 'ec2-worker.tailnet',
-    tailscaleIp: '100.64.0.1',
-    os: 'linux' as const,
-    arch: 'x64' as const,
-    status: 'online' as const,
-    lastHeartbeat: new Date(),
-    capabilities: { gpu: false, docker: true, maxConcurrentAgents: 5 },
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}): DbAgentRegistry {
-  return {
-    getAgent: vi.fn().mockResolvedValue(makeAgent()),
-    getMachine: vi.fn().mockResolvedValue(makeMachine()),
-    createRun: vi.fn().mockResolvedValue('run-001'),
-    completeRun: vi.fn().mockResolvedValue(undefined),
-    registerMachine: vi.fn(),
-    heartbeat: vi.fn(),
-    listMachines: vi.fn().mockResolvedValue([]),
-    createAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    listAgents: vi.fn().mockResolvedValue([]),
-    getRecentRuns: vi.fn().mockResolvedValue([]),
-    insertActions: vi.fn(),
-    ...overrides,
-  } as unknown as DbAgentRegistry;
-}
-
-function mockFetchSuccess(body: Record<string, unknown> = { ok: true, message: 'dispatched' }) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue(body),
-      text: vi.fn().mockResolvedValue(JSON.stringify(body)),
-    }),
-  );
-}
-
-function mockFetchConnectionError(errorMessage = 'ECONNREFUSED') {
-  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error(errorMessage)));
-}
-
-function mockFetchFailure(status = 500, body = 'Internal Server Error') {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: false,
-      status,
-      json: vi.fn().mockRejectedValue(new Error('not json')),
-      text: vi.fn().mockResolvedValue(body),
-    }),
-  );
-}
 
 function getProcessor(): ProcessorFn {
   if (!capturedProcessor) {
     throw new Error('No processor captured — did you call createTaskWorker()?');
   }
   return capturedProcessor;
-}
-
-function makeJob(
-  overrides: Partial<AgentTaskJobData> = {},
-): Job<AgentTaskJobData, void, AgentTaskJobName> {
-  return {
-    id: 'job-failover-1',
-    name: 'agent:start' as const,
-    data: {
-      agentId: 'agent-abc',
-      machineId: 'machine-xyz',
-      prompt: 'Run failover tests',
-      model: 'claude-sonnet-4-20250514',
-      trigger: 'manual' as const,
-      allowedTools: null,
-      resumeSession: null,
-      createdAt: '2026-03-03T00:00:00Z',
-      ...overrides,
-    },
-  } as unknown as Job<AgentTaskJobData, void, AgentTaskJobName>;
 }
 
 // ===========================================================================

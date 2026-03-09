@@ -36,9 +36,7 @@ type AuditSummaryQuerystring = {
   to?: string;
 };
 
-const MAX_BATCH_SIZE = 1000;
-const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 1000;
+import { BATCH_LIMITS, clampLimit, PAGINATION } from '../constants.js';
 
 export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, opts) => {
   const { dbRegistry } = opts;
@@ -65,10 +63,10 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
           .send({ error: 'INVALID_PARAMS', message: 'A non-empty "actions" array is required' });
       }
 
-      if (actions.length > MAX_BATCH_SIZE) {
+      if (actions.length > BATCH_LIMITS.audit) {
         return reply.code(400).send({
           error: 'BATCH_SIZE_EXCEEDED',
-          message: `Batch size ${actions.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
+          message: `Batch size ${actions.length} exceeds maximum of ${BATCH_LIMITS.audit}`,
         });
       }
 
@@ -107,7 +105,7 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
       const { agentId, from, to, tool, limit: limitStr, offset: offsetStr } = request.query;
 
       // Validate limit
-      let limit = DEFAULT_LIMIT;
+      let limit = PAGINATION.audit.defaultLimit;
       if (limitStr !== undefined) {
         const parsed = Number(limitStr);
         if (!Number.isFinite(parsed) || parsed < 1) {
@@ -115,7 +113,7 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
             .code(400)
             .send({ error: 'INVALID_PARAMS', message: '"limit" must be a positive integer' });
         }
-        limit = Math.min(Math.floor(parsed), MAX_LIMIT);
+        limit = clampLimit(parsed, PAGINATION.audit);
       }
 
       // Validate offset

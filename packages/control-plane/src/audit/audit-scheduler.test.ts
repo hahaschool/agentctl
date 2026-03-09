@@ -1,31 +1,13 @@
 import { ControlPlaneError } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { RepeatableJobInfo, RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData } from '../scheduler/task-queue.js';
 import type { AuditScheduler, AuditSchedulerDeps } from './audit-scheduler.js';
 import { createAuditScheduler } from './audit-scheduler.js';
 import type { SecurityAuditReport, SecurityFinding } from './security-audit-agent.js';
 import { createDefaultAuditConfig } from './security-audit-agent.js';
-
-// ---------------------------------------------------------------------------
-// Mock logger
-// ---------------------------------------------------------------------------
-
-function makeLogger(): Logger {
-  return {
-    child: () => makeLogger(),
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-    fatal: vi.fn(),
-    trace: vi.fn(),
-    silent: vi.fn(),
-    level: 'silent',
-  } as unknown as Logger;
-}
 
 // ---------------------------------------------------------------------------
 // Mock RepeatableJobManager
@@ -103,7 +85,7 @@ describe('createAuditScheduler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    logger = makeLogger();
+    logger = createMockLogger();
     jobManager = makeJobManager();
     deps = { jobManager, logger };
     scheduler = createAuditScheduler(deps);

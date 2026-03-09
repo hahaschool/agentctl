@@ -9,14 +9,23 @@ import { PathBadge } from './PathBadge';
 import { WsStatusIndicator } from './WsStatusIndicator';
 
 // ---------------------------------------------------------------------------
-// Mock sonner (used by useToast inside PathBadge)
+// Mock Toast module (used by useToast inside PathBadge)
 // ---------------------------------------------------------------------------
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
+const mockToast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  dismiss: vi.fn(),
+}));
+vi.mock('@/components/Toast', () => ({
+  toast: mockToast,
+  useToast: () => ({
+    toast: (type: string, msg: string) => mockToast[type as 'success' | 'error' | 'info']?.(msg),
+    success: mockToast.success,
+    error: mockToast.error,
+    info: mockToast.info,
+  }),
+  ToastContainer: () => null,
 }));
 
 // ---------------------------------------------------------------------------
@@ -108,7 +117,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    const tryAgainBtn = screen.getByRole('button', { name: 'Try Again' });
+    const tryAgainBtn = screen.getByRole('button', { name: /Try again/i });
     expect(tryAgainBtn).toBeDefined();
   });
 
@@ -132,7 +141,7 @@ describe('ErrorBoundary', () => {
 
     shouldThrow = false;
 
-    const tryAgainBtn = screen.getByRole('button', { name: 'Try Again' });
+    const tryAgainBtn = screen.getByRole('button', { name: /Try again/i });
     fireEvent.click(tryAgainBtn);
 
     rerender(
@@ -158,7 +167,7 @@ describe('ErrorBoundary', () => {
     // Verify the error UI structure
     expect(screen.getByText('Something went wrong')).toBeDefined();
     expect(screen.getByText('Something failed')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Try Again' })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Try again/i })).toBeDefined();
   });
 
   it('applies the expected CSS classes to the error container', () => {
@@ -197,7 +206,7 @@ describe('ConnectionBanner', () => {
 
   it('renders banner when status is "disconnected"', () => {
     render(<ConnectionBanner status="disconnected" />);
-    expect(screen.getByText('Connection lost — displayed data may be stale')).toBeDefined();
+    expect(screen.getByText(/Connection lost/)).toBeDefined();
   });
 
   it('renders a Dismiss button when disconnected', () => {
@@ -212,7 +221,7 @@ describe('ConnectionBanner', () => {
 
     fireEvent.click(dismissBtn);
 
-    expect(screen.queryByText('Connection lost — displayed data may be stale')).toBeNull();
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
   });
 
   it('resets dismissed state when connection is restored and lost again', async () => {
@@ -221,18 +230,18 @@ describe('ConnectionBanner', () => {
     // Dismiss the banner
     const dismissBtn = screen.getByRole('button', { name: 'Dismiss' });
     fireEvent.click(dismissBtn);
-    expect(screen.queryByText('Connection lost — displayed data may be stale')).toBeNull();
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
 
     // Simulate reconnection
     rerender(<ConnectionBanner status="connected" />);
-    expect(screen.queryByText('Connection lost — displayed data may be stale')).toBeNull();
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
 
     // Simulate disconnection again
     rerender(<ConnectionBanner status="disconnected" />);
 
     // Banner should be visible again (dismissed state reset)
     await waitFor(() => {
-      expect(screen.getByText('Connection lost — displayed data may be stale')).toBeDefined();
+      expect(screen.getByText(/Connection lost/)).toBeDefined();
     });
   });
 
@@ -287,11 +296,11 @@ describe('ErrorBanner', () => {
     expect(alertElement).toBeDefined();
   });
 
-  it('applies red color classes for error styling', () => {
+  it('applies destructive color classes for error styling', () => {
     const { container } = render(<ErrorBanner message="Error" />);
     const banner = container.querySelector('[role="alert"]');
-    expect(banner?.className).toContain('bg-red-900');
-    expect(banner?.className).toContain('text-red-300');
+    expect(banner?.className).toContain('bg-destructive/10');
+    expect(banner?.className).toContain('text-destructive');
   });
 
   it('applies custom className prop', () => {
@@ -362,7 +371,7 @@ describe('PathBadge', () => {
   });
 
   it('shows success toast on successful copy', async () => {
-    const { toast } = await import('sonner');
+    const { toast } = await import('@/components/Toast');
     vi.mocked(navigator.clipboard.writeText).mockResolvedValueOnce(undefined);
 
     render(<PathBadge path="/users/john/file.ts" />);
@@ -378,7 +387,7 @@ describe('PathBadge', () => {
   });
 
   it('shows error toast on failed copy', async () => {
-    const { toast } = await import('sonner');
+    const { toast } = await import('@/components/Toast');
     vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('Copy failed'));
 
     render(<PathBadge path="/users/john/file.ts" />);

@@ -1,3 +1,5 @@
+import type { FastifyReply } from 'fastify';
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type ProxyWorkerSuccess = {
@@ -60,6 +62,51 @@ export async function proxyWorkerRequest(
     };
   }
 
-  const data: unknown = await response.json();
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: 'WORKER_ERROR',
+        message:
+          response.statusText ||
+          `Worker returned non-JSON response with HTTP ${String(response.status)}`,
+      };
+    }
+    return {
+      ok: false,
+      status: 502,
+      error: 'INVALID_RESPONSE',
+      message: `Worker returned non-JSON response with HTTP ${String(response.status)}`,
+    };
+  }
+
+  if (!response.ok) {
+    const errBody = data as Record<string, unknown> | null;
+    return {
+      ok: false,
+      status: response.status,
+      error: typeof errBody?.error === 'string' ? errBody.error : 'WORKER_ERROR',
+      message: typeof errBody?.message === 'string' ? errBody.message : response.statusText,
+    };
+  }
+
   return { ok: true, status: response.status, data };
+}
+
+/**
+ * Send a proxy worker result directly via Fastify reply.
+ *
+ * Replaces the repeated if/else pattern:
+ *   if (!result.ok) return reply.status(result.status).send({ error, message });
+ *   return reply.status(result.status).send(result.data);
+ */
+export function replyWithProxyResult(reply: FastifyReply, result: ProxyWorkerResult): FastifyReply {
+  if (!result.ok) {
+    return reply.status(result.status).send({ error: result.error, message: result.message });
+  }
+  return reply.status(result.status).send(result.data);
 }

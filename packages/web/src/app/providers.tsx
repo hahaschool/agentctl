@@ -3,9 +3,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
-import { Toaster } from 'sonner';
-
+import { ToastContainer } from '@/components/Toast';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { NotificationProvider } from '@/contexts/notification-context';
 import { ApiError } from '@/lib/api';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -32,14 +32,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-        <TooltipProvider>{children}</TooltipProvider>
-        <Toaster
-          position="bottom-right"
-          theme="dark"
-          toastOptions={{
-            className: 'text-sm',
-          }}
-        />
+        <NotificationProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </NotificationProvider>
+        <ToastContainer />
       </ThemeProvider>
     </QueryClientProvider>
   );

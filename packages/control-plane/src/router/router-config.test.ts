@@ -1,18 +1,11 @@
 import { ControlPlaneError } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { LiteLLMClient, ModelDeploymentInfo } from './litellm-client.js';
 import { RouterConfig } from './router-config.js';
 
-const logger = {
-  child: () => logger,
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-} as unknown as Logger;
+const logger = createMockLogger();
 
 const SAMPLE_DEPLOYMENTS: ModelDeploymentInfo[] = [
   {

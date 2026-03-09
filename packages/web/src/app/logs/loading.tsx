@@ -25,7 +25,10 @@ export default function Loading() {
       {/* Logs table skeleton */}
       <div className="space-y-2">
         {Array.from({ length: 8 }, (_, i) => (
-          <div key={`log-sk-${String(i)}`} className="p-4 bg-card border border-border rounded-lg">
+          <div
+            key={`log-sk-${String(i)}`}
+            className="p-4 bg-card border border-border/50 rounded-lg"
+          >
             <div className="flex items-center gap-4">
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-4 w-40" />
