@@ -9,6 +9,7 @@ import IORedis from 'ioredis';
 import { createServer } from './api/server.js';
 import type { Database } from './db/index.js';
 import { createDb } from './db/index.js';
+import { ensureSchemaCompatibility } from './db/schema-compat.js';
 import { createLogger } from './logger.js';
 import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
@@ -275,6 +276,8 @@ async function main(): Promise<void> {
         `All ${migrationFiles.length} migrations applied successfully (${totalDdl} DDL statements, all idempotent)`,
       );
     }
+
+    await ensureSchemaCompatibility(db, logger.child({ component: 'schema-compat' }));
 
     dbRegistry = new DbAgentRegistry(db, logger.child({ component: 'db-registry' }));
     logger.info('Database-backed agent registry initialised');
