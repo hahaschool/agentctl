@@ -274,11 +274,13 @@ jobs:
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Reuse build output from the build job — no second `pnpm build`
+      # upload-artifact strips the longest common path prefix (packages/),
+      # so we download into packages/ to restore the correct structure.
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: dist-artifacts
-          path: .
+          path: packages
 
       - name: Restore Vitest cache
         uses: actions/cache@v4
