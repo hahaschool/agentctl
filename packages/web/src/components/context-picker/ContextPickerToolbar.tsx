@@ -15,6 +15,9 @@ export type ContextPickerToolbarProps = {
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onInvert: () => void;
+  // Smart select callbacks
+  onSelectKeyDecisions?: () => void;
+  onSelectByTopic?: (topic: string) => void;
 };
 
 const FILTER_OPTIONS = [
@@ -32,6 +35,50 @@ function getTokenColorClass(tokens: number): string {
   return 'text-green-500';
 }
 
+const TopicInput = React.memo(function TopicInput({
+  onSubmit,
+}: {
+  onSubmit: (topic: string) => void;
+}): React.ReactNode {
+  const [showInput, setShowInput] = React.useState(false);
+  const [value, setValue] = React.useState('');
+
+  return showInput ? (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && value.trim()) {
+          onSubmit(value.trim());
+          setValue('');
+          setShowInput(false);
+        }
+        if (e.key === 'Escape') {
+          setValue('');
+          setShowInput(false);
+        }
+      }}
+      onBlur={() => {
+        if (!value.trim()) setShowInput(false);
+      }}
+      placeholder="e.g., authentication"
+      aria-label="Topic to search for"
+      autoFocus
+      className="px-2 py-0.5 text-xs border border-purple-300/50 dark:border-purple-800/50 rounded-md bg-purple-500/5 text-foreground outline-none focus:ring-1 focus:ring-purple-500/30 w-36"
+    />
+  ) : (
+    <button
+      type="button"
+      onClick={() => setShowInput(true)}
+      aria-label="Select messages by topic"
+      className="px-2 py-0.5 text-[10px] text-purple-600 dark:text-purple-400 border border-purple-300/50 dark:border-purple-800/50 rounded-md hover:bg-purple-100/50 dark:hover:bg-purple-900/30 cursor-pointer transition-colors"
+    >
+      By Topic
+    </button>
+  );
+});
+
 export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
   totalMessages,
   selectedCount,
@@ -43,6 +90,8 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
   onSelectAll,
   onDeselectAll,
   onInvert,
+  onSelectKeyDecisions,
+  onSelectByTopic,
 }: ContextPickerToolbarProps): React.ReactNode {
   return (
     <div className="px-3 py-2 border-b border-border bg-muted/20 space-y-2">
@@ -98,7 +147,27 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
         </button>
       </div>
 
-      {/* Row 3: Stats */}
+      {/* Row 3: Smart select tools */}
+      {(onSelectKeyDecisions || onSelectByTopic) && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] text-muted-foreground mr-0.5">Smart:</span>
+          {onSelectKeyDecisions && (
+            <button
+              type="button"
+              onClick={onSelectKeyDecisions}
+              aria-label="Auto-select key decisions"
+              className="px-2 py-0.5 text-[10px] text-purple-600 dark:text-purple-400 border border-purple-300/50 dark:border-purple-800/50 rounded-md hover:bg-purple-100/50 dark:hover:bg-purple-900/30 cursor-pointer transition-colors"
+            >
+              Key Decisions
+            </button>
+          )}
+          {onSelectByTopic && (
+            <TopicInput onSubmit={onSelectByTopic} />
+          )}
+        </div>
+      )}
+
+      {/* Row 4: Stats */}
       <div className="flex items-center text-[11px] text-muted-foreground">
         <span>{totalMessages} messages</span>
         <span className="mx-1.5 text-border">|</span>

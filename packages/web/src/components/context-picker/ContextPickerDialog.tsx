@@ -11,6 +11,8 @@ import { ContextMessageRow } from './ContextMessageRow';
 import { ContextPickerToolbar } from './ContextPickerToolbar';
 import { ContextSummaryBar } from './ContextSummaryBar';
 import { ForkConfigPanel } from './ForkConfigPanel';
+import { findByTopicIndices, findKeyDecisionIndices } from './SmartSelectTools';
+import { PromptPreview, buildPromptPreview } from './PromptPreview';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,6 +82,7 @@ export function ContextPickerDialog({
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const [hideToolResults, setHideToolResults] = useState(false);
   const [collapseThinking, setCollapseThinking] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(true);
 
   // -------------------------------------------------------------------------
   // State — fork mode
@@ -203,6 +206,24 @@ export function ContextPickerDialog({
     });
   }, [messages.length]);
 
+  const handleSelectKeyDecisions = useCallback(() => {
+    const indices = findKeyDecisionIndices(messages);
+    if (indices.length > 0) {
+      setSelectedIds(new Set(indices));
+    }
+  }, [messages]);
+
+  const handleSelectByTopic = useCallback((topic: string) => {
+    const indices = findByTopicIndices(messages, topic);
+    if (indices.length > 0) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const i of indices) next.add(i);
+        return next;
+      });
+    }
+  }, [messages]);
+
   // -------------------------------------------------------------------------
   // Submit handlers
   // -------------------------------------------------------------------------
@@ -267,6 +288,22 @@ export function ContextPickerDialog({
 
   const handleSubmit = activeTab === 'fork' ? handleForkSubmit : handleCreateAgentSubmit;
   const canSubmit = activeTab === 'fork' ? canSubmitFork : canSubmitAgent;
+
+  const previewText = useMemo(() => {
+    const sortedIds = Array.from(selectedIds).sort((a, b) => a - b);
+    return buildPromptPreview({
+      strategy: detectedStrategy,
+      forkPrompt: activeTab === 'fork' ? forkPrompt : systemPrompt,
+      forkAtIndex: detectedStrategy === 'jsonl-truncation' ? sortedIds[sortedIds.length - 1] : undefined,
+      selectedMessages: detectedStrategy === 'context-injection'
+        ? sortedIds
+            .map((i) => messages[i])
+            .filter((m): m is SessionContentMessage => m != null)
+            .map((m) => ({ type: m.type, content: m.content }))
+        : [],
+      systemPrompt: activeTab === 'agent' ? systemPrompt : undefined,
+    });
+  }, [selectedIds, detectedStrategy, activeTab, forkPrompt, systemPrompt, messages]);
 
   // -------------------------------------------------------------------------
   // Render
@@ -337,6 +374,8 @@ export function ContextPickerDialog({
               onSelectAll={handleSelectAll}
               onDeselectAll={handleDeselectAll}
               onInvert={handleInvert}
+              onSelectKeyDecisions={handleSelectKeyDecisions}
+              onSelectByTopic={handleSelectByTopic}
             />
 
             {/* Virtualized message list */}
@@ -396,6 +435,12 @@ export function ContextPickerDialog({
               collapseThinking={collapseThinking}
               onToggleHideToolResults={() => setHideToolResults((v) => !v)}
               onToggleCollapseThinking={() => setCollapseThinking((v) => !v)}
+            />
+
+            <PromptPreview
+              previewText={previewText}
+              collapsed={previewCollapsed}
+              onToggle={() => setPreviewCollapsed((v) => !v)}
             />
           </div>
 
