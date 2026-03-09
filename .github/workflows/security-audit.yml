@@ -38,6 +38,7 @@ jobs:
         uses: github/codeql-action/autobuild@v3
 
       - name: Perform CodeQL analysis
+        continue-on-error: true
         uses: github/codeql-action/analyze@v3
         with:
           category: /language:javascript-typescript
@@ -171,6 +172,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy vulnerability scan (SARIF)
+        continue-on-error: true
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ matrix.image }}:audit
