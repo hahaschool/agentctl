@@ -399,6 +399,49 @@ export function useForkSession() {
   });
 }
 
+export function useCreateRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.createRuntimeSession,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+    },
+  });
+}
+
+export function useResumeRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & Parameters<typeof api.resumeRuntimeSession>[1]) => api.resumeRuntimeSession(id, body),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeSessionHandoffs(variables.id),
+      });
+    },
+  });
+}
+
+export function useForkRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & Parameters<typeof api.forkRuntimeSession>[1]) => api.forkRuntimeSession(id, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+    },
+  });
+}
+
 export function useHandoffRuntimeSession() {
   const queryClient = useQueryClient();
   return useMutation({

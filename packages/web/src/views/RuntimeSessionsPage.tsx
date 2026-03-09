@@ -22,7 +22,10 @@ import type {
 import { formatDateTime, formatDuration, formatNumber, timeAgo, truncate } from '../lib/format-utils';
 import {
   machinesQuery,
+  useCreateRuntimeSession,
+  useForkRuntimeSession,
   useHandoffRuntimeSession,
+  useResumeRuntimeSession,
   runtimeSessionHandoffsQuery,
   runtimeSessionsQuery,
 } from '../lib/queries';
@@ -114,12 +117,25 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]['value']>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createRuntime, setCreateRuntime] = useState<RuntimeSession['runtime']>('codex');
+  const [createMachineId, setCreateMachineId] = useState('');
+  const [createProjectPath, setCreateProjectPath] = useState('');
+  const [createPrompt, setCreatePrompt] = useState('');
+  const [createModel, setCreateModel] = useState('');
+  const [resumePrompt, setResumePrompt] = useState('');
+  const [resumeModel, setResumeModel] = useState('');
+  const [forkPrompt, setForkPrompt] = useState('');
+  const [forkModel, setForkModel] = useState('');
+  const [forkMachineId, setForkMachineId] = useState('');
   const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSession['runtime']>('claude-code');
   const [handoffPrompt, setHandoffPrompt] = useState('');
 
   const sessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
   const machines = useQuery(machinesQuery());
   const handoffs = useQuery(runtimeSessionHandoffsQuery(selectedId ?? '', 20));
+  const createMutation = useCreateRuntimeSession();
+  const resumeMutation = useResumeRuntimeSession();
+  const forkMutation = useForkRuntimeSession();
   const handoffMutation = useHandoffRuntimeSession();
 
   const machineNames = useMemo(() => {
@@ -183,11 +199,105 @@ export function RuntimeSessionsPage(): React.JSX.Element {
       selectedSession.nativeSessionId &&
       (selectedSession.status === 'active' || selectedSession.status === 'paused'),
   );
+  const canResume = Boolean(
+    selectedSession &&
+      selectedSession.nativeSessionId &&
+      (selectedSession.status === 'paused' ||
+        selectedSession.status === 'ended' ||
+        selectedSession.status === 'error'),
+  );
+  const canFork = Boolean(selectedSession?.nativeSessionId);
 
   useEffect(() => {
     if (!selectedSession) return;
     setHandoffTargetRuntime(selectedSession.runtime === 'codex' ? 'claude-code' : 'codex');
+    setForkMachineId(selectedSession.machineId);
   }, [selectedSession]);
+
+  useEffect(() => {
+    const list = machines.data ?? [];
+    if (createMachineId) return;
+    const preferred = list.find((machine) => machine.status === 'online') ?? list[0];
+    if (preferred) {
+      setCreateMachineId(preferred.id);
+    }
+  }, [createMachineId, machines.data]);
+
+  const handleCreateSession = useCallback(async () => {
+    if (!createMachineId || !createProjectPath.trim() || !createPrompt.trim()) {
+      toast.error('Runtime, machine, project path, and prompt are required');
+      return;
+    }
+
+    try {
+      const result = await createMutation.mutateAsync({
+        runtime: createRuntime,
+        machineId: createMachineId,
+        projectPath: createProjectPath.trim(),
+        prompt: createPrompt.trim(),
+        ...(createModel.trim() ? { model: createModel.trim() } : {}),
+      });
+      toast.success(`Created ${runtimeLabel(result.session.runtime)} session`);
+      setSelectedId(result.session.id);
+      setCreateProjectPath('');
+      setCreatePrompt('');
+      setCreateModel('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create runtime session');
+    }
+  }, [
+    createMachineId,
+    createModel,
+    createMutation,
+    createProjectPath,
+    createPrompt,
+    createRuntime,
+    toast,
+  ]);
+
+  const handleResume = useCallback(async () => {
+    if (!selectedSession || !canResume || !resumePrompt.trim()) {
+      toast.error('Resume requires a prompt and a resumable session');
+      return;
+    }
+
+    try {
+      await resumeMutation.mutateAsync({
+        id: selectedSession.id,
+        prompt: resumePrompt.trim(),
+        ...(resumeModel.trim() ? { model: resumeModel.trim() } : {}),
+      });
+      toast.success(`Resumed ${runtimeLabel(selectedSession.runtime)} session`);
+      setResumePrompt('');
+      setResumeModel('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to resume runtime session');
+    }
+  }, [canResume, resumeModel, resumeMutation, resumePrompt, selectedSession, toast]);
+
+  const handleFork = useCallback(async () => {
+    if (!selectedSession || !canFork) {
+      toast.error('Fork requires a session with a native session id');
+      return;
+    }
+
+    try {
+      const result = await forkMutation.mutateAsync({
+        id: selectedSession.id,
+        ...(forkPrompt.trim() ? { prompt: forkPrompt.trim() } : {}),
+        ...(forkModel.trim() ? { model: forkModel.trim() } : {}),
+        ...(forkMachineId && forkMachineId !== selectedSession.machineId
+          ? { targetMachineId: forkMachineId }
+          : {}),
+      });
+      toast.success(`Forked to new ${runtimeLabel(result.session.runtime)} session`);
+      setSelectedId(result.session.id);
+      setForkPrompt('');
+      setForkModel('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to fork runtime session');
+    }
+  }, [canFork, forkMachineId, forkModel, forkMutation, forkPrompt, selectedSession, toast]);
 
   const handleHandoff = useCallback(async () => {
     if (!selectedSession || !canHandoff) {
@@ -296,6 +406,90 @@ export function RuntimeSessionsPage(): React.JSX.Element {
               ))}
             </select>
           </label>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Create Managed Session</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Start a new Claude Code or Codex session under managed runtime control.
+          </p>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-[180px_220px_minmax(0,1fr)]">
+          <label className="space-y-1.5 text-sm text-muted-foreground">
+            <span>Runtime</span>
+            <select
+              aria-label="Create runtime"
+              value={createRuntime}
+              onChange={(event) => setCreateRuntime(event.target.value as RuntimeSession['runtime'])}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none"
+            >
+              {RUNTIME_OPTIONS.filter((option) => option.value !== 'all').map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1.5 text-sm text-muted-foreground">
+            <span>Machine</span>
+            <select
+              aria-label="Create machine"
+              value={createMachineId}
+              onChange={(event) => setCreateMachineId(event.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none"
+            >
+              <option value="">Select machine</option>
+              {(machines.data ?? []).map((machine) => (
+                <option key={machine.id} value={machine.id}>
+                  {machine.hostname}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1.5 text-sm text-muted-foreground">
+            <span>Project path</span>
+            <input
+              aria-label="Create project path"
+              value={createProjectPath}
+              onChange={(event) => setCreateProjectPath(event.target.value)}
+              placeholder="/abs/path/to/project"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40"
+            />
+          </label>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+          <label className="space-y-1.5 text-sm text-muted-foreground">
+            <span>Prompt</span>
+            <input
+              aria-label="Create prompt"
+              value={createPrompt}
+              onChange={(event) => setCreatePrompt(event.target.value)}
+              placeholder="Tell the runtime what to do"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40"
+            />
+          </label>
+          <label className="space-y-1.5 text-sm text-muted-foreground">
+            <span>Model</span>
+            <input
+              aria-label="Create model"
+              value={createModel}
+              onChange={(event) => setCreateModel(event.target.value)}
+              placeholder="Optional model override"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40"
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => void handleCreateSession()}
+              disabled={createMutation.isPending}
+              className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {createMutation.isPending ? 'Creating...' : 'Create Managed Session'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -455,6 +649,99 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                   </div>
                 </div>
               )}
+
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-foreground">Session Actions</div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Resume
+                    </div>
+                    <label className="space-y-1.5 text-sm text-muted-foreground block">
+                      <span>Prompt</span>
+                      <input
+                        aria-label="Resume prompt"
+                        value={resumePrompt}
+                        disabled={!canResume || resumeMutation.isPending}
+                        onChange={(event) => setResumePrompt(event.target.value)}
+                        placeholder="Prompt to continue the existing session"
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="space-y-1.5 text-sm text-muted-foreground block">
+                      <span>Model</span>
+                      <input
+                        aria-label="Resume model"
+                        value={resumeModel}
+                        disabled={!canResume || resumeMutation.isPending}
+                        onChange={(event) => setResumeModel(event.target.value)}
+                        placeholder="Optional resume model override"
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void handleResume()}
+                      disabled={!canResume || resumeMutation.isPending}
+                      className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {resumeMutation.isPending ? 'Resuming...' : 'Resume Session'}
+                    </button>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Fork
+                    </div>
+                    <label className="space-y-1.5 text-sm text-muted-foreground block">
+                      <span>Prompt</span>
+                      <input
+                        aria-label="Fork prompt"
+                        value={forkPrompt}
+                        disabled={!canFork || forkMutation.isPending}
+                        onChange={(event) => setForkPrompt(event.target.value)}
+                        placeholder="Optional fork prompt"
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="space-y-1.5 text-sm text-muted-foreground block">
+                      <span>Model</span>
+                      <input
+                        aria-label="Fork model"
+                        value={forkModel}
+                        disabled={!canFork || forkMutation.isPending}
+                        onChange={(event) => setForkModel(event.target.value)}
+                        placeholder="Optional fork model override"
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="space-y-1.5 text-sm text-muted-foreground block">
+                      <span>Target machine</span>
+                      <select
+                        aria-label="Fork target machine"
+                        value={forkMachineId}
+                        disabled={!canFork || forkMutation.isPending}
+                        onChange={(event) => setForkMachineId(event.target.value)}
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {(machines.data ?? []).map((machine) => (
+                          <option key={machine.id} value={machine.id}>
+                            {machine.hostname}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void handleFork()}
+                      disabled={!canFork || forkMutation.isPending}
+                      className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {forkMutation.isPending ? 'Forking...' : 'Fork Session'}
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <div className="space-y-3">
                 <div className="flex items-center gap-2">

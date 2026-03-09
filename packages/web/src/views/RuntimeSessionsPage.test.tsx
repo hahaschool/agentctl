@@ -9,14 +9,20 @@ const {
   mockRuntimeSessionsQuery,
   mockRuntimeSessionHandoffsQuery,
   mockMachinesQuery,
+  mockCreateMutateAsync,
+  mockResumeMutateAsync,
+  mockForkMutateAsync,
   mockHandoffMutateAsync,
 } = vi.hoisted(() => ({
-    mockUseQuery: vi.fn(),
-    mockRuntimeSessionsQuery: vi.fn(),
-    mockRuntimeSessionHandoffsQuery: vi.fn(),
-    mockMachinesQuery: vi.fn(),
-    mockHandoffMutateAsync: vi.fn(),
-  }));
+  mockUseQuery: vi.fn(),
+  mockRuntimeSessionsQuery: vi.fn(),
+  mockRuntimeSessionHandoffsQuery: vi.fn(),
+  mockMachinesQuery: vi.fn(),
+  mockCreateMutateAsync: vi.fn(),
+  mockResumeMutateAsync: vi.fn(),
+  mockForkMutateAsync: vi.fn(),
+  mockHandoffMutateAsync: vi.fn(),
+}));
 
 vi.mock('@tanstack/react-query', async () => {
   const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
@@ -79,6 +85,18 @@ vi.mock('@/lib/queries', () => ({
   runtimeSessionsQuery: (params?: Record<string, unknown>) => mockRuntimeSessionsQuery(params),
   runtimeSessionHandoffsQuery: (id: string, limit?: number) => mockRuntimeSessionHandoffsQuery(id, limit),
   machinesQuery: () => mockMachinesQuery(),
+  useCreateRuntimeSession: () => ({
+    mutateAsync: mockCreateMutateAsync,
+    isPending: false,
+  }),
+  useResumeRuntimeSession: () => ({
+    mutateAsync: mockResumeMutateAsync,
+    isPending: false,
+  }),
+  useForkRuntimeSession: () => ({
+    mutateAsync: mockForkMutateAsync,
+    isPending: false,
+  }),
   useHandoffRuntimeSession: () => ({
     mutateAsync: mockHandoffMutateAsync,
     isPending: false,
@@ -169,6 +187,18 @@ function setupUseQuery(options?: {
   mockRuntimeSessionHandoffsQuery.mockImplementation((id: string, limit?: number) => ({
     queryKey: ['runtime-sessions', id, 'handoffs', limit],
   }));
+  mockCreateMutateAsync.mockResolvedValue({
+    ok: true,
+    session: createRuntimeSession({ id: 'ms-created', runtime: 'codex' }),
+  });
+  mockResumeMutateAsync.mockResolvedValue({
+    ok: true,
+    session: createRuntimeSession({ id: 'ms-1', status: 'active' }),
+  });
+  mockForkMutateAsync.mockResolvedValue({
+    ok: true,
+    session: createRuntimeSession({ id: 'ms-forked', runtime: 'codex', machineId: 'machine-2' }),
+  });
   mockHandoffMutateAsync.mockResolvedValue({
     ok: true,
     handoffId: 'handoff-created',
@@ -304,6 +334,91 @@ describe('RuntimeSessionsPage', () => {
         targetRuntime: 'claude-code',
         reason: 'manual',
         prompt: 'Continue from the existing diff',
+      });
+    });
+  });
+
+  it('creates a managed runtime session from the create form', async () => {
+    setupUseQuery({ machines: [createMachine(), createMachine({ id: 'machine-2', hostname: 'ec2-runner' })] });
+
+    render(<RuntimeSessionsPage />);
+
+    fireEvent.change(screen.getByLabelText('Create runtime'), {
+      target: { value: 'claude-code' },
+    });
+    fireEvent.change(screen.getByLabelText('Create machine'), {
+      target: { value: 'machine-2' },
+    });
+    fireEvent.change(screen.getByLabelText('Create project path'), {
+      target: { value: '/tmp/new-runtime-project' },
+    });
+    fireEvent.change(screen.getByLabelText('Create prompt'), {
+      target: { value: 'Bootstrap the handoff context' },
+    });
+    fireEvent.change(screen.getByLabelText('Create model'), {
+      target: { value: 'claude-sonnet-4' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Managed Session' }));
+
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+        runtime: 'claude-code',
+        machineId: 'machine-2',
+        projectPath: '/tmp/new-runtime-project',
+        prompt: 'Bootstrap the handoff context',
+        model: 'claude-sonnet-4',
+      });
+    });
+  });
+
+  it('resumes a resumable runtime session with prompt and model', async () => {
+    setupUseQuery({
+      sessions: [createRuntimeSession({ status: 'paused', runtime: 'claude-code' })],
+    });
+
+    render(<RuntimeSessionsPage />);
+
+    fireEvent.change(screen.getByLabelText('Resume prompt'), {
+      target: { value: 'Continue from the previous stop point' },
+    });
+    fireEvent.change(screen.getByLabelText('Resume model'), {
+      target: { value: 'claude-sonnet-4' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Session' }));
+
+    await waitFor(() => {
+      expect(mockResumeMutateAsync).toHaveBeenCalledWith({
+        id: 'ms-1',
+        prompt: 'Continue from the previous stop point',
+        model: 'claude-sonnet-4',
+      });
+    });
+  });
+
+  it('forks the selected runtime session onto another machine', async () => {
+    setupUseQuery({
+      machines: [createMachine(), createMachine({ id: 'machine-2', hostname: 'ec2-runner' })],
+    });
+
+    render(<RuntimeSessionsPage />);
+
+    fireEvent.change(screen.getByLabelText('Fork prompt'), {
+      target: { value: 'Fork for verification' },
+    });
+    fireEvent.change(screen.getByLabelText('Fork model'), {
+      target: { value: 'gpt-5-codex' },
+    });
+    fireEvent.change(screen.getByLabelText('Fork target machine'), {
+      target: { value: 'machine-2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Fork Session' }));
+
+    await waitFor(() => {
+      expect(mockForkMutateAsync).toHaveBeenCalledWith({
+        id: 'ms-1',
+        prompt: 'Fork for verification',
+        model: 'gpt-5-codex',
+        targetMachineId: 'machine-2',
       });
     });
   });
