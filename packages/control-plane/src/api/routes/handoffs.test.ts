@@ -90,6 +90,9 @@ async function buildApp(
   managedSessionStore: ManagedSessionStoreMock,
   handoffStore: HandoffStoreMock,
   runtimeConfigStore: RuntimeConfigStoreMock,
+  options?: {
+    dbRegistry?: ReturnType<typeof createMockDbRegistry>;
+  },
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(handoffRoutes, {
@@ -97,7 +100,7 @@ async function buildApp(
     managedSessionStore: managedSessionStore as never,
     handoffStore: handoffStore as never,
     runtimeConfigStore: runtimeConfigStore as never,
-    dbRegistry: createMockDbRegistry(),
+    dbRegistry: (options?.dbRegistry ?? createMockDbRegistry()) as never,
     workerPort: 9000,
   });
   await app.ready();
@@ -292,6 +295,176 @@ describe('handoffRoutes', () => {
         body: expect.stringContaining('"sourceNativeSessionId":"codex-native-1"'),
       }),
     );
+  });
+
+  it('GET /api/runtime-sessions/:id/handoff/preflight targets the requested machine worker', async () => {
+    const appWithTargetRegistry = await buildApp(managedSessionStore, handoffStore, runtimeConfigStore, {
+      dbRegistry: createMockDbRegistry({
+        getMachine: vi.fn(async (machineId: string) => {
+          if (machineId === 'machine-2') {
+            return {
+              id: 'machine-2',
+              hostname: 'ec2-runner',
+              tailscaleIp: '100.64.0.2',
+              os: 'linux',
+              arch: 'x64',
+              status: 'online',
+            };
+          }
+
+          return {
+            id: 'machine-1',
+            hostname: 'mac-mini',
+            tailscaleIp: '100.64.0.1',
+            os: 'darwin',
+            arch: 'arm64',
+            status: 'online',
+          };
+        }),
+      }),
+    });
+
+    managedSessionStore.get.mockResolvedValue(makeManagedSession());
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        nativeImportCapable: false,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'not_implemented',
+          metadata: {},
+        },
+      }),
+    });
+
+    const response = await appWithTargetRegistry.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/ms-source/handoff/preflight?targetRuntime=claude-code&targetMachineId=machine-2',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('http://100.64.0.2:9000/api/runtime-sessions/handoff/preflight'),
+      expect.any(Object),
+    );
+
+    await appWithTargetRegistry.close();
+  });
+
+  it('POST /api/runtime-sessions/:id/handoff creates the target session on the requested machine', async () => {
+    const appWithTargetRegistry = await buildApp(managedSessionStore, handoffStore, runtimeConfigStore, {
+      dbRegistry: createMockDbRegistry({
+        getMachine: vi.fn(async (machineId: string) => {
+          if (machineId === 'machine-2') {
+            return {
+              id: 'machine-2',
+              hostname: 'ec2-runner',
+              tailscaleIp: '100.64.0.2',
+              os: 'linux',
+              arch: 'x64',
+              status: 'online',
+            };
+          }
+
+          return {
+            id: 'machine-1',
+            hostname: 'mac-mini',
+            tailscaleIp: '100.64.0.1',
+            os: 'darwin',
+            arch: 'arm64',
+            status: 'online',
+          };
+        }),
+      }),
+    });
+
+    managedSessionStore.get.mockResolvedValue(makeManagedSession());
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-target',
+        runtime: 'claude-code',
+        machineId: 'machine-2',
+        nativeSessionId: null,
+        status: 'starting',
+        handoffStrategy: 'snapshot-handoff',
+        handoffSourceSessionId: 'ms-source',
+      }),
+    );
+    managedSessionStore.updateStatus.mockImplementation(
+      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) => {
+        if (id === 'ms-source') {
+          return makeManagedSession({ id, status });
+        }
+
+        return makeManagedSession({
+          id,
+          runtime: 'claude-code',
+          machineId: 'machine-2',
+          nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
+          status,
+          handoffStrategy: 'snapshot-handoff',
+          handoffSourceSessionId: 'ms-source',
+        });
+      },
+    );
+    handoffStore.create.mockResolvedValue(makeHandoffRecord());
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          snapshot: makeSnapshot(),
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          attemptedStrategies: ['snapshot-handoff'],
+          session: {
+            runtime: 'claude-code',
+            sessionId: 'worker-1',
+            nativeSessionId: 'claude-native-1',
+            agentId: 'agent-1',
+            projectPath: '/workspace/app',
+            model: 'sonnet',
+            status: 'active',
+          },
+        }),
+      });
+
+    const response = await appWithTargetRegistry.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/ms-source/handoff',
+      payload: {
+        targetRuntime: 'claude-code',
+        targetMachineId: 'machine-2',
+        reason: 'manual',
+        prompt: 'Continue on machine-2',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(managedSessionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtime: 'claude-code',
+        machineId: 'machine-2',
+      }),
+    );
+    const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+    expect(String(fetchCalls[0]?.[0])).toContain('http://100.64.0.1:9000/api/runtime-sessions/codex-native-1/handoff/export');
+    expect(String(fetchCalls[1]?.[0])).toContain('http://100.64.0.2:9000/api/runtime-sessions/handoff');
+
+    await appWithTargetRegistry.close();
   });
 
   it('GET /api/runtime-sessions/:id/handoffs returns handoff history for the managed session', async () => {
