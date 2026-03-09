@@ -344,6 +344,33 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('listRuntimeSessions()', () => {
+    it('sends GET to /api/runtime-sessions with limit', async () => {
+      mocks.fetch.mockResolvedValueOnce(jsonResponse({ sessions: [], count: 0 }));
+
+      await client.listRuntimeSessions({ limit: 100 });
+
+      const calledUrl = mocks.fetch.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toBe('https://cp.example.com/api/runtime-sessions?limit=100');
+    });
+
+    it('includes machineId, runtime, and status query params when provided', async () => {
+      mocks.fetch.mockResolvedValueOnce(jsonResponse({ sessions: [], count: 0 }));
+
+      await client.listRuntimeSessions({
+        machineId: 'machine-2',
+        runtime: 'codex',
+        status: 'active',
+        limit: 25,
+      });
+
+      const calledUrl = mocks.fetch.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toBe(
+        'https://cp.example.com/api/runtime-sessions?machineId=machine-2&runtime=codex&status=active&limit=25',
+      );
+    });
+  });
+
   describe('getAgent()', () => {
     it('sends GET to /api/machines/agents/:agentId', async () => {
       const agent = { id: 'a1', name: 'test-agent', status: 'running' };

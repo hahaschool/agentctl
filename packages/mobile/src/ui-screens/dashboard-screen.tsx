@@ -33,6 +33,7 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
     health: null,
     machines: [],
     agents: [],
+    runtimeSessions: [],
     stats: {
       totalAgents: 0,
       running: 0,
@@ -40,6 +41,9 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
       error: 0,
       totalMachines: 0,
       onlineMachines: 0,
+      totalManagedRuntimes: 0,
+      activeManagedRuntimes: 0,
+      switchingManagedRuntimes: 0,
     },
     isLoading: false,
     error: null,
@@ -104,6 +108,26 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
           <View style={styles.statBox}>
             <Text style={[styles.statValue, { color: '#ef4444' }]}>{state.stats.error}</Text>
             <Text style={styles.statLabel}>Error</Text>
+          </View>
+        </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#60a5fa' }]}>
+              {state.stats.totalManagedRuntimes}
+            </Text>
+            <Text style={styles.statLabel}>Runtimes</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#22c55e' }]}>
+              {state.stats.activeManagedRuntimes}
+            </Text>
+            <Text style={styles.statLabel}>Runtime Active</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#3b82f6' }]}>
+              {state.stats.switchingManagedRuntimes}
+            </Text>
+            <Text style={styles.statLabel}>Switching</Text>
           </View>
         </View>
 
