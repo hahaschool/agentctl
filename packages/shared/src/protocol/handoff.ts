@@ -50,6 +50,18 @@ export type ExportHandoffSnapshotRequest = {
   activeSkills?: string[];
 };
 
+export type NativeImportPreflightRequest = {
+  targetRuntime: ManagedRuntime;
+  projectPath: string;
+  snapshot: HandoffSnapshot;
+};
+
+export type NativeImportPreflightResponse = {
+  ok: true;
+  nativeImportCapable: boolean;
+  attempt: NativeImportAttempt;
+};
+
 export type ExportHandoffSnapshotResponse = {
   ok: true;
   strategy: 'snapshot-handoff';

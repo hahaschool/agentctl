@@ -41,6 +41,10 @@ export const queryKeys = {
     limit !== undefined
       ? (['runtime-sessions', id, 'handoffs', limit] as const)
       : (['runtime-sessions', id, 'handoffs'] as const),
+  runtimeSessionPreflight: (id: string, targetRuntime: string, targetMachineId?: string) =>
+    targetMachineId
+      ? (['runtime-sessions', id, 'preflight', targetRuntime, targetMachineId] as const)
+      : (['runtime-sessions', id, 'preflight', targetRuntime] as const),
   sessionContent: (
     sessionId: string,
     params: { machineId: string; projectPath?: string; limit?: number },
@@ -160,6 +164,22 @@ export function runtimeSessionHandoffsQuery(id: string, limit?: number) {
   return queryOptions({
     queryKey: queryKeys.runtimeSessionHandoffs(id, limit),
     queryFn: () => api.listRuntimeSessionHandoffs(id, limit),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionPreflightQuery(
+  id: string,
+  params: {
+    targetRuntime: 'claude-code' | 'codex';
+    targetMachineId?: string;
+  },
+) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessionPreflight(id, params.targetRuntime, params.targetMachineId),
+    queryFn: () => api.preflightRuntimeSessionHandoff(id, params),
     enabled: !!id,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,

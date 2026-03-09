@@ -13,6 +13,7 @@ import type {
   ManagedRuntime,
   ManagedSession,
   ManagedSessionStatus,
+  NativeImportPreflightResponse,
   NativeImportAttempt,
   ResumeManagedSessionRequest,
 } from '@agentctl/shared';
@@ -153,6 +154,20 @@ export class RuntimeSessionApi {
       this.apiClient,
       'GET',
       `/api/runtime-sessions/${encodeURIComponent(sessionId)}/handoffs${suffix}`,
+    );
+  }
+
+  async preflightHandoff(
+    sessionId: string,
+    params: { targetRuntime: ManagedRuntime; targetMachineId?: string },
+  ): Promise<NativeImportPreflightResponse> {
+    assertSessionId(sessionId);
+    const qs = new URLSearchParams({ targetRuntime: params.targetRuntime });
+    if (params.targetMachineId) qs.set('targetMachineId', params.targetMachineId);
+    return requestWithApiClient<NativeImportPreflightResponse>(
+      this.apiClient,
+      'GET',
+      `/api/runtime-sessions/${encodeURIComponent(sessionId)}/handoff/preflight?${qs}`,
     );
   }
 }

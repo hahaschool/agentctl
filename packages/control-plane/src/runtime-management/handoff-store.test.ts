@@ -10,6 +10,7 @@ function makeSnapshot(): HandoffSnapshot {
   return {
     sourceRuntime: 'claude-code',
     sourceSessionId: 'ms-1',
+    sourceNativeSessionId: 'claude-native-1',
     projectPath: '/workspace/app',
     worktreePath: '/workspace/.trees/task-1',
     branch: 'codex/runtime-unification',

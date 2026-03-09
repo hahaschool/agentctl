@@ -8,6 +8,7 @@ const {
   mockUseQuery,
   mockRuntimeSessionsQuery,
   mockRuntimeSessionHandoffsQuery,
+  mockRuntimeSessionPreflightQuery,
   mockMachinesQuery,
   mockCreateMutateAsync,
   mockResumeMutateAsync,
@@ -17,6 +18,7 @@ const {
   mockUseQuery: vi.fn(),
   mockRuntimeSessionsQuery: vi.fn(),
   mockRuntimeSessionHandoffsQuery: vi.fn(),
+  mockRuntimeSessionPreflightQuery: vi.fn(),
   mockMachinesQuery: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockResumeMutateAsync: vi.fn(),
@@ -84,6 +86,8 @@ vi.mock('@/components/StatusBadge', () => ({
 vi.mock('@/lib/queries', () => ({
   runtimeSessionsQuery: (params?: Record<string, unknown>) => mockRuntimeSessionsQuery(params),
   runtimeSessionHandoffsQuery: (id: string, limit?: number) => mockRuntimeSessionHandoffsQuery(id, limit),
+  runtimeSessionPreflightQuery: (id: string, params: Record<string, unknown>) =>
+    mockRuntimeSessionPreflightQuery(id, params),
   machinesQuery: () => mockMachinesQuery(),
   useCreateRuntimeSession: () => ({
     mutateAsync: mockCreateMutateAsync,
@@ -137,6 +141,7 @@ function createHandoff(overrides?: Record<string, unknown>) {
     snapshot: {
       sourceRuntime: 'codex',
       sourceSessionId: 'ms-1',
+      sourceNativeSessionId: 'codex-native-1',
       projectPath: '/tmp/project-a',
       worktreePath: '/tmp/project-a/.trees/runtime',
       branch: 'feature/runtime',
@@ -178,15 +183,43 @@ function setupUseQuery(options?: {
   sessions?: ReturnType<typeof createRuntimeSession>[];
   handoffsBySessionId?: Record<string, ReturnType<typeof createHandoff>[]>;
   machines?: ReturnType<typeof createMachine>[];
+  preflight?: {
+    nativeImportCapable: boolean;
+    attempt: {
+      ok: boolean;
+      sourceRuntime: string;
+      targetRuntime: string;
+      reason: string;
+      metadata?: Record<string, unknown>;
+    };
+  };
 }) {
   const sessions = options?.sessions ?? [createRuntimeSession()];
   const handoffsBySessionId = options?.handoffsBySessionId ?? { 'ms-1': [createHandoff()] };
   const machines = options?.machines ?? [createMachine()];
+  const preflight =
+    options?.preflight ??
+    ({
+      nativeImportCapable: true,
+      attempt: {
+        ok: false,
+        sourceRuntime: 'codex',
+        targetRuntime: 'claude-code',
+        reason: 'not_implemented',
+        metadata: {
+          targetCli: 'claude',
+          sourceStorage: '/Users/example/.codex/sessions',
+        },
+      },
+    } as const);
 
   mockRuntimeSessionsQuery.mockReturnValue({ queryKey: ['runtime-sessions'] });
   mockMachinesQuery.mockReturnValue({ queryKey: ['machines'] });
   mockRuntimeSessionHandoffsQuery.mockImplementation((id: string, limit?: number) => ({
     queryKey: ['runtime-sessions', id, 'handoffs', limit],
+  }));
+  mockRuntimeSessionPreflightQuery.mockImplementation((id: string, params: Record<string, unknown>) => ({
+    queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
   }));
   mockCreateMutateAsync.mockResolvedValue({
     ok: true,
@@ -245,6 +278,17 @@ function setupUseQuery(options?: {
       };
     }
 
+    if (queryKey[0] === 'runtime-sessions' && queryKey[2] === 'preflight') {
+      return {
+        data: preflight,
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+        dataUpdatedAt: 400,
+      };
+    }
+
     throw new Error(`Unhandled query key ${JSON.stringify(queryKey)}`);
   });
 }
@@ -276,6 +320,16 @@ describe('RuntimeSessionsPage', () => {
 
   it('renders native import fallback details in handoff history', async () => {
     setupUseQuery({
+      preflight: {
+        nativeImportCapable: false,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'source_session_missing',
+          metadata: {},
+        },
+      },
       handoffsBySessionId: {
         'ms-1': [
           createHandoff({
@@ -301,9 +355,19 @@ describe('RuntimeSessionsPage', () => {
     render(<RuntimeSessionsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Native import unavailable:/)).toBeDefined();
-      expect(screen.getByText(/target CLI claude/)).toBeDefined();
+      expect(screen.getAllByText(/Native import unavailable:/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/target CLI claude/).length).toBeGreaterThan(0);
       expect(screen.getByText(/1 user \/ 1 assistant messages/)).toBeDefined();
+    });
+  });
+
+  it('renders native import preflight readiness before starting a handoff', async () => {
+    setupUseQuery();
+
+    render(<RuntimeSessionsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Native import ready/)).toBeDefined();
     });
   });
 

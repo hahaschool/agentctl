@@ -85,10 +85,12 @@ async function detectSourceStorage(
   projectPath: string,
   snapshot: HandoffSnapshot,
 ): Promise<NativeImportProbePrerequisites['sourceStorage']> {
+  const sourceNativeSessionId = snapshot.sourceNativeSessionId ?? snapshot.sourceSessionId;
+
   if (sourceRuntime === 'claude-code') {
     const rootPath = join(homedir(), '.claude', 'projects');
     const projectFolder = projectPath.replace(/[\\/]/g, '-');
-    const sessionPath = join(rootPath, projectFolder, `${snapshot.sourceSessionId}.jsonl`);
+    const sessionPath = join(rootPath, projectFolder, `${sourceNativeSessionId}.jsonl`);
     const exists = await pathExists(rootPath);
     const sessionLocated = exists ? await pathExists(sessionPath) : false;
     return {
@@ -100,13 +102,17 @@ async function detectSourceStorage(
     };
   }
 
-  const rootPath = join(homedir(), '.codex');
+  const rootPath = process.env.CODEX_HOME ?? join(homedir(), '.codex');
   const indexPath = join(rootPath, 'session_index.jsonl');
   const sessionsRoot = join(rootPath, 'sessions');
   const indexExists = await pathExists(indexPath);
   const sessionsRootExists = await pathExists(sessionsRoot);
-  const fromIndex = indexExists ? await findCodexSessionInIndex(indexPath, snapshot.sourceSessionId) : null;
-  const fromTree = sessionsRootExists ? await findCodexSessionInTree(sessionsRoot, snapshot.sourceSessionId) : null;
+  const fromIndex = indexExists
+    ? await findCodexSessionInIndex(indexPath, sourceNativeSessionId)
+    : null;
+  const fromTree = sessionsRootExists
+    ? await findCodexSessionInTree(sessionsRoot, sourceNativeSessionId)
+    : null;
   return {
     rootPath,
     exists: indexExists || sessionsRootExists,

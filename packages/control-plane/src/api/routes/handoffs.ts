@@ -3,6 +3,7 @@ import type {
   HandoffManagedSessionRequest,
   HandoffSnapshot,
   HandoffStrategy,
+  NativeImportPreflightRequest,
   StartHandoffRequest,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
@@ -48,6 +49,59 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         handoffs,
         count: handoffs.length,
       };
+    },
+  );
+
+  app.get<{
+    Params: { id: string };
+    Querystring: { targetRuntime: ManagedSessionRecord['runtime']; targetMachineId?: string };
+  }>(
+    '/:id/handoff/preflight',
+    {
+      schema: {
+        tags: ['runtime-sessions'],
+        summary: 'Probe whether native import is available before a cross-runtime handoff',
+      },
+    },
+    async (request, reply) => {
+      const source = await managedSessionStore.get(request.params.id);
+      if (!source) {
+        return reply.code(404).send({
+          error: 'MANAGED_SESSION_NOT_FOUND',
+          message: `Managed session '${request.params.id}' was not found`,
+        });
+      }
+
+      if (!source.nativeSessionId) {
+        return reply.code(400).send({
+          error: 'MISSING_NATIVE_SESSION_ID',
+          message: 'Preflight requires a source native session id',
+        });
+      }
+
+      const targetMachineId = request.query.targetMachineId ?? source.machineId;
+      const targetWorkerBaseUrl = await resolveWorker(targetMachineId, dbRegistry, workerPort);
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: targetWorkerBaseUrl,
+        path: '/api/runtime-sessions/handoff/preflight',
+        method: 'POST',
+        body: {
+          targetRuntime: request.query.targetRuntime,
+          projectPath: source.projectPath,
+          snapshot: buildPreflightSnapshot(source),
+        } satisfies NativeImportPreflightRequest,
+        timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      });
+
+      if (!result.ok) {
+        return reply.status(result.status).send({
+          error: result.error,
+          message: result.message,
+        });
+      }
+
+      return result.data;
     },
   );
 
@@ -221,6 +275,27 @@ function buildExportRequest(
     prompt: input.prompt ?? null,
     activeMcpServers: [],
     activeSkills: [],
+  };
+}
+
+function buildPreflightSnapshot(source: ManagedSessionRecord): HandoffSnapshot {
+  return {
+    sourceRuntime: source.runtime,
+    sourceSessionId: source.id,
+    sourceNativeSessionId: source.nativeSessionId,
+    projectPath: source.projectPath,
+    worktreePath: source.worktreePath,
+    branch: null,
+    headSha: null,
+    dirtyFiles: [],
+    diffSummary: '',
+    conversationSummary: '',
+    openTodos: [],
+    nextSuggestedPrompt: 'Continue from the handoff snapshot.',
+    activeConfigRevision: source.configRevision,
+    activeMcpServers: [],
+    activeSkills: [],
+    reason: 'manual',
   };
 }
 

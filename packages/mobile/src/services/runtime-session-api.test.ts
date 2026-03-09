@@ -117,6 +117,32 @@ describe('RuntimeSessionApi', () => {
     expect(String(url)).toBe('https://cp.example.com/api/runtime-sessions/ms-1/handoffs?limit=10');
   });
 
+  it('probes handoff native import readiness', async () => {
+    mocks.fetch.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        nativeImportCapable: true,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'not_implemented',
+          metadata: {},
+        },
+      }),
+    );
+
+    const response = await runtimeSessionApi.preflightHandoff('ms-1', {
+      targetRuntime: 'claude-code',
+    });
+
+    const [url] = mocks.fetch.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      'https://cp.example.com/api/runtime-sessions/ms-1/handoff/preflight?targetRuntime=claude-code',
+    );
+    expect(response.nativeImportCapable).toBe(true);
+  });
+
   it('rejects empty managed session ids before making a request', async () => {
     await expect(runtimeSessionApi.resumeSession('', { prompt: 'resume' })).rejects.toBeInstanceOf(
       MobileClientError,

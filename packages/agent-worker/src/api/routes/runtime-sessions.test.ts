@@ -11,6 +11,7 @@ function makeSnapshot(overrides: Partial<HandoffSnapshot> = {}): HandoffSnapshot
   return {
     sourceRuntime: 'claude-code',
     sourceSessionId: 'ms-source',
+    sourceNativeSessionId: 'claude-native-source',
     projectPath: '/workspace/app',
     worktreePath: '/workspace/app/.trees/agent-1',
     branch: 'main',
@@ -30,7 +31,7 @@ function makeSnapshot(overrides: Partial<HandoffSnapshot> = {}): HandoffSnapshot
 
 async function buildApp(
   registry: RuntimeRegistry,
-  handoffController: Pick<HandoffController, 'exportSnapshot' | 'handoff'>,
+  handoffController: Pick<HandoffController, 'exportSnapshot' | 'handoff' | 'preflightNativeImport'>,
 ): Promise<FastifyInstance> {
   const Fastify = await import('fastify');
   const app = Fastify.default({ logger: false });
@@ -50,6 +51,7 @@ describe('runtimeSessionsRoutes', () => {
   let handoffController: {
     exportSnapshot: ReturnType<typeof vi.fn>;
     handoff: ReturnType<typeof vi.fn>;
+    preflightNativeImport: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -72,6 +74,17 @@ describe('runtimeSessionsRoutes', () => {
           pid: 2222,
           startedAt: new Date('2026-03-09T10:00:00Z'),
           lastActivity: new Date('2026-03-09T10:01:00Z'),
+        },
+      })),
+      preflightNativeImport: vi.fn(async () => ({
+        ok: true,
+        nativeImportCapable: true,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'claude-code',
+          targetRuntime: 'codex',
+          reason: 'not_implemented',
+          metadata: { targetCli: { command: 'codex', available: true, version: 'codex-cli test' } },
         },
       })),
     };
@@ -199,6 +212,7 @@ describe('runtimeSessionsRoutes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().strategy).toBe('snapshot-handoff');
     expect(response.json().snapshot.reason).toBe('manual');
+    expect(response.json().snapshot.sourceNativeSessionId).toBe('claude-native-source');
   });
 
   it('starts a target runtime from a snapshot handoff request', async () => {
@@ -217,5 +231,26 @@ describe('runtimeSessionsRoutes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().strategy).toBe('snapshot-handoff');
     expect(response.json().session.nativeSessionId).toBe('codex-native-handoff');
+  });
+
+  it('probes native import prerequisites before handoff', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/handoff/preflight',
+      payload: {
+        targetRuntime: 'codex',
+        projectPath: '/workspace/app',
+        snapshot: makeSnapshot(),
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().nativeImportCapable).toBe(true);
+    expect(handoffController.preflightNativeImport).toHaveBeenCalledWith({
+      sourceRuntime: 'claude-code',
+      targetRuntime: 'codex',
+      projectPath: '/workspace/app',
+      snapshot: makeSnapshot(),
+    });
   });
 });

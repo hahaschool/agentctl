@@ -22,6 +22,7 @@ import type {
   ManagedSession,
   ManagedSessionStatus,
   MemoryObservation,
+  NativeImportPreflightResponse,
   NativeImportAttempt,
   ResumeManagedSessionRequest,
   ApiAccount as SharedApiAccount,
@@ -447,6 +448,19 @@ export const api = {
     const suffix = qs.toString() ? `?${qs}` : '';
     return request<RuntimeSessionHandoffsPage>(
       `/api/runtime-sessions/${encodeURIComponent(id)}/handoffs${suffix}`,
+    );
+  },
+  preflightRuntimeSessionHandoff: (
+    id: string,
+    params: {
+      targetRuntime: ManagedRuntime;
+      targetMachineId?: string;
+    },
+  ) => {
+    const qs = new URLSearchParams({ targetRuntime: params.targetRuntime });
+    if (params.targetMachineId) qs.set('targetMachineId', params.targetMachineId);
+    return request<NativeImportPreflightResponse>(
+      `/api/runtime-sessions/${encodeURIComponent(id)}/handoff/preflight?${qs}`,
     );
   },
   createSession: (body: {

@@ -1,5 +1,6 @@
 import type {
   ExportHandoffSnapshotRequest,
+  NativeImportPreflightRequest,
   RuntimeSessionSummary,
   StartHandoffRequest,
 } from '@agentctl/shared';
@@ -18,7 +19,7 @@ import { RuntimeRegistry } from '../../runtime/runtime-registry.js';
 export type RuntimeSessionsRoutesOptions = {
   machineId: string;
   runtimeRegistry: RuntimeRegistry;
-  handoffController: Pick<HandoffController, 'exportSnapshot' | 'handoff'>;
+  handoffController: Pick<HandoffController, 'exportSnapshot' | 'handoff' | 'preflightNativeImport'>;
   logger: Logger;
 };
 
@@ -68,6 +69,15 @@ export const runtimeSessionsRoutes: FastifyPluginAsync<RuntimeSessionsRoutesOpti
       snapshot: result.snapshot,
       session: toSessionSummary(result.session),
     };
+  });
+
+  app.post<{ Body: NativeImportPreflightRequest }>('/handoff/preflight', async (request) => {
+    return handoffController.preflightNativeImport({
+      sourceRuntime: request.body.snapshot.sourceRuntime,
+      targetRuntime: request.body.targetRuntime,
+      projectPath: request.body.projectPath,
+      snapshot: request.body.snapshot,
+    });
   });
 
   app.post<{ Params: { sessionId: string }; Body: RuntimeSessionBody }>(

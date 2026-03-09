@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Machine } from '@agentctl/shared';
+import type { Machine, NativeImportPreflightResponse } from '@agentctl/shared';
 import { ApiClient, MobileClientError } from '../services/api-client.js';
 import type { RuntimeSessionHandoff, RuntimeSessionInfo } from '../services/runtime-session-api.js';
 import type { RuntimeSessionScreenState } from './runtime-session-presenter.js';
@@ -54,6 +54,7 @@ function makeHandoff(partial: Partial<RuntimeSessionHandoff> = {}): RuntimeSessi
     snapshot: {
       sourceRuntime: 'codex',
       sourceSessionId: 'ms-1',
+      sourceNativeSessionId: 'codex-native-1',
       projectPath: '/tmp/project',
       worktreePath: '/tmp/project/.trees/runtime',
       branch: 'feature/runtime',
@@ -238,6 +239,34 @@ describe('RuntimeSessionPresenter', () => {
       model: 'gpt-5-codex',
       targetMachineId: 'machine-2',
     });
+  });
+
+  it('loads handoff preflight for the selected source/target runtime pair', async () => {
+    mocks.fetch.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        nativeImportCapable: true,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'not_implemented',
+          metadata: {},
+        },
+      } satisfies NativeImportPreflightResponse),
+    );
+
+    const presenter = new RuntimeSessionPresenter({ apiClient });
+    await presenter.loadHandoffPreflight({
+      sessionId: 'ms-1',
+      targetRuntime: 'claude-code',
+    });
+
+    expect(presenter.getState().handoffPreflight?.nativeImportCapable).toBe(true);
+    const [preflightUrl] = mocks.fetch.mock.calls[0] ?? [];
+    expect(String(preflightUrl)).toBe(
+      'https://cp.example.com/api/runtime-sessions/ms-1/handoff/preflight?targetRuntime=claude-code',
+    );
   });
 
   it('hands off a session and reloads the selected session handoff history', async () => {

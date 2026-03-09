@@ -4,7 +4,7 @@
 // handoff history, creating sessions, and triggering handoffs.
 // ---------------------------------------------------------------------------
 
-import type { Machine } from '@agentctl/shared';
+import type { Machine, NativeImportPreflightResponse } from '@agentctl/shared';
 
 import type { ApiClient } from '../services/api-client.js';
 import { MobileClientError } from '../services/api-client.js';
@@ -21,8 +21,10 @@ export type RuntimeSessionScreenState = {
   machines: Machine[];
   selectedSession: RuntimeSessionInfo | null;
   handoffs: RuntimeSessionHandoff[];
+  handoffPreflight: NativeImportPreflightResponse | null;
   isLoading: boolean;
   isHandoffsLoading: boolean;
+  isPreflightLoading: boolean;
   error: MobileClientError | null;
   lastUpdated: Date | null;
 };
@@ -46,8 +48,10 @@ export class RuntimeSessionPresenter {
     machines: [],
     selectedSession: null,
     handoffs: [],
+    handoffPreflight: null,
     isLoading: false,
     isHandoffsLoading: false,
+    isPreflightLoading: false,
     error: null,
     lastUpdated: null,
   };
@@ -112,12 +116,12 @@ export class RuntimeSessionPresenter {
   }
 
   async selectSession(session: RuntimeSessionInfo): Promise<void> {
-    this.setState({ selectedSession: session, handoffs: [] });
+    this.setState({ selectedSession: session, handoffs: [], handoffPreflight: null });
     await this.loadHandoffs(session.id);
   }
 
   clearSelectedSession(): void {
-    this.setState({ selectedSession: null, handoffs: [] });
+    this.setState({ selectedSession: null, handoffs: [], handoffPreflight: null });
   }
 
   async loadHandoffs(sessionId: string): Promise<void> {
@@ -135,6 +139,36 @@ export class RuntimeSessionPresenter {
             ? err
             : new MobileClientError(
                 'RUNTIME_HANDOFFS_LOAD_FAILED',
+                err instanceof Error ? err.message : String(err),
+              ),
+      });
+    }
+  }
+
+  async loadHandoffPreflight(params: {
+    sessionId: string;
+    targetRuntime: RuntimeSessionInfo['runtime'];
+    targetMachineId?: string;
+  }): Promise<void> {
+    if (!params.sessionId) return;
+    this.setState({ isPreflightLoading: true, error: null });
+
+    try {
+      const result = await this.runtimeSessionApi.preflightHandoff(params.sessionId, {
+        targetRuntime: params.targetRuntime,
+        ...(params.targetMachineId?.trim()
+          ? { targetMachineId: params.targetMachineId.trim() }
+          : {}),
+      });
+      this.setState({ handoffPreflight: result, isPreflightLoading: false });
+    } catch (err: unknown) {
+      this.setState({
+        isPreflightLoading: false,
+        error:
+          err instanceof MobileClientError
+            ? err
+            : new MobileClientError(
+                'RUNTIME_HANDOFF_PREFLIGHT_FAILED',
                 err instanceof Error ? err.message : String(err),
               ),
       });
@@ -207,6 +241,7 @@ export class RuntimeSessionPresenter {
       machines: [...this.state.machines],
       selectedSession: this.state.selectedSession ? { ...this.state.selectedSession } : null,
       handoffs: [...this.state.handoffs],
+      handoffPreflight: this.state.handoffPreflight ? { ...this.state.handoffPreflight } : null,
     };
   }
 

@@ -51,6 +51,7 @@ function makeSnapshot(): HandoffSnapshot {
   return {
     sourceRuntime: 'codex',
     sourceSessionId: 'ms-source',
+    sourceNativeSessionId: 'codex-native-1',
     projectPath: '/workspace/app',
     worktreePath: '/workspace/app/.trees/agent-1',
     branch: 'main',
@@ -254,6 +255,43 @@ describe('handoffRoutes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error).toBe('MANAGED_SESSION_NOT_FOUND');
+  });
+
+  it('GET /api/runtime-sessions/:id/handoff/preflight probes native import on the target worker', async () => {
+    managedSessionStore.get.mockResolvedValue(makeManagedSession());
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        nativeImportCapable: true,
+        attempt: {
+          ok: false,
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'not_implemented',
+          metadata: {
+            targetCli: { command: 'claude', available: true, version: '2.1.71' },
+          },
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/ms-source/handoff/preflight?targetRuntime=claude-code',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().nativeImportCapable).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/runtime-sessions/handoff/preflight'),
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"sourceNativeSessionId":"codex-native-1"'),
+      }),
+    );
   });
 
   it('GET /api/runtime-sessions/:id/handoffs returns handoff history for the managed session', async () => {

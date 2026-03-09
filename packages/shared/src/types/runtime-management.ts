@@ -90,6 +90,7 @@ export type ManagedSession = {
 export type HandoffSnapshot = {
   sourceRuntime: ManagedRuntime;
   sourceSessionId: string;
+  sourceNativeSessionId: string | null;
   projectPath: string;
   worktreePath: string | null;
   branch: string | null;

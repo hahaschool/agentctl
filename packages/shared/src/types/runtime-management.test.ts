@@ -99,6 +99,7 @@ describe('runtime-management types', () => {
     const snapshot: HandoffSnapshot = {
       sourceRuntime: 'claude-code',
       sourceSessionId: 'ms-parent',
+      sourceNativeSessionId: 'claude-native-parent',
       projectPath: '/tmp/project',
       worktreePath: '/tmp/project/.trees/agent-1',
       branch: 'codex/runtime-unification-fresh',

@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import type {
   ExportHandoffSnapshotRequest,
   HandoffSnapshot,
+  NativeImportPreflightResponse,
   HandoffStrategy,
   ManagedRuntime,
   StartHandoffRequest,
@@ -13,7 +14,12 @@ import type { Logger } from 'pino';
 
 import { tryClaudeToCodexImport } from './native-import/claude-to-codex.js';
 import { tryCodexToClaudeImport } from './native-import/codex-to-claude.js';
-import type { NativeImportAttemptResult, NativeImportProbeInput } from './native-import/types.js';
+import { probeNativeImportPrerequisites } from './native-import/probe.js';
+import {
+  failedNativeImportAttempt,
+  type NativeImportAttemptResult,
+  type NativeImportProbeInput,
+} from './native-import/types.js';
 import type { ManagedSessionHandle, RuntimeAdapter } from './runtime-adapter.js';
 import { RuntimeRegistry } from './runtime-registry.js';
 
@@ -81,6 +87,7 @@ export class HandoffController {
     return {
       sourceRuntime: input.sourceRuntime,
       sourceSessionId: input.sourceSessionId,
+      sourceNativeSessionId: input.nativeSessionId,
       projectPath: input.projectPath,
       worktreePath: input.worktreePath ?? inspected.worktreePath,
       branch: inspected.branch,
@@ -94,6 +101,68 @@ export class HandoffController {
       activeMcpServers: input.activeMcpServers ?? [],
       activeSkills: input.activeSkills ?? [],
       reason: input.reason,
+    };
+  }
+
+  async preflightNativeImport(input: {
+    sourceRuntime: ManagedRuntime;
+    targetRuntime: ManagedRuntime;
+    projectPath: string;
+    snapshot: HandoffSnapshot;
+  }): Promise<NativeImportPreflightResponse> {
+    const key = `${input.sourceRuntime}:${input.targetRuntime}`;
+    if (!this.options.allowExperimentalNativeImport || input.sourceRuntime === input.targetRuntime) {
+      return {
+        ok: true,
+        nativeImportCapable: false,
+        attempt: failedNativeImportAttempt({
+          sourceRuntime: input.sourceRuntime,
+          targetRuntime: input.targetRuntime,
+          reason: 'not_supported',
+          metadata: { key, experimentalNativeImport: this.options.allowExperimentalNativeImport ?? false },
+        }),
+      };
+    }
+
+    if (!this.nativeImporters[key]) {
+      return {
+        ok: true,
+        nativeImportCapable: false,
+        attempt: failedNativeImportAttempt({
+          sourceRuntime: input.sourceRuntime,
+          targetRuntime: input.targetRuntime,
+          reason: 'not_supported',
+          metadata: { key },
+        }),
+      };
+    }
+
+    const prerequisiteResult = await probeNativeImportPrerequisites(input);
+    const attempt =
+      prerequisiteResult.reason === 'not_implemented'
+        ? failedNativeImportAttempt({
+            sourceRuntime: input.sourceRuntime,
+            targetRuntime: input.targetRuntime,
+            reason: 'not_implemented',
+            metadata: {
+              key,
+              ...prerequisiteResult.metadata,
+            },
+          })
+        : failedNativeImportAttempt({
+            sourceRuntime: input.sourceRuntime,
+            targetRuntime: input.targetRuntime,
+            reason: prerequisiteResult.reason,
+            metadata: {
+              key,
+              ...prerequisiteResult.metadata,
+            },
+          });
+
+    return {
+      ok: true,
+      nativeImportCapable: prerequisiteResult.reason === 'not_implemented',
+      attempt,
     };
   }
 

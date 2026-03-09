@@ -9,6 +9,7 @@ function makeSnapshot(overrides: Partial<HandoffSnapshot> = {}): HandoffSnapshot
   return {
     sourceRuntime: 'claude-code',
     sourceSessionId: 'ms-source',
+    sourceNativeSessionId: 'claude-native-source',
     projectPath: '/workspace/app',
     worktreePath: '/workspace/app/.trees/agent-1',
     branch: 'main',
@@ -156,6 +157,7 @@ describe('HandoffController', () => {
 
     expect(snapshot.sourceRuntime).toBe('codex');
     expect(snapshot.branch).toBe('feature/runtime-handoff');
+    expect(snapshot.sourceNativeSessionId).toBe('codex-native-1');
     expect(snapshot.nextSuggestedPrompt).toBe('Continue from the current worktree.');
   });
 

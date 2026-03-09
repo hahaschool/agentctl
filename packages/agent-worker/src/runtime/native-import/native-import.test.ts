@@ -85,6 +85,7 @@ describe('native import probes', () => {
       snapshot: {
         sourceRuntime: 'claude-code',
         sourceSessionId: 'ms-source',
+        sourceNativeSessionId: 'claude-native-source',
         projectPath: '/workspace/app',
         worktreePath: '/workspace/app/.trees/agent-1',
         branch: 'main',
@@ -117,7 +118,7 @@ describe('native import probes', () => {
     expect(sessionIndex).toContain(materializedSession.nativeSessionId);
 
     const sessionFile = await readFile(materializedSession.sessionPath, 'utf8');
-    expect(sessionFile).toContain('Imported from claude-code session ms-source.');
+    expect(sessionFile).toContain('Imported from claude-code session claude-native-source.');
     expect(sessionFile).toContain('Please continue the runtime handoff implementation.');
   });
 
@@ -167,6 +168,7 @@ describe('native import probes', () => {
       snapshot: {
         sourceRuntime: 'codex',
         sourceSessionId: 'ms-source',
+        sourceNativeSessionId: 'codex-native-source',
         projectPath: '/workspace/app',
         worktreePath: '/workspace/app/.trees/agent-1',
         branch: 'main',
@@ -195,7 +197,7 @@ describe('native import probes', () => {
     expect(materializedSession.nativeSessionId).toBe(result.session?.nativeSessionId);
 
     const sessionFile = await readFile(materializedSession.sessionPath, 'utf8');
-    expect(sessionFile).toContain('Imported from codex session ms-source.');
+    expect(sessionFile).toContain('Imported from codex session codex-native-source.');
     expect(sessionFile).toContain('Switch this task over to Claude Code.');
   });
 
@@ -216,6 +218,7 @@ describe('native import probes', () => {
       snapshot: {
         sourceRuntime: 'codex',
         sourceSessionId: 'ms-source',
+        sourceNativeSessionId: 'codex-native-source',
         projectPath: '/workspace/app',
         worktreePath: '/workspace/app/.trees/agent-1',
         branch: 'main',
@@ -272,6 +275,7 @@ describe('native import probes', () => {
       snapshot: {
         sourceRuntime: 'claude-code',
         sourceSessionId: 'ms-source',
+        sourceNativeSessionId: 'claude-native-source',
         projectPath: '/workspace/app',
         worktreePath: '/workspace/app/.trees/agent-1',
         branch: 'main',
@@ -322,6 +326,7 @@ describe('native import probes', () => {
       snapshot: {
         sourceRuntime: 'codex',
         sourceSessionId: 'ms-source',
+        sourceNativeSessionId: 'codex-native-source',
         projectPath: '/workspace/app',
         worktreePath: '/workspace/app/.trees/agent-1',
         branch: 'main',

@@ -9,6 +9,7 @@ import {
 export async function tryCodexToClaudeImport(
   input: NativeImportProbeInput,
 ): Promise<NativeImportAttemptResult> {
+  const sourceImportId = input.snapshot.sourceNativeSessionId ?? input.snapshot.sourceSessionId;
   const prerequisiteResult = await probeNativeImportPrerequisites({
     sourceRuntime: 'codex',
     targetRuntime: 'claude-code',
@@ -24,6 +25,7 @@ export async function tryCodexToClaudeImport(
       metadata: {
         probe: 'codex-to-claude',
         sourceSessionId: input.snapshot.sourceSessionId,
+        sourceNativeSessionId: input.snapshot.sourceNativeSessionId,
         projectPath: input.projectPath,
         ...prerequisiteResult.metadata,
       },
@@ -38,6 +40,7 @@ export async function tryCodexToClaudeImport(
       metadata: {
         probe: 'codex-to-claude',
         sourceSessionId: input.snapshot.sourceSessionId,
+        sourceNativeSessionId: input.snapshot.sourceNativeSessionId,
         projectPath: input.projectPath,
         error: 'Target runtime resume callback is unavailable',
         ...prerequisiteResult.metadata,
@@ -54,7 +57,7 @@ export async function tryCodexToClaudeImport(
     materializedSession = await materializeClaudeImportedSession({
       projectPath: input.projectPath,
       sourceRuntime: 'codex',
-      sourceSessionId: input.snapshot.sourceSessionId,
+      sourceSessionId: sourceImportId,
       gitBranch: input.snapshot.branch,
       sourceSessionSummary: extractSourceSessionSummary(prerequisiteResult.metadata),
       claudeVersion: extractCliVersion(prerequisiteResult.metadata),
@@ -67,6 +70,7 @@ export async function tryCodexToClaudeImport(
       metadata: {
         probe: 'codex-to-claude',
         sourceSessionId: input.snapshot.sourceSessionId,
+        sourceNativeSessionId: input.snapshot.sourceNativeSessionId,
         projectPath: input.projectPath,
         error: error instanceof Error ? error.message : String(error),
         ...prerequisiteResult.metadata,
@@ -89,6 +93,7 @@ export async function tryCodexToClaudeImport(
       metadata: {
         probe: 'codex-to-claude',
         sourceSessionId: input.snapshot.sourceSessionId,
+        sourceNativeSessionId: input.snapshot.sourceNativeSessionId,
         projectPath: input.projectPath,
         materializedSession,
         ...prerequisiteResult.metadata,
@@ -103,6 +108,7 @@ export async function tryCodexToClaudeImport(
       metadata: {
         probe: 'codex-to-claude',
         sourceSessionId: input.snapshot.sourceSessionId,
+        sourceNativeSessionId: input.snapshot.sourceNativeSessionId,
         projectPath: input.projectPath,
         materializedSession,
         error: error instanceof Error ? error.message : String(error),

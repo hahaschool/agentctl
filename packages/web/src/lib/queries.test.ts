@@ -15,6 +15,7 @@ import {
   routerModelsInfoQuery,
   routerModelsQuery,
   runtimeSessionHandoffsQuery,
+  runtimeSessionPreflightQuery,
   runtimeSessionsQuery,
   sessionContentQuery,
   sessionQuery,
@@ -87,6 +88,15 @@ describe('queryKeys', () => {
       'ms-123',
       'handoffs',
       10,
+    ]);
+  });
+
+  it('runtimeSessionPreflight key includes target runtime', () => {
+    expect(queryKeys.runtimeSessionPreflight('ms-123', 'claude-code')).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'preflight',
+      'claude-code',
     ]);
   });
 
@@ -399,6 +409,22 @@ describe('runtimeSessionHandoffsQuery', () => {
   it('has queryFn property', () => {
     const options = runtimeSessionHandoffsQuery('ms-123');
     expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('runtimeSessionPreflightQuery', () => {
+  it('returns queryOptions with runtimeSessionPreflight queryKey', () => {
+    const options = runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' });
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessionPreflight('ms-123', 'claude-code'));
+  });
+
+  it('has enabled property based on id', () => {
+    expect(runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).enabled).toBe(true);
+    expect(runtimeSessionPreflightQuery('', { targetRuntime: 'claude-code' }).enabled).toBe(false);
+  });
+
+  it('has queryFn property', () => {
+    expect(runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).queryFn).toBeDefined();
   });
 });
 

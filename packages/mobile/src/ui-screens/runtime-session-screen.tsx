@@ -88,9 +88,17 @@ function describeNativeImportAttempt(attempt?: {
 
   const details: string[] = [];
   const targetCli =
-    typeof attempt.metadata?.targetCli === 'string' ? attempt.metadata.targetCli : null;
+    typeof attempt.metadata?.targetCli === 'string'
+      ? attempt.metadata.targetCli
+      : typeof attempt.metadata?.targetCli === 'object' && attempt.metadata.targetCli !== null
+        ? formatTargetCli(attempt.metadata.targetCli as Record<string, unknown>)
+        : null;
   const sourceStorage =
-    typeof attempt.metadata?.sourceStorage === 'string' ? attempt.metadata.sourceStorage : null;
+    typeof attempt.metadata?.sourceStorage === 'string'
+      ? attempt.metadata.sourceStorage
+      : typeof attempt.metadata?.sourceStorage === 'object' && attempt.metadata.sourceStorage !== null
+        ? formatSourceStorage(attempt.metadata.sourceStorage as Record<string, unknown>)
+        : null;
   const sourceSessionSummary =
     typeof attempt.metadata?.sourceSessionSummary === 'object' &&
     attempt.metadata.sourceSessionSummary !== null
@@ -125,6 +133,50 @@ function describeNativeImportAttempt(attempt?: {
   return attempt.ok
     ? `Native import succeeded${suffix}.`
     : `Native import unavailable: ${formatNativeImportReason(attempt.reason)}${suffix}.`;
+}
+
+function describeNativeImportPreflight(preflight?: RuntimeSessionScreenState['handoffPreflight']): string | null {
+  if (!preflight) return null;
+
+  if (preflight.nativeImportCapable) {
+    const targetCli =
+      typeof preflight.attempt.metadata?.targetCli === 'string'
+        ? preflight.attempt.metadata.targetCli
+        : typeof preflight.attempt.metadata?.targetCli === 'object' &&
+            preflight.attempt.metadata.targetCli !== null
+          ? formatTargetCli(preflight.attempt.metadata.targetCli as Record<string, unknown>)
+          : null;
+    const sourceStorage =
+      typeof preflight.attempt.metadata?.sourceStorage === 'string'
+        ? preflight.attempt.metadata.sourceStorage
+        : typeof preflight.attempt.metadata?.sourceStorage === 'object' &&
+            preflight.attempt.metadata.sourceStorage !== null
+          ? formatSourceStorage(preflight.attempt.metadata.sourceStorage as Record<string, unknown>)
+          : null;
+    const details = [
+      targetCli ? `target CLI ${targetCli}` : null,
+      sourceStorage ? `source storage ${sourceStorage}` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    return details ? `Native import ready (${details}).` : 'Native import ready on this target runtime.';
+  }
+
+  const summary = describeNativeImportAttempt(preflight.attempt);
+  return summary ? `${summary} Snapshot handoff will be used.` : null;
+}
+
+function formatTargetCli(targetCli: Record<string, unknown>): string | null {
+  const command = typeof targetCli.command === 'string' ? targetCli.command : null;
+  const version = typeof targetCli.version === 'string' ? targetCli.version : null;
+  if (!command) return version;
+  return version ? `${command} (${version})` : command;
+}
+
+function formatSourceStorage(sourceStorage: Record<string, unknown>): string | null {
+  if (typeof sourceStorage.sessionPath === 'string') return sourceStorage.sessionPath;
+  if (typeof sourceStorage.rootPath === 'string') return sourceStorage.rootPath;
+  return null;
 }
 
 
@@ -162,8 +214,10 @@ export function RuntimeSessionScreen(): React.JSX.Element {
     machines: [],
     selectedSession: null,
     handoffs: [],
+    handoffPreflight: null,
     isLoading: false,
     isHandoffsLoading: false,
+    isPreflightLoading: false,
     error: null,
     lastUpdated: null,
   });
@@ -188,6 +242,18 @@ export function RuntimeSessionScreen(): React.JSX.Element {
       state.selectedSession.runtime === 'codex' ? 'claude-code' : 'codex',
     );
   }, [state.selectedSession]);
+
+  useEffect(() => {
+    if (!state.selectedSession) return;
+    if (!state.selectedSession.nativeSessionId) return;
+    if (!(state.selectedSession.status === 'active' || state.selectedSession.status === 'paused')) return;
+    if (handoffTargetRuntime === state.selectedSession.runtime) return;
+
+    void presenterRef.current?.loadHandoffPreflight({
+      sessionId: state.selectedSession.id,
+      targetRuntime: handoffTargetRuntime,
+    });
+  }, [handoffTargetRuntime, state.selectedSession]);
 
   useEffect(() => {
     if (createMachineId) return;
@@ -405,6 +471,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
     state.selectedSession?.status === 'error';
   const handoffable =
     state.selectedSession?.status === 'active' || state.selectedSession?.status === 'paused';
+  const preflightSummary = handoffable ? describeNativeImportPreflight(state.handoffPreflight) : null;
 
   return (
     <View style={styles.container}>
@@ -707,6 +774,29 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                             </TouchableOpacity>
                           ))}
                       </View>
+                      {preflightSummary && (
+                        <View
+                          style={[
+                            styles.preflightCard,
+                            state.handoffPreflight?.nativeImportCapable
+                              ? styles.preflightCardReady
+                              : styles.preflightCardFallback,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.preflightText,
+                              state.handoffPreflight?.nativeImportCapable
+                                ? styles.preflightTextReady
+                                : styles.preflightTextFallback,
+                            ]}
+                          >
+                            {state.isPreflightLoading
+                              ? 'Refreshing native import preflight...'
+                              : preflightSummary}
+                          </Text>
+                        </View>
+                      )}
                       <TextInput
                         style={[styles.input, styles.promptInput]}
                         value={handoffPrompt}
@@ -1132,6 +1222,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 8,
     lineHeight: 18,
+  },
+  preflightCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  preflightCardReady: {
+    borderColor: 'rgba(34, 197, 94, 0.28)',
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+  },
+  preflightCardFallback: {
+    borderColor: 'rgba(245, 158, 11, 0.28)',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+  },
+  preflightText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  preflightTextReady: {
+    color: '#86efac',
+  },
+  preflightTextFallback: {
+    color: '#fcd34d',
   },
   handoffError: {
     color: '#fca5a5',

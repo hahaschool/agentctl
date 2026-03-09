@@ -26,6 +26,7 @@ import {
   useForkRuntimeSession,
   useHandoffRuntimeSession,
   useResumeRuntimeSession,
+  runtimeSessionPreflightQuery,
   runtimeSessionHandoffsQuery,
   runtimeSessionsQuery,
 } from '../lib/queries';
@@ -92,9 +93,17 @@ function describeNativeImportAttempt(attempt?: {
 
   const details: string[] = [];
   const targetCli =
-    typeof attempt.metadata?.targetCli === 'string' ? attempt.metadata.targetCli : null;
+    typeof attempt.metadata?.targetCli === 'string'
+      ? attempt.metadata.targetCli
+      : typeof attempt.metadata?.targetCli === 'object' && attempt.metadata.targetCli !== null
+        ? formatTargetCli(attempt.metadata.targetCli as Record<string, unknown>)
+        : null;
   const sourceStorage =
-    typeof attempt.metadata?.sourceStorage === 'string' ? attempt.metadata.sourceStorage : null;
+    typeof attempt.metadata?.sourceStorage === 'string'
+      ? attempt.metadata.sourceStorage
+      : typeof attempt.metadata?.sourceStorage === 'object' && attempt.metadata.sourceStorage !== null
+        ? formatSourceStorage(attempt.metadata.sourceStorage as Record<string, unknown>)
+        : null;
   const sourceSessionSummary =
     typeof attempt.metadata?.sourceSessionSummary === 'object' &&
     attempt.metadata.sourceSessionSummary !== null
@@ -129,6 +138,57 @@ function describeNativeImportAttempt(attempt?: {
   return attempt.ok
     ? `Native import succeeded${suffix}`
     : `Native import unavailable: ${formatNativeImportReason(attempt.reason)}${suffix}`;
+}
+
+function describeNativeImportPreflight(preflight?: {
+  nativeImportCapable: boolean;
+  attempt: {
+    reason?: string | null;
+    metadata?: Record<string, unknown>;
+  };
+}): string | null {
+  if (!preflight) return null;
+
+  if (preflight.nativeImportCapable) {
+    const targetCli =
+      typeof preflight.attempt.metadata?.targetCli === 'string'
+        ? preflight.attempt.metadata.targetCli
+        : typeof preflight.attempt.metadata?.targetCli === 'object' &&
+            preflight.attempt.metadata.targetCli !== null
+          ? formatTargetCli(preflight.attempt.metadata.targetCli as Record<string, unknown>)
+          : null;
+    const storage =
+      typeof preflight.attempt.metadata?.sourceStorage === 'string'
+        ? preflight.attempt.metadata.sourceStorage
+        : typeof preflight.attempt.metadata?.sourceStorage === 'object' &&
+            preflight.attempt.metadata.sourceStorage !== null
+          ? formatSourceStorage(preflight.attempt.metadata.sourceStorage as Record<string, unknown>)
+          : null;
+    const details = [targetCli ? `target CLI ${targetCli}` : null, storage ? `source storage ${storage}` : null]
+      .filter(Boolean)
+      .join(', ');
+    return details ? `Native import ready, ${details}` : 'Native import ready on this target runtime.';
+  }
+
+  const fallbackSummary = describeNativeImportAttempt({
+    ok: false,
+    reason: preflight.attempt.reason ?? null,
+    metadata: preflight.attempt.metadata,
+  });
+  return fallbackSummary ? `${fallbackSummary}. Snapshot handoff will be used.` : null;
+}
+
+function formatTargetCli(targetCli: Record<string, unknown>): string | null {
+  const command = typeof targetCli.command === 'string' ? targetCli.command : null;
+  const version = typeof targetCli.version === 'string' ? targetCli.version : null;
+  if (!command) return version;
+  return version ? `${command} (${version})` : command;
+}
+
+function formatSourceStorage(sourceStorage: Record<string, unknown>): string | null {
+  if (typeof sourceStorage.sessionPath === 'string') return sourceStorage.sessionPath;
+  if (typeof sourceStorage.rootPath === 'string') return sourceStorage.rootPath;
+  return null;
 }
 
 function HandoffHistoryItem({ handoff }: { handoff: RuntimeSessionHandoff }): React.JSX.Element {
@@ -193,6 +253,11 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const sessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
   const machines = useQuery(machinesQuery());
   const handoffs = useQuery(runtimeSessionHandoffsQuery(selectedId ?? '', 20));
+  const preflight = useQuery(
+    runtimeSessionPreflightQuery(selectedId ?? '', {
+      targetRuntime: handoffTargetRuntime,
+    }),
+  );
   const createMutation = useCreateRuntimeSession();
   const resumeMutation = useResumeRuntimeSession();
   const forkMutation = useForkRuntimeSession();
@@ -242,7 +307,11 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     }
   }, [handoffs, machines, selectedId, sessions]);
 
-  const errorMessage = sessions.error?.message ?? machines.error?.message ?? handoffs.error?.message;
+  const errorMessage =
+    sessions.error?.message ??
+    machines.error?.message ??
+    handoffs.error?.message ??
+    preflight.error?.message;
   const totalCount = sessions.data?.count ?? 0;
   const activeCount = (sessions.data?.sessions ?? []).filter((session) => session.status === 'active').length;
   const handingOffCount = (sessions.data?.sessions ?? []).filter(
@@ -252,6 +321,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     sessions.dataUpdatedAt || 0,
     machines.dataUpdatedAt || 0,
     handoffs.dataUpdatedAt || 0,
+    preflight.dataUpdatedAt || 0,
   );
   const metadataSummary = selectedSession ? summarizeMetadata(selectedSession.metadata) : [];
   const canHandoff = Boolean(
@@ -267,6 +337,10 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         selectedSession.status === 'error'),
   );
   const canFork = Boolean(selectedSession?.nativeSessionId);
+  const preflightSummary =
+    canHandoff && selectedSession && selectedSession.runtime !== handoffTargetRuntime
+      ? describeNativeImportPreflight(preflight.data)
+      : null;
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -386,7 +460,12 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   return (
     <div className="relative p-4 md:p-6 max-w-[1280px] animate-page-enter space-y-5">
       <FetchingBar
-        isFetching={sessions.isFetching || machines.isFetching || (Boolean(selectedId) && handoffs.isFetching)}
+        isFetching={
+          sessions.isFetching ||
+          machines.isFetching ||
+          (Boolean(selectedId) && handoffs.isFetching) ||
+          (Boolean(selectedId) && preflight.isFetching)
+        }
       />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -835,6 +914,18 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                       ))}
                     </select>
                   </label>
+                  {preflightSummary && (
+                    <div
+                      className={cn(
+                        'lg:col-span-3 rounded-md border px-3 py-2 text-xs',
+                        preflight.data?.nativeImportCapable
+                          ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300'
+                          : 'border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-300',
+                      )}
+                    >
+                      {preflight.isFetching ? 'Refreshing native import preflight...' : preflightSummary}
+                    </div>
+                  )}
                   <label className="space-y-1.5 text-sm text-muted-foreground">
                     <span>Takeover prompt</span>
                     <input

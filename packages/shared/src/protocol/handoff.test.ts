@@ -4,6 +4,7 @@ import type {
   ExportHandoffSnapshotRequest,
   ExportHandoffSnapshotResponse,
   ManagedSessionHandoffResponse,
+  NativeImportPreflightResponse,
   NativeImportAttempt,
   StartHandoffRequest,
   StartHandoffResponse,
@@ -29,6 +30,7 @@ describe('handoff protocol', () => {
       snapshot: {
         sourceRuntime: 'codex',
         sourceSessionId: 'ms-source',
+        sourceNativeSessionId: 'codex-native-1',
         projectPath: '/workspace/app',
         worktreePath: '/workspace/app/.trees/agent-1',
         branch: 'codex/runtime-unification-fresh',
@@ -128,5 +130,30 @@ describe('handoff protocol', () => {
       available: false,
       version: null,
     });
+  });
+
+  it('defines native import preflight responses before a handoff starts', () => {
+    const response: NativeImportPreflightResponse = {
+      ok: true,
+      nativeImportCapable: true,
+      attempt: {
+        ok: false,
+        sourceRuntime: 'claude-code',
+        targetRuntime: 'codex',
+        reason: 'not_implemented',
+        metadata: {
+          sourceSessionSummary: {
+            messageCounts: {
+              user: 4,
+              assistant: 3,
+            },
+          },
+        },
+      },
+    };
+
+    expect(response.ok).toBe(true);
+    expect(response.nativeImportCapable).toBe(true);
+    expect(response.attempt.reason).toBe('not_implemented');
   });
 });
