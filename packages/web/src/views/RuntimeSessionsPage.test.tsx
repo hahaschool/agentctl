@@ -358,6 +358,8 @@ describe('RuntimeSessionsPage', () => {
       expect(screen.getAllByText(/Native import unavailable:/).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/target CLI claude/).length).toBeGreaterThan(0);
       expect(screen.getByText(/1 user \/ 1 assistant messages/)).toBeDefined();
+      expect(screen.getByText('Native Import')).toBeDefined();
+      expect(screen.getByText('Fallbacks')).toBeDefined();
     });
   });
 

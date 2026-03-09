@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isMachineSelectable, pickPreferredMachineId, sortMachinesForSelection, type Machine } from '@agentctl/shared';
+import { isMachineSelectable, pickPreferredMachineId, sortMachinesForSelection, summarizeHandoffAnalytics, type Machine } from '@agentctl/shared';
 import {
   Alert,
   FlatList,
@@ -482,6 +482,10 @@ export function RuntimeSessionScreen(): React.JSX.Element {
   const handoffable =
     state.selectedSession?.status === 'active' || state.selectedSession?.status === 'paused';
   const preflightSummary = handoffable ? describeNativeImportPreflight(state.handoffPreflight) : null;
+  const handoffAnalytics = useMemo(
+    () => summarizeHandoffAnalytics(state.handoffs),
+    [state.handoffs],
+  );
 
   return (
     <View style={styles.container}>
@@ -878,7 +882,27 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                     ) : state.handoffs.length === 0 ? (
                       <Text style={styles.emptyTranscript}>No handoffs recorded for this session.</Text>
                     ) : (
-                      state.handoffs.map(renderHandoff)
+                      <>
+                        <View style={styles.handoffAnalyticsRow}>
+                          <View style={styles.handoffAnalyticsCard}>
+                            <Text style={styles.handoffAnalyticsLabel}>Total</Text>
+                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.total}</Text>
+                          </View>
+                          <View style={styles.handoffAnalyticsCard}>
+                            <Text style={styles.handoffAnalyticsLabel}>Succeeded</Text>
+                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.succeeded}</Text>
+                          </View>
+                          <View style={styles.handoffAnalyticsCard}>
+                            <Text style={styles.handoffAnalyticsLabel}>Native Import</Text>
+                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.nativeImportSuccesses}</Text>
+                          </View>
+                          <View style={styles.handoffAnalyticsCard}>
+                            <Text style={styles.handoffAnalyticsLabel}>Fallbacks</Text>
+                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.nativeImportFallbacks}</Text>
+                          </View>
+                        </View>
+                        {state.handoffs.map(renderHandoff)}
+                      </>
                     )}
                   </View>
                 </ScrollView>
@@ -1236,6 +1260,33 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontStyle: 'italic',
     fontSize: 13,
+  },
+  handoffAnalyticsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  handoffAnalyticsCard: {
+    minWidth: '47%',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    backgroundColor: '#111111',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  handoffAnalyticsLabel: {
+    color: '#6b7280',
+    fontSize: 11,
+    textTransform: 'uppercase',
+  },
+  handoffAnalyticsValue: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 6,
   },
   handoffCard: {
     borderRadius: 10,

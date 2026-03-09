@@ -1,7 +1,13 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { formatMachineSelectionLabel, isMachineSelectable, pickPreferredMachineId, sortMachinesForSelection } from '@agentctl/shared';
+import {
+  formatMachineSelectionLabel,
+  isMachineSelectable,
+  pickPreferredMachineId,
+  sortMachinesForSelection,
+  summarizeHandoffAnalytics,
+} from '@agentctl/shared';
 import { ArrowRightLeft, Cable, Cpu, GitBranch, History, Layers3 } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
@@ -348,6 +354,10 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     canHandoff && selectedSession && selectedSession.runtime !== handoffTargetRuntime
       ? describeNativeImportPreflight(preflight.data)
       : null;
+  const handoffAnalytics = useMemo(
+    () => summarizeHandoffAnalytics(handoffs.data?.handoffs ?? []),
+    [handoffs.data?.handoffs],
+  );
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -1021,6 +1031,28 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                   />
                 ) : (
                   <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-lg border border-border bg-background/40 p-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total</div>
+                        <div className="mt-2 text-lg font-semibold text-foreground">{handoffAnalytics.total}</div>
+                      </div>
+                      <div className="rounded-lg border border-border bg-background/40 p-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Succeeded</div>
+                        <div className="mt-2 text-lg font-semibold text-foreground">{handoffAnalytics.succeeded}</div>
+                      </div>
+                      <div className="rounded-lg border border-border bg-background/40 p-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Native Import</div>
+                        <div className="mt-2 text-lg font-semibold text-foreground">
+                          {handoffAnalytics.nativeImportSuccesses}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-border bg-background/40 p-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Fallbacks</div>
+                        <div className="mt-2 text-lg font-semibold text-foreground">
+                          {handoffAnalytics.nativeImportFallbacks}
+                        </div>
+                      </div>
+                    </div>
                     {(handoffs.data?.handoffs ?? []).map((handoff) => (
                       <HandoffHistoryItem key={handoff.id} handoff={handoff} />
                     ))}
