@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Agent, DiscoveredSession, Machine, Session } from '@/lib/api';
 import { DashboardPage } from './DashboardPage';
 
+const { mockPathBadge } = vi.hoisted(() => ({
+  mockPathBadge: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock dependencies
 // ---------------------------------------------------------------------------
@@ -59,7 +63,10 @@ vi.mock('@/components/LiveTimeAgo', () => ({
 }));
 
 vi.mock('@/components/PathBadge', () => ({
-  PathBadge: ({ path }: { path: string }) => <span data-testid="path-badge">{path}</span>,
+  PathBadge: (props: { path: string; copyable?: boolean }) => {
+    mockPathBadge(props);
+    return <span data-testid="path-badge">{props.path}</span>;
+  },
 }));
 
 vi.mock('@/components/RefreshButton', () => ({
@@ -219,6 +226,7 @@ function renderDashboard() {
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPathBadge.mockClear();
 
     // Default successful responses
     mockHealthQuery.mockReturnValue({
@@ -448,6 +456,25 @@ describe('DashboardPage', () => {
     renderDashboard();
     await waitFor(() => {
       expect(screen.getByTestId('path-badge')).toBeDefined();
+    });
+  });
+
+  it('passes non-interactive PathBadge props inside recent activity links', async () => {
+    const session = createSession({ projectPath: '/home/user/project' });
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue([session]),
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(mockPathBadge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: '/home/user/project',
+          copyable: false,
+        }),
+      );
     });
   });
 

@@ -603,7 +603,11 @@ export function DiscoverPage(): React.JSX.Element {
                           {new Set(group.sessions.map((s) => s.projectPath)).size} project(s)
                         </div>
                       ) : (
-                        <PathBadge path={group.projectPath} className="text-[11px] leading-4" />
+                        <PathBadge
+                          path={group.projectPath}
+                          className="text-[11px] leading-4"
+                          copyable={false}
+                        />
                       )}
                     </div>
                     <div className="flex gap-2.5 items-center shrink-0">
@@ -630,56 +634,62 @@ export function DiscoverPage(): React.JSX.Element {
                       const dotClass = recencyColorClass(s.lastActivity);
                       return (
                         <div key={`${s.machineId}-${s.sessionId}`}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedSessionId(s.sessionId)}
+                          <div
                             className={cn(
-                              'w-full flex items-center gap-3 border-b border-border transition-colors duration-100 text-left text-foreground font-[inherit]',
+                              'w-full flex items-center gap-3 border-b border-border transition-colors duration-100 text-foreground',
                               'border-t-0 border-r-0',
                               isFlat ? 'px-4 py-2' : 'py-2 pr-4 pl-[44px]',
                               isSelected
                                 ? 'bg-muted border-l-[3px] border-l-primary'
                                 : 'bg-background border-l-[3px] border-l-transparent hover:bg-accent/10',
-                              'cursor-pointer',
                             )}
                           >
-                            {/* Recency dot */}
-                            <span
-                              className={cn(
-                                'w-[7px] h-[7px] rounded-full shrink-0 inline-block',
-                                dotClass,
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSessionId(s.sessionId)}
+                              className="flex min-w-0 flex-1 items-center gap-3 bg-transparent border-none p-0 text-left text-foreground font-[inherit] cursor-pointer"
+                            >
+                              {/* Recency dot */}
+                              <span
+                                className={cn(
+                                  'w-[7px] h-[7px] rounded-full shrink-0 inline-block',
+                                  dotClass,
+                                )}
+                                title={recencyTitle(s.lastActivity)}
+                              />
+
+                              {/* Summary */}
+                              <SimpleTooltip content={s.summary || 'Untitled'}>
+                                <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
+                                  <HighlightText
+                                    text={s.summary || 'Untitled'}
+                                    highlight={search}
+                                  />
+                                </span>
+                              </SimpleTooltip>
+
+                              {/* Message count */}
+                              <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                                {formatNumber(s.messageCount)} msgs
+                              </span>
+
+                              {/* Branch */}
+                              {s.branch && (
+                                <span className="hidden sm:inline text-[11px] font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
+                                  {s.branch}
+                                </span>
                               )}
-                              title={recencyTitle(s.lastActivity)}
-                            />
 
-                            {/* Summary */}
-                            <SimpleTooltip content={s.summary || 'Untitled'}>
-                              <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-                                <HighlightText text={s.summary || 'Untitled'} highlight={search} />
+                              {/* Hostname */}
+                              <span className="hidden sm:inline text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
+                                {s.hostname}
                               </span>
-                            </SimpleTooltip>
 
-                            {/* Message count */}
-                            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                              {formatNumber(s.messageCount)} msgs
-                            </span>
-
-                            {/* Branch */}
-                            {s.branch && (
-                              <span className="hidden sm:inline text-[11px] font-mono text-green-500 bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0 max-w-[140px] overflow-hidden text-ellipsis">
-                                {s.branch}
+                              {/* Last activity */}
+                              <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 min-w-[60px] text-right">
+                                <LiveTimeAgo date={s.lastActivity} />
                               </span>
-                            )}
-
-                            {/* Hostname */}
-                            <span className="hidden sm:inline text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm whitespace-nowrap shrink-0">
-                              {s.hostname}
-                            </span>
-
-                            {/* Last activity */}
-                            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 min-w-[60px] text-right">
-                              <LiveTimeAgo date={s.lastActivity} />
-                            </span>
+                            </button>
 
                             {/* Session ID (copyable) */}
                             <span className="hidden md:inline">
@@ -701,7 +711,7 @@ export function DiscoverPage(): React.JSX.Element {
                                 Resume
                               </button>
                             )}
-                          </button>
+                          </div>
 
                           {/* Inline resume input */}
                           {isResuming && (

@@ -343,6 +343,12 @@ describe('PathBadge', () => {
     expect(button.tagName).toBe('BUTTON');
   });
 
+  it('renders as non-interactive text when copyable is false', () => {
+    const { container } = render(<PathBadge path="/some/path" copyable={false} />);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(container.querySelector('span')).toBeTruthy();
+  });
+
   it('has aria-label describing the path', () => {
     render(<PathBadge path="/users/john/file.ts" />);
     const button = screen.getByRole('button');

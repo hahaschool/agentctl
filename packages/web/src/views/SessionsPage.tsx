@@ -943,7 +943,7 @@ function SessionListItem({
       </div>
       {s.projectPath && (
         <div className="mt-0.5">
-          <PathBadge path={s.projectPath} className="text-[11px]" />
+          <PathBadge path={s.projectPath} className="text-[11px]" copyable={false} />
         </div>
       )}
       <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">

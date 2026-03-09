@@ -13,13 +13,19 @@ type Props = {
   /** Fallback text when path is empty */
   fallback?: string;
   className?: string;
+  copyable?: boolean;
 };
 
 /**
  * Displays a shortened path with tooltip showing the full path.
  * Click to copy the full path to clipboard.
  */
-export function PathBadge({ path, fallback = '-', className }: Props): React.JSX.Element {
+export function PathBadge({
+  path,
+  fallback = '-',
+  className,
+  copyable = true,
+}: Props): React.JSX.Element {
   const toast = useToast();
   const short = shortenPath(path);
 
@@ -33,6 +39,21 @@ export function PathBadge({ path, fallback = '-', className }: Props): React.JSX
 
   if (!path) {
     return <span className={cn('text-xs text-muted-foreground', className)}>{fallback}</span>;
+  }
+
+  if (!copyable) {
+    return (
+      <SimpleTooltip content={path}>
+        <span
+          className={cn(
+            'font-mono text-xs text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap',
+            className,
+          )}
+        >
+          {short}
+        </span>
+      </SimpleTooltip>
+    );
   }
 
   return (
