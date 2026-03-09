@@ -362,12 +362,22 @@ describe('RuntimeSessionsPage', () => {
   });
 
   it('renders native import preflight readiness before starting a handoff', async () => {
-    setupUseQuery();
+    setupUseQuery({
+      machines: [createMachine(), createMachine({ id: 'machine-2', hostname: 'ec2-runner' })],
+    });
 
     render(<RuntimeSessionsPage />);
 
+    fireEvent.change(screen.getByLabelText('Handoff target machine'), {
+      target: { value: 'machine-2' },
+    });
+
     await waitFor(() => {
       expect(screen.getByText(/Native import ready/)).toBeDefined();
+      expect(mockRuntimeSessionPreflightQuery).toHaveBeenLastCalledWith('ms-1', {
+        targetRuntime: 'claude-code',
+        targetMachineId: 'machine-2',
+      });
     });
   });
 
@@ -418,10 +428,15 @@ describe('RuntimeSessionsPage', () => {
   });
 
   it('starts a manual handoff with the selected target runtime', async () => {
-    setupUseQuery();
+    setupUseQuery({
+      machines: [createMachine(), createMachine({ id: 'machine-2', hostname: 'ec2-runner' })],
+    });
 
     render(<RuntimeSessionsPage />);
 
+    fireEvent.change(screen.getByLabelText('Handoff target machine'), {
+      target: { value: 'machine-2' },
+    });
     const promptInput = await screen.findByLabelText('Takeover prompt');
     fireEvent.change(promptInput, { target: { value: 'Continue from the existing diff' } });
     fireEvent.click(screen.getByRole('button', { name: 'Start Handoff' }));
@@ -431,6 +446,7 @@ describe('RuntimeSessionsPage', () => {
         id: 'ms-1',
         targetRuntime: 'claude-code',
         reason: 'manual',
+        targetMachineId: 'machine-2',
         prompt: 'Continue from the existing diff',
       });
     });

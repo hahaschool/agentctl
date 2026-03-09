@@ -223,10 +223,14 @@ export class RuntimeSessionPresenter {
     sessionId: string;
     targetRuntime: RuntimeSessionInfo['runtime'];
     prompt?: string;
+    targetMachineId?: string;
   }): Promise<RuntimeSessionHandoffResponse> {
     const response = await this.runtimeSessionApi.handoffSession(params.sessionId, {
       targetRuntime: params.targetRuntime,
       reason: 'manual',
+      ...(params.targetMachineId?.trim()
+        ? { targetMachineId: params.targetMachineId.trim() }
+        : {}),
       ...(params.prompt?.trim() ? { prompt: params.prompt.trim() } : {}),
     });
     await this.loadSessions();

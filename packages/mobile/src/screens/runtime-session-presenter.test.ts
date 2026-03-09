@@ -260,12 +260,13 @@ describe('RuntimeSessionPresenter', () => {
     await presenter.loadHandoffPreflight({
       sessionId: 'ms-1',
       targetRuntime: 'claude-code',
+      targetMachineId: 'machine-2',
     });
 
     expect(presenter.getState().handoffPreflight?.nativeImportCapable).toBe(true);
     const [preflightUrl] = mocks.fetch.mock.calls[0] ?? [];
     expect(String(preflightUrl)).toBe(
-      'https://cp.example.com/api/runtime-sessions/ms-1/handoff/preflight?targetRuntime=claude-code',
+      'https://cp.example.com/api/runtime-sessions/ms-1/handoff/preflight?targetRuntime=claude-code&targetMachineId=machine-2',
     );
   });
 
@@ -298,6 +299,7 @@ describe('RuntimeSessionPresenter', () => {
     const response = await presenter.handoffSession({
       sessionId: 'ms-1',
       targetRuntime: 'claude-code',
+      targetMachineId: 'machine-2',
       prompt: 'Continue on Claude Code',
     });
 
@@ -305,6 +307,15 @@ describe('RuntimeSessionPresenter', () => {
     expect(response.nativeImportAttempt?.reason).toBe('source_session_missing');
     expect(presenter.getState().selectedSession?.runtime).toBe('claude-code');
     expect(presenter.getState().handoffs).toHaveLength(1);
+
+    const [handoffUrl, handoffInit] = mocks.fetch.mock.calls[0] ?? [];
+    expect(String(handoffUrl)).toBe('https://cp.example.com/api/runtime-sessions/ms-1/handoff');
+    expect(JSON.parse(String(handoffInit?.body))).toEqual({
+      targetRuntime: 'claude-code',
+      reason: 'manual',
+      targetMachineId: 'machine-2',
+      prompt: 'Continue on Claude Code',
+    });
   });
 
   it('wraps non-MobileClientError failures during load', async () => {

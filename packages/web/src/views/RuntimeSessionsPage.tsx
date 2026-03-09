@@ -248,6 +248,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const [forkModel, setForkModel] = useState('');
   const [forkMachineId, setForkMachineId] = useState('');
   const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSession['runtime']>('claude-code');
+  const [handoffMachineId, setHandoffMachineId] = useState('');
   const [handoffPrompt, setHandoffPrompt] = useState('');
 
   const sessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
@@ -256,6 +257,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const preflight = useQuery(
     runtimeSessionPreflightQuery(selectedId ?? '', {
       targetRuntime: handoffTargetRuntime,
+      ...(handoffMachineId ? { targetMachineId: handoffMachineId } : {}),
     }),
   );
   const createMutation = useCreateRuntimeSession();
@@ -346,6 +348,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     if (!selectedSession) return;
     setHandoffTargetRuntime(selectedSession.runtime === 'codex' ? 'claude-code' : 'codex');
     setForkMachineId(selectedSession.machineId);
+    setHandoffMachineId(selectedSession.machineId);
   }, [selectedSession]);
 
   useEffect(() => {
@@ -443,6 +446,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         id: selectedSession.id,
         targetRuntime: handoffTargetRuntime,
         reason: 'manual',
+        ...(handoffMachineId ? { targetMachineId: handoffMachineId } : {}),
         ...(handoffPrompt.trim() ? { prompt: handoffPrompt.trim() } : {}),
       });
       toast.success(
@@ -455,7 +459,15 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to hand off runtime session');
     }
-  }, [canHandoff, handoffMutation, handoffPrompt, handoffTargetRuntime, selectedSession, toast]);
+  }, [
+    canHandoff,
+    handoffMachineId,
+    handoffMutation,
+    handoffPrompt,
+    handoffTargetRuntime,
+    selectedSession,
+    toast,
+  ]);
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1280px] animate-page-enter space-y-5">
@@ -891,7 +903,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                   <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
                   <div className="text-sm font-semibold text-foreground">Manual Handoff</div>
                 </div>
-                <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_auto]">
+                <div className="grid gap-3 lg:grid-cols-[220px_220px_minmax(0,1fr)_auto]">
                   <label className="space-y-1.5 text-sm text-muted-foreground">
                     <span>Target runtime</span>
                     <select
@@ -914,10 +926,26 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                       ))}
                     </select>
                   </label>
+                  <label className="space-y-1.5 text-sm text-muted-foreground">
+                    <span>Target machine</span>
+                    <select
+                      aria-label="Handoff target machine"
+                      value={handoffMachineId}
+                      disabled={!canHandoff || handoffMutation.isPending}
+                      onChange={(event) => setHandoffMachineId(event.target.value)}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {(machines.data ?? []).map((machine) => (
+                        <option key={machine.id} value={machine.id}>
+                          {machine.hostname}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   {preflightSummary && (
                     <div
                       className={cn(
-                        'lg:col-span-3 rounded-md border px-3 py-2 text-xs',
+                        'lg:col-span-4 rounded-md border px-3 py-2 text-xs',
                         preflight.data?.nativeImportCapable
                           ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300'
                           : 'border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-300',

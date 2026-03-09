@@ -208,6 +208,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
   const [forkMachineId, setForkMachineId] = useState('');
   const [handoffPrompt, setHandoffPrompt] = useState('');
   const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSessionInfo['runtime']>('claude-code');
+  const [handoffMachineId, setHandoffMachineId] = useState('');
 
   const [state, setState] = useState<RuntimeSessionScreenState>({
     sessions: [],
@@ -238,6 +239,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
   useEffect(() => {
     if (!state.selectedSession) return;
     setForkMachineId(state.selectedSession.machineId);
+    setHandoffMachineId(state.selectedSession.machineId);
     setHandoffTargetRuntime(
       state.selectedSession.runtime === 'codex' ? 'claude-code' : 'codex',
     );
@@ -252,8 +254,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
     void presenterRef.current?.loadHandoffPreflight({
       sessionId: state.selectedSession.id,
       targetRuntime: handoffTargetRuntime,
+      ...(handoffMachineId.trim() ? { targetMachineId: handoffMachineId.trim() } : {}),
     });
-  }, [handoffTargetRuntime, state.selectedSession]);
+  }, [handoffMachineId, handoffTargetRuntime, state.selectedSession]);
 
   useEffect(() => {
     if (createMachineId) return;
@@ -362,6 +365,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
       const response = await presenterRef.current?.handoffSession({
         sessionId: selectedSession.id,
         targetRuntime: handoffTargetRuntime,
+        ...(handoffMachineId.trim() ? { targetMachineId: handoffMachineId.trim() } : {}),
         ...(handoffPrompt.trim() ? { prompt: handoffPrompt.trim() } : {}),
       });
       setHandoffPrompt('');
@@ -375,7 +379,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
     } catch (err: unknown) {
       Alert.alert('Handoff Failed', err instanceof Error ? err.message : String(err));
     }
-  }, [handoffPrompt, handoffTargetRuntime, state.selectedSession]);
+  }, [handoffMachineId, handoffPrompt, handoffTargetRuntime, state.selectedSession]);
 
   const renderSession = useCallback(
     ({ item }: { item: RuntimeSessionInfo }) => {
@@ -774,6 +778,41 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                             </TouchableOpacity>
                           ))}
                       </View>
+                      {state.machines.length > 0 ? (
+                        <View style={styles.machinePickerList}>
+                          {state.machines.map((machine) => (
+                            <TouchableOpacity
+                              key={machine.id}
+                              style={[
+                                styles.machinePickerButton,
+                                handoffMachineId === machine.id && styles.machinePickerButtonActive,
+                              ]}
+                              onPress={() => setHandoffMachineId(machine.id)}
+                            >
+                              <View
+                                style={[
+                                  styles.machineStatusDot,
+                                  { backgroundColor: machineStatusColor(machine.status) },
+                                ]}
+                              />
+                              <View style={styles.machinePickerTextBlock}>
+                                <Text style={styles.machinePickerTitle}>{machine.hostname}</Text>
+                                <Text style={styles.machinePickerSubtitle}>{machine.id}</Text>
+                              </View>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      ) : (
+                        <TextInput
+                          style={styles.input}
+                          value={handoffMachineId}
+                          onChangeText={setHandoffMachineId}
+                          placeholder="Optional target machine ID"
+                          placeholderTextColor="#6b7280"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                      )}
                       {preflightSummary && (
                         <View
                           style={[
