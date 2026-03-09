@@ -179,6 +179,7 @@ export function DashboardPage(): React.JSX.Element {
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Link
             href="/sessions"
+            style={{ color: '#ffffff' }}
             className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium no-underline transition-colors bg-blue-600 text-white border border-blue-500 hover:bg-blue-500 hover:text-white hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
           >
             New Session
