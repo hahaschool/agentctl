@@ -17,6 +17,7 @@ vi.mock('./probe.js', () => ({
 
 describe('native import probes', () => {
   const originalCodexHome = process.env.CODEX_HOME;
+  const originalHome = process.env.HOME;
   const tempDirs: string[] = [];
 
   beforeEach(() => {
@@ -28,6 +29,11 @@ describe('native import probes', () => {
       delete process.env.CODEX_HOME;
     } else {
       process.env.CODEX_HOME = originalCodexHome;
+    }
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
     }
 
     await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
@@ -115,7 +121,85 @@ describe('native import probes', () => {
     expect(sessionFile).toContain('Please continue the runtime handoff implementation.');
   });
 
-  it('returns a typed failure for Codex to Claude import scaffolding', async () => {
+  it('materializes and resumes a synthetic Claude session for Codex imports', async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'agentctl-claude-home-'));
+    tempDirs.push(homeDir);
+    process.env.HOME = homeDir;
+
+    mockProbeNativeImportPrerequisites.mockResolvedValueOnce({
+      reason: 'not_implemented',
+      metadata: {
+        targetCli: { command: 'claude', available: true, version: '2.1.71 (Claude Code)' },
+        sourceStorage: {
+          rootPath: '/tmp/.codex',
+          exists: true,
+          sessionLocated: true,
+          sessionPath: '/tmp/.codex/sessions/rollout.jsonl',
+        },
+        prerequisitesMet: true,
+        sourceSessionSummary: {
+          recentMessages: [
+            { role: 'user', text: 'Switch this task over to Claude Code.' },
+            { role: 'assistant', text: 'I will continue from the imported Codex transcript.' },
+          ],
+        },
+      },
+    });
+
+    const resumeTargetSession = vi.fn(async ({ nativeSessionId }: { nativeSessionId: string }) => ({
+      runtime: 'claude-code' as const,
+      sessionId: 'managed-claude-1',
+      nativeSessionId,
+      agentId: 'agent-1',
+      projectPath: '/workspace/app',
+      model: 'claude-sonnet-4-6',
+      status: 'active' as const,
+      pid: 9876,
+      startedAt: new Date('2026-03-10T00:00:00.000Z'),
+      lastActivity: new Date('2026-03-10T00:00:05.000Z'),
+    }));
+
+    const result = await tryCodexToClaudeImport({
+      agentId: 'agent-1',
+      projectPath: '/workspace/app',
+      prompt: 'Continue from this handoff.',
+      resumeTargetSession,
+      snapshot: {
+        sourceRuntime: 'codex',
+        sourceSessionId: 'ms-source',
+        projectPath: '/workspace/app',
+        worktreePath: '/workspace/app/.trees/agent-1',
+        branch: 'main',
+        headSha: 'abc123',
+        dirtyFiles: [],
+        diffSummary: 'No diff.',
+        conversationSummary: 'Continue from Codex.',
+        openTodos: [],
+        nextSuggestedPrompt: 'Continue from the handoff snapshot.',
+        activeConfigRevision: 9,
+        activeMcpServers: [],
+        activeSkills: [],
+        reason: 'manual',
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBe('succeeded');
+    expect(result.metadata.probe).toBe('codex-to-claude');
+    expect(resumeTargetSession).toHaveBeenCalledTimes(1);
+
+    const materializedSession = result.metadata.materializedSession as {
+      nativeSessionId: string;
+      sessionPath: string;
+    };
+    expect(materializedSession.nativeSessionId).toBe(result.session?.nativeSessionId);
+
+    const sessionFile = await readFile(materializedSession.sessionPath, 'utf8');
+    expect(sessionFile).toContain('Imported from codex session ms-source.');
+    expect(sessionFile).toContain('Switch this task over to Claude Code.');
+  });
+
+  it('returns a typed prerequisite failure for Codex to Claude imports', async () => {
     mockProbeNativeImportPrerequisites.mockResolvedValueOnce({
       reason: 'target_cli_unavailable',
       metadata: {
@@ -207,5 +291,55 @@ describe('native import probes', () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toBe('resume_failed');
     expect(result.metadata.error).toBe('Codex resume failed');
+  });
+
+  it('returns a typed resume failure when Claude cannot open the materialized session', async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'agentctl-claude-home-'));
+    tempDirs.push(homeDir);
+    process.env.HOME = homeDir;
+
+    mockProbeNativeImportPrerequisites.mockResolvedValueOnce({
+      reason: 'not_implemented',
+      metadata: {
+        targetCli: { command: 'claude', available: true, version: '2.1.71 (Claude Code)' },
+        sourceStorage: {
+          rootPath: '/tmp/.codex',
+          exists: true,
+          sessionLocated: true,
+          sessionPath: '/tmp/.codex/sessions/rollout.jsonl',
+        },
+        prerequisitesMet: true,
+      },
+    });
+
+    const result = await tryCodexToClaudeImport({
+      agentId: 'agent-1',
+      projectPath: '/workspace/app',
+      prompt: 'Continue from this handoff.',
+      resumeTargetSession: vi.fn(async () => {
+        throw new Error('Claude resume failed');
+      }),
+      snapshot: {
+        sourceRuntime: 'codex',
+        sourceSessionId: 'ms-source',
+        projectPath: '/workspace/app',
+        worktreePath: '/workspace/app/.trees/agent-1',
+        branch: 'main',
+        headSha: 'abc123',
+        dirtyFiles: [],
+        diffSummary: 'No diff.',
+        conversationSummary: 'Continue from Codex.',
+        openTodos: [],
+        nextSuggestedPrompt: 'Continue from the handoff snapshot.',
+        activeConfigRevision: 9,
+        activeMcpServers: [],
+        activeSkills: [],
+        reason: 'manual',
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('resume_failed');
+    expect(result.metadata.error).toBe('Claude resume failed');
   });
 });
