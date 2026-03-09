@@ -107,7 +107,7 @@ export class HandoffController {
 
     for (const strategy of attemptedStrategies) {
       if (strategy === 'native-import') {
-        nativeImportAttempt = await this.tryNativeImport(input);
+        nativeImportAttempt = await this.tryNativeImport(input, adapter);
         if (nativeImportAttempt.ok && nativeImportAttempt.session) {
           return {
             ok: true,
@@ -162,7 +162,10 @@ export class HandoffController {
     );
   }
 
-  private async tryNativeImport(input: StartHandoffRequest): Promise<NativeImportAttemptResult> {
+  private async tryNativeImport(
+    input: StartHandoffRequest,
+    targetAdapter: RuntimeAdapter,
+  ): Promise<NativeImportAttemptResult> {
     const key = `${input.snapshot.sourceRuntime}:${input.targetRuntime}`;
     const importer = this.nativeImporters[key];
     if (!importer) {
@@ -181,6 +184,14 @@ export class HandoffController {
       prompt: input.prompt ?? null,
       model: input.model ?? null,
       snapshot: input.snapshot,
+      resumeTargetSession: ({ nativeSessionId, prompt, model }) =>
+        targetAdapter.resumeSession({
+          agentId: input.agentId,
+          projectPath: input.projectPath,
+          nativeSessionId,
+          prompt,
+          model: model ?? null,
+        }),
     });
   }
 }

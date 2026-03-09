@@ -13,6 +13,11 @@ export type NativeImportProbeInput = {
   prompt?: string | null;
   model?: string | null;
   snapshot: HandoffSnapshot;
+  resumeTargetSession?: (input: {
+    nativeSessionId: string;
+    prompt: string;
+    model?: string | null;
+  }) => Promise<ManagedSessionHandle>;
 };
 
 export type NativeImportAttemptResult = NativeImportAttempt & {

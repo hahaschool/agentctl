@@ -24,6 +24,8 @@ export const NATIVE_IMPORT_ATTEMPT_REASONS = [
   'target_cli_unavailable',
   'source_storage_missing',
   'source_session_missing',
+  'session_materialization_failed',
+  'resume_failed',
 ] as const;
 
 export type NativeImportAttemptReason = (typeof NATIVE_IMPORT_ATTEMPT_REASONS)[number];
