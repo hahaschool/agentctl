@@ -590,16 +590,16 @@ export const api = {
     if (params.project) qs.set('project', params.project);
     if (params.type) qs.set('type', params.type);
     if (params.limit) qs.set('limit', String(params.limit));
-    return request<{ observations: MemoryObservation[] }>(`/api/memory/search?${qs.toString()}`);
+    return request<{ observations: MemoryObservation[] }>(`/api/claude-mem/search?${qs.toString()}`);
   },
 
   getMemoryObservation: (id: number) =>
-    request<{ observation: MemoryObservation }>(`/api/memory/observations/${id}`),
+    request<{ observation: MemoryObservation }>(`/api/claude-mem/observations/${id}`),
 
   getMemoryTimeline: (sessionId: string, limit?: number) => {
     const qs = new URLSearchParams({ sessionId });
     if (limit) qs.set('limit', String(limit));
-    return request<{ observations: MemoryObservation[] }>(`/api/memory/timeline?${qs.toString()}`);
+    return request<{ observations: MemoryObservation[] }>(`/api/claude-mem/timeline?${qs.toString()}`);
   },
 };
 
