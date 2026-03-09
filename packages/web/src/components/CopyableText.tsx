@@ -12,9 +12,16 @@ type Props = {
   maxDisplay?: number;
   label?: string;
   className?: string;
+  as?: 'button' | 'span';
 };
 
-function CopyableTextBase({ value, maxDisplay = 8, label, className }: Props): React.JSX.Element {
+function CopyableTextBase({
+  value,
+  maxDisplay = 8,
+  label,
+  className,
+  as = 'button',
+}: Props): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useToast();
@@ -25,45 +32,66 @@ function CopyableTextBase({ value, maxDisplay = 8, label, className }: Props): R
     };
   }, []);
 
+  const copyValue = useCallback(() => {
+    return navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+    });
+  }, [value]);
+
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      void navigator.clipboard
-        .writeText(value)
-        .then(() => {
-          setCopied(true);
-          if (timerRef.current) clearTimeout(timerRef.current);
-          timerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
-        })
-        .catch(() => toast.error('Failed to copy'));
+      void copyValue().catch(() => toast.error('Failed to copy'));
     },
-    [value, toast],
+    [copyValue, toast],
   );
 
   const display =
     label ?? (value && value.length > maxDisplay ? value.slice(0, maxDisplay) : (value ?? ''));
 
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title={copied ? 'Copied!' : `Click to copy: ${value}`}
-      className={cn(
-        'inline-flex items-center gap-1 rounded-md px-1 py-0.5',
-        'font-mono text-[11px] whitespace-nowrap shrink-0 cursor-pointer',
-        'transition-colors duration-200',
-        copied
-          ? 'text-green-500 bg-muted'
-          : 'text-muted-foreground bg-transparent hover:bg-muted/50',
-        className,
-      )}
-    >
+  const baseClassName = cn(
+    'inline-flex items-center gap-1 rounded-md px-1 py-0.5',
+    'font-mono text-[11px] whitespace-nowrap shrink-0 cursor-pointer',
+    'transition-colors duration-200',
+    copied ? 'text-green-500 bg-muted' : 'text-muted-foreground bg-transparent hover:bg-muted/50',
+    className,
+  );
+
+  const content = (
+    <>
       {copied ? (
         <Check size={10} className="text-green-500" />
       ) : (
         <Copy size={10} className="opacity-40" />
       )}
       {copied ? 'Copied!' : display}
+    </>
+  );
+
+  if (as === 'span') {
+    return (
+      // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard interaction is handled by parent row button
+      // biome-ignore lint/a11y/noStaticElementInteractions: span avoids invalid nested <button> markup
+      <span
+        onClick={handleCopy}
+        title={copied ? 'Copied!' : `Click to copy: ${value}`}
+        className={baseClassName}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copied ? 'Copied!' : `Click to copy: ${value}`}
+      className={baseClassName}
+    >
+      {content}
     </button>
   );
 }

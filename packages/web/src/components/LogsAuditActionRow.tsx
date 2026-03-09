@@ -72,6 +72,7 @@ export function LogsAuditActionRow({
           <CopyableText
             value={action.agentId}
             maxDisplay={8}
+            as="span"
             className="text-[11px] text-muted-foreground font-mono hidden sm:inline"
           />
         )}
