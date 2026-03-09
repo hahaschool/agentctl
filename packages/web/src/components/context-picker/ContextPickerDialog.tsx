@@ -259,14 +259,30 @@ export function ContextPickerDialog({
   }, [agentName, agentType, agentRuntime, agentModel, systemPrompt, selectedIds, onCreateAgentSubmit]);
 
   // -------------------------------------------------------------------------
+  // Derived UI values (must be before early return to keep hook count stable)
+  // -------------------------------------------------------------------------
+
+  const previewText = useMemo(() => {
+    const sortedIds = Array.from(selectedIds).sort((a, b) => a - b);
+    return buildPromptPreview({
+      strategy: detectedStrategy,
+      forkPrompt: activeTab === 'fork' ? forkPrompt : systemPrompt,
+      forkAtIndex: detectedStrategy === 'jsonl-truncation' ? sortedIds[sortedIds.length - 1] : undefined,
+      selectedMessages: detectedStrategy === 'context-injection'
+        ? sortedIds
+            .map((i) => messages[i])
+            .filter((m): m is SessionContentMessage => m != null)
+            .map((m) => ({ type: m.type, content: m.content }))
+        : [],
+      systemPrompt: activeTab === 'agent' ? systemPrompt : undefined,
+    });
+  }, [selectedIds, detectedStrategy, activeTab, forkPrompt, systemPrompt, messages]);
+
+  // -------------------------------------------------------------------------
   // Early return
   // -------------------------------------------------------------------------
 
   if (!open) return null;
-
-  // -------------------------------------------------------------------------
-  // Derived UI values
-  // -------------------------------------------------------------------------
 
   const title = activeTab === 'fork' ? 'Fork Session' : 'Create Agent from Session';
   const subtitle =
@@ -288,22 +304,6 @@ export function ContextPickerDialog({
 
   const handleSubmit = activeTab === 'fork' ? handleForkSubmit : handleCreateAgentSubmit;
   const canSubmit = activeTab === 'fork' ? canSubmitFork : canSubmitAgent;
-
-  const previewText = useMemo(() => {
-    const sortedIds = Array.from(selectedIds).sort((a, b) => a - b);
-    return buildPromptPreview({
-      strategy: detectedStrategy,
-      forkPrompt: activeTab === 'fork' ? forkPrompt : systemPrompt,
-      forkAtIndex: detectedStrategy === 'jsonl-truncation' ? sortedIds[sortedIds.length - 1] : undefined,
-      selectedMessages: detectedStrategy === 'context-injection'
-        ? sortedIds
-            .map((i) => messages[i])
-            .filter((m): m is SessionContentMessage => m != null)
-            .map((m) => ({ type: m.type, content: m.content }))
-        : [],
-      systemPrompt: activeTab === 'agent' ? systemPrompt : undefined,
-    });
-  }, [selectedIds, detectedStrategy, activeTab, forkPrompt, systemPrompt, messages]);
 
   // -------------------------------------------------------------------------
   // Render
