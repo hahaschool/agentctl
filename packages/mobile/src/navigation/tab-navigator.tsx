@@ -6,8 +6,9 @@
 //   1. Dashboard  — fleet overview
 //   2. Agents     — agent list
 //   3. Sessions   — Claude Code session management
-//   4. Scheduler  — cron/heartbeat job management
-//   5. Settings   — control plane config & connection
+//   4. Runtimes   — managed Claude Code / Codex runtime sessions
+//   5. Scheduler  — cron/heartbeat job management
+//   6. Settings   — control plane config & connection
 // ---------------------------------------------------------------------------
 
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -16,6 +17,7 @@ import type React from 'react';
 import { Text } from 'react-native';
 import { AgentListScreen } from '../ui-screens/agent-list-screen.js';
 import { DashboardScreen } from '../ui-screens/dashboard-screen.js';
+import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
 import { SchedulerScreen } from '../ui-screens/scheduler-screen.js';
 import { SessionScreen } from '../ui-screens/session-screen.js';
 import { SettingsScreen } from '../ui-screens/settings-screen.js';
@@ -28,6 +30,7 @@ type TabParamList = {
   Dashboard: undefined;
   Agents: undefined;
   Sessions: undefined;
+  Runtimes: undefined;
   Scheduler: undefined;
   Settings: undefined;
 };
@@ -42,6 +45,7 @@ const TAB_ICONS: Record<keyof TabParamList, string> = {
   Dashboard: '\u2302', // House symbol
   Agents: '\u2699', // Gear/cog (representing CPU/robot)
   Sessions: '\u25B6', // Play triangle (representing terminal/sessions)
+  Runtimes: '\u21C4', // Left-right arrows
   Scheduler: '\u23F0', // Alarm clock
   Settings: '\u2638', // Wheel of dharma (gear-like)
 };
@@ -104,6 +108,11 @@ export function TabNavigator(): React.JSX.Element {
         <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Tab.Screen name="Agents" component={AgentListScreen} options={{ title: 'Agents' }} />
         <Tab.Screen name="Sessions" component={SessionScreen} options={{ title: 'Sessions' }} />
+        <Tab.Screen
+          name="Runtimes"
+          component={RuntimeSessionScreen}
+          options={{ title: 'Runtimes' }}
+        />
         <Tab.Screen name="Scheduler" component={SchedulerScreen} options={{ title: 'Scheduler' }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Tab.Navigator>

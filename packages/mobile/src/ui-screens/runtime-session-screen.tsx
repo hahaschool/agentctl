@@ -1,0 +1,958 @@
+// ---------------------------------------------------------------------------
+// RuntimeSessionScreen — browse and control managed Claude Code / Codex
+// runtime sessions. Supports create, resume, fork, handoff, and handoff
+// history without disturbing the classic Claude session workflow.
+// ---------------------------------------------------------------------------
+
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
+import { useAppContext } from '../context/app-context.js';
+import type {
+  RuntimeSessionScreenState,
+} from '../screens/runtime-session-presenter.js';
+import { RuntimeSessionPresenter } from '../screens/runtime-session-presenter.js';
+import type { RuntimeSessionHandoff, RuntimeSessionInfo } from '../services/runtime-session-api.js';
+
+function truncateId(id: string, length = 10): string {
+  if (id.length <= length) return id;
+  return `${id.slice(0, length)}...`;
+}
+
+function runtimeLabel(runtime: RuntimeSessionInfo['runtime']): string {
+  return runtime === 'claude-code' ? 'Claude Code' : 'Codex';
+}
+
+function sessionStatusColor(status: RuntimeSessionInfo['status']): string {
+  switch (status) {
+    case 'active':
+      return '#22c55e';
+    case 'paused':
+      return '#f59e0b';
+    case 'handing_off':
+      return '#3b82f6';
+    case 'error':
+      return '#ef4444';
+    case 'starting':
+      return '#8b5cf6';
+    case 'ended':
+    default:
+      return '#6b7280';
+  }
+}
+
+function formatRelativeTime(isoString: string | null): string {
+  if (!isoString) return 'unknown';
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  if (diffMs < 60_000) return 'just now';
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
+  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
+  return `${Math.floor(diffMs / 86_400_000)}d ago`;
+}
+
+function handoffStatusColor(status: RuntimeSessionHandoff['status']): string {
+  switch (status) {
+    case 'succeeded':
+      return '#22c55e';
+    case 'failed':
+      return '#ef4444';
+    default:
+      return '#f59e0b';
+  }
+}
+
+export function RuntimeSessionScreen(): React.JSX.Element {
+  const { apiClient } = useAppContext();
+  const presenterRef = useRef<RuntimeSessionPresenter | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [createRuntime, setCreateRuntime] = useState<RuntimeSessionInfo['runtime']>('codex');
+  const [createMachineId, setCreateMachineId] = useState('');
+  const [createProjectPath, setCreateProjectPath] = useState('');
+  const [createPrompt, setCreatePrompt] = useState('');
+  const [createModel, setCreateModel] = useState('');
+  const [resumePrompt, setResumePrompt] = useState('');
+  const [resumeModel, setResumeModel] = useState('');
+  const [forkPrompt, setForkPrompt] = useState('');
+  const [forkModel, setForkModel] = useState('');
+  const [forkMachineId, setForkMachineId] = useState('');
+  const [handoffPrompt, setHandoffPrompt] = useState('');
+  const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSessionInfo['runtime']>('claude-code');
+
+  const [state, setState] = useState<RuntimeSessionScreenState>({
+    sessions: [],
+    selectedSession: null,
+    handoffs: [],
+    isLoading: false,
+    isHandoffsLoading: false,
+    error: null,
+    lastUpdated: null,
+  });
+
+  useEffect(() => {
+    const presenter = new RuntimeSessionPresenter({
+      apiClient,
+      onChange: setState,
+    });
+    presenterRef.current = presenter;
+    presenter.start();
+
+    return () => {
+      presenter.stop();
+    };
+  }, [apiClient]);
+
+  useEffect(() => {
+    if (!state.selectedSession) return;
+    setForkMachineId(state.selectedSession.machineId);
+    setHandoffTargetRuntime(
+      state.selectedSession.runtime === 'codex' ? 'claude-code' : 'codex',
+    );
+  }, [state.selectedSession]);
+
+  const availableMachineIds = useMemo(
+    () => Array.from(new Set(state.sessions.map((session) => session.machineId))).sort(),
+    [state.sessions],
+  );
+
+  const onRefresh = useCallback(() => {
+    void presenterRef.current?.loadSessions();
+  }, []);
+
+  const handleSessionPress = useCallback((session: RuntimeSessionInfo) => {
+    setShowDetailModal(true);
+    void presenterRef.current?.selectSession(session);
+  }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    setShowDetailModal(false);
+    presenterRef.current?.clearSelectedSession();
+    setResumePrompt('');
+    setResumeModel('');
+    setForkPrompt('');
+    setForkModel('');
+    setForkMachineId('');
+    setHandoffPrompt('');
+  }, []);
+
+  const handleCreateSession = useCallback(async () => {
+    if (!createMachineId.trim() || !createProjectPath.trim() || !createPrompt.trim()) {
+      Alert.alert('Validation', 'Runtime, machine ID, project path, and prompt are required.');
+      return;
+    }
+
+    try {
+      const session = await presenterRef.current?.createSession({
+        runtime: createRuntime,
+        machineId: createMachineId.trim(),
+        projectPath: createProjectPath.trim(),
+        prompt: createPrompt.trim(),
+        ...(createModel.trim() ? { model: createModel.trim() } : {}),
+      });
+      setShowCreateModal(false);
+      setCreateMachineId('');
+      setCreateProjectPath('');
+      setCreatePrompt('');
+      setCreateModel('');
+      Alert.alert('Created', `${runtimeLabel(session?.runtime ?? createRuntime)} session started.`);
+    } catch (err: unknown) {
+      Alert.alert('Create Failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [createMachineId, createModel, createProjectPath, createPrompt, createRuntime]);
+
+  const handleResume = useCallback(async () => {
+    const selectedSession = state.selectedSession;
+    if (!selectedSession) return;
+    if (!resumePrompt.trim()) {
+      Alert.alert('Validation', 'Resume prompt is required.');
+      return;
+    }
+
+    try {
+      await presenterRef.current?.resumeSession({
+        sessionId: selectedSession.id,
+        prompt: resumePrompt.trim(),
+        ...(resumeModel.trim() ? { model: resumeModel.trim() } : {}),
+      });
+      setResumePrompt('');
+      setResumeModel('');
+      Alert.alert('Resumed', `${truncateId(selectedSession.id)} resumed.`);
+    } catch (err: unknown) {
+      Alert.alert('Resume Failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [resumeModel, resumePrompt, state.selectedSession]);
+
+  const handleFork = useCallback(async () => {
+    const selectedSession = state.selectedSession;
+    if (!selectedSession) return;
+
+    try {
+      const forkedSession = await presenterRef.current?.forkSession({
+        sessionId: selectedSession.id,
+        ...(forkPrompt.trim() ? { prompt: forkPrompt.trim() } : {}),
+        ...(forkModel.trim() ? { model: forkModel.trim() } : {}),
+        ...(forkMachineId.trim() ? { targetMachineId: forkMachineId.trim() } : {}),
+      });
+      setForkPrompt('');
+      setForkModel('');
+      Alert.alert('Forked', `Created ${truncateId(forkedSession?.id ?? 'new-session')}.`);
+    } catch (err: unknown) {
+      Alert.alert('Fork Failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [forkMachineId, forkModel, forkPrompt, state.selectedSession]);
+
+  const handleHandoff = useCallback(async () => {
+    const selectedSession = state.selectedSession;
+    if (!selectedSession) return;
+
+    try {
+      const response = await presenterRef.current?.handoffSession({
+        sessionId: selectedSession.id,
+        targetRuntime: handoffTargetRuntime,
+        ...(handoffPrompt.trim() ? { prompt: handoffPrompt.trim() } : {}),
+      });
+      setHandoffPrompt('');
+      Alert.alert(
+        'Handed Off',
+        `${truncateId(selectedSession.id)} switched via ${response?.strategy ?? 'handoff'}.`,
+      );
+    } catch (err: unknown) {
+      Alert.alert('Handoff Failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [handoffPrompt, handoffTargetRuntime, state.selectedSession]);
+
+  const renderSession = useCallback(
+    ({ item }: { item: RuntimeSessionInfo }) => {
+      const modelLabel =
+        typeof item.metadata?.model === 'string'
+          ? item.metadata.model
+          : item.metadata?.model !== undefined && item.metadata?.model !== null
+            ? String(item.metadata.model)
+            : null;
+
+      return (
+        <TouchableOpacity
+          style={styles.sessionCard}
+          onPress={() => handleSessionPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.sessionHeader}>
+            <Text style={styles.sessionId}>{truncateId(item.id, 12)}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: sessionStatusColor(item.status) }]}>
+              <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+            </View>
+          </View>
+
+          <View style={styles.runtimeRow}>
+            <Text style={styles.runtimePill}>{runtimeLabel(item.runtime)}</Text>
+            <Text style={styles.machineText}>{item.machineId}</Text>
+          </View>
+
+          <Text style={styles.sessionDetail} numberOfLines={1}>
+            {item.projectPath}
+          </Text>
+
+          <View style={styles.sessionMeta}>
+            <Text style={styles.metaText}>
+              {formatRelativeTime(item.lastHeartbeat ?? item.startedAt)}
+            </Text>
+            {modelLabel && (
+              <>
+                <Text style={styles.metaDot}> · </Text>
+                <Text style={styles.metaText}>{modelLabel}</Text>
+              </>
+            )}
+            {item.nativeSessionId && (
+              <>
+                <Text style={styles.metaDot}> · </Text>
+                <Text style={styles.metaText}>native {truncateId(item.nativeSessionId, 8)}</Text>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [handleSessionPress],
+  );
+
+  const renderHandoff = useCallback(
+    (handoff: RuntimeSessionHandoff, index: number) => (
+      <View key={`${handoff.id}-${index}`} style={styles.handoffCard}>
+        <View style={styles.handoffHeader}>
+          <Text style={styles.handoffStrategy}>{handoff.strategy}</Text>
+          <View
+            style={[
+              styles.handoffStatusBadge,
+              { backgroundColor: handoffStatusColor(handoff.status) },
+            ]}
+          >
+            <Text style={styles.handoffStatusText}>{handoff.status.toUpperCase()}</Text>
+          </View>
+        </View>
+        <Text style={styles.handoffText}>
+          {runtimeLabel(handoff.sourceRuntime)} to {runtimeLabel(handoff.targetRuntime)}
+        </Text>
+        <Text style={styles.handoffText}>Reason: {handoff.reason}</Text>
+        <Text style={styles.handoffSummary} numberOfLines={3}>
+          {handoff.snapshot.diffSummary || handoff.snapshot.conversationSummary || 'No snapshot summary'}
+        </Text>
+        {handoff.errorMessage && <Text style={styles.handoffError}>{handoff.errorMessage}</Text>}
+      </View>
+    ),
+    [],
+  );
+
+  const resumable =
+    state.selectedSession?.status === 'paused' ||
+    state.selectedSession?.status === 'ended' ||
+    state.selectedSession?.status === 'error';
+  const handoffable =
+    state.selectedSession?.status === 'active' || state.selectedSession?.status === 'paused';
+
+  return (
+    <View style={styles.container}>
+      {state.error && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{state.error.message}</Text>
+        </View>
+      )}
+
+      <View style={styles.toolbar}>
+        <Text style={styles.sessionCount}>
+          {state.sessions.length} managed session{state.sessions.length === 1 ? '' : 's'}
+        </Text>
+        <TouchableOpacity style={styles.newSessionButton} onPress={() => setShowCreateModal(true)}>
+          <Text style={styles.newSessionButtonText}>+ New Runtime</Text>
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        data={state.sessions}
+        renderItem={renderSession}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl refreshing={state.isLoading} onRefresh={onRefresh} tintColor="#9ca3af" />
+        }
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>
+            {state.isLoading ? 'Loading runtime sessions...' : 'No managed runtime sessions found'}
+          </Text>
+        }
+      />
+
+      {state.lastUpdated && (
+        <Text style={styles.lastUpdated}>Updated: {state.lastUpdated.toLocaleTimeString()}</Text>
+      )}
+
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>New Managed Session</Text>
+
+            <Text style={styles.fieldLabel}>Runtime</Text>
+            <View style={styles.segmentRow}>
+              {(['codex', 'claude-code'] as const).map((runtime) => (
+                <TouchableOpacity
+                  key={runtime}
+                  style={[
+                    styles.segmentButton,
+                    createRuntime === runtime && styles.segmentButtonActive,
+                  ]}
+                  onPress={() => setCreateRuntime(runtime)}
+                >
+                  <Text style={styles.segmentButtonText}>{runtimeLabel(runtime)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Machine ID</Text>
+            <TextInput
+              style={styles.input}
+              value={createMachineId}
+              onChangeText={setCreateMachineId}
+              placeholder="e.g. mac-mini-01"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {availableMachineIds.length > 0 && (
+              <Text style={styles.helperText}>Known machines: {availableMachineIds.join(', ')}</Text>
+            )}
+
+            <Text style={styles.fieldLabel}>Project Path</Text>
+            <TextInput
+              style={styles.input}
+              value={createProjectPath}
+              onChangeText={setCreateProjectPath}
+              placeholder="e.g. /Users/me/project"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <Text style={styles.fieldLabel}>Prompt</Text>
+            <TextInput
+              style={[styles.input, styles.promptInput]}
+              value={createPrompt}
+              onChangeText={setCreatePrompt}
+              placeholder="Tell the runtime what to do"
+              placeholderTextColor="#6b7280"
+              multiline
+            />
+
+            <Text style={styles.fieldLabel}>Model (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={createModel}
+              onChangeText={setCreateModel}
+              placeholder="e.g. claude-sonnet-4"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.createButton]}
+                onPress={handleCreateSession}
+              >
+                <Text style={styles.buttonText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showDetailModal}
+        animationType="slide"
+        transparent
+        onRequestClose={handleCloseDetail}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.detailModalContent}>
+            {state.selectedSession ? (
+              <>
+                <View style={styles.detailHeader}>
+                  <View style={styles.detailHeaderTop}>
+                    <Text style={styles.detailTitle}>{truncateId(state.selectedSession.id, 14)}</Text>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: sessionStatusColor(state.selectedSession.status) },
+                      ]}
+                    >
+                      <Text style={styles.statusText}>{state.selectedSession.status.toUpperCase()}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.detailInfo}>Runtime: {runtimeLabel(state.selectedSession.runtime)}</Text>
+                  <Text style={styles.detailInfo}>Machine: {state.selectedSession.machineId}</Text>
+                  <Text style={styles.detailInfo}>Project: {state.selectedSession.projectPath}</Text>
+                  {state.selectedSession.worktreePath && (
+                    <Text style={styles.detailInfo}>Worktree: {state.selectedSession.worktreePath}</Text>
+                  )}
+                  {state.selectedSession.nativeSessionId && (
+                    <Text style={styles.detailInfo}>
+                      Native: {state.selectedSession.nativeSessionId}
+                    </Text>
+                  )}
+                </View>
+
+                <ScrollView style={styles.detailScroll} contentContainerStyle={styles.detailScrollContent}>
+                  {resumable && (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionTitle}>Resume</Text>
+                      <TextInput
+                        style={[styles.input, styles.promptInput]}
+                        value={resumePrompt}
+                        onChangeText={setResumePrompt}
+                        placeholder="Required resume prompt"
+                        placeholderTextColor="#6b7280"
+                        multiline
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={resumeModel}
+                        onChangeText={setResumeModel}
+                        placeholder="Optional model override"
+                        placeholderTextColor="#6b7280"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.resumeButton]}
+                        onPress={handleResume}
+                      >
+                        <Text style={styles.buttonText}>Resume Session</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {state.selectedSession.nativeSessionId && (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionTitle}>Fork</Text>
+                      <TextInput
+                        style={[styles.input, styles.promptInput]}
+                        value={forkPrompt}
+                        onChangeText={setForkPrompt}
+                        placeholder="Optional fork prompt"
+                        placeholderTextColor="#6b7280"
+                        multiline
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={forkModel}
+                        onChangeText={setForkModel}
+                        placeholder="Optional model override"
+                        placeholderTextColor="#6b7280"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={forkMachineId}
+                        onChangeText={setForkMachineId}
+                        placeholder="Optional target machine ID"
+                        placeholderTextColor="#6b7280"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <TouchableOpacity style={[styles.actionButton, styles.forkButton]} onPress={handleFork}>
+                        <Text style={styles.buttonText}>Fork Session</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {handoffable && (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionTitle}>Handoff</Text>
+                      <View style={styles.segmentRow}>
+                        {(['codex', 'claude-code'] as const)
+                          .filter((runtime) => runtime !== state.selectedSession?.runtime)
+                          .map((runtime) => (
+                            <TouchableOpacity
+                              key={runtime}
+                              style={[
+                                styles.segmentButton,
+                                handoffTargetRuntime === runtime && styles.segmentButtonActive,
+                              ]}
+                              onPress={() => setHandoffTargetRuntime(runtime)}
+                            >
+                              <Text style={styles.segmentButtonText}>{runtimeLabel(runtime)}</Text>
+                            </TouchableOpacity>
+                          ))}
+                      </View>
+                      <TextInput
+                        style={[styles.input, styles.promptInput]}
+                        value={handoffPrompt}
+                        onChangeText={setHandoffPrompt}
+                        placeholder="Optional takeover prompt"
+                        placeholderTextColor="#6b7280"
+                        multiline
+                      />
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.handoffButton]}
+                        onPress={handleHandoff}
+                      >
+                        <Text style={styles.buttonText}>Start Handoff</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionTitle}>Handoff History</Text>
+                    {state.isHandoffsLoading ? (
+                      <Text style={styles.loadingText}>Loading handoffs...</Text>
+                    ) : state.handoffs.length === 0 ? (
+                      <Text style={styles.emptyTranscript}>No handoffs recorded for this session.</Text>
+                    ) : (
+                      state.handoffs.map(renderHandoff)
+                    )}
+                  </View>
+                </ScrollView>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.closeDetailButton]}
+                  onPress={handleCloseDetail}
+                >
+                  <Text style={styles.buttonText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.loadingText}>Runtime session not found</Text>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#111111',
+  },
+  errorBanner: {
+    backgroundColor: '#7f1d1d',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  errorText: {
+    color: '#fca5a5',
+    fontSize: 13,
+  },
+  toolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2e2e2e',
+  },
+  sessionCount: {
+    color: '#9ca3af',
+    fontSize: 14,
+  },
+  newSessionButton: {
+    backgroundColor: '#1e40af',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  newSessionButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  listContent: {
+    paddingVertical: 8,
+  },
+  emptyText: {
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 32,
+    fontSize: 14,
+  },
+  lastUpdated: {
+    color: '#4b5563',
+    fontSize: 11,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  sessionCard: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+  },
+  sessionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sessionId: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: 'Courier',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  statusText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  runtimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  runtimePill: {
+    color: '#bfdbfe',
+    backgroundColor: '#1e3a5f',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: '700',
+    overflow: 'hidden',
+  },
+  machineText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sessionDetail: {
+    color: '#9ca3af',
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  sessionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  metaText: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+  metaDot: {
+    color: '#4b5563',
+    fontSize: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+  },
+  modalTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 20,
+  },
+  fieldLabel: {
+    color: '#9ca3af',
+    fontSize: 13,
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  helperText: {
+    color: '#6b7280',
+    fontSize: 11,
+    marginTop: -10,
+    marginBottom: 14,
+  },
+  input: {
+    backgroundColor: '#111111',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    color: '#ffffff',
+    padding: 12,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  promptInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  segmentButton: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#111111',
+    alignItems: 'center',
+  },
+  segmentButtonActive: {
+    backgroundColor: '#1e40af',
+    borderColor: '#1e40af',
+  },
+  segmentButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 8,
+  },
+  modalButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#374151',
+  },
+  createButton: {
+    backgroundColor: '#1e40af',
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  detailModalContent: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    maxHeight: '88%',
+    flex: 1,
+  },
+  detailHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#2e2e2e',
+    paddingBottom: 12,
+    marginBottom: 12,
+  },
+  detailHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  detailTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'Courier',
+  },
+  detailInfo: {
+    color: '#9ca3af',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  detailScroll: {
+    flex: 1,
+  },
+  detailScrollContent: {
+    paddingBottom: 8,
+    gap: 12,
+  },
+  sectionCard: {
+    backgroundColor: '#111111',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    padding: 14,
+  },
+  sectionTitle: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  actionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resumeButton: {
+    backgroundColor: '#166534',
+  },
+  forkButton: {
+    backgroundColor: '#4338ca',
+  },
+  handoffButton: {
+    backgroundColor: '#0f766e',
+  },
+  closeDetailButton: {
+    backgroundColor: '#374151',
+    marginTop: 12,
+  },
+  loadingText: {
+    color: '#6b7280',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  emptyTranscript: {
+    color: '#6b7280',
+    fontStyle: 'italic',
+    fontSize: 13,
+  },
+  handoffCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    backgroundColor: '#161616',
+    padding: 12,
+    marginTop: 10,
+  },
+  handoffHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  handoffStrategy: {
+    color: '#bfdbfe',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  handoffStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  handoffStatusText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  handoffText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  handoffSummary: {
+    color: '#d1d5db',
+    fontSize: 12,
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  handoffError: {
+    color: '#fca5a5',
+    fontSize: 12,
+    marginTop: 8,
+  },
+});
