@@ -4,12 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RuntimeSessionsPage } from './RuntimeSessionsPage';
 
-const { mockUseQuery, mockRuntimeSessionsQuery, mockRuntimeSessionHandoffsQuery, mockMachinesQuery } =
-  vi.hoisted(() => ({
+const {
+  mockUseQuery,
+  mockRuntimeSessionsQuery,
+  mockRuntimeSessionHandoffsQuery,
+  mockMachinesQuery,
+  mockHandoffMutateAsync,
+} = vi.hoisted(() => ({
     mockUseQuery: vi.fn(),
     mockRuntimeSessionsQuery: vi.fn(),
     mockRuntimeSessionHandoffsQuery: vi.fn(),
     mockMachinesQuery: vi.fn(),
+    mockHandoffMutateAsync: vi.fn(),
   }));
 
 vi.mock('@tanstack/react-query', async () => {
@@ -73,6 +79,10 @@ vi.mock('@/lib/queries', () => ({
   runtimeSessionsQuery: (params?: Record<string, unknown>) => mockRuntimeSessionsQuery(params),
   runtimeSessionHandoffsQuery: (id: string, limit?: number) => mockRuntimeSessionHandoffsQuery(id, limit),
   machinesQuery: () => mockMachinesQuery(),
+  useHandoffRuntimeSession: () => ({
+    mutateAsync: mockHandoffMutateAsync,
+    isPending: false,
+  }),
 }));
 
 function createRuntimeSession(overrides?: Record<string, unknown>) {
@@ -159,6 +169,14 @@ function setupUseQuery(options?: {
   mockRuntimeSessionHandoffsQuery.mockImplementation((id: string, limit?: number) => ({
     queryKey: ['runtime-sessions', id, 'handoffs', limit],
   }));
+  mockHandoffMutateAsync.mockResolvedValue({
+    ok: true,
+    handoffId: 'handoff-created',
+    strategy: 'snapshot-handoff',
+    attemptedStrategies: ['snapshot-handoff'],
+    snapshot: {},
+    session: createRuntimeSession({ id: 'ms-2', runtime: 'claude-code' }),
+  });
 
   mockUseQuery.mockImplementation((optionsArg: { queryKey: unknown[] }) => {
     const queryKey = optionsArg.queryKey;
@@ -268,6 +286,25 @@ describe('RuntimeSessionsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No runtime sessions match the filters')).toBeDefined();
+    });
+  });
+
+  it('starts a manual handoff with the selected target runtime', async () => {
+    setupUseQuery();
+
+    render(<RuntimeSessionsPage />);
+
+    const promptInput = await screen.findByLabelText('Takeover prompt');
+    fireEvent.change(promptInput, { target: { value: 'Continue from the existing diff' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start Handoff' }));
+
+    await waitFor(() => {
+      expect(mockHandoffMutateAsync).toHaveBeenCalledWith({
+        id: 'ms-1',
+        targetRuntime: 'claude-code',
+        reason: 'manual',
+        prompt: 'Continue from the existing diff',
+      });
     });
   });
 });

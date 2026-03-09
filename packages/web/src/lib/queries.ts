@@ -399,6 +399,21 @@ export function useForkSession() {
   });
 }
 
+export function useHandoffRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & Parameters<typeof api.handoffRuntimeSession>[1]) => api.handoffRuntimeSession(id, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+    },
+  });
+}
+
 export function useCreateAccount() {
   const qc = useQueryClient();
   return useMutation({
