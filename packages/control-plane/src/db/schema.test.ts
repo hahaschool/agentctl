@@ -4,7 +4,17 @@ import { getTableColumns, getTableName } from 'drizzle-orm';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 
-import { agentActions, agentRuns, agents, machines } from './schema.js';
+import {
+  agentActions,
+  agentRuns,
+  agents,
+  machineRuntimeState,
+  machines,
+  managedSessions,
+  nativeImportAttempts,
+  runtimeConfigRevisions,
+  sessionHandoffs,
+} from './schema.js';
 
 // ---------------------------------------------------------------------------
 // Helper: extract column metadata in a concise format for assertions
@@ -58,6 +68,31 @@ describe('Schema module exports', () => {
   it('exports the agentActions table', () => {
     expect(agentActions).toBeDefined();
     expect(getTableName(agentActions)).toBe('agent_actions');
+  });
+
+  it('exports the managedSessions table', () => {
+    expect(managedSessions).toBeDefined();
+    expect(getTableName(managedSessions)).toBe('managed_sessions');
+  });
+
+  it('exports the runtimeConfigRevisions table', () => {
+    expect(runtimeConfigRevisions).toBeDefined();
+    expect(getTableName(runtimeConfigRevisions)).toBe('runtime_config_revisions');
+  });
+
+  it('exports the machineRuntimeState table', () => {
+    expect(machineRuntimeState).toBeDefined();
+    expect(getTableName(machineRuntimeState)).toBe('machine_runtime_state');
+  });
+
+  it('exports the sessionHandoffs table', () => {
+    expect(sessionHandoffs).toBeDefined();
+    expect(getTableName(sessionHandoffs)).toBe('session_handoffs');
+  });
+
+  it('exports the nativeImportAttempts table', () => {
+    expect(nativeImportAttempts).toBeDefined();
+    expect(getTableName(nativeImportAttempts)).toBe('native_import_attempts');
   });
 });
 
@@ -962,5 +997,313 @@ describe('Primary keys', () => {
     const cols = getTableColumns(agentActions);
     expect(cols.id.primary).toBe(true);
     expect(cols.id.columnType).toBe('PgBigSerial53');
+  });
+});
+
+describe('runtimeConfigRevisions table columns', () => {
+  const meta = getColumnMeta(runtimeConfigRevisions);
+
+  it('has exactly 5 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(5);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual(['id', 'version', 'hash', 'config', 'createdAt']);
+  });
+
+  it('stores revision payloads as a JSONB document', () => {
+    expect(meta.config).toEqual({
+      name: 'config',
+      columnType: 'PgJsonb',
+      dataType: 'json',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+  });
+
+  it('version is a required integer and hash is required text', () => {
+    expect(meta.version).toEqual({
+      name: 'version',
+      columnType: 'PgInteger',
+      dataType: 'number',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+    expect(meta.hash).toEqual({
+      name: 'hash',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+  });
+});
+
+describe('managedSessions table columns', () => {
+  const meta = getColumnMeta(managedSessions);
+
+  it('has exactly 15 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(15);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'runtime',
+      'nativeSessionId',
+      'machineId',
+      'agentId',
+      'projectPath',
+      'worktreePath',
+      'status',
+      'configVersion',
+      'handoffStrategy',
+      'handoffSourceSessionId',
+      'metadata',
+      'startedAt',
+      'lastHeartbeat',
+      'endedAt',
+    ]);
+  });
+
+  it('tracks runtime and session status as required text columns', () => {
+    expect(meta.runtime).toEqual({
+      name: 'runtime',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+    expect(meta.status).toEqual({
+      name: 'status',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: true,
+      primary: false,
+    });
+  });
+
+  it('stores config version as a required integer and metadata as jsonb with default', () => {
+    expect(meta.configVersion).toEqual({
+      name: 'config_version',
+      columnType: 'PgInteger',
+      dataType: 'number',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+    expect(meta.metadata).toEqual({
+      name: 'metadata',
+      columnType: 'PgJsonb',
+      dataType: 'json',
+      notNull: false,
+      hasDefault: true,
+      primary: false,
+    });
+  });
+});
+
+describe('machineRuntimeState table columns', () => {
+  const meta = getColumnMeta(machineRuntimeState);
+
+  it('has exactly 12 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(12);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'machineId',
+      'runtime',
+      'isInstalled',
+      'isAuthenticated',
+      'syncStatus',
+      'configVersion',
+      'configHash',
+      'metadata',
+      'lastConfigAppliedAt',
+      'createdAt',
+      'updatedAt',
+    ]);
+  });
+
+  it('tracks install/auth state with required booleans', () => {
+    expect(meta.isInstalled).toEqual({
+      name: 'is_installed',
+      columnType: 'PgBoolean',
+      dataType: 'boolean',
+      notNull: true,
+      hasDefault: true,
+      primary: false,
+    });
+    expect(meta.isAuthenticated).toEqual({
+      name: 'is_authenticated',
+      columnType: 'PgBoolean',
+      dataType: 'boolean',
+      notNull: true,
+      hasDefault: true,
+      primary: false,
+    });
+  });
+});
+
+describe('sessionHandoffs table columns', () => {
+  const meta = getColumnMeta(sessionHandoffs);
+
+  it('has exactly 12 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(12);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'sourceSessionId',
+      'targetSessionId',
+      'sourceRuntime',
+      'targetRuntime',
+      'reason',
+      'strategy',
+      'status',
+      'snapshot',
+      'errorMessage',
+      'createdAt',
+      'completedAt',
+    ]);
+  });
+
+  it('stores handoff snapshot as required jsonb', () => {
+    expect(meta.snapshot).toEqual({
+      name: 'snapshot',
+      columnType: 'PgJsonb',
+      dataType: 'json',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+  });
+});
+
+describe('nativeImportAttempts table columns', () => {
+  const meta = getColumnMeta(nativeImportAttempts);
+
+  it('has exactly 10 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(10);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'handoffId',
+      'sourceSessionId',
+      'targetSessionId',
+      'sourceRuntime',
+      'targetRuntime',
+      'status',
+      'metadata',
+      'errorMessage',
+      'attemptedAt',
+    ]);
+  });
+
+  it('tracks import status and attempt metadata', () => {
+    expect(meta.status).toEqual({
+      name: 'status',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: true,
+      primary: false,
+    });
+    expect(meta.metadata).toEqual({
+      name: 'metadata',
+      columnType: 'PgJsonb',
+      dataType: 'json',
+      notNull: false,
+      hasDefault: true,
+      primary: false,
+    });
+  });
+});
+
+describe('Runtime management foreign key relationships', () => {
+  it('managedSessions references machines, agents, and prior managed sessions', () => {
+    const config = getTableConfig(managedSessions);
+    expect(config.foreignKeys).toHaveLength(3);
+
+    const machineFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'machine_id',
+    );
+    expect(getTableName(machineFk?.reference().foreignTable)).toBe('machines');
+
+    const agentFk = config.foreignKeys.find((fk) => fk.reference().columns[0].name === 'agent_id');
+    expect(getTableName(agentFk?.reference().foreignTable)).toBe('agents');
+
+    const sourceFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'handoff_source_session_id',
+    );
+    expect(getTableName(sourceFk?.reference().foreignTable)).toBe('managed_sessions');
+  });
+
+  it('machineRuntimeState references machines', () => {
+    const config = getTableConfig(machineRuntimeState);
+    expect(config.foreignKeys).toHaveLength(1);
+    expect(getTableName(config.foreignKeys[0].reference().foreignTable)).toBe('machines');
+  });
+
+  it('sessionHandoffs references source and target managed sessions', () => {
+    const config = getTableConfig(sessionHandoffs);
+    expect(config.foreignKeys).toHaveLength(2);
+    expect(getTableName(config.foreignKeys[0].reference().foreignTable)).toBe('managed_sessions');
+    expect(getTableName(config.foreignKeys[1].reference().foreignTable)).toBe('managed_sessions');
+  });
+
+  it('nativeImportAttempts references handoffs and managed sessions', () => {
+    const config = getTableConfig(nativeImportAttempts);
+    expect(config.foreignKeys).toHaveLength(3);
+
+    const handoffFk = config.foreignKeys.find((fk) => fk.reference().columns[0].name === 'handoff_id');
+    expect(getTableName(handoffFk?.reference().foreignTable)).toBe('session_handoffs');
+
+    const sourceFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'source_session_id',
+    );
+    expect(getTableName(sourceFk?.reference().foreignTable)).toBe('managed_sessions');
+
+    const targetFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'target_session_id',
+    );
+    expect(getTableName(targetFk?.reference().foreignTable)).toBe('managed_sessions');
+  });
+});
+
+describe('Runtime management default values', () => {
+  it('managedSessions defaults status to starting and metadata to an empty object', () => {
+    const cols = getTableColumns(managedSessions);
+    expect(cols.status.default).toBe('starting');
+    expect(cols.metadata.default).toEqual({});
+  });
+
+  it('machineRuntimeState defaults installation and auth flags to false', () => {
+    const cols = getTableColumns(machineRuntimeState);
+    expect(cols.isInstalled.default).toBe(false);
+    expect(cols.isAuthenticated.default).toBe(false);
+    expect(cols.syncStatus.default).toBe('unknown');
+    expect(cols.metadata.default).toEqual({});
+  });
+
+  it('sessionHandoffs defaults status to pending', () => {
+    const cols = getTableColumns(sessionHandoffs);
+    expect(cols.status.default).toBe('pending');
+  });
+
+  it('nativeImportAttempts defaults status to pending and metadata to an empty object', () => {
+    const cols = getTableColumns(nativeImportAttempts);
+    expect(cols.status.default).toBe('pending');
+    expect(cols.metadata.default).toEqual({});
   });
 });

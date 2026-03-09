@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   bigint,
   bigserial,
   boolean,
@@ -104,6 +105,128 @@ export const rcSessions = pgTable(
     index('idx_rc_sessions_agent_id').on(table.agentId),
     index('idx_rc_sessions_machine_id').on(table.machineId),
     index('idx_rc_sessions_status').on(table.status),
+  ],
+);
+
+export const runtimeConfigRevisions = pgTable(
+  'runtime_config_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    version: integer('version').notNull().unique(),
+    hash: text('hash').notNull().unique(),
+    config: jsonb('config').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_runtime_config_revisions_version').on(table.version),
+    index('idx_runtime_config_revisions_hash').on(table.hash),
+  ],
+);
+
+export const managedSessions = pgTable(
+  'managed_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runtime: text('runtime').notNull(),
+    nativeSessionId: text('native_session_id'),
+    machineId: text('machine_id')
+      .notNull()
+      .references(() => machines.id),
+    agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'set null' }),
+    projectPath: text('project_path').notNull(),
+    worktreePath: text('worktree_path'),
+    status: text('status').notNull().default('starting'),
+    configVersion: integer('config_version').notNull(),
+    handoffStrategy: text('handoff_strategy'),
+    handoffSourceSessionId: uuid('handoff_source_session_id').references(
+      (): AnyPgColumn => managedSessions.id,
+      { onDelete: 'set null' },
+    ),
+    metadata: jsonb('metadata').default({}),
+    startedAt: timestamp('started_at', { withTimezone: true }).defaultNow(),
+    lastHeartbeat: timestamp('last_heartbeat', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('idx_managed_sessions_machine_id').on(table.machineId),
+    index('idx_managed_sessions_agent_id').on(table.agentId),
+    index('idx_managed_sessions_status').on(table.status),
+    index('idx_managed_sessions_runtime').on(table.runtime),
+  ],
+);
+
+export const machineRuntimeState = pgTable(
+  'machine_runtime_state',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    machineId: text('machine_id')
+      .notNull()
+      .references(() => machines.id, { onDelete: 'cascade' }),
+    runtime: text('runtime').notNull(),
+    isInstalled: boolean('is_installed').notNull().default(false),
+    isAuthenticated: boolean('is_authenticated').notNull().default(false),
+    syncStatus: text('sync_status').notNull().default('unknown'),
+    configVersion: integer('config_version'),
+    configHash: text('config_hash'),
+    metadata: jsonb('metadata').default({}),
+    lastConfigAppliedAt: timestamp('last_config_applied_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_machine_runtime_state_machine_id').on(table.machineId),
+    index('idx_machine_runtime_state_runtime').on(table.runtime),
+  ],
+);
+
+export const sessionHandoffs = pgTable(
+  'session_handoffs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceSessionId: uuid('source_session_id')
+      .notNull()
+      .references(() => managedSessions.id, { onDelete: 'cascade' }),
+    targetSessionId: uuid('target_session_id').references(() => managedSessions.id, {
+      onDelete: 'set null',
+    }),
+    sourceRuntime: text('source_runtime').notNull(),
+    targetRuntime: text('target_runtime').notNull(),
+    reason: text('reason').notNull(),
+    strategy: text('strategy').notNull(),
+    status: text('status').notNull().default('pending'),
+    snapshot: jsonb('snapshot').notNull(),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('idx_session_handoffs_source_session_id').on(table.sourceSessionId),
+    index('idx_session_handoffs_target_session_id').on(table.targetSessionId),
+    index('idx_session_handoffs_status').on(table.status),
+  ],
+);
+
+export const nativeImportAttempts = pgTable(
+  'native_import_attempts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    handoffId: uuid('handoff_id').references(() => sessionHandoffs.id, { onDelete: 'set null' }),
+    sourceSessionId: uuid('source_session_id').references(() => managedSessions.id, {
+      onDelete: 'set null',
+    }),
+    targetSessionId: uuid('target_session_id').references(() => managedSessions.id, {
+      onDelete: 'set null',
+    }),
+    sourceRuntime: text('source_runtime').notNull(),
+    targetRuntime: text('target_runtime').notNull(),
+    status: text('status').notNull().default('pending'),
+    metadata: jsonb('metadata').default({}),
+    errorMessage: text('error_message'),
+    attemptedAt: timestamp('attempted_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_native_import_attempts_handoff_id').on(table.handoffId),
+    index('idx_native_import_attempts_status').on(table.status),
   ],
 );
 
