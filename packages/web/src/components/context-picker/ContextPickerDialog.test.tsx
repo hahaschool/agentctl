@@ -31,6 +31,10 @@ vi.mock('@/lib/model-options', () => ({
     { value: '', label: 'Default' },
     { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
   ],
+  AGENT_RUNTIMES: [
+    { value: 'claude-code', label: 'Claude Code', desc: 'Full CLI' },
+    { value: 'nanoclaw', label: 'NanoClaw', desc: 'Lightweight' },
+  ],
 }));
 
 // Mock the virtualizer — JSDOM has no layout so virtualizer won't render rows.
@@ -111,7 +115,7 @@ function makeMessages(count: number): SessionContentMessage[] {
 // ---------------------------------------------------------------------------
 
 type RenderOpts = {
-  mode?: 'fork' | 'create-agent';
+  defaultTab?: 'fork' | 'agent';
   session?: Session;
   messages?: SessionContentMessage[];
   open?: boolean;
@@ -130,7 +134,7 @@ function renderDialog(opts: RenderOpts = {}) {
 
   const result = render(
     <ContextPickerDialog
-      mode={opts.mode ?? 'fork'}
+      defaultTab={opts.defaultTab}
       session={session}
       messages={messages}
       open={opts.open ?? true}
@@ -167,16 +171,16 @@ describe('ContextPickerDialog', () => {
       expect(container.innerHTML).toBe('');
     });
 
-    it('shows "Fork Session" title in fork mode', () => {
-      renderDialog({ mode: 'fork' });
+    it('shows "Fork Session" title by default', () => {
+      renderDialog();
       // Title appears in h2 and also in submit buttons; use heading role
       const heading = screen.getByRole('heading', { name: 'Fork Session' });
       expect(heading).toBeDefined();
       expect(heading.tagName).toBe('H2');
     });
 
-    it('shows "Create Agent from Session" title in create-agent mode', () => {
-      renderDialog({ mode: 'create-agent' });
+    it('shows "Create Agent from Session" title when defaultTab="agent"', () => {
+      renderDialog({ defaultTab: 'agent' });
       const heading = screen.getByRole('heading', { name: 'Create Agent from Session' });
       expect(heading).toBeDefined();
     });
@@ -200,22 +204,22 @@ describe('ContextPickerDialog', () => {
 
   describe('fork mode', () => {
     it('shows fork prompt textarea', () => {
-      renderDialog({ mode: 'fork' });
+      renderDialog();
       expect(screen.getByLabelText('Fork prompt')).toBeDefined();
     });
 
     it('shows model dropdown', () => {
-      renderDialog({ mode: 'fork' });
+      renderDialog();
       expect(screen.getByLabelText('Model')).toBeDefined();
     });
 
     it('shows strategy as "Full Resume" when all selected', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(3) });
+      renderDialog({ messages: makeMessages(3) });
       expect(screen.getByText('Full Resume')).toBeDefined();
     });
 
     it('fork here on msg index 2 changes strategy to "JSONL Truncation"', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       // Click "Fork here" on index 2 (the 3rd message)
       const forkBtns = screen.getAllByText('Fork here');
@@ -228,7 +232,7 @@ describe('ContextPickerDialog', () => {
     });
 
     it('deselecting non-contiguous messages changes strategy to "Context Injection"', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       // Deselect index 1 (skip the middle) — leaves 0,2,3,4 = non-contiguous
       const checkboxes = screen.getAllByRole('checkbox');
@@ -241,7 +245,7 @@ describe('ContextPickerDialog', () => {
 
     it('submit calls onForkSubmit with correct config', () => {
       const onForkSubmit = vi.fn();
-      renderDialog({ mode: 'fork', messages: makeMessages(3), onForkSubmit });
+      renderDialog({ messages: makeMessages(3), onForkSubmit });
 
       // Enter a fork prompt
       const textarea = screen.getByLabelText('Fork prompt');
@@ -267,7 +271,7 @@ describe('ContextPickerDialog', () => {
 
   describe('create-agent mode', () => {
     it('shows agent name, type, model, system prompt fields', () => {
-      renderDialog({ mode: 'create-agent' });
+      renderDialog({ defaultTab: 'agent' });
 
       expect(screen.getByLabelText('Agent Name')).toBeDefined();
       expect(screen.getByLabelText('Agent type')).toBeDefined();
@@ -277,7 +281,7 @@ describe('ContextPickerDialog', () => {
 
     it('submit calls onCreateAgentSubmit with config', () => {
       const onCreateAgentSubmit = vi.fn();
-      renderDialog({ mode: 'create-agent', messages: makeMessages(3), onCreateAgentSubmit });
+      renderDialog({ defaultTab: 'agent', messages: makeMessages(3), onCreateAgentSubmit });
 
       // Change agent name
       const nameInput = screen.getByLabelText('Agent Name');
@@ -290,12 +294,13 @@ describe('ContextPickerDialog', () => {
       const call = onCreateAgentSubmit.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(call.name).toBe('my-new-agent');
       expect(call.type).toBe('adhoc');
+      expect(call.runtime).toBe('claude-code');
       expect(call.selectedMessageIds).toEqual([0, 1, 2]);
     });
 
     it('agent name defaults to "{agentName}-fork"', () => {
       renderDialog({
-        mode: 'create-agent',
+        defaultTab: 'agent',
         session: makeSession({ agentName: 'my-agent' }),
       });
 
@@ -304,7 +309,7 @@ describe('ContextPickerDialog', () => {
     });
 
     it('submit disabled when name empty', () => {
-      renderDialog({ mode: 'create-agent' });
+      renderDialog({ defaultTab: 'agent' });
 
       // Clear the name
       const nameInput = screen.getByLabelText('Agent Name');
@@ -322,7 +327,7 @@ describe('ContextPickerDialog', () => {
   describe('selection', () => {
     it('Fork Here on index N selects 0..N, deselects N+1..end', () => {
       const onForkSubmit = vi.fn();
-      renderDialog({ mode: 'fork', messages: makeMessages(5), onForkSubmit });
+      renderDialog({ messages: makeMessages(5), onForkSubmit });
 
       // Fork at index 2 (3rd message)
       const forkBtns = screen.getAllByText('Fork here');
@@ -340,7 +345,7 @@ describe('ContextPickerDialog', () => {
     });
 
     it('Select All selects everything', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       // First deselect all
       fireEvent.click(screen.getByText('Deselect All'));
@@ -355,7 +360,7 @@ describe('ContextPickerDialog', () => {
     });
 
     it('Deselect All clears everything', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       fireEvent.click(screen.getByText('Deselect All'));
 
@@ -366,7 +371,7 @@ describe('ContextPickerDialog', () => {
     });
 
     it('Invert flips selection', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       // All are initially selected. Fork here at index 1 → selects 0,1, deselects 2,3,4
       const forkBtns = screen.getAllByText('Fork here');
@@ -386,7 +391,7 @@ describe('ContextPickerDialog', () => {
     });
 
     it('individual toggle works', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(3) });
+      renderDialog({ messages: makeMessages(3) });
 
       // All start checked. Click checkbox 1 to deselect
       const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
@@ -408,7 +413,6 @@ describe('ContextPickerDialog', () => {
   describe('search and filter', () => {
     it('search filters messages by content', () => {
       renderDialog({
-        mode: 'fork',
         messages: [
           makeMessage({ content: 'alpha beta' }),
           makeMessage({ content: 'gamma delta' }),
@@ -426,7 +430,6 @@ describe('ContextPickerDialog', () => {
 
     it('filter by type filters messages', () => {
       renderDialog({
-        mode: 'fork',
         messages: [
           makeMessage({ type: 'human', content: 'User msg' }),
           makeMessage({ type: 'assistant', content: 'AI response' }),
@@ -443,7 +446,6 @@ describe('ContextPickerDialog', () => {
 
     it('search + filter combine (AND logic)', () => {
       renderDialog({
-        mode: 'fork',
         messages: [
           makeMessage({ type: 'human', content: 'alpha' }),
           makeMessage({ type: 'assistant', content: 'alpha response' }),
@@ -473,7 +475,7 @@ describe('ContextPickerDialog', () => {
     it('shows estimated token count', () => {
       // Each message has "Message N content" ≈ 17-18 chars.
       // 5 messages * ~17 chars = ~85 chars / 3.5 ≈ 24 tokens
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       // The token count appears in both toolbar and summary bar.
       // Just check that a number followed by "tokens" is displayed.
@@ -486,7 +488,7 @@ describe('ContextPickerDialog', () => {
         makeMessage({ type: 'human', content: 'A'.repeat(100) }),
         makeMessage({ type: 'tool_result', content: 'B'.repeat(500) }),
       ];
-      renderDialog({ mode: 'fork', messages });
+      renderDialog({ messages });
 
       // Get the initial token display from the summary bar
       const summaryBar = screen.getByText(/est\./);
@@ -505,7 +507,7 @@ describe('ContextPickerDialog', () => {
         makeMessage({ type: 'human', content: 'A'.repeat(100) }),
         makeMessage({ type: 'thinking', content: 'T'.repeat(1000) }),
       ];
-      renderDialog({ mode: 'fork', messages });
+      renderDialog({ messages });
 
       const summaryBar = screen.getByText(/est\./);
       const initialText = summaryBar.parentElement?.textContent ?? '';
@@ -525,7 +527,7 @@ describe('ContextPickerDialog', () => {
   describe('close and cancel', () => {
     it('cancel button calls onClose', () => {
       const onClose = vi.fn();
-      renderDialog({ mode: 'fork', onClose });
+      renderDialog({ onClose });
 
       fireEvent.click(screen.getByText('Cancel'));
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -533,7 +535,7 @@ describe('ContextPickerDialog', () => {
 
     it('backdrop click calls onClose', () => {
       const onClose = vi.fn();
-      renderDialog({ mode: 'fork', onClose });
+      renderDialog({ onClose });
 
       fireEvent.click(screen.getByLabelText('Close dialog'));
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -541,7 +543,7 @@ describe('ContextPickerDialog', () => {
 
     it('X button calls onClose', () => {
       const onClose = vi.fn();
-      renderDialog({ mode: 'fork', onClose });
+      renderDialog({ onClose });
 
       fireEvent.click(screen.getByLabelText('Close'));
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -554,19 +556,19 @@ describe('ContextPickerDialog', () => {
 
   describe('submitting state', () => {
     it('shows "Forking..." in fork mode when isSubmitting', () => {
-      renderDialog({ mode: 'fork', isSubmitting: true });
+      renderDialog({ isSubmitting: true });
       // "Forking..." appears in both ForkConfigPanel and footer buttons
       const btns = screen.getAllByText('Forking...');
       expect(btns.length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows "Creating..." in create-agent mode when isSubmitting', () => {
-      renderDialog({ mode: 'create-agent', isSubmitting: true });
+      renderDialog({ defaultTab: 'agent', isSubmitting: true });
       expect(screen.getByText('Creating...')).toBeDefined();
     });
 
     it('cancel button disabled when isSubmitting', () => {
-      renderDialog({ mode: 'fork', isSubmitting: true });
+      renderDialog({ isSubmitting: true });
       const cancelBtn = screen.getByText('Cancel') as HTMLButtonElement;
       expect(cancelBtn.disabled).toBe(true);
     });
@@ -578,12 +580,12 @@ describe('ContextPickerDialog', () => {
 
   describe('strategy auto-detection', () => {
     it('all selected → "Full Resume"', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(3) });
+      renderDialog({ messages: makeMessages(3) });
       expect(screen.getByText('Full Resume')).toBeDefined();
     });
 
     it('contiguous from start → "JSONL Truncation"', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       // Fork here at index 2 → selects 0,1,2
       const forkBtns = screen.getAllByText('Fork here');
@@ -595,7 +597,7 @@ describe('ContextPickerDialog', () => {
     });
 
     it('non-contiguous → "Context Injection"', () => {
-      renderDialog({ mode: 'fork', messages: makeMessages(5) });
+      renderDialog({ messages: makeMessages(5) });
 
       // Deselect index 1 → leaves 0,2,3,4 = non-contiguous
       const checkboxes = screen.getAllByRole('checkbox');
@@ -614,7 +616,6 @@ describe('ContextPickerDialog', () => {
   describe('filtered empty state', () => {
     it('shows filter empty message when search yields no results', () => {
       renderDialog({
-        mode: 'fork',
         messages: [makeMessage({ content: 'Hello' })],
       });
 
@@ -631,15 +632,69 @@ describe('ContextPickerDialog', () => {
 
   describe('accessibility', () => {
     it('dialog has role="dialog" and aria-label', () => {
-      renderDialog({ mode: 'fork' });
+      renderDialog();
       const dialog = screen.getByRole('dialog');
       expect(dialog.getAttribute('aria-label')).toBe('Fork Session');
     });
 
     it('create-agent dialog has correct aria-label', () => {
-      renderDialog({ mode: 'create-agent' });
+      renderDialog({ defaultTab: 'agent' });
       const dialog = screen.getByRole('dialog');
       expect(dialog.getAttribute('aria-label')).toBe('Create Agent from Session');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Tab toggle
+  // -----------------------------------------------------------------------
+
+  describe('tab toggle', () => {
+    it('renders Quick Fork and Create as Agent tabs', () => {
+      renderDialog();
+      expect(screen.getByRole('tab', { name: /quick fork/i })).toBeDefined();
+      expect(screen.getByRole('tab', { name: /create as agent/i })).toBeDefined();
+    });
+
+    it('defaults to Quick Fork tab', () => {
+      renderDialog();
+      const forkTab = screen.getByRole('tab', { name: /quick fork/i });
+      expect(forkTab.getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('switches to Create as Agent tab', () => {
+      renderDialog();
+      fireEvent.click(screen.getByRole('tab', { name: /create as agent/i }));
+      expect(screen.getByLabelText('Agent Name')).toBeDefined();
+    });
+
+    it('defaultTab="agent" opens on Create as Agent', () => {
+      renderDialog({ defaultTab: 'agent' });
+      const agentTab = screen.getByRole('tab', { name: /create as agent/i });
+      expect(agentTab.getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByLabelText('Agent Name')).toBeDefined();
+    });
+
+    it('shows runtime selector in agent tab', () => {
+      renderDialog({ defaultTab: 'agent' });
+      expect(screen.getByLabelText('Agent runtime')).toBeDefined();
+    });
+
+    it('includes runtime in create-agent submit config', () => {
+      const onCreateAgentSubmit = vi.fn();
+      renderDialog({ defaultTab: 'agent', messages: makeMessages(3), onCreateAgentSubmit });
+
+      const nameInput = screen.getByLabelText('Agent Name');
+      fireEvent.change(nameInput, { target: { value: 'my-new-agent' } });
+
+      // Select nanoclaw runtime
+      const runtimeSelect = screen.getByLabelText('Agent runtime');
+      fireEvent.change(runtimeSelect, { target: { value: 'nanoclaw' } });
+
+      fireEvent.click(screen.getByText('Create Agent'));
+
+      expect(onCreateAgentSubmit).toHaveBeenCalledTimes(1);
+      const call = onCreateAgentSubmit.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(call.runtime).toBe('nanoclaw');
     });
   });
 });

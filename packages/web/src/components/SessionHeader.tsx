@@ -456,7 +456,6 @@ export function SessionHeader({
 
       {/* Fork context picker dialog */}
       <ContextPickerDialog
-        mode="fork"
         session={session}
         messages={contextPickerMessages}
         open={showContextPicker}

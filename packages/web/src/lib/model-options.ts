@@ -4,6 +4,10 @@
  * Centralised here so that adding/removing a model only requires one file change.
  */
 
+import { AGENT_RUNTIMES } from '@agentctl/shared';
+export type { AgentRuntime } from '@agentctl/shared';
+export { AGENT_RUNTIMES };
+
 export type ModelOption = {
   readonly value: string;
   readonly label: string;

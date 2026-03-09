@@ -1,5 +1,4 @@
 export type {
-  ContextPickerMode,
   CreateAgentSubmitConfig,
   ForkSubmitConfig,
 } from './ContextPickerDialog';

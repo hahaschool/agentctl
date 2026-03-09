@@ -3,7 +3,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Session, SessionContentMessage } from '@/lib/api';
-import { FORK_AGENT_TYPES, MODEL_OPTIONS_WITH_DEFAULT } from '@/lib/model-options';
+import { AGENT_RUNTIMES, FORK_AGENT_TYPES, MODEL_OPTIONS_WITH_DEFAULT } from '@/lib/model-options';
+import type { AgentRuntime } from '@/lib/model-options';
+import { cn } from '@/lib/utils';
 
 import { ContextMessageRow } from './ContextMessageRow';
 import { ContextPickerToolbar } from './ContextPickerToolbar';
@@ -13,8 +15,6 @@ import { ForkConfigPanel } from './ForkConfigPanel';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export type ContextPickerMode = 'fork' | 'create-agent';
 
 export type ForkSubmitConfig = {
   prompt: string;
@@ -27,13 +27,14 @@ export type ForkSubmitConfig = {
 export type CreateAgentSubmitConfig = {
   name: string;
   type: string;
+  runtime: AgentRuntime;
   model?: string;
   systemPrompt?: string;
   selectedMessageIds: number[];
 };
 
 export type ContextPickerDialogProps = {
-  mode: ContextPickerMode;
+  defaultTab?: 'fork' | 'agent';
   session: Session;
   messages: SessionContentMessage[];
   open: boolean;
@@ -57,7 +58,7 @@ const COLLAPSED_THINKING_CHARS = 30;
 // ---------------------------------------------------------------------------
 
 export function ContextPickerDialog({
-  mode,
+  defaultTab = 'fork',
   session,
   messages,
   open,
@@ -70,6 +71,7 @@ export function ContextPickerDialog({
   // State — shared
   // -------------------------------------------------------------------------
 
+  const [activeTab, setActiveTab] = useState<'fork' | 'agent'>(defaultTab ?? 'fork');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     () => new Set(messages.map((_, i) => i)),
   );
@@ -92,6 +94,7 @@ export function ContextPickerDialog({
 
   const [agentName, setAgentName] = useState(`${session.agentName ?? 'agent'}-fork`);
   const [agentType, setAgentType] = useState('adhoc');
+  const [agentRuntime, setAgentRuntime] = useState<AgentRuntime>('claude-code');
   const [agentModel, setAgentModel] = useState(session.model ?? '');
   const [systemPrompt, setSystemPrompt] = useState('');
 
@@ -227,11 +230,12 @@ export function ContextPickerDialog({
     onCreateAgentSubmit?.({
       name: agentName.trim(),
       type: agentType,
+      runtime: agentRuntime,
       model: agentModel || undefined,
       systemPrompt: systemPrompt.trim() || undefined,
       selectedMessageIds: Array.from(selectedIds).sort((a, b) => a - b),
     });
-  }, [agentName, agentType, agentModel, systemPrompt, selectedIds, onCreateAgentSubmit]);
+  }, [agentName, agentType, agentRuntime, agentModel, systemPrompt, selectedIds, onCreateAgentSubmit]);
 
   // -------------------------------------------------------------------------
   // Early return
@@ -243,9 +247,9 @@ export function ContextPickerDialog({
   // Derived UI values
   // -------------------------------------------------------------------------
 
-  const title = mode === 'fork' ? 'Fork Session' : 'Create Agent from Session';
+  const title = activeTab === 'fork' ? 'Fork Session' : 'Create Agent from Session';
   const subtitle =
-    mode === 'fork'
+    activeTab === 'fork'
       ? 'Select messages and configure the fork'
       : 'Select messages to include as context for the new agent';
 
@@ -253,7 +257,7 @@ export function ContextPickerDialog({
   const canSubmitAgent = agentName.trim().length > 0 && !isSubmitting;
 
   const submitLabel =
-    mode === 'fork'
+    activeTab === 'fork'
       ? isSubmitting
         ? 'Forking...'
         : 'Fork Session'
@@ -261,8 +265,8 @@ export function ContextPickerDialog({
         ? 'Creating...'
         : 'Create Agent';
 
-  const handleSubmit = mode === 'fork' ? handleForkSubmit : handleCreateAgentSubmit;
-  const canSubmit = mode === 'fork' ? canSubmitFork : canSubmitAgent;
+  const handleSubmit = activeTab === 'fork' ? handleForkSubmit : handleCreateAgentSubmit;
+  const canSubmit = activeTab === 'fork' ? canSubmitFork : canSubmitAgent;
 
   // -------------------------------------------------------------------------
   // Render
@@ -396,20 +400,53 @@ export function ContextPickerDialog({
           </div>
 
           {/* Right panel */}
-          {mode === 'fork' ? (
-            <ForkConfigPanel
-              session={session}
-              forkPrompt={forkPrompt}
-              onForkPromptChange={setForkPrompt}
-              model={forkModel}
-              onModelChange={setForkModel}
-              detectedStrategy={detectedStrategy}
-              isSubmitting={isSubmitting}
-              onSubmit={handleForkSubmit}
-            />
-          ) : (
-            <div className="w-80 shrink-0 flex flex-col overflow-y-auto">
-              <div className="p-4 space-y-3.5">
+          <div className="w-80 shrink-0 flex flex-col overflow-hidden">
+            {/* Tab toggle */}
+            <div role="tablist" className="flex border-b border-border shrink-0">
+              <button
+                role="tab"
+                type="button"
+                aria-selected={activeTab === 'fork'}
+                onClick={() => setActiveTab('fork')}
+                className={cn(
+                  'flex-1 px-3 py-2 text-xs font-medium transition-colors cursor-pointer',
+                  activeTab === 'fork'
+                    ? 'text-foreground border-b-2 border-primary'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Quick Fork
+              </button>
+              <button
+                role="tab"
+                type="button"
+                aria-selected={activeTab === 'agent'}
+                onClick={() => setActiveTab('agent')}
+                className={cn(
+                  'flex-1 px-3 py-2 text-xs font-medium transition-colors cursor-pointer',
+                  activeTab === 'agent'
+                    ? 'text-foreground border-b-2 border-primary'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Create as Agent
+              </button>
+            </div>
+
+            {/* Tab content */}
+            {activeTab === 'fork' ? (
+              <ForkConfigPanel
+                session={session}
+                forkPrompt={forkPrompt}
+                onForkPromptChange={setForkPrompt}
+                model={forkModel}
+                onModelChange={setForkModel}
+                detectedStrategy={detectedStrategy}
+                isSubmitting={isSubmitting}
+                onSubmit={handleForkSubmit}
+              />
+            ) : (
+              <div className="p-4 space-y-3.5 overflow-y-auto">
                 {/* Agent Name */}
                 <div>
                   <label
@@ -446,6 +483,29 @@ export function ContextPickerDialog({
                     {FORK_AGENT_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>
                         {t.label} -- {t.desc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Agent Runtime */}
+                <div>
+                  <label
+                    htmlFor="cpd-agent-runtime"
+                    className="block text-[11px] font-medium text-muted-foreground mb-1"
+                  >
+                    Runtime
+                  </label>
+                  <select
+                    id="cpd-agent-runtime"
+                    value={agentRuntime}
+                    onChange={(e) => setAgentRuntime(e.target.value as AgentRuntime)}
+                    aria-label="Agent runtime"
+                    className="w-full px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors"
+                  >
+                    {AGENT_RUNTIMES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label} — {r.desc}
                       </option>
                     ))}
                   </select>
@@ -506,8 +566,8 @@ export function ContextPickerDialog({
                   )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Footer */}

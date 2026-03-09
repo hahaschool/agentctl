@@ -968,10 +968,12 @@ export function SessionsPage(): React.JSX.Element {
         )}
       </div>
 
-      {/* ContextPickerDialog — create-agent mode */}
+      {/* ContextPickerDialog — opens on Create as Agent tab by default.
+          Note: handleForkSubmit actually creates an agent from session context,
+          not a fork — the naming is a legacy artifact from the original flow. */}
       {selected && (
         <ContextPickerDialog
-          mode="create-agent"
+          defaultTab="agent"
           session={selected}
           messages={forkPickerMessages}
           open={showForkPicker}
