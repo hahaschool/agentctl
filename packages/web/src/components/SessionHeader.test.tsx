@@ -105,6 +105,11 @@ const mockForkSession = {
   mutate: mockForkMutate,
   isPending: false,
 };
+const mockCreateAgentMutate = vi.fn();
+const mockCreateAgent = {
+  mutate: mockCreateAgentMutate,
+  isPending: false,
+};
 
 vi.mock('../lib/queries', () => ({
   accountsQuery: () => ({
@@ -117,6 +122,7 @@ vi.mock('../lib/queries', () => ({
   },
   useDeleteSession: () => mockDeleteSession,
   useForkSession: () => mockForkSession,
+  useCreateAgent: () => mockCreateAgent,
 }));
 
 const mockRouterPush = vi.fn();
@@ -174,7 +180,47 @@ vi.mock('../lib/api', () => ({
 }));
 
 vi.mock('./context-picker', () => ({
-  ContextPickerDialog: () => null,
+  ContextPickerDialog: ({
+    open,
+    onForkSubmit,
+    onCreateAgentSubmit,
+  }: {
+    open: boolean;
+    onForkSubmit?: (config: Record<string, unknown>) => void;
+    onCreateAgentSubmit?: (config: Record<string, unknown>) => void;
+  }) =>
+    open ? (
+      <div data-testid="context-picker-dialog">
+        <button
+          type="button"
+          data-testid="mock-fork-submit"
+          onClick={() =>
+            onForkSubmit?.({
+              prompt: 'fork prompt',
+              strategy: 'resume',
+            })
+          }
+        >
+          Submit fork
+        </button>
+        <button
+          type="button"
+          data-testid="mock-create-agent-submit"
+          onClick={() =>
+            onCreateAgentSubmit?.({
+              name: 'forked-agent',
+              type: 'adhoc',
+              runtime: 'nanoclaw',
+              model: 'claude-sonnet-4-6',
+              systemPrompt: 'system prompt',
+              selectedMessageIds: [0, 1],
+            })
+          }
+        >
+          Submit create agent
+        </button>
+      </div>
+    ) : null,
 }));
 
 // ---------------------------------------------------------------------------
@@ -243,6 +289,7 @@ function renderHeader(overrides: Partial<SessionHeaderProps> = {}) {
 beforeEach(() => {
   mockMutate.mockReset();
   mockForkMutate.mockReset();
+  mockCreateAgentMutate.mockReset();
   mockRouterPush.mockReset();
   mockToast.success.mockReset();
   mockToast.error.mockReset();
@@ -1020,6 +1067,55 @@ describe('SessionHeader', () => {
       // Fork button should not even appear
       expect(screen.queryByText('Fork')).toBeNull();
       expect(mockGetSessionContent).not.toHaveBeenCalled();
+    });
+
+    it('submits create-agent from context picker with runtime and selected context', async () => {
+      mockGetSessionContent.mockResolvedValue({ messages: makeMessages(3) });
+      mockCreateAgentMutate.mockImplementation((_body: unknown, opts: unknown) => {
+        const handlers = opts as { onSuccess?: () => void };
+        handlers.onSuccess?.();
+      });
+
+      renderHeader({
+        session: makeSession({
+          status: 'ended',
+          claudeSessionId: 'claude-sess-abc',
+          endedAt: '2026-03-06T01:00:00Z',
+        }),
+      });
+
+      fireEvent.click(screen.getByText('Fork'));
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('context-picker-dialog')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('mock-create-agent-submit'));
+
+      await vi.waitFor(() => {
+        expect(mockCreateAgentMutate).toHaveBeenCalledTimes(1);
+      });
+
+      const payload = mockCreateAgentMutate.mock.calls[0]?.[0] as {
+        name: string;
+        machineId: string;
+        type: string;
+        runtime: string;
+        projectPath: string;
+        config: Record<string, unknown>;
+      };
+
+      expect(payload.name).toBe('forked-agent');
+      expect(payload.machineId).toBe('machine-1');
+      expect(payload.type).toBe('adhoc');
+      expect(payload.runtime).toBe('nanoclaw');
+      expect(payload.projectPath).toBe('/home/user/project');
+      expect(payload.config).toMatchObject({
+        model: 'claude-sonnet-4-6',
+        systemPrompt: 'system prompt',
+        initialPrompt: '[human] Message content 1\n\n[assistant] Message content 2',
+      });
+      expect(mockToast.success).toHaveBeenCalledWith('Agent "forked-agent" created from session');
     });
   });
 });

@@ -1,18 +1,20 @@
 'use client';
 
+import type { MemoryObservation } from '@agentctl/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import type { Session, SessionContentMessage } from '@/lib/api';
-import { AGENT_RUNTIMES, FORK_AGENT_TYPES, MODEL_OPTIONS_WITH_DEFAULT } from '@/lib/model-options';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api, type Session, type SessionContentMessage } from '@/lib/api';
 import type { AgentRuntime } from '@/lib/model-options';
+import { AGENT_RUNTIMES, FORK_AGENT_TYPES, MODEL_OPTIONS_WITH_DEFAULT } from '@/lib/model-options';
 import { cn } from '@/lib/utils';
 
 import { ContextMessageRow } from './ContextMessageRow';
 import { ContextPickerToolbar } from './ContextPickerToolbar';
 import { ContextSummaryBar } from './ContextSummaryBar';
 import { ForkConfigPanel } from './ForkConfigPanel';
+import { MemoryPanel, matchObservationToMessages } from './MemoryPanel';
+import { buildPromptPreview, PromptPreview } from './PromptPreview';
 import { findByTopicIndices, findKeyDecisionIndices } from './SmartSelectTools';
-import { PromptPreview, buildPromptPreview } from './PromptPreview';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,6 +102,88 @@ export function ContextPickerDialog({
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntime>('claude-code');
   const [agentModel, setAgentModel] = useState(session.model ?? '');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [memoryQuery, setMemoryQuery] = useState('');
+  const [debouncedMemoryQuery, setDebouncedMemoryQuery] = useState('');
+  const [timelineObservations, setTimelineObservations] = useState<MemoryObservation[]>([]);
+  const [searchObservations, setSearchObservations] = useState<MemoryObservation[]>([]);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [selectedObservationId, setSelectedObservationId] = useState<number | undefined>();
+
+  useEffect(() => {
+    if (!open) {
+      setMemoryQuery('');
+      setDebouncedMemoryQuery('');
+      setSelectedObservationId(undefined);
+      setSearchObservations([]);
+      setMemoryLoading(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedMemoryQuery(memoryQuery.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [open, memoryQuery]);
+
+  useEffect(() => {
+    if (!open || debouncedMemoryQuery.length >= 2) {
+      return;
+    }
+    if (!session.claudeSessionId) {
+      setTimelineObservations([]);
+      return;
+    }
+
+    let cancelled = false;
+    setMemoryLoading(true);
+
+    api
+      .getMemoryTimeline(session.claudeSessionId, 30)
+      .then((res) => {
+        if (!cancelled) setTimelineObservations(res.observations ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setTimelineObservations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMemoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, session.claudeSessionId, debouncedMemoryQuery]);
+
+  useEffect(() => {
+    if (!open || debouncedMemoryQuery.length < 2) {
+      setSearchObservations([]);
+      return;
+    }
+
+    let cancelled = false;
+    setMemoryLoading(true);
+
+    api
+      .searchMemory({
+        q: debouncedMemoryQuery,
+        ...(session.projectPath ? { project: session.projectPath } : {}),
+        limit: 20,
+      })
+      .then((res) => {
+        if (!cancelled) setSearchObservations(res.observations ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSearchObservations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMemoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, debouncedMemoryQuery, session.projectPath]);
 
   // -------------------------------------------------------------------------
   // Derived data
@@ -137,6 +221,11 @@ export function ContextPickerDialog({
     }
     return Math.round(totalChars / CHARS_PER_TOKEN);
   }, [selectedIds, messages, hideToolResults, collapseThinking]);
+
+  const memoryObservations = useMemo(
+    () => (debouncedMemoryQuery.length >= 2 ? searchObservations : timelineObservations),
+    [debouncedMemoryQuery, searchObservations, timelineObservations],
+  );
 
   // -------------------------------------------------------------------------
   // Virtualizer
@@ -213,16 +302,42 @@ export function ContextPickerDialog({
     }
   }, [messages]);
 
-  const handleSelectByTopic = useCallback((topic: string) => {
-    const indices = findByTopicIndices(messages, topic);
-    if (indices.length > 0) {
+  const handleSelectByTopic = useCallback(
+    (topic: string) => {
+      const indices = findByTopicIndices(messages, topic);
+      if (indices.length > 0) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const i of indices) next.add(i);
+          return next;
+        });
+      }
+    },
+    [messages],
+  );
+
+  const handleSelectObservation = useCallback(
+    (observation: MemoryObservation) => {
+      setSelectedObservationId(observation.id);
+      const matches = matchObservationToMessages(observation, messages);
+      if (matches.length === 0) return;
+
+      setFilterType('all');
+      setSearchQuery('');
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        for (const i of indices) next.add(i);
+        for (const index of matches) next.add(index);
         return next;
       });
-    }
-  }, [messages]);
+
+      const firstMatch = matches[0];
+      window.setTimeout(() => {
+        const row = document.getElementById(`cpd-row-${String(firstMatch)}`);
+        row?.scrollIntoView({ block: 'center' });
+      }, 0);
+    },
+    [messages],
+  );
 
   // -------------------------------------------------------------------------
   // Submit handlers
@@ -256,7 +371,15 @@ export function ContextPickerDialog({
       systemPrompt: systemPrompt.trim() || undefined,
       selectedMessageIds: Array.from(selectedIds).sort((a, b) => a - b),
     });
-  }, [agentName, agentType, agentRuntime, agentModel, systemPrompt, selectedIds, onCreateAgentSubmit]);
+  }, [
+    agentName,
+    agentType,
+    agentRuntime,
+    agentModel,
+    systemPrompt,
+    selectedIds,
+    onCreateAgentSubmit,
+  ]);
 
   // -------------------------------------------------------------------------
   // Derived UI values (must be before early return to keep hook count stable)
@@ -267,13 +390,15 @@ export function ContextPickerDialog({
     return buildPromptPreview({
       strategy: detectedStrategy,
       forkPrompt: activeTab === 'fork' ? forkPrompt : systemPrompt,
-      forkAtIndex: detectedStrategy === 'jsonl-truncation' ? sortedIds[sortedIds.length - 1] : undefined,
-      selectedMessages: detectedStrategy === 'context-injection'
-        ? sortedIds
-            .map((i) => messages[i])
-            .filter((m): m is SessionContentMessage => m != null)
-            .map((m) => ({ type: m.type, content: m.content }))
-        : [],
+      forkAtIndex:
+        detectedStrategy === 'jsonl-truncation' ? sortedIds[sortedIds.length - 1] : undefined,
+      selectedMessages:
+        detectedStrategy === 'context-injection'
+          ? sortedIds
+              .map((i) => messages[i])
+              .filter((m): m is SessionContentMessage => m != null)
+              .map((m) => ({ type: m.type, content: m.content }))
+          : [],
       systemPrompt: activeTab === 'agent' ? systemPrompt : undefined,
     });
   }, [selectedIds, detectedStrategy, activeTab, forkPrompt, systemPrompt, messages]);
@@ -369,6 +494,8 @@ export function ContextPickerDialog({
               estimatedTokens={estimatedTokens}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
+              memoryQuery={memoryQuery}
+              onMemoryQueryChange={setMemoryQuery}
               filterType={filterType}
               onFilterChange={setFilterType}
               onSelectAll={handleSelectAll}
@@ -377,6 +504,18 @@ export function ContextPickerDialog({
               onSelectKeyDecisions={handleSelectKeyDecisions}
               onSelectByTopic={handleSelectByTopic}
             />
+
+            <div className="border-b border-border bg-purple-500/[0.03]">
+              <div className="px-3 pt-2 pb-1 text-[10px] text-muted-foreground">
+                {debouncedMemoryQuery.length >= 2 ? 'Memory Search Results' : 'Session Memories'}
+              </div>
+              <MemoryPanel
+                observations={memoryObservations}
+                isLoading={memoryLoading}
+                onSelectObservation={handleSelectObservation}
+                selectedObservationId={selectedObservationId}
+              />
+            </div>
 
             {/* Virtualized message list */}
             <div
@@ -405,6 +544,7 @@ export function ContextPickerDialog({
                     return (
                       <div
                         key={`vrow-${String(idx)}`}
+                        id={`cpd-row-${String(idx)}`}
                         style={{
                           position: 'absolute',
                           top: 0,

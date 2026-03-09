@@ -161,7 +161,7 @@ describe('LogsAuditActionRow', () => {
   // Toggle / onToggle callback
   // -----------------------------------------------------------------------
 
-  it('calls onToggle when the row button is clicked', () => {
+  it('calls onToggle when the row control is clicked', () => {
     const onToggle = vi.fn();
     render(
       <LogsAuditActionRow
@@ -181,7 +181,7 @@ describe('LogsAuditActionRow', () => {
   // -----------------------------------------------------------------------
 
   it('shows expand indicator rotated when collapsed', () => {
-    const { container } = render(
+    render(
       <LogsAuditActionRow
         action={makeAction()}
         isFirst={true}
@@ -190,14 +190,14 @@ describe('LogsAuditActionRow', () => {
         searchQuery=""
       />,
     );
-    // The arrow span is the last child of the button
-    const button = container.querySelector('button') as HTMLElement;
-    const arrow = button.lastElementChild as HTMLElement;
+    // The arrow span is the last child of the row control
+    const rowControl = screen.getByRole('button');
+    const arrow = rowControl.lastElementChild as HTMLElement;
     expect(arrow.className).toContain('-rotate-90');
   });
 
   it('shows expand indicator un-rotated when expanded', () => {
-    const { container } = render(
+    render(
       <LogsAuditActionRow
         action={makeAction()}
         isFirst={true}
@@ -206,8 +206,8 @@ describe('LogsAuditActionRow', () => {
         searchQuery=""
       />,
     );
-    const button = container.querySelector('button') as HTMLElement;
-    const arrow = button.lastElementChild as HTMLElement;
+    const rowControl = screen.getByRole('button');
+    const arrow = rowControl.lastElementChild as HTMLElement;
     expect(arrow.className).toContain('rotate-0');
     expect(arrow.className).not.toContain('-rotate-90');
   });
@@ -354,12 +354,12 @@ describe('LogsAuditActionRow', () => {
         searchQuery=""
       />,
     );
-    // In the collapsed button row, the duration appears as formatted text
+    // In the collapsed row, the duration appears as formatted text
     expect(screen.getByText('3000ms')).toBeDefined();
   });
 
   it('does not render duration in collapsed row when null', () => {
-    const { container } = render(
+    render(
       <LogsAuditActionRow
         action={makeAction({ durationMs: null })}
         isFirst={true}
@@ -369,8 +369,8 @@ describe('LogsAuditActionRow', () => {
       />,
     );
     // Only the timestamp should be present as mono text
-    const button = container.querySelector('button') as HTMLElement;
-    const spans = button.querySelectorAll('span');
+    const rowControl = screen.getByRole('button');
+    const spans = rowControl.querySelectorAll('span');
     const durationSpans = Array.from(spans).filter((s) => s.textContent?.endsWith('ms'));
     expect(durationSpans.length).toBe(0);
   });

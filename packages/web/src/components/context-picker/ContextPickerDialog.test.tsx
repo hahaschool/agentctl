@@ -1,5 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockGetMemoryTimeline, mockSearchMemory } = vi.hoisted(() => ({
+  mockGetMemoryTimeline: vi.fn(),
+  mockSearchMemory: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Mocks — BEFORE component import
@@ -36,6 +41,18 @@ vi.mock('@/lib/model-options', () => ({
     { value: 'nanoclaw', label: 'NanoClaw', desc: 'Lightweight' },
   ],
 }));
+
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>();
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      getMemoryTimeline: mockGetMemoryTimeline,
+      searchMemory: mockSearchMemory,
+    },
+  };
+});
 
 // Mock the virtualizer — JSDOM has no layout so virtualizer won't render rows.
 // We mock it to render all items directly.
@@ -156,6 +173,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+beforeEach(() => {
+  mockGetMemoryTimeline.mockReset();
+  mockSearchMemory.mockReset();
+  mockGetMemoryTimeline.mockResolvedValue({ observations: [] });
+  mockSearchMemory.mockResolvedValue({ observations: [] });
+});
+
 // ===========================================================================
 // Tests
 // ===========================================================================
@@ -195,6 +219,11 @@ describe('ContextPickerDialog', () => {
     it('shows empty state when no messages', () => {
       renderDialog({ messages: [] });
       expect(screen.getByText('No messages in this session')).toBeDefined();
+    });
+
+    it('shows memory search input', () => {
+      renderDialog();
+      expect(screen.getByLabelText('Search memories')).toBeDefined();
     });
   });
 
@@ -403,6 +432,73 @@ describe('ContextPickerDialog', () => {
       // Click again to re-select
       fireEvent.click(cb1 as HTMLElement);
       expect(cb1?.checked).toBe(true);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Memory integration
+  // -----------------------------------------------------------------------
+
+  describe('memory integration', () => {
+    it('clicking a memory observation auto-selects matching messages', async () => {
+      mockGetMemoryTimeline.mockResolvedValue({
+        observations: [
+          {
+            id: 42,
+            type: 'bugfix',
+            title: 'Auth middleware fix',
+            files_modified: '["packages/web/src/auth.ts"]',
+            created_at: '2026-03-09T10:00:00Z',
+          },
+        ],
+      });
+
+      renderDialog({
+        messages: [
+          makeMessage({ type: 'human', content: 'Fix auth.ts middleware for login flow' }),
+          makeMessage({ type: 'assistant', content: 'Updated billing service behavior' }),
+        ],
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Auth middleware fix')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByText('Deselect All'));
+      expect(screen.getByText(/0 selected/)).toBeDefined();
+
+      fireEvent.click(screen.getByText('Auth middleware fix'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/1 selected/)).toBeDefined();
+      });
+
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes[0]?.checked).toBe(true);
+      expect(checkboxes[1]?.checked).toBe(false);
+    });
+
+    it('memory search uses debounced query and renders search results', async () => {
+      mockSearchMemory.mockResolvedValue({
+        observations: [
+          {
+            id: 77,
+            type: 'decision',
+            title: 'Use auth middleware guard',
+            created_at: '2026-03-09T11:00:00Z',
+          },
+        ],
+      });
+
+      renderDialog({ messages: makeMessages(2) });
+      fireEvent.change(screen.getByLabelText('Search memories'), {
+        target: { value: 'auth' },
+      });
+
+      await waitFor(() => {
+        expect(mockSearchMemory).toHaveBeenCalledWith(expect.objectContaining({ q: 'auth' }));
+        expect(screen.getByText('Use auth middleware guard')).toBeDefined();
+      });
     });
   });
 

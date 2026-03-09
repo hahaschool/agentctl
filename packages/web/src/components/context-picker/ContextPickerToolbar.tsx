@@ -10,6 +10,8 @@ export type ContextPickerToolbarProps = {
   estimatedTokens: number;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  memoryQuery?: string;
+  onMemoryQueryChange?: (query: string) => void;
   filterType: string;
   onFilterChange: (type: string) => void;
   onSelectAll: () => void;
@@ -64,7 +66,6 @@ const TopicInput = React.memo(function TopicInput({
       }}
       placeholder="e.g., authentication"
       aria-label="Topic to search for"
-      autoFocus
       className="px-2 py-0.5 text-xs border border-purple-300/50 dark:border-purple-800/50 rounded-md bg-purple-500/5 text-foreground outline-none focus:ring-1 focus:ring-purple-500/30 w-36"
     />
   ) : (
@@ -85,6 +86,8 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
   estimatedTokens,
   searchQuery,
   onSearchChange,
+  memoryQuery,
+  onMemoryQueryChange,
   filterType,
   onFilterChange,
   onSelectAll,
@@ -95,7 +98,7 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
 }: ContextPickerToolbarProps): React.ReactNode {
   return (
     <div className="px-3 py-2 border-b border-border bg-muted/20 space-y-2">
-      {/* Row 1: Search + Filter */}
+      {/* Row 1: Message search + filter */}
       <div className="flex items-center gap-2">
         <input
           type="text"
@@ -119,7 +122,21 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
         </select>
       </div>
 
-      {/* Row 2: Bulk action buttons */}
+      {/* Row 2: Memory search */}
+      {onMemoryQueryChange && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={memoryQuery ?? ''}
+            onChange={(e) => onMemoryQueryChange(e.target.value)}
+            placeholder="Search memories..."
+            aria-label="Search memories"
+            className="flex-1 px-2.5 py-1.5 bg-purple-500/5 text-foreground border border-purple-300/30 rounded-md text-xs outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500/40 transition-colors"
+          />
+        </div>
+      )}
+
+      {/* Row 3: Bulk action buttons */}
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -147,7 +164,7 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
         </button>
       </div>
 
-      {/* Row 3: Smart select tools */}
+      {/* Row 4: Smart select tools */}
       {(onSelectKeyDecisions || onSelectByTopic) && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-[10px] text-muted-foreground mr-0.5">Smart:</span>
@@ -161,13 +178,11 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
               Key Decisions
             </button>
           )}
-          {onSelectByTopic && (
-            <TopicInput onSubmit={onSelectByTopic} />
-          )}
+          {onSelectByTopic && <TopicInput onSubmit={onSelectByTopic} />}
         </div>
       )}
 
-      {/* Row 4: Stats */}
+      {/* Row 5: Stats */}
       <div className="flex items-center text-[11px] text-muted-foreground">
         <span>{totalMessages} messages</span>
         <span className="mx-1.5 text-border">|</span>

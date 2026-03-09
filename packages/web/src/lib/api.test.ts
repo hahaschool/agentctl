@@ -129,6 +129,20 @@ describe('api.createAgent', () => {
     expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
     expect(result).toEqual(responsePayload);
   });
+
+  it('includes runtime when provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, agentId: 'new-id' }));
+
+    await api.createAgent({
+      name: 'new-agent',
+      machineId: 'm1',
+      type: 'adhoc',
+      runtime: 'nanoclaw',
+    });
+
+    const [, init] = lastFetchCall();
+    expect(JSON.parse(init?.body as string)).toMatchObject({ runtime: 'nanoclaw' });
+  });
 });
 
 describe('api.startAgent', () => {

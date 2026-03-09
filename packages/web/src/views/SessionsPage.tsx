@@ -21,6 +21,7 @@ import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AgentConfig, ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import { downloadCsv, shortenPath } from '../lib/format-utils';
+import type { AgentRuntime } from '../lib/model-options';
 import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
@@ -390,7 +391,8 @@ export function SessionsPage(): React.JSX.Element {
         setCheckedIds((prev) => {
           const next = new Set(prev);
           for (let i = start; i <= end; i++) {
-            next.add(filteredSessions[i].id);
+            const sessionAtIndex = filteredSessions[i];
+            if (sessionAtIndex) next.add(sessionAtIndex.id);
           }
           return next;
         });
@@ -405,22 +407,19 @@ export function SessionsPage(): React.JSX.Element {
   );
 
   // Group-level select/deselect all sessions in a group
-  const toggleGroupChecked = useCallback(
-    (groupItems: Session[]) => {
-      setCheckedIds((prev) => {
-        const groupIds = groupItems.map((s) => s.id);
-        const allChecked = groupIds.every((gid) => prev.has(gid));
-        const next = new Set(prev);
-        if (allChecked) {
-          for (const gid of groupIds) next.delete(gid);
-        } else {
-          for (const gid of groupIds) next.add(gid);
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const toggleGroupChecked = useCallback((groupItems: Session[]) => {
+    setCheckedIds((prev) => {
+      const groupIds = groupItems.map((s) => s.id);
+      const allChecked = groupIds.every((gid) => prev.has(gid));
+      const next = new Set(prev);
+      if (allChecked) {
+        for (const gid of groupIds) next.delete(gid);
+      } else {
+        for (const gid of groupIds) next.add(gid);
+      }
+      return next;
+    });
+  }, []);
 
   const selected = sessionList.find((s) => s.id === selectedId) ?? null;
 
@@ -479,7 +478,7 @@ export function SessionsPage(): React.JSX.Element {
           toast.success(`Agent "${agentName}" created from session`);
           setShowConvertDialog(false);
           setConvertName('');
-          setConvertType('autonomous');
+          setConvertType('adhoc');
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : String(err));
@@ -510,6 +509,7 @@ export function SessionsPage(): React.JSX.Element {
     (config: {
       name: string;
       type: string;
+      runtime: AgentRuntime;
       model?: string;
       systemPrompt?: string;
       selectedMessageIds: number[];
@@ -532,6 +532,7 @@ export function SessionsPage(): React.JSX.Element {
           name: config.name,
           machineId: selected.machineId,
           type: config.type,
+          runtime: config.runtime,
           ...(selected.projectPath ? { projectPath: selected.projectPath } : {}),
           ...(Object.keys(agentConfig).length > 0 ? { config: agentConfig } : {}),
         },
@@ -927,9 +928,7 @@ export function SessionsPage(): React.JSX.Element {
                         key={s.id}
                         session={s}
                         isSelected={selectedId === s.id}
-                        isFocused={
-                          focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
-                        }
+                        isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
                         onSelect={setSelectedId}
                         isChecked={checkedIds.has(s.id)}
                         onToggleCheck={toggleChecked}

@@ -6,6 +6,7 @@
 
 import type {
   AgentConfig,
+  AgentRuntime,
   AgentStatus,
   AgentType,
   ContentMessage,
@@ -40,6 +41,7 @@ export type Agent = {
   machineId: string;
   name: string;
   type: AgentType;
+  runtime?: AgentRuntime;
   status: AgentStatus;
   schedule: string | null;
   projectPath: string | null;
@@ -301,6 +303,7 @@ export const api = {
     name: string;
     machineId: string;
     type: string;
+    runtime?: AgentRuntime;
     schedule?: string;
     projectPath?: string;
     config?: AgentConfig;
@@ -377,7 +380,9 @@ export const api = {
       body: JSON.stringify({ message }),
     }),
   deleteSession: (id: string, opts?: { purge?: boolean }) =>
-    request<{ ok: boolean }>(`/api/sessions/${id}${opts?.purge ? '?purge=true' : ''}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/api/sessions/${id}${opts?.purge ? '?purge=true' : ''}`, {
+      method: 'DELETE',
+    }),
   forkSession: (
     id: string,
     body: {
@@ -590,7 +595,9 @@ export const api = {
     if (params.project) qs.set('project', params.project);
     if (params.type) qs.set('type', params.type);
     if (params.limit) qs.set('limit', String(params.limit));
-    return request<{ observations: MemoryObservation[] }>(`/api/claude-mem/search?${qs.toString()}`);
+    return request<{ observations: MemoryObservation[] }>(
+      `/api/claude-mem/search?${qs.toString()}`,
+    );
   },
 
   getMemoryObservation: (id: number) =>
@@ -599,7 +606,9 @@ export const api = {
   getMemoryTimeline: (sessionId: string, limit?: number) => {
     const qs = new URLSearchParams({ sessionId });
     if (limit) qs.set('limit', String(limit));
-    return request<{ observations: MemoryObservation[] }>(`/api/claude-mem/timeline?${qs.toString()}`);
+    return request<{ observations: MemoryObservation[] }>(
+      `/api/claude-mem/timeline?${qs.toString()}`,
+    );
   },
 };
 
