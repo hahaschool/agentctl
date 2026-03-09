@@ -19,7 +19,7 @@ git clone https://github.com/hahaschool/agentctl.git
 cd agentctl
 pnpm install
 pnpm build
-pnpm test   # Expect 968+ tests, all passing
+pnpm test
 ```
 
 ## Environment Setup
@@ -58,6 +58,13 @@ CONTROL_PLANE_URL=http://localhost:8080 MACHINE_ID=local WORKER_PORT=9000 pnpm d
 # Listens on http://localhost:9000
 ```
 
+Optional runtime prerequisites on worker machines:
+
+```bash
+claude --version || echo "Claude Code CLI not installed"
+codex --version || echo "Codex CLI not installed"
+```
+
 ## Verify
 
 ```bash
@@ -92,12 +99,18 @@ infra/pm2/                → PM2 ecosystem configs
 - `packages/control-plane/src/index.ts` — Server entry point
 - `packages/control-plane/src/api/server.ts` — Fastify server factory
 - `packages/control-plane/src/api/routes/` — All HTTP/WS route handlers
+- `packages/control-plane/src/api/routes/runtime-config.ts` — Canonical Claude/Codex config rollout
+- `packages/control-plane/src/api/routes/runtime-sessions.ts` — Unified runtime session lifecycle
+- `packages/control-plane/src/api/routes/handoffs.ts` — Cross-runtime handoff orchestration
 - `packages/control-plane/src/scheduler/task-worker.ts` — BullMQ job processor
 - `packages/control-plane/src/registry/db-registry.ts` — PostgreSQL CRUD
-- `packages/control-plane/src/db/schema.ts` — Drizzle schema (4 tables)
+- `packages/control-plane/src/db/schema.ts` — Drizzle schema including managed sessions and handoffs
 - `packages/agent-worker/src/runtime/agent-instance.ts` — Agent lifecycle
 - `packages/agent-worker/src/runtime/agent-pool.ts` — Concurrent agent management
 - `packages/agent-worker/src/runtime/sdk-runner.ts` — Claude Agent SDK wrapper
+- `packages/agent-worker/src/runtime/codex-session-manager.ts` — Codex CLI lifecycle wrapper
+- `packages/agent-worker/src/runtime/handoff-controller.ts` — Snapshot export/import orchestration
+- `packages/agent-worker/src/runtime/config/runtime-config-applier.ts` — Native runtime config rendering
 - `packages/agent-worker/src/hooks/` — Pre/post tool use, audit, stop hooks
 - `packages/shared/src/types/` — All TypeScript type definitions
 - `packages/shared/src/protocol/` — WebSocket + SSE wire protocol
@@ -139,6 +152,19 @@ GET  /api/router/models               # Available LLM models
 
 # Memory
 POST /api/memory/inject               # Inject memory context
+
+# Runtime Config
+GET  /api/runtime-config/defaults
+PUT  /api/runtime-config/defaults
+POST /api/runtime-config/sync
+GET  /api/runtime-config/drift
+
+# Runtime Sessions
+GET  /api/runtime-sessions
+POST /api/runtime-sessions
+POST /api/runtime-sessions/:id/resume
+POST /api/runtime-sessions/:id/fork
+POST /api/runtime-sessions/:id/handoff
 
 # WebSocket
 WS   /api/ws                          # Bidirectional control

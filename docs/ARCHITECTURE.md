@@ -138,6 +138,39 @@ litellm_settings:
     host: os.environ/REDIS_HOST
 ```
 
+### Runtime Management Plane
+
+Claude Code and Codex now share a runtime-aware backend control surface instead
+of being modeled as Claude-only session variants.
+
+Canonical configuration lives in the control plane and is rendered per-runtime
+on each worker:
+
+- `ManagedRuntimeConfig` is the single source of truth for instructions, MCP
+  servers, skills, sandbox mode, approval policy, and environment policy
+- `runtime_config_revisions` stores versioned config bundles plus hashes
+- `machine_runtime_state` stores per-machine apply results and drift signals
+
+Unified runtime sessions and handoffs are tracked separately from the older
+Claude-only `rc_sessions` table:
+
+- `managed_sessions` tracks runtime, native session id, machine, project path,
+  status, config revision, and handoff lineage
+- `session_handoffs` stores the exported `HandoffSnapshot`, source/target
+  runtimes, reason, strategy, and result
+- `native_import_attempts` stores experimental native import probe attempts so
+  the stable snapshot path remains auditable
+
+Control-plane HTTP surface:
+
+- `GET|PUT /api/runtime-config/defaults`
+- `POST /api/runtime-config/sync`
+- `GET /api/runtime-config/drift`
+- `GET|POST /api/runtime-sessions`
+- `POST /api/runtime-sessions/:id/resume`
+- `POST /api/runtime-sessions/:id/fork`
+- `POST /api/runtime-sessions/:id/handoff`
+
 ## 2. Agent Worker
 
 The worker daemon runs on each machine, managing local agent instances.
@@ -157,6 +190,26 @@ agent-worker process (PM2 managed)
 ├── IpcWatcher             → Polls data/ipc/ for container outputs (1000ms)
 └── MetricsExporter        → Prometheus /metrics endpoint on :9090
 ```
+
+### Runtime Adapters and Handoff
+
+The worker now exposes a runtime adapter layer so Claude Code and Codex share a
+single lifecycle API.
+
+- `ClaudeRuntimeAdapter` wraps the existing Claude session manager
+- `CodexRuntimeAdapter` wraps Codex CLI `exec`, `exec resume`, and `fork`
+- `RuntimeRegistry` resolves adapters by managed runtime id
+- `RuntimeConfigApplier` renders native Claude/Codex config files and reports
+  capability state
+
+Cross-runtime switching is implemented as a two-step handoff:
+
+1. Export a portable `HandoffSnapshot` from the source runtime
+2. Start the target runtime from that snapshot on the same project/worktree
+
+The stable path is `snapshot-handoff`. Experimental native import probes run
+first when enabled, but they are allowed to fail and automatically fall back to
+the snapshot path without breaking the handoff.
 
 ### Agent Instance Lifecycle
 
