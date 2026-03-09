@@ -1,4 +1,15 @@
 export type {
+  HandoffManagedSessionRequest,
+  ResumeManagedSessionRequest,
+  RuntimeConfigSyncRequest,
+  RuntimeConfigSyncResponse,
+  ApplyRuntimeConfigRequest,
+  ApplyRuntimeConfigResponse,
+  CreateManagedSessionRequest,
+  ForkManagedSessionRequest,
+  ManagedSessionResponse,
+} from './runtime-management.js';
+export type {
   HeartbeatRequest,
   RegisterWorkerRequest,
   SendMessageRequest,

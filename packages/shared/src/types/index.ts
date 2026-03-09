@@ -18,6 +18,28 @@ export type {
 } from './agent.js';
 export { AGENT_RUNTIMES, AGENT_STATUSES } from './agent.js';
 export type {
+  HandoffReason,
+  HandoffSnapshot,
+  HandoffStrategy,
+  ManagedEnvironmentPolicy,
+  ManagedInstructionBundle,
+  ManagedMcpServer,
+  ManagedRuntime,
+  ManagedRuntimeConfig,
+  ManagedSession,
+  ManagedSessionStatus,
+  ManagedSkill,
+} from './runtime-management.js';
+export {
+  HANDOFF_REASONS,
+  HANDOFF_STRATEGIES,
+  MANAGED_RUNTIMES,
+  MANAGED_SESSION_STATUSES,
+  isHandoffStrategy,
+  isManagedRuntime,
+  isManagedSessionStatus,
+} from './runtime-management.js';
+export type {
   AgentRun,
   RunStatus,
   RunTrigger,
