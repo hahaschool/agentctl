@@ -18,6 +18,7 @@ export type {
   NativeImportPreflightResponse,
   NativeImportAttempt,
   NativeImportAttemptReason,
+  RuntimeHandoffSummaryResponse,
   RuntimeSessionSummary,
   StartHandoffRequest,
   StartHandoffResponse,

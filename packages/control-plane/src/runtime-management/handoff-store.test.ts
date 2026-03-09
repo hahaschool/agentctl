@@ -150,4 +150,78 @@ describe('HandoffStore', () => {
       errorMessage: 'Unsupported session format',
     });
   });
+
+  it('summarizes recent handoffs with native import outcomes', async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          id: 'handoff-1',
+          sourceSessionId: 'ms-1',
+          targetSessionId: 'ms-2',
+          sourceRuntime: 'claude-code',
+          targetRuntime: 'codex',
+          reason: 'manual',
+          strategy: 'native-import',
+          status: 'succeeded',
+          snapshot: makeSnapshot(),
+          errorMessage: null,
+          createdAt: new Date('2026-03-09T13:00:00Z'),
+          completedAt: new Date('2026-03-09T13:01:00Z'),
+        },
+        {
+          id: 'handoff-2',
+          sourceSessionId: 'ms-2',
+          targetSessionId: 'ms-3',
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          reason: 'manual',
+          strategy: 'snapshot-handoff',
+          status: 'succeeded',
+          snapshot: makeSnapshot(),
+          errorMessage: null,
+          createdAt: new Date('2026-03-09T13:02:00Z'),
+          completedAt: new Date('2026-03-09T13:03:00Z'),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'attempt-1',
+          handoffId: 'handoff-1',
+          sourceSessionId: 'ms-1',
+          targetSessionId: 'ms-2',
+          sourceRuntime: 'claude-code',
+          targetRuntime: 'codex',
+          status: 'succeeded',
+          metadata: {},
+          errorMessage: null,
+          attemptedAt: new Date('2026-03-09T13:00:30Z'),
+        },
+        {
+          id: 'attempt-2',
+          handoffId: 'handoff-2',
+          sourceSessionId: 'ms-2',
+          targetSessionId: 'ms-3',
+          sourceRuntime: 'codex',
+          targetRuntime: 'claude-code',
+          status: 'failed',
+          metadata: { reason: 'resume_failed' },
+          errorMessage: 'resume failed',
+          attemptedAt: new Date('2026-03-09T13:02:30Z'),
+        },
+      ]);
+
+    const summary = await store.summarizeRecent(50);
+
+    expect(mockDb.select).toHaveBeenCalledTimes(2);
+    expect(mockDb.limit).toHaveBeenNthCalledWith(1, 50);
+    expect(mockDb.limit).toHaveBeenNthCalledWith(2, 2);
+    expect(summary).toEqual({
+      total: 2,
+      succeeded: 2,
+      failed: 0,
+      pending: 0,
+      nativeImportSuccesses: 1,
+      nativeImportFallbacks: 1,
+    });
+  });
 });

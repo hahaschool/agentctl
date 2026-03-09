@@ -6,6 +6,7 @@ import type {
   ManagedSession,
   ManagedSessionStatus,
 } from '../types/runtime-management.js';
+import type { HandoffAnalyticsSummary } from '../runtime/handoff-analytics.js';
 
 export type RuntimeSessionSummary = {
   runtime: ManagedRuntime;
@@ -94,4 +95,10 @@ export type ManagedSessionHandoffResponse = {
   nativeImportAttempt?: NativeImportAttempt;
   snapshot: HandoffSnapshot;
   session: ManagedSession;
+};
+
+export type RuntimeHandoffSummaryResponse = {
+  ok: true;
+  summary: HandoffAnalyticsSummary;
+  limit: number;
 };

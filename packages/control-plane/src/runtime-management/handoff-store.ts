@@ -2,10 +2,11 @@ import type {
   HandoffReason,
   HandoffSnapshot,
   HandoffStrategy,
+  HandoffAnalyticsSummary,
   ManagedRuntime,
 } from '@agentctl/shared';
-import { ControlPlaneError } from '@agentctl/shared';
-import { desc, eq, or } from 'drizzle-orm';
+import { ControlPlaneError, summarizeHandoffAnalytics } from '@agentctl/shared';
+import { desc, eq, inArray, or } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
@@ -98,6 +99,46 @@ export class HandoffStore {
       .limit(limit);
 
     return rows.map(mapSessionHandoffRow);
+  }
+
+  async summarizeRecent(limit = 100): Promise<HandoffAnalyticsSummary> {
+    const handoffRows = await this.db
+      .select()
+      .from(sessionHandoffs)
+      .orderBy(desc(sessionHandoffs.createdAt))
+      .limit(limit);
+
+    if (handoffRows.length === 0) {
+      return summarizeHandoffAnalytics([]);
+    }
+
+    const handoffIds = handoffRows.map((row) => row.id);
+    const nativeImportRows = await this.db
+      .select()
+      .from(nativeImportAttempts)
+      .where(inArray(nativeImportAttempts.handoffId, handoffIds))
+      .orderBy(desc(nativeImportAttempts.attemptedAt))
+      .limit(handoffIds.length);
+
+    const latestAttemptByHandoffId = new Map<string, NativeImportAttemptRecord>();
+    for (const row of nativeImportRows) {
+      if (!row.handoffId || latestAttemptByHandoffId.has(row.handoffId)) {
+        continue;
+      }
+      latestAttemptByHandoffId.set(row.handoffId, mapNativeImportAttemptRow(row));
+    }
+
+    return summarizeHandoffAnalytics(
+      handoffRows.map((row) => {
+        const nativeImportAttempt = latestAttemptByHandoffId.get(row.id);
+        return {
+          status: row.status as SessionHandoffStatus,
+          nativeImportAttempt: nativeImportAttempt
+            ? { ok: nativeImportAttempt.status === 'succeeded' }
+            : undefined,
+        };
+      }),
+    );
   }
 
   async recordNativeImportAttempt(

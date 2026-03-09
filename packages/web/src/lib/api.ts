@@ -24,6 +24,7 @@ import type {
   MemoryObservation,
   NativeImportPreflightResponse,
   NativeImportAttempt,
+  RuntimeHandoffSummaryResponse,
   ResumeManagedSessionRequest,
   ApiAccount as SharedApiAccount,
 } from '@agentctl/shared';
@@ -162,6 +163,8 @@ export type RuntimeSessionHandoffsPage = {
   handoffs: RuntimeSessionHandoff[];
   count: number;
 };
+
+export type RuntimeHandoffSummary = RuntimeHandoffSummaryResponse;
 
 export type AgentRun = {
   id: string;
@@ -448,6 +451,14 @@ export const api = {
     const suffix = qs.toString() ? `?${qs}` : '';
     return request<RuntimeSessionHandoffsPage>(
       `/api/runtime-sessions/${encodeURIComponent(id)}/handoffs${suffix}`,
+    );
+  },
+  listRuntimeHandoffSummary: (limit?: number) => {
+    const qs = new URLSearchParams();
+    if (limit !== undefined) qs.set('limit', String(limit));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<RuntimeHandoffSummary>(
+      `/api/runtime-sessions/handoffs/summary${suffix}`,
     );
   },
   preflightRuntimeSessionHandoff: (

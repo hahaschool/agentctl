@@ -392,6 +392,30 @@ describe('api.listRuntimeSessionHandoffs', () => {
   });
 });
 
+describe('api.listRuntimeHandoffSummary', () => {
+  it('calls GET /api/runtime-sessions/handoffs/summary with optional limit', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({
+        ok: true,
+        limit: 100,
+        summary: {
+          total: 0,
+          succeeded: 0,
+          failed: 0,
+          pending: 0,
+          nativeImportSuccesses: 0,
+          nativeImportFallbacks: 0,
+        },
+      }),
+    );
+
+    await api.listRuntimeHandoffSummary(100);
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/handoffs/summary?limit=100');
+  });
+});
+
 describe('api.preflightRuntimeSessionHandoff', () => {
   it('calls GET /api/runtime-sessions/:id/handoff/preflight with target runtime', async () => {
     vi.mocked(fetch).mockResolvedValue(

@@ -4,6 +4,7 @@ import type {
   HandoffSnapshot,
   HandoffStrategy,
   NativeImportPreflightRequest,
+  RuntimeHandoffSummaryResponse,
   StartHandoffRequest,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
@@ -21,7 +22,10 @@ import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type HandoffRoutesOptions = {
   managedSessionStore: Pick<ManagedSessionStore, 'get' | 'create' | 'updateStatus'>;
-  handoffStore: Pick<HandoffStore, 'create' | 'listForSession' | 'recordNativeImportAttempt'>;
+  handoffStore: Pick<
+    HandoffStore,
+    'create' | 'listForSession' | 'recordNativeImportAttempt' | 'summarizeRecent'
+  >;
   runtimeConfigStore?: Pick<RuntimeConfigStore, 'getLatestRevision'>;
   dbRegistry?: DbAgentRegistry;
   workerPort?: number;
@@ -30,6 +34,27 @@ export type HandoffRoutesOptions = {
 export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (app, opts) => {
   const { managedSessionStore, handoffStore, runtimeConfigStore, dbRegistry, workerPort = 9000 } =
     opts;
+
+  app.get<{
+    Querystring: { limit?: string };
+  }>(
+    '/handoffs/summary',
+    {
+      schema: {
+        tags: ['runtime-sessions'],
+        summary: 'Summarize recent runtime handoff outcomes across the fleet',
+      },
+    },
+    async (request): Promise<RuntimeHandoffSummaryResponse> => {
+      const limit = request.query.limit ? Number(request.query.limit) : 100;
+      const summary = await handoffStore.summarizeRecent(limit);
+      return {
+        ok: true,
+        summary,
+        limit,
+      };
+    },
+  );
 
   app.get<{
     Params: { id: string };

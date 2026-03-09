@@ -7,6 +7,7 @@
 
 import type {
   Agent,
+  HandoffAnalyticsSummary,
   AgentRun,
   Machine,
   ManagedRuntime,
@@ -123,6 +124,12 @@ export type RuntimeSessionInfo = ManagedSession & {
 export type RuntimeSessionListResponse = {
   sessions: RuntimeSessionInfo[];
   count: number;
+};
+
+export type RuntimeHandoffSummaryResponse = {
+  ok: true;
+  summary: HandoffAnalyticsSummary;
+  limit: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -324,6 +331,15 @@ export class ApiClient {
       limit: params?.limit,
     });
     return this.request<RuntimeSessionListResponse>('GET', `/api/runtime-sessions${qs}`);
+  }
+
+  /** GET /api/runtime-sessions/handoffs/summary — summarize recent fleet handoffs. */
+  async getRuntimeHandoffSummary(limit = 100): Promise<RuntimeHandoffSummaryResponse> {
+    const qs = buildQueryString({ limit });
+    return this.request<RuntimeHandoffSummaryResponse>(
+      'GET',
+      `/api/runtime-sessions/handoffs/summary${qs}`,
+    );
   }
 
   /** GET /api/machines/agents/:agentId — get a single agent by ID. */

@@ -20,6 +20,7 @@ const {
   mockDiscoverQuery,
   mockSessionsQuery,
   mockRuntimeSessionsQuery,
+  mockRuntimeHandoffSummaryQuery,
   mockUseWebSocket,
   mockUseHotkeys,
 } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const {
   mockDiscoverQuery: vi.fn(),
   mockSessionsQuery: vi.fn(),
   mockRuntimeSessionsQuery: vi.fn(),
+  mockRuntimeHandoffSummaryQuery: vi.fn(),
   mockUseWebSocket: vi.fn(),
   mockUseHotkeys: vi.fn(),
 }));
@@ -165,6 +167,7 @@ vi.mock('@/lib/queries', () => ({
   discoverQuery: () => mockDiscoverQuery(),
   sessionsQuery: () => mockSessionsQuery(),
   runtimeSessionsQuery: () => mockRuntimeSessionsQuery(),
+  runtimeHandoffSummaryQuery: () => mockRuntimeHandoffSummaryQuery(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -309,8 +312,29 @@ function setupDefaultMocks(overrides?: {
     sessions: RuntimeSession[];
     count: number;
   };
+  runtimeHandoffSummaryData?: {
+    ok: true;
+    limit: number;
+    summary: {
+      total: number;
+      succeeded: number;
+      failed: number;
+      pending: number;
+      nativeImportSuccesses: number;
+      nativeImportFallbacks: number;
+    };
+  };
   wsStatus?: string;
-  neverResolve?: ('health' | 'metrics' | 'machines' | 'agents' | 'discover' | 'sessions' | 'runtimeSessions')[];
+  neverResolve?: (
+    | 'health'
+    | 'metrics'
+    | 'machines'
+    | 'agents'
+    | 'discover'
+    | 'sessions'
+    | 'runtimeSessions'
+    | 'runtimeHandoffSummary'
+  )[];
 }) {
   const neverResolve = new Set(overrides?.neverResolve ?? []);
 
@@ -395,6 +419,26 @@ function setupDefaultMocks(overrides?: {
           overrides?.runtimeSessionsData ?? {
             sessions: [createRuntimeSession()],
             count: 1,
+          },
+        ),
+  });
+
+  mockRuntimeHandoffSummaryQuery.mockReturnValue({
+    queryKey: ['runtime-sessions', 'handoffs', 'summary', 100],
+    queryFn: neverResolve.has('runtimeHandoffSummary')
+      ? vi.fn().mockReturnValue(new Promise(() => {}))
+      : vi.fn().mockResolvedValue(
+          overrides?.runtimeHandoffSummaryData ?? {
+            ok: true,
+            limit: 100,
+            summary: {
+              total: 2,
+              succeeded: 1,
+              failed: 1,
+              pending: 0,
+              nativeImportSuccesses: 1,
+              nativeImportFallbacks: 1,
+            },
           },
         ),
   });
@@ -640,7 +684,7 @@ describe('DashboardPage', () => {
   // =========================================================================
 
   describe('StatCards', () => {
-    it('renders all seven stat cards', async () => {
+    it('renders all eight stat cards', async () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByTestId('stat-card-Machines Online')).toBeDefined();
@@ -649,6 +693,7 @@ describe('DashboardPage', () => {
         expect(screen.getByTestId('stat-card-Active Runs')).toBeDefined();
         expect(screen.getByTestId('stat-card-Active Sessions')).toBeDefined();
         expect(screen.getByTestId('stat-card-Managed Runtimes')).toBeDefined();
+        expect(screen.getByTestId('stat-card-Native Import')).toBeDefined();
         expect(screen.getByTestId('stat-card-Total Cost')).toBeDefined();
       });
     });
@@ -782,6 +827,30 @@ describe('DashboardPage', () => {
         expect(screen.getByTestId('stat-value-Managed Runtimes').textContent).toBe('3');
         expect(screen.getByTestId('stat-sublabel-Managed Runtimes').textContent).toBe(
           '1 active · 1 switching',
+        );
+      });
+    });
+
+    it('displays native import successes and fallback summary', async () => {
+      setupDefaultMocks({
+        runtimeHandoffSummaryData: {
+          ok: true,
+          limit: 100,
+          summary: {
+            total: 4,
+            succeeded: 3,
+            failed: 1,
+            pending: 0,
+            nativeImportSuccesses: 2,
+            nativeImportFallbacks: 1,
+          },
+        },
+      });
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId('stat-value-Native Import').textContent).toBe('2');
+        expect(screen.getByTestId('stat-sublabel-Native Import').textContent).toBe(
+          '1 fallbacks · 4 handoffs',
         );
       });
     });

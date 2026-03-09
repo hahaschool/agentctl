@@ -4,9 +4,14 @@
 // runtime sessions, computes aggregate stats, and supports auto-refresh polling.
 // ---------------------------------------------------------------------------
 
-import type { Agent, AgentStatus, Machine } from '@agentctl/shared';
+import type { Agent, AgentStatus, HandoffAnalyticsSummary, Machine } from '@agentctl/shared';
 
-import type { ApiClient, HealthResponse, RuntimeSessionInfo } from '../services/api-client.js';
+import type {
+  ApiClient,
+  HealthResponse,
+  RuntimeHandoffSummaryResponse,
+  RuntimeSessionInfo,
+} from '../services/api-client.js';
 import { MobileClientError } from '../services/api-client.js';
 
 // ---------------------------------------------------------------------------
@@ -23,6 +28,9 @@ export type DashboardStats = {
   totalManagedRuntimes: number;
   activeManagedRuntimes: number;
   switchingManagedRuntimes: number;
+  totalRuntimeHandoffs: number;
+  runtimeNativeImportSuccesses: number;
+  runtimeFallbacks: number;
 };
 
 export type DashboardState = {
@@ -30,6 +38,7 @@ export type DashboardState = {
   machines: Machine[];
   agents: Agent[];
   runtimeSessions: RuntimeSessionInfo[];
+  runtimeHandoffSummary: RuntimeHandoffSummaryResponse | null;
   stats: DashboardStats;
   isLoading: boolean;
   error: MobileClientError | null;
@@ -69,6 +78,18 @@ const EMPTY_STATS: DashboardStats = {
   totalManagedRuntimes: 0,
   activeManagedRuntimes: 0,
   switchingManagedRuntimes: 0,
+  totalRuntimeHandoffs: 0,
+  runtimeNativeImportSuccesses: 0,
+  runtimeFallbacks: 0,
+};
+
+const EMPTY_HANDOFF_SUMMARY: HandoffAnalyticsSummary = {
+  total: 0,
+  succeeded: 0,
+  failed: 0,
+  pending: 0,
+  nativeImportSuccesses: 0,
+  nativeImportFallbacks: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -85,6 +106,7 @@ export class DashboardPresenter {
     machines: [],
     agents: [],
     runtimeSessions: [],
+    runtimeHandoffSummary: null,
     stats: { ...EMPTY_STATS },
     isLoading: false,
     error: null,
@@ -125,20 +147,27 @@ export class DashboardPresenter {
     this.setState({ isLoading: true, error: null });
 
     try {
-      const [health, machines, agents, runtimeSessions] = await Promise.all([
+      const [health, machines, agents, runtimeSessions, runtimeHandoffSummary] = await Promise.all([
         this.apiClient.health(true),
         this.apiClient.listMachines(),
         this.apiClient.listAgents(),
         this.apiClient.listRuntimeSessions({ limit: 100 }),
+        this.apiClient.getRuntimeHandoffSummary(100),
       ]);
 
-      const stats = DashboardPresenter.computeStats(agents, machines, runtimeSessions.sessions);
+      const stats = DashboardPresenter.computeStats(
+        agents,
+        machines,
+        runtimeSessions.sessions,
+        runtimeHandoffSummary.summary,
+      );
 
       this.setState({
         health,
         machines,
         agents,
         runtimeSessions: runtimeSessions.sessions,
+        runtimeHandoffSummary,
         stats,
         isLoading: false,
         error: null,
@@ -164,6 +193,12 @@ export class DashboardPresenter {
       agents: [...this.state.agents],
       machines: [...this.state.machines],
       runtimeSessions: [...this.state.runtimeSessions],
+      runtimeHandoffSummary: this.state.runtimeHandoffSummary
+        ? {
+            ...this.state.runtimeHandoffSummary,
+            summary: { ...this.state.runtimeHandoffSummary.summary },
+          }
+        : null,
       stats: { ...this.state.stats },
     };
   }
@@ -182,6 +217,7 @@ export class DashboardPresenter {
     agents: Agent[],
     machines: Machine[],
     runtimeSessions: RuntimeSessionInfo[] = [],
+    runtimeHandoffSummary: HandoffAnalyticsSummary = EMPTY_HANDOFF_SUMMARY,
   ): DashboardStats {
     let running = 0;
     let error = 0;
@@ -211,6 +247,9 @@ export class DashboardPresenter {
       totalManagedRuntimes: runtimeSessions.length,
       activeManagedRuntimes,
       switchingManagedRuntimes,
+      totalRuntimeHandoffs: runtimeHandoffSummary.total,
+      runtimeNativeImportSuccesses: runtimeHandoffSummary.nativeImportSuccesses,
+      runtimeFallbacks: runtimeHandoffSummary.nativeImportFallbacks,
     };
   }
 

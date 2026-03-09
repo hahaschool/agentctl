@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, summarizeHandoffAnalytics } from '@agentctl/shared';
 import fastifyCors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifySwagger from '@fastify/swagger';
@@ -538,9 +538,10 @@ function createFallbackManagedSessionStore(): Pick<
 
 function createFallbackHandoffStore(): Pick<
   HandoffStore,
-  'create' | 'listForSession' | 'recordNativeImportAttempt'
+  'create' | 'listForSession' | 'recordNativeImportAttempt' | 'summarizeRecent'
 > {
   const handoffs = new Map<string, SessionHandoffRecord>();
+  const nativeImportAttempts = new Map<string, { handoffId: string | null; status: 'pending' | 'succeeded' | 'failed' }>();
   return {
     async create(input) {
       const record: SessionHandoffRecord = {
@@ -569,7 +570,7 @@ function createFallbackHandoffStore(): Pick<
         .slice(0, limit);
     },
     async recordNativeImportAttempt(input) {
-      return {
+      const record = {
         id: crypto.randomUUID(),
         handoffId: input.handoffId,
         sourceSessionId: input.sourceSessionId,
@@ -581,6 +582,23 @@ function createFallbackHandoffStore(): Pick<
         errorMessage: input.errorMessage,
         attemptedAt: input.attemptedAt ?? new Date(),
       };
+      nativeImportAttempts.set(record.id, {
+        handoffId: record.handoffId,
+        status: record.status,
+      });
+      return record;
+    },
+    async summarizeRecent(limit = 100) {
+      const recentHandoffs = [...handoffs.values()].slice(0, limit);
+      return summarizeHandoffAnalytics(
+        recentHandoffs.map((handoff) => {
+          const attempt = [...nativeImportAttempts.values()].find((entry) => entry.handoffId === handoff.id);
+          return {
+            status: handoff.status,
+            nativeImportAttempt: attempt ? { ok: attempt.status === 'succeeded' } : undefined,
+          };
+        }),
+      );
     },
   };
 }

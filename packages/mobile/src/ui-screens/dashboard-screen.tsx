@@ -34,6 +34,7 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
     machines: [],
     agents: [],
     runtimeSessions: [],
+    runtimeHandoffSummary: null,
     stats: {
       totalAgents: 0,
       running: 0,
@@ -44,6 +45,9 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
       totalManagedRuntimes: 0,
       activeManagedRuntimes: 0,
       switchingManagedRuntimes: 0,
+      totalRuntimeHandoffs: 0,
+      runtimeNativeImportSuccesses: 0,
+      runtimeFallbacks: 0,
     },
     isLoading: false,
     error: null,
@@ -128,6 +132,26 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
               {state.stats.switchingManagedRuntimes}
             </Text>
             <Text style={styles.statLabel}>Switching</Text>
+          </View>
+        </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#a78bfa' }]}>
+              {state.stats.totalRuntimeHandoffs}
+            </Text>
+            <Text style={styles.statLabel}>Handoffs</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#22c55e' }]}>
+              {state.stats.runtimeNativeImportSuccesses}
+            </Text>
+            <Text style={styles.statLabel}>Native Import</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#f59e0b' }]}>
+              {state.stats.runtimeFallbacks}
+            </Text>
+            <Text style={styles.statLabel}>Fallbacks</Text>
           </View>
         </View>
 

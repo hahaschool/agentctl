@@ -15,12 +15,25 @@ function makeApiClient(overrides: Record<string, unknown> = {}): {
   listMachines: ReturnType<typeof vi.fn>;
   listAgents: ReturnType<typeof vi.fn>;
   listRuntimeSessions: ReturnType<typeof vi.fn>;
+  getRuntimeHandoffSummary: ReturnType<typeof vi.fn>;
 } {
   return {
     health: vi.fn().mockResolvedValue({ status: 'ok', timestamp: '2024-01-01T00:00:00Z' }),
     listMachines: vi.fn().mockResolvedValue([]),
     listAgents: vi.fn().mockResolvedValue([]),
     listRuntimeSessions: vi.fn().mockResolvedValue({ sessions: [], count: 0 }),
+    getRuntimeHandoffSummary: vi.fn().mockResolvedValue({
+      ok: true,
+      limit: 100,
+      summary: {
+        total: 0,
+        succeeded: 0,
+        failed: 0,
+        pending: 0,
+        nativeImportSuccesses: 0,
+        nativeImportFallbacks: 0,
+      },
+    }),
     ...overrides,
   };
 }
@@ -129,6 +142,9 @@ describe('DashboardPresenter', () => {
       expect(stats.totalManagedRuntimes).toBe(0);
       expect(stats.activeManagedRuntimes).toBe(0);
       expect(stats.switchingManagedRuntimes).toBe(0);
+      expect(stats.totalRuntimeHandoffs).toBe(0);
+      expect(stats.runtimeNativeImportSuccesses).toBe(0);
+      expect(stats.runtimeFallbacks).toBe(0);
     });
 
     it('is not polling before start()', () => {
@@ -209,6 +225,7 @@ describe('DashboardPresenter', () => {
       expect(state.machines).toEqual(machines);
       expect(state.agents).toEqual(agents);
       expect(state.runtimeSessions).toEqual(runtimeSessions);
+      expect(state.runtimeHandoffSummary?.summary.total).toBe(0);
     });
 
     it('sets lastUpdated after successful refresh', async () => {
@@ -245,6 +262,7 @@ describe('DashboardPresenter', () => {
       await presenter.refresh();
 
       expect(api.health).toHaveBeenCalledWith(true);
+      expect(api.getRuntimeHandoffSummary).toHaveBeenCalledWith(100);
     });
   });
 
@@ -389,6 +407,21 @@ describe('DashboardPresenter', () => {
       expect(stats.switchingManagedRuntimes).toBe(1);
     });
 
+    it('counts fleet handoffs, native import successes, and fallbacks', () => {
+      const stats = DashboardPresenter.computeStats([], [], [], {
+        total: 6,
+        succeeded: 5,
+        failed: 1,
+        pending: 0,
+        nativeImportSuccesses: 3,
+        nativeImportFallbacks: 2,
+      });
+
+      expect(stats.totalRuntimeHandoffs).toBe(6);
+      expect(stats.runtimeNativeImportSuccesses).toBe(3);
+      expect(stats.runtimeFallbacks).toBe(2);
+    });
+
     it('returns zero stats for empty arrays', () => {
       const stats = DashboardPresenter.computeStats([], []);
       expect(stats).toEqual({
@@ -401,6 +434,9 @@ describe('DashboardPresenter', () => {
         totalManagedRuntimes: 0,
         activeManagedRuntimes: 0,
         switchingManagedRuntimes: 0,
+        totalRuntimeHandoffs: 0,
+        runtimeNativeImportSuccesses: 0,
+        runtimeFallbacks: 0,
       });
     });
 
@@ -419,6 +455,18 @@ describe('DashboardPresenter', () => {
         listAgents: vi.fn().mockResolvedValue(agents),
         listMachines: vi.fn().mockResolvedValue(machines),
         listRuntimeSessions: vi.fn().mockResolvedValue({ sessions: runtimeSessions, count: 2 }),
+        getRuntimeHandoffSummary: vi.fn().mockResolvedValue({
+          ok: true,
+          limit: 100,
+          summary: {
+            total: 4,
+            succeeded: 3,
+            failed: 1,
+            pending: 0,
+            nativeImportSuccesses: 2,
+            nativeImportFallbacks: 1,
+          },
+        }),
       });
 
       const presenter = new DashboardPresenter({ apiClient: api as never });
@@ -434,6 +482,9 @@ describe('DashboardPresenter', () => {
       expect(stats.totalManagedRuntimes).toBe(2);
       expect(stats.activeManagedRuntimes).toBe(1);
       expect(stats.switchingManagedRuntimes).toBe(1);
+      expect(stats.totalRuntimeHandoffs).toBe(4);
+      expect(stats.runtimeNativeImportSuccesses).toBe(2);
+      expect(stats.runtimeFallbacks).toBe(1);
     });
   });
 

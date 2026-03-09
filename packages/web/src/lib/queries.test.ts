@@ -14,6 +14,7 @@ import {
   queryKeys,
   routerModelsInfoQuery,
   routerModelsQuery,
+  runtimeHandoffSummaryQuery,
   runtimeSessionHandoffsQuery,
   runtimeSessionPreflightQuery,
   runtimeSessionsQuery,
@@ -110,6 +111,15 @@ describe('queryKeys', () => {
     ]);
   });
 
+  it('runtimeHandoffSummary key includes optional limit', () => {
+    expect(queryKeys.runtimeHandoffSummary(100)).toEqual([
+      'runtime-sessions',
+      'handoffs',
+      'summary',
+      100,
+    ]);
+  });
+
   it('sessionContent key includes sessionId and params', () => {
     const params = { machineId: 'machine-1', projectPath: '/home/user/project', limit: 100 };
     expect(queryKeys.sessionContent('session-1', params)).toEqual([
@@ -195,6 +205,23 @@ describe('machinesQuery', () => {
 
   it('has queryFn property', () => {
     const options = machinesQuery();
+    expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('runtimeHandoffSummaryQuery', () => {
+  it('returns queryOptions with runtime handoff summary queryKey', () => {
+    const options = runtimeHandoffSummaryQuery(100);
+    expect(options.queryKey).toEqual(queryKeys.runtimeHandoffSummary(100));
+  });
+
+  it('has refetchOnWindowFocus enabled', () => {
+    const options = runtimeHandoffSummaryQuery(100);
+    expect(options.refetchOnWindowFocus).toBe(true);
+  });
+
+  it('has queryFn property', () => {
+    const options = runtimeHandoffSummaryQuery(100);
     expect(options.queryFn).toBeDefined();
   });
 });

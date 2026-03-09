@@ -20,6 +20,7 @@ type HandoffStoreMock = {
   create: ReturnType<typeof vi.fn>;
   listForSession: ReturnType<typeof vi.fn>;
   recordNativeImportAttempt: ReturnType<typeof vi.fn>;
+  summarizeRecent: ReturnType<typeof vi.fn>;
 };
 
 type RuntimeConfigStoreMock = {
@@ -123,6 +124,14 @@ describe('handoffRoutes', () => {
       create: vi.fn(),
       listForSession: vi.fn(),
       recordNativeImportAttempt: vi.fn(),
+      summarizeRecent: vi.fn().mockResolvedValue({
+        total: 0,
+        succeeded: 0,
+        failed: 0,
+        pending: 0,
+        nativeImportSuccesses: 0,
+        nativeImportFallbacks: 0,
+      }),
     };
     runtimeConfigStore = {
       getLatestRevision: vi.fn().mockResolvedValue({
@@ -242,6 +251,37 @@ describe('handoffRoutes', () => {
         status: 'failed',
       }),
     );
+  });
+
+  it('GET /api/runtime-sessions/handoffs/summary returns fleet handoff analytics', async () => {
+    handoffStore.summarizeRecent.mockResolvedValue({
+      total: 5,
+      succeeded: 4,
+      failed: 1,
+      pending: 0,
+      nativeImportSuccesses: 2,
+      nativeImportFallbacks: 2,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/handoffs/summary?limit=50',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      summary: {
+        total: 5,
+        succeeded: 4,
+        failed: 1,
+        pending: 0,
+        nativeImportSuccesses: 2,
+        nativeImportFallbacks: 2,
+      },
+      limit: 50,
+    });
+    expect(handoffStore.summarizeRecent).toHaveBeenCalledWith(50);
   });
 
   it('returns 404 when the source managed session does not exist', async () => {

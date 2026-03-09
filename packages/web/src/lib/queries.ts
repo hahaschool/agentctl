@@ -37,6 +37,10 @@ export const queryKeys = {
   session: (id: string) => ['sessions', id] as const,
   runtimeSessions: (params?: RuntimeSessionsQueryParams) =>
     params ? (['runtime-sessions', params] as const) : (['runtime-sessions'] as const),
+  runtimeHandoffSummary: (limit?: number) =>
+    limit !== undefined
+      ? (['runtime-sessions', 'handoffs', 'summary', limit] as const)
+      : (['runtime-sessions', 'handoffs', 'summary'] as const),
   runtimeSessionHandoffs: (id: string, limit?: number) =>
     limit !== undefined
       ? (['runtime-sessions', id, 'handoffs', limit] as const)
@@ -155,6 +159,15 @@ export function runtimeSessionsQuery(params?: RuntimeSessionsQueryParams) {
   return queryOptions({
     queryKey: queryKeys.runtimeSessions(params),
     queryFn: () => api.listRuntimeSessions(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeHandoffSummaryQuery(limit?: number) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeHandoffSummary(limit),
+    queryFn: () => api.listRuntimeHandoffSummary(limit),
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });

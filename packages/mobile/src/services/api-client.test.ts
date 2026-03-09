@@ -371,6 +371,30 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('getRuntimeHandoffSummary()', () => {
+    it('sends GET to /api/runtime-sessions/handoffs/summary with limit', async () => {
+      mocks.fetch.mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          limit: 100,
+          summary: {
+            total: 3,
+            succeeded: 2,
+            failed: 1,
+            pending: 0,
+            nativeImportSuccesses: 1,
+            nativeImportFallbacks: 1,
+          },
+        }),
+      );
+
+      await client.getRuntimeHandoffSummary(100);
+
+      const calledUrl = mocks.fetch.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toBe('https://cp.example.com/api/runtime-sessions/handoffs/summary?limit=100');
+    });
+  });
+
   describe('getAgent()', () => {
     it('sends GET to /api/machines/agents/:agentId', async () => {
       const agent = { id: 'a1', name: 'test-agent', status: 'running' };
