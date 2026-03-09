@@ -310,7 +310,10 @@ test.describe('Accounts UI', () => {
 
     // Delete the account via the button next to it
     // Find the row containing "E2E Test Account" and click its Delete button
-    const row = page.locator('div').filter({ hasText: /E2E Test Account/ }).first();
+    const row = page
+      .locator('div')
+      .filter({ hasText: /E2E Test Account/ })
+      .first();
     const deleteBtn = row.getByRole('button', { name: 'Delete' });
     await deleteBtn.click();
 

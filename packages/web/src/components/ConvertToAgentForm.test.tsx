@@ -47,8 +47,8 @@ describe('ConvertToAgentForm', () => {
       const options = screen.getAllByRole('option');
       expect(options.length).toBe(FORK_AGENT_TYPES.length);
       for (let i = 0; i < FORK_AGENT_TYPES.length; i++) {
-        const t = FORK_AGENT_TYPES[i]!;
-        expect(options[i]?.textContent).toBe(`${t.label} — ${t.desc}`);
+        const t = FORK_AGENT_TYPES[i];
+        expect(options[i]?.textContent).toBe(`${t?.label} — ${t?.desc}`);
       }
     });
 

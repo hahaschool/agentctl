@@ -44,9 +44,10 @@ for (const { name, path, heading, sel } of pages) {
     const text = await page.locator(sel).first().textContent();
     expect(text?.toLowerCase()).toContain(heading.toLowerCase());
 
-    const nestedInteractiveCount = await page.evaluate(() =>
-      document.querySelectorAll('button button, button a[href], a[href] button, a[href] a[href]')
-        .length,
+    const nestedInteractiveCount = await page.evaluate(
+      () =>
+        document.querySelectorAll('button button, button a[href], a[href] button, a[href] a[href]')
+          .length,
     );
 
     // No uncaught runtime errors

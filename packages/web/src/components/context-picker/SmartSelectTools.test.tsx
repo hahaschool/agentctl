@@ -22,10 +22,7 @@ describe('findKeyDecisionIndices', () => {
   });
 
   it('finds messages with "let\'s go with"', () => {
-    const msgs = [
-      msg('human', 'Options?'),
-      msg('assistant', "Let's go with Fastify"),
-    ];
+    const msgs = [msg('human', 'Options?'), msg('assistant', "Let's go with Fastify")];
     expect(findKeyDecisionIndices(msgs)).toContain(1);
   });
 
@@ -35,16 +32,12 @@ describe('findKeyDecisionIndices', () => {
   });
 
   it('finds messages with "architecture"', () => {
-    const msgs = [
-      msg('assistant', 'The architecture should use microservices'),
-    ];
+    const msgs = [msg('assistant', 'The architecture should use microservices')];
     expect(findKeyDecisionIndices(msgs)).toContain(0);
   });
 
   it('finds messages with "trade-off"', () => {
-    const msgs = [
-      msg('assistant', 'The trade-off here is latency vs throughput'),
-    ];
+    const msgs = [msg('assistant', 'The trade-off here is latency vs throughput')];
     expect(findKeyDecisionIndices(msgs)).toContain(0);
   });
 
@@ -87,10 +80,7 @@ describe('findKeyDecisionIndices', () => {
   });
 
   it('does not match unrelated content', () => {
-    const msgs = [
-      msg('human', 'Hello world'),
-      msg('assistant', 'Hi there'),
-    ];
+    const msgs = [msg('human', 'Hello world'), msg('assistant', 'Hi there')];
     expect(findKeyDecisionIndices(msgs)).toEqual([]);
   });
 
@@ -105,7 +95,7 @@ describe('findKeyDecisionIndices', () => {
     ];
     const indices = findKeyDecisionIndices(msgs);
     for (let i = 1; i < indices.length; i++) {
-      expect(indices[i]).toBeGreaterThan(indices[i - 1]!);
+      expect(indices[i]).toBeGreaterThan(indices[i - 1] as number);
     }
   });
 
@@ -176,10 +166,7 @@ describe('findByTopicIndices', () => {
   });
 
   it('does not match unrelated content', () => {
-    const msgs = [
-      msg('human', 'Hello world'),
-      msg('assistant', 'Hi there'),
-    ];
+    const msgs = [msg('human', 'Hello world'), msg('assistant', 'Hi there')];
     expect(findByTopicIndices(msgs, 'kubernetes')).toEqual([]);
   });
 

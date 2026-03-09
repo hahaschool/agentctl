@@ -1283,7 +1283,7 @@ test.describe('Responsive sidebar', () => {
     // On mobile, the sidebar nav should be hidden initially
     // (either hidden or transformed off-screen)
     const desktopNav = page.locator('aside nav, nav[data-sidebar]').first();
-    const isDesktopNavVisible = await desktopNav.isVisible({ timeout: 2_000 }).catch(() => false);
+    await desktopNav.isVisible({ timeout: 2_000 }).catch(() => false);
 
     // Either no desktop nav or it's hidden — mobile uses a different layout
     // The page should still be functional
@@ -1342,7 +1342,7 @@ test.describe('Breadcrumb navigation', () => {
     const breadcrumb = page
       .locator('nav[aria-label*="breadcrumb" i], [class*="breadcrumb" i]')
       .first();
-    const hasBreadcrumb = await breadcrumb.isVisible({ timeout: 3_000 }).catch(() => false);
+    await breadcrumb.isVisible({ timeout: 3_000 }).catch(() => false);
 
     // Even if no breadcrumb, the page should still be functional
     const heading = page.locator('h1, h2').first();
@@ -1598,7 +1598,7 @@ test.describe('Mobile responsive', () => {
     if (!hasMenuBtn) {
       // Fall back to checking for any mobile-visible nav trigger
       const anyNavButton = page.locator('header button, [data-mobile-nav] button').first();
-      const hasAny = await anyNavButton.isVisible({ timeout: 2_000 }).catch(() => false);
+      await anyNavButton.isVisible({ timeout: 2_000 }).catch(() => false);
       // At minimum, the page should render correctly
       const heading = page.locator('h1, h2').first();
       await expect(heading).toBeVisible({ timeout: 5_000 });

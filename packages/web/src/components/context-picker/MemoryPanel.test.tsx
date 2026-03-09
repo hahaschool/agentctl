@@ -4,9 +4,8 @@ vi.mock('@/lib/utils', () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(' '),
 }));
 
-import { render, screen, fireEvent } from '@testing-library/react';
-
 import type { MemoryObservation } from '@agentctl/shared';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { MemoryPanel, matchObservationToMessages } from './MemoryPanel';
 
@@ -95,23 +94,19 @@ describe('matchObservationToMessages', () => {
     });
     const indices = matchObservationToMessages(obs, messages);
     for (let i = 1; i < indices.length; i++) {
-      expect(indices[i]).toBeGreaterThan(indices[i - 1]!);
+      expect(indices[i]).toBeGreaterThan(indices[i - 1] as number);
     }
   });
 });
 
 describe('MemoryPanel', () => {
   it('shows loading state', () => {
-    render(
-      <MemoryPanel observations={[]} isLoading={true} onSelectObservation={() => {}} />,
-    );
+    render(<MemoryPanel observations={[]} isLoading={true} onSelectObservation={() => {}} />);
     expect(screen.getByText('Searching memories...')).toBeDefined();
   });
 
   it('shows empty state', () => {
-    render(
-      <MemoryPanel observations={[]} isLoading={false} onSelectObservation={() => {}} />,
-    );
+    render(<MemoryPanel observations={[]} isLoading={false} onSelectObservation={() => {}} />);
     expect(screen.getByText('No matching memories found.')).toBeDefined();
   });
 
@@ -121,11 +116,7 @@ describe('MemoryPanel', () => {
       makeObs({ id: 2, type: 'bugfix', title: 'Fix auth flow' }),
     ];
     render(
-      <MemoryPanel
-        observations={observations}
-        isLoading={false}
-        onSelectObservation={() => {}}
-      />,
+      <MemoryPanel observations={observations} isLoading={false} onSelectObservation={() => {}} />,
     );
     expect(screen.getByText('Use PostgreSQL')).toBeDefined();
     expect(screen.getByText('Fix auth flow')).toBeDefined();
@@ -134,9 +125,7 @@ describe('MemoryPanel', () => {
   it('calls onSelectObservation when card clicked', () => {
     const onSelect = vi.fn();
     const obs = makeObs({ id: 1, title: 'Test Obs' });
-    render(
-      <MemoryPanel observations={[obs]} isLoading={false} onSelectObservation={onSelect} />,
-    );
+    render(<MemoryPanel observations={[obs]} isLoading={false} onSelectObservation={onSelect} />);
     fireEvent.click(screen.getByText('Test Obs'));
     expect(onSelect).toHaveBeenCalledWith(obs);
   });
