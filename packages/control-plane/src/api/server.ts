@@ -17,6 +17,7 @@ import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
+import { HandoffStore, type SessionHandoffRecord } from '../runtime-management/handoff-store.js';
 import { ManagedSessionStore, type ManagedSessionRecord } from '../runtime-management/managed-session-store.js';
 import { RuntimeConfigStore } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
@@ -37,6 +38,7 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
+import { handoffRoutes } from './routes/handoffs.js';
 import { runtimeConfigRoutes, type RuntimeConfigRouteStore } from './routes/runtime-config.js';
 import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
@@ -93,6 +95,7 @@ export async function createServer({
   const managedSessionStore = db
     ? new ManagedSessionStore(db, logger)
     : createFallbackManagedSessionStore();
+  const handoffStore = db ? new HandoffStore(db, logger) : createFallbackHandoffStore();
 
   // --- Metrics request tracking ---
   // Registered at the root level so it captures requests to all routes.
@@ -237,6 +240,14 @@ export async function createServer({
   await app.register(runtimeSessionRoutes, {
     prefix: '/api/runtime-sessions',
     managedSessionStore,
+    runtimeConfigStore,
+    dbRegistry,
+    workerPort,
+  });
+  await app.register(handoffRoutes, {
+    prefix: '/api/runtime-sessions',
+    managedSessionStore,
+    handoffStore,
     runtimeConfigStore,
     dbRegistry,
     workerPort,
@@ -521,6 +532,30 @@ function createFallbackManagedSessionStore(): Pick<
       };
       sessions.set(id, updated);
       return updated;
+    },
+  };
+}
+
+function createFallbackHandoffStore(): Pick<HandoffStore, 'create'> {
+  const handoffs = new Map<string, SessionHandoffRecord>();
+  return {
+    async create(input) {
+      const record: SessionHandoffRecord = {
+        id: crypto.randomUUID(),
+        sourceSessionId: input.sourceSessionId,
+        targetSessionId: input.targetSessionId,
+        sourceRuntime: input.sourceRuntime,
+        targetRuntime: input.targetRuntime,
+        reason: input.reason,
+        strategy: input.strategy,
+        status: input.status,
+        snapshot: input.snapshot,
+        errorMessage: input.errorMessage,
+        createdAt: input.createdAt ?? new Date(),
+        completedAt: input.completedAt ?? null,
+      };
+      handoffs.set(record.id, record);
+      return record;
     },
   };
 }

@@ -1,17 +1,44 @@
 import type { FastifyInstance } from 'fastify';
+import type { HandoffSnapshot } from '@agentctl/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { HandoffController } from '../../runtime/handoff-controller.js';
 import { RuntimeRegistry } from '../../runtime/runtime-registry.js';
 import { createSilentLogger } from '../../test-helpers.js';
 import { runtimeSessionsRoutes } from './runtime-sessions.js';
 
-async function buildApp(registry: RuntimeRegistry): Promise<FastifyInstance> {
+function makeSnapshot(overrides: Partial<HandoffSnapshot> = {}): HandoffSnapshot {
+  return {
+    sourceRuntime: 'claude-code',
+    sourceSessionId: 'ms-source',
+    projectPath: '/workspace/app',
+    worktreePath: '/workspace/app/.trees/agent-1',
+    branch: 'main',
+    headSha: 'abc123',
+    dirtyFiles: ['packages/agent-worker/src/api/routes/runtime-sessions.ts'],
+    diffSummary: 'Added runtime handoff routes.',
+    conversationSummary: 'Continue from the latest Claude runtime state.',
+    openTodos: ['start the target runtime'],
+    nextSuggestedPrompt: 'Continue from the handoff snapshot.',
+    activeConfigRevision: 9,
+    activeMcpServers: ['mem0'],
+    activeSkills: ['systematic-debugging'],
+    reason: 'manual',
+    ...overrides,
+  };
+}
+
+async function buildApp(
+  registry: RuntimeRegistry,
+  handoffController: Pick<HandoffController, 'exportSnapshot' | 'handoff'>,
+): Promise<FastifyInstance> {
   const Fastify = await import('fastify');
   const app = Fastify.default({ logger: false });
   await app.register(runtimeSessionsRoutes, {
     prefix: '/api/runtime-sessions',
     machineId: 'machine-1',
     runtimeRegistry: registry,
+    handoffController,
     logger: createSilentLogger(),
   });
   return app;
@@ -20,9 +47,34 @@ async function buildApp(registry: RuntimeRegistry): Promise<FastifyInstance> {
 describe('runtimeSessionsRoutes', () => {
   let app: FastifyInstance;
   let registry: RuntimeRegistry;
+  let handoffController: {
+    exportSnapshot: ReturnType<typeof vi.fn>;
+    handoff: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     registry = new RuntimeRegistry();
+    handoffController = {
+      exportSnapshot: vi.fn(async () => makeSnapshot()),
+      handoff: vi.fn(async () => ({
+        ok: true,
+        strategy: 'snapshot-handoff',
+        attemptedStrategies: ['snapshot-handoff'],
+        snapshot: makeSnapshot(),
+        session: {
+          runtime: 'codex',
+          sessionId: 'managed-4',
+          nativeSessionId: 'codex-native-handoff',
+          agentId: 'agent-1',
+          projectPath: '/workspace/app',
+          model: 'gpt-5-codex',
+          status: 'active',
+          pid: 2222,
+          startedAt: new Date('2026-03-09T10:00:00Z'),
+          lastActivity: new Date('2026-03-09T10:01:00Z'),
+        },
+      })),
+    };
     registry.register({
       runtime: 'codex',
       startSession: vi.fn(async () => ({
@@ -67,7 +119,7 @@ describe('runtimeSessionsRoutes', () => {
         supportsFork: true,
       })),
     });
-    app = await buildApp(registry);
+    app = await buildApp(registry, handoffController as never);
   });
 
   afterEach(async () => {
@@ -125,5 +177,45 @@ describe('runtimeSessionsRoutes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().session.runtime).toBe('codex');
     expect(response.json().session.nativeSessionId).toBe('codex-native-fork');
+  });
+
+  it('exports a handoff snapshot for the source runtime session', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/codex-native-existing/handoff/export',
+      payload: {
+        sourceRuntime: 'codex',
+        sourceSessionId: 'ms-source',
+        projectPath: '/workspace/app',
+        worktreePath: '/workspace/app/.trees/agent-1',
+        activeConfigRevision: 9,
+        reason: 'manual',
+        prompt: 'Continue from the latest worktree state.',
+        activeMcpServers: ['mem0'],
+        activeSkills: ['systematic-debugging'],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().strategy).toBe('snapshot-handoff');
+    expect(response.json().snapshot.reason).toBe('manual');
+  });
+
+  it('starts a target runtime from a snapshot handoff request', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/handoff',
+      payload: {
+        targetRuntime: 'codex',
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+        prompt: 'Continue from the exported snapshot.',
+        snapshot: makeSnapshot(),
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().strategy).toBe('snapshot-handoff');
+    expect(response.json().session.nativeSessionId).toBe('codex-native-handoff');
   });
 });

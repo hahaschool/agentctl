@@ -11,6 +11,14 @@ export type {
   ManagedSessionResponse,
 } from './runtime-management.js';
 export type {
+  ExportHandoffSnapshotRequest,
+  ExportHandoffSnapshotResponse,
+  ManagedSessionHandoffResponse,
+  RuntimeSessionSummary,
+  StartHandoffRequest,
+  StartHandoffResponse,
+} from './handoff.js';
+export type {
   HeartbeatRequest,
   RegisterWorkerRequest,
   SendMessageRequest,

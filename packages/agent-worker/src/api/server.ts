@@ -10,6 +10,7 @@ import type { CliSessionManager } from '../runtime/cli-session-manager.js';
 import { CodexRuntimeAdapter } from '../runtime/codex-runtime-adapter.js';
 import { CodexSessionManager } from '../runtime/codex-session-manager.js';
 import { RuntimeConfigApplier } from '../runtime/config/runtime-config-applier.js';
+import { HandoffController } from '../runtime/handoff-controller.js';
 import { RuntimeRegistry } from '../runtime/runtime-registry.js';
 import { TerminalManager } from '../runtime/terminal-manager.js';
 import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
@@ -48,6 +49,11 @@ export async function createWorkerServer({
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   const runtimeRegistry = externalRuntimeRegistry ?? buildRuntimeRegistry(sessionManager);
+  const handoffController = new HandoffController({
+    machineId,
+    logger,
+    runtimeRegistry,
+  });
 
   // Register @fastify/websocket before any WebSocket route plugins.
   await app.register(fastifyWebsocket);
@@ -180,6 +186,7 @@ export async function createWorkerServer({
     prefix: '/api/runtime-sessions',
     machineId,
     runtimeRegistry,
+    handoffController,
     logger,
   });
 
