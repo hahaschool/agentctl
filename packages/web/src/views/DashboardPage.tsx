@@ -33,6 +33,7 @@ import {
   healthQuery,
   machinesQuery,
   metricsQuery,
+  runtimeSessionsQuery,
   sessionsQuery,
 } from '../lib/queries';
 
@@ -47,6 +48,7 @@ export function DashboardPage(): React.JSX.Element {
   const agents = useQuery(agentsQuery());
   const discovered = useQuery(discoverQuery());
   const sessions = useQuery(sessionsQuery());
+  const runtimeSessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
 
   const { status: wsStatus } = useWebSocket();
   const [showHelp, setShowHelp] = useState(false);
@@ -56,6 +58,7 @@ export function DashboardPage(): React.JSX.Element {
   const agentList = agents.data ?? [];
   const discoveredSessions = discovered.data?.sessions ?? [];
   const sessionList = sessions.data?.sessions ?? [];
+  const managedRuntimeSessions = runtimeSessions.data?.sessions ?? [];
   const metricsData = metrics.data ?? {};
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;
@@ -70,6 +73,10 @@ export function DashboardPage(): React.JSX.Element {
   // Active sessions (running or active status)
   const activeSessions = sessionList.filter((s) => s.status === 'running' || s.status === 'active');
   const activeSessionCount = activeSessions.length;
+  const activeManagedRuntimeCount = managedRuntimeSessions.filter((session) => session.status === 'active').length;
+  const handingOffManagedRuntimeCount = managedRuntimeSessions.filter(
+    (session) => session.status === 'handing_off',
+  ).length;
 
   // Per-agent cost breakdown (top spenders)
   const agentCostBreakdown = useMemo(() => {
@@ -99,8 +106,9 @@ export function DashboardPage(): React.JSX.Element {
       void agents.refetch();
       void discovered.refetch();
       void sessions.refetch();
+      void runtimeSessions.refetch();
     },
-    [health, metrics, machines, agents, discovered, sessions],
+    [health, metrics, machines, agents, discovered, sessions, runtimeSessions],
   );
 
   useHotkeys(useMemo(() => ({ r: refreshAll, '?': toggleHelp }), [refreshAll, toggleHelp]));
@@ -111,7 +119,8 @@ export function DashboardPage(): React.JSX.Element {
     machines.isFetching ||
     agents.isFetching ||
     discovered.isFetching ||
-    sessions.isFetching;
+    sessions.isFetching ||
+    runtimeSessions.isFetching;
   const errorMessages = useMemo(() => {
     const msgs: string[] = [];
     if (health.error) msgs.push(`Control plane: ${health.error.message}`);
@@ -120,8 +129,9 @@ export function DashboardPage(): React.JSX.Element {
     if (agents.error) msgs.push(`Agents: ${agents.error.message}`);
     if (discovered.error) msgs.push(`Discover: ${discovered.error.message}`);
     if (sessions.error) msgs.push(`Sessions: ${sessions.error.message}`);
+    if (runtimeSessions.error) msgs.push(`Runtime sessions: ${runtimeSessions.error.message}`);
     return msgs;
-  }, [health.error, metrics.error, machines.error, agents.error, discovered.error, sessions.error]);
+  }, [health.error, metrics.error, machines.error, agents.error, discovered.error, sessions.error, runtimeSessions.error]);
   const anyError = errorMessages.length > 0;
 
   // Health status — Tailwind class helpers
@@ -256,12 +266,12 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Stats grid */}
-      {machines.isLoading || agents.isLoading || metrics.isLoading || sessions.isLoading ? (
+      {machines.isLoading || agents.isLoading || metrics.isLoading || sessions.isLoading || runtimeSessions.isLoading ? (
         <div
           className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6"
           data-testid="stat-cards-skeleton"
         >
-          {Array.from({ length: 6 }, (_, i) => (
+          {Array.from({ length: 7 }, (_, i) => (
             <Skeleton key={`sk-${String(i)}`} className="h-20 rounded-lg" />
           ))}
         </div>
@@ -309,6 +319,12 @@ export function DashboardPage(): React.JSX.Element {
             value={String(activeSessionCount)}
             accent={activeSessionCount > 0 ? 'green' : undefined}
             sublabel={`${sessionList.length} total`}
+          />
+          <StatCard
+            label="Managed Runtimes"
+            value={String(managedRuntimeSessions.length)}
+            accent={activeManagedRuntimeCount > 0 ? 'blue' : undefined}
+            sublabel={`${activeManagedRuntimeCount} active · ${handingOffManagedRuntimeCount} switching`}
           />
           <StatCard
             label="Total Cost"
