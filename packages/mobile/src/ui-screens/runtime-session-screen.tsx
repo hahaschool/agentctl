@@ -91,12 +91,34 @@ function describeNativeImportAttempt(attempt?: {
     typeof attempt.metadata?.targetCli === 'string' ? attempt.metadata.targetCli : null;
   const sourceStorage =
     typeof attempt.metadata?.sourceStorage === 'string' ? attempt.metadata.sourceStorage : null;
+  const sourceSessionSummary =
+    typeof attempt.metadata?.sourceSessionSummary === 'object' &&
+    attempt.metadata.sourceSessionSummary !== null
+      ? (attempt.metadata.sourceSessionSummary as Record<string, unknown>)
+      : null;
+  const messageCounts =
+    sourceSessionSummary &&
+    typeof sourceSessionSummary.messageCounts === 'object' &&
+    sourceSessionSummary.messageCounts !== null
+      ? (sourceSessionSummary.messageCounts as Record<string, unknown>)
+      : null;
+  const userMessages = typeof messageCounts?.user === 'number' ? messageCounts.user : 0;
+  const assistantMessages =
+    typeof messageCounts?.assistant === 'number' ? messageCounts.assistant : 0;
+  const lastActivity =
+    typeof sourceSessionSummary?.lastActivity === 'string' ? sourceSessionSummary.lastActivity : null;
 
   if (targetCli) {
     details.push(`target CLI ${targetCli}`);
   }
   if (sourceStorage) {
     details.push(`source storage ${sourceStorage}`);
+  }
+  if (userMessages + assistantMessages > 0) {
+    details.push(`${userMessages} user / ${assistantMessages} assistant messages`);
+  }
+  if (lastActivity) {
+    details.push(`last activity ${lastActivity}`);
   }
 
   const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';

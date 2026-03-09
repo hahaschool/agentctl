@@ -287,6 +287,10 @@ describe('RuntimeSessionsPage', () => {
               metadata: {
                 targetCli: 'claude',
                 sourceStorage: '/Users/example/.codex/sessions',
+                sourceSessionSummary: {
+                  lastActivity: '2026-03-10T00:05:02.000Z',
+                  messageCounts: { user: 1, assistant: 1, developer: 0 },
+                },
               },
             },
           }),
@@ -299,6 +303,7 @@ describe('RuntimeSessionsPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Native import unavailable:/)).toBeDefined();
       expect(screen.getByText(/target CLI claude/)).toBeDefined();
+      expect(screen.getByText(/1 user \/ 1 assistant messages/)).toBeDefined();
     });
   });
 
