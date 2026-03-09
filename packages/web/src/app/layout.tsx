@@ -1,19 +1,19 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Sidebar } from '@/components/Sidebar';
 import './globals.css';
 import { Providers } from './providers';
 
-const geist = Geist({
-  subsets: ['latin'],
+const geist = localFont({
+  src: './fonts/geist-latin.woff2',
   variable: '--font-geist',
   display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  subsets: ['latin'],
+const geistMono = localFont({
+  src: './fonts/geist-mono-latin.woff2',
   variable: '--font-geist-mono',
   display: 'swap',
 });
