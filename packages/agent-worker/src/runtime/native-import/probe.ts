@@ -7,6 +7,8 @@ import { promisify } from 'node:util';
 
 import type { HandoffSnapshot, ManagedRuntime, NativeImportAttemptReason } from '@agentctl/shared';
 
+import { readNativeSourceSessionSummary } from './source-session.js';
+
 const execFileAsync = promisify(execFile);
 
 export type NativeImportProbePrerequisites = {
@@ -33,11 +35,16 @@ export async function probeNativeImportPrerequisites(input: {
 }): Promise<{ reason: NativeImportAttemptReason; metadata: Record<string, unknown> }> {
   const targetCli = await detectTargetCli(input.targetRuntime);
   const sourceStorage = await detectSourceStorage(input.sourceRuntime, input.projectPath, input.snapshot);
+  const sourceSessionSummary =
+    sourceStorage.sessionPath !== null
+      ? await readSourceSessionSummary(input.sourceRuntime, sourceStorage.sessionPath)
+      : null;
 
   const metadata: Record<string, unknown> = {
     targetCli,
     sourceStorage,
     prerequisitesMet: targetCli.available && sourceStorage.exists && sourceStorage.sessionLocated,
+    ...(sourceSessionSummary ? { sourceSessionSummary } : {}),
   };
 
   if (!targetCli.available) {
@@ -166,4 +173,21 @@ async function findCodexSessionInTree(rootPath: string, sourceSessionId: string)
   }
 
   return null;
+}
+
+async function readSourceSessionSummary(
+  runtime: ManagedRuntime,
+  sessionPath: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    return await readNativeSourceSessionSummary({
+      runtime,
+      sessionPath,
+    });
+  } catch (error) {
+    return {
+      sessionPath,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
