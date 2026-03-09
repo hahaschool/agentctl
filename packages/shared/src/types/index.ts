@@ -44,6 +44,7 @@ export {
   VALID_TRANSITIONS,
   validateTransition,
 } from './status-machine.js';
+export type { MemoryObservation } from './memory.js';
 export type {
   WebhookConfig,
   WebhookEventType,

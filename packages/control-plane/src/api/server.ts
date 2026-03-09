@@ -21,6 +21,7 @@ import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
 import { agentRoutes } from './routes/agents.js';
+import { claudeMemRoutes } from './routes/claude-mem.js';
 import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
 import { dashboardRoutes } from './routes/dashboard.js';
@@ -277,6 +278,11 @@ export async function createServer({
       mem0Client,
     });
   }
+
+  // Register claude-mem routes for querying the local claude-mem SQLite database.
+  await app.register(claudeMemRoutes, {
+    prefix: '/api/claude-mem',
+  });
 
   // Register scheduler routes for managing repeatable jobs.
   await app.register(schedulerRoutes, {

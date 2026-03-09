@@ -55,6 +55,12 @@ export const queryKeys = {
   auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
     params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
   gitStatus: (machineId: string, path: string) => ['git-status', machineId, path] as const,
+  memory: {
+    search: (q: string, opts?: { project?: string; type?: string }) =>
+      ['memory', 'search', q, opts] as const,
+    timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
+    observation: (id: number) => ['memory', 'observation', id] as const,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -232,6 +238,24 @@ export function gitStatusQuery(machineId: string, path: string) {
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function memorySearchQuery(q: string, opts?: { project?: string; type?: string }) {
+  return queryOptions({
+    queryKey: queryKeys.memory.search(q, opts),
+    queryFn: () => api.searchMemory({ q, ...opts }),
+    enabled: q.length >= 2,
+    staleTime: 60_000,
+  });
+}
+
+export function memoryTimelineQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.memory.timeline(sessionId ?? ''),
+    queryFn: () => api.getMemoryTimeline(sessionId!),
+    enabled: !!sessionId,
+    staleTime: 60_000,
   });
 }
 

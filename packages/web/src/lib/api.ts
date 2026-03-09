@@ -11,6 +11,7 @@ import type {
   ContentMessage,
   MachineCapabilities,
   MachineStatus,
+  MemoryObservation,
   ApiAccount as SharedApiAccount,
 } from '@agentctl/shared';
 
@@ -582,6 +583,24 @@ export const api = {
       `/api/machines/${encodeURIComponent(machineId)}/terminal/${encodeURIComponent(termId)}/resize`,
       { method: 'POST', body: JSON.stringify({ cols, rows }) },
     ),
+
+  // Memory
+  searchMemory: (params: { q: string; project?: string; type?: string; limit?: number }) => {
+    const qs = new URLSearchParams({ q: params.q });
+    if (params.project) qs.set('project', params.project);
+    if (params.type) qs.set('type', params.type);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{ observations: MemoryObservation[] }>(`/api/memory/search?${qs.toString()}`);
+  },
+
+  getMemoryObservation: (id: number) =>
+    request<{ observation: MemoryObservation }>(`/api/memory/observations/${id}`),
+
+  getMemoryTimeline: (sessionId: string, limit?: number) => {
+    const qs = new URLSearchParams({ sessionId });
+    if (limit) qs.set('limit', String(limit));
+    return request<{ observations: MemoryObservation[] }>(`/api/memory/timeline?${qs.toString()}`);
+  },
 };
 
 // ---------------------------------------------------------------------------
