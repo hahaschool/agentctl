@@ -14,6 +14,7 @@ const {
   mockAccountsQuery,
   mockUseDeleteSession,
   mockUseForkSession,
+  mockUseCreateAgent,
   mockUseResumeSession,
   mockUseSendMessage,
   mockUseSessionStream,
@@ -24,6 +25,7 @@ const {
   mockAccountsQuery: vi.fn(),
   mockUseDeleteSession: vi.fn(),
   mockUseForkSession: vi.fn(),
+  mockUseCreateAgent: vi.fn(),
   mockUseResumeSession: vi.fn(),
   mockUseSendMessage: vi.fn(),
   mockUseSessionStream: vi.fn(),
@@ -230,6 +232,7 @@ vi.mock('@/lib/queries', () => ({
   },
   useDeleteSession: () => mockUseDeleteSession(),
   useForkSession: () => mockUseForkSession(),
+  useCreateAgent: () => mockUseCreateAgent(),
   useResumeSession: () => mockUseResumeSession(),
   useSendMessage: () => mockUseSendMessage(),
 }));
@@ -356,6 +359,11 @@ describe('SessionDetailView', () => {
     });
 
     mockUseForkSession.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
+
+    mockUseCreateAgent.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
     });

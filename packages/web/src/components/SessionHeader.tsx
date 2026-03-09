@@ -13,13 +13,19 @@ import { useToast } from '@/components/Toast';
 import { COPY_FEEDBACK_MS } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import type { Session, SessionContentMessage, SessionMetadata } from '../lib/api';
+import type { AgentConfig, Session, SessionContentMessage, SessionMetadata } from '../lib/api';
 import { api } from '../lib/api';
 import { formatNumber } from '../lib/format-utils';
-import { accountsQuery, queryKeys, useDeleteSession, useForkSession } from '../lib/queries';
+import {
+  accountsQuery,
+  queryKeys,
+  useCreateAgent,
+  useDeleteSession,
+  useForkSession,
+} from '../lib/queries';
 import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-export';
 import { ConfirmButton } from './ConfirmButton';
-import type { ForkSubmitConfig } from './context-picker';
+import type { CreateAgentSubmitConfig, ForkSubmitConfig } from './context-picker';
 import { ContextPickerDialog } from './context-picker';
 import { GitStatusBadge } from './GitStatusBadge';
 import { LastUpdated } from './LastUpdated';
@@ -226,6 +232,7 @@ export function SessionHeader({
   const toast = useToast();
   const deleteSession = useDeleteSession();
   const forkSession = useForkSession();
+  const createAgent = useCreateAgent();
   const queryClient = useQueryClient();
   const accounts = useQuery(accountsQuery());
   const [showContextPicker, setShowContextPicker] = useState(false);
@@ -322,6 +329,42 @@ export function SessionHeader({
       );
     },
     [session.id, forkSession, toast, router],
+  );
+
+  const handleCreateAgentSubmit = useCallback(
+    (config: CreateAgentSubmitConfig) => {
+      const agentConfig: AgentConfig = {};
+      if (config.model) agentConfig.model = config.model;
+      if (config.systemPrompt) agentConfig.systemPrompt = config.systemPrompt;
+
+      const contextMessages = config.selectedMessageIds
+        .map((idx) => contextPickerMessages[idx])
+        .filter((msg): msg is SessionContentMessage => msg != null)
+        .map((msg) => `[${msg.type}] ${msg.content}`)
+        .join('\n\n');
+
+      if (contextMessages) agentConfig.initialPrompt = contextMessages;
+
+      createAgent.mutate(
+        {
+          name: config.name,
+          machineId: session.machineId,
+          type: config.type,
+          runtime: config.runtime,
+          ...(session.projectPath ? { projectPath: session.projectPath } : {}),
+          ...(Object.keys(agentConfig).length > 0 ? { config: agentConfig } : {}),
+        },
+        {
+          onSuccess: () => {
+            toast.success(`Agent "${config.name}" created from session`);
+            setShowContextPicker(false);
+            setContextPickerMessages([]);
+          },
+          onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+        },
+      );
+    },
+    [session.machineId, session.projectPath, contextPickerMessages, createAgent, toast],
   );
 
   const canFork =
@@ -464,7 +507,8 @@ export function SessionHeader({
           setContextPickerMessages([]);
         }}
         onForkSubmit={handleForkSubmit}
-        isSubmitting={forkSession.isPending}
+        onCreateAgentSubmit={handleCreateAgentSubmit}
+        isSubmitting={forkSession.isPending || createAgent.isPending}
       />
 
       {/* Metadata row */}
