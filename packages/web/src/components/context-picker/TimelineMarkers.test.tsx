@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeTimelineMarkers } from './TimelineMarkers';
 import type { SessionContentMessage } from '@/lib/api';
+import { computeTimelineMarkers } from './TimelineMarkers';
 
 function msg(overrides: Partial<SessionContentMessage> = {}): SessionContentMessage {
   return { type: 'assistant', content: 'text', ...overrides };
@@ -22,9 +22,7 @@ describe('computeTimelineMarkers', () => {
       msg({ timestamp: '2026-03-09T11:00:00Z' }),
     ];
     const markers = computeTimelineMarkers(messages);
-    expect(markers).toContainEqual(
-      expect.objectContaining({ afterIndex: 1, type: 'time-gap' }),
-    );
+    expect(markers).toContainEqual(expect.objectContaining({ afterIndex: 1, type: 'time-gap' }));
   });
 
   it('does not insert time-gap for <30 min gap', () => {
@@ -71,20 +69,13 @@ describe('computeTimelineMarkers', () => {
   });
 
   it('does not insert human-turn for consecutive human messages', () => {
-    const messages = [
-      msg({ type: 'human' }),
-      msg({ type: 'human' }),
-    ];
+    const messages = [msg({ type: 'human' }), msg({ type: 'human' })];
     const markers = computeTimelineMarkers(messages);
     expect(markers.filter((m) => m.type === 'human-turn')).toEqual([]);
   });
 
   it('handles messages without timestamps gracefully', () => {
-    const messages = [
-      msg({ type: 'human' }),
-      msg({ type: 'assistant' }),
-      msg({ type: 'human' }),
-    ];
+    const messages = [msg({ type: 'human' }), msg({ type: 'assistant' }), msg({ type: 'human' })];
     const markers = computeTimelineMarkers(messages);
     // No time-gap markers but should have human-turn
     expect(markers.filter((m) => m.type === 'time-gap')).toEqual([]);

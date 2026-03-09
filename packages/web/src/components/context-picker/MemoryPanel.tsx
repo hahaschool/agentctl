@@ -1,6 +1,5 @@
-import React from 'react';
-
 import type { MemoryObservation } from '@agentctl/shared';
+import React from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -90,18 +89,12 @@ export const MemoryPanel = React.memo(function MemoryPanel({
 }: MemoryPanelProps): React.ReactNode {
   if (isLoading) {
     return (
-      <div className="p-3 text-xs text-muted-foreground animate-pulse">
-        Searching memories...
-      </div>
+      <div className="p-3 text-xs text-muted-foreground animate-pulse">Searching memories...</div>
     );
   }
 
   if (observations.length === 0) {
-    return (
-      <div className="p-3 text-xs text-muted-foreground">
-        No matching memories found.
-      </div>
-    );
+    return <div className="p-3 text-xs text-muted-foreground">No matching memories found.</div>;
   }
 
   return (
@@ -113,16 +106,12 @@ export const MemoryPanel = React.memo(function MemoryPanel({
           onClick={() => onSelectObservation(obs)}
           className={cn(
             'text-left p-2 rounded-md border text-xs transition-colors cursor-pointer',
-            selectedObservationId === obs.id
-              ? 'ring-2 ring-primary/40'
-              : 'hover:bg-muted/50',
+            selectedObservationId === obs.id ? 'ring-2 ring-primary/40' : 'hover:bg-muted/50',
             TYPE_COLORS[obs.type] ?? TYPE_COLORS.change,
           )}
         >
           <div className="flex items-center gap-1.5">
-            <span className="text-[9px] font-medium uppercase opacity-70">
-              {obs.type}
-            </span>
+            <span className="text-[9px] font-medium uppercase opacity-70">{obs.type}</span>
             <span className="font-medium truncate">{obs.title}</span>
           </div>
         </button>

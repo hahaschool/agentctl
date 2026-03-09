@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock better-sqlite3 BEFORE imports.
 // vi.mock is hoisted, so we must use vi.hoisted() for shared state.

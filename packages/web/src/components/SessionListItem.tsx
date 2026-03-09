@@ -227,7 +227,7 @@ function SessionListItemBase({
         </div>
         {s.projectPath && (
           <div className="mt-1">
-            <PathBadge path={s.projectPath} className="text-[11px]" />
+            <PathBadge path={s.projectPath} className="text-[11px]" copyable={false} />
           </div>
         )}
         <div className="text-[11px] text-muted-foreground/70 mt-1 flex gap-2.5 items-center">

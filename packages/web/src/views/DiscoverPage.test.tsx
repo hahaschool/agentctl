@@ -236,6 +236,17 @@ describe('DiscoverPage', () => {
     vi.restoreAllMocks();
   });
 
+  it('does not render nested buttons in grouped session rows', async () => {
+    const { container } = renderDiscover();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Discover Sessions' })).toBeDefined();
+      expect(screen.getByText('Working on authentication')).toBeDefined();
+    });
+
+    expect(container.querySelector('button button')).toBeNull();
+  });
+
   // =========================================================================
   // 1. Page heading and description
   // =========================================================================

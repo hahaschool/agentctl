@@ -253,7 +253,7 @@ export function memorySearchQuery(q: string, opts?: { project?: string; type?: s
 export function memoryTimelineQuery(sessionId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.memory.timeline(sessionId ?? ''),
-    queryFn: () => api.getMemoryTimeline(sessionId!),
+    queryFn: () => api.getMemoryTimeline(sessionId as string),
     enabled: !!sessionId,
     staleTime: 60_000,
   });

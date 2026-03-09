@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent, DiscoveredSession, Machine, Session } from '@/lib/api';
 
+const { mockPathBadge } = vi.hoisted(() => ({
+  mockPathBadge: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
@@ -99,7 +103,10 @@ vi.mock('@/components/LiveTimeAgo', () => ({
 }));
 
 vi.mock('@/components/PathBadge', () => ({
-  PathBadge: ({ path }: { path: string }) => <span data-testid="path-badge">{path}</span>,
+  PathBadge: (props: { path: string; copyable?: boolean }) => {
+    mockPathBadge(props);
+    return <span data-testid="path-badge">{props.path}</span>;
+  },
 }));
 
 vi.mock('@/components/RefreshButton', () => ({
@@ -362,6 +369,7 @@ function setupDefaultMocks(overrides?: {
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPathBadge.mockClear();
     setupDefaultMocks();
   });
 
@@ -855,6 +863,29 @@ describe('DashboardPage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('path-badge')).toBeDefined();
         expect(screen.getByTestId('path-badge').textContent).toBe('/home/user/project');
+      });
+    });
+
+    it('passes non-interactive PathBadge props inside recent activity links', async () => {
+      setupDefaultMocks({
+        sessionsData: {
+          sessions: [createSession({ projectPath: '/home/user/project' })],
+          total: 1,
+          limit: 50,
+          offset: 0,
+          hasMore: false,
+        },
+      });
+
+      renderDashboard();
+
+      await waitFor(() => {
+        expect(mockPathBadge).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: '/home/user/project',
+            copyable: false,
+          }),
+        );
       });
     });
 

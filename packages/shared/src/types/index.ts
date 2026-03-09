@@ -30,6 +30,7 @@ export type {
   LoopStatus,
 } from './loop.js';
 export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
+export type { MemoryObservation } from './memory.js';
 export type {
   ReplayEvent,
   ReplayFilter,
@@ -44,7 +45,6 @@ export {
   VALID_TRANSITIONS,
   validateTransition,
 } from './status-machine.js';
-export type { MemoryObservation } from './memory.js';
 export type {
   WebhookConfig,
   WebhookEventType,

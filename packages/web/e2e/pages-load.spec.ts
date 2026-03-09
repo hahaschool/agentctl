@@ -27,7 +27,13 @@ const pages = [
 for (const { name, path, heading, sel } of pages) {
   test(`${name} page loads without runtime errors`, async ({ page }) => {
     const errors: string[] = [];
+    const consoleErrors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
 
     await page.goto(path, { timeout: 30_000 });
 
@@ -38,8 +44,16 @@ for (const { name, path, heading, sel } of pages) {
     const text = await page.locator(sel).first().textContent();
     expect(text?.toLowerCase()).toContain(heading.toLowerCase());
 
+    const nestedInteractiveCount = await page.evaluate(
+      () =>
+        document.querySelectorAll('button button, button a[href], a[href] button, a[href] a[href]')
+          .length,
+    );
+
     // No uncaught runtime errors
     expect(errors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+    expect(nestedInteractiveCount).toBe(0);
   });
 }
 

@@ -366,7 +366,11 @@ export function DashboardPage(): React.JSX.Element {
                       </span>
                     )}
                     {session?.projectPath && (
-                      <PathBadge path={session.projectPath} className="text-[11px]" />
+                      <PathBadge
+                        path={session.projectPath}
+                        className="text-[11px]"
+                        copyable={false}
+                      />
                     )}
                     <span className="ml-auto shrink-0">
                       {session?.endedAt ? (

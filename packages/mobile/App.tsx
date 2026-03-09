@@ -3,7 +3,7 @@
 // Wraps the entire app in AppProvider (context) and TabNavigator (routing).
 // ---------------------------------------------------------------------------
 
-import React from 'react';
+import type React from 'react';
 
 import { AppProvider } from './src/context/app-context.js';
 import { TabNavigator } from './src/navigation/tab-navigator.js';

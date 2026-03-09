@@ -143,7 +143,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     }
 
     if (request.body.runtime && !VALID_RUNTIMES.includes(request.body.runtime as AgentRuntime)) {
-      return reply.code(400).send({ error: 'INVALID_RUNTIME', message: `Invalid runtime: ${request.body.runtime}. Must be one of: ${VALID_RUNTIMES.join(', ')}` });
+      return reply.code(400).send({
+        error: 'INVALID_RUNTIME',
+        message: `Invalid runtime: ${request.body.runtime}. Must be one of: ${VALID_RUNTIMES.join(', ')}`,
+      });
     }
 
     const agentId = await dbRegistry.createAgent(request.body);

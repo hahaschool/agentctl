@@ -20,6 +20,7 @@ const {
   mockResumeSession,
   mockDeleteSession,
   mockGetSessionContent,
+  mockPathBadge,
 } = vi.hoisted(() => ({
   mockSessionsQuery: vi.fn(),
   mockAccountsQuery: vi.fn(),
@@ -29,6 +30,7 @@ const {
   mockResumeSession: vi.fn(),
   mockDeleteSession: vi.fn(),
   mockGetSessionContent: vi.fn(),
+  mockPathBadge: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -90,7 +92,10 @@ vi.mock('@/components/LiveTimeAgo', () => ({
 }));
 
 vi.mock('@/components/PathBadge', () => ({
-  PathBadge: ({ path }: { path: string }) => <span data-testid="path-badge">{path}</span>,
+  PathBadge: (props: { path: string; copyable?: boolean }) => {
+    mockPathBadge(props);
+    return <span data-testid="path-badge">{props.path}</span>;
+  },
 }));
 
 vi.mock('@/components/RefreshButton', () => ({
@@ -250,6 +255,7 @@ function querySessionItems() {
 describe('SessionsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPathBadge.mockClear();
 
     // Default successful responses
     mockSessionsQuery.mockReturnValue({
@@ -441,6 +447,19 @@ describe('SessionsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('agent-1')).toBeDefined();
       expect(screen.getByText('agent-2')).toBeDefined();
+    });
+  });
+
+  it('passes non-interactive PathBadge props inside session selection buttons', async () => {
+    renderSessions();
+
+    await waitFor(() => {
+      expect(mockPathBadge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: '/tmp/project',
+          copyable: false,
+        }),
+      );
     });
   });
 

@@ -180,14 +180,21 @@ jobs:
             packages/mobile/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
+      # Cache both .tsbuildinfo AND dist/ together — restoring only
+      # .tsbuildinfo without dist/ causes tsc to skip compilation,
+      # leaving dist/ empty and breaking downstream packages.
       - name: Restore TypeScript build cache
         uses: actions/cache@v4
         with:
           path: |
             packages/shared/.tsbuildinfo
+            packages/shared/dist
             packages/control-plane/.tsbuildinfo
+            packages/control-plane/dist
             packages/agent-worker/.tsbuildinfo
+            packages/agent-worker/dist
             packages/mobile/.tsbuildinfo
+            packages/mobile/dist
           key: tsbuildinfo-${{ runner.os }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
           restore-keys: |
             tsbuildinfo-${{ runner.os }}-
@@ -274,11 +281,13 @@ jobs:
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Reuse build output from the build job — no second `pnpm build`
+      # upload-artifact strips the longest common path prefix (packages/),
+      # so we download into packages/ to restore the correct structure.
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: dist-artifacts
-          path: .
+          path: packages
 
       - name: Restore Vitest cache
         uses: actions/cache@v4
