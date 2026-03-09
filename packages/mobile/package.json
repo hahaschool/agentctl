@@ -12,14 +12,12 @@
     }
   },
   "scripts": {
-    "prebuild": "pnpm --filter @agentctl/shared build",
     "start": "expo start",
     "ios": "expo run:ios",
-    "build": "tsc",
+    "build": "pnpm --filter @agentctl/shared build && tsc",
     "dev": "tsc --watch",
-    "pretest": "pnpm --filter @agentctl/shared build",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "pnpm --filter @agentctl/shared build && vitest run",
+    "test:coverage": "pnpm --filter @agentctl/shared build && vitest run --coverage",
     "lint": "biome check src/"
   },
   "dependencies": {
