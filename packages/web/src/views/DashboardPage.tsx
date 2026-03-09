@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { calculateHandoffAnalyticsRates } from '@agentctl/shared';
 import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
@@ -69,6 +70,7 @@ export function DashboardPage(): React.JSX.Element {
     nativeImportSuccesses: 0,
     nativeImportFallbacks: 0,
   };
+  const runtimeHandoffRates = calculateHandoffAnalyticsRates(runtimeHandoffMetrics);
   const metricsData = metrics.data ?? {};
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;
@@ -343,7 +345,7 @@ export function DashboardPage(): React.JSX.Element {
             label="Native Import"
             value={String(runtimeHandoffMetrics.nativeImportSuccesses)}
             accent={runtimeHandoffMetrics.nativeImportSuccesses > 0 ? 'green' : undefined}
-            sublabel={`${runtimeHandoffMetrics.nativeImportFallbacks} fallbacks · ${runtimeHandoffMetrics.total} handoffs`}
+            sublabel={`${runtimeHandoffRates.nativeImportSuccessRate}% native import · ${runtimeHandoffRates.fallbackRate}% fallback`}
           />
           <StatCard
             label="Total Cost"

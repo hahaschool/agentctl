@@ -420,6 +420,8 @@ describe('DashboardPresenter', () => {
       expect(stats.totalRuntimeHandoffs).toBe(6);
       expect(stats.runtimeNativeImportSuccesses).toBe(3);
       expect(stats.runtimeFallbacks).toBe(2);
+      expect(stats.runtimeNativeImportRate).toBe(50);
+      expect(stats.runtimeFallbackRate).toBe(33);
     });
 
     it('returns zero stats for empty arrays', () => {
@@ -437,6 +439,8 @@ describe('DashboardPresenter', () => {
         totalRuntimeHandoffs: 0,
         runtimeNativeImportSuccesses: 0,
         runtimeFallbacks: 0,
+        runtimeNativeImportRate: 0,
+        runtimeFallbackRate: 0,
       });
     });
 
@@ -485,6 +489,8 @@ describe('DashboardPresenter', () => {
       expect(stats.totalRuntimeHandoffs).toBe(4);
       expect(stats.runtimeNativeImportSuccesses).toBe(2);
       expect(stats.runtimeFallbacks).toBe(1);
+      expect(stats.runtimeNativeImportRate).toBe(50);
+      expect(stats.runtimeFallbackRate).toBe(25);
     });
   });
 

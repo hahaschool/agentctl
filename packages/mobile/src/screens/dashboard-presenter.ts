@@ -4,7 +4,13 @@
 // runtime sessions, computes aggregate stats, and supports auto-refresh polling.
 // ---------------------------------------------------------------------------
 
-import type { Agent, AgentStatus, HandoffAnalyticsSummary, Machine } from '@agentctl/shared';
+import {
+  calculateHandoffAnalyticsRates,
+  type Agent,
+  type AgentStatus,
+  type HandoffAnalyticsSummary,
+  type Machine,
+} from '@agentctl/shared';
 
 import type {
   ApiClient,
@@ -31,6 +37,8 @@ export type DashboardStats = {
   totalRuntimeHandoffs: number;
   runtimeNativeImportSuccesses: number;
   runtimeFallbacks: number;
+  runtimeNativeImportRate: number;
+  runtimeFallbackRate: number;
 };
 
 export type DashboardState = {
@@ -81,6 +89,8 @@ const EMPTY_STATS: DashboardStats = {
   totalRuntimeHandoffs: 0,
   runtimeNativeImportSuccesses: 0,
   runtimeFallbacks: 0,
+  runtimeNativeImportRate: 0,
+  runtimeFallbackRate: 0,
 };
 
 const EMPTY_HANDOFF_SUMMARY: HandoffAnalyticsSummary = {
@@ -236,6 +246,7 @@ export class DashboardPresenter {
     const switchingManagedRuntimes = runtimeSessions.filter(
       (session) => session.status === 'handing_off',
     ).length;
+    const handoffRates = calculateHandoffAnalyticsRates(runtimeHandoffSummary);
 
     return {
       totalAgents: agents.length,
@@ -250,6 +261,8 @@ export class DashboardPresenter {
       totalRuntimeHandoffs: runtimeHandoffSummary.total,
       runtimeNativeImportSuccesses: runtimeHandoffSummary.nativeImportSuccesses,
       runtimeFallbacks: runtimeHandoffSummary.nativeImportFallbacks,
+      runtimeNativeImportRate: handoffRates.nativeImportSuccessRate,
+      runtimeFallbackRate: handoffRates.fallbackRate,
     };
   }
 

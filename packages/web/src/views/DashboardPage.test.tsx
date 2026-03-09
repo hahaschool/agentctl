@@ -850,7 +850,7 @@ describe('DashboardPage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('stat-value-Native Import').textContent).toBe('2');
         expect(screen.getByTestId('stat-sublabel-Native Import').textContent).toBe(
-          '1 fallbacks · 4 handoffs',
+          '50% native import · 25% fallback',
         );
       });
     });

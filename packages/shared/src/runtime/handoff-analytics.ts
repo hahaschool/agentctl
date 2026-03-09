@@ -14,6 +14,11 @@ export type HandoffAnalyticsSummary = {
   nativeImportFallbacks: number;
 };
 
+export type HandoffAnalyticsRates = {
+  nativeImportSuccessRate: number;
+  fallbackRate: number;
+};
+
 export function summarizeHandoffAnalytics(
   handoffs: HandoffAnalyticsInput[],
 ): HandoffAnalyticsSummary {
@@ -46,4 +51,20 @@ export function summarizeHandoffAnalytics(
       nativeImportFallbacks: 0,
     },
   );
+}
+
+export function calculateHandoffAnalyticsRates(
+  summary: Pick<HandoffAnalyticsSummary, 'total' | 'nativeImportSuccesses' | 'nativeImportFallbacks'>,
+): HandoffAnalyticsRates {
+  if (summary.total <= 0) {
+    return {
+      nativeImportSuccessRate: 0,
+      fallbackRate: 0,
+    };
+  }
+
+  return {
+    nativeImportSuccessRate: Math.round((summary.nativeImportSuccesses / summary.total) * 100),
+    fallbackRate: Math.round((summary.nativeImportFallbacks / summary.total) * 100),
+  };
 }

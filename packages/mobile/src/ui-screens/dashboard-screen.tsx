@@ -48,6 +48,8 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
       totalRuntimeHandoffs: 0,
       runtimeNativeImportSuccesses: 0,
       runtimeFallbacks: 0,
+      runtimeNativeImportRate: 0,
+      runtimeFallbackRate: 0,
     },
     isLoading: false,
     error: null,
@@ -154,6 +156,9 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
             <Text style={styles.statLabel}>Fallbacks</Text>
           </View>
         </View>
+        <Text style={styles.runtimeRateSummary}>
+          {state.stats.runtimeNativeImportRate}% native import rate · {state.stats.runtimeFallbackRate}% fallback rate
+        </Text>
 
         {/* Health indicator */}
         <View style={styles.healthRow}>
@@ -225,6 +230,12 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 12,
     marginTop: 2,
+  },
+  runtimeRateSummary: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   healthRow: {
     flexDirection: 'row',
