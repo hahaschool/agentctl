@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FORK_AGENT_TYPES } from '@/lib/model-options';
 import { ConvertToAgentForm } from './ConvertToAgentForm';
 
 afterEach(() => {
@@ -10,7 +11,7 @@ afterEach(() => {
 const defaultProps = {
   convertName: 'my-agent',
   onNameChange: vi.fn(),
-  convertType: 'autonomous',
+  convertType: 'adhoc',
   onTypeChange: vi.fn(),
   machineId: 'machine-001',
   projectPath: '/home/user/project',
@@ -38,15 +39,24 @@ describe('ConvertToAgentForm', () => {
       render(<ConvertToAgentForm {...defaultProps} />);
       const select = screen.getByLabelText('Agent Type') as HTMLSelectElement;
       expect(select).toBeDefined();
-      expect(select.value).toBe('autonomous');
+      expect(select.value).toBe('adhoc');
     });
 
-    it('renders both agent type options', () => {
+    it('renders all FORK_AGENT_TYPES options', () => {
       render(<ConvertToAgentForm {...defaultProps} />);
       const options = screen.getAllByRole('option');
-      expect(options.length).toBe(2);
-      expect(options[0]?.textContent).toBe('Autonomous (long-running)');
-      expect(options[1]?.textContent).toBe('Ad-hoc (one-shot)');
+      expect(options.length).toBe(FORK_AGENT_TYPES.length);
+      for (let i = 0; i < FORK_AGENT_TYPES.length; i++) {
+        const t = FORK_AGENT_TYPES[i]!;
+        expect(options[i]?.textContent).toBe(`${t.label} — ${t.desc}`);
+      }
+    });
+
+    it('renders canonical agent type values', () => {
+      render(<ConvertToAgentForm {...defaultProps} />);
+      const options = screen.getAllByRole('option') as HTMLOptionElement[];
+      const values = options.map((o) => o.value);
+      expect(values).toEqual(FORK_AGENT_TYPES.map((t) => t.value));
     });
 
     it('renders machineId', () => {
@@ -117,8 +127,8 @@ describe('ConvertToAgentForm', () => {
       const onTypeChange = vi.fn();
       render(<ConvertToAgentForm {...defaultProps} onTypeChange={onTypeChange} />);
       const select = screen.getByLabelText('Agent Type');
-      fireEvent.change(select, { target: { value: 'ad-hoc' } });
-      expect(onTypeChange).toHaveBeenCalledWith('ad-hoc');
+      fireEvent.change(select, { target: { value: 'manual' } });
+      expect(onTypeChange).toHaveBeenCalledWith('manual');
     });
 
     it('calls onSubmit when Create Agent button is clicked', () => {
@@ -154,10 +164,16 @@ describe('ConvertToAgentForm', () => {
   });
 
   describe('select value binding', () => {
-    it('reflects ad-hoc type when convertType is ad-hoc', () => {
-      render(<ConvertToAgentForm {...defaultProps} convertType="ad-hoc" />);
+    it('reflects manual type when convertType is manual', () => {
+      render(<ConvertToAgentForm {...defaultProps} convertType="manual" />);
       const select = screen.getByLabelText('Agent Type') as HTMLSelectElement;
-      expect(select.value).toBe('ad-hoc');
+      expect(select.value).toBe('manual');
+    });
+
+    it('reflects loop type when convertType is loop', () => {
+      render(<ConvertToAgentForm {...defaultProps} convertType="loop" />);
+      const select = screen.getByLabelText('Agent Type') as HTMLSelectElement;
+      expect(select.value).toBe('loop');
     });
   });
 });

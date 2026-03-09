@@ -2,6 +2,8 @@
 
 import type React from 'react';
 
+import { FORK_AGENT_TYPES } from '@/lib/model-options';
+
 type ConvertToAgentFormProps = {
   convertName: string;
   onNameChange: (name: string) => void;
@@ -62,8 +64,11 @@ export function ConvertToAgentForm({
             onChange={(e) => onTypeChange(e.target.value)}
             className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
           >
-            <option value="autonomous">Autonomous (long-running)</option>
-            <option value="ad-hoc">Ad-hoc (one-shot)</option>
+            {FORK_AGENT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label} — {t.desc}
+              </option>
+            ))}
           </select>
         </div>
       </div>

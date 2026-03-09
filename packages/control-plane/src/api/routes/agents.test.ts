@@ -426,6 +426,52 @@ describe('Agent routes — with dbRegistry', () => {
         }),
       );
     });
+
+    it('rejects an invalid runtime value with 400', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents',
+        payload: {
+          machineId: 'machine-1',
+          name: 'bad-runtime-agent',
+          type: 'autonomous',
+          runtime: 'invalid-runtime',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('INVALID_RUNTIME');
+      expect(body.message).toContain('invalid-runtime');
+    });
+
+    it('accepts a valid runtime value', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents',
+        payload: {
+          machineId: 'machine-1',
+          name: 'nanoclaw-agent',
+          type: 'autonomous',
+          runtime: 'nanoclaw',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.agentId).toBe('agent-new');
+      expect(mockDbRegistry.createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          machineId: 'machine-1',
+          name: 'nanoclaw-agent',
+          type: 'autonomous',
+          runtime: 'nanoclaw',
+        }),
+      );
+    });
   });
 
   // -------------------------------------------------------------------------

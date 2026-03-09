@@ -1,4 +1,5 @@
 import type {
+  AgentRuntime,
   AgentStatus,
   HeartbeatRequest,
   RegisterWorkerRequest,
@@ -6,7 +7,7 @@ import type {
   StartAgentRequest,
   StopAgentRequest,
 } from '@agentctl/shared';
-import { AGENT_STATUSES, ControlPlaneError } from '@agentctl/shared';
+import { AGENT_RUNTIMES, AGENT_STATUSES, ControlPlaneError } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -98,11 +99,14 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Agent CRUD (only available when dbRegistry is configured)
   // ---------------------------------------------------------------------------
 
+  const VALID_RUNTIMES = AGENT_RUNTIMES.map((r) => r.value);
+
   app.post<{
     Body: {
       machineId: string;
       name: string;
       type: string;
+      runtime?: string;
       schedule?: string;
       projectPath?: string;
       worktreeBranch?: string;
@@ -136,6 +140,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         error: 'INVALID_BODY',
         message: 'A non-empty "type" string is required',
       });
+    }
+
+    if (request.body.runtime && !VALID_RUNTIMES.includes(request.body.runtime as AgentRuntime)) {
+      return reply.code(400).send({ error: 'INVALID_RUNTIME', message: `Invalid runtime: ${request.body.runtime}. Must be one of: ${VALID_RUNTIMES.join(', ')}` });
     }
 
     const agentId = await dbRegistry.createAgent(request.body);

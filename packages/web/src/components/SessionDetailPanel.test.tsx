@@ -180,7 +180,7 @@ function defaultProps(overrides: Partial<SessionDetailPanelProps> = {}): Session
     showConvertDialog: false,
     convertName: 'my-test-agent',
     onConvertNameChange: vi.fn(),
-    convertType: 'autonomous',
+    convertType: 'adhoc',
     onConvertTypeChange: vi.fn(),
     createAgentPending: false,
     forkPickerLoading: false,

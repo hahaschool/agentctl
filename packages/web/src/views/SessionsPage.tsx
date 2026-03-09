@@ -129,7 +129,7 @@ export function SessionsPage(): React.JSX.Element {
   // Convert session to agent
   const [showConvertDialog, setShowConvertDialog] = useState(false);
   const [convertName, setConvertName] = useState('');
-  const [convertType, setConvertType] = useState('autonomous');
+  const [convertType, setConvertType] = useState('adhoc');
   const createAgent = useCreateAgent();
 
   // ContextPickerDialog modal state
