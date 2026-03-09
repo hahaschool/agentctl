@@ -428,6 +428,16 @@ describe('runtimeSessionPreflightQuery', () => {
     expect(options.queryKey).toEqual(queryKeys.runtimeSessionPreflight('ms-123', 'claude-code'));
   });
 
+  it('includes targetMachineId in the queryKey when present', () => {
+    const options = runtimeSessionPreflightQuery('ms-123', {
+      targetRuntime: 'claude-code',
+      targetMachineId: 'machine-2',
+    });
+    expect(options.queryKey).toEqual(
+      queryKeys.runtimeSessionPreflight('ms-123', 'claude-code', 'machine-2'),
+    );
+  });
+
   it('has enabled property based on id', () => {
     expect(runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).enabled).toBe(true);
     expect(runtimeSessionPreflightQuery('', { targetRuntime: 'claude-code' }).enabled).toBe(false);

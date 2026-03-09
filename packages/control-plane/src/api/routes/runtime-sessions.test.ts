@@ -49,13 +49,16 @@ function makeManagedSession(overrides: Partial<ManagedSessionRecord> = {}): Mana
 async function buildApp(
   managedSessionStore: ManagedSessionStoreMock,
   runtimeConfigStore: RuntimeConfigStoreMock,
+  options?: {
+    dbRegistry?: ReturnType<typeof createMockDbRegistry>;
+  },
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(runtimeSessionRoutes, {
     prefix: '/api/runtime-sessions',
     managedSessionStore: managedSessionStore as never,
     runtimeConfigStore: runtimeConfigStore as never,
-    dbRegistry: createMockDbRegistry(),
+    dbRegistry: (options?.dbRegistry ?? createMockDbRegistry()) as never,
     workerPort: 9000,
   });
   await app.ready();
@@ -242,5 +245,88 @@ describe('runtimeSessionRoutes', () => {
       }),
     );
     expect(response.json().session.nativeSessionId).toBe('codex-native-fork');
+  });
+
+  it('POST /api/runtime-sessions/:id/fork targets the requested machine worker', async () => {
+    const appWithTargetRegistry = await buildApp(managedSessionStore, runtimeConfigStore, {
+      dbRegistry: createMockDbRegistry({
+        getMachine: vi.fn(async (machineId: string) => {
+          if (machineId === 'machine-2') {
+            return makeMachine({
+              id: 'machine-2',
+              hostname: 'ec2-runner',
+              tailscaleIp: '100.64.0.2',
+              os: 'linux',
+            });
+          }
+
+          return makeMachine({
+            id: 'machine-1',
+            hostname: 'mac-mini',
+            tailscaleIp: '100.64.0.1',
+            os: 'darwin',
+            arch: 'arm64',
+          });
+        }),
+      }),
+    });
+
+    managedSessionStore.get.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-parent',
+        machineId: 'machine-1',
+        nativeSessionId: 'codex-native-existing',
+      }),
+    );
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-fork',
+        machineId: 'machine-2',
+        nativeSessionId: null,
+        status: 'starting',
+        handoffSourceSessionId: 'ms-parent',
+      }),
+    );
+    managedSessionStore.updateStatus.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-fork',
+        machineId: 'machine-2',
+        nativeSessionId: 'codex-native-fork',
+        status: 'active',
+        handoffSourceSessionId: 'ms-parent',
+      }),
+    );
+    mockFetchOk({
+      ok: true,
+      session: {
+        runtime: 'codex',
+        nativeSessionId: 'codex-native-fork',
+        status: 'active',
+      },
+    });
+
+    const response = await appWithTargetRegistry.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/ms-parent/fork',
+      payload: {
+        prompt: 'Fork onto machine-2',
+        model: 'gpt-5-codex',
+        targetMachineId: 'machine-2',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(managedSessionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handoffSourceSessionId: 'ms-parent',
+        machineId: 'machine-2',
+      }),
+    );
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('http://100.64.0.2:9000/api/runtime-sessions/codex-native-existing/fork'),
+      expect.any(Object),
+    );
+
+    await appWithTargetRegistry.close();
   });
 });
