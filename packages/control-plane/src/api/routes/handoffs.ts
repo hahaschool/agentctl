@@ -20,7 +20,7 @@ import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type HandoffRoutesOptions = {
   managedSessionStore: Pick<ManagedSessionStore, 'get' | 'create' | 'updateStatus'>;
-  handoffStore: Pick<HandoffStore, 'create'>;
+  handoffStore: Pick<HandoffStore, 'create' | 'recordNativeImportAttempt'>;
   runtimeConfigStore?: Pick<RuntimeConfigStore, 'getLatestRevision'>;
   dbRegistry?: DbAgentRegistry;
   workerPort?: number;
@@ -164,6 +164,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         errorMessage: null,
         completedAt: new Date(),
       });
+      await recordNativeImportAttempt(handoffStore, handoff, source, updatedTarget, execution);
 
       return reply.code(202).send({
         ok: true,
@@ -226,17 +227,57 @@ function extractExecution(
 ): {
   strategy?: HandoffStrategy;
   attemptedStrategies?: HandoffStrategy[];
+  nativeImportAttempt?: {
+    ok?: boolean;
+    sourceRuntime?: ManagedSessionRecord['runtime'];
+    targetRuntime?: ManagedSessionRecord['runtime'];
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  };
   session: { nativeSessionId?: string | null; status?: ManagedSessionRecord['status'] };
 } {
   const record = data as {
     strategy?: HandoffStrategy;
     attemptedStrategies?: HandoffStrategy[];
+    nativeImportAttempt?: {
+      ok?: boolean;
+      sourceRuntime?: ManagedSessionRecord['runtime'];
+      targetRuntime?: ManagedSessionRecord['runtime'];
+      reason?: string;
+      metadata?: Record<string, unknown>;
+    };
     session?: { nativeSessionId?: string | null; status?: ManagedSessionRecord['status'] };
   };
 
   return {
     strategy: record?.strategy,
     attemptedStrategies: record?.attemptedStrategies,
+    nativeImportAttempt: record?.nativeImportAttempt,
     session: record?.session ?? {},
   };
+}
+
+async function recordNativeImportAttempt(
+  handoffStore: Pick<HandoffStore, 'recordNativeImportAttempt'>,
+  handoff: SessionHandoffRecord,
+  source: ManagedSessionRecord,
+  target: ManagedSessionRecord,
+  execution: ReturnType<typeof extractExecution>,
+): Promise<void> {
+  if (!execution.nativeImportAttempt) {
+    return;
+  }
+
+  await handoffStore.recordNativeImportAttempt({
+    handoffId: handoff.id,
+    sourceSessionId: source.id,
+    targetSessionId: target.id,
+    sourceRuntime: execution.nativeImportAttempt.sourceRuntime ?? source.runtime,
+    targetRuntime: execution.nativeImportAttempt.targetRuntime ?? target.runtime,
+    status: execution.nativeImportAttempt.ok ? 'succeeded' : 'failed',
+    metadata: execution.nativeImportAttempt.metadata ?? {},
+    errorMessage: execution.nativeImportAttempt.ok
+      ? null
+      : execution.nativeImportAttempt.reason ?? 'native import failed',
+  });
 }

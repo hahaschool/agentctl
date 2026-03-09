@@ -536,7 +536,7 @@ function createFallbackManagedSessionStore(): Pick<
   };
 }
 
-function createFallbackHandoffStore(): Pick<HandoffStore, 'create'> {
+function createFallbackHandoffStore(): Pick<HandoffStore, 'create' | 'recordNativeImportAttempt'> {
   const handoffs = new Map<string, SessionHandoffRecord>();
   return {
     async create(input) {
@@ -556,6 +556,20 @@ function createFallbackHandoffStore(): Pick<HandoffStore, 'create'> {
       };
       handoffs.set(record.id, record);
       return record;
+    },
+    async recordNativeImportAttempt(input) {
+      return {
+        id: crypto.randomUUID(),
+        handoffId: input.handoffId,
+        sourceSessionId: input.sourceSessionId,
+        targetSessionId: input.targetSessionId,
+        sourceRuntime: input.sourceRuntime,
+        targetRuntime: input.targetRuntime,
+        status: input.status,
+        metadata: input.metadata,
+        errorMessage: input.errorMessage,
+        attemptedAt: input.attemptedAt ?? new Date(),
+      };
     },
   };
 }

@@ -11,6 +11,9 @@ import type {
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
+import { tryClaudeToCodexImport } from './native-import/claude-to-codex.js';
+import { tryCodexToClaudeImport } from './native-import/codex-to-claude.js';
+import type { NativeImportAttemptResult, NativeImportProbeInput } from './native-import/types.js';
 import type { ManagedSessionHandle, RuntimeAdapter } from './runtime-adapter.js';
 import { RuntimeRegistry } from './runtime-registry.js';
 
@@ -34,6 +37,7 @@ type HandoffControllerOptions = {
   runtimeRegistry: RuntimeRegistry;
   inspectWorkspace?: (projectPath: string) => Promise<WorkspaceInspection>;
   allowExperimentalNativeImport?: boolean;
+  nativeImporters?: Partial<Record<string, NativeImportProbe>>;
 };
 
 export type HandoffExecutionResult = {
@@ -42,13 +46,22 @@ export type HandoffExecutionResult = {
   attemptedStrategies: HandoffStrategy[];
   snapshot: HandoffSnapshot;
   session: ManagedSessionHandle;
+  nativeImportAttempt?: NativeImportAttemptResult;
 };
+
+type NativeImportProbe = (input: NativeImportProbeInput) => Promise<NativeImportAttemptResult>;
 
 export class HandoffController {
   private readonly inspectWorkspace: (projectPath: string) => Promise<WorkspaceInspection>;
+  private readonly nativeImporters: Record<string, NativeImportProbe>;
 
   constructor(private readonly options: HandoffControllerOptions) {
     this.inspectWorkspace = options.inspectWorkspace ?? inspectGitWorkspace;
+    this.nativeImporters = {
+      'claude-code:codex': tryClaudeToCodexImport,
+      'codex:claude-code': tryCodexToClaudeImport,
+      ...options.nativeImporters,
+    };
   }
 
   pickStrategies(input: {
@@ -90,31 +103,81 @@ export class HandoffController {
       sourceRuntime: input.snapshot.sourceRuntime,
       targetRuntime: input.targetRuntime,
     });
+    let nativeImportAttempt: NativeImportAttemptResult | undefined;
 
-    const session = await adapter.startSession({
+    for (const strategy of attemptedStrategies) {
+      if (strategy === 'native-import') {
+        nativeImportAttempt = await this.tryNativeImport(input);
+        if (nativeImportAttempt.ok && nativeImportAttempt.session) {
+          return {
+            ok: true,
+            strategy: 'native-import',
+            attemptedStrategies,
+            snapshot: input.snapshot,
+            session: nativeImportAttempt.session,
+            nativeImportAttempt,
+          };
+        }
+        continue;
+      }
+
+      const session = await adapter.startSession({
+        agentId: input.agentId,
+        projectPath: input.projectPath,
+        prompt: composeHandoffPrompt(input.snapshot, input.prompt),
+        model: input.model ?? null,
+      });
+
+      this.options.logger.info(
+        {
+          machineId: this.options.machineId,
+          targetRuntime: input.targetRuntime,
+          sourceRuntime: input.snapshot.sourceRuntime,
+          nativeSessionId: session.nativeSessionId,
+        },
+        'Started snapshot handoff session',
+      );
+
+      return {
+        ok: true,
+        strategy: 'snapshot-handoff',
+        attemptedStrategies,
+        snapshot: input.snapshot,
+        session,
+        nativeImportAttempt,
+      };
+    }
+
+    throw new WorkerError(
+      'HANDOFF_STRATEGY_FAILED',
+      `No usable handoff strategy succeeded for '${input.snapshot.sourceRuntime}' -> '${input.targetRuntime}'`,
+      {
+        sourceRuntime: input.snapshot.sourceRuntime,
+        targetRuntime: input.targetRuntime,
+      },
+    );
+  }
+
+  private async tryNativeImport(input: StartHandoffRequest): Promise<NativeImportAttemptResult> {
+    const key = `${input.snapshot.sourceRuntime}:${input.targetRuntime}`;
+    const importer = this.nativeImporters[key];
+    if (!importer) {
+      return {
+        ok: false,
+        sourceRuntime: input.snapshot.sourceRuntime,
+        targetRuntime: input.targetRuntime,
+        reason: 'not_supported',
+        metadata: { key },
+      };
+    }
+
+    return importer({
       agentId: input.agentId,
       projectPath: input.projectPath,
-      prompt: composeHandoffPrompt(input.snapshot, input.prompt),
+      prompt: input.prompt ?? null,
       model: input.model ?? null,
-    });
-
-    this.options.logger.info(
-      {
-        machineId: this.options.machineId,
-        targetRuntime: input.targetRuntime,
-        sourceRuntime: input.snapshot.sourceRuntime,
-        nativeSessionId: session.nativeSessionId,
-      },
-      'Started snapshot handoff session',
-    );
-
-    return {
-      ok: true,
-      strategy: 'snapshot-handoff',
-      attemptedStrategies,
       snapshot: input.snapshot,
-      session,
-    };
+    });
   }
 }
 

@@ -66,6 +66,7 @@ export const runtimeSessionsRoutes: FastifyPluginAsync<RuntimeSessionsRoutesOpti
       ok: true,
       strategy: result.strategy,
       attemptedStrategies: result.attemptedStrategies,
+      nativeImportAttempt: result.nativeImportAttempt,
       snapshot: result.snapshot,
       session: toSessionSummary(result.session),
     };

@@ -18,6 +18,7 @@ type ManagedSessionStoreMock = {
 
 type HandoffStoreMock = {
   create: ReturnType<typeof vi.fn>;
+  recordNativeImportAttempt: ReturnType<typeof vi.fn>;
 };
 
 type RuntimeConfigStoreMock = {
@@ -115,6 +116,7 @@ describe('handoffRoutes', () => {
     };
     handoffStore = {
       create: vi.fn(),
+      recordNativeImportAttempt: vi.fn(),
     };
     runtimeConfigStore = {
       getLatestRevision: vi.fn().mockResolvedValue({
@@ -185,6 +187,13 @@ describe('handoffRoutes', () => {
           ok: true,
           strategy: 'snapshot-handoff',
           attemptedStrategies: ['snapshot-handoff'],
+          nativeImportAttempt: {
+            ok: false,
+            sourceRuntime: 'codex',
+            targetRuntime: 'claude-code',
+            reason: 'not_implemented',
+            metadata: { probe: 'codex-to-claude' },
+          },
           session: {
             runtime: 'claude-code',
             sessionId: 'worker-1',
@@ -216,6 +225,14 @@ describe('handoffRoutes', () => {
         sourceSessionId: 'ms-source',
         targetRuntime: 'claude-code',
         status: 'succeeded',
+      }),
+    );
+    expect(handoffStore.recordNativeImportAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handoffId: 'handoff-1',
+        sourceRuntime: 'codex',
+        targetRuntime: 'claude-code',
+        status: 'failed',
       }),
     );
   });

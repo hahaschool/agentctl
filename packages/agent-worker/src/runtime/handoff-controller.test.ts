@@ -131,4 +131,54 @@ describe('HandoffController', () => {
     );
     expect(result.session.nativeSessionId).toBe('codex-native-2');
   });
+
+  it('falls back to snapshot handoff when native import is enabled but unavailable', async () => {
+    const startSession = vi.fn(async () => ({
+      runtime: 'codex' as const,
+      sessionId: 'worker-2',
+      nativeSessionId: 'codex-native-3',
+      agentId: 'agent-1',
+      projectPath: '/workspace/app',
+      model: 'gpt-5-codex',
+      status: 'active' as const,
+      pid: 4321,
+      startedAt: new Date('2026-03-09T12:05:00Z'),
+      lastActivity: new Date('2026-03-09T12:06:00Z'),
+    }));
+
+    const runtimeRegistry = new RuntimeRegistry();
+    runtimeRegistry.register({
+      runtime: 'codex',
+      startSession,
+      resumeSession: vi.fn(),
+      forkSession: vi.fn(),
+      getCapabilities: vi.fn(async () => ({
+        runtime: 'codex',
+        supportsResume: true,
+        supportsFork: true,
+      })),
+    });
+
+    const controller = new HandoffController({
+      machineId: 'machine-1',
+      logger: createMockLogger(),
+      runtimeRegistry,
+      inspectWorkspace: vi.fn(),
+      allowExperimentalNativeImport: true,
+    });
+
+    const result = await controller.handoff({
+      targetRuntime: 'codex',
+      agentId: 'agent-1',
+      projectPath: '/workspace/app',
+      prompt: 'Continue after native import fallback.',
+      snapshot: makeSnapshot(),
+    });
+
+    expect(result.attemptedStrategies).toEqual(['native-import', 'snapshot-handoff']);
+    expect(result.strategy).toBe('snapshot-handoff');
+    expect(result.nativeImportAttempt?.ok).toBe(false);
+    expect(result.nativeImportAttempt?.reason).toBe('not_implemented');
+    expect(result.session.nativeSessionId).toBe('codex-native-3');
+  });
 });
