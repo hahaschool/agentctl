@@ -248,6 +248,13 @@ describe('RuntimeSessionPresenter', () => {
           handoffId: 'handoff-created',
           strategy: 'snapshot-handoff',
           attemptedStrategies: ['snapshot-handoff'],
+          nativeImportAttempt: {
+            ok: false,
+            sourceRuntime: 'codex',
+            targetRuntime: 'claude-code',
+            reason: 'source_session_missing',
+            metadata: { sourceStorage: '/Users/example/.codex/sessions' },
+          },
           snapshot: makeHandoff().snapshot,
           session: makeSession({ id: 'ms-2', runtime: 'claude-code', machineId: 'machine-2' }),
         }),
@@ -266,6 +273,7 @@ describe('RuntimeSessionPresenter', () => {
     });
 
     expect(response.strategy).toBe('snapshot-handoff');
+    expect(response.nativeImportAttempt?.reason).toBe('source_session_missing');
     expect(presenter.getState().selectedSession?.runtime).toBe('claude-code');
     expect(presenter.getState().handoffs).toHaveLength(1);
   });

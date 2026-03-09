@@ -74,6 +74,37 @@ function handoffStatusColor(status: RuntimeSessionHandoff['status']): string {
   }
 }
 
+function formatNativeImportReason(reason?: string | null): string {
+  if (!reason) return 'unknown';
+  return reason.replaceAll('_', ' ');
+}
+
+function describeNativeImportAttempt(attempt?: {
+  ok: boolean;
+  reason?: string | null;
+  metadata?: Record<string, unknown>;
+}): string | null {
+  if (!attempt) return null;
+
+  const details: string[] = [];
+  const targetCli =
+    typeof attempt.metadata?.targetCli === 'string' ? attempt.metadata.targetCli : null;
+  const sourceStorage =
+    typeof attempt.metadata?.sourceStorage === 'string' ? attempt.metadata.sourceStorage : null;
+
+  if (targetCli) {
+    details.push(`target CLI ${targetCli}`);
+  }
+  if (sourceStorage) {
+    details.push(`source storage ${sourceStorage}`);
+  }
+
+  const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
+  return attempt.ok
+    ? `Native import succeeded${suffix}.`
+    : `Native import unavailable: ${formatNativeImportReason(attempt.reason)}${suffix}.`;
+}
+
 
 function machineStatusColor(status: Machine['status']): string {
   switch (status) {
@@ -246,9 +277,12 @@ export function RuntimeSessionScreen(): React.JSX.Element {
         ...(handoffPrompt.trim() ? { prompt: handoffPrompt.trim() } : {}),
       });
       setHandoffPrompt('');
+      const nativeImportSummary = describeNativeImportAttempt(response?.nativeImportAttempt);
       Alert.alert(
         'Handed Off',
-        `${truncateId(selectedSession.id)} switched via ${response?.strategy ?? 'handoff'}.`,
+        `${truncateId(selectedSession.id)} switched via ${response?.strategy ?? 'handoff'}.${
+          nativeImportSummary ? `\n\n${nativeImportSummary}` : ''
+        }`,
       );
     } catch (err: unknown) {
       Alert.alert('Handoff Failed', err instanceof Error ? err.message : String(err));
@@ -332,6 +366,11 @@ export function RuntimeSessionScreen(): React.JSX.Element {
         <Text style={styles.handoffSummary} numberOfLines={3}>
           {handoff.snapshot.diffSummary || handoff.snapshot.conversationSummary || 'No snapshot summary'}
         </Text>
+        {handoff.nativeImportAttempt && (
+          <Text style={styles.handoffMeta}>
+            {describeNativeImportAttempt(handoff.nativeImportAttempt)}
+          </Text>
+        )}
         {handoff.errorMessage && <Text style={styles.handoffError}>{handoff.errorMessage}</Text>}
       </View>
     ),
@@ -1062,6 +1101,12 @@ const styles = StyleSheet.create({
   },
   handoffSummary: {
     color: '#d1d5db',
+    fontSize: 12,
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  handoffMeta: {
+    color: '#f59e0b',
     fontSize: 12,
     marginTop: 8,
     lineHeight: 18,

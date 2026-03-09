@@ -151,6 +151,7 @@ function createHandoff(overrides?: Record<string, unknown>) {
       activeSkills: ['brainstorming'],
       reason: 'manual',
     },
+    nativeImportAttempt: undefined,
     errorMessage: null,
     createdAt: '2026-03-09T08:06:00.000Z',
     completedAt: '2026-03-09T08:06:30.000Z',
@@ -270,6 +271,34 @@ describe('RuntimeSessionsPage', () => {
       expect(screen.getAllByText('mac-mini').length).toBeGreaterThanOrEqual(2);
       expect(screen.getByText('snapshot-handoff')).toBeDefined();
       expect(screen.getByText('Added runtime handoff support.')).toBeDefined();
+    });
+  });
+
+  it('renders native import fallback details in handoff history', async () => {
+    setupUseQuery({
+      handoffsBySessionId: {
+        'ms-1': [
+          createHandoff({
+            nativeImportAttempt: {
+              ok: false,
+              sourceRuntime: 'codex',
+              targetRuntime: 'claude-code',
+              reason: 'target_cli_unavailable',
+              metadata: {
+                targetCli: 'claude',
+                sourceStorage: '/Users/example/.codex/sessions',
+              },
+            },
+          }),
+        ],
+      },
+    });
+
+    render(<RuntimeSessionsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Native import unavailable:/)).toBeDefined();
+      expect(screen.getByText(/target CLI claude/)).toBeDefined();
     });
   });
 

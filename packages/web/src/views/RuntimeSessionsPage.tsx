@@ -78,7 +78,40 @@ function summarizeMetadata(metadata: Record<string, unknown>): Array<[string, st
     .map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)]);
 }
 
+function formatNativeImportReason(reason?: string | null): string {
+  if (!reason) return 'unknown';
+  return reason.replaceAll('_', ' ');
+}
+
+function describeNativeImportAttempt(attempt?: {
+  ok: boolean;
+  reason?: string | null;
+  metadata?: Record<string, unknown>;
+}): string | null {
+  if (!attempt) return null;
+
+  const details: string[] = [];
+  const targetCli =
+    typeof attempt.metadata?.targetCli === 'string' ? attempt.metadata.targetCli : null;
+  const sourceStorage =
+    typeof attempt.metadata?.sourceStorage === 'string' ? attempt.metadata.sourceStorage : null;
+
+  if (targetCli) {
+    details.push(`target CLI ${targetCli}`);
+  }
+  if (sourceStorage) {
+    details.push(`source storage ${sourceStorage}`);
+  }
+
+  const suffix = details.length > 0 ? `, ${details.join(', ')}` : '';
+  return attempt.ok
+    ? `Native import succeeded${suffix}`
+    : `Native import unavailable: ${formatNativeImportReason(attempt.reason)}${suffix}`;
+}
+
 function HandoffHistoryItem({ handoff }: { handoff: RuntimeSessionHandoff }): React.JSX.Element {
+  const nativeImportSummary = describeNativeImportAttempt(handoff.nativeImportAttempt);
+
   return (
     <div className="rounded-lg border border-border bg-card/70 p-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -97,6 +130,11 @@ function HandoffHistoryItem({ handoff }: { handoff: RuntimeSessionHandoff }): Re
       <div className="text-sm text-muted-foreground leading-6">
         {handoff.snapshot.diffSummary || handoff.snapshot.conversationSummary || 'No snapshot summary'}
       </div>
+      {nativeImportSummary && (
+        <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-300">
+          {nativeImportSummary}
+        </div>
+      )}
       {(handoff.snapshot.openTodos?.length ?? 0) > 0 && (
         <div className="text-xs text-muted-foreground">
           Next: {handoff.snapshot.openTodos.slice(0, 2).join(' · ')}
@@ -311,7 +349,11 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         reason: 'manual',
         ...(handoffPrompt.trim() ? { prompt: handoffPrompt.trim() } : {}),
       });
-      toast.success(`Handed off to ${runtimeLabel(result.session.runtime)}`);
+      toast.success(
+        result.nativeImportAttempt && !result.nativeImportAttempt.ok
+          ? `Handed off to ${runtimeLabel(result.session.runtime)} after native import fallback`
+          : `Handed off to ${runtimeLabel(result.session.runtime)}`,
+      );
       setSelectedId(result.session.id);
       setHandoffPrompt('');
     } catch (error) {
