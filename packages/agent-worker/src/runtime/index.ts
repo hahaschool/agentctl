@@ -1,5 +1,6 @@
 export { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 export { AgentPool } from './agent-pool.js';
+export { ClaudeRuntimeAdapter } from './claude-runtime-adapter.js';
 export {
   type CliSession,
   type CliSessionEvent,
@@ -33,3 +34,11 @@ export {
   decodeProjectPath,
   discoverLocalSessions,
 } from './session-discovery.js';
+export {
+  type ManagedSessionHandle,
+  type ResumeManagedSessionInput,
+  type RuntimeAdapter,
+  type RuntimeCapabilities,
+  type StartManagedSessionInput,
+} from './runtime-adapter.js';
+export { RuntimeRegistry } from './runtime-registry.js';
