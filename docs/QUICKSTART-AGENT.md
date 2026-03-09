@@ -162,6 +162,7 @@ GET  /api/runtime-config/drift
 # Runtime Sessions
 GET  /api/runtime-sessions
 POST /api/runtime-sessions
+GET  /api/runtime-sessions/:id/handoffs
 POST /api/runtime-sessions/:id/resume
 POST /api/runtime-sessions/:id/fork
 POST /api/runtime-sessions/:id/handoff

@@ -52,6 +52,7 @@ describe('OpenAPI / Swagger', () => {
     expect(spec.paths['/api/runtime-config/defaults']).toBeDefined();
     expect(spec.paths['/api/runtime-config/drift']).toBeDefined();
     expect(spec.paths['/api/runtime-sessions/']).toBeDefined();
+    expect(spec.paths['/api/runtime-sessions/{id}/handoffs']).toBeDefined();
   });
 
   it('serves the Swagger UI at /api/docs/', async () => {

@@ -18,6 +18,7 @@ type ManagedSessionStoreMock = {
 
 type HandoffStoreMock = {
   create: ReturnType<typeof vi.fn>;
+  listForSession: ReturnType<typeof vi.fn>;
   recordNativeImportAttempt: ReturnType<typeof vi.fn>;
 };
 
@@ -116,6 +117,7 @@ describe('handoffRoutes', () => {
     };
     handoffStore = {
       create: vi.fn(),
+      listForSession: vi.fn(),
       recordNativeImportAttempt: vi.fn(),
     };
     runtimeConfigStore = {
@@ -251,5 +253,26 @@ describe('handoffRoutes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error).toBe('MANAGED_SESSION_NOT_FOUND');
+  });
+
+  it('GET /api/runtime-sessions/:id/handoffs returns handoff history for the managed session', async () => {
+    handoffStore.listForSession.mockResolvedValue([
+      makeHandoffRecord(),
+      makeHandoffRecord({
+        id: 'handoff-2',
+        targetRuntime: 'codex',
+        status: 'failed',
+      }),
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/ms-source/handoffs',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().count).toBe(2);
+    expect(response.json().handoffs[0].id).toBe('handoff-1');
+    expect(handoffStore.listForSession).toHaveBeenCalledWith('ms-source', 20);
   });
 });

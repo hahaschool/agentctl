@@ -536,7 +536,10 @@ function createFallbackManagedSessionStore(): Pick<
   };
 }
 
-function createFallbackHandoffStore(): Pick<HandoffStore, 'create' | 'recordNativeImportAttempt'> {
+function createFallbackHandoffStore(): Pick<
+  HandoffStore,
+  'create' | 'listForSession' | 'recordNativeImportAttempt'
+> {
   const handoffs = new Map<string, SessionHandoffRecord>();
   return {
     async create(input) {
@@ -556,6 +559,14 @@ function createFallbackHandoffStore(): Pick<HandoffStore, 'create' | 'recordNati
       };
       handoffs.set(record.id, record);
       return record;
+    },
+    async listForSession(sessionId, limit = 20) {
+      return [...handoffs.values()]
+        .filter(
+          (record) =>
+            record.sourceSessionId === sessionId || record.targetSessionId === sessionId,
+        )
+        .slice(0, limit);
     },
     async recordNativeImportAttempt(input) {
       return {

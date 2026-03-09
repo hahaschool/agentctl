@@ -20,7 +20,7 @@ import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type HandoffRoutesOptions = {
   managedSessionStore: Pick<ManagedSessionStore, 'get' | 'create' | 'updateStatus'>;
-  handoffStore: Pick<HandoffStore, 'create' | 'recordNativeImportAttempt'>;
+  handoffStore: Pick<HandoffStore, 'create' | 'listForSession' | 'recordNativeImportAttempt'>;
   runtimeConfigStore?: Pick<RuntimeConfigStore, 'getLatestRevision'>;
   dbRegistry?: DbAgentRegistry;
   workerPort?: number;
@@ -29,6 +29,27 @@ export type HandoffRoutesOptions = {
 export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (app, opts) => {
   const { managedSessionStore, handoffStore, runtimeConfigStore, dbRegistry, workerPort = 9000 } =
     opts;
+
+  app.get<{
+    Params: { id: string };
+    Querystring: { limit?: string };
+  }>(
+    '/:id/handoffs',
+    {
+      schema: {
+        tags: ['runtime-sessions'],
+        summary: 'List handoff history for a managed runtime session',
+      },
+    },
+    async (request) => {
+      const limit = request.query.limit ? Number(request.query.limit) : 20;
+      const handoffs = await handoffStore.listForSession(request.params.id, limit);
+      return {
+        handoffs,
+        count: handoffs.length,
+      };
+    },
+  );
 
   app.post<{
     Params: { id: string };
