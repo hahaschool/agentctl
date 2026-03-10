@@ -441,6 +441,58 @@ describe('RuntimeSessionsPage', () => {
     });
   });
 
+  it('filters handoff history down to failed executions', async () => {
+    setupUseQuery({
+      handoffsBySessionId: {
+        'ms-1': [
+          createHandoff({
+            id: 'handoff-native',
+            reason: 'native-success',
+            strategy: 'native-import',
+            nativeImportAttempt: {
+              ok: true,
+              sourceRuntime: 'codex',
+              targetRuntime: 'claude-code',
+              reason: 'succeeded',
+              metadata: {},
+            },
+          }),
+          createHandoff({
+            id: 'handoff-fallback',
+            reason: 'fallback-success',
+            strategy: 'snapshot-handoff',
+            nativeImportAttempt: {
+              ok: false,
+              sourceRuntime: 'codex',
+              targetRuntime: 'claude-code',
+              reason: 'source_session_missing',
+              metadata: {},
+            },
+          }),
+          createHandoff({
+            id: 'handoff-failed',
+            reason: 'failed-run',
+            status: 'failed',
+            strategy: 'snapshot-handoff',
+            errorMessage: 'worker unavailable',
+          }),
+        ],
+      },
+    });
+
+    render(<RuntimeSessionsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Failed' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('failed-run')).toBeDefined();
+      expect(screen.getByText('worker unavailable')).toBeDefined();
+      expect(screen.queryByText('native-success')).toBeNull();
+      expect(screen.queryByText('fallback-success')).toBeNull();
+      expect(screen.queryByText('No handoffs match this filter')).toBeNull();
+    });
+  });
+
   it('renders native import preflight readiness before starting a handoff', async () => {
     setupUseQuery({
       machines: [createMachine(), createMachine({ id: 'machine-2', hostname: 'ec2-runner' })],
