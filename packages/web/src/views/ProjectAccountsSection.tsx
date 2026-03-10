@@ -70,7 +70,11 @@ export function ProjectAccountsSection(): React.JSX.Element {
   return (
     <div id="project-accounts" className="scroll-mt-6">
       <div className="pb-3 mb-4 border-b border-border/30">
-        <h3 className="text-sm font-semibold">Project Account Overrides</h3>
+        <h3 className="text-sm font-semibold">Project access overrides</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Override the default managed credential for a specific project path until richer runtime
+          bindings are configured.
+        </p>
       </div>
 
       {isLoading ? (
@@ -96,7 +100,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
                       scope="col"
                       className="text-left px-3 py-2 font-medium text-muted-foreground"
                     >
-                      Account
+                      Managed credential
                     </th>
                     <th scope="col" className="w-10 px-3 py-2" />
                   </tr>
@@ -128,7 +132,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
             </div>
           ) : (
             <p className="text-[13px] text-muted-foreground italic">
-              No project-specific account mappings configured.
+              No project-specific access overrides configured.
             </p>
           )}
 
@@ -148,11 +152,11 @@ export function ProjectAccountsSection(): React.JSX.Element {
             </div>
             <div className="min-w-[160px] space-y-1">
               <label className="text-[11px] text-muted-foreground" htmlFor="new-project-account">
-                Account
+                Managed credential
               </label>
               <Select value={newAccountId} onValueChange={setNewAccountId}>
                 <SelectTrigger className="w-full h-8" id="new-project-account">
-                  <SelectValue placeholder="Select account" />
+                  <SelectValue placeholder="Select managed credential" />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
                   {accounts.data?.map((a) => (
@@ -168,7 +172,7 @@ export function ProjectAccountsSection(): React.JSX.Element {
               onClick={handleAdd}
               disabled={!newPath.trim() || !newAccountId || upsert.isPending}
             >
-              {upsert.isPending ? 'Saving...' : 'Add'}
+              {upsert.isPending ? 'Saving...' : 'Add override'}
             </Button>
           </div>
 

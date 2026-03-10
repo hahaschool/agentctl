@@ -51,22 +51,22 @@ describe('PreferencesSection', () => {
 
   // -- Heading -------------------------------------------------------------
 
-  it('renders the "Defaults" heading', () => {
+  it('renders the "Workspace preferences" heading', () => {
     render(<PreferencesSection />);
-    expect(screen.getByText('Defaults')).toBeDefined();
+    expect(screen.getByText('Workspace preferences')).toBeDefined();
   });
 
   it('renders heading as h3 element', () => {
     render(<PreferencesSection />);
-    const heading = screen.getByText('Defaults');
+    const heading = screen.getByText('Workspace preferences');
     expect(heading.tagName).toBe('H3');
   });
 
   // -- Labels --------------------------------------------------------------
 
-  it('renders "Default Model" label', () => {
+  it('does not render the old "Default Model" label', () => {
     render(<PreferencesSection />);
-    expect(screen.getByText('Default Model')).toBeDefined();
+    expect(screen.queryByText('Default Model')).toBeNull();
   });
 
   it('renders "Auto-Refresh Interval" label', () => {
@@ -81,9 +81,11 @@ describe('PreferencesSection', () => {
 
   // -- Description texts ---------------------------------------------------
 
-  it('shows model description text', () => {
+  it('shows runtime profile note', () => {
     render(<PreferencesSection />);
-    expect(screen.getByText('Model used when creating new sessions or agents.')).toBeDefined();
+    expect(
+      screen.getByText(/Runtime models now live in Runtime Profiles/),
+    ).toBeDefined();
   });
 
   it('shows refresh description text', () => {
@@ -96,18 +98,6 @@ describe('PreferencesSection', () => {
     expect(
       screen.getByText('Maximum number of messages shown in the session detail view.'),
     ).toBeDefined();
-  });
-
-  // -- Model options -------------------------------------------------------
-
-  it('renders model options', () => {
-    render(<PreferencesSection />);
-    expect(screen.getByText('Claude Sonnet 4.6')).toBeDefined();
-    expect(screen.getByText('Claude Opus 4.6')).toBeDefined();
-    expect(screen.getByText('Claude Haiku 4.5')).toBeDefined();
-    expect(screen.getByText('Claude Sonnet 4.5')).toBeDefined();
-    expect(screen.getByText('Claude Opus 4')).toBeDefined();
-    expect(screen.getByText('Claude Sonnet 4')).toBeDefined();
   });
 
   // -- Refresh options -----------------------------------------------------
@@ -132,10 +122,9 @@ describe('PreferencesSection', () => {
 
   // -- Default values ------------------------------------------------------
 
-  it('uses claude-sonnet-4-6 as default model value', () => {
+  it('uses 10s as default auto refresh value', () => {
     render(<PreferencesSection />);
     const selects = screen.getAllByTestId('select');
-    // First select is the model select
-    expect(selects[0]?.getAttribute('data-value')).toBe('claude-sonnet-4-6');
+    expect(selects[0]?.getAttribute('data-value')).toBe('10000');
   });
 });

@@ -1,6 +1,9 @@
 export type {
+  AccountCustody,
   AccountDefaults,
   AccountProvider,
+  AccountSource,
+  AccountStatus,
   ApiAccount,
   FailoverPolicy,
   ProjectAccountMapping,

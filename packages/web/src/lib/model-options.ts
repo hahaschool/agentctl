@@ -28,6 +28,23 @@ export const ALL_MODELS: readonly ModelOption[] = [
 /** Latest-generation models only (no legacy versions). */
 export const LATEST_MODELS: readonly ModelOption[] = ALL_MODELS.slice(0, 3);
 
+/** Managed Codex runtime models. Keep the initial list conservative. */
+export const CODEX_MODELS: readonly ModelOption[] = [
+  { value: 'gpt-5-codex', label: 'GPT-5 Codex', tier: 'flagship' },
+] as const;
+
+/** Runtime-specific model groups used by the settings redesign. */
+export const RUNTIME_MODEL_OPTIONS = {
+  'claude-code': ALL_MODELS,
+  codex: CODEX_MODELS,
+} as const;
+
+/** Default model per managed runtime. */
+export const DEFAULT_RUNTIME_MODELS = {
+  'claude-code': 'claude-sonnet-4-6',
+  codex: 'gpt-5-codex',
+} as const;
+
 /** Model selector with a "Default" empty-value option — for session/fork creation. */
 export const MODEL_OPTIONS_WITH_DEFAULT: readonly ModelOption[] = [
   { value: '', label: 'Default' },
@@ -65,4 +82,4 @@ export const FORK_AGENT_TYPES: readonly AgentTypeOption[] = AGENT_TYPES.filter(
 );
 
 /** Default model for new agents. */
-export const DEFAULT_MODEL = 'claude-sonnet-4-6';
+export const DEFAULT_MODEL = DEFAULT_RUNTIME_MODELS['claude-code'];

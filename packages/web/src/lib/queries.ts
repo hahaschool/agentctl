@@ -57,6 +57,11 @@ export const queryKeys = {
   metrics: ['metrics'] as const,
   accounts: ['accounts'] as const,
   accountDefaults: ['account-defaults'] as const,
+  runtimeConfigDefaults: ['runtime-config', 'defaults'] as const,
+  runtimeConfigDrift: (machineId?: string) =>
+    machineId
+      ? (['runtime-config', 'drift', machineId] as const)
+      : (['runtime-config', 'drift'] as const),
   projectAccounts: ['project-accounts'] as const,
   runtimeConfigDefaults: ['runtime-config', 'defaults'] as const,
   runtimeConfigDrift: (machineId?: string) =>
@@ -247,6 +252,24 @@ export function accountDefaultsQuery() {
   });
 }
 
+export function runtimeConfigDefaultsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.runtimeConfigDefaults,
+    queryFn: api.getRuntimeConfigDefaults,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeConfigDriftQuery(machineId?: string) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeConfigDrift(machineId),
+    queryFn: () => api.getRuntimeConfigDrift(machineId),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function projectAccountsQuery() {
   return queryOptions({
     queryKey: queryKeys.projectAccounts,
@@ -352,6 +375,17 @@ export function useCreateAgent() {
     mutationFn: api.createAgent,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+    },
+  });
+}
+
+export function useUpdateRuntimeConfigDefaults() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.updateRuntimeConfigDefaults,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeConfigDefaults });
+      void queryClient.invalidateQueries({ queryKey: ['runtime-config', 'drift'] });
     },
   });
 }

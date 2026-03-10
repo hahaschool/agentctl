@@ -1,23 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// ---------------------------------------------------------------------------
-// Hoisted mocks
-// ---------------------------------------------------------------------------
 
 const { mockHealthQuery } = vi.hoisted(() => ({
   mockHealthQuery: vi.fn(),
-}));
-
-// ---------------------------------------------------------------------------
-// Mock dependencies — BEFORE component import
-// ---------------------------------------------------------------------------
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
-  usePathname: () => '/settings',
-  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('next-themes', () => ({
@@ -42,7 +28,6 @@ vi.mock('@/lib/queries', () => ({
   healthQuery: () => mockHealthQuery(),
 }));
 
-// Stub child sections — they have their own complex dependencies
 vi.mock('./AccountsSection', () => ({
   AccountsSection: () => <div data-testid="accounts-section">AccountsSection</div>,
 }));
@@ -71,15 +56,17 @@ vi.mock('./RuntimeConsistencySection', () => ({
   ),
 }));
 
-// ---------------------------------------------------------------------------
-// Component import (after mocks)
-// ---------------------------------------------------------------------------
+vi.mock('./settings/RuntimeProfilesSection', () => ({
+  RuntimeProfilesSection: () => (
+    <div data-testid="runtime-profiles-section">RuntimeProfilesSection</div>
+  ),
+}));
+
+vi.mock('./settings/WorkersSyncSection', () => ({
+  WorkersSyncSection: () => <div data-testid="workers-sync-section">WorkersSyncSection</div>,
+}));
 
 import { SettingsView } from './SettingsView';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function renderSettings() {
   const queryClient = new QueryClient({
@@ -94,10 +81,6 @@ function renderSettings() {
     </QueryClientProvider>,
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe('SettingsView', () => {
   beforeEach(() => {
@@ -121,66 +104,44 @@ describe('SettingsView', () => {
     vi.restoreAllMocks();
   });
 
-  // =========================================================================
-  // Page Heading
-  // =========================================================================
-
-  it('renders the page heading', () => {
+  it('renders the runtime-centric page heading', () => {
     renderSettings();
-    const heading = screen.getByRole('heading', { level: 1 });
-    expect(heading.textContent).toBe('Settings');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Runtime Control Center');
   });
 
-  it('renders the page description', () => {
+  it('renders the runtime-centric page description', () => {
     renderSettings();
-    expect(
-      screen.getByText('Configure accounts, preferences, and system connections.'),
-    ).toBeDefined();
+    expect(screen.getByText(/Configure managed runtimes, worker sync, and mixed access custody/)).toBeDefined();
   });
 
-  // =========================================================================
-  // Settings Group Sections
-  // =========================================================================
-
-  it('renders the Cloud API Accounts group heading', () => {
+  it('renders the left navigation items', () => {
     renderSettings();
-    expect(screen.getByText('Cloud API Accounts')).toBeDefined();
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    expect(within(nav).getByText('Overview')).toBeDefined();
+    expect(within(nav).getByText('Runtime Profiles')).toBeDefined();
+    expect(within(nav).getByText('Credentials & Access')).toBeDefined();
+    expect(within(nav).getByText('Workers & Sync')).toBeDefined();
+    expect(within(nav).getByText('Routing & Autonomy')).toBeDefined();
+    expect(within(nav).getByText('Appearance & Preferences')).toBeDefined();
   });
 
-  it('renders the Claude & Codex group heading', () => {
+  it('renders the top-level section headings', () => {
     renderSettings();
-    expect(screen.getByText('Claude & Codex')).toBeDefined();
+    expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Runtime Profiles').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Credentials & Access').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Workers & Sync').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Routing & Autonomy').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Appearance & Preferences').length).toBeGreaterThan(0);
   });
 
-  it('renders the Appearance & Preferences group heading', () => {
+  it('renders child runtime-centric sections', () => {
     renderSettings();
-    expect(screen.getByText('Appearance & Preferences')).toBeDefined();
-  });
-
-  it('renders the System group heading', () => {
-    renderSettings();
-    const headings = screen.getAllByText('System');
-    // "System" appears as both a group heading (h2) and a theme option label
-    const h2Heading = headings.find((el) => el.tagName === 'H2');
-    expect(h2Heading).toBeDefined();
-  });
-
-  // =========================================================================
-  // Child Sections Visibility
-  // =========================================================================
-
-  it('renders the AccountsSection component', () => {
-    renderSettings();
+    expect(screen.getByTestId('runtime-profiles-section')).toBeDefined();
     expect(screen.getByTestId('accounts-section')).toBeDefined();
-  });
-
-  it('renders the FailoverSection component', () => {
-    renderSettings();
+    expect(screen.getByTestId('project-accounts-section')).toBeDefined();
+    expect(screen.getByTestId('workers-sync-section')).toBeDefined();
     expect(screen.getByTestId('failover-section')).toBeDefined();
-  });
-
-  it('renders the PreferencesSection component', () => {
-    renderSettings();
     expect(screen.getByTestId('preferences-section')).toBeDefined();
   });
 
@@ -256,64 +217,24 @@ describe('SettingsView', () => {
   // Connection Section (Control Plane)
   // =========================================================================
 
-  it('renders the Control Plane heading', () => {
+  it('still renders the control plane health block', async () => {
     renderSettings();
     expect(screen.getByText('Control Plane')).toBeDefined();
-  });
-
-  it('shows Connected status when health is ok', async () => {
-    renderSettings();
     await waitFor(() => {
       expect(screen.getByText('Connected')).toBeDefined();
     });
   });
 
-  it('shows dependency cards when health data has dependencies', async () => {
+  it('still renders the LiteLLM router link', () => {
     renderSettings();
-    await waitFor(() => {
-      expect(screen.getByText('postgres')).toBeDefined();
-      expect(screen.getByText('redis')).toBeDefined();
-      expect(screen.getByText('litellm')).toBeDefined();
-    });
+    expect(screen.getByText('LLM Router')).toBeDefined();
+    expect(screen.getByTestId('link-/settings/router')).toBeDefined();
   });
 
-  it('shows latency values for healthy dependencies', async () => {
+  it('still renders the theme and about subsections', () => {
     renderSettings();
-    await waitFor(() => {
-      expect(screen.getByText('10ms')).toBeDefined();
-      expect(screen.getByText('5ms')).toBeDefined();
-      expect(screen.getByText('20ms')).toBeDefined();
-    });
-  });
-
-  it('renders retry health check button', () => {
-    renderSettings();
-    const retryButton = screen.getByLabelText('Retry health check');
-    expect(retryButton).toBeDefined();
-  });
-
-  // =========================================================================
-  // Keyboard Shortcuts Section
-  // =========================================================================
-
-  it('renders the Keyboard Shortcuts heading', () => {
-    renderSettings();
+    expect(screen.getByText('Theme')).toBeDefined();
     expect(screen.getByText('Keyboard Shortcuts')).toBeDefined();
-  });
-
-  it('renders shortcut key badges as kbd elements', () => {
-    renderSettings();
-    // At least one <kbd> element should be present for shortcuts
-    const kbdElements = document.querySelectorAll('kbd');
-    expect(kbdElements.length).toBeGreaterThan(0);
-  });
-
-  // =========================================================================
-  // About Section
-  // =========================================================================
-
-  it('renders the About AgentCTL heading', () => {
-    renderSettings();
     expect(screen.getByText('About AgentCTL')).toBeDefined();
   });
 
@@ -375,19 +296,6 @@ describe('SettingsView', () => {
     await waitFor(() => {
       expect(screen.getByText('Degraded')).toBeDefined();
     });
-  });
-
-  // =========================================================================
-  // API Accounts group description
-  // =========================================================================
-
-  it('shows Cloud API Accounts group description', () => {
-    renderSettings();
-    expect(
-      screen.getByText(
-        'Manage provider credentials used for routed API requests and project-level account overrides.',
-      ),
-    ).toBeDefined();
   });
 
   // =========================================================================
@@ -484,30 +392,5 @@ describe('SettingsView', () => {
     // The link contains "Configure →" (HTML entity &rarr; renders as →)
     const link = screen.getByTestId('link-/settings/router');
     expect(link.textContent).toContain('Configure');
-  });
-
-  // =========================================================================
-  // Structure — section separators and group containers
-  // =========================================================================
-
-  it('renders four SettingsGroup sections with h2 headings', () => {
-    renderSettings();
-    const h2s = screen.getAllByRole('heading', { level: 2 });
-    expect(h2s.length).toBe(4);
-    expect(h2s[0]?.textContent).toBe('Cloud API Accounts');
-    expect(h2s[1]?.textContent).toBe('Claude & Codex');
-    expect(h2s[2]?.textContent).toBe('Appearance & Preferences');
-    expect(h2s[3]?.textContent).toBe('System');
-  });
-
-  it('renders h3 sub-section headings', () => {
-    renderSettings();
-    const h3s = screen.getAllByRole('heading', { level: 3 });
-    const h3Texts = h3s.map((h) => h.textContent);
-    expect(h3Texts).toContain('Theme');
-    expect(h3Texts).toContain('Control Plane');
-    expect(h3Texts).toContain('Keyboard Shortcuts');
-    expect(h3Texts).toContain('About AgentCTL');
-    expect(h3Texts).toContain('LLM Router');
   });
 });

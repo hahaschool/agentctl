@@ -18,13 +18,8 @@ import { STORAGE_KEYS } from '../lib/storage-keys';
 // localStorage keys & defaults
 // ---------------------------------------------------------------------------
 
-const LS_DEFAULT_MODEL = STORAGE_KEYS.DEFAULT_MODEL;
 const LS_AUTO_REFRESH = STORAGE_KEYS.AUTO_REFRESH_INTERVAL;
 const LS_MAX_MESSAGES = STORAGE_KEYS.MAX_DISPLAY_MESSAGES;
-
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
-
-import { ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
 
 const DEFAULT_AUTO_REFRESH = '10000';
 const DEFAULT_MAX_MESSAGES = '100';
@@ -67,18 +62,12 @@ function writeLS(key: string, value: string): void {
 // ---------------------------------------------------------------------------
 
 export function PreferencesSection(): React.JSX.Element {
-  const [defaultModel, setDefaultModel] = useState(() => readLS(LS_DEFAULT_MODEL, DEFAULT_MODEL));
   const [autoRefresh, setAutoRefresh] = useState(() =>
     readLS(LS_AUTO_REFRESH, DEFAULT_AUTO_REFRESH),
   );
   const [maxMessages, setMaxMessages] = useState(() =>
     readLS(LS_MAX_MESSAGES, DEFAULT_MAX_MESSAGES),
   );
-
-  const handleModelChange = useCallback((v: string) => {
-    setDefaultModel(v);
-    writeLS(LS_DEFAULT_MODEL, v);
-  }, []);
 
   const handleRefreshChange = useCallback((v: string) => {
     setAutoRefresh(v);
@@ -111,32 +100,14 @@ export function PreferencesSection(): React.JSX.Element {
   return (
     <div id="preferences" className="scroll-mt-6">
       <div className="pb-3 mb-4 border-b border-border/30">
-        <h3 className="text-sm font-semibold">Defaults</h3>
+        <h3 className="text-sm font-semibold">Workspace preferences</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Runtime models now live in Runtime Profiles. These preferences only affect the web
+          control plane UI.
+        </p>
       </div>
 
       <div className="space-y-4">
-        {/* Default Model */}
-        <div className="space-y-1.5">
-          <label className="text-[13px] font-medium" htmlFor="pref-default-model">
-            Default Model
-          </label>
-          <Select value={defaultModel} onValueChange={handleModelChange}>
-            <SelectTrigger className="w-full" id="pref-default-model">
-              <SelectValue placeholder="Select model" />
-            </SelectTrigger>
-            <SelectContent position="popper" sideOffset={4}>
-              {MODEL_OPTIONS.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-[11px] text-muted-foreground">
-            Model used when creating new sessions or agents.
-          </p>
-        </div>
-
         {/* Auto-refresh interval */}
         <div className="space-y-1.5">
           <label className="text-[13px] font-medium" htmlFor="pref-auto-refresh">

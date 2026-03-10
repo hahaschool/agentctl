@@ -761,6 +761,63 @@ describe('api.updateDefaults', () => {
   });
 });
 
+describe('api.getRuntimeConfigDefaults', () => {
+  it('calls GET /api/runtime-config/defaults', async () => {
+    const payload = { version: 1, hash: 'sha256:test', config: { runtimeOverrides: {} } };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(payload));
+
+    const result = await api.getRuntimeConfigDefaults();
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/defaults');
+    expect(result).toEqual(payload);
+  });
+});
+
+describe('api.updateRuntimeConfigDefaults', () => {
+  it('calls PUT /api/runtime-config/defaults with wrapped config body', async () => {
+    const config = {
+      version: 7,
+      hash: 'sha256:cfg-7',
+      instructions: { userGlobal: 'a', projectTemplate: 'b' },
+      mcpServers: [],
+      skills: [],
+      sandbox: 'workspace-write',
+      approvalPolicy: 'on-request',
+      environmentPolicy: { inherit: ['PATH'], set: {} },
+      runtimeOverrides: { claudeCode: { model: 'claude-sonnet-4-6' }, codex: { model: 'gpt-5-codex' } },
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ version: 7, hash: 'sha256:cfg-7', config }));
+
+    await api.updateRuntimeConfigDefaults(config);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/defaults');
+    expect(init?.method).toBe('PUT');
+    expect(JSON.parse(init?.body as string)).toEqual({ config });
+  });
+});
+
+describe('api.getRuntimeConfigDrift', () => {
+  it('calls GET /api/runtime-config/drift without query params by default', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ activeVersion: 1, activeHash: 'sha256:test', items: [] }));
+
+    await api.getRuntimeConfigDrift();
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/drift');
+  });
+
+  it('includes machineId when provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ activeVersion: 1, activeHash: 'sha256:test', items: [] }));
+
+    await api.getRuntimeConfigDrift('machine-1');
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/drift?machineId=machine-1');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Managed runtime config
 // ---------------------------------------------------------------------------
