@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-10
+> Last updated: 2026-03-11
 
 ## Current State
 
@@ -132,16 +132,16 @@ Pre-execution safety: safe (git clean) → guarded (dirty) → risky (non-git) �
 - [ ] Sandbox mode: copy-to-temp → execute → copy-back
 - [ ] API: `POST /api/agents/:id/safety-decision` (approve/reject/sandbox)
 
-### 2.7 Dispatch Signature Verification — P1
+### 2.7 Dispatch Signature Verification — P1 ✅
 
 > Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.3
 
 Ed25519 signing of dispatch payloads for defense-in-depth.
 
-- [ ] Control plane: sign payloads with TweetNaCl Ed25519
-- [ ] Workers: verify signature before execution, reject invalid
-- [ ] Public key distributed during machine registration
-- [ ] Audit: log verification failures
+- [x] Control plane: sign payloads with TweetNaCl Ed25519
+- [x] Workers: verify signature before execution, reject invalid
+- [x] Public key distributed during machine registration
+- [x] Audit: log verification failures
 
 ### 2.8 Mid-Execution Steering — P2
 
@@ -212,10 +212,23 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 - [ ] Task-type affinity rules (e.g., prefer Codex for Python-heavy)
 - [ ] Handoff history API: `GET /api/runs/:id/handoff-history`
 
-### 3.6 Memory Continuity — P3
+### 3.6 Unified Memory Layer — P1
 
-- [ ] Mem0 context shared across agent types within a single run
-- [ ] Memory bridge: extract relevant context from source → inject into target
+> Design doc: [plans/2026-03-10-unified-memory-layer-design.md](plans/2026-03-10-unified-memory-layer-design.md)
+> Impl plan: [plans/2026-03-10-unified-memory-layer-impl-plan.md](plans/2026-03-10-unified-memory-layer-impl-plan.md)
+
+PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolation (global > project > agent > session), pgvector + tsvector + graph traversal fused via Reciprocal Rank Fusion.
+
+- [ ] Shared types: `MemoryFact`, `MemoryEdge`, `MemoryScope`, `InjectionBudget`
+- [ ] SQL migration `0010`: pgvector extension, `memory_facts` (HNSW index), `memory_edges`, `memory_scopes`
+- [ ] Drizzle schema + embedding client (text-embedding-3-small via LiteLLM)
+- [ ] `MemoryStore`: CRUD with scope isolation, dedup, Ebbinghaus decay
+- [ ] `MemorySearch`: hybrid search (vector + BM25 + graph CTE + RRF fusion)
+- [ ] `MemoryInjector` refactor: dual-backend (Mem0 / PG) via `MEMORY_BACKEND` env var
+- [ ] Memory API routes: search, add, list, delete (with scope filtering)
+- [ ] Context budget: maxTokens 2000, maxFacts 15, weighted scoring
+- [ ] Memory MCP server for runtime-side access
+- [ ] Migration path: dual-write → import → cutover
 
 ---
 
@@ -269,16 +282,16 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 
 </details>
 
-### 4.6 Unified Session Browser — P0
+### 4.6 Unified Session Browser — P0 ✅
 
 > Design doc: [plans/2026-03-10-unified-sessions-ui-design.md](plans/2026-03-10-unified-sessions-ui-design.md)
 
 Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
-- [ ] Merge into single `/sessions` route with `Agent` / `Runtime` / `All` type filters
-- [ ] Reuse `SessionsPage` shell, embed runtime-specific actions as type-specific detail UI
-- [ ] Redirect `/runtime-sessions` → `/sessions?type=runtime`
-- [ ] Collapse dashboard/sidebar/command-palette session navigation
+- [x] Merge into single `/sessions` route with `Agent` / `Runtime` / `All` type filters
+- [x] Reuse `SessionsPage` shell, embed runtime-specific actions as type-specific detail UI
+- [x] Redirect `/runtime-sessions` → `/sessions?type=runtime`
+- [x] Collapse dashboard/sidebar/command-palette session navigation
 
 ### 4.7 Fork UX Extensions — P2
 
@@ -379,10 +392,11 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
-| **P0** | Unified Session Browser (Web) | 4.6 | Not started |
+| **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
+| **P1** | Unified Memory Layer | 3.6 | Not started |
 | **P1** | Structured Execution Summary | 2.5 | Not started |
 | **P1** | Workdir Safety Tiers | 2.6 | Not started |
-| **P1** | Dispatch Signature Verification | 2.7 | Not started |
+| **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P2** | AgentOutputStream | 3.3 | Not started |
 | **P2** | Mid-Execution Steering | 2.8 | Not started |
 | **P2** | Codex Operational Parity | 3.4 | Not started |
@@ -391,7 +405,6 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 | **P2** | Fork UX Extensions | 4.7 | Not started |
 | **P3** | Mobile Session Browser | 5.1-5.3 | Not started |
 | **P3** | Execution Environment Registry | 2.9 | Not started |
-| **P3** | Memory Continuity | 3.6 | Not started |
 
 ---
 
@@ -411,25 +424,26 @@ task complete:   execution summary (session resume) → JSONB → summary card
 steer:           chat input → control plane proxy → worker → SDK streamInput → ack
 safety check:    workdir classify (4 tiers) → SSE event → approve/reject/sandbox → execute
 runtime mgmt:    config sync → managed sessions → native import preflight → snapshot fallback
+memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → context injection
 ```
 
 ## Dependencies
 
 | Item | Depends On | Notes |
 |------|-----------|-------|
-| Unified Session Browser (P0) | None | Can start immediately |
+| ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
+| Unified Memory Layer (P1) | None | Can start immediately; replaces Mem0 |
 | Execution Summary (P1) | None | Can start immediately |
 | Workdir Safety (P1) | None | Can start immediately |
-| Dispatch Signing (P1) | None | Can start immediately |
+| ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
 | AgentOutputStream (P2) | None | Foundation for multi-runtime unification |
 | Mid-Execution Steering (P2) | AgentOutputStream | Needs stream interface for response routing |
 | Codex Operational Parity (P2) | None | LiteLLM config + PM2 + sandbox |
 | Automatic Handoff (P2) | AgentOutputStream | Needs unified event stream for trigger detection |
 | Remote Control Spike (P2) | None | Evaluate only — no dependency on implementation |
-| Fork UX Extensions (P2) | None | Extends existing fork system |
-| Mobile Session Browser (P3) | Unified Session Browser | Aligns mobile with web patterns |
+| Fork UX Extensions (P2) | Unified Memory Layer | Memory integration in fork context selection |
+| Mobile Session Browser (P3) | None | Aligns mobile with web patterns |
 | Execution Environment Registry (P3) | AgentOutputStream | Needs adapter interface stable |
-| Memory Continuity (P3) | Automatic Handoff | Needs handoff triggers for context bridge |
 
 ## References
 
@@ -473,5 +487,10 @@ runtime mgmt:    config sync → managed sessions → native import preflight �
 | [runtime-centric-settings-redesign-impl-plan](plans/2026-03-10-runtime-centric-settings-redesign-impl-plan.md) | Delivered | 4.5 |
 | [runtime-settings-config-consistency-design](plans/2026-03-10-runtime-settings-config-consistency-design.md) | Subsumed | 4.5 |
 | [runtime-settings-config-consistency-impl-plan](plans/2026-03-10-runtime-settings-config-consistency-impl-plan.md) | Subsumed | 4.5 |
-| [unified-sessions-ui-design](plans/2026-03-10-unified-sessions-ui-design.md) | Active | 4.6 |
-| [unified-sessions-ui-impl-plan](plans/2026-03-10-unified-sessions-ui-impl-plan.md) | Active | 4.6 |
+| [unified-sessions-ui-design](plans/2026-03-10-unified-sessions-ui-design.md) | Delivered | 4.6 |
+| [unified-sessions-ui-impl-plan](plans/2026-03-10-unified-sessions-ui-impl-plan.md) | Delivered | 4.6 |
+| [remote-control-relay-decision](plans/2026-03-10-remote-control-relay-decision.md) | Delivered | 2.4 |
+| [unified-memory-layer-design](plans/2026-03-10-unified-memory-layer-design.md) | Active | 3.6 |
+| [unified-memory-layer-impl-plan](plans/2026-03-10-unified-memory-layer-impl-plan.md) | Active | 3.6 |
+| [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md) | Planned | — |
+| [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md) | Planned | — |

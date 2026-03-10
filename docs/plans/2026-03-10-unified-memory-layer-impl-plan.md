@@ -8,7 +8,7 @@
 
 **Tech Stack:** PostgreSQL + pgvector, Drizzle ORM, Fastify, OpenAI text-embedding-3-small (via LiteLLM), Vitest, pino
 
-**Spec:** `docs/superpowers/specs/2026-03-10-unified-memory-layer-design.md`
+**Spec:** `docs/plans/2026-03-10-unified-memory-layer-design.md`
 
 ---
 
@@ -2442,7 +2442,7 @@ The roadmap is organized by product layers. Add a "Unified Memory" section under
 Add to the Active Priorities table:
 
 ```markdown
-| P1 | Unified Memory Layer | Replace Mem0 with PG-native hybrid search (vector + BM25 + graph) | `docs/superpowers/specs/2026-03-10-unified-memory-layer-design.md` |
+| P1 | Unified Memory Layer | Replace Mem0 with PG-native hybrid search (vector + BM25 + graph) | `docs/plans/2026-03-10-unified-memory-layer-design.md` |
 ```
 
 Add a new section in the appropriate layer:
@@ -2472,4 +2472,4 @@ git commit -m "docs: add unified memory layer to roadmap"
 
 ---
 
-Plan complete and saved to `docs/superpowers/plans/2026-03-10-unified-memory-layer-impl-plan.md`. Ready to execute?
+Plan complete and saved to `docs/plans/2026-03-10-unified-memory-layer-impl-plan.md`. Ready to execute?
