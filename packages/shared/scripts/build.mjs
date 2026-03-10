@@ -1,14 +1,7 @@
-import {
-  copyFileSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageDir = resolve(__dirname, '..');
@@ -24,11 +17,18 @@ try {
 
   const result = spawnSync(
     'tsc',
-    ['--project', 'tsconfig.json', '--outDir', tempDistDir, '--tsBuildInfoFile', tempTsBuildInfoFile],
+    [
+      '--project',
+      'tsconfig.json',
+      '--outDir',
+      tempDistDir,
+      '--tsBuildInfoFile',
+      tempTsBuildInfoFile,
+    ],
     {
-    cwd: packageDir,
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
+      cwd: packageDir,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
     },
   );
 
@@ -83,12 +83,7 @@ function pruneStaleLock(lockPath) {
 }
 
 function isLockHeldError(error) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'EEXIST'
-  );
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST';
 }
 
 function sleep(ms) {
