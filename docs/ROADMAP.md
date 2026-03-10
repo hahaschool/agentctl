@@ -107,6 +107,9 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - [ ] Re-evaluate only if Anthropic exposes programmatic relay events/session APIs
 - [ ] Optional later slice: add Remote Control as a narrow manual takeover flow without replacing loop or scheduler backends
 
+> Manual takeover design: [plans/2026-03-11-manual-remote-takeover-design.md](plans/2026-03-11-manual-remote-takeover-design.md)
+> Impl plan: [plans/2026-03-11-manual-remote-takeover-impl-plan.md](plans/2026-03-11-manual-remote-takeover-impl-plan.md)
+
 ### 2.5 Structured Execution Summary — P1
 
 > Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.1
@@ -120,17 +123,17 @@ Auto-generate structured summary at task completion via session resume.
 - [ ] API: `GET /api/runs/:id/summary`
 - [ ] Summary card in web/mobile session view
 
-### 2.6 Workdir Safety Tiers — P1
+### 2.6 Workdir Safety Tiers — P1 ✅
 
 > Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.2
 
 Pre-execution safety: safe (git clean) → guarded (dirty) → risky (non-git) → unsafe (parallel).
 
-- [ ] `checkWorkdirSafety()` in `agent-worker/src/runtime/workdir-safety.ts`
-- [ ] Gate in `AgentInstance.start()` before `attemptSdkRun()`
-- [ ] SSE events: `safety_warning`, `safety_approval_needed`, `safety_blocked`
-- [ ] Sandbox mode: copy-to-temp → execute → copy-back
-- [ ] API: `POST /api/agents/:id/safety-decision` (approve/reject/sandbox)
+- [x] `checkWorkdirSafety()` in `agent-worker/src/runtime/workdir-safety.ts`
+- [x] Gate in `AgentInstance.start()` before `attemptSdkRun()`
+- [x] SSE events: `safety_warning`, `safety_approval_needed`, `safety_blocked`
+- [x] Sandbox mode: copy-to-temp → execute → copy-back
+- [x] API: `POST /api/agents/:id/safety-decision` (approve/reject/sandbox)
 
 ### 2.7 Dispatch Signature Verification — P1 ✅
 
@@ -158,6 +161,9 @@ Inject guidance into running sessions via SDK `streamInput()`.
 - [ ] Chat-like input in live session view (web/mobile)
 
 ### 2.9 Execution Environment Registry — P3
+
+> Design doc: [plans/2026-03-11-execution-environment-registry-design.md](plans/2026-03-11-execution-environment-registry-design.md)
+> Impl plan: [plans/2026-03-11-execution-environment-registry-impl-plan.md](plans/2026-03-11-execution-environment-registry-impl-plan.md)
 
 Orthogonal WHERE (local/Docker/SSH) vs WHAT (Claude/Codex) abstraction.
 
@@ -211,11 +217,16 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 > explicit LiteLLM routing/failover for Codex provider traffic and fully-evidenced
 > end-to-end sandbox parity/docs.
 
-- [ ] LiteLLM config: Codex model routing with OpenAI Direct → Azure OpenAI failover
+- [x] LiteLLM config: Codex model routing with OpenAI Direct → Azure OpenAI failover
 - [x] PM2 ecosystem config for Codex-capable worker processes
+- [x] Azure OpenAI credential detection for Codex authentication
+- [x] Config renderer: `modelProvider` and `reasoningEffort` in Codex TOML
 - [ ] Sandbox constraints end-to-end: config rendering and network-policy helpers exist, but full bubblewrap/Seatbelt parity is not yet evidenced here
 
 ### 3.5 Automatic Handoff Triggers — P2
+
+> Design doc: [plans/2026-03-11-automatic-handoff-triggers-design.md](plans/2026-03-11-automatic-handoff-triggers-design.md)
+> Impl plan: [plans/2026-03-11-automatic-handoff-triggers-impl-plan.md](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md)
 
 - [ ] Rate limit hit → failover to other agent type
 - [ ] Cost threshold → switch to cheaper model/provider
@@ -422,7 +433,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P1** | Unified Memory Layer | 3.6 | Not started |
 | **P1** | Structured Execution Summary | 2.5 | Not started |
-| **P1** | Workdir Safety Tiers | 2.6 | Not started |
+| **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P2** | AgentOutputStream | 3.3 | Not started |
 | **P2** | Mid-Execution Steering | 2.8 | Not started |
@@ -461,7 +472,7 @@ memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+gra
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
 | Unified Memory Layer (P1) | None | Can start immediately; replaces Mem0 |
 | Execution Summary (P1) | None | Can start immediately |
-| Workdir Safety (P1) | None | Can start immediately |
+| ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
 | AgentOutputStream (P2) | None | Foundation for multi-runtime unification |
 | Mid-Execution Steering (P2) | AgentOutputStream | Needs stream interface for response routing |
@@ -521,3 +532,9 @@ memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+gra
 | [unified-memory-layer-impl-plan](plans/2026-03-10-unified-memory-layer-impl-plan.md) | Active | 3.6 |
 | [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md) | Planned | — |
 | [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md) | Planned | — |
+| [automatic-handoff-triggers-design](plans/2026-03-11-automatic-handoff-triggers-design.md) | Planned | 3.5 |
+| [automatic-handoff-triggers-impl-plan](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md) | Planned | 3.5 |
+| [execution-environment-registry-design](plans/2026-03-11-execution-environment-registry-design.md) | Planned | 2.9 |
+| [execution-environment-registry-impl-plan](plans/2026-03-11-execution-environment-registry-impl-plan.md) | Planned | 2.9 |
+| [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Planned | 2.4 |
+| [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Planned | 2.4 |
