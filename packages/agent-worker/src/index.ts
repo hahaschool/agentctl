@@ -245,20 +245,21 @@ async function main(): Promise<void> {
     logger: logger.child({ component: 'cli-session-manager' }),
   });
 
-  const server = await createWorkerServer({
-    logger,
-    agentPool: pool,
-    machineId: MACHINE_ID,
-    controlPlaneUrl: CONTROL_PLANE_URL,
-    sessionManager,
-  });
-
   const healthReporter = new HealthReporter({
     machineId: MACHINE_ID,
     controlPlaneUrl: CONTROL_PLANE_URL,
     intervalMs: HEALTH_REPORTER_INTERVAL_MS,
     logger,
     agentPool: pool,
+  });
+
+  const server = await createWorkerServer({
+    logger,
+    agentPool: pool,
+    machineId: MACHINE_ID,
+    controlPlaneUrl: CONTROL_PLANE_URL,
+    sessionManager,
+    getDispatchVerificationConfig: () => healthReporter.getDispatchVerificationConfig(),
   });
 
   await healthReporter.register();

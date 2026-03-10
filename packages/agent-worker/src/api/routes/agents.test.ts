@@ -1,9 +1,13 @@
+import {
+  generateDispatchSigningKeyPair,
+  signDispatchPayload,
+} from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentPool } from '../../runtime/agent-pool.js';
-import { createSilentLogger } from '../../test-helpers.js';
+import { createMockLogger, createSilentLogger } from '../../test-helpers.js';
 import { createWorkerServer } from '../server.js';
 
 // Mock the SDK runner so agents fall back to stub simulation immediately
@@ -145,6 +149,161 @@ describe('Agent CRUD routes', () => {
       const body = response.json();
       expect(body.ok).toBe(true);
       expect(body.agentId).toBe('agent-exact');
+    });
+
+    it('should reject an unsigned dispatch once a control-plane public key is provisioned', async () => {
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      const securedApp = await createWorkerServer({
+        logger,
+        agentPool: pool,
+        machineId: MACHINE_ID,
+        getDispatchVerificationConfig: () => ({
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        }),
+      });
+
+      const response = await securedApp.inject({
+        method: 'POST',
+        url: '/api/agents/agent-secure/start',
+        payload: { prompt: 'Signed dispatch required' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({
+        code: 'DISPATCH_SIGNATURE_REQUIRED',
+      });
+
+      await securedApp.close();
+    });
+
+    it('should reject a dispatch with an invalid signature', async () => {
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      const securedApp = await createWorkerServer({
+        logger,
+        agentPool: pool,
+        machineId: MACHINE_ID,
+        getDispatchVerificationConfig: () => ({
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        }),
+      });
+
+      const response = await securedApp.inject({
+        method: 'POST',
+        url: '/api/agents/agent-secure-invalid/start',
+        payload: {
+          prompt: 'Signed dispatch required',
+          dispatchSignature: {
+            version: 1,
+            algorithm: 'ed25519',
+            agentId: 'agent-secure-invalid',
+            machineId: MACHINE_ID,
+            issuedAt: '2026-03-10T10:00:00.000Z',
+            nonce: 'nonce-123',
+            signature: 'totally-invalid-signature',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({
+        code: 'INVALID_DISPATCH_SIGNATURE',
+      });
+
+      await securedApp.close();
+    });
+
+    it('should accept a valid signed dispatch for this agent and machine', async () => {
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      const securedApp = await createWorkerServer({
+        logger,
+        agentPool: pool,
+        machineId: MACHINE_ID,
+        getDispatchVerificationConfig: () => ({
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        }),
+      });
+
+      const payload = {
+        prompt: 'Start the signed agent',
+        runId: 'run-123',
+        projectPath: '/repo/project',
+        controlPlaneUrl: 'https://control.example.com',
+        resumeSession: null,
+      };
+
+      const response = await securedApp.inject({
+        method: 'POST',
+        url: '/api/agents/agent-secure-valid/start',
+        payload: {
+          ...payload,
+          dispatchSignature: signDispatchPayload(payload, {
+            agentId: 'agent-secure-valid',
+            machineId: MACHINE_ID,
+            secretKey: signingKeyPair.secretKey,
+            issuedAt: '2026-03-10T10:00:00.000Z',
+            nonce: 'nonce-123',
+          }),
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        ok: true,
+        agentId: 'agent-secure-valid',
+      });
+
+      await securedApp.close();
+    });
+
+    it('logs verification failures for invalid signatures', async () => {
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      const mockLogger = createMockLogger();
+      const securedPool = new AgentPool({ logger: mockLogger, maxConcurrent: 5 });
+      const securedApp = await createWorkerServer({
+        logger: mockLogger,
+        agentPool: securedPool,
+        machineId: MACHINE_ID,
+        getDispatchVerificationConfig: () => ({
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        }),
+      });
+
+      const response = await securedApp.inject({
+        method: 'POST',
+        url: '/api/agents/agent-secure-log/start',
+        payload: {
+          prompt: 'Signed dispatch required',
+          dispatchSignature: {
+            version: 1,
+            algorithm: 'ed25519',
+            agentId: 'agent-secure-log',
+            machineId: MACHINE_ID,
+            issuedAt: '2026-03-10T10:00:00.000Z',
+            nonce: 'nonce-123',
+            signature: 'totally-invalid-signature',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: 'agent-secure-log',
+          machineId: MACHINE_ID,
+        }),
+        'Rejected dispatch with invalid signature',
+      );
+
+      await securedPool.stopAll();
+      await securedApp.close();
     });
   });
 

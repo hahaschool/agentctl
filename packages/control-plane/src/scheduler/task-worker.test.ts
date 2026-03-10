@@ -1,4 +1,8 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import {
+  ControlPlaneError,
+  generateDispatchSigningKeyPair,
+  verifyDispatchPayloadSignature,
+} from '@agentctl/shared';
 import type { Job } from 'bullmq';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -249,6 +253,38 @@ describe('createTaskWorker()', () => {
       const fetchCall = vi.mocked(fetch).mock.calls[0];
       expect(fetchCall[0]).toContain('100.64.0.42:9000');
       expect(fetchCall[0]).toContain('/api/agents/agent-abc/start');
+    });
+
+    it('signs the dispatch payload before sending it to the worker', async () => {
+      const registry = createMockRegistry();
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      mockFetchSuccess();
+
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+        registry,
+        dispatchSigningKeyPair: signingKeyPair,
+      });
+
+      const processor = getProcessor();
+      const job = makeJob();
+
+      await processor(job);
+
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestInit = fetchCall?.[1] as { body: string };
+      const requestBody = JSON.parse(requestInit.body) as Record<string, unknown>;
+      const { dispatchSignature, ...signedPayload } = requestBody;
+
+      expect(dispatchSignature).toBeDefined();
+      expect(
+        verifyDispatchPayloadSignature(signedPayload, dispatchSignature, {
+          publicKey: signingKeyPair.publicKey,
+          agentId: 'agent-abc',
+          machineId: 'machine-xyz',
+        }),
+      ).toBe(true);
     });
   });
 

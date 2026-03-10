@@ -1,6 +1,7 @@
 import type {
   AgentRuntime,
   AgentStatus,
+  DispatchVerificationConfig,
   HeartbeatRequest,
   RegisterWorkerRequest,
   SignalAgentRequest,
@@ -25,11 +26,18 @@ export type AgentRoutesOptions = {
   registry?: MachineRegistryLike;
   dbRegistry?: DbAgentRegistry;
   memoryInjector?: MemoryInjector | null;
+  dispatchVerificationConfig?: DispatchVerificationConfig | null;
 };
 
 export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, opts) => {
   const registry = opts.registry ?? new AgentRegistry();
-  const { taskQueue, repeatableJobs, dbRegistry, memoryInjector = null } = opts;
+  const {
+    taskQueue,
+    repeatableJobs,
+    dbRegistry,
+    memoryInjector = null,
+    dispatchVerificationConfig = null,
+  } = opts;
 
   // ---------------------------------------------------------------------------
   // Machine registration & heartbeat
@@ -61,7 +69,11 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         await registry.registerMachine(body.machineId, body.hostname);
       }
 
-      return { ok: true, machineId: body.machineId };
+      return {
+        ok: true,
+        machineId: body.machineId,
+        ...(dispatchVerificationConfig ? { dispatchVerification: dispatchVerificationConfig } : {}),
+      };
     },
   );
 
@@ -75,7 +87,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         await registry.heartbeat(request.params.id);
       }
 
-      return { ok: true };
+      return {
+        ok: true,
+        ...(dispatchVerificationConfig ? { dispatchVerification: dispatchVerificationConfig } : {}),
+      };
     },
   );
 

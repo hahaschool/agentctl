@@ -2,7 +2,14 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { EnvVar } from '@agentctl/shared';
-import { isNumericString, isValidLogLevel, validateEnv } from '@agentctl/shared';
+import {
+  createDispatchVerificationConfig,
+  dispatchSigningKeyPairFromSecretKey,
+  generateDispatchSigningKeyPair,
+  isNumericString,
+  isValidLogLevel,
+  validateEnv,
+} from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import IORedis from 'ioredis';
 
@@ -97,6 +104,11 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
     default: '1 minute',
     description: 'Rate limit time window (e.g., "1 minute", "30 seconds")',
   },
+  {
+    name: 'DISPATCH_SIGNING_SECRET_KEY',
+    description:
+      'Optional base64 Ed25519 secret key for dispatch signing (omit to generate an ephemeral keypair at startup)',
+  },
 ];
 
 const logger = createLogger('control-plane');
@@ -113,6 +125,10 @@ const WORKER_CONCURRENCY = Number(env.WORKER_CONCURRENCY) || 5;
 const REMOTE_WORKER_PORT = Number(env.WORKER_PORT) || 9000;
 const IS_PRODUCTION = env.NODE_ENV === 'production';
 const CORS_ORIGINS = env.CORS_ORIGINS || '';
+const dispatchSigningKeyPair = env.DISPATCH_SIGNING_SECRET_KEY
+  ? dispatchSigningKeyPairFromSecretKey(env.DISPATCH_SIGNING_SECRET_KEY as string)
+  : generateDispatchSigningKeyPair();
+const dispatchVerificationConfig = createDispatchVerificationConfig(dispatchSigningKeyPair.publicKey);
 
 type DependencyHealthDeps = {
   db?: Database;
@@ -331,6 +347,7 @@ async function main(): Promise<void> {
     controlPlaneUrl: CONTROL_PLANE_URL,
     circuitBreaker,
     db: db ?? null,
+    dispatchSigningKeyPair,
   });
   const repeatableJobs = createRepeatableJobManager(
     taskQueue,
@@ -351,6 +368,7 @@ async function main(): Promise<void> {
     workerPort: REMOTE_WORKER_PORT,
     isProduction: IS_PRODUCTION,
     corsOrigins: CORS_ORIGINS || undefined,
+    dispatchVerificationConfig,
   });
 
   // Run dependency health checks before starting the server.

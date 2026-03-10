@@ -5,6 +5,21 @@ export {
   encryptBox,
   encryptSecretBox,
 } from './encryption.js';
+export {
+  createDispatchVerificationConfig,
+  DISPATCH_SIGNATURE_ALGORITHM,
+  DISPATCH_SIGNATURE_VERSION,
+  dispatchSigningKeyPairFromSecretKey,
+  generateDispatchSigningKeyPair,
+  isDispatchVerificationConfig,
+  signDispatchPayload,
+  verifyDispatchPayloadSignature,
+} from './dispatch-signing.js';
+export type {
+  DispatchSignature,
+  DispatchSigningKeyPair,
+  DispatchVerificationConfig,
+} from './dispatch-signing.js';
 export type { KeyPair } from './keypair.js';
 export {
   decodeKey,

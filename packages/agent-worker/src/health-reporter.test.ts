@@ -1,3 +1,4 @@
+import { generateDispatchSigningKeyPair } from '@agentctl/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HealthReporter } from './health-reporter.js';
 import type { AgentPool } from './runtime/agent-pool.js';
@@ -186,6 +187,27 @@ describe('HealthReporter', () => {
       const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
       expect(body.tailscaleIp).toBe('127.0.0.1');
     });
+
+    it('stores the control-plane dispatch verification config returned by register', async () => {
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      mockFetchOk({
+        ok: true,
+        dispatchVerification: {
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        },
+      });
+      const reporter = makeReporter();
+
+      await reporter.register();
+
+      expect(reporter.getDispatchVerificationConfig()).toEqual({
+        version: 1,
+        algorithm: 'ed25519',
+        publicKey: signingKeyPair.publicKey,
+      });
+    });
   });
 
   // ── start() / heartbeat timer ───────────────────────────────────────
@@ -260,6 +282,59 @@ describe('HealthReporter', () => {
         { agentId: 'agent-1', sessionId: 'sess-1' },
         { agentId: 'agent-3', sessionId: 'sess-3' },
       ]);
+
+      reporter.stop();
+    });
+
+    it('heartbeat refreshes the dispatch verification config from the control plane response', async () => {
+      const firstKeyPair = generateDispatchSigningKeyPair();
+      const secondKeyPair = generateDispatchSigningKeyPair();
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              dispatchVerification: {
+                version: 1,
+                algorithm: 'ed25519',
+                publicKey: firstKeyPair.publicKey,
+              },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              dispatchVerification: {
+                version: 1,
+                algorithm: 'ed25519',
+                publicKey: secondKeyPair.publicKey,
+              },
+            }),
+        });
+      vi.stubGlobal('fetch', mockFetch);
+      const reporter = makeReporter({ intervalMs: 1_000 });
+
+      await reporter.register();
+      expect(reporter.getDispatchVerificationConfig()).toEqual({
+        version: 1,
+        algorithm: 'ed25519',
+        publicKey: firstKeyPair.publicKey,
+      });
+
+      reporter.start();
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(reporter.getDispatchVerificationConfig()).toEqual({
+        version: 1,
+        algorithm: 'ed25519',
+        publicKey: secondKeyPair.publicKey,
+      });
 
       reporter.stop();
     });
