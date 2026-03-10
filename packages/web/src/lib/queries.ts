@@ -57,12 +57,12 @@ export const queryKeys = {
   metrics: ['metrics'] as const,
   accounts: ['accounts'] as const,
   accountDefaults: ['account-defaults'] as const,
-  projectAccounts: ['project-accounts'] as const,
   runtimeConfigDefaults: ['runtime-config', 'defaults'] as const,
   runtimeConfigDrift: (machineId?: string) =>
     machineId
       ? (['runtime-config', 'drift', machineId] as const)
       : (['runtime-config', 'drift'] as const),
+  projectAccounts: ['project-accounts'] as const,
   routerModels: ['router', 'models'] as const,
   routerModelsInfo: ['router', 'models-info'] as const,
   audit: (params?: {
@@ -247,18 +247,11 @@ export function accountDefaultsQuery() {
   });
 }
 
-export function projectAccountsQuery() {
-  return queryOptions({
-    queryKey: queryKeys.projectAccounts,
-    queryFn: api.listProjectAccounts,
-  });
-}
-
 export function runtimeConfigDefaultsQuery() {
   return queryOptions({
     queryKey: queryKeys.runtimeConfigDefaults,
     queryFn: api.getRuntimeConfigDefaults,
-    staleTime: 10_000,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -269,6 +262,13 @@ export function runtimeConfigDriftQuery(machineId?: string) {
     queryFn: () => api.getRuntimeConfigDrift(machineId),
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
+  });
+}
+
+export function projectAccountsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.projectAccounts,
+    queryFn: api.listProjectAccounts,
   });
 }
 

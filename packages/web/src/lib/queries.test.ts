@@ -156,10 +156,6 @@ describe('queryKeys', () => {
     expect(queryKeys.accountDefaults).toEqual(['account-defaults']);
   });
 
-  it('projectAccounts key is correct', () => {
-    expect(queryKeys.projectAccounts).toEqual(['project-accounts']);
-  });
-
   it('runtimeConfigDefaults key is correct', () => {
     expect(queryKeys.runtimeConfigDefaults).toEqual(['runtime-config', 'defaults']);
   });
@@ -174,6 +170,10 @@ describe('queryKeys', () => {
       'drift',
       'machine-1',
     ]);
+  });
+
+  it('projectAccounts key is correct', () => {
+    expect(queryKeys.projectAccounts).toEqual(['project-accounts']);
   });
 
   it('routerModels key is correct', () => {
@@ -237,10 +237,20 @@ describe('runtimeConfigDefaultsQuery', () => {
     const options = runtimeConfigDefaultsQuery();
     expect(options.queryFn).toBeDefined();
   });
+
+  it('has refetchOnWindowFocus enabled', () => {
+    const options = runtimeConfigDefaultsQuery();
+    expect(options.refetchOnWindowFocus).toBe(true);
+  });
 });
 
 describe('runtimeConfigDriftQuery', () => {
   it('returns queryOptions with runtime config drift queryKey', () => {
+    const options = runtimeConfigDriftQuery();
+    expect(options.queryKey).toEqual(queryKeys.runtimeConfigDrift());
+  });
+
+  it('includes machineId when provided', () => {
     const options = runtimeConfigDriftQuery('machine-1');
     expect(options.queryKey).toEqual(queryKeys.runtimeConfigDrift('machine-1'));
   });
@@ -248,6 +258,11 @@ describe('runtimeConfigDriftQuery', () => {
   it('has queryFn property', () => {
     const options = runtimeConfigDriftQuery();
     expect(options.queryFn).toBeDefined();
+  });
+
+  it('has refetchOnWindowFocus enabled', () => {
+    const options = runtimeConfigDriftQuery();
+    expect(options.refetchOnWindowFocus).toBe(true);
   });
 });
 

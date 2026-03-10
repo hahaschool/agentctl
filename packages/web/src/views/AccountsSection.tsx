@@ -32,6 +32,13 @@ import {
   useUpdateAccount,
 } from '@/lib/queries';
 import { cn } from '@/lib/utils';
+import {
+  inferAccountCustody,
+  inferAccountRuntimeCompatibility,
+  inferAccountSource,
+  inferAccountStatus,
+  RUNTIME_LABELS,
+} from './settings/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -39,6 +46,7 @@ import { cn } from '@/lib/utils';
 
 const PROVIDERS = [
   { value: 'anthropic_api', label: 'Anthropic API' },
+  { value: 'openai_api', label: 'OpenAI API' },
   { value: 'claude_max', label: 'Claude Max (Pro)' },
   { value: 'claude_team', label: 'Claude Team' },
   { value: 'bedrock', label: 'AWS Bedrock' },
@@ -47,6 +55,7 @@ const PROVIDERS = [
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic_api: 'Anthropic API',
+  openai_api: 'OpenAI API',
   claude_max: 'Claude Max',
   claude_team: 'Claude Team',
   bedrock: 'AWS Bedrock',
@@ -69,6 +78,13 @@ function validateCredentialFormat(provider: string, value: string): string | nul
   if (provider === 'anthropic_api') {
     if (!value.startsWith('sk-ant-')) {
       return 'Anthropic API keys typically start with "sk-ant-". Double-check your key.';
+    }
+    return null;
+  }
+
+  if (provider === 'openai_api') {
+    if (!value.startsWith('sk-')) {
+      return 'OpenAI API keys typically start with "sk-". Double-check your key.';
     }
     return null;
   }
@@ -130,6 +146,14 @@ function getCredentialConfig(provider: string): CredentialFieldConfig {
       label: 'Service Account Key',
       placeholder: 'Paste service account JSON or path',
       hint: 'Paste the full service account JSON key, or set GOOGLE_APPLICATION_CREDENTIALS env var',
+      inputType: 'password',
+    };
+  }
+  if (provider === 'openai_api') {
+    return {
+      label: 'API Key',
+      placeholder: 'sk-proj-...',
+      hint: 'OpenAI API key used for Codex-compatible managed runtimes.',
       inputType: 'password',
     };
   }
@@ -277,10 +301,21 @@ export function AccountsSection(): React.JSX.Element {
   return (
     <div>
       <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/30">
-        <h3 className="text-sm font-semibold">Accounts</h3>
-        <Button size="sm" variant="default" onClick={() => setShowAdd(true)}>
-          Add Account
-        </Button>
+        <div>
+          <h3 className="text-sm font-semibold">Credential inventory</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Managed credentials live in the control plane. Worker-local discovered credentials will
+            appear here once reported by runtime inventory.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled>
+            Adopt local
+          </Button>
+          <Button size="sm" variant="default" onClick={() => setShowAdd(true)}>
+            Add managed credential
+          </Button>
+        </div>
       </div>
 
       {/* Account list */}
@@ -291,12 +326,13 @@ export function AccountsSection(): React.JSX.Element {
         </div>
       ) : accounts.length === 0 ? (
         <div className="text-[13px] text-muted-foreground py-6 text-center">
-          No accounts configured. Add one to get started.
+          No managed credentials configured yet. Add one to route Claude Code or Codex through the
+          control plane.
         </div>
       ) : (
         <div className="space-y-2">
           {accounts.map((account) => (
-            <div
+            <article
               key={account.id}
               className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 p-3 text-[13px] transition-colors hover:bg-muted/50"
             >
@@ -309,6 +345,15 @@ export function AccountsSection(): React.JSX.Element {
                   >
                     {PROVIDER_LABELS[account.provider] ?? account.provider}
                   </Badge>
+                  {inferAccountRuntimeCompatibility(account).map((runtime) => (
+                    <Badge
+                      key={`${account.id}-${runtime}`}
+                      variant="outline"
+                      className="text-[10px] border-border/40 bg-background/70"
+                    >
+                      {RUNTIME_LABELS[runtime]}
+                    </Badge>
+                  ))}
                   {account.isActive ? (
                     <Badge
                       variant="outline"
@@ -324,10 +369,19 @@ export function AccountsSection(): React.JSX.Element {
                       Inactive
                     </Badge>
                   )}
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] border-border/40 bg-background/70"
+                  >
+                    {inferAccountSource(account).replaceAll('_', ' ')}
+                  </Badge>
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                   <span className="font-mono">{account.credentialMasked}</span>
                   <span>Priority: {account.priority}</span>
+                  <span>Custody: {inferAccountCustody(account).replaceAll('_', ' ')}</span>
+                  <span>Status: {inferAccountStatus(account).replaceAll('_', ' ')}</span>
+                  {account.originMachineId && <span>Origin: {account.originMachineId}</span>}
                   {(() => {
                     const result = testResult[account.id];
                     if (result == null) return null;
@@ -370,16 +424,33 @@ export function AccountsSection(): React.JSX.Element {
                   Delete
                 </Button>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       )}
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-dashed border-border/60 bg-background/60 p-4">
+          <div className="text-sm font-medium">Adopt discovered credential</div>
+          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+            Import a worker-local credential into encrypted control-plane custody once worker
+            discovery starts reporting local runtime access.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-dashed border-border/60 bg-background/60 p-4">
+          <div className="text-sm font-medium">Reference local credential</div>
+          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+            Keep the secret on the worker and bind it to a runtime profile without taking over its
+            custody.
+          </p>
+        </div>
+      </div>
 
       {/* Add Account Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Account</DialogTitle>
+            <DialogTitle>Add Managed Credential</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -492,7 +563,7 @@ export function AccountsSection(): React.JSX.Element {
                 !name || !provider || !credential || createAccount.isPending || oauthLoading
               }
             >
-              {createAccount.isPending ? 'Creating...' : 'Create Account'}
+              {createAccount.isPending ? 'Creating...' : 'Create Managed Credential'}
             </Button>
           </DialogFooter>
         </DialogContent>

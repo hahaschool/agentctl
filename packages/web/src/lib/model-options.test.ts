@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_TYPES,
   ALL_MODELS,
+  CODEX_MODELS,
   DEFAULT_MODEL,
+  DEFAULT_RUNTIME_MODELS,
   FORK_AGENT_TYPES,
   LATEST_MODELS,
   MODEL_OPTIONS_WITH_DEFAULT,
   RESUME_MODEL_OPTIONS,
+  RUNTIME_MODEL_OPTIONS,
 } from './model-options';
 
 // ---------------------------------------------------------------------------
@@ -180,5 +183,38 @@ describe('DEFAULT_MODEL', () => {
 
   it('equals claude-sonnet-4-6', () => {
     expect(DEFAULT_MODEL).toBe('claude-sonnet-4-6');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Runtime-specific models
+// ---------------------------------------------------------------------------
+
+describe('RUNTIME_MODEL_OPTIONS', () => {
+  it('includes runtime-specific groups for claude-code and codex', () => {
+    expect(RUNTIME_MODEL_OPTIONS['claude-code']).toBeDefined();
+    expect(RUNTIME_MODEL_OPTIONS.codex).toBeDefined();
+  });
+
+  it('includes GPT-5 Codex in the codex runtime group', () => {
+    const values = RUNTIME_MODEL_OPTIONS.codex.map((o) => o.value);
+    expect(values).toContain('gpt-5-codex');
+  });
+});
+
+describe('CODEX_MODELS', () => {
+  it('is non-empty and contains GPT-5 Codex', () => {
+    expect(CODEX_MODELS.length).toBeGreaterThan(0);
+    expect(CODEX_MODELS.map((o) => o.value)).toContain('gpt-5-codex');
+  });
+});
+
+describe('DEFAULT_RUNTIME_MODELS', () => {
+  it('uses claude-sonnet-4-6 for claude-code', () => {
+    expect(DEFAULT_RUNTIME_MODELS['claude-code']).toBe('claude-sonnet-4-6');
+  });
+
+  it('uses gpt-5-codex for codex', () => {
+    expect(DEFAULT_RUNTIME_MODELS.codex).toBe('gpt-5-codex');
   });
 });

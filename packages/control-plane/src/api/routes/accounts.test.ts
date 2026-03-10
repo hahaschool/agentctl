@@ -306,6 +306,29 @@ describe('Account routes — /api/settings/accounts', () => {
       const body = response.json();
       expect(body.error).toBe('INVALID_BODY');
     });
+
+    it('accepts openai_api as a valid provider', async () => {
+      const inserted = makeAccount({
+        provider: 'openai_api',
+        name: 'OpenAI API',
+        credential: 'mock-encrypted',
+        credentialIv: 'mock-iv',
+      });
+      mockDb.setRows([inserted]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts',
+        payload: {
+          name: 'OpenAI API',
+          provider: 'openai_api',
+          credential: 'sk-proj-test-openai-key',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().provider).toBe('openai_api');
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -630,6 +653,28 @@ describe('Account routes — /api/settings/accounts', () => {
       const body = response.json();
       expect(body.ok).toBe(false);
       expect(body.error).toMatch(/client_email and private_key/);
+    });
+
+    it('openai_api: returns ok when OpenAI responds successfully', async () => {
+      const account = makeAccount({ provider: 'openai_api' });
+      mockDb.setRows([account]);
+
+      vi.mocked(decryptCredential).mockReturnValueOnce('sk-proj-openai-key');
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: 'gpt-5-codex' }] }),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-001/test',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().ok).toBe(true);
+
+      globalThis.fetch = originalFetch;
     });
   });
 });

@@ -327,6 +327,32 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
         }
       }
 
+      case 'openai_api': {
+        try {
+          const start = Date.now();
+          const res = await fetch('https://api.openai.com/v1/models', {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${credential}`,
+            },
+            signal: AbortSignal.timeout(15_000),
+          });
+          const latencyMs = Date.now() - start;
+          if (res.ok) {
+            return reply.send({ ok: true, latencyMs });
+          }
+          return reply.send({
+            ok: false,
+            error: await extractErrorMessage(res),
+          });
+        } catch (err) {
+          return reply.code(500).send({
+            error: 'ACCOUNT_TEST_ERROR',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
       case 'claude_max':
       case 'claude_team': {
         // Session tokens cannot be API-tested — validate format only

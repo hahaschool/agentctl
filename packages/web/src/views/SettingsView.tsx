@@ -15,34 +15,42 @@ import { PreferencesSection } from './PreferencesSection';
 import { ProjectAccountsSection } from './ProjectAccountsSection';
 import { RuntimeAccessSection } from './RuntimeAccessSection';
 import { RuntimeConsistencySection } from './RuntimeConsistencySection';
+import { RuntimeProfilesSection } from './settings/RuntimeProfilesSection';
+import { SettingsSection, SettingsShell } from './settings/SettingsShell';
+import { WorkersSyncSection } from './settings/WorkersSyncSection';
 
-// ---------------------------------------------------------------------------
-// Group wrapper — visual grouping without heavy card borders
-// ---------------------------------------------------------------------------
-
-function SettingsGroup({
-  id,
-  title,
-  description,
-  children,
-}: {
-  id?: string;
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <section id={id} className="space-y-6 scroll-mt-6">
-      <div>
-        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-        {description && <p className="text-[13px] text-muted-foreground mt-1">{description}</p>}
-      </div>
-      <div className="rounded-lg border border-border/50 bg-card/50 p-5 space-y-6 transition-colors hover:border-border">
-        {children}
-      </div>
-    </section>
-  );
-}
+const SETTINGS_NAV = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    detail: 'Control plane health, router status, and UI entry points.',
+  },
+  {
+    id: 'runtime-profiles',
+    label: 'Runtime Profiles',
+    detail: 'Per-runtime models, access strategy, worker scope, and switching policy.',
+  },
+  {
+    id: 'credentials-access',
+    label: 'Credentials & Access',
+    detail: 'Managed credentials plus future worker-discovered local access records.',
+  },
+  {
+    id: 'workers-sync',
+    label: 'Workers & Sync',
+    detail: 'Runtime installation, authentication, drift, and mirrored access state.',
+  },
+  {
+    id: 'routing-autonomy',
+    label: 'Routing & Autonomy',
+    detail: 'Fallback credential policy and the runtime resolution chain.',
+  },
+  {
+    id: 'appearance-preferences',
+    label: 'Appearance & Preferences',
+    detail: 'Theme, polling cadence, and operator-facing control plane preferences.',
+  },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Settings view
@@ -50,56 +58,113 @@ function SettingsGroup({
 
 export function SettingsView(): React.JSX.Element {
   return (
-    <div className="p-4 md:p-6 max-w-3xl animate-page-enter">
-      <div className="mb-8">
-        <h1 className="text-[22px] font-semibold tracking-tight">Settings</h1>
-        <p className="text-[13px] text-muted-foreground mt-1">
-          Configure accounts, preferences, and system connections.
-        </p>
-      </div>
-
-      <div className="space-y-10">
-        {/* --- API & Accounts group --- */}
-        <SettingsGroup
-          id="accounts"
-          title="Cloud API Accounts"
-          description="Manage provider credentials used for routed API requests and project-level account overrides."
-        >
-          <AccountsSection />
-          <FailoverSection />
-          <ProjectAccountsSection />
-        </SettingsGroup>
-
-        <hr className="border-border/30" />
-
-        <SettingsGroup
-          id="runtime-management"
-          title="Claude & Codex"
-          description="Manage machine-local Claude Code and Codex access, then inspect and repair config consistency."
-        >
-          <RuntimeAccessSection />
-          <RuntimeConsistencySection />
-        </SettingsGroup>
-
-        <hr className="border-border/30" />
-
-        {/* --- Appearance & Preferences group --- */}
-        <SettingsGroup id="appearance" title="Appearance & Preferences">
-          <ThemeSection />
-          <PreferencesSection />
-        </SettingsGroup>
-
-        <hr className="border-border/30" />
-
-        {/* --- System group --- */}
-        <SettingsGroup id="system" title="System">
-          <ConnectionSection />
-          <RouterLink />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <KeyboardShortcutsSection />
-            <AboutSection />
+    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_35%)] p-4 md:p-6 animate-page-enter">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground/80">
+              Settings
+            </p>
+            <h1 className="mt-2 text-[28px] font-semibold tracking-tight">
+              Runtime Control Center
+            </h1>
+            <p className="mt-2 max-w-[70ch] text-sm leading-6 text-muted-foreground">
+              Configure managed runtimes, worker sync, and mixed access custody for Claude Code and
+              Codex from one control plane.
+            </p>
           </div>
-        </SettingsGroup>
+          <div className="rounded-[22px] border border-border/40 bg-card/70 px-4 py-3 text-sm text-muted-foreground shadow-[0_18px_48px_rgba(0,0,0,0.08)] backdrop-blur">
+            Session, agent, project, machine, then global runtime defaults.
+          </div>
+        </div>
+
+        <SettingsShell navItems={SETTINGS_NAV}>
+          <SettingsSection
+            id="overview"
+            title="Overview"
+            description="See control plane health, the LiteLLM router, and the main operator-facing controls before editing runtime-specific behavior."
+          >
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+              <div className="space-y-4">
+                <ConnectionSection />
+                <RouterLink />
+              </div>
+
+              <div className="rounded-[24px] border border-border/40 bg-muted/20 p-5">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/80">
+                  Why this changed
+                </div>
+                <div className="mt-3 space-y-3 text-sm leading-6 text-muted-foreground">
+                  <p>Settings are now organized around runtimes instead of provider accounts.</p>
+                  <p>
+                    Use runtime profiles for models and switching policy, credentials for custody,
+                    and worker sync for machine-specific runtime health.
+                  </p>
+                  <p>
+                    This structure matches how multi-agent execution is actually resolved at run
+                    time.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            id="runtime-profiles"
+            title="Runtime Profiles"
+            description="Each runtime has its own default model, access source preference, worker scope, and automatic switching policy."
+          >
+            <RuntimeProfilesSection />
+          </SettingsSection>
+
+          <SettingsSection
+            id="credentials-access"
+            title="Credentials & Access"
+            description="Managed credentials stay under control-plane custody. Worker-local discovered credentials can be referenced or adopted once worker discovery reports them."
+          >
+            <div className="space-y-6">
+              <AccountsSection />
+              <ProjectAccountsSection />
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            id="workers-sync"
+            title="Workers & Sync"
+            description="Track which runtimes are installed and authenticated on each worker, how much local access has been discovered, and whether a worker has drifted from the managed runtime config."
+          >
+            <div className="space-y-6">
+              <WorkersSyncSection />
+              <RuntimeAccessSection />
+              <RuntimeConsistencySection />
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            id="routing-autonomy"
+            title="Routing & Autonomy"
+            description="Control the baseline managed credential pool and how failover behaves when a managed credential cannot satisfy the selected runtime profile."
+          >
+            <FailoverSection />
+          </SettingsSection>
+
+          <SettingsSection
+            id="appearance-preferences"
+            title="Appearance & Preferences"
+            description="These controls affect the web control plane itself, not the runtime profiles pushed to workers."
+          >
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="space-y-4">
+                <ThemeSection />
+                <PreferencesSection />
+              </div>
+              <div className="space-y-4">
+                <KeyboardShortcutsSection />
+                <AboutSection />
+              </div>
+            </div>
+          </SettingsSection>
+        </SettingsShell>
       </div>
     </div>
   );

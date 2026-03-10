@@ -1,4 +1,12 @@
-export type AccountProvider = 'anthropic_api' | 'claude_max' | 'claude_team' | 'bedrock' | 'vertex';
+import type { ManagedRuntime } from './runtime-management.js';
+
+export type AccountProvider =
+  | 'anthropic_api'
+  | 'claude_max'
+  | 'claude_team'
+  | 'bedrock'
+  | 'vertex'
+  | 'openai_api';
 
 export const ACCOUNT_PROVIDERS: AccountProvider[] = [
   'anthropic_api',
@@ -6,7 +14,18 @@ export const ACCOUNT_PROVIDERS: AccountProvider[] = [
   'claude_team',
   'bedrock',
   'vertex',
+  'openai_api',
 ];
+
+export type AccountSource =
+  | 'managed'
+  | 'discovered_local'
+  | 'managed_mirrored_to_worker'
+  | 'takeover_pending';
+
+export type AccountCustody = 'control_plane' | 'worker_local';
+
+export type AccountStatus = 'active' | 'inactive' | 'auth_error' | 'drifted' | 'ignored';
 
 export type ApiAccount = {
   id: string;
@@ -18,6 +37,11 @@ export type ApiAccount = {
   rateLimit: { itpm?: number; otpm?: number };
   isActive: boolean;
   metadata: Record<string, unknown>;
+  source?: AccountSource;
+  custody?: AccountCustody;
+  status?: AccountStatus;
+  runtimeCompatibility?: ManagedRuntime[];
+  originMachineId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
