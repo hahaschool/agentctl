@@ -1,5 +1,7 @@
 # AgentCTL
 
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL_1.1-blue.svg)](LICENSE)
+
 AgentCTL is a monorepo for running and operating AI coding agents across multiple machines.
 It combines a control plane, per-machine worker daemon, web operator UI, shared protocol/types,
 deployment assets, and supporting scripts in one repository.
@@ -217,6 +219,19 @@ It should answer:
 
 It should not try to be the full API reference, deployment runbook, or roadmap changelog.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get involved.
+
+## Security
+
+To report a security vulnerability, see [SECURITY.md](SECURITY.md).
+
 ## License
 
-Private repository. All rights reserved.
+This project is licensed under the [Business Source License 1.1](LICENSE).
+
+You may use, modify, and redistribute the code for non-production purposes freely.
+Production use is permitted provided you do not offer AgentCTL as a competitive
+hosted service. On 2030-03-10, the license automatically converts to
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
