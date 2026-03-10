@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-03
+> Last updated: 2026-03-10
 
 ## Current State
 
@@ -408,6 +408,86 @@ Surface all agent sessions — regardless of agent type — in one mobile view:
 
 ---
 
+## Phase 11 — Runtime Hardening & Observability Patterns (Priority: High)
+
+> Goal: Adopt battle-tested patterns from [astro-agent](https://github.com/astro-anywhere/astro-agent)
+> to harden execution safety, improve observability, and prepare the adapter layer for multi-runtime support.
+> Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md)
+
+### 11.1 Structured Execution Summary (P0)
+
+Automatically generate a structured summary at task completion by resuming the same
+session with a summary prompt. Stores as JSONB in `agent_runs.result_summary`.
+
+- [ ] Define `ExecutionSummary` type in `packages/shared/src/types/`
+  - Fields: status, workCompleted, executiveSummary, keyFindings, filesChanged, followUps, cost, tokens
+- [ ] Implement summary generation in `AgentInstance.stop()` (session-resume approach)
+- [ ] Fallback: post-hoc aggregation from PostToolUse hook data + git diff
+- [ ] DB migration: `agent_runs.result_summary` TEXT → JSONB
+- [ ] New SSE event: `execution_summary`
+- [ ] API: `GET /api/runs/:id/summary` returns structured data
+- [ ] Mobile/web: summary card at end of session view
+
+### 11.2 Workdir Safety Tiers (P0)
+
+Pre-execution safety check classifying working directories into 4 tiers:
+safe (git clean) → guarded (git dirty) → risky (non-git) → unsafe (non-git + parallel).
+
+- [ ] Implement `checkWorkdirSafety()` in `agent-worker/src/runtime/workdir-safety.ts`
+- [ ] Gate in `AgentInstance.start()` before `attemptSdkRun()`
+- [ ] SSE events: `safety_warning`, `safety_approval_needed`, `safety_blocked`
+- [ ] Sandbox mode: copy-to-temp + execute + copy-back for approved risky directories
+- [ ] API: `POST /api/agents/:id/safety-decision` (approve/reject/sandbox)
+- [ ] Mobile/web: safety prompt UI (reuses existing approval flow pattern)
+
+### 11.3 Dispatch Signature Verification (P0)
+
+Ed25519 signing of dispatch payloads for defense-in-depth over Tailscale.
+
+- [ ] Control plane: sign dispatch payloads with Ed25519 (TweetNaCl)
+- [ ] Public key distributed to workers during machine registration
+- [ ] Worker: verify signature before task execution, reject invalid payloads
+- [ ] Audit: log signature verification failures
+
+### 11.4 AgentOutputStream — Unified Output Streaming (P1)
+
+Shared output contract between runtime adapters and event pipeline. Foundation for
+multi-runtime support (bridges to Phase 10 Codex integration).
+
+- [ ] Define `AgentOutputStream` interface in `packages/shared/src/protocol/`
+  - Methods: text, thinking, toolUse, toolResult, fileChange, sessionInit, costUpdate, error
+- [ ] Refactor `sdk-runner.ts` to emit through `AgentOutputStream`
+- [ ] `AgentInstance` creates stream impl backed by EventEmitter + OutputBuffer
+- [ ] Runtime unification adapters (`ClaudeRuntimeAdapter`, `CodexRuntimeAdapter`) use same interface
+
+### 11.5 Mid-Execution Steering (P1)
+
+Inject guidance into running agent sessions via Claude Agent SDK `streamInput()`.
+
+- [ ] Expose `steer(message)` on `AgentInstance` (delegates to SDK Query.streamInput)
+- [ ] Worker API: `POST /api/agents/:agentId/steer`
+- [ ] Control plane proxy: `POST /api/agents/:agentId/steer` → forward to worker
+- [ ] SSE events: `steer_sent`, `steer_ack`
+- [ ] Mobile/web: chat-like input at bottom of live session view
+- [ ] Codex steering deferred until CodexRuntimeAdapter lands
+
+### 11.6 Execution Environment Registry (P2)
+
+Orthogonal abstraction for WHERE tasks execute (local/Docker/SSH), separate from
+WHAT agent runs them (Claude/Codex).
+
+- [ ] Define `ExecutionEnvironment` interface in `agent-worker/src/execution/`
+  - Methods: detect, prepare, cleanup
+- [ ] `DirectEnvironment`: wraps current subprocess behavior
+- [ ] `DockerEnvironment`: wraps existing Dockerfile patterns with gVisor
+- [ ] `ExecutionEnvironmentRegistry`: auto-detect at startup, report in heartbeat
+- [ ] Machine registration includes available environments + runtime adapters
+- [ ] Control plane: dispatch routing considers environment requirements
+
+**Deliverable**: Execution summary, safety tiers, dispatch signing, output stream, steering, environment registry
+
+---
+
 ## Target Workflow Summary
 
 ```
@@ -420,6 +500,9 @@ fleet deploy:    canary -> verify -> matrix deploy remaining -> per-machine heal
 nightly:         security audit agent -> structured report -> auto-create issues for high-severity
 handoff:         rate limit / cost threshold / manual -> serialize context -> hydrate target agent -> resume
 codex session:   same relay pattern as Claude Code -> outbound poll -> SSE stream -> iOS unified browser
+task complete:   execution summary (session resume) -> JSONB storage -> summary card in mobile/web
+steer:           mobile chat input -> control plane proxy -> worker steer -> SDK streamInput -> steer ack
+safety check:    workdir classify (4 tiers) -> SSE safety event -> user approve/reject/sandbox -> execute
 ```
 
 ## Timeline & Dependencies
@@ -435,7 +518,8 @@ codex session:   same relay pattern as Claude Code -> outbound poll -> SSE strea
 | Phase 7 — Fleet Deploy | Phase 5 | Post-MVP |
 | Phase 8 — Sessions & Loop | Phase 4 (DB) | Types/API can start with Phase 1-2; 8.2 (Remote Control) unlocks Phase 10 |
 | Phase 9 — Security Audit | Phase 2 (scan) + Phase 3 (DAST) + Phase 8 (audit agent) | SAST/SCA start with Phase 1 |
-| Phase 10 — Codex & Handoff | Phase 8.2 (Remote Control) + Phase 7 (Fleet) | Codex runtime mirrors Claude relay pattern; handoff needs fleet routing |
+| Phase 10 — Codex & Handoff | Phase 8.2 (Remote Control) + Phase 7 (Fleet) + Phase 11.4 (output stream) | Codex runtime mirrors Claude relay pattern; handoff needs fleet routing; adapter uses AgentOutputStream |
+| Phase 11 — Runtime Hardening | Phase 8 (runtime) + Phase 9 (security) | 11.1-11.3 start immediately; 11.4-11.5 after Phase 8; 11.6 after Phase 10 |
 
 ## References
 
@@ -453,6 +537,10 @@ codex session:   same relay pattern as Claude Code -> outbound poll -> SSE strea
 - [Claude Code Remote Control (Feb 2026)](https://docs.anthropic.com/en/docs/claude-code/remote-control) — Outbound polling relay; replaces subprocess spawning
 - [Claude Agent SDK](https://github.com/anthropic/claude-agent-sdk) — TypeScript SDK wrapping Claude Code CLI
 - [OpenAI Codex CLI](https://github.com/openai/codex) — Terminal-native coding agent
+
+### Runtime Patterns
+- [Astro Agent Runner](https://github.com/astro-anywhere/astro-agent) — Provider adapters, execution strategies, workdir safety, dispatch signing
+- [Astro Agent Patterns Design](plans/2026-03-10-astro-agent-patterns-design.md) — Evaluation and adoption plan
 
 ### Security
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
