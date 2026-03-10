@@ -212,15 +212,16 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 ### 3.4 Codex Operational Parity — P2
 
 > Status note: Partially delivered on `main`. The worker already renders managed
-> Codex config, detects Codex auth, runs under the shared PM2 worker process, and
-> includes sandbox/network configuration hooks. The main remaining gaps are
-> explicit LiteLLM routing/failover for Codex provider traffic and fully-evidenced
-> end-to-end sandbox parity/docs.
+> Codex config, including sandbox, approval, provider, and shell-environment
+> policy, detects Codex auth, runs under the shared PM2 worker process, and
+> includes sandbox/network helper primitives. LiteLLM routing/failover is already
+> landed; the remaining gap is runtime-level enforcement/evidence for
+> bubblewrap/Seatbelt or container-backed restrictions on the Codex path.
 
 - [x] LiteLLM config: Codex model routing with OpenAI Direct → Azure OpenAI failover
 - [x] PM2 ecosystem config for Codex-capable worker processes
 - [x] Azure OpenAI credential detection for Codex authentication
-- [x] Config renderer: `modelProvider` and `reasoningEffort` in Codex TOML
+- [x] Config renderer: `modelProvider`, `reasoningEffort`, and shell environment policy in Codex TOML
 - [ ] Sandbox constraints end-to-end: config rendering and network-policy helpers exist, but full bubblewrap/Seatbelt parity is not yet evidenced here
 
 ### 3.5 Automatic Handoff Triggers — P2
@@ -437,7 +438,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P2** | AgentOutputStream | 3.3 | Not started |
 | **P2** | Mid-Execution Steering | 2.8 | Not started |
-| **P2** | Codex Operational Parity | 3.4 | Partial — LiteLLM routing/failover gap remains |
+| **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
 | **P2** | Automatic Handoff Triggers | 3.5 | Not started |
 | **P2** | Remote Control Spike | 2.4 | Not started |
 | **P2** | Fork UX Extensions | 4.7 | Partial — auto-related-message/runtime-in-direct-fork work remains |
@@ -476,7 +477,7 @@ memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+gra
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
 | AgentOutputStream (P2) | None | Foundation for multi-runtime unification |
 | Mid-Execution Steering (P2) | AgentOutputStream | Needs stream interface for response routing |
-| Codex Operational Parity (P2) | None | Partial on `main`; remaining work is LiteLLM routing/failover and ops polish |
+| Codex Operational Parity (P2) | None | Partial on `main`; LiteLLM routing/failover is done, remaining work is runtime-level sandbox enforcement/evidence |
 | Automatic Handoff (P2) | AgentOutputStream | Needs unified event stream for trigger detection |
 | Remote Control Spike (P2) | None | Evaluate only — no dependency on implementation |
 | Fork UX Extensions (P2) | Unified Memory Layer | Memory integration in fork context selection; extends existing `ContextPickerDialog`, memory panel, and prompt preview |

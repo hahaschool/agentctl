@@ -8,13 +8,20 @@ import {
 
 export class CodexConfigRenderer {
   render(config: ManagedRuntimeConfig): RenderedRuntimeConfig {
+    const configToml = renderConfigToml(config);
+
     return {
       runtime: 'codex',
       files: [
         {
           scope: 'home',
           path: '.codex/config.toml',
-          content: renderConfigToml(config),
+          content: configToml,
+        },
+        {
+          scope: 'workspace',
+          path: '.codex/config.toml',
+          content: configToml,
         },
         {
           scope: 'home',
@@ -61,6 +68,7 @@ function renderConfigToml(config: ManagedRuntimeConfig): string {
     lines.push(`model_reasoning_effort = ${quoteToml(reasoningEffort)}`);
   }
 
+  renderShellEnvironmentPolicy(lines, config);
   lines.push('');
 
   for (const server of config.mcpServers) {
@@ -77,6 +85,18 @@ function renderConfigToml(config: ManagedRuntimeConfig): string {
   }
 
   return lines.join('\n');
+}
+
+function renderShellEnvironmentPolicy(lines: string[], config: ManagedRuntimeConfig): void {
+  lines.push('[shell_environment_policy]');
+  lines.push(
+    `inherit = [${config.environmentPolicy.inherit.map((value) => quoteToml(value)).join(', ')}]`,
+  );
+
+  lines.push('[shell_environment_policy.set]');
+  for (const [key, value] of Object.entries(config.environmentPolicy.set)) {
+    lines.push(`${key} = ${quoteToml(value)}`);
+  }
 }
 
 function quoteToml(value: string): string {
