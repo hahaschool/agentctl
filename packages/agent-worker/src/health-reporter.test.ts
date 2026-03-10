@@ -405,6 +405,38 @@ describe('HealthReporter', () => {
       reporter.stop();
     });
 
+    it('re-registers and retries heartbeat when the control plane rejects an unknown machine', async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503 })
+        .mockResolvedValueOnce({ ok: false, status: 500 })
+        .mockResolvedValueOnce({ ok: true, status: 200 })
+        .mockResolvedValueOnce({ ok: true, status: 200 });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const reporter = makeReporter({ intervalMs: 2_000 });
+
+      await reporter.register();
+      reporter.start();
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+      expect(mockFetch.mock.calls[0]?.[0]).toBe(`${CONTROL_PLANE_URL}/api/agents/register`);
+      expect(mockFetch.mock.calls[1]?.[0]).toBe(
+        `${CONTROL_PLANE_URL}/api/agents/test-machine-001/heartbeat`,
+      );
+      expect(mockFetch.mock.calls[2]?.[0]).toBe(`${CONTROL_PLANE_URL}/api/agents/register`);
+      expect(mockFetch.mock.calls[3]?.[0]).toBe(
+        `${CONTROL_PLANE_URL}/api/agents/test-machine-001/heartbeat`,
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ machineId: 'test-machine-001', statusCode: 500 }),
+        'Heartbeat rejected by control plane, retrying registration',
+      );
+
+      reporter.stop();
+    });
+
     it('multiple register failures are all caught', async () => {
       mockFetchReject(new Error('Unreachable'));
       const reporter = makeReporter();
