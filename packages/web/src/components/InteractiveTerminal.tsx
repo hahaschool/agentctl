@@ -17,6 +17,8 @@ type InteractiveTerminalProps = {
   machineId: string;
   /** Terminal session ID (from spawn). */
   terminalId: string;
+  /** Optional command to send once after the socket opens. */
+  initialCommand?: string;
   /** Called when the terminal process exits. */
   onExit?: (code: number) => void;
   /** Called on connection error. */
@@ -28,6 +30,7 @@ type InteractiveTerminalProps = {
 export function InteractiveTerminal({
   machineId,
   terminalId,
+  initialCommand,
   onExit,
   onError,
   className,
@@ -37,6 +40,7 @@ export function InteractiveTerminal({
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const initialCommandSentRef = useRef(false);
   const [connected, setConnected] = useState(false);
 
   // Store callbacks in refs so the effect always uses the latest version
@@ -96,6 +100,10 @@ export function InteractiveTerminal({
         terminal.focus();
         // Send initial size
         ws.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
+        if (initialCommand && !initialCommandSentRef.current) {
+          initialCommandSentRef.current = true;
+          ws.send(JSON.stringify({ type: 'input', data: `${initialCommand}\r` }));
+        }
       };
 
       ws.onmessage = (event) => {
@@ -157,7 +165,7 @@ export function InteractiveTerminal({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [machineId, terminalId]);
+  }, [initialCommand, machineId, terminalId]);
 
   // Shared resize handling
   useTerminalResize(fitAddonRef, containerRef);

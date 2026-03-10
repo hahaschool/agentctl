@@ -383,6 +383,17 @@ describe('InteractiveTerminal', () => {
       );
     });
 
+    it('sends an initial command when provided', async () => {
+      render(<InteractiveTerminal {...defaultProps} initialCommand="claude login" />);
+      await flushAsyncInit();
+      simulateWsOpen();
+
+      expect(mockWsInstance?.send).toHaveBeenNthCalledWith(
+        2,
+        JSON.stringify({ type: 'input', data: 'claude login\r' }),
+      );
+    });
+
     it('focuses the terminal on WebSocket open', async () => {
       render(<InteractiveTerminal {...defaultProps} />);
       await flushAsyncInit();
