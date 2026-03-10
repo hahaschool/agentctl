@@ -6,6 +6,16 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn(),
 }));
 
+vi.mock('node:child_process', () => ({
+  spawnSync: vi.fn(),
+}));
+
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(),
+}));
+
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 
 import { RuntimeConfigApplier } from './runtime-config-applier.js';
@@ -49,6 +59,8 @@ describe('RuntimeConfigApplier', () => {
     vi.clearAllMocks();
     vi.mocked(mkdir).mockResolvedValue(undefined);
     vi.mocked(writeFile).mockResolvedValue(undefined);
+    vi.mocked(spawnSync).mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>);
+    vi.mocked(existsSync).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -102,5 +114,39 @@ describe('RuntimeConfigApplier', () => {
     expect(state.lastAppliedConfigVersion).toBe(11);
     expect(state.lastAppliedConfigHash).toBe('sha256:cfg-11');
     expect(state.runtimes.codex.installed).toBe(true);
+  });
+
+  it('treats Azure OpenAI credentials as authenticated for Codex runtime discovery', async () => {
+    const originalAzureApiKey = process.env.AZURE_OPENAI_API_KEY;
+    const originalAzureEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
+
+    process.env.AZURE_OPENAI_API_KEY = 'azure-key';
+    process.env.AZURE_OPENAI_ENDPOINT = 'https://example-resource.openai.azure.com';
+
+    try {
+      const applier = new RuntimeConfigApplier({
+        workspaceRoot: '/workspace/project',
+        homeDir: '/Users/tester',
+      });
+
+      const state = await applier.getState('machine-1');
+
+      expect(state.runtimes.codex).toEqual({
+        installed: true,
+        authenticated: true,
+      });
+    } finally {
+      if (originalAzureApiKey === undefined) {
+        delete process.env.AZURE_OPENAI_API_KEY;
+      } else {
+        process.env.AZURE_OPENAI_API_KEY = originalAzureApiKey;
+      }
+
+      if (originalAzureEndpoint === undefined) {
+        delete process.env.AZURE_OPENAI_ENDPOINT;
+      } else {
+        process.env.AZURE_OPENAI_ENDPOINT = originalAzureEndpoint;
+      }
+    }
   });
 });

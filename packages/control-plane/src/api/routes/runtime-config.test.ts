@@ -80,6 +80,11 @@ describe('runtimeConfigRoutes', () => {
     expect(body).toHaveProperty('config');
     expect(body.config.runtimeOverrides).toHaveProperty('claudeCode');
     expect(body.config.runtimeOverrides).toHaveProperty('codex');
+    expect(body.config.runtimeOverrides.codex).toMatchObject({
+      configPath: '.codex/config.toml',
+      modelProvider: 'openai',
+      reasoningEffort: 'high',
+    });
     expect(body.version).toBe(body.config.version);
     expect(body.hash).toBe(body.config.hash);
   });
