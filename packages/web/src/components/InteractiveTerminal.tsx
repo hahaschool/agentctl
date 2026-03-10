@@ -12,12 +12,20 @@ import '@xterm/xterm/css/xterm.css';
 // Dynamic import for xterm — it accesses DOM globals and cannot be imported at SSR time.
 // We lazy-load both Terminal and FitAddon inside useEffect.
 
+/** Commands that may be auto-queued via URL ?command= parameter. */
+const ALLOWED_INITIAL_COMMANDS = new Set([
+  'claude login',
+  'claude setup-token',
+  'codex login',
+  'codex auth',
+]);
+
 type InteractiveTerminalProps = {
   /** Machine ID to connect to. */
   machineId: string;
   /** Terminal session ID (from spawn). */
   terminalId: string;
-  /** Optional command to send once after the socket opens. */
+  /** Optional command to queue after the socket opens. Must be in the allowlist. */
   initialCommand?: string;
   /** Called when the terminal process exits. */
   onExit?: (code: number) => void;
@@ -41,6 +49,8 @@ export function InteractiveTerminal({
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const initialCommandSentRef = useRef(false);
+  const initialCommandRef = useRef(initialCommand);
+  initialCommandRef.current = initialCommand;
   const [connected, setConnected] = useState(false);
 
   // Store callbacks in refs so the effect always uses the latest version
@@ -100,9 +110,10 @@ export function InteractiveTerminal({
         terminal.focus();
         // Send initial size
         ws.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
-        if (initialCommand && !initialCommandSentRef.current) {
+        const cmd = initialCommandRef.current;
+        if (cmd && !initialCommandSentRef.current && ALLOWED_INITIAL_COMMANDS.has(cmd)) {
           initialCommandSentRef.current = true;
-          ws.send(JSON.stringify({ type: 'input', data: `${initialCommand}\r` }));
+          ws.send(JSON.stringify({ type: 'input', data: `${cmd}\r` }));
         }
       };
 
@@ -165,7 +176,7 @@ export function InteractiveTerminal({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [initialCommand, machineId, terminalId]);
+  }, [machineId, terminalId]); // initialCommand captured via ref, not a reconnect trigger
 
   // Shared resize handling
   useTerminalResize(fitAddonRef, containerRef);

@@ -123,8 +123,12 @@ export default function MachineTerminalPage() {
       <div className="flex-1 min-h-0">
         {initialCommand && (
           <div className="px-4 py-2 border-b border-border bg-muted/40">
-            <p className="text-xs font-medium text-muted-foreground">Queued command</p>
-            <code className="mt-1 block text-xs text-foreground">{initialCommand}</code>
+            <p className="text-xs font-medium text-muted-foreground">
+              Queued command
+            </p>
+            <code className="mt-1 block text-xs text-foreground">
+              {initialCommand}
+            </code>
           </div>
         )}
         {spawning && (

@@ -394,6 +394,20 @@ describe('InteractiveTerminal', () => {
       );
     });
 
+    it('does NOT send a non-allowlisted initial command', async () => {
+      render(<InteractiveTerminal {...defaultProps} initialCommand="rm -rf /" />);
+      await flushAsyncInit();
+      simulateWsOpen();
+
+      // Should only have the resize call, no input call
+      const sendCalls = (mockWsInstance?.send as ReturnType<typeof vi.fn>).mock.calls;
+      const inputCalls = sendCalls.filter((call: unknown[]) => {
+        const parsed = JSON.parse(call[0] as string) as { type: string };
+        return parsed.type === 'input';
+      });
+      expect(inputCalls).toHaveLength(0);
+    });
+
     it('focuses the terminal on WebSocket open', async () => {
       render(<InteractiveTerminal {...defaultProps} />);
       await flushAsyncInit();
