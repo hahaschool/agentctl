@@ -53,9 +53,9 @@ describe('WorkersSyncSection', () => {
     vi.clearAllMocks();
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
-      queryFn: vi.fn().mockResolvedValue([
-        { id: 'machine-1', hostname: 'alpha', status: 'online' },
-      ]),
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([{ id: 'machine-1', hostname: 'alpha', status: 'online' }]),
       initialData: [{ id: 'machine-1', hostname: 'alpha', status: 'online' }],
     });
     mockRuntimeConfigDriftQuery.mockReturnValue({

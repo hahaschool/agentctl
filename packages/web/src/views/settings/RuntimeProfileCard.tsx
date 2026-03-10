@@ -14,10 +14,10 @@ import { cn } from '@/lib/utils';
 import {
   ACCESS_STRATEGY_LABELS,
   RUNTIME_LABELS,
-  SWITCHING_POLICY_LABELS,
   type RuntimeAccessStrategy,
   type RuntimeProfileSettings,
   type RuntimeSwitchingPolicy,
+  SWITCHING_POLICY_LABELS,
 } from './types';
 
 const ACCESS_STRATEGIES: RuntimeAccessStrategy[] = [

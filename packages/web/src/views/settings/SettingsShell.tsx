@@ -72,9 +72,7 @@ export function SettingsSection({
       <div className="mb-5 flex flex-col gap-2 border-b border-border/40 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-          <p className="mt-1 max-w-[62ch] text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
+          <p className="mt-1 max-w-[62ch] text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
       </div>
 

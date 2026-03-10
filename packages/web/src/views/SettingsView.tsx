@@ -20,7 +20,11 @@ import { SettingsSection, SettingsShell } from './settings/SettingsShell';
 import { WorkersSyncSection } from './settings/WorkersSyncSection';
 
 const SETTINGS_NAV = [
-  { id: 'overview', label: 'Overview', detail: 'Control plane health, router status, and UI entry points.' },
+  {
+    id: 'overview',
+    label: 'Overview',
+    detail: 'Control plane health, router status, and UI entry points.',
+  },
   {
     id: 'runtime-profiles',
     label: 'Runtime Profiles',
@@ -61,10 +65,12 @@ export function SettingsView(): React.JSX.Element {
             <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground/80">
               Settings
             </p>
-            <h1 className="mt-2 text-[28px] font-semibold tracking-tight">Runtime Control Center</h1>
+            <h1 className="mt-2 text-[28px] font-semibold tracking-tight">
+              Runtime Control Center
+            </h1>
             <p className="mt-2 max-w-[70ch] text-sm leading-6 text-muted-foreground">
-              Configure managed runtimes, worker sync, and mixed access custody for Claude Code
-              and Codex from one control plane.
+              Configure managed runtimes, worker sync, and mixed access custody for Claude Code and
+              Codex from one control plane.
             </p>
           </div>
           <div className="rounded-[22px] border border-border/40 bg-card/70 px-4 py-3 text-sm text-muted-foreground shadow-[0_18px_48px_rgba(0,0,0,0.08)] backdrop-blur">

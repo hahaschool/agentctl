@@ -12,7 +12,11 @@ import type {
   RuntimeConfigDefaultsResponse,
   RuntimeConfigDriftResponse,
 } from '@/lib/api';
-import { DEFAULT_RUNTIME_MODELS, RUNTIME_MODEL_OPTIONS, type ModelOption } from '@/lib/model-options';
+import {
+  DEFAULT_RUNTIME_MODELS,
+  type ModelOption,
+  RUNTIME_MODEL_OPTIONS,
+} from '@/lib/model-options';
 
 export type RuntimeAccessStrategy =
   | 'managed_only'
@@ -135,7 +139,10 @@ export function readRuntimeProfiles(
       description: RUNTIME_DESCRIPTIONS.codex,
       defaultModel: stringOrFallback(codexOverride.model, DEFAULT_RUNTIME_MODELS.codex),
       modelOptions: RUNTIME_MODEL_OPTIONS.codex,
-      accessStrategy: enumOrFallback(codexOverride.accessStrategy, 'prefer_managed') as RuntimeAccessStrategy,
+      accessStrategy: enumOrFallback(
+        codexOverride.accessStrategy,
+        'prefer_managed',
+      ) as RuntimeAccessStrategy,
       switchingPolicy: enumOrFallback(
         codexOverride.switchingPolicy,
         'failover_only',

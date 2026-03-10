@@ -25,12 +25,7 @@ export type AccountSource =
 
 export type AccountCustody = 'control_plane' | 'worker_local';
 
-export type AccountStatus =
-  | 'active'
-  | 'inactive'
-  | 'auth_error'
-  | 'drifted'
-  | 'ignored';
+export type AccountStatus = 'active' | 'inactive' | 'auth_error' | 'drifted' | 'ignored';
 
 export type ApiAccount = {
   id: string;

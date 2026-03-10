@@ -63,11 +63,6 @@ export const queryKeys = {
       ? (['runtime-config', 'drift', machineId] as const)
       : (['runtime-config', 'drift'] as const),
   projectAccounts: ['project-accounts'] as const,
-  runtimeConfigDefaults: ['runtime-config', 'defaults'] as const,
-  runtimeConfigDrift: (machineId?: string) =>
-    machineId
-      ? (['runtime-config', 'drift', machineId] as const)
-      : (['runtime-config', 'drift'] as const),
   routerModels: ['router', 'models'] as const,
   routerModelsInfo: ['router', 'models-info'] as const,
   audit: (params?: {
@@ -277,24 +272,6 @@ export function projectAccountsQuery() {
   });
 }
 
-export function runtimeConfigDefaultsQuery() {
-  return queryOptions({
-    queryKey: queryKeys.runtimeConfigDefaults,
-    queryFn: api.getRuntimeConfigDefaults,
-    staleTime: 10_000,
-    refetchOnWindowFocus: true,
-  });
-}
-
-export function runtimeConfigDriftQuery(machineId?: string) {
-  return queryOptions({
-    queryKey: queryKeys.runtimeConfigDrift(machineId),
-    queryFn: () => api.getRuntimeConfigDrift(machineId),
-    refetchInterval: getRefetchInterval(),
-    refetchOnWindowFocus: true,
-  });
-}
-
 export function auditQuery(params?: {
   agentId?: string;
   tool?: string;
@@ -375,17 +352,6 @@ export function useCreateAgent() {
     mutationFn: api.createAgent,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
-    },
-  });
-}
-
-export function useUpdateRuntimeConfigDefaults() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: api.updateRuntimeConfigDefaults,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeConfigDefaults });
-      void queryClient.invalidateQueries({ queryKey: ['runtime-config', 'drift'] });
     },
   });
 }

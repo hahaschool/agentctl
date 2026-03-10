@@ -785,9 +785,14 @@ describe('api.updateRuntimeConfigDefaults', () => {
       sandbox: 'workspace-write',
       approvalPolicy: 'on-request',
       environmentPolicy: { inherit: ['PATH'], set: {} },
-      runtimeOverrides: { claudeCode: { model: 'claude-sonnet-4-6' }, codex: { model: 'gpt-5-codex' } },
+      runtimeOverrides: {
+        claudeCode: { model: 'claude-sonnet-4-6' },
+        codex: { model: 'gpt-5-codex' },
+      },
     };
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ version: 7, hash: 'sha256:cfg-7', config }));
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ version: 7, hash: 'sha256:cfg-7', config }),
+    );
 
     await api.updateRuntimeConfigDefaults(config);
 
@@ -800,7 +805,9 @@ describe('api.updateRuntimeConfigDefaults', () => {
 
 describe('api.getRuntimeConfigDrift', () => {
   it('calls GET /api/runtime-config/drift without query params by default', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ activeVersion: 1, activeHash: 'sha256:test', items: [] }));
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ activeVersion: 1, activeHash: 'sha256:test', items: [] }),
+    );
 
     await api.getRuntimeConfigDrift();
 
@@ -809,7 +816,9 @@ describe('api.getRuntimeConfigDrift', () => {
   });
 
   it('includes machineId when provided', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ activeVersion: 1, activeHash: 'sha256:test', items: [] }));
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ activeVersion: 1, activeHash: 'sha256:test', items: [] }),
+    );
 
     await api.getRuntimeConfigDrift('machine-1');
 

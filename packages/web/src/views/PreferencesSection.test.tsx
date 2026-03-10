@@ -83,9 +83,7 @@ describe('PreferencesSection', () => {
 
   it('shows runtime profile note', () => {
     render(<PreferencesSection />);
-    expect(
-      screen.getByText(/Runtime models now live in Runtime Profiles/),
-    ).toBeDefined();
+    expect(screen.getByText(/Runtime models now live in Runtime Profiles/)).toBeDefined();
   });
 
   it('shows refresh description text', () => {

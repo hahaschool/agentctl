@@ -6,10 +6,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { accountsQuery, machinesQuery, runtimeConfigDefaultsQuery, useUpdateRuntimeConfigDefaults } from '@/lib/queries';
+import {
+  accountsQuery,
+  machinesQuery,
+  runtimeConfigDefaultsQuery,
+  useUpdateRuntimeConfigDefaults,
+} from '@/lib/queries';
 
 import { RuntimeProfileCard } from './RuntimeProfileCard';
-import { buildRuntimeConfig, inferAccountRuntimeCompatibility, readRuntimeProfiles, type RuntimeProfileSettings } from './types';
+import {
+  buildRuntimeConfig,
+  inferAccountRuntimeCompatibility,
+  type RuntimeProfileSettings,
+  readRuntimeProfiles,
+} from './types';
 
 export function RuntimeProfilesSection(): React.JSX.Element {
   const runtimeDefaults = useQuery(runtimeConfigDefaultsQuery());

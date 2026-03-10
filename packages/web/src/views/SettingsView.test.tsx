@@ -111,7 +111,9 @@ describe('SettingsView', () => {
 
   it('renders the runtime-centric page description', () => {
     renderSettings();
-    expect(screen.getByText(/Configure managed runtimes, worker sync, and mixed access custody/)).toBeDefined();
+    expect(
+      screen.getByText(/Configure managed runtimes, worker sync, and mixed access custody/),
+    ).toBeDefined();
   });
 
   it('renders the left navigation items', () => {
@@ -176,9 +178,7 @@ describe('SettingsView', () => {
 
   it('renders all three theme option labels', () => {
     renderSettings();
-    // "System" also appears as a group heading, so use getAllByText
-    const systemLabels = screen.getAllByText('System');
-    expect(systemLabels.length).toBeGreaterThanOrEqual(2); // group heading + theme label
+    expect(screen.getByText('System')).toBeDefined();
     expect(screen.getByText('Light')).toBeDefined();
     expect(screen.getByText('Dark')).toBeDefined();
   });

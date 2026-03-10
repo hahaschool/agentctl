@@ -369,7 +369,10 @@ export function AccountsSection(): React.JSX.Element {
                       Inactive
                     </Badge>
                   )}
-                  <Badge variant="outline" className="text-[10px] border-border/40 bg-background/70">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] border-border/40 bg-background/70"
+                  >
                     {inferAccountSource(account).replaceAll('_', ' ')}
                   </Badge>
                 </div>

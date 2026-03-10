@@ -102,8 +102,8 @@ export function PreferencesSection(): React.JSX.Element {
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Workspace preferences</h3>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          Runtime models now live in Runtime Profiles. These preferences only affect the web
-          control plane UI.
+          Runtime models now live in Runtime Profiles. These preferences only affect the web control
+          plane UI.
         </p>
       </div>
 
