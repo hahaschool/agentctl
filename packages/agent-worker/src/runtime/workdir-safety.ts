@@ -82,6 +82,14 @@ export async function createSandbox(workdir: string, taskId: string): Promise<Sa
   return {
     sandboxPath,
     originalPath: workdir,
+    /**
+     * Copy modified/new files from the sandbox back to the original workdir.
+     *
+     * NOTE: This operation is additive — files that were deleted inside the
+     * sandbox are NOT removed from the original workdir. Only new and modified
+     * files are overwritten. If full synchronisation (including deletions) is
+     * needed, a different strategy (e.g. rsync --delete) must be used instead.
+     */
     copyBack: async () => {
       await cp(sandboxPath, workdir, {
         recursive: true,
@@ -112,7 +120,9 @@ async function detectUncommittedChanges(workdir: string): Promise<boolean> {
     });
     return stdout.trim().length > 0;
   } catch {
-    return false;
+    // If git fails (e.g. corrupt repo, missing binary), treat the workdir as
+    // dirty/guarded so it is NOT classified as safe for unattended writes.
+    return true;
   }
 }
 

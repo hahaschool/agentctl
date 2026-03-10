@@ -150,7 +150,6 @@ export class AgentInstance extends EventEmitter {
     const resumeSessionId = this.resumeSession ?? undefined;
 
     this.state.sessionId = randomUUID();
-    this.state.startedAt = new Date();
     this.state.stoppedAt = null;
     this.state.costUsd = 0;
     this.state.prompt = prompt;
@@ -471,6 +470,9 @@ export class AgentInstance extends EventEmitter {
   }
 
   private async beginExecution(prompt: string, resumeSessionId: string | undefined): Promise<void> {
+    // Stamp startedAt here (after safety approval resolves) so that run
+    // duration metrics exclude the time the agent spent waiting for approval.
+    this.state.startedAt = new Date();
     this.transitionTo('running');
     this.log.info(
       { sessionId: this.state.sessionId, projectPath: this.executionProjectPath },
