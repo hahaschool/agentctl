@@ -175,6 +175,89 @@ WS   /api/ws                          # Bidirectional control
      → send: {type:"ping"}
 ```
 
+## Manual Runtime Switching Smoke Test
+
+Use this when you want to manually exercise the unified Claude Code / Codex flow in local dev before touching the mobile app or web UI.
+
+```bash
+BASE_URL=http://localhost:8080
+PROJECT_PATH=/Users/hahaschool/agentctl
+MACHINE_ID=$(curl -fsS "$BASE_URL/api/agents" | jq -r '.[0].id // .[0].machineId')
+
+if [ -z "$MACHINE_ID" ] || [ "$MACHINE_ID" = "null" ]; then
+  echo "No registered machines. Start agent-worker first."
+  exit 1
+fi
+
+echo "Using machine: $MACHINE_ID"
+```
+
+Create a Codex managed session:
+
+```bash
+CREATE_CODEX=$(curl -fsS -X POST "$BASE_URL/api/runtime-sessions" \
+  -H "content-type: application/json" \
+  -d "{
+    \"runtime\": \"codex\",
+    \"machineId\": \"$MACHINE_ID\",
+    \"projectPath\": \"$PROJECT_PATH\",
+    \"prompt\": \"Inspect the current runtime-management work and report status.\"
+  }")
+
+echo "$CREATE_CODEX" | jq
+CODEX_SESSION_ID=$(echo "$CREATE_CODEX" | jq -r '.session.id')
+```
+
+Inspect the managed session list:
+
+```bash
+curl -fsS "$BASE_URL/api/runtime-sessions?limit=10" | jq
+```
+
+Preflight a cross-runtime handoff into Claude Code:
+
+```bash
+curl -fsS \
+  "$BASE_URL/api/runtime-sessions/$CODEX_SESSION_ID/handoff/preflight?targetRuntime=claude-code&targetMachineId=$MACHINE_ID" \
+  | jq
+```
+
+Start the handoff:
+
+```bash
+HANDOFF=$(curl -fsS -X POST "$BASE_URL/api/runtime-sessions/$CODEX_SESSION_ID/handoff" \
+  -H "content-type: application/json" \
+  -d "{
+    \"targetRuntime\": \"claude-code\",
+    \"targetMachineId\": \"$MACHINE_ID\",
+    \"reason\": \"manual-feedback\",
+    \"prompt\": \"Continue from the existing worktree and explain what state transferred.\"
+  }")
+
+echo "$HANDOFF" | jq
+CLAUDE_SESSION_ID=$(echo "$HANDOFF" | jq -r '.session.id')
+```
+
+Inspect handoff history and the target managed session:
+
+```bash
+curl -fsS "$BASE_URL/api/runtime-sessions/$CODEX_SESSION_ID/handoffs?limit=10" | jq
+curl -fsS "$BASE_URL/api/runtime-sessions?runtime=claude-code&limit=10" | jq
+```
+
+Useful UI routes while this is running:
+
+```bash
+open http://localhost:5173/runtime-sessions
+open http://localhost:5173
+```
+
+Expected behavior:
+- `/runtime-sessions` shows both managed sessions
+- `handoff history` records `native-import` or `snapshot-handoff`
+- dashboard summaries update the managed runtime counts and handoff rates
+- if preflight says native import is unavailable, the actual handoff still succeeds through snapshot fallback
+
 ## Docker Production
 
 ```bash
