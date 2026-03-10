@@ -1095,6 +1095,148 @@ describe('E2E smoke tests — runtime management', () => {
       limit: 10,
     });
   });
+
+  it('records failed handoffs and error session state when target startup fails', async () => {
+    const projectPath = '/workspace/runtime-failure-smoke';
+    const snapshot = {
+      sourceRuntime: 'codex',
+      sourceSessionId: 'ms-source-failure',
+      sourceNativeSessionId: 'codex-native-failure',
+      projectPath,
+      worktreePath: `${projectPath}/.trees/runtime-failure-smoke`,
+      branch: 'main',
+      headSha: 'ghi789',
+      dirtyFiles: ['packages/control-plane/src/api/routes/e2e-smoke.test.ts'],
+      diffSummary: 'Runtime failure smoke diff.',
+      conversationSummary: 'Continue after the failed runtime handoff.',
+      openTodos: ['inspect target worker failure'],
+      nextSuggestedPrompt: 'Retry the handoff after fixing the worker.',
+      activeConfigRevision: 3,
+      activeMcpServers: ['mem0'],
+      activeSkills: ['systematic-debugging'],
+      reason: 'manual',
+    } as const;
+
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          session: {
+            runtime: 'codex',
+            sessionId: 'worker-codex-failure',
+            nativeSessionId: 'codex-native-failure',
+            agentId: 'adhoc',
+            projectPath,
+            model: null,
+            status: 'active',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          snapshot,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({
+          error: 'WORKER_UNREACHABLE',
+          message: 'Target worker could not start runtime handoff',
+        }),
+        statusText: 'Bad Gateway',
+      });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: runtimeMachine.id,
+        projectPath,
+        prompt: 'Start runtime failure smoke session.',
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const sourceSessionId = createResponse.json().session.id as string;
+
+    const handoffResponse = await app.inject({
+      method: 'POST',
+      url: `/api/runtime-sessions/${sourceSessionId}/handoff`,
+      payload: {
+        targetRuntime: 'claude-code',
+        targetMachineId: runtimeMachine.id,
+        reason: 'manual',
+        prompt: 'Attempt the failing handoff.',
+      },
+    });
+
+    expect(handoffResponse.statusCode).toBe(502);
+    expect(handoffResponse.json()).toMatchObject({
+      error: 'WORKER_UNREACHABLE',
+      message: 'Target worker could not start runtime handoff',
+    });
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions?limit=10',
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().count).toBe(2);
+    expect(
+      listResponse.json().sessions.map((session: { runtime: string; status: string }) => ({
+        runtime: session.runtime,
+        status: session.status,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        { runtime: 'codex', status: 'active' },
+        { runtime: 'claude-code', status: 'error' },
+      ]),
+    );
+
+    const historyResponse = await app.inject({
+      method: 'GET',
+      url: `/api/runtime-sessions/${sourceSessionId}/handoffs?limit=10`,
+    });
+
+    expect(historyResponse.statusCode).toBe(200);
+    expect(historyResponse.json().count).toBe(1);
+    expect(historyResponse.json().handoffs[0]).toMatchObject({
+      targetRuntime: 'claude-code',
+      strategy: 'snapshot-handoff',
+      status: 'failed',
+      errorMessage: 'Target worker could not start runtime handoff',
+    });
+
+    const summaryResponse = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/handoffs/summary?limit=10',
+    });
+
+    expect(summaryResponse.statusCode).toBe(200);
+    expect(summaryResponse.json()).toEqual({
+      ok: true,
+      summary: {
+        total: 1,
+        succeeded: 0,
+        failed: 1,
+        pending: 0,
+        nativeImportSuccesses: 0,
+        nativeImportFallbacks: 0,
+      },
+      limit: 10,
+    });
+  });
 });
 
 // ===========================================================================
