@@ -1,6 +1,6 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
@@ -749,7 +749,7 @@ describe('E2E smoke tests — runtime management', () => {
     ),
   });
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     app = await createServer({
       logger,
       dbRegistry,
@@ -760,17 +760,13 @@ describe('E2E smoke tests — runtime management', () => {
     await app.ready();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     restoreFetch(originalFetch);
     vi.clearAllMocks();
     vi.mocked(dbRegistry.listMachines).mockResolvedValue([runtimeMachine]);
     vi.mocked(dbRegistry.getMachine).mockImplementation(async (machineId: string) =>
       machineId === runtimeMachine.id ? runtimeMachine : undefined,
     );
-  });
-
-  afterAll(async () => {
-    restoreFetch(originalFetch);
     await app.close();
   });
 
@@ -936,6 +932,165 @@ describe('E2E smoke tests — runtime management', () => {
         pending: 0,
         nativeImportSuccesses: 0,
         nativeImportFallbacks: 1,
+      },
+      limit: 10,
+    });
+  });
+
+  it('tracks native-import handoffs in runtime summary analytics', async () => {
+    const projectPath = '/workspace/runtime-native-smoke';
+    const snapshot = {
+      sourceRuntime: 'claude-code',
+      sourceSessionId: 'ms-source-native',
+      sourceNativeSessionId: 'claude-native-1',
+      projectPath,
+      worktreePath: `${projectPath}/.trees/runtime-native-smoke`,
+      branch: 'main',
+      headSha: 'def456',
+      dirtyFiles: ['packages/agent-worker/src/runtime/native-import/codex-to-claude.ts'],
+      diffSummary: 'Runtime native-import smoke diff.',
+      conversationSummary: 'Continue from the runtime native-import handoff.',
+      openTodos: ['verify native import analytics'],
+      nextSuggestedPrompt: 'Continue from the native-import session.',
+      activeConfigRevision: 2,
+      activeMcpServers: ['mem0', 'clickhouse'],
+      activeSkills: ['systematic-debugging', 'verification-before-completion'],
+      reason: 'manual',
+    } as const;
+
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          session: {
+            runtime: 'claude-code',
+            sessionId: 'worker-claude-1',
+            nativeSessionId: 'claude-native-1',
+            agentId: 'adhoc',
+            projectPath,
+            model: null,
+            status: 'active',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          nativeImportCapable: true,
+          attempt: {
+            ok: true,
+            sourceRuntime: 'claude-code',
+            targetRuntime: 'codex',
+            reason: 'succeeded',
+            metadata: { probe: 'claude-to-codex' },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          snapshot,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'native-import',
+          attemptedStrategies: ['native-import'],
+          nativeImportAttempt: {
+            ok: true,
+            sourceRuntime: 'claude-code',
+            targetRuntime: 'codex',
+            reason: 'succeeded',
+            metadata: { probe: 'claude-to-codex' },
+          },
+          snapshot,
+          session: {
+            runtime: 'codex',
+            sessionId: 'worker-codex-2',
+            nativeSessionId: 'codex-native-2',
+            agentId: 'adhoc',
+            projectPath,
+            model: null,
+            status: 'active',
+          },
+        }),
+      });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'claude-code',
+        machineId: runtimeMachine.id,
+        projectPath,
+        prompt: 'Start runtime native-import smoke session.',
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(createResponse.json().session.runtime).toBe('claude-code');
+    const sourceSessionId = createResponse.json().session.id as string;
+
+    const preflightResponse = await app.inject({
+      method: 'GET',
+      url: `/api/runtime-sessions/${sourceSessionId}/handoff/preflight?targetRuntime=codex&targetMachineId=${runtimeMachine.id}`,
+    });
+
+    expect(preflightResponse.statusCode).toBe(200);
+    expect(preflightResponse.json().nativeImportCapable).toBe(true);
+    expect(preflightResponse.json().attempt.reason).toBe('succeeded');
+
+    const handoffResponse = await app.inject({
+      method: 'POST',
+      url: `/api/runtime-sessions/${sourceSessionId}/handoff`,
+      payload: {
+        targetRuntime: 'codex',
+        targetMachineId: runtimeMachine.id,
+        reason: 'manual',
+        prompt: 'Continue on Codex via native import.',
+      },
+    });
+
+    expect(handoffResponse.statusCode).toBe(202);
+    expect(handoffResponse.json().strategy).toBe('native-import');
+    expect(handoffResponse.json().session.runtime).toBe('codex');
+    expect(handoffResponse.json().nativeImportAttempt.reason).toBe('succeeded');
+
+    const historyResponse = await app.inject({
+      method: 'GET',
+      url: `/api/runtime-sessions/${sourceSessionId}/handoffs?limit=10`,
+    });
+
+    expect(historyResponse.statusCode).toBe(200);
+    expect(historyResponse.json().count).toBe(1);
+    expect(historyResponse.json().handoffs[0].strategy).toBe('native-import');
+
+    const summaryResponse = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/handoffs/summary?limit=10',
+    });
+
+    expect(summaryResponse.statusCode).toBe(200);
+    expect(summaryResponse.json()).toEqual({
+      ok: true,
+      summary: {
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+        pending: 0,
+        nativeImportSuccesses: 1,
+        nativeImportFallbacks: 0,
       },
       limit: 10,
     });
