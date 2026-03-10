@@ -18,11 +18,25 @@ import { SessionListItem } from '../components/SessionListItem';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import type { AgentConfig, ApiAccount, Session, SessionContentMessage } from '../lib/api';
+import type {
+  AgentConfig,
+  ApiAccount,
+  Session,
+  SessionContentMessage,
+} from '../lib/api';
 import { api } from '../lib/api';
 import { downloadCsv, shortenPath } from '../lib/format-utils';
 import type { AgentRuntime } from '../lib/model-options';
-import { accountsQuery, queryKeys, sessionsQuery, useCreateAgent } from '../lib/queries';
+import { accountsQuery, queryKeys, runtimeSessionsQuery, sessionsQuery, useCreateAgent } from '../lib/queries';
+import {
+  buildUnifiedSessionRows,
+  matchesUnifiedSessionSearch,
+  matchesUnifiedSessionType,
+  type UnifiedRuntimeSessionRow,
+  type UnifiedSessionRow,
+  type UnifiedSessionTypeFilter,
+} from './unified-session-model';
+import { RuntimeSessionPanel } from './RuntimeSessionPanel';
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
 type SortOrder = 'newest' | 'oldest' | 'status' | 'cost' | 'duration';
@@ -36,55 +50,138 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'error', label: 'Error' },
 ];
 
+const TYPE_OPTIONS: Array<{ key: UnifiedSessionTypeFilter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'agent', label: 'Agent' },
+  { key: 'runtime', label: 'Runtime' },
+];
+
 function matchesStatusFilter(status: string, filter: StatusFilter): boolean {
   if (filter === 'all') return true;
   if (filter === 'ended') return status === 'ended' || status === 'paused';
   return status === filter;
 }
 
-function matchesSearchQuery(session: Session, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  if (session.id.toLowerCase().includes(q)) return true;
-  if (session.agentId.toLowerCase().includes(q)) return true;
-  if (session.agentName?.toLowerCase().includes(q)) return true;
-  if (session.projectPath?.toLowerCase().includes(q)) return true;
-  if (session.machineId.toLowerCase().includes(q)) return true;
-  if (session.model?.toLowerCase().includes(q)) return true;
-  return false;
-}
-
-function exportSessionsCsv(sessions: Session[]): void {
+function exportSessionsCsv(rows: UnifiedSessionRow[]): void {
   downloadCsv(
     [
       'id',
-      'agentName',
+      'type',
+      'label',
       'machineId',
       'status',
       'model',
       'projectPath',
       'startedAt',
       'endedAt',
+      'activityAt',
       'costUsd',
       'messageCount',
     ],
-    sessions.map((s) => [
-      s.id,
-      s.agentName ?? s.agentId,
-      s.machineId,
-      s.status,
-      s.model,
-      s.projectPath,
-      s.startedAt,
-      s.endedAt,
-      s.metadata?.costUsd,
-      s.metadata?.messageCount,
-    ]),
+    rows.map((row) => {
+      if (row.kind === 'agent') {
+        const session = row.session;
+        return [
+          row.id,
+          'agent',
+          row.label,
+          row.machineId,
+          row.status,
+          session.model,
+          row.projectPath,
+          session.startedAt,
+          session.endedAt,
+          row.activityAt,
+          session.metadata?.costUsd,
+          session.metadata?.messageCount,
+        ];
+      }
+
+      const session = row.session;
+      return [
+        row.id,
+        'runtime',
+        row.label,
+        row.machineId,
+        row.status,
+        typeof session.metadata?.model === 'string' ? session.metadata.model : null,
+        row.projectPath,
+        session.startedAt,
+        session.endedAt,
+        row.activityAt,
+        null,
+        null,
+      ];
+    }),
     `sessions-${new Date().toISOString().slice(0, 10)}.csv`,
   );
 }
 
 const PAGE_SIZE = 50;
+
+type RuntimeSessionListItemProps = {
+  row: UnifiedRuntimeSessionRow;
+  isSelected: boolean;
+  isFocused: boolean;
+  onSelect: (id: string) => void;
+};
+
+function RuntimeSessionListItem({
+  row,
+  isSelected,
+  isFocused,
+  onSelect,
+}: RuntimeSessionListItemProps): React.JSX.Element {
+  const model =
+    typeof row.session.metadata?.model === 'string' ? row.session.metadata.model : 'default';
+
+  return (
+    <div
+      role="option"
+      id={`session-${row.id}`}
+      tabIndex={isFocused ? 0 : -1}
+      aria-selected={isSelected}
+      className={cn(
+        'group flex w-full text-left border-b border-border transition-all duration-200 hover:border-border/80 border-l-[3px]',
+        isSelected
+          ? 'bg-accent/15 border-l-blue-500'
+          : isFocused
+            ? 'bg-accent/10 ring-1 ring-inset ring-primary/40 border-l-blue-500/70'
+            : 'bg-transparent hover:bg-accent/8 border-l-blue-500/50',
+      )}
+    >
+      <div className="flex items-start pt-4 pl-2.5 shrink-0">
+        <div className="w-4 h-4 rounded border border-border/60 bg-muted/30" aria-hidden />
+      </div>
+      <button
+        type="button"
+        onClick={() => onSelect(row.id)}
+        className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
+      >
+        <div className="flex justify-between items-center mb-1.5 gap-2">
+          <span className="font-medium text-xs text-foreground/90 truncate">{row.label}</span>
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
+            {row.status}
+          </span>
+        </div>
+        <div className="text-xs text-muted-foreground flex gap-2 items-center flex-wrap">
+          <span className="font-medium text-foreground/70">{row.machineId}</span>
+          <span className="text-muted-foreground/50">|</span>
+          <span>{model}</span>
+          {row.secondaryLabel && (
+            <>
+              <span className="text-muted-foreground/50">|</span>
+              <span className="font-mono">{row.secondaryLabel}</span>
+            </>
+          )}
+        </div>
+        {row.projectPath && (
+          <div className="mt-1 text-[11px] text-muted-foreground/80 truncate">{row.projectPath}</div>
+        )}
+      </button>
+    </div>
+  );
+}
 
 export function SessionsPage(): React.JSX.Element {
   const toast = useToast();
@@ -94,6 +191,7 @@ export function SessionsPage(): React.JSX.Element {
   const [accumulatedSessions, setAccumulatedSessions] = useState<Session[]>([]);
 
   const sessions = useQuery(sessionsQuery({ offset, limit: PAGE_SIZE }));
+  const runtimeSessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
 
   // When fresh data arrives, append to (or replace) the accumulated list.
   // If offset is 0 it's a fresh load/reset, so we replace.
@@ -118,6 +216,11 @@ export function SessionsPage(): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
   const [lastSentMessage, setLastSentMessage] = useState<{ text: string; ts: number } | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<UnifiedSessionTypeFilter>(() => {
+    if (typeof window === 'undefined') return 'all';
+    const type = new URLSearchParams(window.location.search).get('type');
+    return type === 'agent' || type === 'runtime' ? type : 'all';
+  });
   const [searchQuery, setSearchQuery] = useState(() => {
     if (typeof window === 'undefined') return '';
     return new URLSearchParams(window.location.search).get('agentId') ?? '';
@@ -161,7 +264,7 @@ export function SessionsPage(): React.JSX.Element {
   useEffect(() => {
     setOffset(0);
     setCheckedIds(new Set());
-  }, [statusFilter, searchQuery]);
+  }, [statusFilter, searchQuery, typeFilter]);
 
   // --- New Session form state ---
   const [showCreateForm, setShowCreateForm] = useState(() => {
@@ -197,6 +300,7 @@ export function SessionsPage(): React.JSX.Element {
     setOffset(0);
     setAccumulatedSessions([]);
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    void queryClient.invalidateQueries({ queryKey: ['runtime-sessions'] });
   }, [queryClient]);
 
   // Refresh without clearing accumulated sessions — avoids empty flash.
@@ -204,7 +308,10 @@ export function SessionsPage(): React.JSX.Element {
   // won't re-fire, so we must NOT eagerly clear accumulatedSessions here.
   const refreshSessions = useCallback(async () => {
     setOffset(0);
-    await queryClient.refetchQueries({ queryKey: queryKeys.sessions() });
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: queryKeys.sessions() }),
+      queryClient.refetchQueries({ queryKey: ['runtime-sessions'] }),
+    ]);
   }, [queryClient]);
 
   useHotkeys(
@@ -228,43 +335,68 @@ export function SessionsPage(): React.JSX.Element {
   }, [resetAndInvalidateSessions]);
 
   const sessionList = accumulatedSessions;
+  const runtimeSessionList = runtimeSessions.data?.sessions ?? [];
+  const unifiedSessionList = useMemo(
+    () => buildUnifiedSessionRows(sessionList, runtimeSessionList),
+    [runtimeSessionList, sessionList],
+  );
   const hasMore = sessions.data?.hasMore ?? false;
-  const totalCount = sessions.data?.total ?? accumulatedSessions.length;
+  const totalCount =
+    (sessions.data?.total ?? sessionList.length) +
+    (runtimeSessions.data?.count ?? runtimeSessionList.length);
+  const loadedCount = sessionList.length + runtimeSessionList.length;
 
   const statusCounts = useMemo(() => {
     const counts: Record<StatusFilter, number> = {
-      all: sessionList.length,
+      all: unifiedSessionList.length,
       starting: 0,
       active: 0,
       ended: 0,
       error: 0,
     };
-    for (const s of sessionList) {
-      if (s.status === 'starting') counts.starting++;
-      else if (s.status === 'active') counts.active++;
-      else if (s.status === 'ended' || s.status === 'paused') counts.ended++;
-      else if (s.status === 'error') counts.error++;
+    for (const row of unifiedSessionList) {
+      if (row.status === 'starting') counts.starting++;
+      else if (row.status === 'active') counts.active++;
+      else if (row.status === 'ended' || row.status === 'paused') counts.ended++;
+      else if (row.status === 'error') counts.error++;
     }
     return counts;
-  }, [sessionList]);
+  }, [unifiedSessionList]);
 
   const filteredSessions = useMemo(() => {
-    let result = sessionList.filter(
-      (s) => matchesStatusFilter(s.status, statusFilter) && matchesSearchQuery(s, searchQuery),
+    let result = unifiedSessionList.filter(
+      (row) =>
+        matchesUnifiedSessionType(row, typeFilter) &&
+        matchesStatusFilter(row.status, statusFilter) &&
+        matchesUnifiedSessionSearch(row, searchQuery),
     );
 
     if (hideEmpty) {
-      result = result.filter((s) => s.claudeSessionId);
+      result = result.filter((row) =>
+        row.kind === 'agent' ? Boolean(row.session.claudeSessionId) : Boolean(row.session.nativeSessionId),
+      );
     }
 
     // Sort
     if (sortOrder === 'newest') {
       result = [...result].sort(
-        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+        (a, b) => {
+          const newestA =
+            a.kind === 'agent' ? a.session.startedAt : (a.activityAt ?? a.session.startedAt ?? 0);
+          const newestB =
+            b.kind === 'agent' ? b.session.startedAt : (b.activityAt ?? b.session.startedAt ?? 0);
+          return new Date(newestB).getTime() - new Date(newestA).getTime();
+        },
       );
     } else if (sortOrder === 'oldest') {
       result = [...result].sort(
-        (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
+        (a, b) => {
+          const oldestA =
+            a.kind === 'agent' ? a.session.startedAt : (a.session.startedAt ?? a.activityAt ?? 0);
+          const oldestB =
+            b.kind === 'agent' ? b.session.startedAt : (b.session.startedAt ?? b.activityAt ?? 0);
+          return new Date(oldestA).getTime() - new Date(oldestB).getTime();
+        },
       );
     } else if (sortOrder === 'status') {
       const statusOrder: Record<string, number> = {
@@ -278,30 +410,41 @@ export function SessionsPage(): React.JSX.Element {
         (a, b) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5),
       );
     } else if (sortOrder === 'cost') {
-      result = [...result].sort((a, b) => (b.metadata?.costUsd ?? 0) - (a.metadata?.costUsd ?? 0));
+      result = [...result].sort((a, b) => {
+        const costA = a.kind === 'agent' ? (a.session.metadata?.costUsd ?? 0) : 0;
+        const costB = b.kind === 'agent' ? (b.session.metadata?.costUsd ?? 0) : 0;
+        return costB - costA;
+      });
     } else if (sortOrder === 'duration') {
       result = [...result].sort((a, b) => {
-        const endA = a.endedAt ?? a.lastHeartbeat ?? new Date().toISOString();
-        const endB = b.endedAt ?? b.lastHeartbeat ?? new Date().toISOString();
-        const durA = new Date(endA).getTime() - new Date(a.startedAt).getTime();
-        const durB = new Date(endB).getTime() - new Date(b.startedAt).getTime();
+        const startA = a.kind === 'agent' ? a.session.startedAt : (a.session.startedAt ?? a.activityAt ?? new Date().toISOString());
+        const startB = b.kind === 'agent' ? b.session.startedAt : (b.session.startedAt ?? b.activityAt ?? new Date().toISOString());
+        const endA = a.activityAt ?? new Date().toISOString();
+        const endB = b.activityAt ?? new Date().toISOString();
+        const durA = new Date(endA).getTime() - new Date(startA).getTime();
+        const durB = new Date(endB).getTime() - new Date(startB).getTime();
         return durB - durA;
       });
     }
 
     return result;
-  }, [sessionList, statusFilter, searchQuery, hideEmpty, sortOrder]);
+  }, [hideEmpty, searchQuery, sortOrder, statusFilter, typeFilter, unifiedSessionList]);
+
+  const selectableRows = useMemo(
+    () => filteredSessions.filter((row): row is Extract<UnifiedSessionRow, { kind: 'agent' }> => row.kind === 'agent'),
+    [filteredSessions],
+  );
 
   const groupedSessions = useMemo(() => {
     if (groupBy === 'none') return null;
 
-    const groups = new Map<string, Session[]>();
+    const groups = new Map<string, UnifiedSessionRow[]>();
     for (const s of filteredSessions) {
       const key =
         groupBy === 'project'
           ? (shortenPath(s.projectPath) ?? '(no project)')
           : groupBy === 'agent'
-            ? (s.agentName ?? s.agentId.slice(0, 12))
+            ? (s.kind === 'agent' ? (s.session.agentName ?? s.session.agentId.slice(0, 12)) : s.label)
             : s.machineId;
       const existing = groups.get(key);
       if (existing) {
@@ -332,11 +475,10 @@ export function SessionsPage(): React.JSX.Element {
   }, []);
 
   const cleanupSessions = useMemo(
-    () =>
-      sessionList.filter(
-        (s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error',
-      ),
-    [sessionList],
+    () => filteredSessions.filter((row): row is Extract<UnifiedSessionRow, { kind: 'agent' }> => row.kind === 'agent')
+      .map((row) => row.session)
+      .filter((s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error'),
+    [filteredSessions],
   );
 
   const handleCleanup = useCallback(async () => {
@@ -392,7 +534,7 @@ export function SessionsPage(): React.JSX.Element {
           const next = new Set(prev);
           for (let i = start; i <= end; i++) {
             const sessionAtIndex = filteredSessions[i];
-            if (sessionAtIndex) next.add(sessionAtIndex.id);
+            if (sessionAtIndex?.kind === 'agent') next.add(sessionAtIndex.id);
           }
           return next;
         });
@@ -407,9 +549,9 @@ export function SessionsPage(): React.JSX.Element {
   );
 
   // Group-level select/deselect all sessions in a group
-  const toggleGroupChecked = useCallback((groupItems: Session[]) => {
+  const toggleGroupChecked = useCallback((groupItems: UnifiedSessionRow[]) => {
     setCheckedIds((prev) => {
-      const groupIds = groupItems.map((s) => s.id);
+      const groupIds = groupItems.filter((row) => row.kind === 'agent').map((s) => s.id);
       const allChecked = groupIds.every((gid) => prev.has(gid));
       const next = new Set(prev);
       if (allChecked) {
@@ -421,7 +563,8 @@ export function SessionsPage(): React.JSX.Element {
     });
   }, []);
 
-  const selected = sessionList.find((s) => s.id === selectedId) ?? null;
+  const selectedRow = unifiedSessionList.find((row) => row.id === selectedId) ?? null;
+  const selected = selectedRow?.kind === 'agent' ? selectedRow.session : null;
 
   const handleSend = useCallback(async () => {
     if (!selected || !prompt.trim()) return;
@@ -598,7 +741,7 @@ export function SessionsPage(): React.JSX.Element {
         className={cn(
           'border-r border-border flex flex-col',
           // Mobile: full width, hidden when a session is selected
-          selected ? 'hidden md:flex' : 'flex w-full',
+          selectedRow ? 'hidden md:flex' : 'flex w-full',
           // Desktop: fixed sidebar width
           'md:w-[340px] md:min-w-[340px] md:max-w-[340px] overflow-hidden',
         )}
@@ -608,7 +751,7 @@ export function SessionsPage(): React.JSX.Element {
             <h2 className="text-sm font-semibold tracking-tight flex-1 min-w-0">
               Sessions
               <span className="ml-1.5 text-[11px] font-normal text-muted-foreground tabular-nums">
-                {hasMore ? `${sessionList.length}/${totalCount}` : String(filteredSessions.length)}
+                {hasMore ? `${loadedCount}/${totalCount}` : String(filteredSessions.length)}
               </span>
             </h2>
             <button
@@ -648,7 +791,7 @@ export function SessionsPage(): React.JSX.Element {
             )}
             <SimpleTooltip
               content={
-                filteredSessions.length === 0 ? 'No sessions to export' : 'Download sessions as CSV'
+          filteredSessions.length === 0 ? 'No sessions to export' : 'Download sessions as CSV'
               }
             >
               <button
@@ -745,6 +888,21 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Sort / Bulk / Group controls */}
         <div className="px-2 py-1 border-b border-border flex items-center gap-1">
+          <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer py-1">
+            <span>Type</span>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as UnifiedSessionTypeFilter)}
+              aria-label="Type"
+              className="h-6 px-1.5 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+            >
+              {TYPE_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label
             htmlFor="sessions-select-all"
             className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer py-1"
@@ -752,18 +910,17 @@ export function SessionsPage(): React.JSX.Element {
             <input
               id="sessions-select-all"
               type="checkbox"
-              checked={checkedIds.size > 0 && checkedIds.size === filteredSessions.length}
+              checked={checkedIds.size > 0 && checkedIds.size === selectableRows.length}
               ref={(el) => {
                 if (el) {
-                  el.indeterminate =
-                    checkedIds.size > 0 && checkedIds.size < filteredSessions.length;
+                  el.indeterminate = checkedIds.size > 0 && checkedIds.size < selectableRows.length;
                 }
               }}
               onChange={() => {
-                if (checkedIds.size === filteredSessions.length && filteredSessions.length > 0) {
+                if (checkedIds.size === selectableRows.length && selectableRows.length > 0) {
                   setCheckedIds(new Set());
                 } else {
-                  setCheckedIds(new Set(filteredSessions.map((s) => s.id)));
+                  setCheckedIds(new Set(selectableRows.map((s) => s.id)));
                 }
               }}
               className="w-3 h-3 cursor-pointer"
@@ -843,7 +1000,7 @@ export function SessionsPage(): React.JSX.Element {
               ))}
             </div>
           ) : filteredSessions.length === 0 ? (
-            sessionList.length === 0 ? (
+            unifiedSessionList.length === 0 ? (
               <EmptyState
                 icon={MessageSquare}
                 title="No sessions yet"
@@ -923,33 +1080,53 @@ export function SessionsPage(): React.JSX.Element {
                     </button>
                   </div>
                   {!collapsedGroups.has(groupKey) &&
-                    groupItems.map((s) => (
-                      <SessionListItem
-                        key={s.id}
-                        session={s}
-                        isSelected={selectedId === s.id}
-                        isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
-                        onSelect={setSelectedId}
-                        isChecked={checkedIds.has(s.id)}
-                        onToggleCheck={toggleChecked}
-                        onItemClick={handleItemClick}
-                      />
-                    ))}
+                    groupItems.map((s) =>
+                      s.kind === 'agent' ? (
+                        <SessionListItem
+                          key={s.id}
+                          session={s.session}
+                          isSelected={selectedId === s.id}
+                          isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
+                          onSelect={setSelectedId}
+                          isChecked={checkedIds.has(s.id)}
+                          onToggleCheck={toggleChecked}
+                          onItemClick={handleItemClick}
+                        />
+                      ) : (
+                        <RuntimeSessionListItem
+                          key={s.id}
+                          row={s}
+                          isSelected={selectedId === s.id}
+                          isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
+                          onSelect={setSelectedId}
+                        />
+                      ),
+                    )}
                 </div>
               );
             })
           ) : (
             filteredSessions.map((s, i) => (
-              <SessionListItem
-                key={s.id}
-                session={s}
-                isSelected={selectedId === s.id}
-                isFocused={focusedIndex === i}
-                onSelect={setSelectedId}
-                isChecked={checkedIds.has(s.id)}
-                onToggleCheck={toggleChecked}
-                onItemClick={handleItemClick}
-              />
+              s.kind === 'agent' ? (
+                <SessionListItem
+                  key={s.id}
+                  session={s.session}
+                  isSelected={selectedId === s.id}
+                  isFocused={focusedIndex === i}
+                  onSelect={setSelectedId}
+                  isChecked={checkedIds.has(s.id)}
+                  onToggleCheck={toggleChecked}
+                  onItemClick={handleItemClick}
+                />
+              ) : (
+                <RuntimeSessionListItem
+                  key={s.id}
+                  row={s}
+                  isSelected={selectedId === s.id}
+                  isFocused={focusedIndex === i}
+                  onSelect={setSelectedId}
+                />
+              )
             ))
           )}
           {!sessions.isLoading && (
@@ -963,11 +1140,11 @@ export function SessionsPage(): React.JSX.Element {
                 >
                   {sessions.isFetching
                     ? 'Loading...'
-                    : `Load more (${totalCount - sessionList.length} remaining)`}
+                    : `Load more (${totalCount - loadedCount} remaining)`}
                 </button>
-              ) : sessionList.length > 0 ? (
+              ) : unifiedSessionList.length > 0 ? (
                 <p className="text-[11px] text-muted-foreground text-center">
-                  All {sessionList.length} sessions loaded
+                  All {unifiedSessionList.length} sessions loaded
                 </p>
               ) : null}
             </div>
@@ -988,7 +1165,7 @@ export function SessionsPage(): React.JSX.Element {
                 setCheckedIds((prev) => {
                   const next = new Set<string>();
                   for (const s of filteredSessions) {
-                    if (!prev.has(s.id)) next.add(s.id);
+                    if (s.kind === 'agent' && !prev.has(s.id)) next.add(s.id);
                   }
                   return next;
                 });
@@ -1021,12 +1198,12 @@ export function SessionsPage(): React.JSX.Element {
         className={cn(
           'flex-1 flex flex-col min-w-0 overflow-hidden',
           // Mobile: hidden when no session selected, full width when selected
-          selected ? 'flex' : 'hidden md:flex',
+          selectedRow ? 'flex' : 'hidden md:flex',
         )}
       >
-        {selected ? (
+        {selectedRow?.kind === 'agent' ? (
           <SessionDetailPanel
-            session={selected}
+            session={selectedRow.session}
             accounts={(accounts.data ?? []) as ApiAccount[]}
             prompt={prompt}
             onPromptChange={setPrompt}
@@ -1047,11 +1224,20 @@ export function SessionsPage(): React.JSX.Element {
             onStop={() => void handleStop()}
             onConvertToAgent={handleConvertToAgent}
             onOpenConvertDialog={() => {
-              setConvertName(selected.agentName ?? `agent-from-${selected.id.slice(0, 8)}`);
+              const agentSession = selectedRow.session;
+              setConvertName(
+                agentSession.agentName ?? `agent-from-${agentSession.id.slice(0, 8)}`,
+              );
               setShowConvertDialog(true);
             }}
             onCloseConvertDialog={() => setShowConvertDialog(false)}
             onOpenForkPicker={() => void openForkPicker()}
+          />
+        ) : selectedRow?.kind === 'runtime' ? (
+          <RuntimeSessionPanel
+            selectedSession={selectedRow.session}
+            onBack={() => setSelectedId(null)}
+            onSelectedSessionChange={setSelectedId}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
