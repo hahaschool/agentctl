@@ -400,22 +400,24 @@ describe('SessionsPage', () => {
         count: id ? 1 : 0,
       }),
     }));
-    mockRuntimeSessionPreflightQuery.mockImplementation((id: string, params: Record<string, unknown>) => ({
-      queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
-      queryFn: vi.fn().mockResolvedValue({
-        nativeImportCapable: true,
-        attempt: {
-          ok: false,
-          sourceRuntime: 'codex',
-          targetRuntime: String(params.targetRuntime ?? 'claude-code'),
-          reason: 'not_implemented',
-          metadata: {
-            targetCli: 'claude',
-            sourceStorage: '/Users/example/.codex/sessions',
+    mockRuntimeSessionPreflightQuery.mockImplementation(
+      (id: string, params: Record<string, unknown>) => ({
+        queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
+        queryFn: vi.fn().mockResolvedValue({
+          nativeImportCapable: true,
+          attempt: {
+            ok: false,
+            sourceRuntime: 'codex',
+            targetRuntime: String(params.targetRuntime ?? 'claude-code'),
+            reason: 'not_implemented',
+            metadata: {
+              targetCli: 'claude',
+              sourceStorage: '/Users/example/.codex/sessions',
+            },
           },
-        },
+        }),
       }),
-    }));
+    );
     mockResumeRuntimeSessionMutateAsync.mockResolvedValue({
       ok: true,
       session: createRuntimeSession(),
@@ -611,7 +613,13 @@ describe('SessionsPage', () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
       queryFn: vi.fn().mockResolvedValue({
-        sessions: [createSession({ id: 'agent-session-1', agentId: 'agent-alpha', agentName: 'Agent Alpha' })],
+        sessions: [
+          createSession({
+            id: 'agent-session-1',
+            agentId: 'agent-alpha',
+            agentName: 'Agent Alpha',
+          }),
+        ],
         total: 1,
         limit: 50,
         offset: 0,
@@ -622,7 +630,13 @@ describe('SessionsPage', () => {
       isFetching: false,
       refetch: vi.fn().mockResolvedValue({
         data: {
-          sessions: [createSession({ id: 'agent-session-1', agentId: 'agent-alpha', agentName: 'Agent Alpha' })],
+          sessions: [
+            createSession({
+              id: 'agent-session-1',
+              agentId: 'agent-alpha',
+              agentName: 'Agent Alpha',
+            }),
+          ],
           total: 1,
           limit: 50,
           offset: 0,
@@ -659,7 +673,13 @@ describe('SessionsPage', () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
       queryFn: vi.fn().mockResolvedValue({
-        sessions: [createSession({ id: 'agent-session-1', agentId: 'agent-alpha', agentName: 'Agent Alpha' })],
+        sessions: [
+          createSession({
+            id: 'agent-session-1',
+            agentId: 'agent-alpha',
+            agentName: 'Agent Alpha',
+          }),
+        ],
         total: 1,
         limit: 50,
         offset: 0,
@@ -670,7 +690,13 @@ describe('SessionsPage', () => {
       isFetching: false,
       refetch: vi.fn().mockResolvedValue({
         data: {
-          sessions: [createSession({ id: 'agent-session-1', agentId: 'agent-alpha', agentName: 'Agent Alpha' })],
+          sessions: [
+            createSession({
+              id: 'agent-session-1',
+              agentId: 'agent-alpha',
+              agentName: 'Agent Alpha',
+            }),
+          ],
           total: 1,
           limit: 50,
           offset: 0,
@@ -710,7 +736,13 @@ describe('SessionsPage', () => {
     mockSessionsQuery.mockReturnValue({
       queryKey: ['sessions'],
       queryFn: vi.fn().mockResolvedValue({
-        sessions: [createSession({ id: 'agent-session-1', agentId: 'agent-alpha', agentName: 'Agent Alpha' })],
+        sessions: [
+          createSession({
+            id: 'agent-session-1',
+            agentId: 'agent-alpha',
+            agentName: 'Agent Alpha',
+          }),
+        ],
         total: 1,
         limit: 50,
         offset: 0,
@@ -721,7 +753,13 @@ describe('SessionsPage', () => {
       isFetching: false,
       refetch: vi.fn().mockResolvedValue({
         data: {
-          sessions: [createSession({ id: 'agent-session-1', agentId: 'agent-alpha', agentName: 'Agent Alpha' })],
+          sessions: [
+            createSession({
+              id: 'agent-session-1',
+              agentId: 'agent-alpha',
+              agentName: 'Agent Alpha',
+            }),
+          ],
           total: 1,
           limit: 50,
           offset: 0,

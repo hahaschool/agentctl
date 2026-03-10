@@ -85,7 +85,8 @@ export function mapAgentSessionToUnifiedRow(session: Session): UnifiedAgentSessi
     status: session.status,
     activityAt: getAgentActivityAt(session),
     label: session.agentName ?? session.agentId,
-    secondaryLabel: session.model ?? (typeof session.metadata.model === 'string' ? session.metadata.model : null),
+    secondaryLabel:
+      session.model ?? (typeof session.metadata.model === 'string' ? session.metadata.model : null),
     searchTerms: uniqueSearchTerms([
       session.id,
       session.agentId,

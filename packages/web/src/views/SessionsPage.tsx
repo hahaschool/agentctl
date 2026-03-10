@@ -18,16 +18,18 @@ import { SessionListItem } from '../components/SessionListItem';
 import { SimpleTooltip } from '../components/SimpleTooltip';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import type {
-  AgentConfig,
-  ApiAccount,
-  Session,
-  SessionContentMessage,
-} from '../lib/api';
+import type { AgentConfig, ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import { downloadCsv, shortenPath } from '../lib/format-utils';
 import type { AgentRuntime } from '../lib/model-options';
-import { accountsQuery, queryKeys, runtimeSessionsQuery, sessionsQuery, useCreateAgent } from '../lib/queries';
+import {
+  accountsQuery,
+  queryKeys,
+  runtimeSessionsQuery,
+  sessionsQuery,
+  useCreateAgent,
+} from '../lib/queries';
+import { RuntimeSessionPanel } from './RuntimeSessionPanel';
 import {
   buildUnifiedSessionRows,
   matchesUnifiedSessionSearch,
@@ -36,7 +38,6 @@ import {
   type UnifiedSessionRow,
   type UnifiedSessionTypeFilter,
 } from './unified-session-model';
-import { RuntimeSessionPanel } from './RuntimeSessionPanel';
 
 type StatusFilter = 'all' | 'starting' | 'active' | 'ended' | 'error';
 type SortOrder = 'newest' | 'oldest' | 'status' | 'cost' | 'duration';
@@ -176,7 +177,9 @@ function RuntimeSessionListItem({
           )}
         </div>
         {row.projectPath && (
-          <div className="mt-1 text-[11px] text-muted-foreground/80 truncate">{row.projectPath}</div>
+          <div className="mt-1 text-[11px] text-muted-foreground/80 truncate">
+            {row.projectPath}
+          </div>
         )}
       </button>
     </div>
@@ -373,31 +376,29 @@ export function SessionsPage(): React.JSX.Element {
 
     if (hideEmpty) {
       result = result.filter((row) =>
-        row.kind === 'agent' ? Boolean(row.session.claudeSessionId) : Boolean(row.session.nativeSessionId),
+        row.kind === 'agent'
+          ? Boolean(row.session.claudeSessionId)
+          : Boolean(row.session.nativeSessionId),
       );
     }
 
     // Sort
     if (sortOrder === 'newest') {
-      result = [...result].sort(
-        (a, b) => {
-          const newestA =
-            a.kind === 'agent' ? a.session.startedAt : (a.activityAt ?? a.session.startedAt ?? 0);
-          const newestB =
-            b.kind === 'agent' ? b.session.startedAt : (b.activityAt ?? b.session.startedAt ?? 0);
-          return new Date(newestB).getTime() - new Date(newestA).getTime();
-        },
-      );
+      result = [...result].sort((a, b) => {
+        const newestA =
+          a.kind === 'agent' ? a.session.startedAt : (a.activityAt ?? a.session.startedAt ?? 0);
+        const newestB =
+          b.kind === 'agent' ? b.session.startedAt : (b.activityAt ?? b.session.startedAt ?? 0);
+        return new Date(newestB).getTime() - new Date(newestA).getTime();
+      });
     } else if (sortOrder === 'oldest') {
-      result = [...result].sort(
-        (a, b) => {
-          const oldestA =
-            a.kind === 'agent' ? a.session.startedAt : (a.session.startedAt ?? a.activityAt ?? 0);
-          const oldestB =
-            b.kind === 'agent' ? b.session.startedAt : (b.session.startedAt ?? b.activityAt ?? 0);
-          return new Date(oldestA).getTime() - new Date(oldestB).getTime();
-        },
-      );
+      result = [...result].sort((a, b) => {
+        const oldestA =
+          a.kind === 'agent' ? a.session.startedAt : (a.session.startedAt ?? a.activityAt ?? 0);
+        const oldestB =
+          b.kind === 'agent' ? b.session.startedAt : (b.session.startedAt ?? b.activityAt ?? 0);
+        return new Date(oldestA).getTime() - new Date(oldestB).getTime();
+      });
     } else if (sortOrder === 'status') {
       const statusOrder: Record<string, number> = {
         active: 0,
@@ -417,8 +418,14 @@ export function SessionsPage(): React.JSX.Element {
       });
     } else if (sortOrder === 'duration') {
       result = [...result].sort((a, b) => {
-        const startA = a.kind === 'agent' ? a.session.startedAt : (a.session.startedAt ?? a.activityAt ?? new Date().toISOString());
-        const startB = b.kind === 'agent' ? b.session.startedAt : (b.session.startedAt ?? b.activityAt ?? new Date().toISOString());
+        const startA =
+          a.kind === 'agent'
+            ? a.session.startedAt
+            : (a.session.startedAt ?? a.activityAt ?? new Date().toISOString());
+        const startB =
+          b.kind === 'agent'
+            ? b.session.startedAt
+            : (b.session.startedAt ?? b.activityAt ?? new Date().toISOString());
         const endA = a.activityAt ?? new Date().toISOString();
         const endB = b.activityAt ?? new Date().toISOString();
         const durA = new Date(endA).getTime() - new Date(startA).getTime();
@@ -431,7 +438,10 @@ export function SessionsPage(): React.JSX.Element {
   }, [hideEmpty, searchQuery, sortOrder, statusFilter, typeFilter, unifiedSessionList]);
 
   const selectableRows = useMemo(
-    () => filteredSessions.filter((row): row is Extract<UnifiedSessionRow, { kind: 'agent' }> => row.kind === 'agent'),
+    () =>
+      filteredSessions.filter(
+        (row): row is Extract<UnifiedSessionRow, { kind: 'agent' }> => row.kind === 'agent',
+      ),
     [filteredSessions],
   );
 
@@ -444,7 +454,9 @@ export function SessionsPage(): React.JSX.Element {
         groupBy === 'project'
           ? (shortenPath(s.projectPath) ?? '(no project)')
           : groupBy === 'agent'
-            ? (s.kind === 'agent' ? (s.session.agentName ?? s.session.agentId.slice(0, 12)) : s.label)
+            ? s.kind === 'agent'
+              ? (s.session.agentName ?? s.session.agentId.slice(0, 12))
+              : s.label
             : s.machineId;
       const existing = groups.get(key);
       if (existing) {
@@ -475,9 +487,11 @@ export function SessionsPage(): React.JSX.Element {
   }, []);
 
   const cleanupSessions = useMemo(
-    () => filteredSessions.filter((row): row is Extract<UnifiedSessionRow, { kind: 'agent' }> => row.kind === 'agent')
-      .map((row) => row.session)
-      .filter((s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error'),
+    () =>
+      filteredSessions
+        .filter((row): row is Extract<UnifiedSessionRow, { kind: 'agent' }> => row.kind === 'agent')
+        .map((row) => row.session)
+        .filter((s) => s.status === 'ended' || s.status === 'paused' || s.status === 'error'),
     [filteredSessions],
   );
 
@@ -791,7 +805,7 @@ export function SessionsPage(): React.JSX.Element {
             )}
             <SimpleTooltip
               content={
-          filteredSessions.length === 0 ? 'No sessions to export' : 'Download sessions as CSV'
+                filteredSessions.length === 0 ? 'No sessions to export' : 'Download sessions as CSV'
               }
             >
               <button
@@ -1086,7 +1100,9 @@ export function SessionsPage(): React.JSX.Element {
                           key={s.id}
                           session={s.session}
                           isSelected={selectedId === s.id}
-                          isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
+                          isFocused={
+                            focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
+                          }
                           onSelect={setSelectedId}
                           isChecked={checkedIds.has(s.id)}
                           onToggleCheck={toggleChecked}
@@ -1097,7 +1113,9 @@ export function SessionsPage(): React.JSX.Element {
                           key={s.id}
                           row={s}
                           isSelected={selectedId === s.id}
-                          isFocused={focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id}
+                          isFocused={
+                            focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
+                          }
                           onSelect={setSelectedId}
                         />
                       ),
@@ -1106,7 +1124,7 @@ export function SessionsPage(): React.JSX.Element {
               );
             })
           ) : (
-            filteredSessions.map((s, i) => (
+            filteredSessions.map((s, i) =>
               s.kind === 'agent' ? (
                 <SessionListItem
                   key={s.id}
@@ -1126,8 +1144,8 @@ export function SessionsPage(): React.JSX.Element {
                   isFocused={focusedIndex === i}
                   onSelect={setSelectedId}
                 />
-              )
-            ))
+              ),
+            )
           )}
           {!sessions.isLoading && (
             <div className="px-4 py-3 border-t border-border">
@@ -1225,9 +1243,7 @@ export function SessionsPage(): React.JSX.Element {
             onConvertToAgent={handleConvertToAgent}
             onOpenConvertDialog={() => {
               const agentSession = selectedRow.session;
-              setConvertName(
-                agentSession.agentName ?? `agent-from-${agentSession.id.slice(0, 8)}`,
-              );
+              setConvertName(agentSession.agentName ?? `agent-from-${agentSession.id.slice(0, 8)}`);
               setShowConvertDialog(true);
             }}
             onCloseConvertDialog={() => setShowConvertDialog(false)}

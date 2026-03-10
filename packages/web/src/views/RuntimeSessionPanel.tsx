@@ -174,7 +174,9 @@ function describeNativeImportPreflight(preflight?: RuntimeSessionPreflight | nul
       .filter(Boolean)
       .join(', ');
 
-    return details ? `Native import ready, ${details}` : 'Native import ready on this target runtime.';
+    return details
+      ? `Native import ready, ${details}`
+      : 'Native import ready on this target runtime.';
   }
 
   const fallbackSummary = describeNativeImportAttempt({
@@ -290,14 +292,17 @@ export function RuntimeSessionPanel({
   const canFork = Boolean(selectedSession?.nativeSessionId);
   const preflightSummary =
     canHandoff && selectedSession && selectedSession.runtime !== handoffTargetRuntime
-      ? describeNativeImportPreflight((preflight.data as RuntimeSessionPreflight | undefined) ?? null)
+      ? describeNativeImportPreflight(
+          (preflight.data as RuntimeSessionPreflight | undefined) ?? null,
+        )
       : null;
   const preflightStatus = summarizeNativeImportPreflightStatus({
     preflight:
       canHandoff && selectedSession && selectedSession.runtime !== handoffTargetRuntime
-        ? (((preflight.data as RuntimeSessionPreflight | undefined) ?? null) as
-            | Pick<RuntimeSessionPreflight, 'nativeImportCapable'>
-            | null)
+        ? (((preflight.data as RuntimeSessionPreflight | undefined) ?? null) as Pick<
+            RuntimeSessionPreflight,
+            'nativeImportCapable'
+          > | null)
         : null,
     isLoading:
       Boolean(selectedSession?.id) &&
@@ -312,9 +317,11 @@ export function RuntimeSessionPanel({
       selectedSession?.runtime !== handoffTargetRuntime);
   const filteredHandoffs = useMemo(
     () =>
-      (((handoffs.data as { handoffs?: RuntimeSessionHandoff[] } | undefined)?.handoffs ?? []).filter(
-        (handoff) => matchesHandoffHistoryFilter(handoff, handoffHistoryFilter),
-      ) as RuntimeSessionHandoff[]),
+      (
+        (handoffs.data as { handoffs?: RuntimeSessionHandoff[] } | undefined)?.handoffs ?? []
+      ).filter((handoff) =>
+        matchesHandoffHistoryFilter(handoff, handoffHistoryFilter),
+      ) as RuntimeSessionHandoff[],
     [handoffHistoryFilter, handoffs.data],
   );
   const handoffAnalytics = useMemo(
@@ -484,7 +491,9 @@ export function RuntimeSessionPanel({
           </div>
 
           <div className="space-y-2">
-            <div className="text-base font-semibold text-foreground break-all">{selectedSession.id}</div>
+            <div className="text-base font-semibold text-foreground break-all">
+              {selectedSession.id}
+            </div>
             <PathBadge path={selectedSession.projectPath} className="block max-w-full" />
             {selectedSession.worktreePath && (
               <PathBadge path={selectedSession.worktreePath} className="block max-w-full" />
@@ -493,7 +502,9 @@ export function RuntimeSessionPanel({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-border bg-background/40 p-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Machine</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Machine
+              </div>
               <div className="mt-2 text-sm font-medium text-foreground">
                 {machineNames.get(selectedSession.machineId) ?? selectedSession.machineId}
               </div>
@@ -507,13 +518,18 @@ export function RuntimeSessionPanel({
                 {selectedSession.nativeSessionId ?? 'Pending runtime assignment'}
               </div>
               {selectedSession.agentId && (
-                <div className="mt-1 text-xs text-muted-foreground">Agent {selectedSession.agentId}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Agent {selectedSession.agentId}
+                </div>
               )}
             </div>
             <div className="rounded-lg border border-border bg-background/40 p-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Timeline</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Timeline
+              </div>
               <div className="mt-2 text-sm text-foreground">
-                Started {selectedSession.startedAt ? formatDateTime(selectedSession.startedAt) : 'unknown'}
+                Started{' '}
+                {selectedSession.startedAt ? formatDateTime(selectedSession.startedAt) : 'unknown'}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {selectedSession.lastHeartbeat
@@ -556,7 +572,9 @@ export function RuntimeSessionPanel({
             <div className="text-sm font-semibold text-foreground">Session Actions</div>
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Resume</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Resume
+                </div>
                 <label className="space-y-1.5 text-sm text-muted-foreground block">
                   <span>Prompt</span>
                   <input
@@ -747,7 +765,8 @@ export function RuntimeSessionPanel({
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
-              Uses managed snapshot handoff and automatically falls back if native import is unavailable.
+              Uses managed snapshot handoff and automatically falls back if native import is
+              unavailable.
             </div>
             {!canHandoff && (
               <div className="text-xs text-muted-foreground">
@@ -767,7 +786,10 @@ export function RuntimeSessionPanel({
                   <div key={key} className="h-28 rounded-lg bg-muted/60 animate-pulse" />
                 ))}
               </div>
-            ) : (((handoffs.data as { handoffs?: RuntimeSessionHandoff[] } | undefined)?.handoffs ?? []).length === 0) ? (
+            ) : (
+                (handoffs.data as { handoffs?: RuntimeSessionHandoff[] } | undefined)?.handoffs ??
+                []
+              ).length === 0 ? (
               <EmptyState
                 title="No handoffs recorded"
                 description="This managed session has not been handed off between Claude Code and Codex yet."
@@ -793,21 +815,33 @@ export function RuntimeSessionPanel({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-lg border border-border bg-background/40 p-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total</div>
-                    <div className="mt-2 text-lg font-semibold text-foreground">{handoffAnalytics.total}</div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Total
+                    </div>
+                    <div className="mt-2 text-lg font-semibold text-foreground">
+                      {handoffAnalytics.total}
+                    </div>
                   </div>
                   <div className="rounded-lg border border-border bg-background/40 p-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Succeeded</div>
-                    <div className="mt-2 text-lg font-semibold text-foreground">{handoffAnalytics.succeeded}</div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Succeeded
+                    </div>
+                    <div className="mt-2 text-lg font-semibold text-foreground">
+                      {handoffAnalytics.succeeded}
+                    </div>
                   </div>
                   <div className="rounded-lg border border-border bg-background/40 p-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Native Import</div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Native Import
+                    </div>
                     <div className="mt-2 text-lg font-semibold text-foreground">
                       {handoffAnalytics.nativeImportSuccesses}
                     </div>
                   </div>
                   <div className="rounded-lg border border-border bg-background/40 p-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Fallbacks</div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Fallbacks
+                    </div>
                     <div className="mt-2 text-lg font-semibold text-foreground">
                       {handoffAnalytics.nativeImportFallbacks}
                     </div>
