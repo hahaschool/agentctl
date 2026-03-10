@@ -383,6 +383,13 @@ function discoverFromJsonlFiles(
   }
 }
 
+/**
+ * Max bytes to read from each JSONL file during discovery.
+ * 128 KB is enough to capture the first few messages (summary, branch)
+ * without blocking the event loop on multi-hundred-MB files.
+ */
+const JSONL_HEAD_BYTES = 128 * 1024;
+
 function extractJsonlSessionMetadata(
   filePath: string,
   fallbackLastActivity: string,
@@ -398,16 +405,19 @@ function extractJsonlSessionMetadata(
   const buffer = Buffer.allocUnsafe(64 * 1024);
   let fd: number | null = null;
   let leftover = '';
+  let totalBytesRead = 0;
 
   try {
     fd = openSync(filePath, 'r');
 
-    while (true) {
-      const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
+    while (totalBytesRead < JSONL_HEAD_BYTES) {
+      const toRead = Math.min(buffer.length, JSONL_HEAD_BYTES - totalBytesRead);
+      const bytesRead = readSync(fd, buffer, 0, toRead, null);
       if (bytesRead === 0) {
         break;
       }
 
+      totalBytesRead += bytesRead;
       leftover += buffer.toString('utf8', 0, bytesRead);
       const lines = leftover.split('\n');
       leftover = lines.pop() ?? '';
