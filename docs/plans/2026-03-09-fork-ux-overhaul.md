@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+> ℹ️ **Note:** Runtime names updated 2026-03-10 — `nanoclaw`/`openclaw` replaced with `codex` to match canonical `ManagedRuntime` type.
+
 **Goal:** Unify the fork/create-agent flows into a single dialog with smart context selection, agent runtime as an orthogonal dimension, and claude-mem memory-powered auto-select for navigating 2k+ message histories.
 
 **Architecture:** Replace the current dual-mode ContextPickerDialog (fork vs create-agent) with a single unified dialog featuring a tab toggle (Quick Fork / Create as Agent). Add an `AgentRuntime` dimension orthogonal to `AgentType` trigger types. Integrate claude-mem's 9k+ observation library as a first-class context source — search memories, display matches, auto-highlight corresponding raw messages. Add smart selection tools (key decisions, by-topic, timeline markers) and a live prompt preview panel.
@@ -23,7 +25,7 @@
 ```typescript
 // In packages/shared/src/types/agent.ts, ADD:
 
-export type AgentRuntime = 'claude-code' | 'nanoclaw' | 'openclaw';
+export type AgentRuntime = 'claude-code' | 'codex';
 
 // UPDATE Agent type — add runtime field:
 export type Agent = {
@@ -44,8 +46,7 @@ export type Agent = {
 
 export const AGENT_RUNTIMES: readonly { value: AgentRuntime; label: string; desc: string }[] = [
   { value: 'claude-code', label: 'Claude Code', desc: 'Full Claude Code CLI with built-in tools' },
-  { value: 'nanoclaw', label: 'NanoClaw', desc: 'Lightweight agent with filesystem IPC' },
-  { value: 'openclaw', label: 'OpenClaw', desc: 'Open-source agent runtime' },
+  { value: 'codex', label: 'Codex', desc: 'Lightweight agent with filesystem IPC' },
 ] as const;
 ```
 
@@ -85,7 +86,7 @@ Add `runtime TEXT NOT NULL DEFAULT 'claude-code'` to the agents table. This is a
 const { machineId, name, type, runtime, schedule, projectPath, config } = request.body;
 
 // Validate runtime is one of the allowed values:
-const VALID_RUNTIMES = ['claude-code', 'nanoclaw', 'openclaw'];
+const VALID_RUNTIMES = ['claude-code', 'codex'];
 if (runtime && !VALID_RUNTIMES.includes(runtime)) {
   return reply.status(400).send({ error: `Invalid runtime: ${runtime}. Must be one of: ${VALID_RUNTIMES.join(', ')}` });
 }
@@ -117,7 +118,7 @@ it('accepts valid runtime value', async () => {
   const res = await app.inject({
     method: 'POST',
     url: '/api/agents',
-    payload: { name: 'test', machineId: 'm1', type: 'adhoc', runtime: 'nanoclaw' },
+    payload: { name: 'test', machineId: 'm1', type: 'adhoc', runtime: 'codex' },
   });
   expect(res.statusCode).toBe(200);
 });
@@ -339,7 +340,7 @@ it('renders runtime selector in Create as Agent tab', async () => {
   render(<ContextPickerDialog defaultTab="agent" {...baseProps} />);
   expect(screen.getByLabelText(/agent runtime/i)).toBeInTheDocument();
   expect(screen.getByText(/claude code/i)).toBeInTheDocument();
-  expect(screen.getByText(/nanoclaw/i)).toBeInTheDocument();
+  expect(screen.getByText(/codex/i)).toBeInTheDocument();
 });
 
 it('includes runtime in create-agent submit config', async () => {
@@ -347,11 +348,11 @@ it('includes runtime in create-agent submit config', async () => {
   render(<ContextPickerDialog defaultTab="agent" onCreateAgentSubmit={onSubmit} {...baseProps} />);
   // Fill required fields
   await userEvent.type(screen.getByLabelText(/agent name/i), 'test-agent');
-  // Select nanoclaw runtime
-  await userEvent.selectOptions(screen.getByLabelText(/agent runtime/i), 'nanoclaw');
+  // Select codex runtime
+  await userEvent.selectOptions(screen.getByLabelText(/agent runtime/i), 'codex');
   await userEvent.click(screen.getByRole('button', { name: /create agent/i }));
   expect(onSubmit).toHaveBeenCalledWith(
-    expect.objectContaining({ runtime: 'nanoclaw' }),
+    expect.objectContaining({ runtime: 'codex' }),
   );
 });
 ```

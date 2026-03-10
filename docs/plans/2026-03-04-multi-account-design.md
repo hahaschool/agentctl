@@ -1,3 +1,5 @@
+> ⚠️ **ARCHIVED** — This plan has been fully implemented. Kept for historical reference.
+
 # Multi-Account Configuration Design
 
 **Date:** 2026-03-04

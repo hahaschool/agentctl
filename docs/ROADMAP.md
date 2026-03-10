@@ -4,550 +4,429 @@
 
 ## Current State
 
-Full CI/CD pipeline with 9 workflow files:
+AgentCTL is a multi-machine AI agent orchestration platform with:
 
-- **CI** (`ci.yml`): paths-filter, matrix build/test, security scanning, coverage
-- **Docker Build** (`build-images.yml`): multi-stage, Trivy, SBOM, GHCR
-- **Security Audit** (`security-audit.yml`): CodeQL, Semgrep, gitleaks, license check
-- **Deploy Dev** (`deploy-dev.yml`): Tailscale SSH, auto-deploy on push to dev
-- **Deploy Prod** (`deploy-prod.yml`): approval gate, blue-green, pg_dump backup
-- **Rollback** (`rollback.yml`): manual rollback to any previous image tag
-- **Fleet Deploy** (`deploy-fleet.yml`): canary/rolling/all-at-once fleet deployment
-- **Migration Check** (`migration-check.yml`): PR validation with throwaway PostgreSQL
-- **Build Images** (`build-images.yml`): multi-stage Docker with Trivy + SBOM
+- **Web App**: Next.js 15 (App Router) + React Query + Tailwind CSS + shadcn/ui
+- **Control Plane**: Fastify + PostgreSQL + BullMQ + Drizzle ORM
+- **Agent Worker**: Claude Agent SDK + node-pty + PM2
+- **Mobile**: React Native (Expo) — early stage
+- **CI/CD**: 9 GitHub Actions workflows (build, test, deploy, security, fleet)
+- **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
-**3902 tests** across 102 files. All packages build cleanly.
+**7,255+ unit tests** across 111 files + **143 Playwright e2e tests**. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
 
 ---
 
-## Phase 1 — CI Hardening (Priority: Critical)
+## 1. Infrastructure
 
-> Goal: Make CI faster, more reliable, and security-aware before adding CD.
+> CI/CD pipeline, deployment, fleet management, database migrations.
 
-### 1.1 Monorepo-Aware Conditional Builds
+<details>
+<summary>✅ All complete — 9 workflows, full deploy chain, fleet rollout</summary>
 
-- [x] Add `dorny/paths-filter` to detect which packages changed
-- [x] Only run build/test for affected packages on PRs
-- [x] Full build on `main` merges for safety
+### 1.1 CI Hardening
 
-### 1.2 Dependency Caching
+- [x] `dorny/paths-filter` for monorepo-aware conditional builds
+- [x] pnpm store caching + TypeScript build cache
+- [x] Security scanning: `pnpm audit`, `gitleaks`, Biome security lint
 
-- [x] Verify pnpm store caching via `setup-node`
-- [x] Add TypeScript build cache (`tsconfig.tsBuildInfoFile`)
-- [x] Add TypeScript build output cache (`packages/*/dist`)
-- [ ] Target: CI < 2 minutes for unchanged packages
+### 1.2 Docker Build & Registry
 
-### 1.3 Security Scanning in CI
+- [x] Multi-stage Docker build (`node:22-alpine`, non-root uid 1001)
+- [x] Image tagging: `sha-<commit>`, `main-latest`/`dev-latest`, semver `v*.*.*`
+- [x] Trivy + Grype container scanning, SBOM generation
 
-- [x] Add `pnpm audit` step for dependency vulnerabilities
-- [x] Add `gitleaks` for secret scanning
-- [x] Add Biome security lint rules
+### 1.3 Deployment Pipeline
 
-**Deliverable**: Updated `.github/workflows/ci.yml` ✅
+- [x] Dev auto-deploy via Tailscale SSH on push to `dev`
+- [x] Production deploy with GitHub Environment approval gate + blue-green
+- [x] Rollback workflow (`workflow_dispatch` with tag selector)
+- [x] Fleet deploy: canary → verify → matrix deploy remaining machines
 
----
+### 1.4 Database Migration Safety
 
-## Phase 2 — Docker Image Build & Registry (Priority: Critical)
+- [x] PR validation: throwaway PostgreSQL + `drizzle-kit generate`
+- [x] Deploy-time: migration in transaction, `pg_dump` backup, destructive ops need approval
 
-> Goal: Every merge to `main` produces a versioned, scannable, deployable image.
+### 1.5 Observability & Notifications
 
-### 2.1 Multi-Stage Docker Build
-
-- [x] Use `docker/build-push-action` with Buildx
-- [x] Build `control-plane` and `agent-worker` in parallel (matrix)
-- [x] Multi-stage: `node:22-alpine` build -> `node:22-alpine` prod (non-root uid 1001)
-
-### 2.2 Image Tagging
-
-- [x] `sha-<commit>` on every build
-- [x] `main-latest` / `dev-latest` for environment tracking
-- [x] Semver `v*.*.*` on GitHub Release
-
-### 2.3 Container Security Scanning
-
-- [x] `aquasecurity/trivy-action` — fail on CRITICAL/HIGH, SARIF to GitHub Security tab
-- [x] `anchore/scan-action` (Grype) as second scanner
-- [x] Generate SBOM with Trivy, upload as build artifact
-
-### 2.4 Image Layer Caching
-
-- [x] GHA cache backend (`cache-from: type=gha`)
-- [ ] Target: Docker build < 3 minutes with warm cache
-
-**Deliverable**: `.github/workflows/build-images.yml` ✅
-
----
-
-## Phase 3 — Dev Environment Auto-Deploy (Priority: High)
-
-> Goal: Merge to `dev` auto-deploys to dev environment via Tailscale.
-
-### 3.1 Tailscale-Based Deployment
-
-- [x] `tailscale/github-action` with ephemeral OAuth client
-- [x] SSH into target via Tailscale IP (zero public ports)
-- [x] Tailscale ACL: allow `tag:ci` to SSH into `tag:server`
-
-### 3.2 Deploy Steps
-
-- [x] Pull images from ghcr.io
-- [x] Run Drizzle migrations before container restart
-- [x] `docker compose up -d --remove-orphans`
-- [x] Post-deploy health check (`/api/health` returns 200)
-- [x] On failure: alert, keep old containers
-
-### 3.3 Target Machine Setup
-
-- [x] `deploy` user with limited permissions
-- [x] Pre-install Docker, Compose, Tailscale
-- [x] Store `docker-compose.prod.yml` + `.env` on target
-
-### 3.4 GitHub Secrets
-
-| Secret | Purpose |
-|--------|---------|
-| `TS_OAUTH_CLIENT_ID` | Tailscale OAuth for CI |
-| `TS_OAUTH_SECRET` | Tailscale OAuth secret |
-| `DEV_TAILSCALE_IP` | Dev machine IP (100.x.x.x) |
-| `DEPLOY_SSH_KEY` | SSH private key for deploy user |
-| `POSTGRES_PASSWORD` | PostgreSQL password |
-
-**Deliverable**: `.github/workflows/deploy-dev.yml`
-
----
-
-## Phase 4 — Database Migration Safety (Priority: High)
-
-> Goal: Schema changes applied automatically, safely, and reversibly.
-
-### 4.1 Migration in CI (PR Validation)
-
-- [x] On PRs touching `drizzle/**`: run `drizzle-kit generate`, validate SQL
-- [x] Spin up throwaway PostgreSQL (`services:`) and apply migration
-
-### 4.2 Migration in CD (Deploy-Time)
-
-- [x] Run migration in transaction before starting new containers (109 tests)
-- [x] If migration fails: abort deploy, keep old containers, alert
-- [x] Limited-privilege PostgreSQL user for migrations
-
-### 4.3 Backup Before Migration
-
-- [x] `pg_dump` before applying (timestamped artifact) (99 tests)
-- [x] Retain last 7 backups
-- [x] Destructive migrations (DROP) require manual approval
-
-**Deliverable**: Migration scripts integrated into deploy workflows
-
----
-
-## Phase 5 — Production Deploy with Approval Gate (Priority: Medium)
-
-> Goal: Production deploys are manual, auditable, and rollback-ready.
-
-### 5.1 Release-Based Trigger
-
-- [x] GitHub Release or `workflow_dispatch` with image tag input
-- [x] GitHub Environment protection rule: `production` with required reviewers
-
-### 5.2 Blue-Green Deployment
-
-- [x] Scale up new container -> health check -> scale down old
-- [x] Health check retry loop (5 attempts, 10s interval)
-
-### 5.3 Rollback
-
-- [x] Keep last 5 image tags in ghcr.io (cleanup-images.yml)
-- [x] `workflow_dispatch` rollback workflow (select previous tag)
-- [x] Post-rollback health check
-
-### 5.4 Smoke Tests
-
-- [x] API health, PostgreSQL, Redis, WebSocket upgrade, cross-service registration
-
-**Deliverable**: `.github/workflows/deploy-prod.yml`, `.github/workflows/rollback.yml`
-
----
-
-## Phase 6 — Observability & Notifications (Priority: Medium)
-
-> Goal: Know immediately when deploys succeed, fail, or degrade.
-
-- [x] Slack/Discord webhook on deploy success/failure
-- [x] Deploy audit trail (table or append-only log)
-- [x] Vector -> ClickHouse pipeline for structured logs
+- [x] Slack/Discord webhooks on deploy success/failure
+- [x] Vector → ClickHouse structured logging pipeline
 - [x] Prometheus-compatible `/metrics` endpoint
-- [x] Track: request latency, active agents, queue depth, error rate
 
-**Deliverable**: Notification integration, `/metrics` endpoint, Vector config
+**Workflows**: `ci.yml`, `build-images.yml`, `deploy-dev.yml`, `deploy-prod.yml`, `rollback.yml`, `deploy-fleet.yml`, `migration-check.yml`, `security-audit.yml`
 
----
-
-## Phase 7 — Multi-Machine Fleet Deploy (Priority: Low, post-MVP)
-
-> Goal: Deploy agent-worker to all machines in the Tailscale mesh.
-
-- [x] Machine inventory file (`infra/machines.yml`)
-- [x] Matrix deploy with canary strategy
-- [x] Per-machine health verification
-- [x] Staggered rollout: canary -> verify -> remaining
-- [x] Integrate `scripts/setup-machine.sh` for new machine bootstrap
-
-**Deliverable**: `.github/workflows/deploy-fleet.yml`, `infra/machines.yml` ✅
+</details>
 
 ---
 
-## Phase 8 — Scheduled Sessions & Continuous Loop (Priority: High, Core Feature)
+## 2. Runtime Engine
 
-> Goal: Allow sessions to run on cron schedules and in continuous loop mode.
-> Design doc: [plans/2026-03-02-scheduled-sessions-and-loop-design.md](plans/2026-03-02-scheduled-sessions-and-loop-design.md)
+> Agent lifecycle, scheduling, session control, execution safety.
 
-### 8.1 Scheduled Sessions (Cron-like)
+<details>
+<summary>✅ Scheduling, loop controller, session control — all delivered</summary>
 
-- [x] Add `ScheduleConfig` type (`sessionMode`, `promptTemplate`, `pattern`)
-- [x] Extend `AgentTaskJobData` with `sessionMode: 'fresh' | 'resume'`
-- [x] Session resume: look up `currentSessionId`, pass as `resumeSession`
+### 2.1 Scheduled Sessions
+
+- [x] `ScheduleConfig` type with `sessionMode: 'fresh' | 'resume'`
 - [x] Prompt template variables: `{{date}}`, `{{iteration}}`, `{{lastResult}}`
-- [x] Add `schedule_config` jsonb column, API endpoints
+- [x] DB: `schedule_config` JSONB column, cron API endpoints
 
-### 8.2 Claude Code Remote Control Integration
+> Design doc: [plans/2026-03-02-scheduled-sessions-and-loop-design.md](plans/2026-03-02-scheduled-sessions-and-loop-design.md) (archived)
 
-> Key discovery (2026-02-24): Claude Code ships a built-in **Remote Control**
-> feature that uses an outbound polling model to the Anthropic API relay.
-> AgentCTL should leverage this instead of spawning Claude Code CLI as a
-> subprocess via the Agent SDK. Benefits:
->
-> - **No inbound ports** — the Claude Code instance polls outward, fitting
->   AgentCTL's Tailscale mesh without extra firewall rules
-> - **Native mobile relay** — the same relay the iOS Claude app uses can be
->   reused by AgentCTL's React Native client
-> - **Session persistence** — Remote Control sessions survive network blips;
->   no PID management or respawn logic needed
-> - **First-class API** — tool calls, streaming output, and session lifecycle
->   are exposed as structured events on the relay
+### 2.2 Continuous Loop (Ralph Loop)
 
-- [ ] Spike: replace Agent SDK subprocess wrapper with Remote Control relay client
-- [ ] Update `agent-worker/src/runtime/` to connect via outbound polling
-- [ ] Migrate hook system (PreToolUse/PostToolUse/Stop) to relay event filters
-- [ ] Validate loop controller + scheduled sessions work over relay
-- [ ] Remove `child_process.spawn` code path once relay path is stable
-- [ ] Document latency/reliability comparison (subprocess vs relay)
-
-### 8.3 Continuous Loop (Ralph Loop)
-
-- [x] Add `LoopConfig` type and `AgentType: 'loop'`
-- [x] Implement `LoopController` in agent-worker
-  - Three modes: `result-feedback`, `fixed-prompt`, `callback`
-  - Limits: `maxIterations`, `costLimitUsd`, `maxDurationMs`
-  - Checkpoint to control plane every N iterations
-- [x] DB columns: `loop_config`, `loop_iteration`, `parent_run_id`
-- [x] API: `PUT/DEL /loop`, `POST /loop/stop`, `GET /loop/status`
+- [x] `LoopController` with 3 modes: `result-feedback`, `fixed-prompt`, `callback`
+- [x] Limits: `maxIterations`, `costLimitUsd`, `maxDurationMs`
+- [x] Safety: dead-loop detection, cost alerts at 80%, auto-pause on checkpoint failure
 - [x] SSE events: `loop_iteration`, `loop_checkpoint`, `loop_complete`
 
-### 8.4 Safety & Limits
+### 2.3 Session Control Architecture (3-Layer)
 
-- [x] At least one limit required (iterations/cost/duration)
-- [x] `iterationDelayMs >= 500` enforced server-side
-- [x] Cost alert at 80% of limit
-- [x] Dead-loop detection (3 identical results -> warn/stop)
-- [x] Network partition: auto-pause if checkpoint fails 3x
-- [x] Emergency stop via API + abort signal
+- [x] **Layer 1**: Claude Code CLI `-p` mode (primary — subprocess with structured I/O)
+- [x] **Layer 2**: Agent SDK wrapper (hooks, tool gating, output streaming)
+- [x] **Layer 3**: tmux fallback (attach to existing sessions)
 
-**Deliverable**: `loop-controller.ts`, updated types, API routes, DB migration
+> Design doc: [plans/2026-03-03-session-takeover-design.md](plans/2026-03-03-session-takeover-design.md) (archived)
 
----
+</details>
 
-## Phase 9 — Security Audit & Hardening (Priority: High)
+### 2.4 Remote Control Integration (Optional Enhancement) — P2
 
-> Goal: Systematic security audit aligned with OWASP Agentic Top 10 (2026). Deploy an independent agent to continuously audit the project.
+> Claude Code's built-in Remote Control uses an outbound polling relay.
+> This is an **optional upgrade path** for Max plan seats — the current CLI `-p`
+> approach is operational and does not require it.
+> See [session-takeover-design.md](plans/2026-03-03-session-takeover-design.md) for the 3-layer analysis.
 
-### 9.1 OWASP Agentic Top 10 Compliance Checklist
+- [ ] Spike: evaluate Remote Control relay vs current CLI `-p` (latency, reliability, cost)
+- [ ] If beneficial: implement relay client in `agent-worker/src/runtime/`
+- [ ] Migrate hook system to relay event filters
+- [ ] Validate loop controller + scheduled sessions over relay
 
-Map every OWASP ASI risk to concrete mitigations in AgentCTL:
+### 2.5 Structured Execution Summary — P1
 
-| OWASP Risk | AgentCTL Mitigation | Status |
-|------------|---------------------|--------|
-| **ASI01 — Agent Goal Hijack** | PreToolUse hook validates tool calls against task scope; prompt injection detection on external inputs | [x] |
-| **ASI02 — Tool Misuse** | `allowedTools`/`disallowedTools` allowlist; PreToolUse denies undeclared tools; no wildcard permissions | [x] |
-| **ASI03 — Identity & Privilege Abuse** | Per-agent identity (agentId + machineId); short-lived session tokens; no shared credentials; Tailscale ACLs per role | [x] |
-| **ASI04 — Supply Chain** | `pnpm audit` in CI; Trivy + Grype scanning; SBOM; pinned deps; MCP server verification | [x] |
-| **ASI05 — Code Execution** | Claude Code sandbox (bubblewrap/Seatbelt); `--cap-drop=ALL`; `--network=none`; gVisor option | [x] |
-| **ASI06 — Memory Poisoning** | Validate data before Mem0 storage; per-agent memory isolation; TTL + size limits; integrity checks | [x] |
-| **ASI07 — Inter-Agent Comms** | TweetNaCl E2E encryption; signed payloads; Tailscale WireGuard transport | [x] |
-| **ASI08 — Cascading Failures** | Per-agent timeout; circuit breaker on dispatch; BullMQ retry with backoff; loop checkpoints | [x] |
-| **ASI09 — Trust Exploitation** | Approval gates for destructive ops; cost alerts at 80%; mandatory human review for prod; dead-loop detection | [x] |
-| **ASI10 — Rogue Agents** | Audit logging with SHA-256; anomaly detection on tool patterns; kill switch; valid status transitions | [x] |
+> Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.1
 
-### 9.2 Automated Security Pipeline (SAST + DAST + SCA)
+Auto-generate structured summary at task completion via session resume.
 
-Dedicated security workflow on every PR and nightly:
+- [ ] Define `ExecutionSummary` type (status, workCompleted, executiveSummary, filesChanged, followUps, cost)
+- [ ] Implement summary generation in `AgentInstance.stop()` with post-hoc fallback
+- [ ] DB migration: `agent_runs.result_summary` JSONB
+- [ ] SSE event: `execution_summary`
+- [ ] API: `GET /api/runs/:id/summary`
+- [ ] Summary card in web/mobile session view
 
-- [x] **SAST — CodeQL**: GitHub native with `security-extended` queries for JS/TS
-- [x] **SAST — Semgrep**: `semgrep/semgrep-action` with `p/security-audit` + `p/secrets`
-- [x] **SCA — Dependency Audit**: `pnpm audit --audit-level=high` as blocking CI step
-- [x] **SCA — License Check**: no GPL/AGPL dependencies
-- [x] **Secret Scanning**: `gitleaks` on every PR; GitHub push protection
-- [x] **Container Scanning**: Trivy + Grype with SARIF to Security tab
-- [x] **DAST — OWASP ZAP**: baseline scan on `/api/*` + WebSocket fuzzing on `/ws` (post-deploy to staging)
+### 2.6 Workdir Safety Tiers — P1
 
-**Deliverable**: `.github/workflows/security-audit.yml`
+> Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.2
 
-### 9.3 Independent Security Audit Agent
+Pre-execution safety: safe (git clean) → guarded (dirty) → risky (non-git) → unsafe (parallel).
 
-A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
+- [ ] `checkWorkdirSafety()` in `agent-worker/src/runtime/workdir-safety.ts`
+- [ ] Gate in `AgentInstance.start()` before `attemptSdkRun()`
+- [ ] SSE events: `safety_warning`, `safety_approval_needed`, `safety_blocked`
+- [ ] Sandbox mode: copy-to-temp → execute → copy-back
+- [ ] API: `POST /api/agents/:id/safety-decision` (approve/reject/sandbox)
 
-- [x] **Agent config**: read-only access, `allowedTools: ['Read', 'Glob', 'Grep']` only (61 tests)
-- [x] **Schedule**: nightly cron via BullMQ (uses Phase 8 cron feature) (106 tests)
-- [x] **Prompt template**: structured security review covering:
-  - Input validation on all API routes (SQLi, command injection, XSS)
-  - Secrets leakage in code, config, logs, git history
-  - Container security (Dockerfile, compose hardening)
-  - Auth/authz gaps in API endpoints
-  - Dependency vulnerabilities and outdated packages
-  - OWASP Agentic Top 10 compliance gaps
-- [x] **Output**: structured JSON report (severity, file, line, description, recommendation)
-- [x] **Integration**: results posted to control plane; high-severity -> auto-create GitHub Issues (60 tests)
-- [x] **Guardrails**: audit agent itself runs sandboxed (read-only FS, no network egress, restricted tools)
+### 2.7 Dispatch Signature Verification — P1
 
-### 9.4 Runtime Security Controls
+> Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.3
 
-- [x] **Agent identity**: unique short-lived tokens per session (not shared machine keys)
-- [x] **Network egress**: `--network=none` default; allowlist specific domains per agent (70 tests)
-- [x] **FS isolation**: worktrees read-only except output dirs; block `.ssh`, `.gnupg`, `.aws`, `.env` (111 tests)
-- [x] **Memory security**: content validation, PII redaction, agent namespace isolation (67 tests)
-- [x] **Tool rate limiting**: cap tool calls/minute/agent to detect runaway loops
-- [x] **Prompt injection defense**:
-  - Sanitize external content before agent context injection
-  - Flag patterns: `ignore previous instructions`, `system:`, encoded payloads
-  - Guardian agent: lightweight validator reviews high-risk tool calls pre-execution
-- [x] **Kill switch**: `POST /api/agents/:id/emergency-stop` — abort + revoke token
-- [x] **Anomaly detection**: baseline tool-call patterns; alert on deviations (e.g., agent using Bash after only Read/Write)
+Ed25519 signing of dispatch payloads for defense-in-depth.
 
-### 9.5 Audit Logging & Forensics
+- [ ] Control plane: sign payloads with TweetNaCl Ed25519
+- [ ] Workers: verify signature before execution, reject invalid
+- [ ] Public key distributed during machine registration
+- [ ] Audit: log verification failures
 
-- [x] Structured NDJSON with SHA-256 integrity hashes (extends existing `AuditLogger`)
-- [x] Log retention: configurable per-table retention with batch cleanup (78 tests)
-- [x] Tamper detection: hash chain (each entry includes previous hash)
-- [x] Queryable API: `GET /api/audit?agentId=X&from=T1&to=T2&tool=Bash`
-- [x] Dashboard: top tools, cost by agent, error rates, blocked calls
-- [x] Incident response: full session replay from audit logs
+### 2.8 Mid-Execution Steering — P2
 
-### 9.6 Threat Model & Compliance
+Inject guidance into running sessions via SDK `streamInput()`.
 
-- [x] Document AgentCTL-specific threat model (multi-machine, multi-agent, mobile control surface)
-- [x] Map controls to OWASP Agentic Top 10, NIST AI RMF, Anthropic safety guidelines
-- [x] Security runbook: incident procedures for rogue agent, credential leak, prompt injection
-- [ ] Quarterly review cadence for security controls
+- [ ] `steer(message)` on `AgentInstance`
+- [ ] Worker API: `POST /api/agents/:agentId/steer`
+- [ ] Control plane proxy → forward to worker
+- [ ] SSE events: `steer_sent`, `steer_ack`
+- [ ] Chat-like input in live session view (web/mobile)
 
-**Deliverable**: Security audit workflow, audit agent config, runtime hardening, threat model document
+### 2.9 Execution Environment Registry — P3
+
+Orthogonal WHERE (local/Docker/SSH) vs WHAT (Claude/Codex) abstraction.
+
+- [ ] `ExecutionEnvironment` interface: detect, prepare, cleanup
+- [ ] `DirectEnvironment` (subprocess) + `DockerEnvironment` (gVisor)
+- [ ] Auto-detect at startup, report in heartbeat
+- [ ] Dispatch routing considers environment requirements
 
 ---
 
-## Phase 10 — Codex CLI Integration & Cross-Agent Session Handoff (Priority: Medium)
+## 3. Multi-Runtime & Handoff
 
-> Goal: Support OpenAI Codex CLI as a first-class agent type alongside Claude
-> Code, enable seamless session handoff between agent types, and surface all
-> sessions in a unified iOS browser.
+> Codex integration, cross-agent switching, unified output streaming.
 
-### 10.1 Codex CLI Integration
+<details>
+<summary>✅ Codex core integration + handoff protocol — delivered</summary>
 
-Use the same Remote Control relay pattern proven with Claude Code (Phase 8.2)
-to orchestrate Codex CLI instances across the fleet:
+### 3.1 Codex CLI Core Integration
 
-- [x] Add managed runtime support for `codex` in shared contracts and worker/control-plane APIs
-- [x] Implement `CodexRuntimeAdapter` and `CodexSessionManager` in `agent-worker/src/runtime/`
-  - Supports create via `codex exec --json`
-  - Supports resume via `codex exec resume ... --json`
-  - Supports same-runtime fork via `codex fork`
-- [x] Add runtime-aware worker and control-plane session routes
-  - `GET|POST /api/runtime-sessions`
-  - `POST /api/runtime-sessions/:id/resume`
-  - `POST /api/runtime-sessions/:id/fork`
-- [ ] Add Codex model routing to LiteLLM config (`infra/litellm/`)
-  - Provider failover: OpenAI Direct -> Azure OpenAI
-  - Cost tracking parity with Claude models
-- [ ] Extend PM2 ecosystem config to manage Codex worker processes
-- [x] Registry: managed Codex sessions use the same machine registry and worker URL resolution path
-- [ ] Security: apply identical sandbox constraints (bubblewrap/Seatbelt, `--cap-drop=ALL`, `--network=none`)
+- [x] `ManagedRuntime = 'claude-code' | 'codex'` in shared contracts
+- [x] `CodexRuntimeAdapter` + `CodexSessionManager` (create, resume, fork)
+- [x] Runtime-aware routes: `GET|POST /api/runtime-sessions`, resume, fork, handoff
+- [x] Machine registry: Codex sessions use same resolution path as Claude
 
-### 10.2 Cross-Agent Session Handoff (Claude Code <-> Codex)
+> Design doc: [plans/2026-03-09-codex-claude-runtime-unification-design.md](plans/2026-03-09-codex-claude-runtime-unification-design.md)
 
-Enable seamless mid-task switching between agent types without losing context:
+### 3.2 Session Handoff Protocol
 
-- [x] Define `SessionHandoff` protocol in `packages/shared/src/protocol/`
-  - Portable session snapshot includes worktree path, git branch/SHA, dirty files, diff summary, conversation summary, active MCP/skills, and handoff reason
-  - Handoff reason enum includes `'model-affinity'`, `'cost-optimization'`, `'rate-limit-failover'`, and `'manual'`
-- [x] Implement `HandoffController` in agent-worker
-  - Export portable snapshots from the source runtime
-  - Hydrate incoming runtime from the snapshot preamble
-  - Preserve the existing project/worktree path through the handoff
-- [x] Control plane API:
-  - `POST /api/runtime-sessions/:id/handoff` — initiate runtime handoff to a target runtime
-- [x] Experimental native import scaffolding
-  - Probe native import first when enabled
-  - Fall back automatically to `snapshot-handoff`
-  - Audit every failed native import attempt separately
-- [ ] Handoff history API:
-  - `GET /api/runs/:id/handoff-history` or equivalent unified session history view
-- [ ] Automatic handoff triggers:
-  - Rate limit hit on current provider -> failover to other agent type
-  - Cost threshold -> switch to cheaper model/provider
-  - Task-type affinity rules (e.g., prefer Codex for Python-heavy tasks)
-- [ ] Memory continuity: Mem0 context shared across agent types within a single run
-- [x] Audit: backend stores every handoff plus native import attempt metadata
+- [x] `SessionHandoff` protocol: portable snapshot (worktree, branch, SHA, diff, conversation, MCP/skills)
+- [x] `HandoffController`: export snapshot → hydrate target runtime → preserve worktree
+- [x] Handoff reasons: `model-affinity`, `cost-optimization`, `rate-limit-failover`, `manual`
+- [x] Experimental native import scaffolding with automatic snapshot fallback
+- [x] Audit: every handoff + native import attempt logged
 
-### 10.3 Unified Session Browser (Web + iOS)
+</details>
+
+### 3.3 AgentOutputStream — Unified Output Streaming — P2
+
+Shared output contract between runtime adapters. Foundation for multi-runtime.
+
+- [ ] Define `AgentOutputStream` interface (text, thinking, toolUse, toolResult, fileChange, costUpdate, error)
+- [ ] Refactor `sdk-runner.ts` to emit through `AgentOutputStream`
+- [ ] `AgentInstance` stream impl backed by EventEmitter + OutputBuffer
+- [ ] Both `ClaudeRuntimeAdapter` and `CodexRuntimeAdapter` use same interface
+
+### 3.4 Codex Operational Parity — P2
+
+- [ ] LiteLLM config: Codex model routing with OpenAI Direct → Azure OpenAI failover
+- [ ] PM2 ecosystem config for Codex worker processes
+- [ ] Sandbox constraints: bubblewrap/Seatbelt, `--cap-drop=ALL`, `--network=none`
+
+### 3.5 Automatic Handoff Triggers — P2
+
+- [ ] Rate limit hit → failover to other agent type
+- [ ] Cost threshold → switch to cheaper model/provider
+- [ ] Task-type affinity rules (e.g., prefer Codex for Python-heavy)
+- [ ] Handoff history API: `GET /api/runs/:id/handoff-history`
+
+### 3.6 Memory Continuity — P3
+
+- [ ] Mem0 context shared across agent types within a single run
+- [ ] Memory bridge: extract relevant context from source → inject into target
+
+---
+
+## 4. Frontend — Web
+
+> Next.js web application, settings, sessions, fork system.
+
+<details>
+<summary>✅ Next.js migration, multi-account, fork, settings redesign — all delivered</summary>
+
+### 4.1 Next.js Migration
+
+- [x] Migrated from Vite SPA to Next.js 15 App Router
+- [x] React Query for server state, Tailwind CSS + shadcn/ui
+- [x] xterm.js remote terminal, command palette with fuzzy search
+
+> Design docs: [plans/2026-03-03-frontend-framework-survey.md](plans/2026-03-03-frontend-framework-survey.md) (archived), [plans/2026-03-03-nextjs-migration-design.md](plans/2026-03-03-nextjs-migration-design.md) (archived)
+
+### 4.2 Multi-Account System
+
+- [x] API account management with AES-256-GCM encrypted credentials
+- [x] Cascade resolution: project → agent → global default
+- [x] OAuth PKCE + failover policies
+- [x] Per-project account assignment
+
+> Design doc: [plans/2026-03-04-multi-account-design.md](plans/2026-03-04-multi-account-design.md) (archived)
+
+### 4.3 Advanced Fork / Context Picker
+
+- [x] ContextPickerDialog: fork-here timeline, shift+click range selection
+- [x] Fork strategies: resume (full history), JSONL truncation, context injection
+- [x] Virtualized scroll (@tanstack/react-virtual), token estimation, compression toggles
+- [x] Cross-machine fork with machine selector
+
+> Design docs: [plans/2026-03-08-advanced-fork-design.md](plans/2026-03-08-advanced-fork-design.md) (archived), [plans/2026-03-06-cross-machine-session-transfer.md](plans/2026-03-06-cross-machine-session-transfer.md)
+
+### 4.4 Claude Code-like Session Display
+
+- [x] Thinking blocks, progress indicators, subagent nesting, todo tracking
+- [x] Sessions page: grouping by agent, cost/duration sort, bulk actions
+- [x] Component extractions (SessionDetailView, SessionsPage — major size reductions)
+
+### 4.5 Runtime-Centric Settings Redesign
+
+- [x] Replaced provider-centric settings with runtime-centric model
+- [x] Runtime profiles, credential inventory, worker sync, routing policies
+- [x] Config consistency UI: runtime access + config drift detection
+- [x] Terminal command allowlist for URL-sourced `?command=` parameter
+
+> Design docs: [plans/2026-03-10-runtime-centric-settings-redesign-design.md](plans/2026-03-10-runtime-centric-settings-redesign-design.md), [plans/2026-03-10-runtime-settings-config-consistency-design.md](plans/2026-03-10-runtime-settings-config-consistency-design.md) (subsumed by redesign)
+
+</details>
+
+### 4.6 Unified Session Browser — P0
 
 > Design doc: [plans/2026-03-10-unified-sessions-ui-design.md](plans/2026-03-10-unified-sessions-ui-design.md)
 
-Surface all sessions through one primary browser, starting with the web app and then aligning mobile:
+Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
-#### Web consolidation
+- [ ] Merge into single `/sessions` route with `Agent` / `Runtime` / `All` type filters
+- [ ] Reuse `SessionsPage` shell, embed runtime-specific actions as type-specific detail UI
+- [ ] Redirect `/runtime-sessions` → `/sessions?type=runtime`
+- [ ] Collapse dashboard/sidebar/command-palette session navigation
 
-- [ ] Consolidate `/sessions` and `/runtime-sessions` into one canonical `/sessions` browser
-- [ ] Default `/sessions` to `All` with `Agent` and `Runtime` type filters
-- [ ] Reuse the existing `SessionsPage` shell and embed runtime-specific handoff/native-import actions as type-specific detail UI
-- [ ] Redirect `/runtime-sessions` to `/sessions?type=runtime` after the unified browser is stable
-- [ ] Collapse dashboard/sidebar/command-palette session navigation onto the unified route
+### 4.7 Fork UX Extensions — P2
 
-#### Mobile
+> Design doc: [plans/2026-03-09-fork-ux-overhaul.md](plans/2026-03-09-fork-ux-overhaul.md)
 
-Surface all agent sessions — regardless of agent type — in one mobile view:
-
-- [ ] New `SessionBrowser` screen in `packages/mobile/src/screens/`
-  - Filterable by: agent type (Claude Code / Codex), machine, status, time range
-  - Session cards show: agent type badge, model used, cost, duration, last tool call
-  - Tap to view live SSE stream or completed session replay
-- [ ] Cross-agent run view: for runs with handoffs, show timeline of agent switches
-  - Visual handoff markers with reason and context-transfer summary
-  - Expandable diff of what each agent contributed
-- [ ] Session actions from mobile:
-  - Pause / resume / stop any session
-  - Trigger manual handoff to different agent type
-  - Fork session (create new branch from session state)
-- [ ] Push notifications for handoff events (agent switched, handoff failed, awaiting approval)
-
-**Deliverable status**
-
-- Backend runtime management, managed session schema, Codex session lifecycle,
-  snapshot handoff, and native import scaffolding are implemented
-- Unified mobile/web session browser and automatic handoff policy are still open
+- [ ] claude-mem memory integration in fork context selection
+- [ ] Smart selection tools (auto-select related messages)
+- [ ] Live prompt preview in fork dialog
+- [ ] Runtime dimension in fork (fork to different agent type)
 
 ---
 
-## Phase 11 — Runtime Hardening & Observability Patterns (Priority: High)
+## 5. Frontend — Mobile
 
-> Goal: Adopt battle-tested patterns from [astro-agent](https://github.com/astro-anywhere/astro-agent)
-> to harden execution safety, improve observability, and prepare the adapter layer for multi-runtime support.
-> Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md)
+> React Native (Expo) iOS app — early stage.
 
-### 11.1 Structured Execution Summary (P0)
+### 5.1 Mobile Session Browser — P3
 
-Automatically generate a structured summary at task completion by resuming the same
-session with a summary prompt. Stores as JSONB in `agent_runs.result_summary`.
+- [ ] `SessionBrowser` screen filterable by agent type, machine, status, time range
+- [ ] Session cards: agent type badge, model, cost, duration, last tool call
+- [ ] Tap for live SSE stream or session replay
 
-- [ ] Define `ExecutionSummary` type in `packages/shared/src/types/`
-  - Fields: status, workCompleted, executiveSummary, keyFindings, filesChanged, followUps, cost, tokens
-- [ ] Implement summary generation in `AgentInstance.stop()` (session-resume approach)
-- [ ] Fallback: post-hoc aggregation from PostToolUse hook data + git diff
-- [ ] DB migration: `agent_runs.result_summary` TEXT → JSONB
-- [ ] New SSE event: `execution_summary`
-- [ ] API: `GET /api/runs/:id/summary` returns structured data
-- [ ] Mobile/web: summary card at end of session view
+### 5.2 Cross-Agent Run View — P3
 
-### 11.2 Workdir Safety Tiers (P0)
+- [ ] Handoff timeline with visual markers and context-transfer summary
+- [ ] Expandable diff of each agent's contribution
 
-Pre-execution safety check classifying working directories into 4 tiers:
-safe (git clean) → guarded (git dirty) → risky (non-git) → unsafe (non-git + parallel).
+### 5.3 Mobile Session Actions — P3
 
-- [ ] Implement `checkWorkdirSafety()` in `agent-worker/src/runtime/workdir-safety.ts`
-- [ ] Gate in `AgentInstance.start()` before `attemptSdkRun()`
-- [ ] SSE events: `safety_warning`, `safety_approval_needed`, `safety_blocked`
-- [ ] Sandbox mode: copy-to-temp + execute + copy-back for approved risky directories
-- [ ] API: `POST /api/agents/:id/safety-decision` (approve/reject/sandbox)
-- [ ] Mobile/web: safety prompt UI (reuses existing approval flow pattern)
+- [ ] Pause / resume / stop from mobile
+- [ ] Manual handoff trigger
+- [ ] Fork session (create branch from state)
+- [ ] Push notifications for handoff events
 
-### 11.3 Dispatch Signature Verification (P0)
+---
 
-Ed25519 signing of dispatch payloads for defense-in-depth over Tailscale.
+## 6. Security & Observability
 
-- [ ] Control plane: sign dispatch payloads with Ed25519 (TweetNaCl)
-- [ ] Public key distributed to workers during machine registration
-- [ ] Worker: verify signature before task execution, reject invalid payloads
-- [ ] Audit: log signature verification failures
+> OWASP compliance, security pipeline, audit logging, threat model.
 
-### 11.4 AgentOutputStream — Unified Output Streaming (P1)
+<details>
+<summary>✅ Comprehensive security stack — OWASP Top 10 mapped, audit pipeline, runtime hardening</summary>
 
-Shared output contract between runtime adapters and event pipeline. Foundation for
-multi-runtime support (bridges to Phase 10 Codex integration).
+### 6.1 OWASP Agentic Top 10 Compliance
 
-- [ ] Define `AgentOutputStream` interface in `packages/shared/src/protocol/`
-  - Methods: text, thinking, toolUse, toolResult, fileChange, sessionInit, costUpdate, error
-- [ ] Refactor `sdk-runner.ts` to emit through `AgentOutputStream`
-- [ ] `AgentInstance` creates stream impl backed by EventEmitter + OutputBuffer
-- [ ] Runtime unification adapters (`ClaudeRuntimeAdapter`, `CodexRuntimeAdapter`) use same interface
+| Risk | Mitigation | Status |
+|------|-----------|--------|
+| ASI01 — Goal Hijack | PreToolUse hook + prompt injection detection | ✅ |
+| ASI02 — Tool Misuse | allowedTools/disallowedTools allowlist | ✅ |
+| ASI03 — Identity Abuse | Per-agent identity + short-lived tokens + Tailscale ACLs | ✅ |
+| ASI04 — Supply Chain | pnpm audit + Trivy + Grype + SBOM + pinned deps | ✅ |
+| ASI05 — Code Execution | Sandbox (bubblewrap/Seatbelt) + cap-drop + network=none | ✅ |
+| ASI06 — Memory Poisoning | Mem0 validation + per-agent isolation + TTL | ✅ |
+| ASI07 — Inter-Agent Comms | TweetNaCl E2E + Tailscale WireGuard | ✅ |
+| ASI08 — Cascading Failures | Timeout + circuit breaker + BullMQ backoff + checkpoints | ✅ |
+| ASI09 — Trust Exploitation | Approval gates + cost alerts + dead-loop detection | ✅ |
+| ASI10 — Rogue Agents | SHA-256 audit log + anomaly detection + kill switch | ✅ |
 
-### 11.5 Mid-Execution Steering (P1)
+### 6.2 Security Pipeline
 
-Inject guidance into running agent sessions via Claude Agent SDK `streamInput()`.
+- [x] SAST: CodeQL (`security-extended`) + Semgrep (`p/security-audit` + `p/secrets`)
+- [x] SCA: `pnpm audit`, license check (no GPL/AGPL), Trivy + Grype
+- [x] Secret scanning: gitleaks + GitHub push protection
+- [x] DAST: OWASP ZAP baseline scan + WebSocket fuzzing
 
-- [ ] Expose `steer(message)` on `AgentInstance` (delegates to SDK Query.streamInput)
-- [ ] Worker API: `POST /api/agents/:agentId/steer`
-- [ ] Control plane proxy: `POST /api/agents/:agentId/steer` → forward to worker
-- [ ] SSE events: `steer_sent`, `steer_ack`
-- [ ] Mobile/web: chat-like input at bottom of live session view
-- [ ] Codex steering deferred until CodexRuntimeAdapter lands
+### 6.3 Security Audit Agent
 
-### 11.6 Execution Environment Registry (P2)
+- [x] Read-only agent on nightly cron (BullMQ scheduled)
+- [x] Structured JSON report → control plane → auto-create GitHub Issues for high-severity
+- [x] Sandboxed: read-only FS, no network egress, restricted tools
 
-Orthogonal abstraction for WHERE tasks execute (local/Docker/SSH), separate from
-WHAT agent runs them (Claude/Codex).
+### 6.4 Runtime Security Controls
 
-- [ ] Define `ExecutionEnvironment` interface in `agent-worker/src/execution/`
-  - Methods: detect, prepare, cleanup
-- [ ] `DirectEnvironment`: wraps current subprocess behavior
-- [ ] `DockerEnvironment`: wraps existing Dockerfile patterns with gVisor
-- [ ] `ExecutionEnvironmentRegistry`: auto-detect at startup, report in heartbeat
-- [ ] Machine registration includes available environments + runtime adapters
-- [ ] Control plane: dispatch routing considers environment requirements
+- [x] Per-session short-lived tokens, network egress allowlist, FS isolation
+- [x] Tool rate limiting, prompt injection defense (sanitize + flag + guardian agent)
+- [x] Kill switch: `POST /api/agents/:id/emergency-stop`
+- [x] Anomaly detection on tool-call patterns
 
-**Deliverable**: Execution summary, safety tiers, dispatch signing, output stream, steering, environment registry
+### 6.5 Audit Logging & Forensics
+
+- [x] NDJSON with SHA-256 hash chain (tamper detection)
+- [x] Configurable retention + batch cleanup
+- [x] Queryable API: `GET /api/audit?agentId=X&from=T1&to=T2&tool=Bash`
+- [x] Dashboard: top tools, cost by agent, error rates, blocked calls, session replay
+
+### 6.6 Threat Model & Compliance
+
+- [x] AgentCTL threat model (multi-machine, multi-agent, mobile control surface)
+- [x] Mapped to OWASP Agentic Top 10, NIST AI RMF, Anthropic safety guidelines
+- [x] Security runbook: rogue agent, credential leak, prompt injection procedures
+- [ ] Quarterly review cadence (ongoing)
+
+</details>
+
+---
+
+## Active Priorities
+
+| Priority | Item | Section | Status |
+|----------|------|---------|--------|
+| **P0** | Unified Session Browser (Web) | 4.6 | Not started |
+| **P1** | Structured Execution Summary | 2.5 | Not started |
+| **P1** | Workdir Safety Tiers | 2.6 | Not started |
+| **P1** | Dispatch Signature Verification | 2.7 | Not started |
+| **P2** | AgentOutputStream | 3.3 | Not started |
+| **P2** | Mid-Execution Steering | 2.8 | Not started |
+| **P2** | Codex Operational Parity | 3.4 | Not started |
+| **P2** | Automatic Handoff Triggers | 3.5 | Not started |
+| **P2** | Remote Control Spike | 2.4 | Not started |
+| **P2** | Fork UX Extensions | 4.7 | Not started |
+| **P3** | Mobile Session Browser | 5.1-5.3 | Not started |
+| **P3** | Execution Environment Registry | 2.9 | Not started |
+| **P3** | Memory Continuity | 3.6 | Not started |
 
 ---
 
 ## Target Workflow Summary
 
 ```
-PR:              CI (lint + test) -> Docker build -> security scan (CodeQL + Semgrep + Trivy)
-merge -> dev:    CI -> Docker build -> push ghcr.io:dev-latest -> deploy dev -> health check -> ZAP scan
-merge -> main:   CI -> Docker build -> push ghcr.io:main-latest -> (ready for release)
-GitHub Release:  push ghcr.io:v*.*.* -> approval gate -> DB backup + migrate -> deploy prod -> smoke test
-rollback:        workflow_dispatch -> select previous tag -> deploy -> health check
-fleet deploy:    canary -> verify -> matrix deploy remaining -> per-machine health check
-nightly:         security audit agent -> structured report -> auto-create issues for high-severity
-handoff:         rate limit / cost threshold / manual -> serialize context -> hydrate target agent -> resume
-codex session:   same relay pattern as Claude Code -> outbound poll -> SSE stream -> iOS unified browser
-task complete:   execution summary (session resume) -> JSONB storage -> summary card in mobile/web
-steer:           mobile chat input -> control plane proxy -> worker steer -> SDK streamInput -> steer ack
-safety check:    workdir classify (4 tiers) -> SSE safety event -> user approve/reject/sandbox -> execute
-runtime mgmt:    canonical config sync -> managed sessions -> native import preflight -> snapshot fallback
+PR:              CI (lint + test) → Docker build → security scan (CodeQL + Semgrep + Trivy)
+merge → dev:     CI → Docker build → push ghcr.io:dev-latest → deploy dev → health check → ZAP
+merge → main:    CI → Docker build → push ghcr.io:main-latest → (ready for release)
+GitHub Release:  push ghcr.io:v*.*.* → approval gate → DB backup + migrate → deploy prod → smoke
+rollback:        workflow_dispatch → select tag → deploy → health check
+fleet deploy:    canary → verify → matrix remaining → per-machine health check
+nightly:         security audit agent → structured report → auto-create issues
+session control: CLI -p (primary) → Agent SDK wrapper → tmux fallback
+handoff:         manual / rate-limit / cost → serialize context → hydrate target → resume
+task complete:   execution summary (session resume) → JSONB → summary card
+steer:           chat input → control plane proxy → worker → SDK streamInput → ack
+safety check:    workdir classify (4 tiers) → SSE event → approve/reject/sandbox → execute
+runtime mgmt:    config sync → managed sessions → native import preflight → snapshot fallback
 ```
 
-## Timeline & Dependencies
+## Dependencies
 
-| Phase | Dependency | Notes |
-|-------|-----------|-------|
-| Phase 1 — CI Hardening | None | Start immediately |
-| Phase 2 — Docker Build | None | Parallel with Phase 1 |
-| Phase 3 — Dev Deploy | Phase 2 + Tailscale ACL | Need target machine |
-| Phase 4 — DB Migration | Phase 3 | Integrate into deploy |
-| Phase 5 — Prod Deploy | Phase 3 + 4 | After dev deploy stable |
-| Phase 6 — Observability | Phase 5 | After prod deploy exists |
-| Phase 7 — Fleet Deploy | Phase 5 | Post-MVP |
-| Phase 8 — Sessions & Loop | Phase 4 (DB) | Types/API can start with Phase 1-2; 8.2 (Remote Control) unlocks Phase 10 |
-| Phase 9 — Security Audit | Phase 2 (scan) + Phase 3 (DAST) + Phase 8 (audit agent) | SAST/SCA start with Phase 1 |
-| Phase 10 — Codex & Handoff | Phase 8.2 (Remote Control) + Phase 7 (Fleet) + Phase 11.4 (output stream) | Codex runtime mirrors Claude relay pattern; handoff needs fleet routing; adapter uses AgentOutputStream |
-| Phase 11 — Runtime Hardening | Phase 8 (runtime) + Phase 9 (security) | 11.1-11.3 start immediately; 11.4-11.5 after Phase 8; 11.6 after Phase 10 |
+| Item | Depends On | Notes |
+|------|-----------|-------|
+| Unified Session Browser (P0) | None | Can start immediately |
+| Execution Summary (P1) | None | Can start immediately |
+| Workdir Safety (P1) | None | Can start immediately |
+| Dispatch Signing (P1) | None | Can start immediately |
+| AgentOutputStream (P2) | None | Foundation for multi-runtime unification |
+| Mid-Execution Steering (P2) | AgentOutputStream | Needs stream interface for response routing |
+| Codex Operational Parity (P2) | None | LiteLLM config + PM2 + sandbox |
+| Automatic Handoff (P2) | AgentOutputStream | Needs unified event stream for trigger detection |
+| Remote Control Spike (P2) | None | Evaluate only — no dependency on implementation |
+| Fork UX Extensions (P2) | None | Extends existing fork system |
+| Mobile Session Browser (P3) | Unified Session Browser | Aligns mobile with web patterns |
+| Execution Environment Registry (P3) | AgentOutputStream | Needs adapter interface stable |
+| Memory Continuity (P3) | Automatic Handoff | Needs handoff triggers for context bridge |
 
 ## References
 
@@ -557,28 +436,39 @@ runtime mgmt:    canonical config sync -> managed sessions -> native import pref
 - [Tailscale GitHub Action](https://tailscale.com/kb/1276/tailscale-github-action)
 - [Trivy Container Scanning](https://github.com/aquasecurity/trivy-action)
 - [Grype/Anchore Scan](https://github.com/anchore/scan-action)
-- [CI/CD for Node.js (Red Hat)](https://developers.redhat.com/articles/2023/11/01/cicd-best-practices-nodejs)
-- [DB Migration CI/CD](https://www.bytebase.com/blog/how-to-build-cicd-pipeline-for-database-schema-migration/)
 - [Drizzle ORM Migrations](https://orm.drizzle.team/docs/migrations)
 
-### Agent Runtime & Remote Control
-- [Claude Code Remote Control (Feb 2026)](https://docs.anthropic.com/en/docs/claude-code/remote-control) — Outbound polling relay; replaces subprocess spawning
+### Agent Runtime
+- [Claude Code Remote Control (Feb 2026)](https://docs.anthropic.com/en/docs/claude-code/remote-control) — Outbound polling relay (optional enhancement)
 - [Claude Agent SDK](https://github.com/anthropic/claude-agent-sdk) — TypeScript SDK wrapping Claude Code CLI
 - [OpenAI Codex CLI](https://github.com/openai/codex) — Terminal-native coding agent
-
-### Runtime Patterns
 - [Astro Agent Runner](https://github.com/astro-anywhere/astro-agent) — Provider adapters, execution strategies, workdir safety, dispatch signing
-- [Astro Agent Patterns Design](plans/2026-03-10-astro-agent-patterns-design.md) — Evaluation and adoption plan
 
 ### Security
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
 - [OWASP AI Agent Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html)
 - [AWS Agentic AI Security Scoping Matrix](https://aws.amazon.com/blogs/security/the-agentic-ai-security-scoping-matrix-a-framework-for-securing-autonomous-ai-systems/)
-- [NVIDIA Sandboxing Agentic Workflows](https://developer.nvidia.com/blog/practical-security-guidance-for-sandboxing-agentic-workflows-and-managing-execution-risk/)
-- [Security Patterns for Autonomous Agents (Pentagi)](https://www.sitepoint.com/security-patterns-for-autonomous-agents-lessons-from-pentagi/)
-- [AI Agent Security Best Practices 2026](https://aiagentskit.com/blog/ai-agent-security-best-practices/)
-- [Glean AI Agent Security](https://www.glean.com/perspectives/best-practices-for-ai-agent-security-in-2025)
-- [OpenAI Prompt Injections](https://openai.com/index/prompt-injections/)
-- [Google ADK Safety](https://google.github.io/adk-docs/safety/)
-- [GitHub Actions Security Scanning](https://oneuptime.com/blog/post/2025-12-20-github-actions-container-scanning/view)
-- [SBOM Automation](https://medium.com/@bhpuri/github-actions-series-41-github-actions-for-software-supply-chain-security-and-sbom-18ff7f998a49)
+
+### Design Documents
+
+| Plan | Status | Section |
+|------|--------|---------|
+| [scheduled-sessions-and-loop-design](plans/2026-03-02-scheduled-sessions-and-loop-design.md) | Archived | 2.1, 2.2 |
+| [frontend-framework-survey](plans/2026-03-03-frontend-framework-survey.md) | Archived | 4.1 |
+| [nextjs-migration-design](plans/2026-03-03-nextjs-migration-design.md) | Archived | 4.1 |
+| [session-takeover-design](plans/2026-03-03-session-takeover-design.md) | Archived | 2.3 |
+| [multi-account-design](plans/2026-03-04-multi-account-design.md) | Archived | 4.2 |
+| [multi-account-impl-plan](plans/2026-03-04-multi-account-impl-plan.md) | Archived | 4.2 |
+| [cross-machine-session-transfer](plans/2026-03-06-cross-machine-session-transfer.md) | Delivered | 4.3 |
+| [advanced-fork-design](plans/2026-03-08-advanced-fork-design.md) | Archived | 4.3 |
+| [advanced-fork-impl-plan](plans/2026-03-08-advanced-fork-impl-plan.md) | Archived | 4.3 |
+| [codex-claude-runtime-unification-design](plans/2026-03-09-codex-claude-runtime-unification-design.md) | Active | 3.1, 3.2 |
+| [codex-claude-runtime-unification-impl-plan](plans/2026-03-09-codex-claude-runtime-unification-impl-plan.md) | Active | 3.1, 3.2 |
+| [fork-ux-overhaul](plans/2026-03-09-fork-ux-overhaul.md) | Planned | 4.7 |
+| [astro-agent-patterns-design](plans/2026-03-10-astro-agent-patterns-design.md) | Active | 2.5-2.9, 3.3 |
+| [runtime-centric-settings-redesign-design](plans/2026-03-10-runtime-centric-settings-redesign-design.md) | Delivered | 4.5 |
+| [runtime-centric-settings-redesign-impl-plan](plans/2026-03-10-runtime-centric-settings-redesign-impl-plan.md) | Delivered | 4.5 |
+| [runtime-settings-config-consistency-design](plans/2026-03-10-runtime-settings-config-consistency-design.md) | Subsumed | 4.5 |
+| [runtime-settings-config-consistency-impl-plan](plans/2026-03-10-runtime-settings-config-consistency-impl-plan.md) | Subsumed | 4.5 |
+| [unified-sessions-ui-design](plans/2026-03-10-unified-sessions-ui-design.md) | Active | 4.6 |
+| [unified-sessions-ui-impl-plan](plans/2026-03-10-unified-sessions-ui-impl-plan.md) | Active | 4.6 |

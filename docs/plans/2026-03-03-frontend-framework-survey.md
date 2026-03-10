@@ -1,3 +1,5 @@
+> ⚠️ **ARCHIVED** — This plan has been fully implemented. Kept for historical reference.
+
 # Frontend Framework Survey for AgentCTL Web Dashboard
 
 **Date:** 2026-03-03

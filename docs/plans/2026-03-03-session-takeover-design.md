@@ -1,3 +1,5 @@
+> ⚠️ **ARCHIVED** — This plan has been fully implemented. Kept for historical reference.
+
 # Design: Claude Code Session Control — Multi-Layer Architecture
 
 > Date: 2026-03-03

@@ -1,3 +1,5 @@
+> ⚠️ **ARCHIVED** — This plan has been fully implemented. Kept for historical reference.
+
 # Next.js Migration Design
 
 **Date:** 2026-03-03

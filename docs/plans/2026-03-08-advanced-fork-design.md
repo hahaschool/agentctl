@@ -1,3 +1,5 @@
+> ⚠️ **ARCHIVED** — This plan has been fully implemented. Kept for historical reference.
+
 # Advanced Fork / Context Picker Design
 
 **Date:** 2026-03-08
