@@ -58,6 +58,11 @@ export const queryKeys = {
   accounts: ['accounts'] as const,
   accountDefaults: ['account-defaults'] as const,
   projectAccounts: ['project-accounts'] as const,
+  runtimeConfigDefaults: ['runtime-config', 'defaults'] as const,
+  runtimeConfigDrift: (machineId?: string) =>
+    machineId
+      ? (['runtime-config', 'drift', machineId] as const)
+      : (['runtime-config', 'drift'] as const),
   routerModels: ['router', 'models'] as const,
   routerModelsInfo: ['router', 'models-info'] as const,
   audit: (params?: {
@@ -246,6 +251,24 @@ export function projectAccountsQuery() {
   return queryOptions({
     queryKey: queryKeys.projectAccounts,
     queryFn: api.listProjectAccounts,
+  });
+}
+
+export function runtimeConfigDefaultsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.runtimeConfigDefaults,
+    queryFn: api.getRuntimeConfigDefaults,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeConfigDriftQuery(machineId?: string) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeConfigDrift(machineId),
+    queryFn: () => api.getRuntimeConfigDrift(machineId),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -556,6 +579,27 @@ export function useDeleteProjectAccount() {
     mutationFn: api.deleteProjectAccount,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.projectAccounts });
+    },
+  });
+}
+
+export function useUpdateRuntimeConfigDefaults() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.updateRuntimeConfigDefaults,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.runtimeConfigDefaults });
+      void qc.invalidateQueries({ queryKey: queryKeys.runtimeConfigDrift() });
+    },
+  });
+}
+
+export function useSyncRuntimeConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.syncRuntimeConfig,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.runtimeConfigDrift() });
     },
   });
 }

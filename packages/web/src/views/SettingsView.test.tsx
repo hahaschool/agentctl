@@ -61,6 +61,16 @@ vi.mock('./ProjectAccountsSection', () => ({
   ),
 }));
 
+vi.mock('./RuntimeAccessSection', () => ({
+  RuntimeAccessSection: () => <div data-testid="runtime-access-section">RuntimeAccessSection</div>,
+}));
+
+vi.mock('./RuntimeConsistencySection', () => ({
+  RuntimeConsistencySection: () => (
+    <div data-testid="runtime-consistency-section">RuntimeConsistencySection</div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Component import (after mocks)
 // ---------------------------------------------------------------------------
@@ -132,9 +142,14 @@ describe('SettingsView', () => {
   // Settings Group Sections
   // =========================================================================
 
-  it('renders the API Accounts group heading', () => {
+  it('renders the Cloud API Accounts group heading', () => {
     renderSettings();
-    expect(screen.getByText('API Accounts')).toBeDefined();
+    expect(screen.getByText('Cloud API Accounts')).toBeDefined();
+  });
+
+  it('renders the Claude & Codex group heading', () => {
+    renderSettings();
+    expect(screen.getByText('Claude & Codex')).toBeDefined();
   });
 
   it('renders the Appearance & Preferences group heading', () => {
@@ -172,6 +187,16 @@ describe('SettingsView', () => {
   it('renders the ProjectAccountsSection component', () => {
     renderSettings();
     expect(screen.getByTestId('project-accounts-section')).toBeDefined();
+  });
+
+  it('renders the RuntimeAccessSection component', () => {
+    renderSettings();
+    expect(screen.getByTestId('runtime-access-section')).toBeDefined();
+  });
+
+  it('renders the RuntimeConsistencySection component', () => {
+    renderSettings();
+    expect(screen.getByTestId('runtime-consistency-section')).toBeDefined();
   });
 
   // =========================================================================
@@ -356,11 +381,11 @@ describe('SettingsView', () => {
   // API Accounts group description
   // =========================================================================
 
-  it('shows API Accounts group description', () => {
+  it('shows Cloud API Accounts group description', () => {
     renderSettings();
     expect(
       screen.getByText(
-        'Manage provider credentials and configure how requests are routed between accounts.',
+        'Manage provider credentials used for routed API requests and project-level account overrides.',
       ),
     ).toBeDefined();
   });
@@ -465,13 +490,14 @@ describe('SettingsView', () => {
   // Structure — section separators and group containers
   // =========================================================================
 
-  it('renders three SettingsGroup sections with h2 headings', () => {
+  it('renders four SettingsGroup sections with h2 headings', () => {
     renderSettings();
     const h2s = screen.getAllByRole('heading', { level: 2 });
-    expect(h2s.length).toBe(3);
-    expect(h2s[0]?.textContent).toBe('API Accounts');
-    expect(h2s[1]?.textContent).toBe('Appearance & Preferences');
-    expect(h2s[2]?.textContent).toBe('System');
+    expect(h2s.length).toBe(4);
+    expect(h2s[0]?.textContent).toBe('Cloud API Accounts');
+    expect(h2s[1]?.textContent).toBe('Claude & Codex');
+    expect(h2s[2]?.textContent).toBe('Appearance & Preferences');
+    expect(h2s[3]?.textContent).toBe('System');
   });
 
   it('renders h3 sub-section headings', () => {
