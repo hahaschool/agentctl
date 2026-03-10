@@ -4,7 +4,7 @@ import type {
   RuntimeSessionSummary,
   StartHandoffRequest,
 } from '@agentctl/shared';
-import { WorkerError, type ManagedRuntime } from '@agentctl/shared';
+import { type ManagedRuntime, WorkerError } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
 
@@ -14,12 +14,15 @@ import type {
   RuntimeAdapter,
   StartManagedSessionInput,
 } from '../../runtime/runtime-adapter.js';
-import { RuntimeRegistry } from '../../runtime/runtime-registry.js';
+import type { RuntimeRegistry } from '../../runtime/runtime-registry.js';
 
 export type RuntimeSessionsRoutesOptions = {
   machineId: string;
   runtimeRegistry: RuntimeRegistry;
-  handoffController: Pick<HandoffController, 'exportSnapshot' | 'handoff' | 'preflightNativeImport'>;
+  handoffController: Pick<
+    HandoffController,
+    'exportSnapshot' | 'handoff' | 'preflightNativeImport'
+  >;
   logger: Logger;
 };
 
@@ -40,7 +43,10 @@ export const runtimeSessionsRoutes: FastifyPluginAsync<RuntimeSessionsRoutesOpti
   app.post<{ Body: RuntimeSessionBody }>('/', async (request, reply) => {
     const adapter = requireAdapter(runtimeRegistry, request.body.runtime);
     const session = await adapter.startSession(toStartInput(request.body));
-    logger.info({ runtime: request.body.runtime, sessionId: session.sessionId }, 'Started runtime session');
+    logger.info(
+      { runtime: request.body.runtime, sessionId: session.sessionId },
+      'Started runtime session',
+    );
     return reply.code(201).send({ ok: true, session });
   });
 
@@ -111,7 +117,9 @@ export const runtimeSessionsRoutes: FastifyPluginAsync<RuntimeSessionsRoutesOpti
 function requireAdapter(registry: RuntimeRegistry, runtime: ManagedRuntime): RuntimeAdapter {
   const adapter = registry.get(runtime);
   if (!adapter) {
-    throw new WorkerError('RUNTIME_NOT_FOUND', `Runtime '${runtime}' is not registered`, { runtime });
+    throw new WorkerError('RUNTIME_NOT_FOUND', `Runtime '${runtime}' is not registered`, {
+      runtime,
+    });
   }
   return adapter;
 }

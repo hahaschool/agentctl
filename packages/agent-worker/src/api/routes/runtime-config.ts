@@ -33,7 +33,10 @@ export const runtimeConfigRoutes: FastifyPluginAsync<RuntimeConfigRoutesOptions>
     }
 
     const response = await runtimeConfigApplier.apply(request.body);
-    logger.info({ machineId, configVersion: response.configVersion }, 'Applied managed runtime config');
+    logger.info(
+      { machineId, configVersion: response.configVersion },
+      'Applied managed runtime config',
+    );
     return response;
   });
 

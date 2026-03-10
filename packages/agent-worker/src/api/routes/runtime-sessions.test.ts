@@ -1,5 +1,5 @@
-import type { FastifyInstance } from 'fastify';
 import type { HandoffSnapshot } from '@agentctl/shared';
+import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HandoffController } from '../../runtime/handoff-controller.js';
@@ -31,7 +31,10 @@ function makeSnapshot(overrides: Partial<HandoffSnapshot> = {}): HandoffSnapshot
 
 async function buildApp(
   registry: RuntimeRegistry,
-  handoffController: Pick<HandoffController, 'exportSnapshot' | 'handoff' | 'preflightNativeImport'>,
+  handoffController: Pick<
+    HandoffController,
+    'exportSnapshot' | 'handoff' | 'preflightNativeImport'
+  >,
 ): Promise<FastifyInstance> {
   const Fastify = await import('fastify');
   const app = Fastify.default({ logger: false });

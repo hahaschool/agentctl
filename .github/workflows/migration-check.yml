@@ -176,6 +176,7 @@ jobs:
       # Step 3: Apply all migrations to the throwaway PostgreSQL
       # ------------------------------------------------------------------
       - name: Apply migrations to test database
+        working-directory: packages/control-plane
         run: |
           node -e "
           import pg from 'pg';
@@ -187,7 +188,7 @@ jobs:
           });
           await client.connect();
 
-          const dir = 'packages/control-plane/drizzle';
+          const dir = 'drizzle';
           const entries = (await readdir(dir))
             .filter(f => f.match(/^\d{4,}_.+\.sql$/))
             .sort();
@@ -217,6 +218,7 @@ jobs:
       # Step 4: Verify expected tables exist after all migrations
       # ------------------------------------------------------------------
       - name: Verify final schema
+        working-directory: packages/control-plane
         run: |
           node -e "
           import pg from 'pg';

@@ -1,12 +1,11 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import {
-  formatHandoffHistoryFilterLabel,
   describeHandoffCompletion,
   describeHandoffExecution,
-  formatMachineSelectionLabel,
+  formatHandoffHistoryFilterLabel,
   formatHandoffStrategyLabel,
+  formatMachineSelectionLabel,
   HANDOFF_HISTORY_FILTERS,
   isMachineSelectable,
   matchesHandoffHistoryFilter,
@@ -15,6 +14,7 @@ import {
   summarizeHandoffAnalytics,
   summarizeNativeImportPreflightStatus,
 } from '@agentctl/shared';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowRightLeft, Cable, Cpu, GitBranch, History, Layers3 } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
@@ -29,20 +29,23 @@ import { RefreshButton } from '@/components/RefreshButton';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
-import type {
-  RuntimeSession,
-  RuntimeSessionHandoff,
-} from '../lib/api';
-import { formatDateTime, formatDuration, formatNumber, timeAgo, truncate } from '../lib/format-utils';
+import type { RuntimeSession, RuntimeSessionHandoff } from '../lib/api';
+import {
+  formatDateTime,
+  formatDuration,
+  formatNumber,
+  timeAgo,
+  truncate,
+} from '../lib/format-utils';
 import {
   machinesQuery,
+  runtimeSessionHandoffsQuery,
+  runtimeSessionPreflightQuery,
+  runtimeSessionsQuery,
   useCreateRuntimeSession,
   useForkRuntimeSession,
   useHandoffRuntimeSession,
   useResumeRuntimeSession,
-  runtimeSessionPreflightQuery,
-  runtimeSessionHandoffsQuery,
-  runtimeSessionsQuery,
 } from '../lib/queries';
 
 const RUNTIME_OPTIONS = [
@@ -60,6 +63,15 @@ const STATUS_OPTIONS = [
   { value: 'ended', label: 'Ended' },
   { value: 'error', label: 'Error' },
 ] as const;
+
+const SESSION_SKELETON_KEYS = [
+  'runtime-session-skeleton-a',
+  'runtime-session-skeleton-b',
+  'runtime-session-skeleton-c',
+  'runtime-session-skeleton-d',
+] as const;
+
+const HANDOFF_SKELETON_KEYS = ['handoff-skeleton-a', 'handoff-skeleton-b'] as const;
 
 function runtimeLabel(runtime: RuntimeSession['runtime']): string {
   return runtime === 'claude-code' ? 'Claude Code' : 'Codex';
@@ -115,7 +127,8 @@ function describeNativeImportAttempt(attempt?: {
   const sourceStorage =
     typeof attempt.metadata?.sourceStorage === 'string'
       ? attempt.metadata.sourceStorage
-      : typeof attempt.metadata?.sourceStorage === 'object' && attempt.metadata.sourceStorage !== null
+      : typeof attempt.metadata?.sourceStorage === 'object' &&
+          attempt.metadata.sourceStorage !== null
         ? formatSourceStorage(attempt.metadata.sourceStorage as Record<string, unknown>)
         : null;
   const sourceSessionSummary =
@@ -133,7 +146,9 @@ function describeNativeImportAttempt(attempt?: {
   const assistantMessages =
     typeof messageCounts?.assistant === 'number' ? messageCounts.assistant : 0;
   const lastActivity =
-    typeof sourceSessionSummary?.lastActivity === 'string' ? sourceSessionSummary.lastActivity : null;
+    typeof sourceSessionSummary?.lastActivity === 'string'
+      ? sourceSessionSummary.lastActivity
+      : null;
 
   if (targetCli) {
     details.push(`target CLI ${targetCli}`);
@@ -178,10 +193,15 @@ function describeNativeImportPreflight(preflight?: {
             preflight.attempt.metadata.sourceStorage !== null
           ? formatSourceStorage(preflight.attempt.metadata.sourceStorage as Record<string, unknown>)
           : null;
-    const details = [targetCli ? `target CLI ${targetCli}` : null, storage ? `source storage ${storage}` : null]
+    const details = [
+      targetCli ? `target CLI ${targetCli}` : null,
+      storage ? `source storage ${storage}` : null,
+    ]
       .filter(Boolean)
       .join(', ');
-    return details ? `Native import ready, ${details}` : 'Native import ready on this target runtime.';
+    return details
+      ? `Native import ready, ${details}`
+      : 'Native import ready on this target runtime.';
   }
 
   const fallbackSummary = describeNativeImportAttempt({
@@ -209,7 +229,7 @@ function HandoffHistoryItem({ handoff }: { handoff: RuntimeSessionHandoff }): Re
   const nativeImportSummary = describeNativeImportAttempt(handoff.nativeImportAttempt);
 
   return (
-      <div className="rounded-lg border border-border bg-card/70 p-3 space-y-2">
+    <div className="rounded-lg border border-border bg-card/70 p-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={handoff.status} />
         <span className="text-xs text-muted-foreground font-medium">
@@ -232,7 +252,9 @@ function HandoffHistoryItem({ handoff }: { handoff: RuntimeSessionHandoff }): Re
         {handoff.createdAt ? formatDateTime(handoff.createdAt) : 'Created time unavailable'}
       </div>
       <div className="text-sm text-muted-foreground leading-6">
-        {handoff.snapshot.diffSummary || handoff.snapshot.conversationSummary || 'No snapshot summary'}
+        {handoff.snapshot.diffSummary ||
+          handoff.snapshot.conversationSummary ||
+          'No snapshot summary'}
       </div>
       {nativeImportSummary && (
         <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-300">
@@ -255,7 +277,8 @@ function HandoffHistoryItem({ handoff }: { handoff: RuntimeSessionHandoff }): Re
 
 export function RuntimeSessionsPage(): React.JSX.Element {
   const toast = useToast();
-  const [runtimeFilter, setRuntimeFilter] = useState<(typeof RUNTIME_OPTIONS)[number]['value']>('all');
+  const [runtimeFilter, setRuntimeFilter] =
+    useState<(typeof RUNTIME_OPTIONS)[number]['value']>('all');
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]['value']>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -269,10 +292,13 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const [forkPrompt, setForkPrompt] = useState('');
   const [forkModel, setForkModel] = useState('');
   const [forkMachineId, setForkMachineId] = useState('');
-  const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSession['runtime']>('claude-code');
+  const [handoffTargetRuntime, setHandoffTargetRuntime] =
+    useState<RuntimeSession['runtime']>('claude-code');
   const [handoffMachineId, setHandoffMachineId] = useState('');
   const [handoffPrompt, setHandoffPrompt] = useState('');
-  const [handoffHistoryFilter, setHandoffHistoryFilter] = useState<'all' | 'native-import' | 'fallback' | 'failed'>('all');
+  const [handoffHistoryFilter, setHandoffHistoryFilter] = useState<
+    'all' | 'native-import' | 'fallback' | 'failed'
+  >('all');
 
   const sessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
   const machines = useQuery(machinesQuery());
@@ -310,7 +336,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         const bTime = getSessionActivity(b);
         return new Date(bTime ?? 0).getTime() - new Date(aTime ?? 0).getTime();
       });
-  }, [runtimeFilter, searchQuery, sessions.data?.sessions, statusFilter]);
+  }, [machineNames, runtimeFilter, searchQuery, sessions.data?.sessions, statusFilter]);
 
   useEffect(() => {
     if (filteredSessions.length === 0) {
@@ -342,7 +368,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     handoffs.error?.message ??
     preflight.error?.message;
   const totalCount = sessions.data?.count ?? 0;
-  const activeCount = (sessions.data?.sessions ?? []).filter((session) => session.status === 'active').length;
+  const activeCount = (sessions.data?.sessions ?? []).filter(
+    (session) => session.status === 'active',
+  ).length;
   const handingOffCount = (sessions.data?.sessions ?? []).filter(
     (session) => session.status === 'handing_off',
   ).length;
@@ -354,13 +382,11 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   );
   const metadataSummary = selectedSession ? summarizeMetadata(selectedSession.metadata) : [];
   const canHandoff = Boolean(
-    selectedSession &&
-      selectedSession.nativeSessionId &&
+    selectedSession?.nativeSessionId &&
       (selectedSession.status === 'active' || selectedSession.status === 'paused'),
   );
   const canResume = Boolean(
-    selectedSession &&
-      selectedSession.nativeSessionId &&
+    selectedSession?.nativeSessionId &&
       (selectedSession.status === 'paused' ||
         selectedSession.status === 'ended' ||
         selectedSession.status === 'error'),
@@ -540,7 +566,8 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Runtime Sessions</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Unified managed session view for Claude Code and Codex, with cross-runtime handoff history.
+            Unified managed session view for Claude Code and Codex, with cross-runtime handoff
+            history.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -551,7 +578,10 @@ export function RuntimeSessionsPage(): React.JSX.Element {
             Classic Sessions
           </Link>
           <LastUpdated dataUpdatedAt={combinedUpdatedAt} />
-          <RefreshButton onClick={refreshAll} isFetching={sessions.isFetching || machines.isFetching} />
+          <RefreshButton
+            onClick={refreshAll}
+            isFetching={sessions.isFetching || machines.isFetching}
+          />
         </div>
       </div>
 
@@ -561,7 +591,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Managed</div>
           <div className="mt-2 text-2xl font-semibold">{formatNumber(totalCount)}</div>
-          <div className="mt-1 text-sm text-muted-foreground">Sessions under runtime management</div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            Sessions under runtime management
+          </div>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Active</div>
@@ -571,7 +603,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Switching</div>
           <div className="mt-2 text-2xl font-semibold">{formatNumber(handingOffCount)}</div>
-          <div className="mt-1 text-sm text-muted-foreground">Sessions currently handing off runtimes</div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            Sessions currently handing off runtimes
+          </div>
         </div>
       </div>
 
@@ -592,7 +626,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
             <select
               aria-label="Filter by runtime"
               value={runtimeFilter}
-              onChange={(event) => setRuntimeFilter(event.target.value as (typeof runtimeFilter))}
+              onChange={(event) => setRuntimeFilter(event.target.value as typeof runtimeFilter)}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none"
             >
               {RUNTIME_OPTIONS.map((option) => (
@@ -607,7 +641,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
             <select
               aria-label="Filter by status"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as (typeof statusFilter))}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none"
             >
               {STATUS_OPTIONS.map((option) => (
@@ -633,7 +667,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
             <select
               aria-label="Create runtime"
               value={createRuntime}
-              onChange={(event) => setCreateRuntime(event.target.value as RuntimeSession['runtime'])}
+              onChange={(event) =>
+                setCreateRuntime(event.target.value as RuntimeSession['runtime'])
+              }
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none"
             >
               {RUNTIME_OPTIONS.filter((option) => option.value !== 'all').map((option) => (
@@ -721,8 +757,8 @@ export function RuntimeSessionsPage(): React.JSX.Element {
 
           {sessions.isLoading ? (
             <div className="p-4 space-y-3">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div key={`runtime-session-skeleton-${index}`} className="h-24 rounded-lg bg-muted/60 animate-pulse" />
+              {SESSION_SKELETON_KEYS.map((key) => (
+                <div key={key} className="h-24 rounded-lg bg-muted/60 animate-pulse" />
               ))}
             </div>
           ) : filteredSessions.length === 0 ? (
@@ -757,17 +793,26 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                           </span>
                           <StatusBadge status={session.status} />
                         </div>
-                        <div className="text-sm font-medium text-foreground break-all">{session.id}</div>
+                        <div className="text-sm font-medium text-foreground break-all">
+                          {session.id}
+                        </div>
                         <PathBadge path={session.projectPath} />
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                           <span>{machineName}</span>
-                          {session.nativeSessionId && <span>native {truncate(session.nativeSessionId, 24)}</span>}
+                          {session.nativeSessionId && (
+                            <span>native {truncate(session.nativeSessionId, 24)}</span>
+                          )}
                           {activity && <span>{timeAgo(activity)}</span>}
                         </div>
                       </div>
                       <div className="text-right text-xs text-muted-foreground space-y-1">
                         <div>Config v{session.configRevision}</div>
-                        <div>{formatDuration(session.startedAt ?? new Date().toISOString(), session.endedAt)}</div>
+                        <div>
+                          {formatDuration(
+                            session.startedAt ?? new Date().toISOString(),
+                            session.endedAt,
+                          )}
+                        </div>
                       </div>
                     </div>
                   </button>
@@ -809,7 +854,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
               </div>
 
               <div className="space-y-2">
-                <div className="text-base font-semibold text-foreground break-all">{selectedSession.id}</div>
+                <div className="text-base font-semibold text-foreground break-all">
+                  {selectedSession.id}
+                </div>
                 <PathBadge path={selectedSession.projectPath} className="block max-w-full" />
                 {selectedSession.worktreePath && (
                   <PathBadge path={selectedSession.worktreePath} className="block max-w-full" />
@@ -818,36 +865,55 @@ export function RuntimeSessionsPage(): React.JSX.Element {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-border bg-background/40 p-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Machine</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Machine
+                  </div>
                   <div className="mt-2 text-sm font-medium text-foreground">
                     {machineNames.get(selectedSession.machineId) ?? selectedSession.machineId}
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">{selectedSession.machineId}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {selectedSession.machineId}
+                  </div>
                 </div>
                 <div className="rounded-lg border border-border bg-background/40 p-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Native Session</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Native Session
+                  </div>
                   <div className="mt-2 text-sm font-medium text-foreground break-all">
                     {selectedSession.nativeSessionId ?? 'Pending runtime assignment'}
                   </div>
                   {selectedSession.agentId && (
-                    <div className="mt-1 text-xs text-muted-foreground">Agent {selectedSession.agentId}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Agent {selectedSession.agentId}
+                    </div>
                   )}
                 </div>
                 <div className="rounded-lg border border-border bg-background/40 p-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Timeline</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Timeline
+                  </div>
                   <div className="mt-2 text-sm text-foreground">
-                    Started {selectedSession.startedAt ? formatDateTime(selectedSession.startedAt) : 'unknown'}
+                    Started{' '}
+                    {selectedSession.startedAt
+                      ? formatDateTime(selectedSession.startedAt)
+                      : 'unknown'}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {selectedSession.lastHeartbeat ? `Heartbeat ${timeAgo(selectedSession.lastHeartbeat)}` : 'No heartbeat yet'}
+                    {selectedSession.lastHeartbeat
+                      ? `Heartbeat ${timeAgo(selectedSession.lastHeartbeat)}`
+                      : 'No heartbeat yet'}
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-background/40 p-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Handoff Source</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Handoff Source
+                  </div>
                   <div className="mt-2 text-sm text-foreground break-all">
                     {selectedSession.handoffSourceSessionId ?? 'None'}
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">Config v{selectedSession.configRevision}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Config v{selectedSession.configRevision}
+                  </div>
                 </div>
               </div>
 
@@ -856,9 +922,16 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                   <div className="text-sm font-semibold text-foreground">Metadata</div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {metadataSummary.map(([key, value]) => (
-                      <div key={key} className="rounded-lg border border-border bg-background/40 p-3">
-                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{key}</div>
-                        <div className="mt-2 text-sm text-foreground break-words">{truncate(value, 180)}</div>
+                      <div
+                        key={key}
+                        className="rounded-lg border border-border bg-background/40 p-3"
+                      >
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          {key}
+                        </div>
+                        <div className="mt-2 text-sm text-foreground break-words">
+                          {truncate(value, 180)}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1036,7 +1109,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                           : 'border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-300',
                       )}
                     >
-                      {preflight.isFetching ? 'Refreshing native import preflight...' : preflightSummary}
+                      {preflight.isFetching
+                        ? 'Refreshing native import preflight...'
+                        : preflightSummary}
                     </div>
                   )}
                   <label className="space-y-1.5 text-sm text-muted-foreground">
@@ -1062,7 +1137,8 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                   </div>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Uses managed snapshot handoff and automatically falls back if native import is unavailable.
+                  Uses managed snapshot handoff and automatically falls back if native import is
+                  unavailable.
                 </div>
                 {!canHandoff && (
                   <div className="text-xs text-muted-foreground">
@@ -1078,8 +1154,8 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                 </div>
                 {handoffs.isLoading ? (
                   <div className="space-y-3">
-                    {Array.from({ length: 2 }).map((_, index) => (
-                      <div key={`handoff-skeleton-${index}`} className="h-28 rounded-lg bg-muted/60 animate-pulse" />
+                    {HANDOFF_SKELETON_KEYS.map((key) => (
+                      <div key={key} className="h-28 rounded-lg bg-muted/60 animate-pulse" />
                     ))}
                   </div>
                 ) : (handoffs.data?.handoffs ?? []).length === 0 ? (
@@ -1108,21 +1184,33 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-lg border border-border bg-background/40 p-3">
-                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total</div>
-                        <div className="mt-2 text-lg font-semibold text-foreground">{handoffAnalytics.total}</div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Total
+                        </div>
+                        <div className="mt-2 text-lg font-semibold text-foreground">
+                          {handoffAnalytics.total}
+                        </div>
                       </div>
                       <div className="rounded-lg border border-border bg-background/40 p-3">
-                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Succeeded</div>
-                        <div className="mt-2 text-lg font-semibold text-foreground">{handoffAnalytics.succeeded}</div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Succeeded
+                        </div>
+                        <div className="mt-2 text-lg font-semibold text-foreground">
+                          {handoffAnalytics.succeeded}
+                        </div>
                       </div>
                       <div className="rounded-lg border border-border bg-background/40 p-3">
-                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Native Import</div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Native Import
+                        </div>
                         <div className="mt-2 text-lg font-semibold text-foreground">
                           {handoffAnalytics.nativeImportSuccesses}
                         </div>
                       </div>
                       <div className="rounded-lg border border-border bg-background/40 p-3">
-                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Fallbacks</div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Fallbacks
+                        </div>
                         <div className="mt-2 text-lg font-semibold text-foreground">
                           {handoffAnalytics.nativeImportFallbacks}
                         </div>
@@ -1135,7 +1223,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                       />
                     ) : (
                       filteredHandoffs.map((handoff) => (
-                      <HandoffHistoryItem key={handoff.id} handoff={handoff} />
+                        <HandoffHistoryItem key={handoff.id} handoff={handoff} />
                       ))
                     )}
                   </div>
@@ -1145,7 +1233,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
               <div className="rounded-lg border border-border bg-background/40 p-3 text-xs text-muted-foreground space-y-2">
                 <div className="flex items-center gap-2">
                   <Cable className="h-3.5 w-3.5" />
-                  Active MCP servers: {(selectedSession.metadata?.activeMcpServers as string[] | undefined)?.length ?? 0}
+                  Active MCP servers:{' '}
+                  {(selectedSession.metadata?.activeMcpServers as string[] | undefined)?.length ??
+                    0}
                 </div>
                 <div className="flex items-center gap-2">
                   <GitBranch className="h-3.5 w-3.5" />

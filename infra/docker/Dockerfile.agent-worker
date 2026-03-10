@@ -38,6 +38,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 
 # ── Layer 3: source code (changes most often) ──────────────────
 COPY packages/shared/src/ packages/shared/src/
+COPY packages/shared/scripts/ packages/shared/scripts/
 COPY packages/agent-worker/src/ packages/agent-worker/src/
 
 # Build shared first, then agent-worker (pnpm -r respects dependency order)
