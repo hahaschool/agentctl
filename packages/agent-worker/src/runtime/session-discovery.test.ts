@@ -1,4 +1,12 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,9 +17,12 @@ import { decodeProjectPath, discoverLocalSessions } from './session-discovery.js
 // ---------------------------------------------------------------------------
 
 vi.mock('node:fs', () => ({
+  closeSync: vi.fn(),
   existsSync: vi.fn(),
+  openSync: vi.fn(),
   readdirSync: vi.fn(),
   readFileSync: vi.fn(),
+  readSync: vi.fn(),
   statSync: vi.fn(),
 }));
 
@@ -19,13 +30,19 @@ vi.mock('node:os', () => ({
   homedir: vi.fn(() => '/Users/testuser'),
 }));
 
+const mockCloseSync = vi.mocked(closeSync);
 const mockExistsSync = vi.mocked(existsSync);
+const mockOpenSync = vi.mocked(openSync);
 const mockReaddirSync = vi.mocked(readdirSync);
 const mockReadFileSync = vi.mocked(readFileSync);
+const mockReadSync = vi.mocked(readSync);
 const mockStatSync = vi.mocked(statSync);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCloseSync.mockImplementation(() => undefined);
+  mockOpenSync.mockReturnValue(42);
+  mockReadSync.mockImplementation(() => 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -194,7 +211,7 @@ describe('discoverLocalSessions', () => {
     expect(sessions[1].branch).toBeNull();
   });
 
-  it('discovers sessions from JSONL files when no index exists', () => {
+  it('extracts metadata from JSONL files when no index exists', () => {
     mockExistsSync.mockImplementation((p) => {
       if (p === claudeDir) return true;
       // No sessions-index.json
@@ -231,12 +248,34 @@ describe('discoverLocalSessions', () => {
       mtime: new Date('2026-03-01T15:00:00Z'),
     } as ReturnType<typeof statSync>);
 
+    const jsonl = `{"type":"progress","gitBranch":"main","timestamp":"2026-03-01T14:59:00Z"}
+{"type":"user","message":{"role":"user","content":"Ship discover fallback"},"timestamp":"2026-03-01T15:00:00Z"}
+{"message":{"role":"assistant","content":[{"type":"text","text":"Working on it"}]},"timestamp":"2026-03-01T15:01:00Z"}
+`;
+    let offset = 0;
+    mockReadSync.mockImplementation(((
+      _fd: number,
+      buffer: NodeJS.ArrayBufferView,
+      _bufferOffset: number,
+      length: number,
+    ) => {
+      const chunk = jsonl.slice(offset, offset + length);
+      const target = Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+      target.fill(0);
+      target.write(chunk, 0, 'utf8');
+      const bytesRead = Buffer.byteLength(chunk);
+      offset += bytesRead;
+      return bytesRead;
+    }) as typeof readSync);
+
     const sessions = discoverLocalSessions();
     // Only the valid UUID .jsonl file should be discovered
     expect(sessions).toHaveLength(1);
     expect(sessions[0].sessionId).toBe('a1b2c3d4-e5f6-7890-abcd-ef1234567890');
-    expect(sessions[0].summary).toBe('');
-    expect(sessions[0].messageCount).toBe(0);
+    expect(sessions[0].summary).toBe('Ship discover fallback');
+    expect(sessions[0].messageCount).toBe(2);
+    expect(sessions[0].branch).toBe('main');
+    expect(sessions[0].lastActivity).toBe('2026-03-01T15:01:00Z');
   });
 
   it('filters by projectPath when provided', () => {

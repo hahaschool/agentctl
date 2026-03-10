@@ -5,7 +5,15 @@
 // filesystem discovery as separate concerns.
 // ---------------------------------------------------------------------------
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,6 +38,13 @@ export type DiscoveredSession = {
 
 type DiscoveryLogger = {
   debug: (obj: Record<string, unknown>, msg: string) => void;
+};
+
+type JsonlSessionMetadata = {
+  summary: string;
+  messageCount: number;
+  lastActivity: string;
+  branch: string | null;
 };
 
 /** Legacy sessions-index.json entry (Record<sessionId, entry> format). */
@@ -69,6 +84,52 @@ function isSessionIndexEntryV1(value: unknown): value is SessionIndexEntryV1 {
   return isNonNullObject(value) && 'sessionId' in value && typeof value.sessionId === 'string';
 }
 
+function extractTextContent(content: unknown): string | null {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (typeof block === 'string') {
+      parts.push(block);
+      continue;
+    }
+
+    if (!isNonNullObject(block)) {
+      continue;
+    }
+
+    if (typeof block.text === 'string') {
+      parts.push(block.text);
+      continue;
+    }
+
+    if (typeof block.content === 'string') {
+      parts.push(block.content);
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n') : null;
+}
+
+function normalizeSummary(text: string | null | undefined): string {
+  if (!text) {
+    return '';
+  }
+
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -84,7 +145,8 @@ function isSessionIndexEntryV1(value: unknown): value is SessionIndexEntryV1 {
  *    (e.g. under a `-` parent directory).
  *
  * 2. **Without sessions-index.json** — only `.jsonl` files exist.
- *    We report these as sessions with minimal metadata.
+ *    We stream-parse the JSONL to recover summary, branch, message count,
+ *    and last activity.
  */
 export function discoverLocalSessions(
   projectPathFilter?: string,
@@ -272,7 +334,7 @@ function parseSessionIndex(
 
 /**
  * Discover sessions from raw JSONL files when no sessions-index.json exists.
- * Provides minimal metadata (sessionId, projectPath, lastActivity from file mtime).
+ * Extracts enough metadata for discover filters to treat them like indexed sessions.
  */
 function discoverFromJsonlFiles(
   dirPath: string,
@@ -298,15 +360,17 @@ function discoverFromJsonlFiles(
         continue;
       }
 
+      const filePath = join(dirPath, file.name);
       const stats = statSync(join(dirPath, file.name));
+      const metadata = extractJsonlSessionMetadata(filePath, stats.mtime.toISOString(), logger);
 
       out.push({
         sessionId,
         projectPath: decodedPath,
-        summary: '',
-        messageCount: 0,
-        lastActivity: stats.mtime.toISOString(),
-        branch: null,
+        summary: metadata.summary,
+        messageCount: metadata.messageCount,
+        lastActivity: metadata.lastActivity,
+        branch: metadata.branch,
       });
     }
   } catch (err) {
@@ -316,6 +380,102 @@ function discoverFromJsonlFiles(
       { error: err instanceof Error ? err.message : String(err), path: dirPath },
       'Skipped unreadable directory during JSONL session discovery',
     );
+  }
+}
+
+function extractJsonlSessionMetadata(
+  filePath: string,
+  fallbackLastActivity: string,
+  logger?: DiscoveryLogger,
+): JsonlSessionMetadata {
+  const state: JsonlSessionMetadata = {
+    summary: '',
+    messageCount: 0,
+    lastActivity: fallbackLastActivity,
+    branch: null,
+  };
+
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let fd: number | null = null;
+  let leftover = '';
+
+  try {
+    fd = openSync(filePath, 'r');
+
+    while (true) {
+      const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) {
+        break;
+      }
+
+      leftover += buffer.toString('utf8', 0, bytesRead);
+      const lines = leftover.split('\n');
+      leftover = lines.pop() ?? '';
+
+      for (const line of lines) {
+        updateMetadataFromJsonlLine(line, state);
+      }
+    }
+
+    if (leftover.trim()) {
+      updateMetadataFromJsonlLine(leftover, state);
+    }
+  } catch (err) {
+    logger?.debug(
+      { error: err instanceof Error ? err.message : String(err), path: filePath },
+      'Failed to parse JSONL session metadata during discovery',
+    );
+  } finally {
+    if (fd !== null) {
+      closeSync(fd);
+    }
+  }
+
+  if (!state.summary && state.messageCount > 0) {
+    state.summary = 'No prompt';
+  }
+
+  return state;
+}
+
+function updateMetadataFromJsonlLine(line: string, state: JsonlSessionMetadata): void {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return;
+  }
+
+  if (!isNonNullObject(parsed)) {
+    return;
+  }
+
+  if (!state.branch && typeof parsed.gitBranch === 'string' && parsed.gitBranch.trim()) {
+    state.branch = parsed.gitBranch;
+  }
+
+  if (typeof parsed.timestamp === 'string' && parsed.timestamp > state.lastActivity) {
+    state.lastActivity = parsed.timestamp;
+  }
+
+  const message = isNonNullObject(parsed.message) ? parsed.message : null;
+  const role = typeof message?.role === 'string' ? message.role : null;
+
+  if (role === 'user' || parsed.type === 'user') {
+    state.messageCount++;
+    if (!state.summary) {
+      state.summary = normalizeSummary(extractTextContent(message?.content));
+    }
+    return;
+  }
+
+  if (role === 'assistant') {
+    state.messageCount++;
   }
 }
 
