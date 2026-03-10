@@ -39,3 +39,15 @@ export type SignalAgentRequest = {
   prompt: string;
   metadata?: Record<string, unknown>;
 };
+
+export const WORKDIR_SAFETY_TIERS = ['safe', 'guarded', 'risky', 'unsafe'] as const;
+
+export type WorkdirSafetyTier = (typeof WORKDIR_SAFETY_TIERS)[number];
+
+export const SAFETY_DECISIONS = ['approve', 'reject', 'sandbox'] as const;
+
+export type SafetyDecision = (typeof SAFETY_DECISIONS)[number];
+
+export type SafetyDecisionRequest = {
+  decision: SafetyDecision;
+};

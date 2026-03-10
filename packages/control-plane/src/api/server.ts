@@ -269,6 +269,7 @@ export async function createServer({
     dbRegistry,
     memoryInjector,
     dispatchVerificationConfig,
+    workerPort,
   });
   await app.register(streamRoutes, {
     prefix: '/api/agents',

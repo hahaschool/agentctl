@@ -1,4 +1,4 @@
-import { generateDispatchSigningKeyPair, signDispatchPayload } from '@agentctl/shared';
+import { AgentError, generateDispatchSigningKeyPair, signDispatchPayload } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -301,6 +301,87 @@ describe('Agent CRUD routes', () => {
 
       await securedPool.stopAll();
       await securedApp.close();
+    });
+  });
+
+  describe('POST /api/agents/:id/safety-decision', () => {
+    it('applies a safety decision for an existing agent', async () => {
+      const agent = await pool.createAgent({
+        agentId: 'agent-safety',
+        machineId: MACHINE_ID,
+        config: {},
+        projectPath: process.cwd(),
+        logger,
+      });
+
+      const applySpy = vi.spyOn(agent, 'applySafetyDecision').mockResolvedValueOnce(undefined);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-safety/safety-decision',
+        payload: { decision: 'approve' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(applySpy).toHaveBeenCalledWith('approve');
+      expect(response.json()).toMatchObject({
+        ok: true,
+        agentId: 'agent-safety',
+        status: 'registered',
+      });
+    });
+
+    it('returns 400 for an invalid safety decision', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-safety/safety-decision',
+        payload: { decision: 'ship-it' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        code: 'INVALID_INPUT',
+      });
+    });
+
+    it('returns 404 when the agent does not exist', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/ghost-agent/safety-decision',
+        payload: { decision: 'reject' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({
+        code: 'AGENT_NOT_FOUND',
+      });
+    });
+
+    it('maps agent safety errors to 409 responses', async () => {
+      const agent = await pool.createAgent({
+        agentId: 'agent-safety-pending',
+        machineId: MACHINE_ID,
+        config: {},
+        projectPath: process.cwd(),
+        logger,
+      });
+
+      vi.spyOn(agent, 'applySafetyDecision').mockRejectedValueOnce(
+        new AgentError('SAFETY_DECISION_NOT_PENDING', 'No pending safety decision for this agent', {
+          agentId: 'agent-safety-pending',
+        }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-safety-pending/safety-decision',
+        payload: { decision: 'sandbox' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        code: 'SAFETY_DECISION_NOT_PENDING',
+      });
     });
   });
 

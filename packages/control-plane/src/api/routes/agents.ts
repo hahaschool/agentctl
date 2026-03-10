@@ -4,11 +4,18 @@ import type {
   DispatchVerificationConfig,
   HeartbeatRequest,
   RegisterWorkerRequest,
+  SafetyDecisionRequest,
   SignalAgentRequest,
   StartAgentRequest,
   StopAgentRequest,
 } from '@agentctl/shared';
-import { AGENT_RUNTIMES, AGENT_STATUSES, ControlPlaneError } from '@agentctl/shared';
+import {
+  AGENT_RUNTIMES,
+  AGENT_STATUSES,
+  ControlPlaneError,
+  DEFAULT_WORKER_PORT,
+  SAFETY_DECISIONS,
+} from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -19,6 +26,8 @@ import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { RepeatableJobManager } from '../../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-queue.js';
 import { clampLimit, PAGINATION } from '../constants.js';
+import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
+import { resolveWorkerUrl } from '../resolve-worker-url.js';
 
 export type AgentRoutesOptions = {
   taskQueue?: Queue<AgentTaskJobData, void, AgentTaskJobName>;
@@ -27,6 +36,7 @@ export type AgentRoutesOptions = {
   dbRegistry?: DbAgentRegistry;
   memoryInjector?: MemoryInjector | null;
   dispatchVerificationConfig?: DispatchVerificationConfig | null;
+  workerPort?: number;
 };
 
 export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, opts) => {
@@ -37,6 +47,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     dbRegistry,
     memoryInjector = null,
     dispatchVerificationConfig = null,
+    workerPort = DEFAULT_WORKER_PORT,
   } = opts;
 
   // ---------------------------------------------------------------------------
@@ -480,6 +491,52 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       }
 
       return { ok: true, agentId, prompt, model };
+    },
+  );
+
+  app.post<{
+    Params: { id: string };
+    Body: SafetyDecisionRequest;
+    Querystring: { workerUrl?: string; machineId?: string };
+  }>(
+    '/:id/safety-decision',
+    {
+      schema: {
+        tags: ['agents'],
+        summary: 'Apply a workdir safety decision to a pending agent run',
+      },
+    },
+    async (request, reply) => {
+      const agentId = request.params.id;
+      const { decision } = request.body;
+      const query = request.query;
+
+      if (!decision || !SAFETY_DECISIONS.includes(decision)) {
+        return reply.code(400).send({
+          error: 'INVALID_SAFETY_DECISION',
+          message: `Decision must be one of: ${SAFETY_DECISIONS.join(', ')}`,
+        });
+      }
+
+      const resolved = await resolveWorkerUrl(agentId, query, {
+        registry,
+        dbRegistry,
+        workerPort,
+      });
+      if (!resolved.ok) {
+        return reply
+          .status(resolved.status)
+          .send({ error: resolved.error, message: resolved.message });
+      }
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: resolved.url,
+        path: `/api/agents/${encodeURIComponent(agentId)}/safety-decision`,
+        method: 'POST',
+        body: request.body,
+      });
+
+      return replyWithProxyResult(reply, result);
     },
   );
 

@@ -1,10 +1,17 @@
 export type {
   HeartbeatRequest,
   RegisterWorkerRequest,
+  SafetyDecision,
+  SafetyDecisionRequest,
   SendMessageRequest,
   SignalAgentRequest,
   StartAgentRequest,
   StopAgentRequest,
+  WorkdirSafetyTier,
+} from './commands.js';
+export {
+  SAFETY_DECISIONS,
+  WORKDIR_SAFETY_TIERS,
 } from './commands.js';
 export type {
   AgentApprovalEvent,
@@ -13,6 +20,7 @@ export type {
   AgentHeartbeatEvent,
   AgentOutputEvent,
   AgentRawOutputEvent,
+  AgentSafetyEvent,
   AgentStatusEvent,
   AgentUserMessageEvent,
   ContentMessage,
