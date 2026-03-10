@@ -10,6 +10,7 @@ const {
   mockRuntimeSessionHandoffsQuery,
   mockRuntimeSessionPreflightQuery,
   mockMachinesQuery,
+  mockQueryClient,
   mockCreateMutateAsync,
   mockResumeMutateAsync,
   mockForkMutateAsync,
@@ -21,6 +22,9 @@ const {
   mockRuntimeSessionHandoffsQuery: vi.fn(),
   mockRuntimeSessionPreflightQuery: vi.fn(),
   mockMachinesQuery: vi.fn(),
+  mockQueryClient: {
+    invalidateQueries: vi.fn(),
+  },
   mockCreateMutateAsync: vi.fn(),
   mockResumeMutateAsync: vi.fn(),
   mockForkMutateAsync: vi.fn(),
@@ -39,6 +43,7 @@ vi.mock('@tanstack/react-query', async () => {
   return {
     ...actual,
     useQuery: (options: unknown) => mockUseQuery(options),
+    useQueryClient: () => mockQueryClient,
   };
 });
 

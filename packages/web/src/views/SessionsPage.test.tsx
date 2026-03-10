@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { ApiAccount, Machine, Session } from '@/lib/api';
+import type { ApiAccount, Machine, RuntimeSession, Session } from '@/lib/api';
 import { SessionsPage } from './SessionsPage';
 
 // ---------------------------------------------------------------------------
@@ -13,9 +13,16 @@ import { SessionsPage } from './SessionsPage';
 
 const {
   mockSessionsQuery,
+  mockRuntimeSessionsQuery,
   mockAccountsQuery,
+  mockMachinesQuery,
+  mockRuntimeSessionHandoffsQuery,
+  mockRuntimeSessionPreflightQuery,
   mockListMachines,
   mockCreateSession,
+  mockResumeRuntimeSessionMutateAsync,
+  mockForkRuntimeSessionMutateAsync,
+  mockHandoffRuntimeSessionMutateAsync,
   mockSendMessage,
   mockResumeSession,
   mockDeleteSession,
@@ -23,9 +30,16 @@ const {
   mockPathBadge,
 } = vi.hoisted(() => ({
   mockSessionsQuery: vi.fn(),
+  mockRuntimeSessionsQuery: vi.fn(),
   mockAccountsQuery: vi.fn(),
+  mockMachinesQuery: vi.fn(),
+  mockRuntimeSessionHandoffsQuery: vi.fn(),
+  mockRuntimeSessionPreflightQuery: vi.fn(),
   mockListMachines: vi.fn(),
   mockCreateSession: vi.fn(),
+  mockResumeRuntimeSessionMutateAsync: vi.fn(),
+  mockForkRuntimeSessionMutateAsync: vi.fn(),
+  mockHandoffRuntimeSessionMutateAsync: vi.fn(),
   mockSendMessage: vi.fn(),
   mockResumeSession: vi.fn(),
   mockDeleteSession: vi.fn(),
@@ -143,7 +157,25 @@ vi.mock('@/components/Toast', () => ({
 
 vi.mock('@/lib/queries', () => ({
   sessionsQuery: () => mockSessionsQuery(),
+  runtimeSessionsQuery: () => mockRuntimeSessionsQuery(),
   accountsQuery: () => mockAccountsQuery(),
+  machinesQuery: () => mockMachinesQuery(),
+  runtimeSessionHandoffsQuery: (id: string, limit?: number) =>
+    mockRuntimeSessionHandoffsQuery(id, limit),
+  runtimeSessionPreflightQuery: (id: string, params: Record<string, unknown>) =>
+    mockRuntimeSessionPreflightQuery(id, params),
+  useResumeRuntimeSession: () => ({
+    mutateAsync: mockResumeRuntimeSessionMutateAsync,
+    isPending: false,
+  }),
+  useForkRuntimeSession: () => ({
+    mutateAsync: mockForkRuntimeSessionMutateAsync,
+    isPending: false,
+  }),
+  useHandoffRuntimeSession: () => ({
+    mutateAsync: mockHandoffRuntimeSessionMutateAsync,
+    isPending: false,
+  }),
   queryKeys: {
     sessions: () => ['sessions'],
   },
@@ -197,6 +229,66 @@ function createSession(overrides?: Partial<Session>): Session {
     metadata: {},
     accountId: 'account-1',
     model: 'claude-3-5-sonnet-20241022',
+    ...overrides,
+  };
+}
+
+function createRuntimeSession(overrides?: Partial<RuntimeSession>): RuntimeSession {
+  return {
+    id: 'runtime-1',
+    runtime: 'codex',
+    nativeSessionId: 'native-runtime-1',
+    machineId: 'machine-runtime',
+    agentId: 'runtime-agent-1',
+    projectPath: '/tmp/runtime-project',
+    worktreePath: '/tmp/runtime-project/.trees/codex',
+    status: 'active',
+    configRevision: 4,
+    handoffStrategy: null,
+    handoffSourceSessionId: null,
+    metadata: {
+      model: 'gpt-5-codex',
+      activeMcpServers: ['github'],
+    },
+    startedAt: new Date(Date.now() - 120000).toISOString(),
+    lastHeartbeat: new Date().toISOString(),
+    endedAt: null,
+    ...overrides,
+  };
+}
+
+function createRuntimeHandoff(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'handoff-1',
+    sourceSessionId: 'runtime-1',
+    targetSessionId: 'runtime-2',
+    sourceRuntime: 'codex',
+    targetRuntime: 'claude-code',
+    reason: 'manual',
+    strategy: 'snapshot-handoff',
+    status: 'succeeded',
+    snapshot: {
+      sourceRuntime: 'codex',
+      sourceSessionId: 'runtime-1',
+      sourceNativeSessionId: 'native-runtime-1',
+      projectPath: '/tmp/runtime-project',
+      worktreePath: '/tmp/runtime-project/.trees/codex',
+      branch: 'feature/runtime',
+      headSha: 'abc123',
+      dirtyFiles: [],
+      diffSummary: 'Added runtime handoff support.',
+      conversationSummary: 'Continue runtime integration.',
+      openTodos: ['Wire the unified page'],
+      nextSuggestedPrompt: 'Keep going',
+      activeConfigRevision: 4,
+      activeMcpServers: ['github'],
+      activeSkills: ['brainstorming'],
+      reason: 'manual',
+    },
+    nativeImportAttempt: undefined,
+    errorMessage: null,
+    createdAt: '2026-03-10T08:06:00.000Z',
+    completedAt: '2026-03-10T08:06:30.000Z',
     ...overrides,
   };
 }
@@ -281,6 +373,63 @@ describe('SessionsPage', () => {
       data: [createAccount()],
       isLoading: false,
       isFetching: false,
+    });
+
+    mockRuntimeSessionsQuery.mockReturnValue({
+      queryKey: ['runtime-sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [],
+        count: 0,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: { sessions: [], count: 0 },
+      }),
+    });
+
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([createMachine(), createMachine({ id: 'machine-2' })]),
+    });
+    mockRuntimeSessionHandoffsQuery.mockImplementation((id: string) => ({
+      queryKey: ['runtime-sessions', id, 'handoffs'],
+      queryFn: vi.fn().mockResolvedValue({
+        handoffs: id ? [createRuntimeHandoff({ sourceSessionId: id })] : [],
+        count: id ? 1 : 0,
+      }),
+    }));
+    mockRuntimeSessionPreflightQuery.mockImplementation(
+      (id: string, params: Record<string, unknown>) => ({
+        queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
+        queryFn: vi.fn().mockResolvedValue({
+          nativeImportCapable: true,
+          attempt: {
+            ok: false,
+            sourceRuntime: 'codex',
+            targetRuntime: String(params.targetRuntime ?? 'claude-code'),
+            reason: 'not_implemented',
+            metadata: {
+              targetCli: 'claude',
+              sourceStorage: '/Users/example/.codex/sessions',
+            },
+          },
+        }),
+      }),
+    );
+    mockResumeRuntimeSessionMutateAsync.mockResolvedValue({
+      ok: true,
+      session: createRuntimeSession(),
+    });
+    mockForkRuntimeSessionMutateAsync.mockResolvedValue({
+      ok: true,
+      session: createRuntimeSession({ id: 'runtime-forked' }),
+    });
+    mockHandoffRuntimeSessionMutateAsync.mockResolvedValue({
+      ok: true,
+      strategy: 'snapshot-handoff',
+      session: createRuntimeSession({ id: 'runtime-handoff', runtime: 'claude-code' }),
     });
 
     mockListMachines.mockResolvedValue([createMachine()]);
@@ -410,6 +559,16 @@ describe('SessionsPage', () => {
     expect(groupSelect.value).toBe('none');
   });
 
+  it('renders a type filter with all, agent, and runtime options defaulting to all', async () => {
+    renderSessions();
+
+    const typeSelect = (await screen.findByLabelText('Type')) as HTMLSelectElement;
+    expect(typeSelect.value).toBe('all');
+    expect(within(typeSelect).getByRole('option', { name: 'All' })).toBeDefined();
+    expect(within(typeSelect).getByRole('option', { name: 'Agent' })).toBeDefined();
+    expect(within(typeSelect).getByRole('option', { name: 'Runtime' })).toBeDefined();
+  });
+
   it('renders hide empty checkbox', () => {
     renderSessions();
     const hideEmptyCheckbox = screen.getByLabelText('Hide empty') as HTMLInputElement;
@@ -447,6 +606,236 @@ describe('SessionsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('agent-1')).toBeDefined();
       expect(screen.getByText('agent-2')).toBeDefined();
+    });
+  });
+
+  it('shows runtime rows in the default all view when mixed data is present', async () => {
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [
+          createSession({
+            id: 'agent-session-1',
+            agentId: 'agent-alpha',
+            agentName: 'Agent Alpha',
+          }),
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          sessions: [
+            createSession({
+              id: 'agent-session-1',
+              agentId: 'agent-alpha',
+              agentName: 'Agent Alpha',
+            }),
+          ],
+          total: 1,
+          limit: 50,
+          offset: 0,
+          hasMore: false,
+        },
+      }),
+    });
+    mockRuntimeSessionsQuery.mockReturnValue({
+      queryKey: ['runtime-sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [createRuntimeSession({ id: 'runtime-session-1', runtime: 'codex' })],
+        count: 1,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          sessions: [createRuntimeSession({ id: 'runtime-session-1', runtime: 'codex' })],
+          count: 1,
+        },
+      }),
+    });
+
+    renderSessions();
+
+    await waitFor(() => {
+      expect(screen.getByText('Agent Alpha')).toBeDefined();
+      expect(screen.getByText('Runtime · Codex')).toBeDefined();
+    });
+  });
+
+  it('filters runtime rows out when type is agent', async () => {
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [
+          createSession({
+            id: 'agent-session-1',
+            agentId: 'agent-alpha',
+            agentName: 'Agent Alpha',
+          }),
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          sessions: [
+            createSession({
+              id: 'agent-session-1',
+              agentId: 'agent-alpha',
+              agentName: 'Agent Alpha',
+            }),
+          ],
+          total: 1,
+          limit: 50,
+          offset: 0,
+          hasMore: false,
+        },
+      }),
+    });
+    mockRuntimeSessionsQuery.mockReturnValue({
+      queryKey: ['runtime-sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [createRuntimeSession({ id: 'runtime-session-1', runtime: 'codex' })],
+        count: 1,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          sessions: [createRuntimeSession({ id: 'runtime-session-1', runtime: 'codex' })],
+          count: 1,
+        },
+      }),
+    });
+
+    renderSessions();
+
+    const typeSelect = (await screen.findByLabelText('Type')) as HTMLSelectElement;
+    fireEvent.change(typeSelect, { target: { value: 'agent' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Agent Alpha')).toBeDefined();
+      expect(screen.queryByText('Runtime · Codex')).toBeNull();
+    });
+  });
+
+  it('filters agent rows out when type is runtime', async () => {
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [
+          createSession({
+            id: 'agent-session-1',
+            agentId: 'agent-alpha',
+            agentName: 'Agent Alpha',
+          }),
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          sessions: [
+            createSession({
+              id: 'agent-session-1',
+              agentId: 'agent-alpha',
+              agentName: 'Agent Alpha',
+            }),
+          ],
+          total: 1,
+          limit: 50,
+          offset: 0,
+          hasMore: false,
+        },
+      }),
+    });
+    mockRuntimeSessionsQuery.mockReturnValue({
+      queryKey: ['runtime-sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [createRuntimeSession({ id: 'runtime-session-1', runtime: 'codex' })],
+        count: 1,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          sessions: [createRuntimeSession({ id: 'runtime-session-1', runtime: 'codex' })],
+          count: 1,
+        },
+      }),
+    });
+
+    renderSessions();
+
+    const typeSelect = (await screen.findByLabelText('Type')) as HTMLSelectElement;
+    fireEvent.change(typeSelect, { target: { value: 'runtime' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Runtime · Codex')).toBeDefined();
+      expect(screen.queryByText('Agent Alpha')).toBeNull();
+    });
+  });
+
+  it('shows runtime-specific detail actions when selecting a runtime row', async () => {
+    mockRuntimeSessionsQuery.mockReturnValue({
+      queryKey: ['runtime-sessions'],
+      queryFn: vi.fn().mockResolvedValue({
+        sessions: [
+          createRuntimeSession({
+            id: 'runtime-session-1',
+            runtime: 'codex',
+            machineId: 'machine-1',
+          }),
+        ],
+        count: 1,
+      }),
+      dataUpdatedAt: Date.now(),
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          sessions: [
+            createRuntimeSession({
+              id: 'runtime-session-1',
+              runtime: 'codex',
+              machineId: 'machine-1',
+            }),
+          ],
+          count: 1,
+        },
+      }),
+    });
+
+    renderSessions();
+
+    fireEvent.click(await screen.findByText('Runtime · Codex'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Manual Handoff')).toBeDefined();
+      expect(screen.getByText('Handoff History')).toBeDefined();
+      expect(screen.getByLabelText('Back to session list')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Resume Session' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Fork Session' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Start Native Import' })).toBeDefined();
     });
   });
 

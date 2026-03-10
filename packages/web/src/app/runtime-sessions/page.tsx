@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
-import { RuntimeSessionsPage } from '@/views/RuntimeSessionsPage';
+export const metadata: Metadata = { title: 'Sessions' };
 
-export const metadata: Metadata = { title: 'Runtime Sessions' };
-
-export default function Page() {
-  return <RuntimeSessionsPage />;
+export default function Page(): never {
+  redirect('/sessions?type=runtime');
 }

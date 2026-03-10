@@ -488,10 +488,10 @@ describe('DashboardPage', () => {
       expect(screen.getByTestId('link-/agents')).toBeDefined();
     });
 
-    it('renders "Runtime Sessions" quick action link to /runtime-sessions', () => {
+    it('renders "Runtime Sessions" quick action link to /sessions?type=runtime', () => {
       renderDashboard();
       expect(screen.getByText('Runtime Sessions')).toBeDefined();
-      expect(screen.getByTestId('link-/runtime-sessions')).toBeDefined();
+      expect(screen.getByTestId('link-/sessions?type=runtime')).toBeDefined();
     });
 
     it('renders last-updated component', () => {
@@ -1092,6 +1092,7 @@ describe('DashboardPage', () => {
           id: `session-${i}`,
           claudeSessionId: `cs-${String(i).padStart(5, '0')}`,
           startedAt: new Date(Date.now() - i * 60000).toISOString(),
+          lastHeartbeat: null,
         }),
       );
       setupDefaultMocks({
