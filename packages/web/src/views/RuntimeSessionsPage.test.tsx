@@ -370,8 +370,47 @@ describe('RuntimeSessionsPage', () => {
       expect(screen.getAllByText(/Native import unavailable:/).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/target CLI claude/).length).toBeGreaterThan(0);
       expect(screen.getByText(/1 user \/ 1 assistant messages/)).toBeDefined();
-      expect(screen.getByText('Native Import')).toBeDefined();
+      expect(screen.getAllByText('Native Import').length).toBeGreaterThanOrEqual(2);
       expect(screen.getByText('Fallbacks')).toBeDefined();
+    });
+  });
+
+  it('filters handoff history down to fallback executions', async () => {
+    setupUseQuery({
+      handoffsBySessionId: {
+        'ms-1': [
+          createHandoff({
+            id: 'handoff-native',
+            reason: 'native-success',
+            strategy: 'native-import',
+            nativeImportAttempt: { ok: true, sourceRuntime: 'codex', targetRuntime: 'claude-code', reason: 'succeeded', metadata: {} },
+          }),
+          createHandoff({
+            id: 'handoff-fallback',
+            reason: 'fallback-success',
+            strategy: 'snapshot-handoff',
+            nativeImportAttempt: { ok: false, sourceRuntime: 'codex', targetRuntime: 'claude-code', reason: 'source_session_missing', metadata: {} },
+          }),
+          createHandoff({
+            id: 'handoff-failed',
+            reason: 'failed-run',
+            status: 'failed',
+            strategy: 'snapshot-handoff',
+            errorMessage: 'worker unavailable',
+          }),
+        ],
+      },
+    });
+
+    render(<RuntimeSessionsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fallback' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('fallback-success')).toBeDefined();
+      expect(screen.queryByText('native-success')).toBeNull();
+      expect(screen.queryByText('failed-run')).toBeNull();
+      expect(screen.queryByText('No handoffs match this filter')).toBeNull();
     });
   });
 

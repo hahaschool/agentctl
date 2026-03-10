@@ -2,11 +2,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import {
+  formatHandoffHistoryFilterLabel,
   describeHandoffCompletion,
   describeHandoffExecution,
   formatMachineSelectionLabel,
   formatHandoffStrategyLabel,
+  HANDOFF_HISTORY_FILTERS,
   isMachineSelectable,
+  matchesHandoffHistoryFilter,
   pickPreferredMachineId,
   sortMachinesForSelection,
   summarizeHandoffAnalytics,
@@ -269,6 +272,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSession['runtime']>('claude-code');
   const [handoffMachineId, setHandoffMachineId] = useState('');
   const [handoffPrompt, setHandoffPrompt] = useState('');
+  const [handoffHistoryFilter, setHandoffHistoryFilter] = useState<'all' | 'native-import' | 'fallback' | 'failed'>('all');
 
   const sessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
   const machines = useQuery(machinesQuery());
@@ -382,9 +386,16 @@ export function RuntimeSessionsPage(): React.JSX.Element {
     (Boolean(selectedId) &&
       preflight.isFetching &&
       selectedSession?.runtime !== handoffTargetRuntime);
+  const filteredHandoffs = useMemo(
+    () =>
+      (handoffs.data?.handoffs ?? []).filter((handoff) =>
+        matchesHandoffHistoryFilter(handoff, handoffHistoryFilter),
+      ),
+    [handoffHistoryFilter, handoffs.data?.handoffs],
+  );
   const handoffAnalytics = useMemo(
-    () => summarizeHandoffAnalytics(handoffs.data?.handoffs ?? []),
-    [handoffs.data?.handoffs],
+    () => summarizeHandoffAnalytics(filteredHandoffs),
+    [filteredHandoffs],
   );
 
   useEffect(() => {
@@ -1078,6 +1089,23 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                   />
                 ) : (
                   <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {HANDOFF_HISTORY_FILTERS.map((filter) => (
+                        <button
+                          key={filter}
+                          type="button"
+                          onClick={() => setHandoffHistoryFilter(filter)}
+                          className={cn(
+                            'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                            handoffHistoryFilter === filter
+                              ? 'border-primary/40 bg-primary/10 text-primary'
+                              : 'border-border bg-background/40 text-muted-foreground hover:bg-accent/10',
+                          )}
+                        >
+                          {formatHandoffHistoryFilterLabel(filter)}
+                        </button>
+                      ))}
+                    </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-lg border border-border bg-background/40 p-3">
                         <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total</div>
@@ -1100,9 +1128,16 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                         </div>
                       </div>
                     </div>
-                    {(handoffs.data?.handoffs ?? []).map((handoff) => (
+                    {filteredHandoffs.length === 0 ? (
+                      <EmptyState
+                        title="No handoffs match this filter"
+                        description={`Try a different filter or clear back to ${formatHandoffHistoryFilterLabel('all')}.`}
+                      />
+                    ) : (
+                      filteredHandoffs.map((handoff) => (
                       <HandoffHistoryItem key={handoff.id} handoff={handoff} />
-                    ))}
+                      ))
+                    )}
                   </div>
                 )}
               </div>

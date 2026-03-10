@@ -9,8 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   describeHandoffCompletion,
   describeHandoffExecution,
+  formatHandoffHistoryFilterLabel,
   formatHandoffStrategyLabel,
+  HANDOFF_HISTORY_FILTERS,
   isMachineSelectable,
+  matchesHandoffHistoryFilter,
   pickPreferredMachineId,
   sortMachinesForSelection,
   summarizeHandoffAnalytics,
@@ -219,6 +222,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
   const [handoffPrompt, setHandoffPrompt] = useState('');
   const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSessionInfo['runtime']>('claude-code');
   const [handoffMachineId, setHandoffMachineId] = useState('');
+  const [handoffHistoryFilter, setHandoffHistoryFilter] = useState<'all' | 'native-import' | 'fallback' | 'failed'>('all');
 
   const [state, setState] = useState<RuntimeSessionScreenState>({
     sessions: [],
@@ -514,9 +518,14 @@ export function RuntimeSessionScreen(): React.JSX.Element {
   const handoffActionDisabled =
     !handoffable ||
     (state.isPreflightLoading && state.selectedSession?.runtime !== handoffTargetRuntime);
+  const filteredHandoffs = useMemo(
+    () =>
+      state.handoffs.filter((handoff) => matchesHandoffHistoryFilter(handoff, handoffHistoryFilter)),
+    [handoffHistoryFilter, state.handoffs],
+  );
   const handoffAnalytics = useMemo(
-    () => summarizeHandoffAnalytics(state.handoffs),
-    [state.handoffs],
+    () => summarizeHandoffAnalytics(filteredHandoffs),
+    [filteredHandoffs],
   );
 
   return (
@@ -932,6 +941,27 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                       <Text style={styles.emptyTranscript}>No handoffs recorded for this session.</Text>
                     ) : (
                       <>
+                        <View style={styles.handoffFilterRow}>
+                          {HANDOFF_HISTORY_FILTERS.map((filter) => (
+                            <TouchableOpacity
+                              key={filter}
+                              style={[
+                                styles.handoffFilterChip,
+                                handoffHistoryFilter === filter && styles.handoffFilterChipActive,
+                              ]}
+                              onPress={() => setHandoffHistoryFilter(filter)}
+                            >
+                              <Text
+                                style={[
+                                  styles.handoffFilterChipText,
+                                  handoffHistoryFilter === filter && styles.handoffFilterChipTextActive,
+                                ]}
+                              >
+                                {formatHandoffHistoryFilterLabel(filter)}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
                         <View style={styles.handoffAnalyticsRow}>
                           <View style={styles.handoffAnalyticsCard}>
                             <Text style={styles.handoffAnalyticsLabel}>Total</Text>
@@ -950,7 +980,11 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                             <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.nativeImportFallbacks}</Text>
                           </View>
                         </View>
-                        {state.handoffs.map(renderHandoff)}
+                        {filteredHandoffs.length === 0 ? (
+                          <Text style={styles.emptyTranscript}>No handoffs match this filter.</Text>
+                        ) : (
+                          filteredHandoffs.map(renderHandoff)
+                        )}
                       </>
                     )}
                   </View>
@@ -1319,6 +1353,32 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
     marginBottom: 4,
+  },
+  handoffFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  handoffFilterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#111827',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  handoffFilterChipActive: {
+    borderColor: '#22c55e',
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+  },
+  handoffFilterChipText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  handoffFilterChipTextActive: {
+    color: '#bbf7d0',
   },
   handoffAnalyticsCard: {
     minWidth: '47%',
