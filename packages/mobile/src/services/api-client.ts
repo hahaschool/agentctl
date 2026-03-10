@@ -8,7 +8,11 @@
 import type {
   Agent,
   AgentRun,
+  HandoffAnalyticsSummary,
   Machine,
+  ManagedRuntime,
+  ManagedSession,
+  ManagedSessionStatus,
   SignalAgentRequest,
   StartAgentRequest,
 } from '@agentctl/shared';
@@ -109,6 +113,23 @@ export type AuditSummary = {
   totalActions: number;
   byTool: Record<string, number>;
   byActionType: Record<string, number>;
+};
+
+export type RuntimeSessionInfo = ManagedSession & {
+  startedAt: string | null;
+  lastHeartbeat: string | null;
+  endedAt: string | null;
+};
+
+export type RuntimeSessionListResponse = {
+  sessions: RuntimeSessionInfo[];
+  count: number;
+};
+
+export type RuntimeHandoffSummaryResponse = {
+  ok: true;
+  summary: HandoffAnalyticsSummary;
+  limit: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -294,6 +315,31 @@ export class ApiClient {
   async listAgents(machineId?: string): Promise<Agent[]> {
     const qs = machineId ? `?machineId=${encodeURIComponent(machineId)}` : '';
     return this.request<Agent[]>('GET', `/api/machines/agents/list${qs}`);
+  }
+
+  /** GET /api/runtime-sessions — list managed Claude Code / Codex runtime sessions. */
+  async listRuntimeSessions(params?: {
+    machineId?: string;
+    runtime?: ManagedRuntime;
+    status?: ManagedSessionStatus;
+    limit?: number;
+  }): Promise<RuntimeSessionListResponse> {
+    const qs = buildQueryString({
+      machineId: params?.machineId,
+      runtime: params?.runtime,
+      status: params?.status,
+      limit: params?.limit,
+    });
+    return this.request<RuntimeSessionListResponse>('GET', `/api/runtime-sessions${qs}`);
+  }
+
+  /** GET /api/runtime-sessions/handoffs/summary — summarize recent fleet handoffs. */
+  async getRuntimeHandoffSummary(limit = 100): Promise<RuntimeHandoffSummaryResponse> {
+    const qs = buildQueryString({ limit });
+    return this.request<RuntimeHandoffSummaryResponse>(
+      'GET',
+      `/api/runtime-sessions/handoffs/summary${qs}`,
+    );
   }
 
   /** GET /api/machines/agents/:agentId — get a single agent by ID. */

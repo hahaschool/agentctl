@@ -32,6 +32,28 @@ export type {
 export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
 export type { MemoryObservation } from './memory.js';
 export type {
+  HandoffReason,
+  HandoffSnapshot,
+  HandoffStrategy,
+  ManagedEnvironmentPolicy,
+  ManagedInstructionBundle,
+  ManagedMcpServer,
+  ManagedRuntime,
+  ManagedRuntimeConfig,
+  ManagedSession,
+  ManagedSessionStatus,
+  ManagedSkill,
+} from './runtime-management.js';
+export {
+  HANDOFF_REASONS,
+  HANDOFF_STRATEGIES,
+  isHandoffStrategy,
+  isManagedRuntime,
+  isManagedSessionStatus,
+  MANAGED_RUNTIMES,
+  MANAGED_SESSION_STATUSES,
+} from './runtime-management.js';
+export type {
   ReplayEvent,
   ReplayFilter,
   SessionTimeline,

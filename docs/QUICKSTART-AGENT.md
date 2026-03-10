@@ -19,7 +19,7 @@ git clone https://github.com/hahaschool/agentctl.git
 cd agentctl
 pnpm install
 pnpm build
-pnpm test   # Expect 968+ tests, all passing
+pnpm test
 ```
 
 ## Environment Setup
@@ -58,6 +58,13 @@ CONTROL_PLANE_URL=http://localhost:8080 MACHINE_ID=local WORKER_PORT=9000 pnpm d
 # Listens on http://localhost:9000
 ```
 
+Optional runtime prerequisites on worker machines:
+
+```bash
+claude --version || echo "Claude Code CLI not installed"
+codex --version || echo "Codex CLI not installed"
+```
+
 ## Verify
 
 ```bash
@@ -92,12 +99,18 @@ infra/pm2/                → PM2 ecosystem configs
 - `packages/control-plane/src/index.ts` — Server entry point
 - `packages/control-plane/src/api/server.ts` — Fastify server factory
 - `packages/control-plane/src/api/routes/` — All HTTP/WS route handlers
+- `packages/control-plane/src/api/routes/runtime-config.ts` — Canonical Claude/Codex config rollout
+- `packages/control-plane/src/api/routes/runtime-sessions.ts` — Unified runtime session lifecycle
+- `packages/control-plane/src/api/routes/handoffs.ts` — Cross-runtime handoff orchestration
 - `packages/control-plane/src/scheduler/task-worker.ts` — BullMQ job processor
 - `packages/control-plane/src/registry/db-registry.ts` — PostgreSQL CRUD
-- `packages/control-plane/src/db/schema.ts` — Drizzle schema (4 tables)
+- `packages/control-plane/src/db/schema.ts` — Drizzle schema including managed sessions and handoffs
 - `packages/agent-worker/src/runtime/agent-instance.ts` — Agent lifecycle
 - `packages/agent-worker/src/runtime/agent-pool.ts` — Concurrent agent management
 - `packages/agent-worker/src/runtime/sdk-runner.ts` — Claude Agent SDK wrapper
+- `packages/agent-worker/src/runtime/codex-session-manager.ts` — Codex CLI lifecycle wrapper
+- `packages/agent-worker/src/runtime/handoff-controller.ts` — Snapshot export/import orchestration
+- `packages/agent-worker/src/runtime/config/runtime-config-applier.ts` — Native runtime config rendering
 - `packages/agent-worker/src/hooks/` — Pre/post tool use, audit, stop hooks
 - `packages/shared/src/types/` — All TypeScript type definitions
 - `packages/shared/src/protocol/` — WebSocket + SSE wire protocol
@@ -140,6 +153,20 @@ GET  /api/router/models               # Available LLM models
 # Memory
 POST /api/memory/inject               # Inject memory context
 
+# Runtime Config
+GET  /api/runtime-config/defaults
+PUT  /api/runtime-config/defaults
+POST /api/runtime-config/sync
+GET  /api/runtime-config/drift
+
+# Runtime Sessions
+GET  /api/runtime-sessions
+POST /api/runtime-sessions
+GET  /api/runtime-sessions/:id/handoffs
+POST /api/runtime-sessions/:id/resume
+POST /api/runtime-sessions/:id/fork
+POST /api/runtime-sessions/:id/handoff
+
 # WebSocket
 WS   /api/ws                          # Bidirectional control
      → send: {type:"start_agent", agentId, prompt}
@@ -147,6 +174,89 @@ WS   /api/ws                          # Bidirectional control
      → send: {type:"subscribe_agent", agentId}
      → send: {type:"ping"}
 ```
+
+## Manual Runtime Switching Smoke Test
+
+Use this when you want to manually exercise the unified Claude Code / Codex flow in local dev before touching the mobile app or web UI.
+
+```bash
+BASE_URL=http://localhost:8080
+PROJECT_PATH=/Users/hahaschool/agentctl
+MACHINE_ID=$(curl -fsS "$BASE_URL/api/agents" | jq -r '.[0].id // .[0].machineId')
+
+if [ -z "$MACHINE_ID" ] || [ "$MACHINE_ID" = "null" ]; then
+  echo "No registered machines. Start agent-worker first."
+  exit 1
+fi
+
+echo "Using machine: $MACHINE_ID"
+```
+
+Create a Codex managed session:
+
+```bash
+CREATE_CODEX=$(curl -fsS -X POST "$BASE_URL/api/runtime-sessions" \
+  -H "content-type: application/json" \
+  -d "{
+    \"runtime\": \"codex\",
+    \"machineId\": \"$MACHINE_ID\",
+    \"projectPath\": \"$PROJECT_PATH\",
+    \"prompt\": \"Inspect the current runtime-management work and report status.\"
+  }")
+
+echo "$CREATE_CODEX" | jq
+CODEX_SESSION_ID=$(echo "$CREATE_CODEX" | jq -r '.session.id')
+```
+
+Inspect the managed session list:
+
+```bash
+curl -fsS "$BASE_URL/api/runtime-sessions?limit=10" | jq
+```
+
+Preflight a cross-runtime handoff into Claude Code:
+
+```bash
+curl -fsS \
+  "$BASE_URL/api/runtime-sessions/$CODEX_SESSION_ID/handoff/preflight?targetRuntime=claude-code&targetMachineId=$MACHINE_ID" \
+  | jq
+```
+
+Start the handoff:
+
+```bash
+HANDOFF=$(curl -fsS -X POST "$BASE_URL/api/runtime-sessions/$CODEX_SESSION_ID/handoff" \
+  -H "content-type: application/json" \
+  -d "{
+    \"targetRuntime\": \"claude-code\",
+    \"targetMachineId\": \"$MACHINE_ID\",
+    \"reason\": \"manual-feedback\",
+    \"prompt\": \"Continue from the existing worktree and explain what state transferred.\"
+  }")
+
+echo "$HANDOFF" | jq
+CLAUDE_SESSION_ID=$(echo "$HANDOFF" | jq -r '.session.id')
+```
+
+Inspect handoff history and the target managed session:
+
+```bash
+curl -fsS "$BASE_URL/api/runtime-sessions/$CODEX_SESSION_ID/handoffs?limit=10" | jq
+curl -fsS "$BASE_URL/api/runtime-sessions?runtime=claude-code&limit=10" | jq
+```
+
+Useful UI routes while this is running:
+
+```bash
+open http://localhost:5173/runtime-sessions
+open http://localhost:5173
+```
+
+Expected behavior:
+- `/runtime-sessions` shows both managed sessions
+- `handoff history` records `native-import` or `snapshot-handoff`
+- dashboard summaries update the managed runtime counts and handoff rates
+- if preflight says native import is unavailable, the actual handoff still succeeds through snapshot fallback
 
 ## Docker Production
 

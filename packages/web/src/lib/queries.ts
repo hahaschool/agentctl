@@ -4,6 +4,8 @@ import type { AgentConfig } from './api';
 import { api } from './api';
 import { STORAGE_KEYS } from './storage-keys';
 
+type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
+
 // ---------------------------------------------------------------------------
 // Helpers — read user preferences from localStorage
 // ---------------------------------------------------------------------------
@@ -33,6 +35,20 @@ export const queryKeys = {
     limit?: number;
   }) => (params ? (['sessions', params] as const) : (['sessions'] as const)),
   session: (id: string) => ['sessions', id] as const,
+  runtimeSessions: (params?: RuntimeSessionsQueryParams) =>
+    params ? (['runtime-sessions', params] as const) : (['runtime-sessions'] as const),
+  runtimeHandoffSummary: (limit?: number) =>
+    limit !== undefined
+      ? (['runtime-sessions', 'handoffs', 'summary', limit] as const)
+      : (['runtime-sessions', 'handoffs', 'summary'] as const),
+  runtimeSessionHandoffs: (id: string, limit?: number) =>
+    limit !== undefined
+      ? (['runtime-sessions', id, 'handoffs', limit] as const)
+      : (['runtime-sessions', id, 'handoffs'] as const),
+  runtimeSessionPreflight: (id: string, targetRuntime: string, targetMachineId?: string) =>
+    targetMachineId
+      ? (['runtime-sessions', id, 'preflight', targetRuntime, targetMachineId] as const)
+      : (['runtime-sessions', id, 'preflight', targetRuntime] as const),
   sessionContent: (
     sessionId: string,
     params: { machineId: string; projectPath?: string; limit?: number },
@@ -135,6 +151,50 @@ export function sessionQuery(id: string) {
     queryFn: () => api.getSession(id),
     enabled: !!id,
     refetchInterval: 5_000, // Poll session status to detect worker restarts / status changes
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionsQuery(params?: RuntimeSessionsQueryParams) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessions(params),
+    queryFn: () => api.listRuntimeSessions(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeHandoffSummaryQuery(limit?: number) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeHandoffSummary(limit),
+    queryFn: () => api.listRuntimeHandoffSummary(limit),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionHandoffsQuery(id: string, limit?: number) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessionHandoffs(id, limit),
+    queryFn: () => api.listRuntimeSessionHandoffs(id, limit),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionPreflightQuery(
+  id: string,
+  params: {
+    targetRuntime: 'claude-code' | 'codex';
+    targetMachineId?: string;
+  },
+) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessionPreflight(id, params.targetRuntime, params.targetMachineId),
+    queryFn: () => api.preflightRuntimeSessionHandoff(id, params),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
 }
@@ -368,6 +428,64 @@ export function useForkSession() {
     }) => api.forkSession(id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    },
+  });
+}
+
+export function useCreateRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.createRuntimeSession,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+    },
+  });
+}
+
+export function useResumeRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & Parameters<typeof api.resumeRuntimeSession>[1]) => api.resumeRuntimeSession(id, body),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeSessionHandoffs(variables.id),
+      });
+    },
+  });
+}
+
+export function useForkRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & Parameters<typeof api.forkRuntimeSession>[1]) => api.forkRuntimeSession(id, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+    },
+  });
+}
+
+export function useHandoffRuntimeSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & Parameters<typeof api.handoffRuntimeSession>[1]) => api.handoffRuntimeSession(id, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
     },
   });
 }

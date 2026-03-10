@@ -1,12 +1,23 @@
 // ---------------------------------------------------------------------------
 // Dashboard screen presenter — framework-agnostic business logic for the
-// fleet overview screen. Fetches health, machines, and agents, computes
-// aggregate stats, and supports auto-refresh polling.
+// fleet overview screen. Fetches health, machines, agents, and managed
+// runtime sessions, computes aggregate stats, and supports auto-refresh polling.
 // ---------------------------------------------------------------------------
 
-import type { Agent, AgentStatus, Machine } from '@agentctl/shared';
+import {
+  type Agent,
+  type AgentStatus,
+  calculateHandoffAnalyticsRates,
+  type HandoffAnalyticsSummary,
+  type Machine,
+} from '@agentctl/shared';
 
-import type { ApiClient, HealthResponse } from '../services/api-client.js';
+import type {
+  ApiClient,
+  HealthResponse,
+  RuntimeHandoffSummaryResponse,
+  RuntimeSessionInfo,
+} from '../services/api-client.js';
 import { MobileClientError } from '../services/api-client.js';
 
 // ---------------------------------------------------------------------------
@@ -20,12 +31,22 @@ export type DashboardStats = {
   error: number;
   totalMachines: number;
   onlineMachines: number;
+  totalManagedRuntimes: number;
+  activeManagedRuntimes: number;
+  switchingManagedRuntimes: number;
+  totalRuntimeHandoffs: number;
+  runtimeNativeImportSuccesses: number;
+  runtimeFallbacks: number;
+  runtimeNativeImportRate: number;
+  runtimeFallbackRate: number;
 };
 
 export type DashboardState = {
   health: HealthResponse | null;
   machines: Machine[];
   agents: Agent[];
+  runtimeSessions: RuntimeSessionInfo[];
+  runtimeHandoffSummary: RuntimeHandoffSummaryResponse | null;
   stats: DashboardStats;
   isLoading: boolean;
   error: MobileClientError | null;
@@ -62,6 +83,23 @@ const EMPTY_STATS: DashboardStats = {
   error: 0,
   totalMachines: 0,
   onlineMachines: 0,
+  totalManagedRuntimes: 0,
+  activeManagedRuntimes: 0,
+  switchingManagedRuntimes: 0,
+  totalRuntimeHandoffs: 0,
+  runtimeNativeImportSuccesses: 0,
+  runtimeFallbacks: 0,
+  runtimeNativeImportRate: 0,
+  runtimeFallbackRate: 0,
+};
+
+const EMPTY_HANDOFF_SUMMARY: HandoffAnalyticsSummary = {
+  total: 0,
+  succeeded: 0,
+  failed: 0,
+  pending: 0,
+  nativeImportSuccesses: 0,
+  nativeImportFallbacks: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -77,6 +115,8 @@ export class DashboardPresenter {
     health: null,
     machines: [],
     agents: [],
+    runtimeSessions: [],
+    runtimeHandoffSummary: null,
     stats: { ...EMPTY_STATS },
     isLoading: false,
     error: null,
@@ -117,18 +157,27 @@ export class DashboardPresenter {
     this.setState({ isLoading: true, error: null });
 
     try {
-      const [health, machines, agents] = await Promise.all([
+      const [health, machines, agents, runtimeSessions, runtimeHandoffSummary] = await Promise.all([
         this.apiClient.health(true),
         this.apiClient.listMachines(),
         this.apiClient.listAgents(),
+        this.apiClient.listRuntimeSessions({ limit: 100 }),
+        this.apiClient.getRuntimeHandoffSummary(100),
       ]);
 
-      const stats = DashboardPresenter.computeStats(agents, machines);
+      const stats = DashboardPresenter.computeStats(
+        agents,
+        machines,
+        runtimeSessions.sessions,
+        runtimeHandoffSummary.summary,
+      );
 
       this.setState({
         health,
         machines,
         agents,
+        runtimeSessions: runtimeSessions.sessions,
+        runtimeHandoffSummary,
         stats,
         isLoading: false,
         error: null,
@@ -153,6 +202,13 @@ export class DashboardPresenter {
       ...this.state,
       agents: [...this.state.agents],
       machines: [...this.state.machines],
+      runtimeSessions: [...this.state.runtimeSessions],
+      runtimeHandoffSummary: this.state.runtimeHandoffSummary
+        ? {
+            ...this.state.runtimeHandoffSummary,
+            summary: { ...this.state.runtimeHandoffSummary.summary },
+          }
+        : null,
       stats: { ...this.state.stats },
     };
   }
@@ -167,7 +223,12 @@ export class DashboardPresenter {
   // -----------------------------------------------------------------------
 
   /** Compute aggregate stats from agents and machines lists. */
-  static computeStats(agents: Agent[], machines: Machine[]): DashboardStats {
+  static computeStats(
+    agents: Agent[],
+    machines: Machine[],
+    runtimeSessions: RuntimeSessionInfo[] = [],
+    runtimeHandoffSummary: HandoffAnalyticsSummary = EMPTY_HANDOFF_SUMMARY,
+  ): DashboardStats {
     let running = 0;
     let error = 0;
 
@@ -181,6 +242,13 @@ export class DashboardPresenter {
 
     const idle = agents.length - running - error;
     const onlineMachines = machines.filter((m) => m.status === 'online').length;
+    const activeManagedRuntimes = runtimeSessions.filter(
+      (session) => session.status === 'active',
+    ).length;
+    const switchingManagedRuntimes = runtimeSessions.filter(
+      (session) => session.status === 'handing_off',
+    ).length;
+    const handoffRates = calculateHandoffAnalyticsRates(runtimeHandoffSummary);
 
     return {
       totalAgents: agents.length,
@@ -189,6 +257,14 @@ export class DashboardPresenter {
       error,
       totalMachines: machines.length,
       onlineMachines,
+      totalManagedRuntimes: runtimeSessions.length,
+      activeManagedRuntimes,
+      switchingManagedRuntimes,
+      totalRuntimeHandoffs: runtimeHandoffSummary.total,
+      runtimeNativeImportSuccesses: runtimeHandoffSummary.nativeImportSuccesses,
+      runtimeFallbacks: runtimeHandoffSummary.nativeImportFallbacks,
+      runtimeNativeImportRate: handoffRates.nativeImportSuccessRate,
+      runtimeFallbackRate: handoffRates.fallbackRate,
     };
   }
 

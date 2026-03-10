@@ -33,6 +33,8 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
     health: null,
     machines: [],
     agents: [],
+    runtimeSessions: [],
+    runtimeHandoffSummary: null,
     stats: {
       totalAgents: 0,
       running: 0,
@@ -40,6 +42,14 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
       error: 0,
       totalMachines: 0,
       onlineMachines: 0,
+      totalManagedRuntimes: 0,
+      activeManagedRuntimes: 0,
+      switchingManagedRuntimes: 0,
+      totalRuntimeHandoffs: 0,
+      runtimeNativeImportSuccesses: 0,
+      runtimeFallbacks: 0,
+      runtimeNativeImportRate: 0,
+      runtimeFallbackRate: 0,
     },
     isLoading: false,
     error: null,
@@ -106,6 +116,50 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
             <Text style={styles.statLabel}>Error</Text>
           </View>
         </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#60a5fa' }]}>
+              {state.stats.totalManagedRuntimes}
+            </Text>
+            <Text style={styles.statLabel}>Runtimes</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#22c55e' }]}>
+              {state.stats.activeManagedRuntimes}
+            </Text>
+            <Text style={styles.statLabel}>Runtime Active</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#3b82f6' }]}>
+              {state.stats.switchingManagedRuntimes}
+            </Text>
+            <Text style={styles.statLabel}>Switching</Text>
+          </View>
+        </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#a78bfa' }]}>
+              {state.stats.totalRuntimeHandoffs}
+            </Text>
+            <Text style={styles.statLabel}>Handoffs</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#22c55e' }]}>
+              {state.stats.runtimeNativeImportSuccesses}
+            </Text>
+            <Text style={styles.statLabel}>Native Import</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statValue, { color: '#f59e0b' }]}>
+              {state.stats.runtimeFallbacks}
+            </Text>
+            <Text style={styles.statLabel}>Fallbacks</Text>
+          </View>
+        </View>
+        <Text style={styles.runtimeRateSummary}>
+          {state.stats.runtimeNativeImportRate}% native import rate ·{' '}
+          {state.stats.runtimeFallbackRate}% fallback rate
+        </Text>
 
         {/* Health indicator */}
         <View style={styles.healthRow}>
@@ -177,6 +231,12 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 12,
     marginTop: 2,
+  },
+  runtimeRateSummary: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   healthRow: {
     flexDirection: 'row',

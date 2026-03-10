@@ -1,5 +1,6 @@
 export { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 export { AgentPool } from './agent-pool.js';
+export { ClaudeRuntimeAdapter } from './claude-runtime-adapter.js';
 export {
   type CliSession,
   type CliSessionEvent,
@@ -8,6 +9,13 @@ export {
   type CliSessionStatus,
   type StartCliSessionOptions,
 } from './cli-session-manager.js';
+export { CodexRuntimeAdapter } from './codex-runtime-adapter.js';
+export {
+  type CodexSession,
+  CodexSessionManager,
+  type CodexSessionManagerOptions,
+  type CodexSessionStatus,
+} from './codex-session-manager.js';
 export {
   type CheckpointConfig,
   type CheckpointData,
@@ -22,6 +30,15 @@ export {
   type RcSessionStatus,
   type StartSessionOptions,
 } from './rc-session-manager.js';
+export type {
+  ForkManagedSessionInput,
+  ManagedSessionHandle,
+  ResumeManagedSessionInput,
+  RuntimeAdapter,
+  RuntimeCapabilities,
+  StartManagedSessionInput,
+} from './runtime-adapter.js';
+export { RuntimeRegistry } from './runtime-registry.js';
 export {
   runWithSdk,
   type SdkRunnerHooks,

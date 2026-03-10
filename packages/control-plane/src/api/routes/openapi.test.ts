@@ -38,6 +38,8 @@ describe('OpenAPI / Swagger', () => {
     expect(tagNames).toContain('agents');
     expect(tagNames).toContain('machines');
     expect(tagNames).toContain('scheduler');
+    expect(tagNames).toContain('runtime-config');
+    expect(tagNames).toContain('runtime-sessions');
   });
 
   it('includes routes in the spec paths', async () => {
@@ -47,6 +49,11 @@ describe('OpenAPI / Swagger', () => {
     expect(spec.paths).toBeDefined();
     expect(spec.paths['/health']).toBeDefined();
     expect(spec.paths['/api/agents/register']).toBeDefined();
+    expect(spec.paths['/api/runtime-config/defaults']).toBeDefined();
+    expect(spec.paths['/api/runtime-config/drift']).toBeDefined();
+    expect(spec.paths['/api/runtime-sessions/']).toBeDefined();
+    expect(spec.paths['/api/runtime-sessions/handoffs/summary']).toBeDefined();
+    expect(spec.paths['/api/runtime-sessions/{id}/handoffs']).toBeDefined();
   });
 
   it('serves the Swagger UI at /api/docs/', async () => {

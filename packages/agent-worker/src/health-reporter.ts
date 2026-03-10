@@ -132,15 +132,40 @@ export class HealthReporter {
   }
 
   private async sendHeartbeat(): Promise<void> {
-    await fetch(`${this.controlPlaneUrl}/api/agents/${this.machineId}/heartbeat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        machineId: this.machineId,
-        runningAgents: this.getRunningAgentsSummary(),
-        cpuPercent: (os.loadavg()[0] * 100) / os.cpus().length,
-        memoryPercent: (1 - os.freemem() / os.totalmem()) * 100,
-      }),
-    });
+    const heartbeatRequest = () =>
+      fetch(`${this.controlPlaneUrl}/api/agents/${this.machineId}/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          machineId: this.machineId,
+          runningAgents: this.getRunningAgentsSummary(),
+          cpuPercent: (os.loadavg()[0] * 100) / os.cpus().length,
+          memoryPercent: (1 - os.freemem() / os.totalmem()) * 100,
+        }),
+      });
+
+    const response = await heartbeatRequest();
+    if (response.ok) {
+      return;
+    }
+
+    this.logger.info(
+      { machineId: this.machineId, statusCode: response.status },
+      'Heartbeat rejected by control plane, retrying registration',
+    );
+
+    await this.register();
+
+    const retryResponse = await heartbeatRequest();
+    if (!retryResponse.ok) {
+      throw new WorkerError(
+        'HEARTBEAT_FAILED',
+        `Heartbeat returned ${retryResponse.status} after registration retry`,
+        {
+          machineId: this.machineId,
+          statusCode: retryResponse.status,
+        },
+      );
+    }
   }
 }

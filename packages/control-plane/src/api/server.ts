@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, summarizeHandoffAnalytics } from '@agentctl/shared';
 import fastifyCors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifySwagger from '@fastify/swagger';
@@ -17,6 +17,12 @@ import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
+import { HandoffStore, type SessionHandoffRecord } from '../runtime-management/handoff-store.js';
+import {
+  type ManagedSessionRecord,
+  ManagedSessionStore,
+} from '../runtime-management/managed-session-store.js';
+import { RuntimeConfigStore } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
@@ -28,6 +34,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
 import { fileProxyRoutes } from './routes/files.js';
 import { gitProxyRoutes } from './routes/git.js';
+import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -35,6 +42,8 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
+import { type RuntimeConfigRouteStore, runtimeConfigRoutes } from './routes/runtime-config.js';
+import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -57,6 +66,7 @@ type CreateServerOptions = {
   workerPort?: number;
   isProduction?: boolean;
   corsOrigins?: string;
+  runtimeConfigStore?: RuntimeConfigRouteStore;
 };
 
 export async function createServer({
@@ -73,6 +83,7 @@ export async function createServer({
   workerPort = 9000,
   isProduction: isProductionOverride,
   corsOrigins: corsOriginsOverride,
+  runtimeConfigStore: externalRuntimeConfigStore,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -81,6 +92,13 @@ export async function createServer({
 
   const registry = externalRegistry ?? new AgentRegistry();
   const requestTracker = createRequestTracker();
+  const runtimeConfigStore =
+    externalRuntimeConfigStore ??
+    (db ? new RuntimeConfigStore(db, logger) : createFallbackRuntimeConfigStore());
+  const managedSessionStore = db
+    ? new ManagedSessionStore(db, logger)
+    : createFallbackManagedSessionStore();
+  const handoffStore = db ? new HandoffStore(db, logger) : createFallbackHandoffStore();
 
   // --- Metrics request tracking ---
   // Registered at the root level so it captures requests to all routes.
@@ -150,6 +168,8 @@ export async function createServer({
         { name: 'scheduler', description: 'Repeatable job scheduling' },
         { name: 'memory', description: 'Mem0 memory search' },
         { name: 'router', description: 'LiteLLM model routing' },
+        { name: 'runtime-config', description: 'Managed Claude/Codex configuration sync state' },
+        { name: 'runtime-sessions', description: 'Unified Claude/Codex managed session lifecycle' },
         { name: 'audit', description: 'Action audit log and replay' },
         { name: 'dashboard', description: 'Analytics and cost dashboards' },
         { name: 'webhooks', description: 'Webhook subscription management' },
@@ -215,6 +235,25 @@ export async function createServer({
     mem0Client,
     litellmClient,
     requestTracker,
+  });
+  await app.register(runtimeConfigRoutes, {
+    prefix: '/api/runtime-config',
+    runtimeConfigStore,
+  });
+  await app.register(runtimeSessionRoutes, {
+    prefix: '/api/runtime-sessions',
+    managedSessionStore,
+    runtimeConfigStore,
+    dbRegistry,
+    workerPort,
+  });
+  await app.register(handoffRoutes, {
+    prefix: '/api/runtime-sessions',
+    managedSessionStore,
+    handoffStore,
+    runtimeConfigStore,
+    dbRegistry,
+    workerPort,
   });
   await app.register(agentRoutes, {
     prefix: '/api/agents',
@@ -426,6 +465,150 @@ export async function createServer({
   });
 
   return app;
+}
+
+function createFallbackRuntimeConfigStore(): RuntimeConfigRouteStore {
+  return {
+    async getLatestRevision() {
+      return null;
+    },
+    async saveRevision(config) {
+      return {
+        id: 'ephemeral-default',
+        version: config.version,
+        hash: config.hash,
+        config,
+        createdAt: new Date(),
+      };
+    },
+    async listMachineStates() {
+      return [];
+    },
+  };
+}
+
+function createFallbackManagedSessionStore(): Pick<
+  ManagedSessionStore,
+  'list' | 'create' | 'get' | 'updateStatus'
+> {
+  const sessions = new Map<string, ManagedSessionRecord>();
+  return {
+    async list() {
+      return [...sessions.values()];
+    },
+    async create(input) {
+      const session: ManagedSessionRecord = {
+        id: crypto.randomUUID(),
+        runtime: input.runtime,
+        nativeSessionId: input.nativeSessionId,
+        machineId: input.machineId,
+        agentId: input.agentId,
+        projectPath: input.projectPath,
+        worktreePath: input.worktreePath,
+        status: input.status,
+        configRevision: input.configRevision,
+        handoffStrategy: input.handoffStrategy,
+        handoffSourceSessionId: input.handoffSourceSessionId,
+        metadata: input.metadata,
+        startedAt: input.startedAt ?? new Date(),
+        lastHeartbeat: input.lastHeartbeat ?? null,
+        endedAt: input.endedAt ?? null,
+      };
+      sessions.set(session.id, session);
+      return session;
+    },
+    async get(id) {
+      return sessions.get(id) ?? null;
+    },
+    async updateStatus(id, status, patch = {}) {
+      const existing = sessions.get(id);
+      if (!existing) {
+        throw new Error(`Managed session '${id}' not found`);
+      }
+      const updated: ManagedSessionRecord = {
+        ...existing,
+        status,
+        nativeSessionId: patch.nativeSessionId ?? existing.nativeSessionId,
+        handoffStrategy: patch.handoffStrategy ?? existing.handoffStrategy,
+        metadata: patch.metadata ?? existing.metadata,
+        lastHeartbeat: patch.lastHeartbeat ?? existing.lastHeartbeat,
+        endedAt: patch.endedAt ?? existing.endedAt,
+      };
+      sessions.set(id, updated);
+      return updated;
+    },
+  };
+}
+
+function createFallbackHandoffStore(): Pick<
+  HandoffStore,
+  'create' | 'listForSession' | 'recordNativeImportAttempt' | 'summarizeRecent'
+> {
+  const handoffs = new Map<string, SessionHandoffRecord>();
+  const nativeImportAttempts = new Map<
+    string,
+    { handoffId: string | null; status: 'pending' | 'succeeded' | 'failed' }
+  >();
+  return {
+    async create(input) {
+      const record: SessionHandoffRecord = {
+        id: crypto.randomUUID(),
+        sourceSessionId: input.sourceSessionId,
+        targetSessionId: input.targetSessionId,
+        sourceRuntime: input.sourceRuntime,
+        targetRuntime: input.targetRuntime,
+        reason: input.reason,
+        strategy: input.strategy,
+        status: input.status,
+        snapshot: input.snapshot,
+        errorMessage: input.errorMessage,
+        createdAt: input.createdAt ?? new Date(),
+        completedAt: input.completedAt ?? null,
+      };
+      handoffs.set(record.id, record);
+      return record;
+    },
+    async listForSession(sessionId, limit = 20) {
+      return [...handoffs.values()]
+        .filter(
+          (record) => record.sourceSessionId === sessionId || record.targetSessionId === sessionId,
+        )
+        .slice(0, limit);
+    },
+    async recordNativeImportAttempt(input) {
+      const record = {
+        id: crypto.randomUUID(),
+        handoffId: input.handoffId,
+        sourceSessionId: input.sourceSessionId,
+        targetSessionId: input.targetSessionId,
+        sourceRuntime: input.sourceRuntime,
+        targetRuntime: input.targetRuntime,
+        status: input.status,
+        metadata: input.metadata,
+        errorMessage: input.errorMessage,
+        attemptedAt: input.attemptedAt ?? new Date(),
+      };
+      nativeImportAttempts.set(record.id, {
+        handoffId: record.handoffId,
+        status: record.status,
+      });
+      return record;
+    },
+    async summarizeRecent(limit = 100) {
+      const recentHandoffs = [...handoffs.values()].slice(0, limit);
+      return summarizeHandoffAnalytics(
+        recentHandoffs.map((handoff) => {
+          const attempt = [...nativeImportAttempts.values()].find(
+            (entry) => entry.handoffId === handoff.id,
+          );
+          return {
+            status: handoff.status,
+            nativeImportAttempt: attempt ? { ok: attempt.status === 'succeeded' } : undefined,
+          };
+        }),
+      );
+    },
+  };
 }
 
 function controlPlaneErrorToStatus(code: string): number {

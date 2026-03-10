@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type {
   Agent,
   AgentConfig,
+  AgentRuntime,
   AgentType,
   PromptTemplateVars,
   ScheduleConfig,
   SessionMode,
 } from './agent.js';
-import { AGENT_STATUSES } from './agent.js';
+import { AGENT_RUNTIMES, AGENT_STATUSES } from './agent.js';
 import type { AgentRun, RunStatus, RunTrigger } from './agent-run.js';
 import { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 import type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
@@ -67,6 +68,19 @@ describe('AgentType', () => {
     const types: AgentType[] = ['heartbeat', 'cron', 'manual', 'adhoc', 'loop'];
     const unique = new Set(types);
     expect(unique.size).toBe(5);
+  });
+});
+
+describe('AgentRuntime', () => {
+  it('includes codex as a first-class runtime', () => {
+    const runtimes: AgentRuntime[] = ['claude-code', 'codex', 'nanoclaw', 'openclaw'];
+    expect(runtimes).toHaveLength(4);
+    expect(AGENT_RUNTIMES.map((runtime) => runtime.value)).toContain('codex');
+  });
+
+  it('keeps runtime option values unique', () => {
+    const values = AGENT_RUNTIMES.map((runtime) => runtime.value);
+    expect(new Set(values).size).toBe(values.length);
   });
 });
 

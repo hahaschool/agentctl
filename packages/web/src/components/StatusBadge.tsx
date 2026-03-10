@@ -12,6 +12,8 @@ const STATUS_VARIANTS: Record<string, string> = {
   completed: 'bg-green-500/10 text-green-500 border-green-500/20',
   registered: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   restarting: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  handing_off: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  pending: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   starting: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   stopping: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   degraded: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
@@ -22,6 +24,7 @@ const STATUS_VARIANTS: Record<string, string> = {
   ended: 'bg-muted text-muted-foreground border-transparent',
   cancelled: 'bg-muted text-muted-foreground border-transparent',
   error: 'bg-red-500/10 text-red-500 border-red-500/20',
+  failed: 'bg-red-500/10 text-red-500 border-red-500/20',
   failure: 'bg-red-500/10 text-red-500 border-red-500/20',
   timeout: 'bg-red-500/10 text-red-500 border-red-500/20',
 };

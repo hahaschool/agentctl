@@ -6,6 +6,7 @@
 
 import type { ApiClient } from './api-client.js';
 import { MobileClientError } from './api-client.js';
+import { requestWithApiClient } from './request-with-api-client.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,100 +134,7 @@ export class SessionApi {
     );
   }
 
-  // -----------------------------------------------------------------------
-  // Internal — delegates to ApiClient's private `request` via fetch
-  // -----------------------------------------------------------------------
-
-  /**
-   * We cannot call `apiClient.request()` directly because it is private.
-   * Instead we replicate a minimal typed fetch that reuses the ApiClient's
-   * baseUrl and authToken (exposed via the constructor config pattern).
-   *
-   * The ApiClient exposes `setAuthToken` but not a getter, so we rely on
-   * the fact that SessionApi is constructed with the same ApiClient instance
-   * that AppContext manages — meaning auth is already configured.
-   *
-   * This approach intentionally mirrors ApiClient.request() error handling.
-   */
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    // We access the apiClient through a cast to reach its private baseUrl
-    // and authToken. This is acceptable because SessionApi is tightly
-    // coupled to ApiClient by design.
-    const client = this.apiClient as unknown as {
-      baseUrl: string;
-      authToken: string | undefined;
-      timeoutMs: number;
-    };
-
-    const url = `${client.baseUrl}${path}`;
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
-
-    if (client.authToken) {
-      headers.Authorization = `Bearer ${client.authToken}`;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), client.timeoutMs ?? 30_000);
-
-    let response: Response;
-
-    try {
-      response = await fetch(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } catch (err: unknown) {
-      clearTimeout(timeoutId);
-
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        throw new MobileClientError('REQUEST_TIMEOUT', `Request to ${method} ${path} timed out`, {
-          timeoutMs: client.timeoutMs,
-        });
-      }
-
-      const message = err instanceof Error ? err.message : String(err);
-      throw new MobileClientError('NETWORK_ERROR', `Network error: ${message}`, {
-        method,
-        path,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-
-    if (!response.ok) {
-      let errorBody: Record<string, unknown> | null = null;
-
-      try {
-        errorBody = (await response.json()) as Record<string, unknown>;
-      } catch {
-        // Response body isn't JSON — ignore.
-      }
-
-      const errorCode =
-        typeof errorBody?.code === 'string' ? errorBody.code : `HTTP_${response.status}`;
-      const errorMessage =
-        typeof errorBody?.error === 'string'
-          ? errorBody.error
-          : typeof errorBody?.message === 'string'
-            ? (errorBody.message as string)
-            : `HTTP ${response.status} ${response.statusText}`;
-
-      throw new MobileClientError(errorCode, errorMessage, {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorBody,
-        method,
-        path,
-      });
-    }
-
-    const data = (await response.json()) as T;
-    return data;
+    return requestWithApiClient<T>(this.apiClient, method, path, body);
   }
 }

@@ -5,7 +5,13 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from '../runtime/agent-pool.js';
+import { ClaudeRuntimeAdapter } from '../runtime/claude-runtime-adapter.js';
 import type { CliSessionManager } from '../runtime/cli-session-manager.js';
+import { CodexRuntimeAdapter } from '../runtime/codex-runtime-adapter.js';
+import { CodexSessionManager } from '../runtime/codex-session-manager.js';
+import { RuntimeConfigApplier } from '../runtime/config/runtime-config-applier.js';
+import { HandoffController } from '../runtime/handoff-controller.js';
+import { RuntimeRegistry } from '../runtime/runtime-registry.js';
 import { TerminalManager } from '../runtime/terminal-manager.js';
 import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
 import { agentRoutes } from './routes/agents.js';
@@ -14,6 +20,8 @@ import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
+import { runtimeConfigRoutes } from './routes/runtime-config.js';
+import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { streamRoutes } from './routes/stream.js';
 import { terminalRoutes } from './routes/terminal.js';
@@ -25,6 +33,8 @@ type CreateWorkerServerOptions = {
   controlPlaneUrl?: string;
   sessionManager?: CliSessionManager;
   maxTerminals?: number;
+  runtimeConfigApplier?: RuntimeConfigApplier;
+  runtimeRegistry?: RuntimeRegistry;
 };
 
 export async function createWorkerServer({
@@ -34,8 +44,16 @@ export async function createWorkerServer({
   controlPlaneUrl,
   sessionManager,
   maxTerminals,
+  runtimeConfigApplier = new RuntimeConfigApplier(),
+  runtimeRegistry: externalRuntimeRegistry,
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  const runtimeRegistry = externalRuntimeRegistry ?? buildRuntimeRegistry(sessionManager);
+  const handoffController = new HandoffController({
+    machineId,
+    logger,
+    runtimeRegistry,
+  });
 
   // Register @fastify/websocket before any WebSocket route plugins.
   await app.register(fastifyWebsocket);
@@ -157,6 +175,21 @@ export async function createWorkerServer({
     agentPool,
   });
 
+  await app.register(runtimeConfigRoutes, {
+    prefix: '/api/runtime-config',
+    machineId,
+    runtimeConfigApplier,
+    logger,
+  });
+
+  await app.register(runtimeSessionsRoutes, {
+    prefix: '/api/runtime-sessions',
+    machineId,
+    runtimeRegistry,
+    handoffController,
+    logger,
+  });
+
   await app.register(fileRoutes, {
     prefix: '/api/files',
     logger,
@@ -249,4 +282,13 @@ function workerErrorToStatus(code: string): number {
     return 409;
   }
   return 500;
+}
+
+function buildRuntimeRegistry(sessionManager?: CliSessionManager): RuntimeRegistry {
+  const registry = new RuntimeRegistry();
+  if (sessionManager) {
+    registry.register(new ClaudeRuntimeAdapter(sessionManager));
+  }
+  registry.register(new CodexRuntimeAdapter(new CodexSessionManager()));
+  return registry;
 }

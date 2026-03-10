@@ -1,7 +1,7 @@
-import type { Agent, Machine } from '@agentctl/shared';
+import type { Agent, Machine, ManagedSessionStatus } from '@agentctl/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { HealthResponse } from '../services/api-client.js';
+import type { HealthResponse, RuntimeSessionInfo } from '../services/api-client.js';
 import { MobileClientError } from '../services/api-client.js';
 import type { DashboardState } from './dashboard-presenter.js';
 import { DashboardPresenter } from './dashboard-presenter.js';
@@ -14,11 +14,26 @@ function makeApiClient(overrides: Record<string, unknown> = {}): {
   health: ReturnType<typeof vi.fn>;
   listMachines: ReturnType<typeof vi.fn>;
   listAgents: ReturnType<typeof vi.fn>;
+  listRuntimeSessions: ReturnType<typeof vi.fn>;
+  getRuntimeHandoffSummary: ReturnType<typeof vi.fn>;
 } {
   return {
     health: vi.fn().mockResolvedValue({ status: 'ok', timestamp: '2024-01-01T00:00:00Z' }),
     listMachines: vi.fn().mockResolvedValue([]),
     listAgents: vi.fn().mockResolvedValue([]),
+    listRuntimeSessions: vi.fn().mockResolvedValue({ sessions: [], count: 0 }),
+    getRuntimeHandoffSummary: vi.fn().mockResolvedValue({
+      ok: true,
+      limit: 100,
+      summary: {
+        total: 0,
+        succeeded: 0,
+        failed: 0,
+        pending: 0,
+        nativeImportSuccesses: 0,
+        nativeImportFallbacks: 0,
+      },
+    }),
     ...overrides,
   };
 }
@@ -54,6 +69,29 @@ function makeMachine(partial: Partial<Machine> = {}): Machine {
     lastHeartbeat: null,
     capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
     createdAt: new Date('2024-01-01'),
+    ...partial,
+  };
+}
+
+function makeRuntimeSession(
+  partial: Partial<RuntimeSessionInfo> & { status?: ManagedSessionStatus } = {},
+): RuntimeSessionInfo {
+  return {
+    id: 'ms-1',
+    runtime: 'codex',
+    nativeSessionId: 'codex-native-1',
+    machineId: 'machine-1',
+    agentId: 'agent-1',
+    projectPath: '/tmp/project',
+    worktreePath: '/tmp/project/.trees/runtime',
+    status: 'active',
+    configRevision: 1,
+    handoffStrategy: null,
+    handoffSourceSessionId: null,
+    metadata: {},
+    startedAt: '2024-01-01T00:00:00Z',
+    lastHeartbeat: '2024-01-01T00:05:00Z',
+    endedAt: null,
     ...partial,
   };
 }
@@ -101,6 +139,12 @@ describe('DashboardPresenter', () => {
       expect(stats.error).toBe(0);
       expect(stats.totalMachines).toBe(0);
       expect(stats.onlineMachines).toBe(0);
+      expect(stats.totalManagedRuntimes).toBe(0);
+      expect(stats.activeManagedRuntimes).toBe(0);
+      expect(stats.switchingManagedRuntimes).toBe(0);
+      expect(stats.totalRuntimeHandoffs).toBe(0);
+      expect(stats.runtimeNativeImportSuccesses).toBe(0);
+      expect(stats.runtimeFallbacks).toBe(0);
     });
 
     it('is not polling before start()', () => {
@@ -164,11 +208,13 @@ describe('DashboardPresenter', () => {
       const health: HealthResponse = { status: 'ok', timestamp: '2024-01-01T00:00:00Z' };
       const machines = [makeMachine()];
       const agents = [makeAgent({ status: 'running' })];
+      const runtimeSessions = [makeRuntimeSession({ status: 'active' })];
 
       const api = makeApiClient({
         health: vi.fn().mockResolvedValue(health),
         listMachines: vi.fn().mockResolvedValue(machines),
         listAgents: vi.fn().mockResolvedValue(agents),
+        listRuntimeSessions: vi.fn().mockResolvedValue({ sessions: runtimeSessions, count: 1 }),
       });
 
       const presenter = new DashboardPresenter({ apiClient: api as never });
@@ -178,6 +224,8 @@ describe('DashboardPresenter', () => {
       expect(state.health).toEqual(health);
       expect(state.machines).toEqual(machines);
       expect(state.agents).toEqual(agents);
+      expect(state.runtimeSessions).toEqual(runtimeSessions);
+      expect(state.runtimeHandoffSummary?.summary.total).toBe(0);
     });
 
     it('sets lastUpdated after successful refresh', async () => {
@@ -214,6 +262,7 @@ describe('DashboardPresenter', () => {
       await presenter.refresh();
 
       expect(api.health).toHaveBeenCalledWith(true);
+      expect(api.getRuntimeHandoffSummary).toHaveBeenCalledWith(100);
     });
   });
 
@@ -345,6 +394,36 @@ describe('DashboardPresenter', () => {
       expect(stats.onlineMachines).toBe(2);
     });
 
+    it('counts managed runtime totals, active, and switching sessions', () => {
+      const runtimeSessions = [
+        makeRuntimeSession({ id: 'ms-1', status: 'active' }),
+        makeRuntimeSession({ id: 'ms-2', status: 'handing_off' }),
+        makeRuntimeSession({ id: 'ms-3', status: 'paused' }),
+      ];
+
+      const stats = DashboardPresenter.computeStats([], [], runtimeSessions);
+      expect(stats.totalManagedRuntimes).toBe(3);
+      expect(stats.activeManagedRuntimes).toBe(1);
+      expect(stats.switchingManagedRuntimes).toBe(1);
+    });
+
+    it('counts fleet handoffs, native import successes, and fallbacks', () => {
+      const stats = DashboardPresenter.computeStats([], [], [], {
+        total: 6,
+        succeeded: 5,
+        failed: 1,
+        pending: 0,
+        nativeImportSuccesses: 3,
+        nativeImportFallbacks: 2,
+      });
+
+      expect(stats.totalRuntimeHandoffs).toBe(6);
+      expect(stats.runtimeNativeImportSuccesses).toBe(3);
+      expect(stats.runtimeFallbacks).toBe(2);
+      expect(stats.runtimeNativeImportRate).toBe(50);
+      expect(stats.runtimeFallbackRate).toBe(33);
+    });
+
     it('returns zero stats for empty arrays', () => {
       const stats = DashboardPresenter.computeStats([], []);
       expect(stats).toEqual({
@@ -354,6 +433,14 @@ describe('DashboardPresenter', () => {
         error: 0,
         totalMachines: 0,
         onlineMachines: 0,
+        totalManagedRuntimes: 0,
+        activeManagedRuntimes: 0,
+        switchingManagedRuntimes: 0,
+        totalRuntimeHandoffs: 0,
+        runtimeNativeImportSuccesses: 0,
+        runtimeFallbacks: 0,
+        runtimeNativeImportRate: 0,
+        runtimeFallbackRate: 0,
       });
     });
 
@@ -363,10 +450,27 @@ describe('DashboardPresenter', () => {
         makeAgent({ id: '2', status: 'error' }),
       ];
       const machines = [makeMachine({ status: 'online' })];
+      const runtimeSessions = [
+        makeRuntimeSession({ id: 'ms-1', status: 'active' }),
+        makeRuntimeSession({ id: 'ms-2', status: 'handing_off' }),
+      ];
 
       const api = makeApiClient({
         listAgents: vi.fn().mockResolvedValue(agents),
         listMachines: vi.fn().mockResolvedValue(machines),
+        listRuntimeSessions: vi.fn().mockResolvedValue({ sessions: runtimeSessions, count: 2 }),
+        getRuntimeHandoffSummary: vi.fn().mockResolvedValue({
+          ok: true,
+          limit: 100,
+          summary: {
+            total: 4,
+            succeeded: 3,
+            failed: 1,
+            pending: 0,
+            nativeImportSuccesses: 2,
+            nativeImportFallbacks: 1,
+          },
+        }),
       });
 
       const presenter = new DashboardPresenter({ apiClient: api as never });
@@ -379,6 +483,14 @@ describe('DashboardPresenter', () => {
       expect(stats.idle).toBe(0);
       expect(stats.totalMachines).toBe(1);
       expect(stats.onlineMachines).toBe(1);
+      expect(stats.totalManagedRuntimes).toBe(2);
+      expect(stats.activeManagedRuntimes).toBe(1);
+      expect(stats.switchingManagedRuntimes).toBe(1);
+      expect(stats.totalRuntimeHandoffs).toBe(4);
+      expect(stats.runtimeNativeImportSuccesses).toBe(2);
+      expect(stats.runtimeFallbacks).toBe(1);
+      expect(stats.runtimeNativeImportRate).toBe(50);
+      expect(stats.runtimeFallbackRate).toBe(25);
     });
   });
 
@@ -565,6 +677,7 @@ describe('DashboardPresenter', () => {
       const fresh = presenter.getState();
       expect(fresh.agents).toHaveLength(1);
       expect(fresh.stats.running).toBe(1);
+      expect(fresh.runtimeSessions).toEqual([]);
     });
   });
 

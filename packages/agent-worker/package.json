@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "pnpm --filter @agentctl/shared build && tsc",
     "start": "node dist/index.js",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "pnpm --filter @agentctl/shared build && vitest run",
+    "test:coverage": "pnpm --filter @agentctl/shared build && vitest run --coverage",
     "postinstall": "node -e \"const p=require('path'),f=require('fs'),d=p.join(__dirname,'node_modules','node-pty','prebuilds');if(f.existsSync(d)){for(const a of f.readdirSync(d)){const h=p.join(d,a,'spawn-helper');if(f.existsSync(h))f.chmodSync(h,0o755)}}\""
   },
   "dependencies": {

@@ -1,5 +1,6 @@
 'use client';
 
+import { calculateHandoffAnalyticsRates } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
@@ -33,6 +34,8 @@ import {
   healthQuery,
   machinesQuery,
   metricsQuery,
+  runtimeHandoffSummaryQuery,
+  runtimeSessionsQuery,
   sessionsQuery,
 } from '../lib/queries';
 
@@ -47,6 +50,8 @@ export function DashboardPage(): React.JSX.Element {
   const agents = useQuery(agentsQuery());
   const discovered = useQuery(discoverQuery());
   const sessions = useQuery(sessionsQuery());
+  const runtimeSessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
+  const runtimeHandoffSummary = useQuery(runtimeHandoffSummaryQuery(100));
 
   const { status: wsStatus } = useWebSocket();
   const [showHelp, setShowHelp] = useState(false);
@@ -56,6 +61,16 @@ export function DashboardPage(): React.JSX.Element {
   const agentList = agents.data ?? [];
   const discoveredSessions = discovered.data?.sessions ?? [];
   const sessionList = sessions.data?.sessions ?? [];
+  const managedRuntimeSessions = runtimeSessions.data?.sessions ?? [];
+  const runtimeHandoffMetrics = runtimeHandoffSummary.data?.summary ?? {
+    total: 0,
+    succeeded: 0,
+    failed: 0,
+    pending: 0,
+    nativeImportSuccesses: 0,
+    nativeImportFallbacks: 0,
+  };
+  const runtimeHandoffRates = calculateHandoffAnalyticsRates(runtimeHandoffMetrics);
   const metricsData = metrics.data ?? {};
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;
@@ -70,6 +85,12 @@ export function DashboardPage(): React.JSX.Element {
   // Active sessions (running or active status)
   const activeSessions = sessionList.filter((s) => s.status === 'running' || s.status === 'active');
   const activeSessionCount = activeSessions.length;
+  const activeManagedRuntimeCount = managedRuntimeSessions.filter(
+    (session) => session.status === 'active',
+  ).length;
+  const handingOffManagedRuntimeCount = managedRuntimeSessions.filter(
+    (session) => session.status === 'handing_off',
+  ).length;
 
   // Per-agent cost breakdown (top spenders)
   const agentCostBreakdown = useMemo(() => {
@@ -99,8 +120,19 @@ export function DashboardPage(): React.JSX.Element {
       void agents.refetch();
       void discovered.refetch();
       void sessions.refetch();
+      void runtimeSessions.refetch();
+      void runtimeHandoffSummary.refetch();
     },
-    [health, metrics, machines, agents, discovered, sessions],
+    [
+      health,
+      metrics,
+      machines,
+      agents,
+      discovered,
+      sessions,
+      runtimeSessions,
+      runtimeHandoffSummary,
+    ],
   );
 
   useHotkeys(useMemo(() => ({ r: refreshAll, '?': toggleHelp }), [refreshAll, toggleHelp]));
@@ -111,7 +143,9 @@ export function DashboardPage(): React.JSX.Element {
     machines.isFetching ||
     agents.isFetching ||
     discovered.isFetching ||
-    sessions.isFetching;
+    sessions.isFetching ||
+    runtimeSessions.isFetching ||
+    runtimeHandoffSummary.isFetching;
   const errorMessages = useMemo(() => {
     const msgs: string[] = [];
     if (health.error) msgs.push(`Control plane: ${health.error.message}`);
@@ -120,8 +154,20 @@ export function DashboardPage(): React.JSX.Element {
     if (agents.error) msgs.push(`Agents: ${agents.error.message}`);
     if (discovered.error) msgs.push(`Discover: ${discovered.error.message}`);
     if (sessions.error) msgs.push(`Sessions: ${sessions.error.message}`);
+    if (runtimeSessions.error) msgs.push(`Runtime sessions: ${runtimeSessions.error.message}`);
+    if (runtimeHandoffSummary.error)
+      msgs.push(`Runtime handoffs: ${runtimeHandoffSummary.error.message}`);
     return msgs;
-  }, [health.error, metrics.error, machines.error, agents.error, discovered.error, sessions.error]);
+  }, [
+    health.error,
+    metrics.error,
+    machines.error,
+    agents.error,
+    discovered.error,
+    sessions.error,
+    runtimeSessions.error,
+    runtimeHandoffSummary.error,
+  ]);
   const anyError = errorMessages.length > 0;
 
   // Health status — Tailwind class helpers
@@ -190,6 +236,12 @@ export function DashboardPage(): React.JSX.Element {
           >
             View Agents
           </Link>
+          <Link
+            href="/runtime-sessions"
+            className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
+          >
+            Runtime Sessions
+          </Link>
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>
@@ -250,12 +302,17 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Stats grid */}
-      {machines.isLoading || agents.isLoading || metrics.isLoading || sessions.isLoading ? (
+      {machines.isLoading ||
+      agents.isLoading ||
+      metrics.isLoading ||
+      sessions.isLoading ||
+      runtimeSessions.isLoading ||
+      runtimeHandoffSummary.isLoading ? (
         <div
           className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6"
           data-testid="stat-cards-skeleton"
         >
-          {Array.from({ length: 6 }, (_, i) => (
+          {Array.from({ length: 8 }, (_, i) => (
             <Skeleton key={`sk-${String(i)}`} className="h-20 rounded-lg" />
           ))}
         </div>
@@ -303,6 +360,18 @@ export function DashboardPage(): React.JSX.Element {
             value={String(activeSessionCount)}
             accent={activeSessionCount > 0 ? 'green' : undefined}
             sublabel={`${sessionList.length} total`}
+          />
+          <StatCard
+            label="Managed Runtimes"
+            value={String(managedRuntimeSessions.length)}
+            accent={activeManagedRuntimeCount > 0 ? 'blue' : undefined}
+            sublabel={`${activeManagedRuntimeCount} active · ${handingOffManagedRuntimeCount} switching`}
+          />
+          <StatCard
+            label="Native Import"
+            value={String(runtimeHandoffMetrics.nativeImportSuccesses)}
+            accent={runtimeHandoffMetrics.nativeImportSuccesses > 0 ? 'green' : undefined}
+            sublabel={`${runtimeHandoffRates.nativeImportSuccessRate}% native import · ${runtimeHandoffRates.fallbackRate}% fallback`}
           />
           <StatCard
             label="Total Cost"

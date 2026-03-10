@@ -6,19 +6,24 @@
 //   1. Dashboard  — fleet overview
 //   2. Agents     — agent list
 //   3. Sessions   — Claude Code session management
-//   4. Scheduler  — cron/heartbeat job management
-//   5. Settings   — control plane config & connection
+//   4. Runtimes   — managed Claude Code / Codex runtime sessions
+//   5. Scheduler  — cron/heartbeat job management
+//   6. Settings   — control plane config & connection
 // ---------------------------------------------------------------------------
 
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Text } from 'react-native';
+import { useAppContext } from '../context/app-context.js';
 import { AgentListScreen } from '../ui-screens/agent-list-screen.js';
 import { DashboardScreen } from '../ui-screens/dashboard-screen.js';
+import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
 import { SchedulerScreen } from '../ui-screens/scheduler-screen.js';
 import { SessionScreen } from '../ui-screens/session-screen.js';
 import { SettingsScreen } from '../ui-screens/settings-screen.js';
+import { getRuntimeTabBadgeCount } from './runtime-tab-badge.js';
 
 // ---------------------------------------------------------------------------
 // Tab param list
@@ -28,6 +33,7 @@ type TabParamList = {
   Dashboard: undefined;
   Agents: undefined;
   Sessions: undefined;
+  Runtimes: undefined;
   Scheduler: undefined;
   Settings: undefined;
 };
@@ -42,6 +48,7 @@ const TAB_ICONS: Record<keyof TabParamList, string> = {
   Dashboard: '\u2302', // House symbol
   Agents: '\u2699', // Gear/cog (representing CPU/robot)
   Sessions: '\u25B6', // Play triangle (representing terminal/sessions)
+  Runtimes: '\u21C4', // Left-right arrows
   Scheduler: '\u23F0', // Alarm clock
   Settings: '\u2638', // Wheel of dharma (gear-like)
 };
@@ -68,11 +75,51 @@ const NAVIGATION_THEME = {
   },
 };
 
+const RUNTIME_BADGE_POLL_INTERVAL_MS = 30_000;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function TabNavigator(): React.JSX.Element {
+  const { apiClient } = useAppContext();
+  const [runtimeBadgeCount, setRuntimeBadgeCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshRuntimeBadge(): Promise<void> {
+      try {
+        const response = await apiClient.listRuntimeSessions({ limit: 100 });
+        if (!cancelled) {
+          setRuntimeBadgeCount(getRuntimeTabBadgeCount(response.sessions));
+        }
+      } catch {
+        if (!cancelled) {
+          setRuntimeBadgeCount(0);
+        }
+      }
+    }
+
+    void refreshRuntimeBadge();
+    const timer = setInterval(() => {
+      void refreshRuntimeBadge();
+    }, RUNTIME_BADGE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [apiClient]);
+
+  const runtimesTabOptions = useMemo(
+    () => ({
+      title: 'Runtimes',
+      ...(runtimeBadgeCount > 0 ? { tabBarBadge: runtimeBadgeCount } : {}),
+    }),
+    [runtimeBadgeCount],
+  );
+
   return (
     <NavigationContainer theme={NAVIGATION_THEME}>
       <Tab.Navigator
@@ -104,6 +151,7 @@ export function TabNavigator(): React.JSX.Element {
         <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Tab.Screen name="Agents" component={AgentListScreen} options={{ title: 'Agents' }} />
         <Tab.Screen name="Sessions" component={SessionScreen} options={{ title: 'Sessions' }} />
+        <Tab.Screen name="Runtimes" component={RuntimeSessionScreen} options={runtimesTabOptions} />
         <Tab.Screen name="Scheduler" component={SchedulerScreen} options={{ title: 'Scheduler' }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Tab.Navigator>

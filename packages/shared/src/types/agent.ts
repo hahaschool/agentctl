@@ -1,9 +1,10 @@
 export type AgentType = 'heartbeat' | 'cron' | 'manual' | 'adhoc' | 'loop';
 
-export type AgentRuntime = 'claude-code' | 'nanoclaw' | 'openclaw';
+export type AgentRuntime = 'claude-code' | 'codex' | 'nanoclaw' | 'openclaw';
 
 export const AGENT_RUNTIMES: readonly { value: AgentRuntime; label: string; desc: string }[] = [
   { value: 'claude-code', label: 'Claude Code', desc: 'Full Claude Code CLI with built-in tools' },
+  { value: 'codex', label: 'Codex', desc: 'OpenAI Codex CLI runtime with managed sessions' },
   { value: 'nanoclaw', label: 'NanoClaw', desc: 'Lightweight agent with filesystem IPC' },
   { value: 'openclaw', label: 'OpenClaw', desc: 'Open-source agent runtime' },
 ] as const;

@@ -14,6 +14,10 @@ import {
   queryKeys,
   routerModelsInfoQuery,
   routerModelsQuery,
+  runtimeHandoffSummaryQuery,
+  runtimeSessionHandoffsQuery,
+  runtimeSessionPreflightQuery,
+  runtimeSessionsQuery,
   sessionContentQuery,
   sessionQuery,
   sessionsQuery,
@@ -60,6 +64,60 @@ describe('queryKeys', () => {
 
   it('session key with id includes the id', () => {
     expect(queryKeys.session('session-123')).toEqual(['sessions', 'session-123']);
+  });
+
+  it('runtimeSessions key without params', () => {
+    expect(queryKeys.runtimeSessions()).toEqual(['runtime-sessions']);
+  });
+
+  it('runtimeSessions key with params includes the params', () => {
+    const params = { runtime: 'codex', status: 'active' } as const;
+    expect(queryKeys.runtimeSessions(params)).toEqual(['runtime-sessions', params]);
+  });
+
+  it('runtimeSessionHandoffs key includes id', () => {
+    expect(queryKeys.runtimeSessionHandoffs('ms-123')).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'handoffs',
+    ]);
+  });
+
+  it('runtimeSessionHandoffs key includes optional limit', () => {
+    expect(queryKeys.runtimeSessionHandoffs('ms-123', 10)).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'handoffs',
+      10,
+    ]);
+  });
+
+  it('runtimeSessionPreflight key includes target runtime', () => {
+    expect(queryKeys.runtimeSessionPreflight('ms-123', 'claude-code')).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'preflight',
+      'claude-code',
+    ]);
+  });
+
+  it('runtimeSessionPreflight key includes target machine when present', () => {
+    expect(queryKeys.runtimeSessionPreflight('ms-123', 'claude-code', 'machine-2')).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'preflight',
+      'claude-code',
+      'machine-2',
+    ]);
+  });
+
+  it('runtimeHandoffSummary key includes optional limit', () => {
+    expect(queryKeys.runtimeHandoffSummary(100)).toEqual([
+      'runtime-sessions',
+      'handoffs',
+      'summary',
+      100,
+    ]);
   });
 
   it('sessionContent key includes sessionId and params', () => {
@@ -147,6 +205,23 @@ describe('machinesQuery', () => {
 
   it('has queryFn property', () => {
     const options = machinesQuery();
+    expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('runtimeHandoffSummaryQuery', () => {
+  it('returns queryOptions with runtime handoff summary queryKey', () => {
+    const options = runtimeHandoffSummaryQuery(100);
+    expect(options.queryKey).toEqual(queryKeys.runtimeHandoffSummary(100));
+  });
+
+  it('has refetchOnWindowFocus enabled', () => {
+    const options = runtimeHandoffSummaryQuery(100);
+    expect(options.refetchOnWindowFocus).toBe(true);
+  });
+
+  it('has queryFn property', () => {
+    const options = runtimeHandoffSummaryQuery(100);
     expect(options.queryFn).toBeDefined();
   });
 });
@@ -318,6 +393,89 @@ describe('sessionQuery', () => {
   it('has queryFn property', () => {
     const options = sessionQuery('session-123');
     expect(options.queryFn).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runtimeSessionsQuery
+// ---------------------------------------------------------------------------
+
+describe('runtimeSessionsQuery', () => {
+  it('returns queryOptions with runtimeSessions queryKey without params', () => {
+    const options = runtimeSessionsQuery();
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessions());
+  });
+
+  it('includes params in queryKey when provided', () => {
+    const params = { runtime: 'codex', status: 'active' } as const;
+    const options = runtimeSessionsQuery(params);
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessions(params));
+  });
+
+  it('has refetchOnWindowFocus enabled', () => {
+    const options = runtimeSessionsQuery();
+    expect(options.refetchOnWindowFocus).toBe(true);
+  });
+
+  it('has queryFn property', () => {
+    const options = runtimeSessionsQuery();
+    expect(options.queryFn).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runtimeSessionHandoffsQuery
+// ---------------------------------------------------------------------------
+
+describe('runtimeSessionHandoffsQuery', () => {
+  it('returns queryOptions with runtimeSessionHandoffs queryKey', () => {
+    const options = runtimeSessionHandoffsQuery('ms-123');
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessionHandoffs('ms-123'));
+  });
+
+  it('includes limit in queryKey when provided', () => {
+    const options = runtimeSessionHandoffsQuery('ms-123', 10);
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessionHandoffs('ms-123', 10));
+  });
+
+  it('is enabled only when id is present', () => {
+    expect(runtimeSessionHandoffsQuery('ms-123').enabled).toBe(true);
+    expect(runtimeSessionHandoffsQuery('').enabled).toBe(false);
+  });
+
+  it('has queryFn property', () => {
+    const options = runtimeSessionHandoffsQuery('ms-123');
+    expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('runtimeSessionPreflightQuery', () => {
+  it('returns queryOptions with runtimeSessionPreflight queryKey', () => {
+    const options = runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' });
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessionPreflight('ms-123', 'claude-code'));
+  });
+
+  it('includes targetMachineId in the queryKey when present', () => {
+    const options = runtimeSessionPreflightQuery('ms-123', {
+      targetRuntime: 'claude-code',
+      targetMachineId: 'machine-2',
+    });
+    expect(options.queryKey).toEqual(
+      queryKeys.runtimeSessionPreflight('ms-123', 'claude-code', 'machine-2'),
+    );
+  });
+
+  it('has enabled property based on id', () => {
+    expect(runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).enabled).toBe(
+      true,
+    );
+    expect(runtimeSessionPreflightQuery('', { targetRuntime: 'claude-code' }).enabled).toBe(false);
+  });
+
+  it('has queryFn property', () => {
+    expect(
+      runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).queryFn,
+    ).toBeDefined();
   });
 });
 

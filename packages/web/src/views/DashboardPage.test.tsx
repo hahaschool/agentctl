@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Agent, DiscoveredSession, Machine, Session } from '@/lib/api';
+import type { Agent, DiscoveredSession, Machine, RuntimeSession, Session } from '@/lib/api';
 
 const { mockPathBadge } = vi.hoisted(() => ({
   mockPathBadge: vi.fn(),
@@ -19,6 +19,8 @@ const {
   mockAgentsQuery,
   mockDiscoverQuery,
   mockSessionsQuery,
+  mockRuntimeSessionsQuery,
+  mockRuntimeHandoffSummaryQuery,
   mockUseWebSocket,
   mockUseHotkeys,
 } = vi.hoisted(() => ({
@@ -28,6 +30,8 @@ const {
   mockAgentsQuery: vi.fn(),
   mockDiscoverQuery: vi.fn(),
   mockSessionsQuery: vi.fn(),
+  mockRuntimeSessionsQuery: vi.fn(),
+  mockRuntimeHandoffSummaryQuery: vi.fn(),
   mockUseWebSocket: vi.fn(),
   mockUseHotkeys: vi.fn(),
 }));
@@ -162,6 +166,8 @@ vi.mock('@/lib/queries', () => ({
   agentsQuery: () => mockAgentsQuery(),
   discoverQuery: () => mockDiscoverQuery(),
   sessionsQuery: () => mockSessionsQuery(),
+  runtimeSessionsQuery: () => mockRuntimeSessionsQuery(),
+  runtimeHandoffSummaryQuery: () => mockRuntimeHandoffSummaryQuery(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -231,6 +237,27 @@ function createSession(overrides?: Partial<Session>): Session {
   };
 }
 
+function createRuntimeSession(overrides?: Partial<RuntimeSession>): RuntimeSession {
+  return {
+    id: 'ms-1',
+    runtime: 'codex',
+    nativeSessionId: 'codex-native-1',
+    machineId: 'machine-1',
+    agentId: 'agent-1',
+    projectPath: '/tmp/project',
+    worktreePath: '/tmp/project/.trees/runtime',
+    status: 'active',
+    configRevision: 1,
+    handoffStrategy: null,
+    handoffSourceSessionId: null,
+    metadata: {},
+    startedAt: new Date().toISOString(),
+    lastHeartbeat: new Date().toISOString(),
+    endedAt: null,
+    ...overrides,
+  };
+}
+
 function createDiscoveredSession(overrides?: Partial<DiscoveredSession>): DiscoveredSession {
   return {
     sessionId: 'discovered-1',
@@ -281,8 +308,33 @@ function setupDefaultMocks(overrides?: {
     offset: number;
     hasMore: boolean;
   };
+  runtimeSessionsData?: {
+    sessions: RuntimeSession[];
+    count: number;
+  };
+  runtimeHandoffSummaryData?: {
+    ok: true;
+    limit: number;
+    summary: {
+      total: number;
+      succeeded: number;
+      failed: number;
+      pending: number;
+      nativeImportSuccesses: number;
+      nativeImportFallbacks: number;
+    };
+  };
   wsStatus?: string;
-  neverResolve?: ('health' | 'metrics' | 'machines' | 'agents' | 'discover' | 'sessions')[];
+  neverResolve?: (
+    | 'health'
+    | 'metrics'
+    | 'machines'
+    | 'agents'
+    | 'discover'
+    | 'sessions'
+    | 'runtimeSessions'
+    | 'runtimeHandoffSummary'
+  )[];
 }) {
   const neverResolve = new Set(overrides?.neverResolve ?? []);
 
@@ -359,6 +411,38 @@ function setupDefaultMocks(overrides?: {
         ),
   });
 
+  mockRuntimeSessionsQuery.mockReturnValue({
+    queryKey: ['runtime-sessions', { limit: 100 }],
+    queryFn: neverResolve.has('runtimeSessions')
+      ? vi.fn().mockReturnValue(new Promise(() => {}))
+      : vi.fn().mockResolvedValue(
+          overrides?.runtimeSessionsData ?? {
+            sessions: [createRuntimeSession()],
+            count: 1,
+          },
+        ),
+  });
+
+  mockRuntimeHandoffSummaryQuery.mockReturnValue({
+    queryKey: ['runtime-sessions', 'handoffs', 'summary', 100],
+    queryFn: neverResolve.has('runtimeHandoffSummary')
+      ? vi.fn().mockReturnValue(new Promise(() => {}))
+      : vi.fn().mockResolvedValue(
+          overrides?.runtimeHandoffSummaryData ?? {
+            ok: true,
+            limit: 100,
+            summary: {
+              total: 2,
+              succeeded: 1,
+              failed: 1,
+              pending: 0,
+              nativeImportSuccesses: 1,
+              nativeImportFallbacks: 1,
+            },
+          },
+        ),
+  });
+
   mockUseWebSocket.mockReturnValue({ status: overrides?.wsStatus ?? 'connected' });
 }
 
@@ -402,6 +486,12 @@ describe('DashboardPage', () => {
       renderDashboard();
       expect(screen.getByText('View Agents')).toBeDefined();
       expect(screen.getByTestId('link-/agents')).toBeDefined();
+    });
+
+    it('renders "Runtime Sessions" quick action link to /runtime-sessions', () => {
+      renderDashboard();
+      expect(screen.getByText('Runtime Sessions')).toBeDefined();
+      expect(screen.getByTestId('link-/runtime-sessions')).toBeDefined();
     });
 
     it('renders last-updated component', () => {
@@ -594,7 +684,7 @@ describe('DashboardPage', () => {
   // =========================================================================
 
   describe('StatCards', () => {
-    it('renders all six stat cards', async () => {
+    it('renders all eight stat cards', async () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByTestId('stat-card-Machines Online')).toBeDefined();
@@ -602,6 +692,8 @@ describe('DashboardPage', () => {
         expect(screen.getByTestId('stat-card-Agents Registered')).toBeDefined();
         expect(screen.getByTestId('stat-card-Active Runs')).toBeDefined();
         expect(screen.getByTestId('stat-card-Active Sessions')).toBeDefined();
+        expect(screen.getByTestId('stat-card-Managed Runtimes')).toBeDefined();
+        expect(screen.getByTestId('stat-card-Native Import')).toBeDefined();
         expect(screen.getByTestId('stat-card-Total Cost')).toBeDefined();
       });
     });
@@ -716,6 +808,50 @@ describe('DashboardPage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('stat-value-Active Sessions').textContent).toBe('2');
         expect(screen.getByTestId('stat-sublabel-Active Sessions').textContent).toBe('4 total');
+      });
+    });
+
+    it('displays managed runtime summary with active and switching counts', async () => {
+      setupDefaultMocks({
+        runtimeSessionsData: {
+          sessions: [
+            createRuntimeSession({ id: 'ms-1', status: 'active' }),
+            createRuntimeSession({ id: 'ms-2', status: 'handing_off' }),
+            createRuntimeSession({ id: 'ms-3', status: 'paused' }),
+          ],
+          count: 3,
+        },
+      });
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId('stat-value-Managed Runtimes').textContent).toBe('3');
+        expect(screen.getByTestId('stat-sublabel-Managed Runtimes').textContent).toBe(
+          '1 active · 1 switching',
+        );
+      });
+    });
+
+    it('displays native import successes and fallback summary', async () => {
+      setupDefaultMocks({
+        runtimeHandoffSummaryData: {
+          ok: true,
+          limit: 100,
+          summary: {
+            total: 4,
+            succeeded: 3,
+            failed: 1,
+            pending: 0,
+            nativeImportSuccesses: 2,
+            nativeImportFallbacks: 1,
+          },
+        },
+      });
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId('stat-value-Native Import').textContent).toBe('2');
+        expect(screen.getByTestId('stat-sublabel-Native Import').textContent).toBe(
+          '50% native import · 25% fallback',
+        );
       });
     });
 

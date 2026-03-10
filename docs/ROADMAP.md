@@ -354,38 +354,47 @@ A dedicated Claude Code agent that continuously audits the AgentCTL codebase:
 Use the same Remote Control relay pattern proven with Claude Code (Phase 8.2)
 to orchestrate Codex CLI instances across the fleet:
 
-- [ ] Define `AgentType: 'codex'` in shared types alongside existing `'claude'` and `'loop'`
-- [ ] Implement `CodexRuntime` adapter in `agent-worker/src/runtime/`
-  - Outbound polling to Codex API (mirrors Claude Code relay pattern)
-  - Map Codex tool calls to AgentCTL's hook system (PreToolUse/PostToolUse/Stop)
-  - Structured output events compatible with existing SSE stream format
+- [x] Add managed runtime support for `codex` in shared contracts and worker/control-plane APIs
+- [x] Implement `CodexRuntimeAdapter` and `CodexSessionManager` in `agent-worker/src/runtime/`
+  - Supports create via `codex exec --json`
+  - Supports resume via `codex exec resume ... --json`
+  - Supports same-runtime fork via `codex fork`
+- [x] Add runtime-aware worker and control-plane session routes
+  - `GET|POST /api/runtime-sessions`
+  - `POST /api/runtime-sessions/:id/resume`
+  - `POST /api/runtime-sessions/:id/fork`
 - [ ] Add Codex model routing to LiteLLM config (`infra/litellm/`)
   - Provider failover: OpenAI Direct -> Azure OpenAI
   - Cost tracking parity with Claude models
 - [ ] Extend PM2 ecosystem config to manage Codex worker processes
-- [ ] Registry: Codex agents register with same heartbeat/health protocol
+- [x] Registry: managed Codex sessions use the same machine registry and worker URL resolution path
 - [ ] Security: apply identical sandbox constraints (bubblewrap/Seatbelt, `--cap-drop=ALL`, `--network=none`)
 
 ### 10.2 Cross-Agent Session Handoff (Claude Code <-> Codex)
 
 Enable seamless mid-task switching between agent types without losing context:
 
-- [ ] Define `SessionHandoff` protocol in `packages/shared/src/protocol/`
-  - Portable session snapshot: working directory state, git diff, conversation summary, active tool state
-  - Handoff reason enum: `'model-affinity'`, `'cost-optimization'`, `'rate-limit-failover'`, `'manual'`
-- [ ] Implement `HandoffController` in agent-worker
-  - Serialize outgoing agent's context (files touched, pending edits, conversation summary via LLM)
-  - Hydrate incoming agent with handoff context as system prompt preamble
-  - Preserve git worktree — both agent types operate on the same worktree
-- [ ] Control plane API:
-  - `POST /api/agents/:id/handoff` — initiate handoff to target agent type
-  - `GET /api/runs/:id/handoff-history` — view handoff chain for a run
+- [x] Define `SessionHandoff` protocol in `packages/shared/src/protocol/`
+  - Portable session snapshot includes worktree path, git branch/SHA, dirty files, diff summary, conversation summary, active MCP/skills, and handoff reason
+  - Handoff reason enum includes `'model-affinity'`, `'cost-optimization'`, `'rate-limit-failover'`, and `'manual'`
+- [x] Implement `HandoffController` in agent-worker
+  - Export portable snapshots from the source runtime
+  - Hydrate incoming runtime from the snapshot preamble
+  - Preserve the existing project/worktree path through the handoff
+- [x] Control plane API:
+  - `POST /api/runtime-sessions/:id/handoff` — initiate runtime handoff to a target runtime
+- [x] Experimental native import scaffolding
+  - Probe native import first when enabled
+  - Fall back automatically to `snapshot-handoff`
+  - Audit every failed native import attempt separately
+- [ ] Handoff history API:
+  - `GET /api/runs/:id/handoff-history` or equivalent unified session history view
 - [ ] Automatic handoff triggers:
   - Rate limit hit on current provider -> failover to other agent type
   - Cost threshold -> switch to cheaper model/provider
   - Task-type affinity rules (e.g., prefer Codex for Python-heavy tasks)
 - [ ] Memory continuity: Mem0 context shared across agent types within a single run
-- [ ] Audit: log every handoff with source agent, target agent, reason, context size
+- [x] Audit: backend stores every handoff plus native import attempt metadata
 
 ### 10.3 Unified Session Browser (iOS App)
 
@@ -404,7 +413,11 @@ Surface all agent sessions — regardless of agent type — in one mobile view:
   - Fork session (create new branch from session state)
 - [ ] Push notifications for handoff events (agent switched, handoff failed, awaiting approval)
 
-**Deliverable**: Codex runtime adapter, handoff protocol + controller, unified session UI, updated API routes and DB schema
+**Deliverable status**
+
+- Backend runtime management, managed session schema, Codex session lifecycle,
+  snapshot handoff, and native import scaffolding are implemented
+- Unified mobile/web session browser and automatic handoff policy are still open
 
 ---
 
@@ -503,6 +516,7 @@ codex session:   same relay pattern as Claude Code -> outbound poll -> SSE strea
 task complete:   execution summary (session resume) -> JSONB storage -> summary card in mobile/web
 steer:           mobile chat input -> control plane proxy -> worker steer -> SDK streamInput -> steer ack
 safety check:    workdir classify (4 tiers) -> SSE safety event -> user approve/reject/sandbox -> execute
+runtime mgmt:    canonical config sync -> managed sessions -> native import preflight -> snapshot fallback
 ```
 
 ## Timeline & Dependencies

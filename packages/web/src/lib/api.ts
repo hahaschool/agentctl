@@ -10,9 +10,22 @@ import type {
   AgentStatus,
   AgentType,
   ContentMessage,
+  CreateManagedSessionRequest,
+  ForkManagedSessionRequest,
+  HandoffManagedSessionRequest,
+  HandoffReason,
+  HandoffSnapshot,
+  HandoffStrategy,
   MachineCapabilities,
   MachineStatus,
+  ManagedRuntime,
+  ManagedSession,
+  ManagedSessionStatus,
   MemoryObservation,
+  NativeImportAttempt,
+  NativeImportPreflightResponse,
+  ResumeManagedSessionRequest,
+  RuntimeHandoffSummaryResponse,
   ApiAccount as SharedApiAccount,
 } from '@agentctl/shared';
 
@@ -118,6 +131,40 @@ export type SessionsPage = {
   offset: number;
   hasMore: boolean;
 };
+
+export type RuntimeSession = ManagedSession & {
+  startedAt: string | null;
+  lastHeartbeat: string | null;
+  endedAt: string | null;
+};
+
+export type RuntimeSessionsPage = {
+  sessions: RuntimeSession[];
+  count: number;
+};
+
+export type RuntimeSessionHandoff = {
+  id: string;
+  sourceSessionId: string;
+  targetSessionId: string | null;
+  sourceRuntime: ManagedRuntime;
+  targetRuntime: ManagedRuntime;
+  reason: HandoffReason;
+  strategy: HandoffStrategy;
+  status: 'pending' | 'succeeded' | 'failed';
+  snapshot: HandoffSnapshot;
+  nativeImportAttempt?: NativeImportAttempt;
+  errorMessage: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+};
+
+export type RuntimeSessionHandoffsPage = {
+  handoffs: RuntimeSessionHandoff[];
+  count: number;
+};
+
+export type RuntimeHandoffSummary = RuntimeHandoffSummaryResponse;
 
 export type AgentRun = {
   id: string;
@@ -356,6 +403,75 @@ export const api = {
     return request<SessionsPage>(`/api/sessions${suffix}`);
   },
   getSession: (id: string) => request<Session>(`/api/sessions/${id}`),
+  listRuntimeSessions: (params?: {
+    machineId?: string;
+    runtime?: ManagedRuntime;
+    status?: ManagedSessionStatus;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.machineId) qs.set('machineId', params.machineId);
+    if (params?.runtime) qs.set('runtime', params.runtime);
+    if (params?.status) qs.set('status', params.status);
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<RuntimeSessionsPage>(`/api/runtime-sessions${suffix}`);
+  },
+  createRuntimeSession: (body: CreateManagedSessionRequest) =>
+    request<{ ok: boolean; session: RuntimeSession }>('/api/runtime-sessions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  resumeRuntimeSession: (id: string, body: ResumeManagedSessionRequest) =>
+    request<{ ok: boolean; session: RuntimeSession }>(`/api/runtime-sessions/${id}/resume`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  forkRuntimeSession: (id: string, body: ForkManagedSessionRequest) =>
+    request<{ ok: boolean; session: RuntimeSession }>(`/api/runtime-sessions/${id}/fork`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  handoffRuntimeSession: (id: string, body: HandoffManagedSessionRequest) =>
+    request<{
+      ok: boolean;
+      handoffId: string;
+      strategy: HandoffStrategy;
+      attemptedStrategies: HandoffStrategy[];
+      nativeImportAttempt?: NativeImportAttempt;
+      snapshot: HandoffSnapshot;
+      session: RuntimeSession;
+    }>(`/api/runtime-sessions/${id}/handoff`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listRuntimeSessionHandoffs: (id: string, limit?: number) => {
+    const qs = new URLSearchParams();
+    if (limit !== undefined) qs.set('limit', String(limit));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<RuntimeSessionHandoffsPage>(
+      `/api/runtime-sessions/${encodeURIComponent(id)}/handoffs${suffix}`,
+    );
+  },
+  listRuntimeHandoffSummary: (limit?: number) => {
+    const qs = new URLSearchParams();
+    if (limit !== undefined) qs.set('limit', String(limit));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<RuntimeHandoffSummary>(`/api/runtime-sessions/handoffs/summary${suffix}`);
+  },
+  preflightRuntimeSessionHandoff: (
+    id: string,
+    params: {
+      targetRuntime: ManagedRuntime;
+      targetMachineId?: string;
+    },
+  ) => {
+    const qs = new URLSearchParams({ targetRuntime: params.targetRuntime });
+    if (params.targetMachineId) qs.set('targetMachineId', params.targetMachineId);
+    return request<NativeImportPreflightResponse>(
+      `/api/runtime-sessions/${encodeURIComponent(id)}/handoff/preflight?${qs}`,
+    );
+  },
   createSession: (body: {
     agentId: string;
     machineId: string;
