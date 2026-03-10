@@ -1,7 +1,4 @@
-import {
-  generateDispatchSigningKeyPair,
-  signDispatchPayload,
-} from '@agentctl/shared';
+import { generateDispatchSigningKeyPair, signDispatchPayload } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

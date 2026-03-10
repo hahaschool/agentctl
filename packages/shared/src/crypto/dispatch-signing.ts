@@ -149,9 +149,7 @@ export function verifyDispatchPayloadSignature(
   }
 }
 
-export function isDispatchVerificationConfig(
-  value: unknown,
-): value is DispatchVerificationConfig {
+export function isDispatchVerificationConfig(value: unknown): value is DispatchVerificationConfig {
   if (!value || typeof value !== 'object') {
     return false;
   }

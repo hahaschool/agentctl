@@ -128,7 +128,9 @@ const CORS_ORIGINS = env.CORS_ORIGINS || '';
 const dispatchSigningKeyPair = env.DISPATCH_SIGNING_SECRET_KEY
   ? dispatchSigningKeyPairFromSecretKey(env.DISPATCH_SIGNING_SECRET_KEY as string)
   : generateDispatchSigningKeyPair();
-const dispatchVerificationConfig = createDispatchVerificationConfig(dispatchSigningKeyPair.publicKey);
+const dispatchVerificationConfig = createDispatchVerificationConfig(
+  dispatchSigningKeyPair.publicKey,
+);
 
 type DependencyHealthDeps = {
   db?: Database;

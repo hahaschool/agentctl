@@ -1,8 +1,8 @@
 import * as crypto from 'node:crypto';
 
 import {
-  type DispatchVerificationConfig,
   ControlPlaneError,
+  type DispatchVerificationConfig,
   summarizeHandoffAnalytics,
 } from '@agentctl/shared';
 import fastifyCors from '@fastify/cors';

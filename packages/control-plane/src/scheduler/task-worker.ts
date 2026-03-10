@@ -1,8 +1,8 @@
 import {
-  type DispatchSignature,
-  type DispatchSigningKeyPair,
   ControlPlaneError,
   DEFAULT_WORKER_PORT,
+  type DispatchSignature,
+  type DispatchSigningKeyPair,
   generateDispatchSigningKeyPair,
   signDispatchPayload,
 } from '@agentctl/shared';

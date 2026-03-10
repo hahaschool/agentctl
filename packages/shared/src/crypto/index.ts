@@ -1,10 +1,8 @@
-export {
-  computeSharedSecret,
-  decryptBox,
-  decryptSecretBox,
-  encryptBox,
-  encryptSecretBox,
-} from './encryption.js';
+export type {
+  DispatchSignature,
+  DispatchSigningKeyPair,
+  DispatchVerificationConfig,
+} from './dispatch-signing.js';
 export {
   createDispatchVerificationConfig,
   DISPATCH_SIGNATURE_ALGORITHM,
@@ -15,11 +13,13 @@ export {
   signDispatchPayload,
   verifyDispatchPayloadSignature,
 } from './dispatch-signing.js';
-export type {
-  DispatchSignature,
-  DispatchSigningKeyPair,
-  DispatchVerificationConfig,
-} from './dispatch-signing.js';
+export {
+  computeSharedSecret,
+  decryptBox,
+  decryptSecretBox,
+  encryptBox,
+  encryptSecretBox,
+} from './encryption.js';
 export type { KeyPair } from './keypair.js';
 export {
   decodeKey,

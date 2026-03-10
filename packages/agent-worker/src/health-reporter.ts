@@ -3,8 +3,8 @@ import os from 'node:os';
 
 import {
   type DispatchVerificationConfig,
-  WorkerError,
   isDispatchVerificationConfig,
+  WorkerError,
 } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
