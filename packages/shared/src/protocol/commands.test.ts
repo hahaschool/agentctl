@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   HeartbeatRequest,
   RegisterWorkerRequest,
+  SafetyDecisionRequest,
   SendMessageRequest,
   SignalAgentRequest,
   StartAgentRequest,
@@ -385,6 +386,28 @@ describe('SignalAgentRequest', () => {
 
     const json = JSON.stringify(original);
     const parsed = JSON.parse(json) as SignalAgentRequest;
+
+    expect(parsed).toEqual(original);
+  });
+});
+
+// ── SafetyDecisionRequest ───────────────────────────────────────────
+
+describe('SafetyDecisionRequest', () => {
+  it('accepts approve, reject, and sandbox decisions', () => {
+    const decisions: SafetyDecisionRequest['decision'][] = ['approve', 'reject', 'sandbox'];
+
+    for (const decision of decisions) {
+      const req: SafetyDecisionRequest = { decision };
+      expect(req.decision).toBe(decision);
+    }
+  });
+
+  it('serializes and deserializes correctly as JSON', () => {
+    const original: SafetyDecisionRequest = { decision: 'sandbox' };
+
+    const json = JSON.stringify(original);
+    const parsed = JSON.parse(json) as SafetyDecisionRequest;
 
     expect(parsed).toEqual(original);
   });

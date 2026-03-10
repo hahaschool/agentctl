@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
-import type { AgentConfig, AgentEvent, AgentStatus } from '@agentctl/shared';
+import type { AgentConfig, AgentEvent, AgentStatus, SafetyDecision } from '@agentctl/shared';
 import { AgentError, VALID_TRANSITIONS } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
@@ -13,6 +13,12 @@ import { createPreToolUseHook } from '../hooks/pre-tool-use.js';
 import { createStopHook } from '../hooks/stop-hook.js';
 import { OutputBuffer } from './output-buffer.js';
 import { runWithSdk, type SdkRunnerHooks } from './sdk-runner.js';
+import {
+  checkWorkdirSafety,
+  createSandbox,
+  type SafetyCheckResult,
+  type SandboxSetup,
+} from './workdir-safety.js';
 
 const DEFAULT_AUDIT_LOG_DIR = '.agentctl/audit';
 
@@ -34,6 +40,8 @@ export type AgentInstanceOptions = {
   controlPlaneUrl?: string;
   /** Session ID to resume a previous agent session instead of starting fresh. */
   resumeSession?: string;
+  /** Current number of active tasks sharing this worker. */
+  getActiveTaskCount?: () => number;
 };
 
 type AgentInstanceState = {
@@ -52,6 +60,12 @@ const STUB_TURNS = 4;
 const STUB_TURN_INTERVAL_MS = 1_000;
 const STUB_COST_PER_TURN = 0.003;
 
+type PendingSafetyDecision = {
+  prompt: string;
+  resumeSessionId: string | undefined;
+  check: SafetyCheckResult;
+};
+
 export class AgentInstance extends EventEmitter {
   readonly agentId: string;
   readonly machineId: string;
@@ -69,12 +83,16 @@ export class AgentInstance extends EventEmitter {
   private readonly auditLogger: AuditLogger;
   private readonly hooks: SdkRunnerHooks;
   private readonly maxExecutionMs: number;
+  private readonly getActiveTaskCount: () => number;
   private state: AgentInstanceState;
   private auditReporter: AuditReporter | null = null;
   private simulationTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimer: ReturnType<typeof setInterval> | null = null;
   private executionTimer: ReturnType<typeof setTimeout> | null = null;
   private abortController: AbortController | null = null;
+  private pendingSafetyDecision: PendingSafetyDecision | null = null;
+  private sandboxSetup: SandboxSetup | null = null;
+  private executionProjectPath: string;
 
   constructor(options: AgentInstanceOptions) {
     super();
@@ -86,8 +104,10 @@ export class AgentInstance extends EventEmitter {
     this.runId = options.runId ?? null;
     this.controlPlaneUrl = options.controlPlaneUrl ?? null;
     this.resumeSession = options.resumeSession ?? null;
+    this.getActiveTaskCount = options.getActiveTaskCount ?? (() => 1);
     this.log = options.logger.child({ agentId: this.agentId, machineId: this.machineId });
     this.outputBuffer = new OutputBuffer();
+    this.executionProjectPath = this.projectPath;
 
     // Initialize audit logger and hook functions
     this.auditLogger = new AuditLogger({
@@ -135,6 +155,8 @@ export class AgentInstance extends EventEmitter {
     this.state.costUsd = 0;
     this.state.prompt = prompt;
     this.state.isResumed = false;
+    this.pendingSafetyDecision = null;
+    this.executionProjectPath = this.projectPath;
     this.abortController = new AbortController();
 
     if (resumeSessionId) {
@@ -142,78 +164,60 @@ export class AgentInstance extends EventEmitter {
     }
 
     try {
-      this.transitionTo('running');
-      this.log.info({ sessionId: this.state.sessionId }, 'Agent running');
-
-      // Start per-instance audit reporter if this run is tied to a control plane run.
-      // The reporter tails the same NDJSON file the AuditLogger writes to and
-      // periodically POSTs new entries to the control plane.
-      if (this.controlPlaneUrl && this.runId) {
-        this.auditReporter = new AuditReporter({
-          controlPlaneUrl: this.controlPlaneUrl,
-          runId: this.runId,
-          auditFilePath: this.auditLogger.getLogFilePath(),
-          logger: this.log,
-        });
-        this.auditReporter.start();
-      }
-
-      // Start execution timeout timer
-      this.executionTimer = setTimeout(() => {
-        if (this.state.status === 'running') {
-          this.log.warn(
-            { agentId: this.agentId, maxExecutionMs: this.maxExecutionMs },
-            'Agent execution timed out',
-          );
-          if (this.abortController) {
-            this.abortController.abort();
-            this.abortController = null;
-          }
-          this.clearTimers();
-          this.state.status = 'timeout';
-          this.state.stoppedAt = new Date();
-          const timeoutEvent: AgentEvent = {
-            event: 'status',
-            data: { status: 'timeout', reason: 'execution_timeout' },
-          };
-          this.emitEvent(timeoutEvent);
-
-          // Flush remaining audit events before notifying the control plane.
-          this.stopAuditReporter().catch((err) => {
-            this.log.warn({ err }, 'Failed to stop audit reporter on timeout');
-          });
-
-          // Fire-and-forget: notify the control plane that this run timed out.
-          this.notifyRunCompletion('failure', 'Agent execution timed out').catch((err) => {
-            this.log.error({ err }, 'Failed to notify control plane of timeout');
-          });
-        }
-      }, this.maxExecutionMs);
-
-      // Try the real Claude Agent SDK first — with optional session resume
-      let result = await this.attemptSdkRun(prompt, resumeSessionId);
-
-      // If resume was requested but the SDK run failed, fall back to a fresh session.
-      // This handles cases where the session no longer exists or is corrupted.
-      if (result === 'resume_failed') {
-        this.log.warn({ resumeSessionId }, 'Session resume failed, falling back to fresh session');
-        this.state.isResumed = false;
-        result = await this.attemptSdkRun(prompt, undefined);
-      }
-
-      if (result === true) {
-        // SDK run completed (handled inside attemptSdkRun)
+      const safetyCheck = await checkWorkdirSafety(this.projectPath, this.getActiveTaskCount());
+      const awaitingDecision = this.applySafetyCheck(safetyCheck, prompt, resumeSessionId);
+      if (awaitingDecision) {
         return;
       }
 
-      // SDK not available — fall back to stub simulation
-      if (resumeSessionId) {
-        this.log.info('Session resume is not supported in stub simulation mode');
+      await this.beginExecution(prompt, resumeSessionId);
+    } catch (err) {
+      if (err instanceof AgentError && err.code === 'SAFETY_BLOCKED') {
+        throw err;
       }
-      this.log.info('SDK not available, falling back to stub simulation');
-      this.simulateRun();
+      this.handleError(err);
+    }
+  }
+
+  async applySafetyDecision(decision: SafetyDecision): Promise<void> {
+    const pending = this.pendingSafetyDecision;
+
+    if (!pending) {
+      throw new AgentError(
+        'SAFETY_DECISION_NOT_PENDING',
+        'No pending safety decision for this agent',
+        { agentId: this.agentId, decision },
+      );
+    }
+
+    this.pendingSafetyDecision = null;
+
+    if (decision === 'reject') {
+      const message = 'Agent start rejected by workdir safety decision.';
+      this.emitEvent({
+        event: 'safety_blocked',
+        data: {
+          tier: pending.check.tier,
+          blockReason: message,
+          parallelTaskCount: pending.check.parallelTaskCount,
+        },
+      });
+      this.stopWithReason('safety_rejected', 'failure', message);
+      return;
+    }
+
+    try {
+      if (decision === 'sandbox') {
+        this.sandboxSetup = await createSandbox(this.projectPath, this.runId ?? this.agentId);
+        this.executionProjectPath = this.sandboxSetup.sandboxPath;
+      } else {
+        this.executionProjectPath = this.projectPath;
+      }
+
+      await this.beginExecution(pending.prompt, pending.resumeSessionId);
     } catch (err) {
       this.handleError(err);
+      throw err;
     }
   }
 
@@ -237,7 +241,7 @@ export class AgentInstance extends EventEmitter {
         agentId: this.agentId,
         sessionId: this.state.sessionId ?? '',
         config: this.config,
-        projectPath: this.projectPath,
+        projectPath: this.executionProjectPath,
         logger: this.log,
         onEvent: (event) => this.emitEvent(event),
         abortSignal: this.abortController?.signal,
@@ -296,7 +300,9 @@ export class AgentInstance extends EventEmitter {
 
     this.clearTimers();
 
-    if (graceful) {
+    if (this.state.status === 'starting') {
+      this.finishStop('user');
+    } else if (graceful) {
       this.transitionTo('stopping');
       this.finishStop('user');
     } else {
@@ -369,7 +375,7 @@ export class AgentInstance extends EventEmitter {
       startedAt: this.state.startedAt?.toISOString() ?? null,
       stoppedAt: this.state.stoppedAt?.toISOString() ?? null,
       costUsd: this.state.costUsd,
-      projectPath: this.projectPath,
+      projectPath: this.executionProjectPath,
       isResumed: this.state.isResumed,
     };
   }
@@ -403,11 +409,151 @@ export class AgentInstance extends EventEmitter {
     this.emit('agent-event', event);
   }
 
+  private applySafetyCheck(
+    check: SafetyCheckResult,
+    prompt: string,
+    resumeSessionId: string | undefined,
+  ): boolean {
+    if (check.tier === 'safe') {
+      return false;
+    }
+
+    if (check.tier === 'guarded') {
+      this.emitEvent({
+        event: 'safety_warning',
+        data: {
+          tier: check.tier,
+          warning: check.warning ?? 'Working directory changes may be overwritten.',
+          parallelTaskCount: check.parallelTaskCount,
+        },
+      });
+      return false;
+    }
+
+    if (check.tier === 'risky') {
+      this.pendingSafetyDecision = {
+        prompt,
+        resumeSessionId,
+        check,
+      };
+      this.emitEvent({
+        event: 'safety_approval_needed',
+        data: {
+          tier: check.tier,
+          warning: check.warning ?? 'Workdir safety approval is required before execution.',
+          parallelTaskCount: check.parallelTaskCount,
+          options: [
+            { id: 'approve', label: 'Continue in place' },
+            { id: 'sandbox', label: 'Run in sandbox' },
+            { id: 'reject', label: 'Cancel start' },
+          ],
+        },
+      });
+      return true;
+    }
+
+    const blockReason =
+      check.blockReason ?? 'Workdir safety check blocked execution in this directory.';
+    this.emitEvent({
+      event: 'safety_blocked',
+      data: {
+        tier: check.tier,
+        blockReason,
+        parallelTaskCount: check.parallelTaskCount,
+      },
+    });
+    this.stopWithReason('safety_blocked', 'failure', blockReason);
+    throw new AgentError('SAFETY_BLOCKED', blockReason, {
+      agentId: this.agentId,
+      tier: check.tier,
+      parallelTaskCount: check.parallelTaskCount,
+    });
+  }
+
+  private async beginExecution(prompt: string, resumeSessionId: string | undefined): Promise<void> {
+    this.transitionTo('running');
+    this.log.info(
+      { sessionId: this.state.sessionId, projectPath: this.executionProjectPath },
+      'Agent running',
+    );
+
+    // Start per-instance audit reporter if this run is tied to a control plane run.
+    // The reporter tails the same NDJSON file the AuditLogger writes to and
+    // periodically POSTs new entries to the control plane.
+    if (this.controlPlaneUrl && this.runId) {
+      this.auditReporter = new AuditReporter({
+        controlPlaneUrl: this.controlPlaneUrl,
+        runId: this.runId,
+        auditFilePath: this.auditLogger.getLogFilePath(),
+        logger: this.log,
+      });
+      this.auditReporter.start();
+    }
+
+    // Start execution timeout timer
+    this.executionTimer = setTimeout(() => {
+      if (this.state.status === 'running') {
+        this.log.warn(
+          { agentId: this.agentId, maxExecutionMs: this.maxExecutionMs },
+          'Agent execution timed out',
+        );
+        if (this.abortController) {
+          this.abortController.abort();
+          this.abortController = null;
+        }
+        this.clearTimers();
+        this.state.status = 'timeout';
+        this.state.stoppedAt = new Date();
+        const timeoutEvent: AgentEvent = {
+          event: 'status',
+          data: { status: 'timeout', reason: 'execution_timeout' },
+        };
+        this.emitEvent(timeoutEvent);
+
+        void this.finalizeSandbox(false);
+
+        // Flush remaining audit events before notifying the control plane.
+        this.stopAuditReporter().catch((err) => {
+          this.log.warn({ err }, 'Failed to stop audit reporter on timeout');
+        });
+
+        // Fire-and-forget: notify the control plane that this run timed out.
+        this.notifyRunCompletion('failure', 'Agent execution timed out').catch((err) => {
+          this.log.error({ err }, 'Failed to notify control plane of timeout');
+        });
+      }
+    }, this.maxExecutionMs);
+
+    // Try the real Claude Agent SDK first — with optional session resume
+    let result = await this.attemptSdkRun(prompt, resumeSessionId);
+
+    // If resume was requested but the SDK run failed, fall back to a fresh session.
+    // This handles cases where the session no longer exists or is corrupted.
+    if (result === 'resume_failed') {
+      this.log.warn({ resumeSessionId }, 'Session resume failed, falling back to fresh session');
+      this.state.isResumed = false;
+      result = await this.attemptSdkRun(prompt, undefined);
+    }
+
+    if (result === true) {
+      // SDK run completed (handled inside attemptSdkRun)
+      return;
+    }
+
+    // SDK not available — fall back to stub simulation
+    if (resumeSessionId) {
+      this.log.info('Session resume is not supported in stub simulation mode');
+    }
+    this.log.info('SDK not available, falling back to stub simulation');
+    this.simulateRun();
+  }
+
   private handleError(err: unknown): void {
     const message = err instanceof Error ? err.message : String(err);
 
     this.log.error({ err }, 'Agent encountered an error');
     this.clearTimers();
+    this.abortController = null;
 
     // Only transition to error if we're in a state that allows it
     const allowed = VALID_TRANSITIONS[this.state.status];
@@ -422,6 +568,8 @@ export class AgentInstance extends EventEmitter {
 
       this.emitEvent(statusEvent);
 
+      void this.finalizeSandbox(false);
+
       // Flush remaining audit events before notifying the control plane.
       void this.stopAuditReporter();
 
@@ -431,8 +579,18 @@ export class AgentInstance extends EventEmitter {
   }
 
   private finishStop(reason: string): void {
+    this.stopWithReason(reason, 'success');
+  }
+
+  private stopWithReason(
+    reason: string,
+    completionStatus: 'success' | 'failure',
+    errorMessage?: string,
+  ): void {
     this.state.status = 'stopped';
     this.state.stoppedAt = new Date();
+    this.abortController = null;
+    this.pendingSafetyDecision = null;
 
     const statusEvent: AgentEvent = {
       event: 'status',
@@ -445,11 +603,13 @@ export class AgentInstance extends EventEmitter {
       'Agent stopped',
     );
 
+    void this.finalizeSandbox(reason === 'completed');
+
     // Flush remaining audit events to the control plane before notifying completion.
     void this.stopAuditReporter();
 
     // Fire-and-forget: notify the control plane that this run completed.
-    void this.notifyRunCompletion('success');
+    void this.notifyRunCompletion(completionStatus, errorMessage);
   }
 
   /**
@@ -491,6 +651,36 @@ export class AgentInstance extends EventEmitter {
       this.log.warn({ err }, 'Failed to stop per-instance audit reporter');
     } finally {
       this.auditReporter = null;
+    }
+  }
+
+  private async finalizeSandbox(copyBack: boolean): Promise<void> {
+    const sandboxSetup = this.sandboxSetup;
+
+    if (!sandboxSetup) {
+      this.executionProjectPath = this.projectPath;
+      return;
+    }
+
+    this.sandboxSetup = null;
+
+    if (copyBack) {
+      try {
+        await sandboxSetup.copyBack();
+      } catch (err) {
+        this.log.warn(
+          { err, sandboxPath: sandboxSetup.sandboxPath },
+          'Failed to copy sandbox back',
+        );
+      }
+    }
+
+    try {
+      await sandboxSetup.cleanup();
+    } catch (err) {
+      this.log.warn({ err, sandboxPath: sandboxSetup.sandboxPath }, 'Failed to clean up sandbox');
+    } finally {
+      this.executionProjectPath = this.projectPath;
     }
   }
 

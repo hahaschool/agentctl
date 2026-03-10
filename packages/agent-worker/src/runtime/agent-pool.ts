@@ -106,6 +106,7 @@ export class AgentPool extends EventEmitter {
       ...options,
       projectPath: effectiveProjectPath,
       auditLogDir: options.auditLogDir ?? this.auditLogDir,
+      getActiveTaskCount: () => this.getRunningCount(),
     });
 
     // Forward agent events from the instance to the pool level,

@@ -1,5 +1,10 @@
-import type { AgentConfig, DispatchSignature, DispatchVerificationConfig } from '@agentctl/shared';
-import { AgentError, verifyDispatchPayloadSignature } from '@agentctl/shared';
+import type {
+  AgentConfig,
+  DispatchSignature,
+  DispatchVerificationConfig,
+  SafetyDecisionRequest,
+} from '@agentctl/shared';
+import { AgentError, SAFETY_DECISIONS, verifyDispatchPayloadSignature } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
@@ -34,6 +39,8 @@ type StopAgentBody = {
   graceful?: boolean;
 };
 
+type SafetyDecisionBody = SafetyDecisionRequest;
+
 type AgentIdParams = {
   id: string;
 };
@@ -44,6 +51,8 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   POOL_FULL: 503,
   INVALID_TRANSITION: 409,
   AGENT_STILL_RUNNING: 409,
+  SAFETY_BLOCKED: 409,
+  SAFETY_DECISION_NOT_PENDING: 409,
 };
 
 function errorToStatusCode(err: unknown): number {
@@ -184,6 +193,44 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
         }
 
         await instance.start(prompt);
+
+        return reply.status(200).send({
+          ok: true,
+          agentId: id,
+          sessionId: instance.getSessionId(),
+          status: instance.getStatus(),
+        });
+      } catch (err) {
+        const statusCode = errorToStatusCode(err);
+        return reply.status(statusCode).send(errorToResponse(err));
+      }
+    },
+  );
+
+  app.post<{ Params: AgentIdParams; Body: SafetyDecisionBody }>(
+    '/:id/safety-decision',
+    async (request, reply) => {
+      const { id } = request.params;
+      const { decision } = request.body ?? {};
+
+      if (!decision || !SAFETY_DECISIONS.includes(decision)) {
+        return reply.status(400).send({
+          error: 'A valid "decision" is required',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      const instance = pool.getAgent(id);
+
+      if (!instance) {
+        return reply.status(404).send({
+          error: `Agent '${id}' not found`,
+          code: 'AGENT_NOT_FOUND',
+        });
+      }
+
+      try {
+        await instance.applySafetyDecision(decision);
 
         return reply.status(200).send({
           ok: true,

@@ -44,6 +44,21 @@ vi.mock('../hooks/stop-hook.js', () => ({
   createStopHook: vi.fn().mockReturnValue(vi.fn().mockResolvedValue(undefined)),
 }));
 
+vi.mock('./workdir-safety.js', () => ({
+  checkWorkdirSafety: vi.fn().mockResolvedValue({
+    tier: 'safe',
+    isGitRepo: true,
+    hasUncommittedChanges: false,
+    parallelTaskCount: 1,
+  }),
+  createSandbox: vi.fn().mockResolvedValue({
+    sandboxPath: '/tmp/agentctl-sandbox',
+    originalPath: '/tmp/test-project',
+    copyBack: vi.fn().mockResolvedValue(undefined),
+    cleanup: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 const mockLogger = createMockLogger();
 
 function makeOptions(overrides?: Partial<AgentInstanceOptions>): AgentInstanceOptions {
@@ -96,6 +111,115 @@ describe('AgentInstance', () => {
     await agent.stop(false);
     vi.runAllTimers();
     await startPromise;
+  });
+
+  it('emits safety_approval_needed and stays in starting when workdir is risky', async () => {
+    const { checkWorkdirSafety } = await import('./workdir-safety.js');
+    const { runWithSdk } = await import('./sdk-runner.js');
+
+    vi.mocked(checkWorkdirSafety).mockResolvedValueOnce({
+      tier: 'risky',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount: 1,
+      warning: 'Working directory is not a git repository.',
+    });
+
+    const agent = new AgentInstance(makeOptions());
+    const events: AgentEvent[] = [];
+    agent.onEvent((event) => events.push(event));
+
+    await agent.start('needs approval');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(agent.getStatus()).toBe('starting');
+    expect(runWithSdk).not.toHaveBeenCalled();
+    expect(events).toContainEqual({
+      event: 'safety_approval_needed',
+      data: expect.objectContaining({
+        tier: 'risky',
+      }),
+    });
+  });
+
+  it('applySafetyDecision("approve") resumes execution after a risky workdir gate', async () => {
+    const { checkWorkdirSafety } = await import('./workdir-safety.js');
+    const { runWithSdk } = await import('./sdk-runner.js');
+
+    vi.mocked(checkWorkdirSafety).mockResolvedValueOnce({
+      tier: 'risky',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount: 1,
+      warning: 'Working directory is not a git repository.',
+    });
+
+    const agent = new AgentInstance(makeOptions());
+
+    await agent.start('resume after approval');
+    await vi.advanceTimersByTimeAsync(0);
+
+    await agent.applySafetyDecision('approve');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runWithSdk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectPath: '/tmp/test-project',
+      }),
+    );
+    expect(agent.getStatus()).toBe('running');
+  });
+
+  it('applySafetyDecision("sandbox") runs the agent inside the sandbox path', async () => {
+    const { checkWorkdirSafety, createSandbox } = await import('./workdir-safety.js');
+    const { runWithSdk } = await import('./sdk-runner.js');
+
+    vi.mocked(checkWorkdirSafety).mockResolvedValueOnce({
+      tier: 'risky',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount: 1,
+      warning: 'Working directory is not a git repository.',
+    });
+
+    vi.mocked(createSandbox).mockResolvedValueOnce({
+      sandboxPath: '/tmp/custom-sandbox',
+      originalPath: '/tmp/test-project',
+      copyBack: vi.fn().mockResolvedValue(undefined),
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const agent = new AgentInstance(makeOptions());
+
+    await agent.start('sandbox decision');
+    await vi.advanceTimersByTimeAsync(0);
+
+    await agent.applySafetyDecision('sandbox');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(createSandbox).toHaveBeenCalledWith('/tmp/test-project', 'agent-1');
+    expect(runWithSdk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectPath: '/tmp/custom-sandbox',
+      }),
+    );
+  });
+
+  it('rejects start when workdir is unsafe', async () => {
+    const { checkWorkdirSafety } = await import('./workdir-safety.js');
+
+    vi.mocked(checkWorkdirSafety).mockResolvedValueOnce({
+      tier: 'unsafe',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount: 2,
+      blockReason: 'Parallel tasks detected in a non-git directory.',
+    });
+
+    const agent = new AgentInstance(makeOptions());
+
+    await expect(agent.start('blocked')).rejects.toThrow('Parallel tasks detected');
+    expect(agent.getStatus()).toBe('stopped');
   });
 
   it('stop() transitions to stopped', async () => {

@@ -11,6 +11,16 @@ vi.mock('./sdk-runner.js', () => ({
   runWithSdk: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('./workdir-safety.js', () => ({
+  checkWorkdirSafety: vi.fn().mockResolvedValue({
+    tier: 'safe',
+    isGitRepo: true,
+    hasUncommittedChanges: false,
+    parallelTaskCount: 1,
+  }),
+  createSandbox: vi.fn(),
+}));
+
 const mockLogger = createMockLogger();
 
 function makeAgentOptions(id: string): AgentInstanceOptions {

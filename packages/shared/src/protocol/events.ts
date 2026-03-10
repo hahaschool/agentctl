@@ -1,4 +1,5 @@
 import type { AgentStatus } from '../types/agent.js';
+import type { SafetyDecision, WorkdirSafetyTier } from './commands.js';
 
 export type AgentOutputEvent = {
   event: 'output';
@@ -72,6 +73,17 @@ export type AgentUserMessageEvent = {
   };
 };
 
+export type AgentSafetyEvent = {
+  event: 'safety_warning' | 'safety_approval_needed' | 'safety_blocked';
+  data: {
+    tier: WorkdirSafetyTier;
+    warning?: string;
+    blockReason?: string;
+    parallelTaskCount?: number;
+    options?: Array<{ id: SafetyDecision; label: string }>;
+  };
+};
+
 export type AgentEvent =
   | AgentOutputEvent
   | AgentRawOutputEvent
@@ -81,7 +93,8 @@ export type AgentEvent =
   | AgentHeartbeatEvent
   | LoopIterationEvent
   | LoopCompleteEvent
-  | AgentUserMessageEvent;
+  | AgentUserMessageEvent
+  | AgentSafetyEvent;
 
 // ---------------------------------------------------------------------------
 // Session content messages — parsed from JSONL session files and served via

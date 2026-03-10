@@ -5,7 +5,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { AgentRegistry } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
-import { createMockLogger } from './test-helpers.js';
+import {
+  createFullMockDbRegistry,
+  createMockLogger,
+  makeMachine,
+  mockFetchOk,
+  mockFetchThrow,
+  restoreFetch,
+  saveOriginalFetch,
+} from './test-helpers.js';
 
 const logger = createMockLogger();
 
@@ -326,6 +334,38 @@ describe('Agent routes — /api/agents', () => {
       expect(body.agentId).toBe('ec2-us-east-1');
       expect(body.reason).toBe('user');
       expect(body.graceful).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agents/:id/safety-decision — worker proxy
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/agents/:id/safety-decision (no dbRegistry)', () => {
+    it('returns 400 when the decision is invalid', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/safety-decision',
+        payload: { decision: 'ship-it' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'INVALID_SAFETY_DECISION',
+      });
+    });
+
+    it('returns 500 when the worker URL cannot be resolved', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/safety-decision',
+        payload: { decision: 'approve' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({
+        error: 'REGISTRY_UNAVAILABLE',
+      });
     });
   });
 
@@ -852,6 +892,113 @@ describe('Agent routes — with dbRegistry', () => {
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body);
       expect(body.error).toBe('AGENT_NOT_FOUND');
+    });
+  });
+});
+
+describe('Agent routes — safety decision proxying', () => {
+  let app: FastifyInstance;
+  let originalFetch: typeof globalThis.fetch;
+  const mockDbRegistry = createFullMockDbRegistry({
+    getAgent: vi.fn().mockResolvedValue({
+      id: 'agent-1',
+      machineId: 'machine-1',
+      name: 'Agent One',
+      type: 'adhoc',
+      status: 'starting',
+      schedule: null,
+      projectPath: null,
+      worktreeBranch: null,
+      currentSessionId: null,
+      config: {},
+      lastRunAt: null,
+      lastCostUsd: null,
+      totalCostUsd: 0,
+      createdAt: new Date(),
+    }),
+    getMachine: vi.fn().mockResolvedValue(makeMachine()),
+  });
+
+  beforeAll(async () => {
+    originalFetch = saveOriginalFetch();
+    app = await createServer({
+      logger,
+      registry: new AgentRegistry(),
+      dbRegistry: mockDbRegistry,
+      workerPort: 9123,
+    });
+    await app.ready();
+  });
+
+  afterEach(() => {
+    restoreFetch(originalFetch);
+    vi.clearAllMocks();
+    vi.mocked(mockDbRegistry.getAgent).mockResolvedValue({
+      id: 'agent-1',
+      machineId: 'machine-1',
+      name: 'Agent One',
+      type: 'adhoc',
+      status: 'starting',
+      schedule: null,
+      projectPath: null,
+      worktreeBranch: null,
+      currentSessionId: null,
+      config: {},
+      lastRunAt: null,
+      lastCostUsd: null,
+      totalCostUsd: 0,
+      createdAt: new Date(),
+    } as never);
+    vi.mocked(mockDbRegistry.getMachine).mockResolvedValue(makeMachine() as never);
+  });
+
+  afterAll(async () => {
+    restoreFetch(originalFetch);
+    await app.close();
+  });
+
+  it('proxies a safety decision to the resolved worker', async () => {
+    mockFetchOk({
+      ok: true,
+      agentId: 'agent-1',
+      status: 'running',
+      sessionId: 'sess-123',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/safety-decision',
+      payload: { decision: 'sandbox' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      agentId: 'agent-1',
+      status: 'running',
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://100.64.0.1:9123/api/agents/agent-1/safety-decision',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: 'sandbox' }),
+      }),
+    );
+  });
+
+  it('returns 502 when the worker cannot be reached', async () => {
+    mockFetchThrow('connection refused');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/safety-decision',
+      payload: { decision: 'approve' },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toMatchObject({
+      error: 'WORKER_UNREACHABLE',
     });
   });
 });

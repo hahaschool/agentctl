@@ -6,6 +6,7 @@ import type {
   AgentEvent,
   AgentOutputEvent,
   AgentRawOutputEvent,
+  AgentSafetyEvent,
   ContentMessage,
   ContentMessageType,
   LoopCompleteEvent,
@@ -99,6 +100,22 @@ describe('AgentEvent union', () => {
     };
     expect(event.event).toBe('user_message');
   });
+
+  it('accepts a safety_approval_needed event', () => {
+    const event: AgentEvent = {
+      event: 'safety_approval_needed',
+      data: {
+        tier: 'risky',
+        warning: 'Project path is not a git repository.',
+        options: [
+          { id: 'approve', label: 'Approve' },
+          { id: 'sandbox', label: 'Sandbox' },
+          { id: 'reject', label: 'Reject' },
+        ],
+      },
+    };
+    expect(event.event).toBe('safety_approval_needed');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -163,6 +180,23 @@ describe('AgentApprovalEvent', () => {
     };
     expect(event.data.tool).toBe('Write');
     expect(event.data.timeoutSeconds).toBe(60);
+  });
+});
+
+describe('AgentSafetyEvent', () => {
+  it('carries tier-specific safety metadata', () => {
+    const event: AgentSafetyEvent = {
+      event: 'safety_warning',
+      data: {
+        tier: 'guarded',
+        warning: 'Working directory has uncommitted changes.',
+        parallelTaskCount: 1,
+      },
+    };
+
+    expect(event.event).toBe('safety_warning');
+    expect(event.data.tier).toBe('guarded');
+    expect(event.data.warning).toContain('uncommitted changes');
   });
 });
 
