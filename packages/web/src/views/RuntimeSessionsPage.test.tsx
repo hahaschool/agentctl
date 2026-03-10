@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -491,6 +491,21 @@ describe('RuntimeSessionsPage', () => {
       expect(screen.queryByText('fallback-success')).toBeNull();
       expect(screen.queryByText('No handoffs match this filter')).toBeNull();
     });
+
+    const totalCard = screen.getByText('Total').parentElement;
+    const succeededCard = screen.getByText('Succeeded').parentElement;
+    const nativeImportCard = screen.getAllByText('Native Import')[1]?.parentElement ?? null;
+    const fallbackCard = screen.getByText('Fallbacks').parentElement;
+
+    expect(totalCard).not.toBeNull();
+    expect(succeededCard).not.toBeNull();
+    expect(nativeImportCard).not.toBeNull();
+    expect(fallbackCard).not.toBeNull();
+
+    expect(within(totalCard as HTMLElement).getByText('1')).toBeDefined();
+    expect(within(succeededCard as HTMLElement).getByText('0')).toBeDefined();
+    expect(within(nativeImportCard as HTMLElement).getByText('0')).toBeDefined();
+    expect(within(fallbackCard as HTMLElement).getByText('0')).toBeDefined();
   });
 
   it('renders native import preflight readiness before starting a handoff', async () => {
