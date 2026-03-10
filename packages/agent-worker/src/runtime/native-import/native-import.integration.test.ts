@@ -1,11 +1,10 @@
-import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
-import { CliSessionManager } from '../cli-session-manager.js';
 import { ClaudeRuntimeAdapter } from '../claude-runtime-adapter.js';
+import { CliSessionManager } from '../cli-session-manager.js';
 import { CodexRuntimeAdapter } from '../codex-runtime-adapter.js';
 import { CodexSessionManager } from '../codex-session-manager.js';
 import { tryClaudeToCodexImport } from './claude-to-codex.js';
@@ -157,7 +156,12 @@ async function createTempEnv(): Promise<TempEnv> {
   const homeDir = join(root, 'home');
   const codexHome = join(root, 'codex-home');
   const logsDir = join(root, 'logs');
-  await Promise.all([mkdir(binDir, { recursive: true }), mkdir(homeDir, { recursive: true }), mkdir(codexHome, { recursive: true }), mkdir(logsDir, { recursive: true })]);
+  await Promise.all([
+    mkdir(binDir, { recursive: true }),
+    mkdir(homeDir, { recursive: true }),
+    mkdir(codexHome, { recursive: true }),
+    mkdir(logsDir, { recursive: true }),
+  ]);
 
   process.env.PATH = `${binDir}${originalPath ? `:${originalPath}` : ''}`;
   process.env.HOME = homeDir;
@@ -174,7 +178,7 @@ async function installFakeCodex(binDir: string, argsLog: string): Promise<void> 
       '#!/bin/sh',
       'set -eu',
       `LOG_FILE="${argsLog}"`,
-      'if [ "${1:-}" = "--version" ]; then',
+      `if [ "\${1:-}" = "--version" ]; then`,
       "  echo 'codex-cli fake'",
       '  exit 0',
       'fi',
@@ -183,8 +187,8 @@ async function installFakeCodex(binDir: string, argsLog: string): Promise<void> 
       '  printf "%s\\n" "$arg" >> "$LOG_FILE"',
       'done',
       'session_id="fake-codex-start"',
-      'if [ "${1:-}" = "exec" ] && [ "${2:-}" = "resume" ]; then',
-      '  session_id="${3:-fake-codex-resume}"',
+      `if [ "\${1:-}" = "exec" ] && [ "\${2:-}" = "resume" ]; then`,
+      `  session_id="\${3:-fake-codex-resume}"`,
       'fi',
       'printf \'{"type":"session.started","session_id":"%s"}\\n\' "$session_id"',
     ].join('\n'),
@@ -201,7 +205,7 @@ async function installFakeClaude(binDir: string, argsLog: string): Promise<void>
       '#!/bin/sh',
       'set -eu',
       `LOG_FILE="${argsLog}"`,
-      'if [ "${1:-}" = "--version" ]; then',
+      `if [ "\${1:-}" = "--version" ]; then`,
       "  echo '2.1.71 (Claude Code)'",
       '  exit 0',
       'fi',
@@ -232,7 +236,7 @@ async function seedClaudeSourceSession(
   await mkdir(projectDir, { recursive: true });
   await writeFile(
     join(projectDir, `${sourceNativeSessionId}.jsonl`),
-    [
+    `${[
       JSON.stringify({
         type: 'user',
         timestamp: '2026-03-10T00:00:00.000Z',
@@ -251,7 +255,7 @@ async function seedClaudeSourceSession(
           content: [{ type: 'text', text: 'I am ready to continue in Codex.' }],
         },
       }),
-    ].join('\n') + '\n',
+    ].join('\n')}\n`,
     'utf8',
   );
 }
@@ -271,7 +275,7 @@ async function seedCodexSourceSession(
   await mkdir(sessionDir, { recursive: true });
   await writeFile(
     join(sessionDir, `rollout-2026-03-10T00-00-00-${sourceNativeSessionId}.jsonl`),
-    [
+    `${[
       JSON.stringify({
         timestamp: '2026-03-10T00:00:00.000Z',
         type: 'session_meta',
@@ -298,7 +302,7 @@ async function seedCodexSourceSession(
           content: [{ type: 'output_text', text: 'I will continue in Claude.' }],
         },
       }),
-    ].join('\n') + '\n',
+    ].join('\n')}\n`,
     'utf8',
   );
 }

@@ -18,6 +18,20 @@ export type {
 } from './agent.js';
 export { AGENT_RUNTIMES, AGENT_STATUSES } from './agent.js';
 export type {
+  AgentRun,
+  RunStatus,
+  RunTrigger,
+} from './agent-run.js';
+export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
+export type {
+  LoopConfig,
+  LoopMode,
+  LoopState,
+  LoopStatus,
+} from './loop.js';
+export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
+export type { MemoryObservation } from './memory.js';
+export type {
   HandoffReason,
   HandoffSnapshot,
   HandoffStrategy,
@@ -33,26 +47,12 @@ export type {
 export {
   HANDOFF_REASONS,
   HANDOFF_STRATEGIES,
-  MANAGED_RUNTIMES,
-  MANAGED_SESSION_STATUSES,
   isHandoffStrategy,
   isManagedRuntime,
   isManagedSessionStatus,
+  MANAGED_RUNTIMES,
+  MANAGED_SESSION_STATUSES,
 } from './runtime-management.js';
-export type {
-  AgentRun,
-  RunStatus,
-  RunTrigger,
-} from './agent-run.js';
-export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
-export type {
-  LoopConfig,
-  LoopMode,
-  LoopState,
-  LoopStatus,
-} from './loop.js';
-export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
-export type { MemoryObservation } from './memory.js';
 export type {
   ReplayEvent,
   ReplayFilter,

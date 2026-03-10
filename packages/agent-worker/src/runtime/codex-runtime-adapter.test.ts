@@ -1,9 +1,11 @@
-import type { CodexSessionManager } from './codex-session-manager.js';
 import { describe, expect, it, vi } from 'vitest';
-
 import { CodexRuntimeAdapter } from './codex-runtime-adapter.js';
+import type { CodexSessionManager } from './codex-session-manager.js';
 
-function createMockManager(): Pick<CodexSessionManager, 'startSession' | 'resumeSession' | 'forkSession'> {
+function createMockManager(): Pick<
+  CodexSessionManager,
+  'startSession' | 'resumeSession' | 'forkSession'
+> {
   return {
     startSession: vi.fn(async (input) => ({
       runtime: 'codex',

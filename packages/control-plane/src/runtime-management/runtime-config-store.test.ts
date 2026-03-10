@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { Database } from '../db/index.js';
-import { createMockDb, type MockDb } from './test-helpers.js';
 import { RuntimeConfigStore } from './runtime-config-store.js';
+import { createMockDb, type MockDb } from './test-helpers.js';
 
 function makeConfig(overrides: Partial<ManagedRuntimeConfig> = {}): ManagedRuntimeConfig {
   return {
@@ -23,7 +23,9 @@ function makeConfig(overrides: Partial<ManagedRuntimeConfig> = {}): ManagedRunti
         env: { ROOT: '/workspace' },
       },
     ],
-    skills: [{ id: 'systematic-debugging', path: '.claude/skills/systematic-debugging.md', enabled: true }],
+    skills: [
+      { id: 'systematic-debugging', path: '.claude/skills/systematic-debugging.md', enabled: true },
+    ],
     sandbox: 'workspace-write',
     approvalPolicy: 'on-request',
     environmentPolicy: {
@@ -99,24 +101,22 @@ describe('RuntimeConfigStore', () => {
   });
 
   it('upserts machine runtime state and returns the stored row', async () => {
-    mockDb.returning
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: 'mrs-1',
-          machineId: 'machine-1',
-          runtime: 'codex',
-          isInstalled: true,
-          isAuthenticated: true,
-          syncStatus: 'in-sync',
-          configVersion: 7,
-          configHash: 'sha256:cfg-7',
-          metadata: { lastSyncReason: 'manual' },
-          lastConfigAppliedAt: new Date('2026-03-09T12:00:00Z'),
-          createdAt: new Date('2026-03-09T12:00:00Z'),
-          updatedAt: new Date('2026-03-09T12:00:00Z'),
-        },
-      ]);
+    mockDb.returning.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: 'mrs-1',
+        machineId: 'machine-1',
+        runtime: 'codex',
+        isInstalled: true,
+        isAuthenticated: true,
+        syncStatus: 'in-sync',
+        configVersion: 7,
+        configHash: 'sha256:cfg-7',
+        metadata: { lastSyncReason: 'manual' },
+        lastConfigAppliedAt: new Date('2026-03-09T12:00:00Z'),
+        createdAt: new Date('2026-03-09T12:00:00Z'),
+        updatedAt: new Date('2026-03-09T12:00:00Z'),
+      },
+    ]);
 
     const state = await store.upsertMachineState({
       machineId: 'machine-1',

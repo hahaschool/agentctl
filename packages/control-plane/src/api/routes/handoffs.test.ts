@@ -5,8 +5,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import type { SessionHandoffRecord } from '../../runtime-management/handoff-store.js';
 import type { ManagedSessionRecord } from '../../runtime-management/managed-session-store.js';
-import { createMockDbRegistry, saveOriginalFetch } from './test-helpers.js';
 import { handoffRoutes } from './handoffs.js';
+import { createMockDbRegistry, saveOriginalFetch } from './test-helpers.js';
 
 const originalFetch = saveOriginalFetch();
 
@@ -167,7 +167,11 @@ describe('handoffRoutes', () => {
       }),
     );
     managedSessionStore.updateStatus.mockImplementation(
-      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) => {
+      async (
+        id: string,
+        status: ManagedSessionRecord['status'],
+        patch?: Record<string, unknown>,
+      ) => {
         if (id === 'ms-source') {
           return makeManagedSession({ id, status });
         }
@@ -175,7 +179,8 @@ describe('handoffRoutes', () => {
         return makeManagedSession({
           id,
           runtime: 'claude-code',
-          nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
+          nativeSessionId:
+            (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
           status,
           handoffStrategy:
             (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
@@ -268,7 +273,11 @@ describe('handoffRoutes', () => {
       }),
     );
     managedSessionStore.updateStatus.mockImplementation(
-      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) => {
+      async (
+        id: string,
+        status: ManagedSessionRecord['status'],
+        patch?: Record<string, unknown>,
+      ) => {
         if (id === 'ms-source') {
           return makeManagedSession({ id, status });
         }
@@ -276,7 +285,8 @@ describe('handoffRoutes', () => {
         return makeManagedSession({
           id,
           runtime: 'claude-code',
-          nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-2',
+          nativeSessionId:
+            (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-2',
           status,
           handoffStrategy:
             (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
@@ -449,31 +459,36 @@ describe('handoffRoutes', () => {
   });
 
   it('GET /api/runtime-sessions/:id/handoff/preflight targets the requested machine worker', async () => {
-    const appWithTargetRegistry = await buildApp(managedSessionStore, handoffStore, runtimeConfigStore, {
-      dbRegistry: createMockDbRegistry({
-        getMachine: vi.fn(async (machineId: string) => {
-          if (machineId === 'machine-2') {
+    const appWithTargetRegistry = await buildApp(
+      managedSessionStore,
+      handoffStore,
+      runtimeConfigStore,
+      {
+        dbRegistry: createMockDbRegistry({
+          getMachine: vi.fn(async (machineId: string) => {
+            if (machineId === 'machine-2') {
+              return {
+                id: 'machine-2',
+                hostname: 'ec2-runner',
+                tailscaleIp: '100.64.0.2',
+                os: 'linux',
+                arch: 'x64',
+                status: 'online',
+              };
+            }
+
             return {
-              id: 'machine-2',
-              hostname: 'ec2-runner',
-              tailscaleIp: '100.64.0.2',
-              os: 'linux',
-              arch: 'x64',
+              id: 'machine-1',
+              hostname: 'mac-mini',
+              tailscaleIp: '100.64.0.1',
+              os: 'darwin',
+              arch: 'arm64',
               status: 'online',
             };
-          }
-
-          return {
-            id: 'machine-1',
-            hostname: 'mac-mini',
-            tailscaleIp: '100.64.0.1',
-            os: 'darwin',
-            arch: 'arm64',
-            status: 'online',
-          };
+          }),
         }),
-      }),
-    });
+      },
+    );
 
     managedSessionStore.get.mockResolvedValue(makeManagedSession());
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
@@ -507,31 +522,36 @@ describe('handoffRoutes', () => {
   });
 
   it('POST /api/runtime-sessions/:id/handoff creates the target session on the requested machine', async () => {
-    const appWithTargetRegistry = await buildApp(managedSessionStore, handoffStore, runtimeConfigStore, {
-      dbRegistry: createMockDbRegistry({
-        getMachine: vi.fn(async (machineId: string) => {
-          if (machineId === 'machine-2') {
+    const appWithTargetRegistry = await buildApp(
+      managedSessionStore,
+      handoffStore,
+      runtimeConfigStore,
+      {
+        dbRegistry: createMockDbRegistry({
+          getMachine: vi.fn(async (machineId: string) => {
+            if (machineId === 'machine-2') {
+              return {
+                id: 'machine-2',
+                hostname: 'ec2-runner',
+                tailscaleIp: '100.64.0.2',
+                os: 'linux',
+                arch: 'x64',
+                status: 'online',
+              };
+            }
+
             return {
-              id: 'machine-2',
-              hostname: 'ec2-runner',
-              tailscaleIp: '100.64.0.2',
-              os: 'linux',
-              arch: 'x64',
+              id: 'machine-1',
+              hostname: 'mac-mini',
+              tailscaleIp: '100.64.0.1',
+              os: 'darwin',
+              arch: 'arm64',
               status: 'online',
             };
-          }
-
-          return {
-            id: 'machine-1',
-            hostname: 'mac-mini',
-            tailscaleIp: '100.64.0.1',
-            os: 'darwin',
-            arch: 'arm64',
-            status: 'online',
-          };
+          }),
         }),
-      }),
-    });
+      },
+    );
 
     managedSessionStore.get.mockResolvedValue(makeManagedSession());
     managedSessionStore.create.mockResolvedValue(
@@ -546,7 +566,11 @@ describe('handoffRoutes', () => {
       }),
     );
     managedSessionStore.updateStatus.mockImplementation(
-      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) => {
+      async (
+        id: string,
+        status: ManagedSessionRecord['status'],
+        patch?: Record<string, unknown>,
+      ) => {
         if (id === 'ms-source') {
           return makeManagedSession({ id, status });
         }
@@ -555,7 +579,8 @@ describe('handoffRoutes', () => {
           id,
           runtime: 'claude-code',
           machineId: 'machine-2',
-          nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
+          nativeSessionId:
+            (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
           status,
           handoffStrategy:
             (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
@@ -614,38 +639,47 @@ describe('handoffRoutes', () => {
       }),
     );
     const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
-    expect(String(fetchCalls[0]?.[0])).toContain('http://100.64.0.1:9000/api/runtime-sessions/codex-native-1/handoff/export');
-    expect(String(fetchCalls[1]?.[0])).toContain('http://100.64.0.2:9000/api/runtime-sessions/handoff');
+    expect(String(fetchCalls[0]?.[0])).toContain(
+      'http://100.64.0.1:9000/api/runtime-sessions/codex-native-1/handoff/export',
+    );
+    expect(String(fetchCalls[1]?.[0])).toContain(
+      'http://100.64.0.2:9000/api/runtime-sessions/handoff',
+    );
 
     await appWithTargetRegistry.close();
   });
 
   it('POST /api/runtime-sessions/:id/handoff preserves native-import strategy across machines', async () => {
-    const appWithTargetRegistry = await buildApp(managedSessionStore, handoffStore, runtimeConfigStore, {
-      dbRegistry: createMockDbRegistry({
-        getMachine: vi.fn(async (machineId: string) => {
-          if (machineId === 'machine-2') {
+    const appWithTargetRegistry = await buildApp(
+      managedSessionStore,
+      handoffStore,
+      runtimeConfigStore,
+      {
+        dbRegistry: createMockDbRegistry({
+          getMachine: vi.fn(async (machineId: string) => {
+            if (machineId === 'machine-2') {
+              return {
+                id: 'machine-2',
+                hostname: 'ec2-runner',
+                tailscaleIp: '100.64.0.2',
+                os: 'linux',
+                arch: 'x64',
+                status: 'online',
+              };
+            }
+
             return {
-              id: 'machine-2',
-              hostname: 'ec2-runner',
-              tailscaleIp: '100.64.0.2',
-              os: 'linux',
-              arch: 'x64',
+              id: 'machine-1',
+              hostname: 'mac-mini',
+              tailscaleIp: '100.64.0.1',
+              os: 'darwin',
+              arch: 'arm64',
               status: 'online',
             };
-          }
-
-          return {
-            id: 'machine-1',
-            hostname: 'mac-mini',
-            tailscaleIp: '100.64.0.1',
-            os: 'darwin',
-            arch: 'arm64',
-            status: 'online',
-          };
+          }),
         }),
-      }),
-    });
+      },
+    );
 
     managedSessionStore.get.mockResolvedValue(makeManagedSession());
     managedSessionStore.create.mockResolvedValue(
@@ -660,7 +694,11 @@ describe('handoffRoutes', () => {
       }),
     );
     managedSessionStore.updateStatus.mockImplementation(
-      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) => {
+      async (
+        id: string,
+        status: ManagedSessionRecord['status'],
+        patch?: Record<string, unknown>,
+      ) => {
         if (id === 'ms-source') {
           return makeManagedSession({ id, status });
         }
@@ -669,7 +707,8 @@ describe('handoffRoutes', () => {
           id,
           runtime: 'claude-code',
           machineId: 'machine-2',
-          nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-2',
+          nativeSessionId:
+            (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-2',
           status,
           handoffStrategy:
             (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
@@ -746,8 +785,12 @@ describe('handoffRoutes', () => {
     );
 
     const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
-    expect(String(fetchCalls[0]?.[0])).toContain('http://100.64.0.1:9000/api/runtime-sessions/codex-native-1/handoff/export');
-    expect(String(fetchCalls[1]?.[0])).toContain('http://100.64.0.2:9000/api/runtime-sessions/handoff');
+    expect(String(fetchCalls[0]?.[0])).toContain(
+      'http://100.64.0.1:9000/api/runtime-sessions/codex-native-1/handoff/export',
+    );
+    expect(String(fetchCalls[1]?.[0])).toContain(
+      'http://100.64.0.2:9000/api/runtime-sessions/handoff',
+    );
 
     await appWithTargetRegistry.close();
   });

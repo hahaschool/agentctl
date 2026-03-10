@@ -1,3 +1,4 @@
+import type { HandoffAnalyticsSummary } from '../runtime/handoff-analytics.js';
 import type {
   HandoffReason,
   HandoffSnapshot,
@@ -6,7 +7,6 @@ import type {
   ManagedSession,
   ManagedSessionStatus,
 } from '../types/runtime-management.js';
-import type { HandoffAnalyticsSummary } from '../runtime/handoff-analytics.js';
 
 export type RuntimeSessionSummary = {
   runtime: ManagedRuntime;

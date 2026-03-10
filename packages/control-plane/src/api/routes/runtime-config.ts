@@ -1,9 +1,16 @@
 import { createHash } from 'node:crypto';
 
-import type { ManagedRuntimeConfig, RuntimeConfigSyncRequest, RuntimeConfigSyncResponse } from '@agentctl/shared';
+import type {
+  ManagedRuntimeConfig,
+  RuntimeConfigSyncRequest,
+  RuntimeConfigSyncResponse,
+} from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
-import { RuntimeConfigStore, type MachineRuntimeStateRecord } from '../../runtime-management/runtime-config-store.js';
+import type {
+  MachineRuntimeStateRecord,
+  RuntimeConfigStore,
+} from '../../runtime-management/runtime-config-store.js';
 
 export type RuntimeConfigRouteStore = Pick<
   RuntimeConfigStore,
@@ -80,7 +87,11 @@ export const runtimeConfigRoutes: FastifyPluginAsync<RuntimeConfigRoutesOptions>
     },
     async (request, reply) => {
       const { machineIds, configVersion } = request.body ?? {};
-      if (!Array.isArray(machineIds) || machineIds.length === 0 || typeof configVersion !== 'number') {
+      if (
+        !Array.isArray(machineIds) ||
+        machineIds.length === 0 ||
+        typeof configVersion !== 'number'
+      ) {
         return reply.code(400).send({
           error: 'INVALID_RUNTIME_SYNC_REQUEST',
           message: 'machineIds[] and configVersion are required',

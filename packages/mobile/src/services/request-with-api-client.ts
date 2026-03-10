@@ -64,7 +64,8 @@ export async function requestWithApiClient<T>(
       // Response body isn't JSON — ignore.
     }
 
-    const errorCode = typeof errorBody?.code === 'string' ? errorBody.code : `HTTP_${response.status}`;
+    const errorCode =
+      typeof errorBody?.code === 'string' ? errorBody.code : `HTTP_${response.status}`;
     const errorMessage =
       typeof errorBody?.error === 'string'
         ? errorBody.error

@@ -466,12 +466,16 @@ describe('runtimeSessionPreflightQuery', () => {
   });
 
   it('has enabled property based on id', () => {
-    expect(runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).enabled).toBe(true);
+    expect(runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).enabled).toBe(
+      true,
+    );
     expect(runtimeSessionPreflightQuery('', { targetRuntime: 'claude-code' }).enabled).toBe(false);
   });
 
   it('has queryFn property', () => {
-    expect(runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).queryFn).toBeDefined();
+    expect(
+      runtimeSessionPreflightQuery('ms-123', { targetRuntime: 'claude-code' }).queryFn,
+    ).toBeDefined();
   });
 });
 

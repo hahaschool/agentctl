@@ -391,7 +391,9 @@ describe('ApiClient', () => {
       await client.getRuntimeHandoffSummary(100);
 
       const calledUrl = mocks.fetch.mock.calls[0]?.[0] as string;
-      expect(calledUrl).toBe('https://cp.example.com/api/runtime-sessions/handoffs/summary?limit=100');
+      expect(calledUrl).toBe(
+        'https://cp.example.com/api/runtime-sessions/handoffs/summary?limit=100',
+      );
     });
   });
 

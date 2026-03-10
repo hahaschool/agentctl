@@ -1,8 +1,8 @@
 import type {
+  HandoffAnalyticsSummary,
   HandoffReason,
   HandoffSnapshot,
   HandoffStrategy,
-  HandoffAnalyticsSummary,
   ManagedRuntime,
 } from '@agentctl/shared';
 import { ControlPlaneError, summarizeHandoffAnalytics } from '@agentctl/shared';
@@ -30,7 +30,10 @@ export type SessionHandoffRecord = {
   completedAt: Date | null;
 };
 
-export type CreateSessionHandoffInput = Omit<SessionHandoffRecord, 'id' | 'createdAt' | 'completedAt'> & {
+export type CreateSessionHandoffInput = Omit<
+  SessionHandoffRecord,
+  'id' | 'createdAt' | 'completedAt'
+> & {
   createdAt?: Date | null;
   completedAt?: Date | null;
 };
@@ -48,7 +51,10 @@ export type NativeImportAttemptRecord = {
   attemptedAt: Date | null;
 };
 
-export type CreateNativeImportAttemptInput = Omit<NativeImportAttemptRecord, 'id' | 'attemptedAt'> & {
+export type CreateNativeImportAttemptInput = Omit<
+  NativeImportAttemptRecord,
+  'id' | 'attemptedAt'
+> & {
   attemptedAt?: Date | null;
 };
 
@@ -78,10 +84,14 @@ export class HandoffStore {
 
     const row = rows[0];
     if (!row) {
-      throw new ControlPlaneError('SESSION_HANDOFF_CREATE_FAILED', 'Failed to create session handoff record', {
-        sourceSessionId: input.sourceSessionId,
-        targetRuntime: input.targetRuntime,
-      });
+      throw new ControlPlaneError(
+        'SESSION_HANDOFF_CREATE_FAILED',
+        'Failed to create session handoff record',
+        {
+          sourceSessionId: input.sourceSessionId,
+          targetRuntime: input.targetRuntime,
+        },
+      );
     }
 
     this.logger.info({ handoffId: row.id, strategy: row.strategy }, 'Session handoff created');
@@ -93,7 +103,10 @@ export class HandoffStore {
       .select()
       .from(sessionHandoffs)
       .where(
-        or(eq(sessionHandoffs.sourceSessionId, sessionId), eq(sessionHandoffs.targetSessionId, sessionId)),
+        or(
+          eq(sessionHandoffs.sourceSessionId, sessionId),
+          eq(sessionHandoffs.targetSessionId, sessionId),
+        ),
       )
       .orderBy(desc(sessionHandoffs.createdAt))
       .limit(limit);
@@ -168,7 +181,10 @@ export class HandoffStore {
       );
     }
 
-    this.logger.info({ nativeImportAttemptId: row.id, status: row.status }, 'Native import attempt recorded');
+    this.logger.info(
+      { nativeImportAttemptId: row.id, status: row.status },
+      'Native import attempt recorded',
+    );
     return mapNativeImportAttemptRow(row);
   }
 }

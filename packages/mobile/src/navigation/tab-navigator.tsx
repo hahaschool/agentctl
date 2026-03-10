@@ -17,13 +17,13 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Text } from 'react-native';
 import { useAppContext } from '../context/app-context.js';
-import { getRuntimeTabBadgeCount } from './runtime-tab-badge.js';
 import { AgentListScreen } from '../ui-screens/agent-list-screen.js';
 import { DashboardScreen } from '../ui-screens/dashboard-screen.js';
 import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
 import { SchedulerScreen } from '../ui-screens/scheduler-screen.js';
 import { SessionScreen } from '../ui-screens/session-screen.js';
 import { SettingsScreen } from '../ui-screens/settings-screen.js';
+import { getRuntimeTabBadgeCount } from './runtime-tab-badge.js';
 
 // ---------------------------------------------------------------------------
 // Tab param list
@@ -151,11 +151,7 @@ export function TabNavigator(): React.JSX.Element {
         <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Tab.Screen name="Agents" component={AgentListScreen} options={{ title: 'Agents' }} />
         <Tab.Screen name="Sessions" component={SessionScreen} options={{ title: 'Sessions' }} />
-        <Tab.Screen
-          name="Runtimes"
-          component={RuntimeSessionScreen}
-          options={runtimesTabOptions}
-        />
+        <Tab.Screen name="Runtimes" component={RuntimeSessionScreen} options={runtimesTabOptions} />
         <Tab.Screen name="Scheduler" component={SchedulerScreen} options={{ title: 'Scheduler' }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Tab.Navigator>

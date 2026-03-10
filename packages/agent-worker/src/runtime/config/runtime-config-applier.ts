@@ -1,9 +1,9 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 import type {
   ApplyRuntimeConfigRequest,
@@ -44,7 +44,8 @@ export class RuntimeConfigApplier {
   constructor(options: RuntimeConfigApplierOptions = {}) {
     this.workspaceRoot = options.workspaceRoot ?? process.cwd();
     this.homeDir = options.homeDir ?? homedir();
-    this.probeRuntime = options.probeRuntime ?? ((runtime) => defaultProbeRuntime(runtime, this.homeDir));
+    this.probeRuntime =
+      options.probeRuntime ?? ((runtime) => defaultProbeRuntime(runtime, this.homeDir));
   }
 
   async apply(request: ApplyRuntimeConfigRequest): Promise<ApplyRuntimeConfigResponse> {
@@ -97,7 +98,11 @@ export class RuntimeConfigApplier {
   }
 }
 
-function resolveTargetPath(file: RenderedConfigFile, workspaceRoot: string, homeDir: string): string {
+function resolveTargetPath(
+  file: RenderedConfigFile,
+  workspaceRoot: string,
+  homeDir: string,
+): string {
   return file.scope === 'home'
     ? path.resolve(homeDir, file.path)
     : path.resolve(workspaceRoot, file.path);
@@ -113,7 +118,8 @@ function defaultProbeRuntime(runtime: ManagedRuntime, homeDir: string): RuntimeC
   const authenticated =
     runtime === 'claude-code'
       ? Boolean(process.env.ANTHROPIC_API_KEY) || existsSync(path.join(homeDir, '.claude.json'))
-      : Boolean(process.env.OPENAI_API_KEY) || existsSync(path.join(homeDir, '.codex', 'auth.json'));
+      : Boolean(process.env.OPENAI_API_KEY) ||
+        existsSync(path.join(homeDir, '.codex', 'auth.json'));
 
   return {
     installed,

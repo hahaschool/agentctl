@@ -211,7 +211,9 @@ export class CodexSessionManager extends EventEmitter {
       if (code && code !== 0) {
         session.status = 'error';
         session.startupReject?.(
-          new Error(session.lastError ?? `Codex exited before startup completed (code ${String(code)})`),
+          new Error(
+            session.lastError ?? `Codex exited before startup completed (code ${String(code)})`,
+          ),
         );
       } else {
         session.status = 'ended';

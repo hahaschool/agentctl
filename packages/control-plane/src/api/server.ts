@@ -18,7 +18,10 @@ import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 import type { LiteLLMClient } from '../router/litellm-client.js';
 import { HandoffStore, type SessionHandoffRecord } from '../runtime-management/handoff-store.js';
-import { ManagedSessionStore, type ManagedSessionRecord } from '../runtime-management/managed-session-store.js';
+import {
+  type ManagedSessionRecord,
+  ManagedSessionStore,
+} from '../runtime-management/managed-session-store.js';
 import { RuntimeConfigStore } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
@@ -31,6 +34,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
 import { fileProxyRoutes } from './routes/files.js';
 import { gitProxyRoutes } from './routes/git.js';
+import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -38,8 +42,7 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
-import { handoffRoutes } from './routes/handoffs.js';
-import { runtimeConfigRoutes, type RuntimeConfigRouteStore } from './routes/runtime-config.js';
+import { type RuntimeConfigRouteStore, runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
@@ -542,7 +545,10 @@ function createFallbackHandoffStore(): Pick<
   'create' | 'listForSession' | 'recordNativeImportAttempt' | 'summarizeRecent'
 > {
   const handoffs = new Map<string, SessionHandoffRecord>();
-  const nativeImportAttempts = new Map<string, { handoffId: string | null; status: 'pending' | 'succeeded' | 'failed' }>();
+  const nativeImportAttempts = new Map<
+    string,
+    { handoffId: string | null; status: 'pending' | 'succeeded' | 'failed' }
+  >();
   return {
     async create(input) {
       const record: SessionHandoffRecord = {
@@ -565,8 +571,7 @@ function createFallbackHandoffStore(): Pick<
     async listForSession(sessionId, limit = 20) {
       return [...handoffs.values()]
         .filter(
-          (record) =>
-            record.sourceSessionId === sessionId || record.targetSessionId === sessionId,
+          (record) => record.sourceSessionId === sessionId || record.targetSessionId === sessionId,
         )
         .slice(0, limit);
     },
@@ -593,7 +598,9 @@ function createFallbackHandoffStore(): Pick<
       const recentHandoffs = [...handoffs.values()].slice(0, limit);
       return summarizeHandoffAnalytics(
         recentHandoffs.map((handoff) => {
-          const attempt = [...nativeImportAttempts.values()].find((entry) => entry.handoffId === handoff.id);
+          const attempt = [...nativeImportAttempts.values()].find(
+            (entry) => entry.handoffId === handoff.id,
+          );
           return {
             status: handoff.status,
             nativeImportAttempt: attempt ? { ok: attempt.status === 'succeeded' } : undefined,

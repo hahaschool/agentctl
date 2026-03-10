@@ -270,9 +270,10 @@ async function resolveWorker(
   return resolveWorkerUrlByMachineIdOrThrow(machineId, { dbRegistry, workerPort });
 }
 
-function extractWorkerSession(
-  data: unknown,
-): { nativeSessionId?: string | null; status?: ManagedSessionRecord['status'] } {
+function extractWorkerSession(data: unknown): {
+  nativeSessionId?: string | null;
+  status?: ManagedSessionRecord['status'];
+} {
   const record = (data ?? {}) as {
     session?: { nativeSessionId?: string | null; status?: ManagedSessionRecord['status'] };
   };

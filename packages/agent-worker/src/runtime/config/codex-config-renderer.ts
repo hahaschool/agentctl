@@ -1,9 +1,9 @@
 import type { ManagedRuntimeConfig } from '@agentctl/shared';
 
 import {
+  type RenderedRuntimeConfig,
   renderManagedInstructions,
   renderSkillsManifest,
-  type RenderedRuntimeConfig,
 } from './shared-rendering.js';
 
 export class CodexConfigRenderer {

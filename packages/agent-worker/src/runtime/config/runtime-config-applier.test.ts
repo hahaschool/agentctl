@@ -27,7 +27,9 @@ function makeConfig(overrides: Partial<ManagedRuntimeConfig> = {}): ManagedRunti
         env: { ROOT: '/workspace' },
       },
     ],
-    skills: [{ id: 'systematic-debugging', path: '/skills/systematic-debugging/SKILL.md', enabled: true }],
+    skills: [
+      { id: 'systematic-debugging', path: '/skills/systematic-debugging/SKILL.md', enabled: true },
+    ],
     sandbox: 'workspace-write',
     approvalPolicy: 'on-request',
     environmentPolicy: {
@@ -75,7 +77,10 @@ describe('RuntimeConfigApplier', () => {
       expect.objectContaining({ path: '.mcp.json', hash: expect.stringMatching(/^sha256:/) }),
     );
     expect(response.files).toContainEqual(
-      expect.objectContaining({ path: '.codex/config.toml', hash: expect.stringMatching(/^sha256:/) }),
+      expect.objectContaining({
+        path: '.codex/config.toml',
+        hash: expect.stringMatching(/^sha256:/),
+      }),
     );
     expect(response.runtimes['claude-code']).toEqual({ installed: true, authenticated: true });
     expect(response.runtimes.codex).toEqual({ installed: true, authenticated: false });

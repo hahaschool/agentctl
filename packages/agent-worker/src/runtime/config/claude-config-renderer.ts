@@ -1,10 +1,10 @@
 import type { ManagedRuntimeConfig } from '@agentctl/shared';
 
 import {
+  type RenderedRuntimeConfig,
   renderManagedInstructions,
   renderMcpServerMap,
   renderSkillsManifest,
-  type RenderedRuntimeConfig,
 } from './shared-rendering.js';
 
 export class ClaudeConfigRenderer {

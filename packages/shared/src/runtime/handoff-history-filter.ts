@@ -20,7 +20,6 @@ export function formatHandoffHistoryFilterLabel(filter: HandoffHistoryFilter): s
       return 'Fallback';
     case 'failed':
       return 'Failed';
-    case 'all':
     default:
       return 'All';
   }
@@ -37,7 +36,6 @@ export function matchesHandoffHistoryFilter(
       return handoff.status === 'succeeded' && handoff.nativeImportAttempt?.ok === false;
     case 'failed':
       return handoff.status === 'failed';
-    case 'all':
     default:
       return true;
   }

@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import { calculateHandoffAnalyticsRates } from '@agentctl/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
@@ -85,7 +85,9 @@ export function DashboardPage(): React.JSX.Element {
   // Active sessions (running or active status)
   const activeSessions = sessionList.filter((s) => s.status === 'running' || s.status === 'active');
   const activeSessionCount = activeSessions.length;
-  const activeManagedRuntimeCount = managedRuntimeSessions.filter((session) => session.status === 'active').length;
+  const activeManagedRuntimeCount = managedRuntimeSessions.filter(
+    (session) => session.status === 'active',
+  ).length;
   const handingOffManagedRuntimeCount = managedRuntimeSessions.filter(
     (session) => session.status === 'handing_off',
   ).length;
@@ -121,7 +123,16 @@ export function DashboardPage(): React.JSX.Element {
       void runtimeSessions.refetch();
       void runtimeHandoffSummary.refetch();
     },
-    [health, metrics, machines, agents, discovered, sessions, runtimeSessions, runtimeHandoffSummary],
+    [
+      health,
+      metrics,
+      machines,
+      agents,
+      discovered,
+      sessions,
+      runtimeSessions,
+      runtimeHandoffSummary,
+    ],
   );
 
   useHotkeys(useMemo(() => ({ r: refreshAll, '?': toggleHelp }), [refreshAll, toggleHelp]));
@@ -144,9 +155,19 @@ export function DashboardPage(): React.JSX.Element {
     if (discovered.error) msgs.push(`Discover: ${discovered.error.message}`);
     if (sessions.error) msgs.push(`Sessions: ${sessions.error.message}`);
     if (runtimeSessions.error) msgs.push(`Runtime sessions: ${runtimeSessions.error.message}`);
-    if (runtimeHandoffSummary.error) msgs.push(`Runtime handoffs: ${runtimeHandoffSummary.error.message}`);
+    if (runtimeHandoffSummary.error)
+      msgs.push(`Runtime handoffs: ${runtimeHandoffSummary.error.message}`);
     return msgs;
-  }, [health.error, metrics.error, machines.error, agents.error, discovered.error, sessions.error, runtimeSessions.error, runtimeHandoffSummary.error]);
+  }, [
+    health.error,
+    metrics.error,
+    machines.error,
+    agents.error,
+    discovered.error,
+    sessions.error,
+    runtimeSessions.error,
+    runtimeHandoffSummary.error,
+  ]);
   const anyError = errorMessages.length > 0;
 
   // Health status — Tailwind class helpers
@@ -281,7 +302,12 @@ export function DashboardPage(): React.JSX.Element {
       </div>
 
       {/* Stats grid */}
-      {machines.isLoading || agents.isLoading || metrics.isLoading || sessions.isLoading || runtimeSessions.isLoading || runtimeHandoffSummary.isLoading ? (
+      {machines.isLoading ||
+      agents.isLoading ||
+      metrics.isLoading ||
+      sessions.isLoading ||
+      runtimeSessions.isLoading ||
+      runtimeHandoffSummary.isLoading ? (
         <div
           className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6"
           data-testid="stat-cards-skeleton"

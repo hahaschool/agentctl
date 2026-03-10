@@ -20,7 +20,9 @@ function makeConfig(overrides: Partial<ManagedRuntimeConfig> = {}): ManagedRunti
         env: { ROOT: '/workspace' },
       },
     ],
-    skills: [{ id: 'systematic-debugging', path: '/skills/systematic-debugging/SKILL.md', enabled: true }],
+    skills: [
+      { id: 'systematic-debugging', path: '/skills/systematic-debugging/SKILL.md', enabled: true },
+    ],
     sandbox: 'workspace-write',
     approvalPolicy: 'on-request',
     environmentPolicy: {

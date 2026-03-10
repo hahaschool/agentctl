@@ -89,7 +89,8 @@ export class RuntimeSessionPresenter {
         this.apiClient.listMachines(),
       ]);
       const selectedSessionId = this.state.selectedSession?.id;
-      const selectedSession = result.sessions.find((session) => session.id === selectedSessionId) ?? null;
+      const selectedSession =
+        result.sessions.find((session) => session.id === selectedSessionId) ?? null;
       this.setState({
         sessions: result.sessions,
         machines,
@@ -210,9 +211,7 @@ export class RuntimeSessionPresenter {
     const response = await this.runtimeSessionApi.forkSession(params.sessionId, {
       ...(params.prompt?.trim() ? { prompt: params.prompt.trim() } : {}),
       ...(params.model?.trim() ? { model: params.model.trim() } : {}),
-      ...(params.targetMachineId?.trim()
-        ? { targetMachineId: params.targetMachineId.trim() }
-        : {}),
+      ...(params.targetMachineId?.trim() ? { targetMachineId: params.targetMachineId.trim() } : {}),
     });
     await this.loadSessions();
     await this.selectSession(response.session);
@@ -228,9 +227,7 @@ export class RuntimeSessionPresenter {
     const response = await this.runtimeSessionApi.handoffSession(params.sessionId, {
       targetRuntime: params.targetRuntime,
       reason: 'manual',
-      ...(params.targetMachineId?.trim()
-        ? { targetMachineId: params.targetMachineId.trim() }
-        : {}),
+      ...(params.targetMachineId?.trim() ? { targetMachineId: params.targetMachineId.trim() } : {}),
       ...(params.prompt?.trim() ? { prompt: params.prompt.trim() } : {}),
     });
     await this.loadSessions();

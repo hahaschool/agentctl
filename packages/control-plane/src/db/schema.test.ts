@@ -1266,7 +1266,9 @@ describe('Runtime management foreign key relationships', () => {
     const config = getTableConfig(nativeImportAttempts);
     expect(config.foreignKeys).toHaveLength(3);
 
-    const handoffFk = config.foreignKeys.find((fk) => fk.reference().columns[0].name === 'handoff_id');
+    const handoffFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'handoff_id',
+    );
     expect(getTableName(handoffFk?.reference().foreignTable)).toBe('session_handoffs');
 
     const sourceFk = config.foreignKeys.find(

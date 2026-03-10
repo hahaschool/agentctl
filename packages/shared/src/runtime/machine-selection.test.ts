@@ -8,7 +8,9 @@ import {
   sortMachinesForSelection,
 } from './machine-selection.js';
 
-function makeMachine(overrides: Partial<MachineSelectionCandidate> = {}): MachineSelectionCandidate {
+function makeMachine(
+  overrides: Partial<MachineSelectionCandidate> = {},
+): MachineSelectionCandidate {
   return {
     id: 'machine-1',
     hostname: 'mac-mini',
@@ -25,9 +27,9 @@ describe('machine selection helpers', () => {
   });
 
   it('formats machine labels with hostname and status', () => {
-    expect(formatMachineSelectionLabel(makeMachine({ hostname: 'ec2-runner', status: 'degraded' }))).toBe(
-      'ec2-runner (degraded)',
-    );
+    expect(
+      formatMachineSelectionLabel(makeMachine({ hostname: 'ec2-runner', status: 'degraded' })),
+    ).toBe('ec2-runner (degraded)');
   });
 
   it('sorts machines by availability before hostname', () => {

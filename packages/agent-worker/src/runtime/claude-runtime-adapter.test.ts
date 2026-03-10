@@ -1,7 +1,6 @@
-import type { CliSessionManager } from './cli-session-manager.js';
 import { describe, expect, it, vi } from 'vitest';
-
 import { ClaudeRuntimeAdapter } from './claude-runtime-adapter.js';
+import type { CliSessionManager } from './cli-session-manager.js';
 
 function createMockCliSessionManager(): Pick<CliSessionManager, 'startSession'> {
   return {

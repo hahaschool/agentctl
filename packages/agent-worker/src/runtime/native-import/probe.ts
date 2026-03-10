@@ -1,8 +1,8 @@
-import { access, readFile, readdir } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
+import { access, readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import type { HandoffSnapshot, ManagedRuntime, NativeImportAttemptReason } from '@agentctl/shared';
@@ -34,7 +34,11 @@ export async function probeNativeImportPrerequisites(input: {
   snapshot: HandoffSnapshot;
 }): Promise<{ reason: NativeImportAttemptReason; metadata: Record<string, unknown> }> {
   const targetCli = await detectTargetCli(input.targetRuntime);
-  const sourceStorage = await detectSourceStorage(input.sourceRuntime, input.projectPath, input.snapshot);
+  const sourceStorage = await detectSourceStorage(
+    input.sourceRuntime,
+    input.projectPath,
+    input.snapshot,
+  );
   const sourceSessionSummary =
     sourceStorage.sessionPath !== null
       ? await readSourceSessionSummary(input.sourceRuntime, sourceStorage.sessionPath)
@@ -62,7 +66,9 @@ export async function probeNativeImportPrerequisites(input: {
   return { reason: 'not_implemented', metadata };
 }
 
-async function detectTargetCli(targetRuntime: ManagedRuntime): Promise<NativeImportProbePrerequisites['targetCli']> {
+async function detectTargetCli(
+  targetRuntime: ManagedRuntime,
+): Promise<NativeImportProbePrerequisites['targetCli']> {
   const command = targetRuntime === 'codex' ? 'codex' : 'claude';
   try {
     const { stdout, stderr } = await execFileAsync(command, ['--version']);
@@ -131,7 +137,10 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function findCodexSessionInIndex(indexPath: string, sourceSessionId: string): Promise<string | null> {
+async function findCodexSessionInIndex(
+  indexPath: string,
+  sourceSessionId: string,
+): Promise<string | null> {
   try {
     const content = await readFile(indexPath, 'utf8');
     for (const line of content.split('\n')) {
@@ -141,9 +150,7 @@ async function findCodexSessionInIndex(indexPath: string, sourceSessionId: strin
         if (parsed.id === sourceSessionId) {
           return sourceSessionId;
         }
-      } catch {
-        continue;
-      }
+      } catch {}
     }
   } catch {
     return null;
@@ -152,30 +159,34 @@ async function findCodexSessionInIndex(indexPath: string, sourceSessionId: strin
   return null;
 }
 
-async function findCodexSessionInTree(rootPath: string, sourceSessionId: string): Promise<string | null> {
+async function findCodexSessionInTree(
+  rootPath: string,
+  sourceSessionId: string,
+): Promise<string | null> {
   const stack = [rootPath];
   while (stack.length > 0) {
     const current = stack.pop();
     if (!current) continue;
 
-    let entries;
     try {
-      entries = await readdir(current, { withFileTypes: true });
-    } catch {
-      continue;
-    }
+      const entries = await readdir(current, { withFileTypes: true });
 
-    for (const entry of entries) {
-      const fullPath = join(current, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(fullPath);
-        continue;
-      }
+      for (const entry of entries) {
+        const fullPath = join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(fullPath);
+          continue;
+        }
 
-      if (entry.isFile() && entry.name.includes(sourceSessionId) && entry.name.endsWith('.jsonl')) {
-        return fullPath;
+        if (
+          entry.isFile() &&
+          entry.name.includes(sourceSessionId) &&
+          entry.name.endsWith('.jsonl')
+        ) {
+          return fullPath;
+        }
       }
-    }
+    } catch {}
   }
 
   return null;

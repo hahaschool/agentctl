@@ -34,7 +34,8 @@ const {
 }));
 
 vi.mock('@tanstack/react-query', async () => {
-  const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
   return {
     ...actual,
     useQuery: (options: unknown) => mockUseQuery(options),
@@ -59,7 +60,9 @@ vi.mock('@/components/EmptyState', () => ({
 }));
 
 vi.mock('@/components/ErrorBanner', () => ({
-  ErrorBanner: ({ message }: { message: string }) => <div data-testid="error-banner">{message}</div>,
+  ErrorBanner: ({ message }: { message: string }) => (
+    <div data-testid="error-banner">{message}</div>
+  ),
 }));
 
 vi.mock('@/components/FetchingBar', () => ({
@@ -96,7 +99,8 @@ vi.mock('@/components/Toast', () => ({
 
 vi.mock('@/lib/queries', () => ({
   runtimeSessionsQuery: (params?: Record<string, unknown>) => mockRuntimeSessionsQuery(params),
-  runtimeSessionHandoffsQuery: (id: string, limit?: number) => mockRuntimeSessionHandoffsQuery(id, limit),
+  runtimeSessionHandoffsQuery: (id: string, limit?: number) =>
+    mockRuntimeSessionHandoffsQuery(id, limit),
   runtimeSessionPreflightQuery: (id: string, params: Record<string, unknown>) =>
     mockRuntimeSessionPreflightQuery(id, params),
   machinesQuery: () => mockMachinesQuery(),
@@ -229,9 +233,11 @@ function setupUseQuery(options?: {
   mockRuntimeSessionHandoffsQuery.mockImplementation((id: string, limit?: number) => ({
     queryKey: ['runtime-sessions', id, 'handoffs', limit],
   }));
-  mockRuntimeSessionPreflightQuery.mockImplementation((id: string, params: Record<string, unknown>) => ({
-    queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
-  }));
+  mockRuntimeSessionPreflightQuery.mockImplementation(
+    (id: string, params: Record<string, unknown>) => ({
+      queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
+    }),
+  );
   mockCreateMutateAsync.mockResolvedValue({
     ok: true,
     session: createRuntimeSession({ id: 'ms-created', runtime: 'codex' }),
@@ -280,7 +286,12 @@ function setupUseQuery(options?: {
     if (queryKey[0] === 'runtime-sessions' && queryKey[2] === 'handoffs') {
       const id = String(queryKey[1] ?? '');
       return {
-        data: id ? { handoffs: handoffsBySessionId[id] ?? [], count: (handoffsBySessionId[id] ?? []).length } : undefined,
+        data: id
+          ? {
+              handoffs: handoffsBySessionId[id] ?? [],
+              count: (handoffsBySessionId[id] ?? []).length,
+            }
+          : undefined,
         isLoading: false,
         isFetching: false,
         error: null,
@@ -319,7 +330,11 @@ describe('RuntimeSessionsPage', () => {
     render(<RuntimeSessionsPage />);
 
     expect(screen.getByText('Runtime Sessions')).toBeDefined();
-    expect(screen.getByText('Unified managed session view for Claude Code and Codex, with cross-runtime handoff history.')).toBeDefined();
+    expect(
+      screen.getByText(
+        'Unified managed session view for Claude Code and Codex, with cross-runtime handoff history.',
+      ),
+    ).toBeDefined();
 
     await waitFor(() => {
       expect(screen.getAllByText('ms-1').length).toBeGreaterThanOrEqual(2);
@@ -383,13 +398,25 @@ describe('RuntimeSessionsPage', () => {
             id: 'handoff-native',
             reason: 'native-success',
             strategy: 'native-import',
-            nativeImportAttempt: { ok: true, sourceRuntime: 'codex', targetRuntime: 'claude-code', reason: 'succeeded', metadata: {} },
+            nativeImportAttempt: {
+              ok: true,
+              sourceRuntime: 'codex',
+              targetRuntime: 'claude-code',
+              reason: 'succeeded',
+              metadata: {},
+            },
           }),
           createHandoff({
             id: 'handoff-fallback',
             reason: 'fallback-success',
             strategy: 'snapshot-handoff',
-            nativeImportAttempt: { ok: false, sourceRuntime: 'codex', targetRuntime: 'claude-code', reason: 'source_session_missing', metadata: {} },
+            nativeImportAttempt: {
+              ok: false,
+              sourceRuntime: 'codex',
+              targetRuntime: 'claude-code',
+              reason: 'source_session_missing',
+              metadata: {},
+            },
           }),
           createHandoff({
             id: 'handoff-failed',
@@ -470,12 +497,17 @@ describe('RuntimeSessionsPage', () => {
     render(<RuntimeSessionsPage />);
 
     await waitFor(() => {
-      expect((screen.getByLabelText('Create machine') as HTMLSelectElement).value).toBe('machine-2');
+      expect((screen.getByLabelText('Create machine') as HTMLSelectElement).value).toBe(
+        'machine-2',
+      );
     });
 
-    const [createOfflineOption, forkOfflineOption, handoffOfflineOption] = screen.getAllByRole('option', {
-      name: 'backup-box (offline)',
-    }) as HTMLOptionElement[];
+    const [createOfflineOption, forkOfflineOption, handoffOfflineOption] = screen.getAllByRole(
+      'option',
+      {
+        name: 'backup-box (offline)',
+      },
+    ) as HTMLOptionElement[];
 
     expect(createOfflineOption.disabled).toBe(true);
     expect(forkOfflineOption.disabled).toBe(true);
@@ -485,7 +517,11 @@ describe('RuntimeSessionsPage', () => {
   it('filters runtime sessions by runtime and search query', async () => {
     setupUseQuery({
       sessions: [
-        createRuntimeSession({ id: 'ms-codex', runtime: 'codex', projectPath: '/tmp/codex-project' }),
+        createRuntimeSession({
+          id: 'ms-codex',
+          runtime: 'codex',
+          projectPath: '/tmp/codex-project',
+        }),
         createRuntimeSession({
           id: 'ms-claude',
           runtime: 'claude-code',
@@ -550,12 +586,16 @@ describe('RuntimeSessionsPage', () => {
         targetMachineId: 'machine-2',
         prompt: 'Continue from the existing diff',
       });
-      expect(mockToast.success).toHaveBeenCalledWith('Handed off to Claude Code via snapshot handoff');
+      expect(mockToast.success).toHaveBeenCalledWith(
+        'Handed off to Claude Code via snapshot handoff',
+      );
     });
   });
 
   it('creates a managed runtime session from the create form', async () => {
-    setupUseQuery({ machines: [createMachine(), createMachine({ id: 'machine-2', hostname: 'ec2-runner' })] });
+    setupUseQuery({
+      machines: [createMachine(), createMachine({ id: 'machine-2', hostname: 'ec2-runner' })],
+    });
 
     render(<RuntimeSessionsPage />);
 

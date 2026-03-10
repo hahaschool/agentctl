@@ -157,7 +157,8 @@ export function DashboardScreen({ onAgentPress }: DashboardScreenProps): React.J
           </View>
         </View>
         <Text style={styles.runtimeRateSummary}>
-          {state.stats.runtimeNativeImportRate}% native import rate · {state.stats.runtimeFallbackRate}% fallback rate
+          {state.stats.runtimeNativeImportRate}% native import rate ·{' '}
+          {state.stats.runtimeFallbackRate}% fallback rate
         </Text>
 
         {/* Health indicator */}

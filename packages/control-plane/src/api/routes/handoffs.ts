@@ -32,8 +32,13 @@ export type HandoffRoutesOptions = {
 };
 
 export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (app, opts) => {
-  const { managedSessionStore, handoffStore, runtimeConfigStore, dbRegistry, workerPort = 9000 } =
-    opts;
+  const {
+    managedSessionStore,
+    handoffStore,
+    runtimeConfigStore,
+    dbRegistry,
+    workerPort = 9000,
+  } = opts;
 
   app.get<{
     Querystring: { limit?: string };
@@ -345,9 +350,7 @@ function extractSnapshot(data: unknown): HandoffSnapshot {
   return record.snapshot;
 }
 
-function extractExecution(
-  data: unknown,
-): {
+function extractExecution(data: unknown): {
   strategy?: HandoffStrategy;
   attemptedStrategies?: HandoffStrategy[];
   nativeImportAttempt?: {
@@ -401,6 +404,6 @@ async function recordNativeImportAttempt(
     metadata: execution.nativeImportAttempt.metadata ?? {},
     errorMessage: execution.nativeImportAttempt.ok
       ? null
-      : execution.nativeImportAttempt.reason ?? 'native import failed',
+      : (execution.nativeImportAttempt.reason ?? 'native import failed'),
   });
 }

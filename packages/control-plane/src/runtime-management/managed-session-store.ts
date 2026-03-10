@@ -72,10 +72,14 @@ export class ManagedSessionStore {
 
     const row = rows[0];
     if (!row) {
-      throw new ControlPlaneError('MANAGED_SESSION_CREATE_FAILED', 'Failed to create managed session', {
-        machineId: input.machineId,
-        runtime: input.runtime,
-      });
+      throw new ControlPlaneError(
+        'MANAGED_SESSION_CREATE_FAILED',
+        'Failed to create managed session',
+        {
+          machineId: input.machineId,
+          runtime: input.runtime,
+        },
+      );
     }
 
     this.logger.info({ managedSessionId: row.id, runtime: row.runtime }, 'Managed session created');
@@ -146,9 +150,13 @@ export class ManagedSessionStore {
 
     const row = rows[0];
     if (!row) {
-      throw new ControlPlaneError('MANAGED_SESSION_NOT_FOUND', `Managed session '${sessionId}' was not found`, {
-        sessionId,
-      });
+      throw new ControlPlaneError(
+        'MANAGED_SESSION_NOT_FOUND',
+        `Managed session '${sessionId}' was not found`,
+        {
+          sessionId,
+        },
+      );
     }
 
     this.logger.info({ managedSessionId: sessionId, status }, 'Managed session status updated');

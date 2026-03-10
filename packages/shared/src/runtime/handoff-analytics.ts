@@ -54,7 +54,10 @@ export function summarizeHandoffAnalytics(
 }
 
 export function calculateHandoffAnalyticsRates(
-  summary: Pick<HandoffAnalyticsSummary, 'total' | 'nativeImportSuccesses' | 'nativeImportFallbacks'>,
+  summary: Pick<
+    HandoffAnalyticsSummary,
+    'total' | 'nativeImportSuccesses' | 'nativeImportFallbacks'
+  >,
 ): HandoffAnalyticsRates {
   if (summary.total <= 0) {
     return {

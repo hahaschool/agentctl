@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import type { Machine, NativeImportPreflightResponse } from '@agentctl/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient, MobileClientError } from '../services/api-client.js';
 import type { RuntimeSessionHandoff, RuntimeSessionInfo } from '../services/runtime-session-api.js';
 import type { RuntimeSessionScreenState } from './runtime-session-presenter.js';
@@ -143,9 +142,7 @@ describe('RuntimeSessionPresenter', () => {
   });
 
   it('selects a session and loads handoff history', async () => {
-    mocks.fetch.mockResolvedValueOnce(
-      jsonResponse({ handoffs: [makeHandoff()], count: 1 }),
-    );
+    mocks.fetch.mockResolvedValueOnce(jsonResponse({ handoffs: [makeHandoff()], count: 1 }));
 
     const presenter = new RuntimeSessionPresenter({ apiClient });
     const session = makeSession();
@@ -161,8 +158,15 @@ describe('RuntimeSessionPresenter', () => {
   it('creates a managed session and refreshes the list', async () => {
     mocks.fetch
       .mockResolvedValueOnce(jsonResponse({ ok: true, session: makeSession({ id: 'ms-created' }) }))
-      .mockResolvedValueOnce(jsonResponse({ sessions: [makeSession({ id: 'ms-created' })], count: 1 }))
-      .mockResolvedValueOnce(jsonResponse([makeMachine(), makeMachine({ id: 'machine-2', hostname: 'ec2-runner', os: 'linux' })]));
+      .mockResolvedValueOnce(
+        jsonResponse({ sessions: [makeSession({ id: 'ms-created' })], count: 1 }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([
+          makeMachine(),
+          makeMachine({ id: 'machine-2', hostname: 'ec2-runner', os: 'linux' }),
+        ]),
+      );
 
     const presenter = new RuntimeSessionPresenter({ apiClient });
     const session = await presenter.createSession({
@@ -190,8 +194,12 @@ describe('RuntimeSessionPresenter', () => {
 
   it('resumes a session, refreshes sessions, and reloads handoffs for the returned session', async () => {
     mocks.fetch
-      .mockResolvedValueOnce(jsonResponse({ ok: true, session: makeSession({ id: 'ms-1', status: 'active' }) }))
-      .mockResolvedValueOnce(jsonResponse({ sessions: [makeSession({ id: 'ms-1', status: 'active' })], count: 1 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ ok: true, session: makeSession({ id: 'ms-1', status: 'active' }) }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ sessions: [makeSession({ id: 'ms-1', status: 'active' })], count: 1 }),
+      )
       .mockResolvedValueOnce(jsonResponse([makeMachine()]))
       .mockResolvedValueOnce(jsonResponse({ handoffs: [makeHandoff()], count: 1 }));
 
@@ -216,9 +224,24 @@ describe('RuntimeSessionPresenter', () => {
 
   it('forks a session with optional machine target and selects the new session', async () => {
     mocks.fetch
-      .mockResolvedValueOnce(jsonResponse({ ok: true, session: makeSession({ id: 'ms-forked', machineId: 'machine-2' }) }))
-      .mockResolvedValueOnce(jsonResponse({ sessions: [makeSession({ id: 'ms-forked', machineId: 'machine-2' })], count: 1 }))
-      .mockResolvedValueOnce(jsonResponse([makeMachine(), makeMachine({ id: 'machine-2', hostname: 'ec2-runner', os: 'linux' })]))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          session: makeSession({ id: 'ms-forked', machineId: 'machine-2' }),
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          sessions: [makeSession({ id: 'ms-forked', machineId: 'machine-2' })],
+          count: 1,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([
+          makeMachine(),
+          makeMachine({ id: 'machine-2', hostname: 'ec2-runner', os: 'linux' }),
+        ]),
+      )
       .mockResolvedValueOnce(jsonResponse({ handoffs: [], count: 0 }));
 
     const presenter = new RuntimeSessionPresenter({ apiClient });
@@ -290,10 +313,20 @@ describe('RuntimeSessionPresenter', () => {
         }),
       )
       .mockResolvedValueOnce(
-        jsonResponse({ sessions: [makeSession({ id: 'ms-2', runtime: 'claude-code', machineId: 'machine-2' })], count: 1 }),
+        jsonResponse({
+          sessions: [makeSession({ id: 'ms-2', runtime: 'claude-code', machineId: 'machine-2' })],
+          count: 1,
+        }),
       )
-      .mockResolvedValueOnce(jsonResponse([makeMachine(), makeMachine({ id: 'machine-2', hostname: 'ec2-runner', os: 'linux' })]))
-      .mockResolvedValueOnce(jsonResponse({ handoffs: [makeHandoff({ targetSessionId: 'ms-2' })], count: 1 }));
+      .mockResolvedValueOnce(
+        jsonResponse([
+          makeMachine(),
+          makeMachine({ id: 'machine-2', hostname: 'ec2-runner', os: 'linux' }),
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ handoffs: [makeHandoff({ targetSessionId: 'ms-2' })], count: 1 }),
+      );
 
     const presenter = new RuntimeSessionPresenter({ apiClient });
     const response = await presenter.handoffSession({
@@ -345,7 +378,10 @@ describe('RuntimeSessionPresenter', () => {
   });
 
   it('loads and exposes machines alongside runtime sessions', async () => {
-    queueSessionAndMachineLoad([makeSession()], [makeMachine({ id: 'machine-9', hostname: 'laptop' })]);
+    queueSessionAndMachineLoad(
+      [makeSession()],
+      [makeMachine({ id: 'machine-9', hostname: 'laptop' })],
+    );
 
     const presenter = new RuntimeSessionPresenter({ apiClient });
     await presenter.loadSessions();

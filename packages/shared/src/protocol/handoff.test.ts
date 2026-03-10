@@ -4,8 +4,8 @@ import type {
   ExportHandoffSnapshotRequest,
   ExportHandoffSnapshotResponse,
   ManagedSessionHandoffResponse,
-  NativeImportPreflightResponse,
   NativeImportAttempt,
+  NativeImportPreflightResponse,
   StartHandoffRequest,
   StartHandoffResponse,
 } from './handoff.js';

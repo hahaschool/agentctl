@@ -9,8 +9,8 @@ import type {
   AgentRuntime,
   AgentStatus,
   AgentType,
-  CreateManagedSessionRequest,
   ContentMessage,
+  CreateManagedSessionRequest,
   ForkManagedSessionRequest,
   HandoffManagedSessionRequest,
   HandoffReason,
@@ -22,10 +22,10 @@ import type {
   ManagedSession,
   ManagedSessionStatus,
   MemoryObservation,
-  NativeImportPreflightResponse,
   NativeImportAttempt,
-  RuntimeHandoffSummaryResponse,
+  NativeImportPreflightResponse,
   ResumeManagedSessionRequest,
+  RuntimeHandoffSummaryResponse,
   ApiAccount as SharedApiAccount,
 } from '@agentctl/shared';
 
@@ -457,9 +457,7 @@ export const api = {
     const qs = new URLSearchParams();
     if (limit !== undefined) qs.set('limit', String(limit));
     const suffix = qs.toString() ? `?${qs}` : '';
-    return request<RuntimeHandoffSummary>(
-      `/api/runtime-sessions/handoffs/summary${suffix}`,
-    );
+    return request<RuntimeHandoffSummary>(`/api/runtime-sessions/handoffs/summary${suffix}`);
   },
   preflightRuntimeSessionHandoff: (
     id: string,

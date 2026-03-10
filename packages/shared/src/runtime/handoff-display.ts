@@ -1,5 +1,5 @@
-import type { HandoffStrategy, ManagedRuntime } from '../types/runtime-management.js';
 import type { NativeImportAttempt } from '../protocol/handoff.js';
+import type { HandoffStrategy, ManagedRuntime } from '../types/runtime-management.js';
 
 export function formatRuntimeLabel(runtime: ManagedRuntime): string {
   return runtime === 'claude-code' ? 'Claude Code' : 'Codex';
@@ -29,7 +29,9 @@ export function describeHandoffCompletion(input: {
   strategy: HandoffStrategy;
   nativeImportAttempt?: Pick<NativeImportAttempt, 'ok'>;
 }): string {
-  return `Handed off to ${formatRuntimeLabel(input.targetRuntime)} via ${describeHandoffExecution(input)
+  return `Handed off to ${formatRuntimeLabel(input.targetRuntime)} via ${describeHandoffExecution(
+    input,
+  )
     .replace(/^Completed via /, '')
     .toLowerCase()}`;
 }

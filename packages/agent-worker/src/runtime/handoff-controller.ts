@@ -4,9 +4,9 @@ import { promisify } from 'node:util';
 import type {
   ExportHandoffSnapshotRequest,
   HandoffSnapshot,
-  NativeImportPreflightResponse,
   HandoffStrategy,
   ManagedRuntime,
+  NativeImportPreflightResponse,
   StartHandoffRequest,
 } from '@agentctl/shared';
 import { WorkerError } from '@agentctl/shared';
@@ -21,7 +21,7 @@ import {
   type NativeImportProbeInput,
 } from './native-import/types.js';
 import type { ManagedSessionHandle, RuntimeAdapter } from './runtime-adapter.js';
-import { RuntimeRegistry } from './runtime-registry.js';
+import type { RuntimeRegistry } from './runtime-registry.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -111,7 +111,10 @@ export class HandoffController {
     snapshot: HandoffSnapshot;
   }): Promise<NativeImportPreflightResponse> {
     const key = `${input.sourceRuntime}:${input.targetRuntime}`;
-    if (!this.options.allowExperimentalNativeImport || input.sourceRuntime === input.targetRuntime) {
+    if (
+      !this.options.allowExperimentalNativeImport ||
+      input.sourceRuntime === input.targetRuntime
+    ) {
       return {
         ok: true,
         nativeImportCapable: false,
@@ -119,7 +122,10 @@ export class HandoffController {
           sourceRuntime: input.sourceRuntime,
           targetRuntime: input.targetRuntime,
           reason: 'not_supported',
-          metadata: { key, experimentalNativeImport: this.options.allowExperimentalNativeImport ?? false },
+          metadata: {
+            key,
+            experimentalNativeImport: this.options.allowExperimentalNativeImport ?? false,
+          },
         }),
       };
     }
@@ -268,7 +274,9 @@ export class HandoffController {
 function requireAdapter(registry: RuntimeRegistry, runtime: ManagedRuntime): RuntimeAdapter {
   const adapter = registry.get(runtime);
   if (!adapter) {
-    throw new WorkerError('RUNTIME_NOT_FOUND', `Runtime '${runtime}' is not registered`, { runtime });
+    throw new WorkerError('RUNTIME_NOT_FOUND', `Runtime '${runtime}' is not registered`, {
+      runtime,
+    });
   }
   return adapter;
 }
@@ -365,9 +373,7 @@ function composeHandoffPrompt(
   return lines.join('\n').trim();
 }
 
-function extractSourceSessionSummary(
-  metadata: Record<string, unknown> | undefined,
-): {
+function extractSourceSessionSummary(metadata: Record<string, unknown> | undefined): {
   recentMessages?: Array<{ role?: string; text?: string }>;
 } | null {
   if (!metadata) return null;

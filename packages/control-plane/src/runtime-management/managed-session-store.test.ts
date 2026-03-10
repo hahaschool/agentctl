@@ -1,10 +1,9 @@
-import type { ManagedRuntime, ManagedSessionStatus } from '@agentctl/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { Database } from '../db/index.js';
-import { createMockDb, type MockDb } from './test-helpers.js';
 import { ManagedSessionStore } from './managed-session-store.js';
+import { createMockDb, type MockDb } from './test-helpers.js';
 
 describe('ManagedSessionStore', () => {
   let mockDb: MockDb;

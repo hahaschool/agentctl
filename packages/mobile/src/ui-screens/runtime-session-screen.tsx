@@ -4,8 +4,6 @@
 // history without disturbing the classic Claude session workflow.
 // ---------------------------------------------------------------------------
 
-import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   describeHandoffCompletion,
   describeHandoffExecution,
@@ -13,13 +11,15 @@ import {
   formatHandoffStrategyLabel,
   HANDOFF_HISTORY_FILTERS,
   isMachineSelectable,
+  type Machine,
   matchesHandoffHistoryFilter,
   pickPreferredMachineId,
   sortMachinesForSelection,
   summarizeHandoffAnalytics,
   summarizeNativeImportPreflightStatus,
-  type Machine,
 } from '@agentctl/shared';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -34,9 +34,7 @@ import {
 } from 'react-native';
 
 import { useAppContext } from '../context/app-context.js';
-import type {
-  RuntimeSessionScreenState,
-} from '../screens/runtime-session-presenter.js';
+import type { RuntimeSessionScreenState } from '../screens/runtime-session-presenter.js';
 import { RuntimeSessionPresenter } from '../screens/runtime-session-presenter.js';
 import type { RuntimeSessionHandoff, RuntimeSessionInfo } from '../services/runtime-session-api.js';
 
@@ -61,7 +59,6 @@ function sessionStatusColor(status: RuntimeSessionInfo['status']): string {
       return '#ef4444';
     case 'starting':
       return '#8b5cf6';
-    case 'ended':
     default:
       return '#6b7280';
   }
@@ -109,7 +106,8 @@ function describeNativeImportAttempt(attempt?: {
   const sourceStorage =
     typeof attempt.metadata?.sourceStorage === 'string'
       ? attempt.metadata.sourceStorage
-      : typeof attempt.metadata?.sourceStorage === 'object' && attempt.metadata.sourceStorage !== null
+      : typeof attempt.metadata?.sourceStorage === 'object' &&
+          attempt.metadata.sourceStorage !== null
         ? formatSourceStorage(attempt.metadata.sourceStorage as Record<string, unknown>)
         : null;
   const sourceSessionSummary =
@@ -127,7 +125,9 @@ function describeNativeImportAttempt(attempt?: {
   const assistantMessages =
     typeof messageCounts?.assistant === 'number' ? messageCounts.assistant : 0;
   const lastActivity =
-    typeof sourceSessionSummary?.lastActivity === 'string' ? sourceSessionSummary.lastActivity : null;
+    typeof sourceSessionSummary?.lastActivity === 'string'
+      ? sourceSessionSummary.lastActivity
+      : null;
 
   if (targetCli) {
     details.push(`target CLI ${targetCli}`);
@@ -148,7 +148,9 @@ function describeNativeImportAttempt(attempt?: {
     : `Native import unavailable: ${formatNativeImportReason(attempt.reason)}${suffix}.`;
 }
 
-function describeNativeImportPreflight(preflight?: RuntimeSessionScreenState['handoffPreflight']): string | null {
+function describeNativeImportPreflight(
+  preflight?: RuntimeSessionScreenState['handoffPreflight'],
+): string | null {
   if (!preflight) return null;
 
   if (preflight.nativeImportCapable) {
@@ -172,7 +174,9 @@ function describeNativeImportPreflight(preflight?: RuntimeSessionScreenState['ha
     ]
       .filter(Boolean)
       .join(', ');
-    return details ? `Native import ready (${details}).` : 'Native import ready on this target runtime.';
+    return details
+      ? `Native import ready (${details}).`
+      : 'Native import ready on this target runtime.';
   }
 
   const summary = describeNativeImportAttempt(preflight.attempt);
@@ -191,7 +195,6 @@ function formatSourceStorage(sourceStorage: Record<string, unknown>): string | n
   if (typeof sourceStorage.rootPath === 'string') return sourceStorage.rootPath;
   return null;
 }
-
 
 function machineStatusColor(status: Machine['status']): string {
   switch (status) {
@@ -220,9 +223,12 @@ export function RuntimeSessionScreen(): React.JSX.Element {
   const [forkModel, setForkModel] = useState('');
   const [forkMachineId, setForkMachineId] = useState('');
   const [handoffPrompt, setHandoffPrompt] = useState('');
-  const [handoffTargetRuntime, setHandoffTargetRuntime] = useState<RuntimeSessionInfo['runtime']>('claude-code');
+  const [handoffTargetRuntime, setHandoffTargetRuntime] =
+    useState<RuntimeSessionInfo['runtime']>('claude-code');
   const [handoffMachineId, setHandoffMachineId] = useState('');
-  const [handoffHistoryFilter, setHandoffHistoryFilter] = useState<'all' | 'native-import' | 'fallback' | 'failed'>('all');
+  const [handoffHistoryFilter, setHandoffHistoryFilter] = useState<
+    'all' | 'native-import' | 'fallback' | 'failed'
+  >('all');
 
   const [state, setState] = useState<RuntimeSessionScreenState>({
     sessions: [],
@@ -252,18 +258,20 @@ export function RuntimeSessionScreen(): React.JSX.Element {
 
   useEffect(() => {
     if (!state.selectedSession) return;
-    const preferredMachineId = pickPreferredMachineId(state.machines, state.selectedSession.machineId);
+    const preferredMachineId = pickPreferredMachineId(
+      state.machines,
+      state.selectedSession.machineId,
+    );
     setForkMachineId(preferredMachineId);
     setHandoffMachineId(preferredMachineId);
-    setHandoffTargetRuntime(
-      state.selectedSession.runtime === 'codex' ? 'claude-code' : 'codex',
-    );
+    setHandoffTargetRuntime(state.selectedSession.runtime === 'codex' ? 'claude-code' : 'codex');
   }, [state.machines, state.selectedSession]);
 
   useEffect(() => {
     if (!state.selectedSession) return;
     if (!state.selectedSession.nativeSessionId) return;
-    if (!(state.selectedSession.status === 'active' || state.selectedSession.status === 'paused')) return;
+    if (!(state.selectedSession.status === 'active' || state.selectedSession.status === 'paused'))
+      return;
     if (handoffTargetRuntime === state.selectedSession.runtime) return;
 
     void presenterRef.current?.loadHandoffPreflight({
@@ -423,7 +431,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
         >
           <View style={styles.sessionHeader}>
             <Text style={styles.sessionId}>{truncateId(item.id, 12)}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: sessionStatusColor(item.status) }]}>
+            <View
+              style={[styles.statusBadge, { backgroundColor: sessionStatusColor(item.status) }]}
+            >
               <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
             </View>
           </View>
@@ -459,7 +469,7 @@ export function RuntimeSessionScreen(): React.JSX.Element {
         </TouchableOpacity>
       );
     },
-    [handleSessionPress],
+    [handleSessionPress, machineLookup],
   );
 
   const renderHandoff = useCallback(
@@ -487,7 +497,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
         </Text>
         <Text style={styles.handoffText}>Reason: {handoff.reason}</Text>
         <Text style={styles.handoffSummary} numberOfLines={3}>
-          {handoff.snapshot.diffSummary || handoff.snapshot.conversationSummary || 'No snapshot summary'}
+          {handoff.snapshot.diffSummary ||
+            handoff.snapshot.conversationSummary ||
+            'No snapshot summary'}
         </Text>
         {handoff.nativeImportAttempt && (
           <Text style={styles.handoffMeta}>
@@ -506,21 +518,27 @@ export function RuntimeSessionScreen(): React.JSX.Element {
     state.selectedSession?.status === 'error';
   const handoffable =
     state.selectedSession?.status === 'active' || state.selectedSession?.status === 'paused';
-  const preflightSummary = handoffable ? describeNativeImportPreflight(state.handoffPreflight) : null;
+  const preflightSummary = handoffable
+    ? describeNativeImportPreflight(state.handoffPreflight)
+    : null;
   const preflightStatus = summarizeNativeImportPreflightStatus({
     preflight:
       handoffable && state.selectedSession?.runtime !== handoffTargetRuntime
         ? state.handoffPreflight
         : null,
     isLoading:
-      state.isPreflightLoading && handoffable && state.selectedSession?.runtime !== handoffTargetRuntime,
+      state.isPreflightLoading &&
+      handoffable &&
+      state.selectedSession?.runtime !== handoffTargetRuntime,
   });
   const handoffActionDisabled =
     !handoffable ||
     (state.isPreflightLoading && state.selectedSession?.runtime !== handoffTargetRuntime);
   const filteredHandoffs = useMemo(
     () =>
-      state.handoffs.filter((handoff) => matchesHandoffHistoryFilter(handoff, handoffHistoryFilter)),
+      state.handoffs.filter((handoff) =>
+        matchesHandoffHistoryFilter(handoff, handoffHistoryFilter),
+      ),
     [handoffHistoryFilter, state.handoffs],
   );
   const handoffAnalytics = useMemo(
@@ -630,7 +648,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
-                <Text style={styles.helperText}>No machine inventory loaded; using manual entry.</Text>
+                <Text style={styles.helperText}>
+                  No machine inventory loaded; using manual entry.
+                </Text>
               </>
             )}
 
@@ -696,25 +716,35 @@ export function RuntimeSessionScreen(): React.JSX.Element {
               <>
                 <View style={styles.detailHeader}>
                   <View style={styles.detailHeaderTop}>
-                    <Text style={styles.detailTitle}>{truncateId(state.selectedSession.id, 14)}</Text>
+                    <Text style={styles.detailTitle}>
+                      {truncateId(state.selectedSession.id, 14)}
+                    </Text>
                     <View
                       style={[
                         styles.statusBadge,
                         { backgroundColor: sessionStatusColor(state.selectedSession.status) },
                       ]}
                     >
-                      <Text style={styles.statusText}>{state.selectedSession.status.toUpperCase()}</Text>
+                      <Text style={styles.statusText}>
+                        {state.selectedSession.status.toUpperCase()}
+                      </Text>
                     </View>
                   </View>
-                  <Text style={styles.detailInfo}>Runtime: {runtimeLabel(state.selectedSession.runtime)}</Text>
+                  <Text style={styles.detailInfo}>
+                    Runtime: {runtimeLabel(state.selectedSession.runtime)}
+                  </Text>
                   <Text style={styles.detailInfo}>
                     Machine:{' '}
                     {machineLookup.get(state.selectedSession.machineId)?.hostname ??
                       state.selectedSession.machineId}
                   </Text>
-                  <Text style={styles.detailInfo}>Project: {state.selectedSession.projectPath}</Text>
+                  <Text style={styles.detailInfo}>
+                    Project: {state.selectedSession.projectPath}
+                  </Text>
                   {state.selectedSession.worktreePath && (
-                    <Text style={styles.detailInfo}>Worktree: {state.selectedSession.worktreePath}</Text>
+                    <Text style={styles.detailInfo}>
+                      Worktree: {state.selectedSession.worktreePath}
+                    </Text>
                   )}
                   {state.selectedSession.nativeSessionId && (
                     <Text style={styles.detailInfo}>
@@ -723,7 +753,10 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                   )}
                 </View>
 
-                <ScrollView style={styles.detailScroll} contentContainerStyle={styles.detailScrollContent}>
+                <ScrollView
+                  style={styles.detailScroll}
+                  contentContainerStyle={styles.detailScrollContent}
+                >
                   {resumable && (
                     <View style={styles.sectionCard}>
                       <Text style={styles.sectionTitle}>Resume</Text>
@@ -812,7 +845,10 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                           autoCorrect={false}
                         />
                       )}
-                      <TouchableOpacity style={[styles.actionButton, styles.forkButton]} onPress={handleFork}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.forkButton]}
+                        onPress={handleFork}
+                      >
                         <Text style={styles.buttonText}>Fork Session</Text>
                       </TouchableOpacity>
                     </View>
@@ -885,7 +921,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                             preflightStatus.tone === 'neutral' && styles.preflightBadgeNeutral,
                           ]}
                         >
-                          <Text style={styles.preflightBadgeText}>{preflightStatus.badgeLabel}</Text>
+                          <Text style={styles.preflightBadgeText}>
+                            {preflightStatus.badgeLabel}
+                          </Text>
                         </View>
                       )}
                       {preflightSummary && (
@@ -938,7 +976,9 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                     {state.isHandoffsLoading ? (
                       <Text style={styles.loadingText}>Loading handoffs...</Text>
                     ) : state.handoffs.length === 0 ? (
-                      <Text style={styles.emptyTranscript}>No handoffs recorded for this session.</Text>
+                      <Text style={styles.emptyTranscript}>
+                        No handoffs recorded for this session.
+                      </Text>
                     ) : (
                       <>
                         <View style={styles.handoffFilterRow}>
@@ -954,7 +994,8 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                               <Text
                                 style={[
                                   styles.handoffFilterChipText,
-                                  handoffHistoryFilter === filter && styles.handoffFilterChipTextActive,
+                                  handoffHistoryFilter === filter &&
+                                    styles.handoffFilterChipTextActive,
                                 ]}
                               >
                                 {formatHandoffHistoryFilterLabel(filter)}
@@ -965,19 +1006,27 @@ export function RuntimeSessionScreen(): React.JSX.Element {
                         <View style={styles.handoffAnalyticsRow}>
                           <View style={styles.handoffAnalyticsCard}>
                             <Text style={styles.handoffAnalyticsLabel}>Total</Text>
-                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.total}</Text>
+                            <Text style={styles.handoffAnalyticsValue}>
+                              {handoffAnalytics.total}
+                            </Text>
                           </View>
                           <View style={styles.handoffAnalyticsCard}>
                             <Text style={styles.handoffAnalyticsLabel}>Succeeded</Text>
-                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.succeeded}</Text>
+                            <Text style={styles.handoffAnalyticsValue}>
+                              {handoffAnalytics.succeeded}
+                            </Text>
                           </View>
                           <View style={styles.handoffAnalyticsCard}>
                             <Text style={styles.handoffAnalyticsLabel}>Native Import</Text>
-                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.nativeImportSuccesses}</Text>
+                            <Text style={styles.handoffAnalyticsValue}>
+                              {handoffAnalytics.nativeImportSuccesses}
+                            </Text>
                           </View>
                           <View style={styles.handoffAnalyticsCard}>
                             <Text style={styles.handoffAnalyticsLabel}>Fallbacks</Text>
-                            <Text style={styles.handoffAnalyticsValue}>{handoffAnalytics.nativeImportFallbacks}</Text>
+                            <Text style={styles.handoffAnalyticsValue}>
+                              {handoffAnalytics.nativeImportFallbacks}
+                            </Text>
                           </View>
                         </View>
                         {filteredHandoffs.length === 0 ? (

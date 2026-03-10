@@ -155,7 +155,10 @@ export class RuntimeConfigStore {
           .from(machineRuntimeState)
           .where(eq(machineRuntimeState.machineId, machineId))
           .orderBy(desc(machineRuntimeState.updatedAt))
-      : await this.db.select().from(machineRuntimeState).orderBy(desc(machineRuntimeState.updatedAt));
+      : await this.db
+          .select()
+          .from(machineRuntimeState)
+          .orderBy(desc(machineRuntimeState.updatedAt));
 
     return rows.map(mapMachineRuntimeState);
   }

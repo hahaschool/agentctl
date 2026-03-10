@@ -2,15 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { type ManagedSessionRecord } from '../../runtime-management/managed-session-store.js';
+import type { ManagedSessionRecord } from '../../runtime-management/managed-session-store.js';
+import { runtimeSessionRoutes } from './runtime-sessions.js';
 import {
   createMockDbRegistry,
   makeMachine,
   mockFetchOk,
-  mockFetchThrow,
   saveOriginalFetch,
 } from './test-helpers.js';
-import { runtimeSessionRoutes } from './runtime-sessions.js';
 
 const originalFetch = saveOriginalFetch();
 
@@ -323,7 +322,9 @@ describe('runtimeSessionRoutes', () => {
       }),
     );
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('http://100.64.0.2:9000/api/runtime-sessions/codex-native-existing/fork'),
+      expect.stringContaining(
+        'http://100.64.0.2:9000/api/runtime-sessions/codex-native-existing/fork',
+      ),
       expect.any(Object),
     );
 

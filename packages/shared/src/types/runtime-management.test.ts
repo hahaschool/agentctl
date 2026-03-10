@@ -8,11 +8,11 @@ import type {
 } from './runtime-management.js';
 import {
   HANDOFF_STRATEGIES,
-  MANAGED_RUNTIMES,
-  MANAGED_SESSION_STATUSES,
   isHandoffStrategy,
   isManagedRuntime,
   isManagedSessionStatus,
+  MANAGED_RUNTIMES,
+  MANAGED_SESSION_STATUSES,
 } from './runtime-management.js';
 
 describe('runtime-management types', () => {

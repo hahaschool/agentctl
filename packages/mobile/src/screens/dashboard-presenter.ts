@@ -5,9 +5,9 @@
 // ---------------------------------------------------------------------------
 
 import {
-  calculateHandoffAnalyticsRates,
   type Agent,
   type AgentStatus,
+  calculateHandoffAnalyticsRates,
   type HandoffAnalyticsSummary,
   type Machine,
 } from '@agentctl/shared';
@@ -242,7 +242,9 @@ export class DashboardPresenter {
 
     const idle = agents.length - running - error;
     const onlineMachines = machines.filter((m) => m.status === 'online').length;
-    const activeManagedRuntimes = runtimeSessions.filter((session) => session.status === 'active').length;
+    const activeManagedRuntimes = runtimeSessions.filter(
+      (session) => session.status === 'active',
+    ).length;
     const switchingManagedRuntimes = runtimeSessions.filter(
       (session) => session.status === 'handing_off',
     ).length;
