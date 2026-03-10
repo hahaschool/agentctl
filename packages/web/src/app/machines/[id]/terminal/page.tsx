@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
@@ -14,10 +14,12 @@ export default function MachineTerminalPage() {
   const params = useParams<{ id: string }>();
   const machineId = params.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [terminalId, setTerminalId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [spawning, setSpawning] = useState(true);
+  const initialCommand = searchParams.get('command')?.trim() || null;
 
   // Ref survives React Strict Mode's unmount/remount cycle.
   // We use it to share the spawn result across mounts so we only spawn once.
@@ -119,6 +121,12 @@ export default function MachineTerminalPage() {
       </div>
 
       <div className="flex-1 min-h-0">
+        {initialCommand && (
+          <div className="px-4 py-2 border-b border-border bg-muted/40">
+            <p className="text-xs font-medium text-muted-foreground">Queued command</p>
+            <code className="mt-1 block text-xs text-foreground">{initialCommand}</code>
+          </div>
+        )}
         {spawning && (
           <div className="flex items-center justify-center h-full">
             <span className="text-sm text-muted-foreground animate-pulse">
@@ -156,6 +164,7 @@ export default function MachineTerminalPage() {
           <InteractiveTerminal
             machineId={machineId}
             terminalId={terminalId}
+            initialCommand={initialCommand ?? undefined}
             onExit={handleExit}
             onError={handleError}
             className="h-full"

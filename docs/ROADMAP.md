@@ -396,7 +396,21 @@ Enable seamless mid-task switching between agent types without losing context:
 - [ ] Memory continuity: Mem0 context shared across agent types within a single run
 - [x] Audit: backend stores every handoff plus native import attempt metadata
 
-### 10.3 Unified Session Browser (iOS App)
+### 10.3 Unified Session Browser (Web + iOS)
+
+> Design doc: [plans/2026-03-10-unified-sessions-ui-design.md](plans/2026-03-10-unified-sessions-ui-design.md)
+
+Surface all sessions through one primary browser, starting with the web app and then aligning mobile:
+
+#### Web consolidation
+
+- [ ] Consolidate `/sessions` and `/runtime-sessions` into one canonical `/sessions` browser
+- [ ] Default `/sessions` to `All` with `Agent` and `Runtime` type filters
+- [ ] Reuse the existing `SessionsPage` shell and embed runtime-specific handoff/native-import actions as type-specific detail UI
+- [ ] Redirect `/runtime-sessions` to `/sessions?type=runtime` after the unified browser is stable
+- [ ] Collapse dashboard/sidebar/command-palette session navigation onto the unified route
+
+#### Mobile
 
 Surface all agent sessions — regardless of agent type — in one mobile view:
 

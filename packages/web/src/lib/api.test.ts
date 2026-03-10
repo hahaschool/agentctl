@@ -762,6 +762,134 @@ describe('api.updateDefaults', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Managed runtime config
+// ---------------------------------------------------------------------------
+
+describe('api.getRuntimeConfigDefaults', () => {
+  it('calls GET /api/runtime-config/defaults', async () => {
+    const payload = {
+      version: 9,
+      hash: 'sha256:cfg-9',
+      config: {
+        version: 9,
+        hash: 'sha256:cfg-9',
+        instructions: {
+          userGlobal: 'Global instructions',
+          projectTemplate: 'Project instructions',
+        },
+        mcpServers: [],
+        skills: [],
+        sandbox: 'workspace-write',
+        approvalPolicy: 'on-request',
+        environmentPolicy: { inherit: ['PATH'], set: {} },
+        runtimeOverrides: {
+          claudeCode: { model: 'sonnet' },
+          codex: { model: 'gpt-5-codex' },
+        },
+      },
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(payload));
+
+    const result = await api.getRuntimeConfigDefaults();
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/defaults');
+    expect(result).toEqual(payload);
+  });
+});
+
+describe('api.updateRuntimeConfigDefaults', () => {
+  it('calls PUT /api/runtime-config/defaults with config body', async () => {
+    const payload = {
+      version: 10,
+      hash: 'sha256:cfg-10',
+      config: {
+        version: 10,
+        hash: 'sha256:cfg-10',
+        instructions: {
+          userGlobal: 'Updated global instructions',
+          projectTemplate: 'Project instructions',
+        },
+        mcpServers: [],
+        skills: [],
+        sandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+        environmentPolicy: { inherit: ['PATH', 'HOME'], set: { FOO: 'bar' } },
+        runtimeOverrides: {
+          claudeCode: { model: 'sonnet' },
+          codex: { model: 'gpt-5-codex' },
+        },
+      },
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(payload));
+
+    const result = await api.updateRuntimeConfigDefaults(payload.config);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/defaults');
+    expect(init?.method).toBe('PUT');
+    expect(JSON.parse(init?.body as string)).toEqual({ config: payload.config });
+    expect(result).toEqual(payload);
+  });
+});
+
+describe('api.getRuntimeConfigDrift', () => {
+  it('calls GET /api/runtime-config/drift with no machine filter', async () => {
+    const payload = {
+      activeVersion: 9,
+      activeHash: 'sha256:cfg-9',
+      items: [],
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(payload));
+
+    const result = await api.getRuntimeConfigDrift();
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/drift');
+    expect(result).toEqual(payload);
+  });
+
+  it('calls GET /api/runtime-config/drift with machineId filter', async () => {
+    const payload = {
+      activeVersion: 9,
+      activeHash: 'sha256:cfg-9',
+      items: [],
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(payload));
+
+    await api.getRuntimeConfigDrift('machine-1');
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/drift?machineId=machine-1');
+  });
+});
+
+describe('api.syncRuntimeConfig', () => {
+  it('calls POST /api/runtime-config/sync with machineIds and configVersion', async () => {
+    const payload = {
+      queued: 2,
+      machineIds: ['machine-1', 'machine-2'],
+      configVersion: 9,
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(payload));
+
+    const result = await api.syncRuntimeConfig({
+      machineIds: ['machine-1', 'machine-2'],
+      configVersion: 9,
+    });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-config/sync');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({
+      machineIds: ['machine-1', 'machine-2'],
+      configVersion: 9,
+    });
+    expect(result).toEqual(payload);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Project account mappings
 // ---------------------------------------------------------------------------
 

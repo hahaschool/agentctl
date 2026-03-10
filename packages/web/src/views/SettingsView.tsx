@@ -13,6 +13,8 @@ import { AccountsSection } from './AccountsSection';
 import { FailoverSection } from './FailoverSection';
 import { PreferencesSection } from './PreferencesSection';
 import { ProjectAccountsSection } from './ProjectAccountsSection';
+import { RuntimeAccessSection } from './RuntimeAccessSection';
+import { RuntimeConsistencySection } from './RuntimeConsistencySection';
 
 // ---------------------------------------------------------------------------
 // Group wrapper — visual grouping without heavy card borders
@@ -60,12 +62,23 @@ export function SettingsView(): React.JSX.Element {
         {/* --- API & Accounts group --- */}
         <SettingsGroup
           id="accounts"
-          title="API Accounts"
-          description="Manage provider credentials and configure how requests are routed between accounts."
+          title="Cloud API Accounts"
+          description="Manage provider credentials used for routed API requests and project-level account overrides."
         >
           <AccountsSection />
           <FailoverSection />
           <ProjectAccountsSection />
+        </SettingsGroup>
+
+        <hr className="border-border/30" />
+
+        <SettingsGroup
+          id="runtime-management"
+          title="Claude & Codex"
+          description="Manage machine-local Claude Code and Codex access, then inspect and repair config consistency."
+        >
+          <RuntimeAccessSection />
+          <RuntimeConsistencySection />
         </SettingsGroup>
 
         <hr className="border-border/30" />

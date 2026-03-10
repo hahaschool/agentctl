@@ -14,6 +14,8 @@ import {
   queryKeys,
   routerModelsInfoQuery,
   routerModelsQuery,
+  runtimeConfigDefaultsQuery,
+  runtimeConfigDriftQuery,
   runtimeHandoffSummaryQuery,
   runtimeSessionHandoffsQuery,
   runtimeSessionPreflightQuery,
@@ -158,6 +160,22 @@ describe('queryKeys', () => {
     expect(queryKeys.projectAccounts).toEqual(['project-accounts']);
   });
 
+  it('runtimeConfigDefaults key is correct', () => {
+    expect(queryKeys.runtimeConfigDefaults).toEqual(['runtime-config', 'defaults']);
+  });
+
+  it('runtimeConfigDrift key is correct without machineId', () => {
+    expect(queryKeys.runtimeConfigDrift()).toEqual(['runtime-config', 'drift']);
+  });
+
+  it('runtimeConfigDrift key includes machineId when present', () => {
+    expect(queryKeys.runtimeConfigDrift('machine-1')).toEqual([
+      'runtime-config',
+      'drift',
+      'machine-1',
+    ]);
+  });
+
   it('routerModels key is correct', () => {
     expect(queryKeys.routerModels).toEqual(['router', 'models']);
   });
@@ -205,6 +223,30 @@ describe('machinesQuery', () => {
 
   it('has queryFn property', () => {
     const options = machinesQuery();
+    expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('runtimeConfigDefaultsQuery', () => {
+  it('returns queryOptions with runtime config defaults queryKey', () => {
+    const options = runtimeConfigDefaultsQuery();
+    expect(options.queryKey).toEqual(queryKeys.runtimeConfigDefaults);
+  });
+
+  it('has queryFn property', () => {
+    const options = runtimeConfigDefaultsQuery();
+    expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('runtimeConfigDriftQuery', () => {
+  it('returns queryOptions with runtime config drift queryKey', () => {
+    const options = runtimeConfigDriftQuery('machine-1');
+    expect(options.queryKey).toEqual(queryKeys.runtimeConfigDrift('machine-1'));
+  });
+
+  it('has queryFn property', () => {
+    const options = runtimeConfigDriftQuery();
     expect(options.queryFn).toBeDefined();
   });
 });

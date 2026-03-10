@@ -19,12 +19,15 @@ import type {
   MachineCapabilities,
   MachineStatus,
   ManagedRuntime,
+  ManagedRuntimeConfig,
   ManagedSession,
   ManagedSessionStatus,
   MemoryObservation,
   NativeImportAttempt,
   NativeImportPreflightResponse,
   ResumeManagedSessionRequest,
+  RuntimeConfigSyncRequest,
+  RuntimeConfigSyncResponse,
   RuntimeHandoffSummaryResponse,
   ApiAccount as SharedApiAccount,
 } from '@agentctl/shared';
@@ -165,6 +168,34 @@ export type RuntimeSessionHandoffsPage = {
 };
 
 export type RuntimeHandoffSummary = RuntimeHandoffSummaryResponse;
+
+export type RuntimeConfigDefaultsResponse = {
+  version: number;
+  hash: string;
+  config: ManagedRuntimeConfig;
+};
+
+export type RuntimeConfigDriftItem = {
+  id: string;
+  machineId: string;
+  runtime: ManagedRuntime;
+  isInstalled: boolean;
+  isAuthenticated: boolean;
+  syncStatus: string;
+  configVersion: number | null;
+  configHash: string | null;
+  metadata: Record<string, unknown>;
+  lastConfigAppliedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  drifted: boolean;
+};
+
+export type RuntimeConfigDriftResponse = {
+  activeVersion: number;
+  activeHash: string;
+  items: RuntimeConfigDriftItem[];
+};
 
 export type AgentRun = {
   id: string;
@@ -581,6 +612,24 @@ export const api = {
   updateDefaults: (body: Partial<AccountDefaults>) =>
     request<AccountDefaults>('/api/settings/defaults', {
       method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  getRuntimeConfigDefaults: () =>
+    request<RuntimeConfigDefaultsResponse>('/api/runtime-config/defaults'),
+  updateRuntimeConfigDefaults: (config: ManagedRuntimeConfig) =>
+    request<RuntimeConfigDefaultsResponse>('/api/runtime-config/defaults', {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    }),
+  getRuntimeConfigDrift: (machineId?: string) => {
+    const qs = new URLSearchParams();
+    if (machineId) qs.set('machineId', machineId);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return request<RuntimeConfigDriftResponse>(`/api/runtime-config/drift${suffix}`);
+  },
+  syncRuntimeConfig: (body: RuntimeConfigSyncRequest) =>
+    request<RuntimeConfigSyncResponse>('/api/runtime-config/sync', {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
 
