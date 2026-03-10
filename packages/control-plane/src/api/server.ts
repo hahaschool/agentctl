@@ -526,6 +526,7 @@ function createFallbackManagedSessionStore(): Pick<
         ...existing,
         status,
         nativeSessionId: patch.nativeSessionId ?? existing.nativeSessionId,
+        handoffStrategy: patch.handoffStrategy ?? existing.handoffStrategy,
         metadata: patch.metadata ?? existing.metadata,
         lastHeartbeat: patch.lastHeartbeat ?? existing.lastHeartbeat,
         endedAt: patch.endedAt ?? existing.endedAt,

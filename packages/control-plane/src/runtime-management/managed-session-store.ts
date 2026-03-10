@@ -37,6 +37,7 @@ export type ManagedSessionFilters = {
 
 export type UpdateManagedSessionStatusPatch = {
   nativeSessionId?: string | null;
+  handoffStrategy?: HandoffStrategy | null;
   lastHeartbeat?: Date | null;
   endedAt?: Date | null;
   metadata?: Record<string, unknown>;
@@ -135,6 +136,7 @@ export class ManagedSessionStore {
       .set({
         status,
         nativeSessionId: patch.nativeSessionId,
+        handoffStrategy: patch.handoffStrategy,
         lastHeartbeat: patch.lastHeartbeat,
         endedAt: patch.endedAt,
         metadata: patch.metadata,

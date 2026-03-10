@@ -248,6 +248,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         execution.session.status ?? 'active',
         {
           nativeSessionId: execution.session.nativeSessionId ?? null,
+          handoffStrategy: execution.strategy ?? 'snapshot-handoff',
           lastHeartbeat: new Date(),
         },
       );

@@ -123,7 +123,7 @@ describe('ManagedSessionStore', () => {
         worktreePath: null,
         status: 'ended',
         configVersion: 7,
-        handoffStrategy: null,
+        handoffStrategy: 'native-import',
         handoffSourceSessionId: null,
         metadata: { source: 'manual' },
         startedAt: new Date('2026-03-09T10:00:00Z'),
@@ -134,6 +134,7 @@ describe('ManagedSessionStore', () => {
 
     const session = await store.updateStatus('ms-1', 'ended', {
       nativeSessionId: 'native-1',
+      handoffStrategy: 'native-import',
       endedAt: new Date('2026-03-09T10:40:00Z'),
     });
 
@@ -142,9 +143,11 @@ describe('ManagedSessionStore', () => {
       expect.objectContaining({
         status: 'ended',
         nativeSessionId: 'native-1',
+        handoffStrategy: 'native-import',
       }),
     );
     expect(session.status).toBe('ended');
+    expect(session.handoffStrategy).toBe('native-import');
   });
 
   it('returns a managed session by id when it exists', async () => {

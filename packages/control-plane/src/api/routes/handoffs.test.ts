@@ -177,7 +177,9 @@ describe('handoffRoutes', () => {
           runtime: 'claude-code',
           nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
           status,
-          handoffStrategy: 'snapshot-handoff',
+          handoffStrategy:
+            (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
+            'snapshot-handoff',
           handoffSourceSessionId: 'ms-source',
         });
       },
@@ -249,6 +251,115 @@ describe('handoffRoutes', () => {
         sourceRuntime: 'codex',
         targetRuntime: 'claude-code',
         status: 'failed',
+      }),
+    );
+  });
+
+  it('persists native-import as the target managed session strategy when the worker imports successfully', async () => {
+    managedSessionStore.get.mockResolvedValue(makeManagedSession());
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-target',
+        runtime: 'claude-code',
+        nativeSessionId: null,
+        status: 'starting',
+        handoffStrategy: 'snapshot-handoff',
+        handoffSourceSessionId: 'ms-source',
+      }),
+    );
+    managedSessionStore.updateStatus.mockImplementation(
+      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) => {
+        if (id === 'ms-source') {
+          return makeManagedSession({ id, status });
+        }
+
+        return makeManagedSession({
+          id,
+          runtime: 'claude-code',
+          nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-2',
+          status,
+          handoffStrategy:
+            (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
+            'snapshot-handoff',
+          handoffSourceSessionId: 'ms-source',
+        });
+      },
+    );
+    handoffStore.create.mockResolvedValue(
+      makeHandoffRecord({
+        strategy: 'native-import',
+        targetRuntime: 'claude-code',
+      }),
+    );
+
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          snapshot: makeSnapshot(),
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'native-import',
+          attemptedStrategies: ['native-import', 'snapshot-handoff'],
+          nativeImportAttempt: {
+            ok: true,
+            sourceRuntime: 'codex',
+            targetRuntime: 'claude-code',
+            reason: 'succeeded',
+            metadata: { probe: 'codex-to-claude' },
+          },
+          session: {
+            runtime: 'claude-code',
+            sessionId: 'worker-2',
+            nativeSessionId: 'claude-native-2',
+            agentId: 'agent-1',
+            projectPath: '/workspace/app',
+            model: 'sonnet',
+            status: 'active',
+          },
+        }),
+      });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/ms-source/handoff',
+      payload: {
+        targetRuntime: 'claude-code',
+        reason: 'manual',
+        prompt: 'Continue through native import.',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().strategy).toBe('native-import');
+    expect(response.json().session.handoffStrategy).toBe('native-import');
+    expect(managedSessionStore.updateStatus).toHaveBeenCalledWith(
+      'ms-target',
+      'active',
+      expect.objectContaining({
+        nativeSessionId: 'claude-native-2',
+        handoffStrategy: 'native-import',
+      }),
+    );
+    expect(handoffStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategy: 'native-import',
+        status: 'succeeded',
+      }),
+    );
+    expect(handoffStore.recordNativeImportAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handoffId: 'handoff-1',
+        status: 'succeeded',
       }),
     );
   });
@@ -446,7 +557,9 @@ describe('handoffRoutes', () => {
           machineId: 'machine-2',
           nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
           status,
-          handoffStrategy: 'snapshot-handoff',
+          handoffStrategy:
+            (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
+            'snapshot-handoff',
           handoffSourceSessionId: 'ms-source',
         });
       },
@@ -500,6 +613,138 @@ describe('handoffRoutes', () => {
         machineId: 'machine-2',
       }),
     );
+    const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+    expect(String(fetchCalls[0]?.[0])).toContain('http://100.64.0.1:9000/api/runtime-sessions/codex-native-1/handoff/export');
+    expect(String(fetchCalls[1]?.[0])).toContain('http://100.64.0.2:9000/api/runtime-sessions/handoff');
+
+    await appWithTargetRegistry.close();
+  });
+
+  it('POST /api/runtime-sessions/:id/handoff preserves native-import strategy across machines', async () => {
+    const appWithTargetRegistry = await buildApp(managedSessionStore, handoffStore, runtimeConfigStore, {
+      dbRegistry: createMockDbRegistry({
+        getMachine: vi.fn(async (machineId: string) => {
+          if (machineId === 'machine-2') {
+            return {
+              id: 'machine-2',
+              hostname: 'ec2-runner',
+              tailscaleIp: '100.64.0.2',
+              os: 'linux',
+              arch: 'x64',
+              status: 'online',
+            };
+          }
+
+          return {
+            id: 'machine-1',
+            hostname: 'mac-mini',
+            tailscaleIp: '100.64.0.1',
+            os: 'darwin',
+            arch: 'arm64',
+            status: 'online',
+          };
+        }),
+      }),
+    });
+
+    managedSessionStore.get.mockResolvedValue(makeManagedSession());
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-target',
+        runtime: 'claude-code',
+        machineId: 'machine-2',
+        nativeSessionId: null,
+        status: 'starting',
+        handoffStrategy: 'snapshot-handoff',
+        handoffSourceSessionId: 'ms-source',
+      }),
+    );
+    managedSessionStore.updateStatus.mockImplementation(
+      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) => {
+        if (id === 'ms-source') {
+          return makeManagedSession({ id, status });
+        }
+
+        return makeManagedSession({
+          id,
+          runtime: 'claude-code',
+          machineId: 'machine-2',
+          nativeSessionId: (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-2',
+          status,
+          handoffStrategy:
+            (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
+            'snapshot-handoff',
+          handoffSourceSessionId: 'ms-source',
+        });
+      },
+    );
+    handoffStore.create.mockResolvedValue(
+      makeHandoffRecord({
+        strategy: 'native-import',
+        targetRuntime: 'claude-code',
+      }),
+    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          snapshot: makeSnapshot(),
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'native-import',
+          attemptedStrategies: ['native-import', 'snapshot-handoff'],
+          nativeImportAttempt: {
+            ok: true,
+            sourceRuntime: 'codex',
+            targetRuntime: 'claude-code',
+            reason: 'succeeded',
+            metadata: { probe: 'codex-to-claude' },
+          },
+          session: {
+            runtime: 'claude-code',
+            sessionId: 'worker-2',
+            nativeSessionId: 'claude-native-2',
+            agentId: 'agent-1',
+            projectPath: '/workspace/app',
+            model: 'sonnet',
+            status: 'active',
+          },
+        }),
+      });
+
+    const response = await appWithTargetRegistry.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/ms-source/handoff',
+      payload: {
+        targetRuntime: 'claude-code',
+        targetMachineId: 'machine-2',
+        reason: 'manual',
+        prompt: 'Continue on machine-2 via native import',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().strategy).toBe('native-import');
+    expect(response.json().session.machineId).toBe('machine-2');
+    expect(response.json().session.handoffStrategy).toBe('native-import');
+    expect(managedSessionStore.updateStatus).toHaveBeenCalledWith(
+      'ms-target',
+      'active',
+      expect.objectContaining({
+        nativeSessionId: 'claude-native-2',
+        handoffStrategy: 'native-import',
+      }),
+    );
+
     const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
     expect(String(fetchCalls[0]?.[0])).toContain('http://100.64.0.1:9000/api/runtime-sessions/codex-native-1/handoff/export');
     expect(String(fetchCalls[1]?.[0])).toContain('http://100.64.0.2:9000/api/runtime-sessions/handoff');
