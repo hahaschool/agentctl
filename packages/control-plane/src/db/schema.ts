@@ -230,6 +230,58 @@ export const nativeImportAttempts = pgTable(
   ],
 );
 
+export const memoryScopes = pgTable(
+  'memory_scopes',
+  {
+    scope: text('scope').primaryKey(),
+    parentScope: text('parent_scope').references((): AnyPgColumn => memoryScopes.scope),
+    displayName: text('display_name'),
+    configJson: jsonb('config_json').notNull().default({}),
+  },
+);
+
+export const memoryFacts = pgTable(
+  'memory_facts',
+  {
+    id: text('id').primaryKey(),
+    scope: text('scope').notNull(),
+    content: text('content').notNull(),
+    contentModel: text('content_model').notNull().default('text-embedding-3-small'),
+    entityType: text('entity_type').notNull(),
+    confidence: numeric('confidence', { precision: 4, scale: 3 }).notNull().default('0.800'),
+    strength: numeric('strength', { precision: 4, scale: 3 }).notNull().default('1.000'),
+    sourceJson: jsonb('source_json').notNull().default({}),
+    validFrom: timestamp('valid_from', { withTimezone: true }).notNull().defaultNow(),
+    validUntil: timestamp('valid_until', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    accessedAt: timestamp('accessed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_memory_facts_scope').on(table.scope),
+    index('idx_memory_facts_entity_type').on(table.entityType),
+  ],
+);
+
+export const memoryEdges = pgTable(
+  'memory_edges',
+  {
+    id: text('id').primaryKey(),
+    sourceFactId: text('source_fact_id')
+      .notNull()
+      .references(() => memoryFacts.id, { onDelete: 'cascade' }),
+    targetFactId: text('target_fact_id')
+      .notNull()
+      .references(() => memoryFacts.id, { onDelete: 'cascade' }),
+    relation: text('relation').notNull(),
+    weight: numeric('weight', { precision: 4, scale: 3 }).notNull().default('0.500'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_memory_edges_source').on(table.sourceFactId),
+    index('idx_memory_edges_target').on(table.targetFactId),
+  ],
+);
+
 export const agentActions = pgTable(
   'agent_actions',
   {
