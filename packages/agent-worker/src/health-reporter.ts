@@ -1,7 +1,11 @@
 import { execSync } from 'node:child_process';
 import os from 'node:os';
 
-import { WorkerError } from '@agentctl/shared';
+import {
+  type DispatchVerificationConfig,
+  isDispatchVerificationConfig,
+  WorkerError,
+} from '@agentctl/shared';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from './runtime/agent-pool.js';
@@ -60,6 +64,7 @@ export class HealthReporter {
   private readonly logger: Logger;
   private readonly agentPool: AgentPool | null;
   private tailscaleIp: string = '127.0.0.1';
+  private dispatchVerificationConfig: DispatchVerificationConfig | null = null;
 
   constructor(options: HealthReporterOptions) {
     this.machineId = options.machineId;
@@ -94,6 +99,8 @@ export class HealthReporter {
         throw new WorkerError('REGISTER_FAILED', `Registration returned ${response.status}`);
       }
 
+      this.updateDispatchVerificationConfig(await readJsonBody(response));
+
       this.logger.info({ machineId: this.machineId }, 'Registered with control plane');
     } catch (err) {
       this.logger.warn(
@@ -118,6 +125,10 @@ export class HealthReporter {
       clearInterval(this.timer);
       this.timer = null;
     }
+  }
+
+  getDispatchVerificationConfig(): DispatchVerificationConfig | null {
+    return this.dispatchVerificationConfig;
   }
 
   private getRunningAgentsSummary(): Array<{ agentId: string; sessionId: string | null }> {
@@ -146,6 +157,7 @@ export class HealthReporter {
 
     const response = await heartbeatRequest();
     if (response.ok) {
+      this.updateDispatchVerificationConfig(await readJsonBody(response));
       return;
     }
 
@@ -167,5 +179,28 @@ export class HealthReporter {
         },
       );
     }
+
+    this.updateDispatchVerificationConfig(await readJsonBody(retryResponse));
+  }
+
+  private updateDispatchVerificationConfig(payload: unknown): void {
+    if (!payload || typeof payload !== 'object') {
+      return;
+    }
+
+    const candidate = (payload as { dispatchVerification?: unknown }).dispatchVerification;
+    if (!isDispatchVerificationConfig(candidate)) {
+      return;
+    }
+
+    this.dispatchVerificationConfig = candidate;
+  }
+}
+
+async function readJsonBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
   }
 }

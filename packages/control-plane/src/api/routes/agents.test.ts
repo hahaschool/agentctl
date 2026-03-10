@@ -1,4 +1,4 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, generateDispatchSigningKeyPair } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -76,6 +76,94 @@ describe('Agent routes — /api/agents', () => {
       const body = response.json();
       expect(body.ok).toBe(true);
       expect(body.machineId).toBe('mac-mini-studio');
+    });
+  });
+
+  describe('dispatch verification bootstrap responses', () => {
+    it('returns the control-plane dispatch verification config on register', async () => {
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      const bootstrapApp = await createServer({
+        logger,
+        registry: new AgentRegistry(),
+        dispatchVerificationConfig: {
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        },
+      });
+
+      await bootstrapApp.ready();
+
+      const response = await bootstrapApp.inject({
+        method: 'POST',
+        url: '/api/agents/register',
+        payload: {
+          machineId: 'dispatch-bootstrap-machine',
+          hostname: 'bootstrap.local',
+          tailscaleIp: '100.64.0.10',
+          os: 'linux',
+          arch: 'x64',
+          capabilities: {
+            gpu: false,
+            docker: true,
+            maxConcurrentAgents: 2,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        ok: true,
+        machineId: 'dispatch-bootstrap-machine',
+        dispatchVerification: {
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        },
+      });
+
+      await bootstrapApp.close();
+    });
+
+    it('returns the control-plane dispatch verification config on heartbeat', async () => {
+      const signingKeyPair = generateDispatchSigningKeyPair();
+      const bootstrapRegistry = new AgentRegistry();
+      bootstrapRegistry.registerMachine('heartbeat-bootstrap-machine', 'heartbeat.local');
+
+      const bootstrapApp = await createServer({
+        logger,
+        registry: bootstrapRegistry,
+        dispatchVerificationConfig: {
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        },
+      });
+
+      await bootstrapApp.ready();
+
+      const response = await bootstrapApp.inject({
+        method: 'POST',
+        url: '/api/agents/heartbeat-bootstrap-machine/heartbeat',
+        payload: {
+          machineId: 'heartbeat-bootstrap-machine',
+          runningAgents: [],
+          cpuPercent: 12,
+          memoryPercent: 34,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        ok: true,
+        dispatchVerification: {
+          version: 1,
+          algorithm: 'ed25519',
+          publicKey: signingKeyPair.publicKey,
+        },
+      });
+
+      await bootstrapApp.close();
     });
   });
 

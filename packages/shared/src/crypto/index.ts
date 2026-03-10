@@ -1,3 +1,18 @@
+export type {
+  DispatchSignature,
+  DispatchSigningKeyPair,
+  DispatchVerificationConfig,
+} from './dispatch-signing.js';
+export {
+  createDispatchVerificationConfig,
+  DISPATCH_SIGNATURE_ALGORITHM,
+  DISPATCH_SIGNATURE_VERSION,
+  dispatchSigningKeyPairFromSecretKey,
+  generateDispatchSigningKeyPair,
+  isDispatchVerificationConfig,
+  signDispatchPayload,
+  verifyDispatchPayloadSignature,
+} from './dispatch-signing.js';
 export {
   computeSharedSecret,
   decryptBox,

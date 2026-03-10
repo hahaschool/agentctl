@@ -1,4 +1,4 @@
-import type { DependencyStatus } from '@agentctl/shared';
+import type { DependencyStatus, DispatchVerificationConfig } from '@agentctl/shared';
 import { AgentError, checkWithTimeout, WorkerError } from '@agentctl/shared';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
@@ -35,6 +35,7 @@ type CreateWorkerServerOptions = {
   maxTerminals?: number;
   runtimeConfigApplier?: RuntimeConfigApplier;
   runtimeRegistry?: RuntimeRegistry;
+  getDispatchVerificationConfig?: () => DispatchVerificationConfig | null;
 };
 
 export async function createWorkerServer({
@@ -46,6 +47,7 @@ export async function createWorkerServer({
   maxTerminals,
   runtimeConfigApplier = new RuntimeConfigApplier(),
   runtimeRegistry: externalRuntimeRegistry,
+  getDispatchVerificationConfig,
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   const runtimeRegistry = externalRuntimeRegistry ?? buildRuntimeRegistry(sessionManager);
@@ -149,6 +151,7 @@ export async function createWorkerServer({
     pool: agentPool,
     machineId,
     logger,
+    getDispatchVerificationConfig,
   });
 
   await app.register(loopRoutes, {

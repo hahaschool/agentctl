@@ -1,6 +1,10 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError, summarizeHandoffAnalytics } from '@agentctl/shared';
+import {
+  ControlPlaneError,
+  type DispatchVerificationConfig,
+  summarizeHandoffAnalytics,
+} from '@agentctl/shared';
 import fastifyCors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifySwagger from '@fastify/swagger';
@@ -67,6 +71,7 @@ type CreateServerOptions = {
   isProduction?: boolean;
   corsOrigins?: string;
   runtimeConfigStore?: RuntimeConfigRouteStore;
+  dispatchVerificationConfig?: DispatchVerificationConfig | null;
 };
 
 export async function createServer({
@@ -84,6 +89,7 @@ export async function createServer({
   isProduction: isProductionOverride,
   corsOrigins: corsOriginsOverride,
   runtimeConfigStore: externalRuntimeConfigStore,
+  dispatchVerificationConfig = null,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -262,6 +268,7 @@ export async function createServer({
     registry,
     dbRegistry,
     memoryInjector,
+    dispatchVerificationConfig,
   });
   await app.register(streamRoutes, {
     prefix: '/api/agents',

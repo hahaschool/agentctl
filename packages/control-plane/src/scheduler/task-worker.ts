@@ -1,4 +1,11 @@
-import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import {
+  ControlPlaneError,
+  DEFAULT_WORKER_PORT,
+  type DispatchSignature,
+  type DispatchSigningKeyPair,
+  generateDispatchSigningKeyPair,
+  signDispatchPayload,
+} from '@agentctl/shared';
 import { type ConnectionOptions, type Job, Worker } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
@@ -27,6 +34,8 @@ export type TaskWorkerOptions = {
   circuitBreaker?: MachineCircuitBreaker | null;
   /** Optional database instance for account resolution during dispatch. */
   db?: Database | null;
+  /** Ed25519 key pair used to sign control-plane dispatches. */
+  dispatchSigningKeyPair?: DispatchSigningKeyPair;
 };
 
 type DispatchPayload = {
@@ -44,6 +53,8 @@ type DispatchPayload = {
   accountCredential: string | null;
   /** Provider of the resolved account (e.g. "anthropic", "bedrock", "vertex"). */
   accountProvider: string | null;
+  /** Ed25519 signature envelope for application-layer dispatch verification. */
+  dispatchSignature: DispatchSignature;
 };
 
 type DispatchResult = {
@@ -113,6 +124,7 @@ export function createTaskWorker({
   controlPlaneUrl,
   circuitBreaker = null,
   db = null,
+  dispatchSigningKeyPair = generateDispatchSigningKeyPair(),
 }: TaskWorkerOptions): Worker<AgentTaskJobData, void, AgentTaskJobName> {
   const worker = new Worker<AgentTaskJobData, void, AgentTaskJobName>(
     AGENT_TASKS_QUEUE,
@@ -351,7 +363,7 @@ export function createTaskWorker({
         const address = machine.tailscaleIp ?? machine.hostname;
         const dispatchUrl = `http://${address}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
 
-        const payload: DispatchPayload = {
+        const unsignedPayload = {
           runId,
           prompt: enrichedPrompt,
           config: {
@@ -363,6 +375,15 @@ export function createTaskWorker({
           controlPlaneUrl: controlPlaneUrl ?? null,
           accountCredential,
           accountProvider,
+        };
+
+        const payload: DispatchPayload = {
+          ...unsignedPayload,
+          dispatchSignature: signDispatchPayload(unsignedPayload, {
+            agentId,
+            machineId: machine.id,
+            secretKey: dispatchSigningKeyPair.secretKey,
+          }),
         };
 
         const result = await dispatchToWorker(dispatchUrl, payload, jobLogger);
