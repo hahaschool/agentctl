@@ -92,17 +92,20 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 
 </details>
 
-### 2.4 Remote Control Integration (Optional Enhancement) — P2
+### 2.4 Remote Control Integration (Optional Manual Takeover) — P2
 
-> Claude Code's built-in Remote Control uses an outbound polling relay.
-> This is an **optional upgrade path** for Max plan seats — the current CLI `-p`
-> approach is operational and does not require it.
-> See [session-takeover-design.md](plans/2026-03-03-session-takeover-design.md) for the 3-layer analysis.
+> Claude Code Remote Control is an outbound relay to `claude.ai/code`.
+> Current Anthropic docs no longer frame it as Max-only, but AgentCTL's managed
+> runtime still fits `claude -p` better because `stream-json`, worker-side
+> events, hooks, loops, and scheduled sessions already depend on local
+> structured control.
+> See [2026-03-10-remote-control-relay-decision.md](plans/2026-03-10-remote-control-relay-decision.md)
+> for the spike decision memo.
 
-- [ ] Spike: evaluate Remote Control relay vs current CLI `-p` (latency, reliability, cost)
-- [ ] If beneficial: implement relay client in `agent-worker/src/runtime/`
-- [ ] Migrate hook system to relay event filters
-- [ ] Validate loop controller + scheduled sessions over relay
+- [x] Spike: evaluate Remote Control relay vs current CLI `-p`
+- [x] Decision: keep `claude -p` as the primary managed-session path for now
+- [ ] Re-evaluate only if Anthropic exposes programmatic relay events/session APIs
+- [ ] Optional later slice: add Remote Control as a narrow manual takeover flow without replacing loop or scheduler backends
 
 ### 2.5 Structured Execution Summary — P1
 
