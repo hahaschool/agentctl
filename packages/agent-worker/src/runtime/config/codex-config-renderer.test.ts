@@ -70,4 +70,25 @@ describe('CodexConfigRenderer', () => {
     expect(configFile?.content).toContain('[mcp_servers.filesystem]');
     expect(configFile?.content).toContain('command = "npx"');
   });
+
+  it('serializes supported Codex runtime overrides for provider selection and reasoning effort', () => {
+    const renderer = new CodexConfigRenderer();
+    const rendered = renderer.render(
+      makeConfig({
+        runtimeOverrides: {
+          claudeCode: { model: 'sonnet' },
+          codex: {
+            model: 'gpt-5.2-codex',
+            modelProvider: 'openai',
+            reasoningEffort: 'high',
+          },
+        },
+      }),
+    );
+    const configFile = rendered.files.find((file) => file.path === '.codex/config.toml');
+
+    expect(configFile?.content).toContain('model = "gpt-5.2-codex"');
+    expect(configFile?.content).toContain('model_provider = "openai"');
+    expect(configFile?.content).toContain('model_reasoning_effort = "high"');
+  });
 });

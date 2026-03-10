@@ -37,13 +37,31 @@ export class CodexConfigRenderer {
 }
 
 function renderConfigToml(config: ManagedRuntimeConfig): string {
+  const codexOverrides = (config.runtimeOverrides.codex ?? {}) as Record<string, unknown>;
   const lines = [
     '# Managed by AgentCTL',
-    `model = ${quoteToml(String(config.runtimeOverrides.codex?.model ?? 'gpt-5-codex'))}`,
+    `model = ${quoteToml(String(codexOverrides.model ?? 'gpt-5-codex'))}`,
     `approval_policy = ${quoteToml(config.approvalPolicy)}`,
     `sandbox_mode = ${quoteToml(config.sandbox)}`,
-    '',
   ];
+
+  const modelProvider =
+    typeof codexOverrides.modelProvider === 'string' && codexOverrides.modelProvider.length > 0
+      ? codexOverrides.modelProvider
+      : null;
+  if (modelProvider) {
+    lines.push(`model_provider = ${quoteToml(modelProvider)}`);
+  }
+
+  const reasoningEffort =
+    typeof codexOverrides.reasoningEffort === 'string' && codexOverrides.reasoningEffort.length > 0
+      ? codexOverrides.reasoningEffort
+      : null;
+  if (reasoningEffort) {
+    lines.push(`model_reasoning_effort = ${quoteToml(reasoningEffort)}`);
+  }
+
+  lines.push('');
 
   for (const server of config.mcpServers) {
     lines.push(`[mcp_servers.${server.name}]`);

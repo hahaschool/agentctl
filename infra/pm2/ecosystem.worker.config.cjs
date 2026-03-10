@@ -59,6 +59,14 @@ module.exports = {
         // Direct Anthropic API key (used by Claude Agent SDK subprocess)
         // NEVER hardcode — set in machine-local .env
         ANTHROPIC_API_KEY: '',
+        // Direct OpenAI API key for managed Codex sessions
+        OPENAI_API_KEY: '',
+        // Optional OpenAI-compatible base URL for Codex CLI
+        OPENAI_BASE_URL: '',
+        // Optional Azure OpenAI failover for Codex when model_provider=azure
+        AZURE_OPENAI_API_KEY: '',
+        AZURE_OPENAI_ENDPOINT: '',
+        AZURE_OPENAI_API_VERSION: '2025-10-01-preview',
         // LiteLLM proxy for multi-provider routing
         LITELLM_PROXY_URL: 'http://ec2-control:4000',
 
@@ -88,6 +96,11 @@ module.exports = {
         CONTROL_URL: 'http://localhost:8080',
         REDIS_URL: 'redis://localhost:6379',
         ANTHROPIC_API_KEY: '',
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: '',
+        AZURE_OPENAI_API_KEY: '',
+        AZURE_OPENAI_ENDPOINT: '',
+        AZURE_OPENAI_API_VERSION: '2025-10-01-preview',
         LITELLM_PROXY_URL: 'http://localhost:4000',
         MAX_CONCURRENT_AGENTS: '2',
         HEARTBEAT_INTERVAL_MS: '15000',

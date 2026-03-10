@@ -158,6 +158,8 @@ function makeDefaultRuntimeConfig(): RuntimeConfigEnvelope {
       },
       codex: {
         configPath: '.codex/config.toml',
+        modelProvider: 'openai',
+        reasoningEffort: 'high',
       },
     },
   } satisfies Omit<ManagedRuntimeConfig, 'hash'>;

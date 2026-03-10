@@ -119,10 +119,17 @@ function defaultProbeRuntime(runtime: ManagedRuntime, homeDir: string): RuntimeC
     runtime === 'claude-code'
       ? Boolean(process.env.ANTHROPIC_API_KEY) || existsSync(path.join(homeDir, '.claude.json'))
       : Boolean(process.env.OPENAI_API_KEY) ||
+        hasAzureOpenAiCredentials() ||
         existsSync(path.join(homeDir, '.codex', 'auth.json'));
 
   return {
     installed,
     authenticated,
   };
+}
+
+function hasAzureOpenAiCredentials(): boolean {
+  const apiKey = process.env.AZURE_OPENAI_API_KEY ?? process.env.AZURE_API_KEY;
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT ?? process.env.AZURE_API_BASE;
+  return Boolean(apiKey) && Boolean(endpoint);
 }
