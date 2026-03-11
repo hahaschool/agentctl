@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { Mem0Client } from '../../memory/mem0-client.js';
+import type { MemorySearch } from '../../memory/memory-search.js';
+import type { MemoryStore } from '../../memory/memory-store.js';
 import { createServer } from '../server.js';
 import { createMockLogger } from './test-helpers.js';
 
@@ -29,6 +31,22 @@ function createMockMem0Client(overrides: Partial<Mem0Client> = {}): Mem0Client {
     deleteAll: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as Mem0Client;
+}
+
+function createMockMemorySearch(overrides: Partial<MemorySearch> = {}): MemorySearch {
+  return {
+    search: vi.fn().mockResolvedValue([]),
+    ...overrides,
+  } as unknown as MemorySearch;
+}
+
+function createMockMemoryStore(overrides: Partial<MemoryStore> = {}): MemoryStore {
+  return {
+    addFact: vi.fn(),
+    listFacts: vi.fn().mockResolvedValue([]),
+    deleteFact: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as MemoryStore;
 }
 
 describe('Memory routes — /api/memory', () => {
@@ -482,6 +500,192 @@ describe('Memory routes — /api/memory', () => {
       expect(body.error).toBe('DELETE_FAILED');
       expect(body.message).toBe('Failed to delete memory');
       expect(body.memoryId).toBe('mem-500');
+    });
+  });
+});
+
+describe('Memory routes — /api/memory (postgres backend)', () => {
+  let app: FastifyInstance;
+  let memorySearch: MemorySearch;
+  let memoryStore: MemoryStore;
+
+  beforeAll(async () => {
+    memorySearch = createMockMemorySearch({
+      search: vi.fn().mockResolvedValue([
+        {
+          fact: {
+            id: 'fact-search-1',
+            scope: 'agent:agent-1',
+            content: 'Use pgvector hybrid retrieval',
+            content_model: 'text-embedding-3-small',
+            entity_type: 'pattern',
+            confidence: 0.93,
+            strength: 1,
+            source: {
+              session_id: null,
+              agent_id: 'agent-1',
+              machine_id: null,
+              turn_index: null,
+              extraction_method: 'manual',
+            },
+            valid_from: '2026-03-11T10:00:00.000Z',
+            valid_until: null,
+            created_at: '2026-03-11T10:00:00.000Z',
+            accessed_at: '2026-03-11T10:00:00.000Z',
+          },
+          score: 0.97,
+          source_path: 'vector',
+        },
+      ]),
+    });
+
+    memoryStore = createMockMemoryStore({
+      addFact: vi.fn().mockResolvedValue({
+        id: 'fact-added-1',
+        scope: 'agent:agent-1',
+        content: 'user: Remember this\nassistant: Stored',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'concept',
+        confidence: 0.8,
+        strength: 1,
+        source: {
+          session_id: null,
+          agent_id: 'agent-1',
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T11:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T11:00:00.000Z',
+        accessed_at: '2026-03-11T11:00:00.000Z',
+      }),
+      listFacts: vi.fn().mockResolvedValue([
+        {
+          id: 'fact-list-1',
+          scope: 'global',
+          content: 'Global memory fact',
+          content_model: 'text-embedding-3-small',
+          entity_type: 'concept',
+          confidence: 0.77,
+          strength: 0.91,
+          source: {
+            session_id: null,
+            agent_id: null,
+            machine_id: null,
+            turn_index: null,
+            extraction_method: 'manual',
+          },
+          valid_from: '2026-03-11T12:00:00.000Z',
+          valid_until: null,
+          created_at: '2026-03-11T12:00:00.000Z',
+          accessed_at: '2026-03-11T12:00:00.000Z',
+        },
+      ]),
+    });
+
+    app = await createServer({
+      logger,
+      memorySearch,
+      memoryStore,
+    });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('POST /api/memory/search returns normalized PG search results', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/search',
+      payload: {
+        query: 'vector retrieval',
+        agentId: 'agent-1',
+        limit: 5,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memorySearch.search).toHaveBeenCalledWith({
+      query: 'vector retrieval',
+      visibleScopes: ['agent:agent-1', 'global'],
+      limit: 5,
+    });
+
+    const body = response.json();
+    expect(body.results).toEqual([
+      expect.objectContaining({
+        id: 'fact-search-1',
+        memory: 'Use pgvector hybrid retrieval',
+        agentId: 'agent-1',
+        score: 0.97,
+        sourcePath: 'vector',
+      }),
+    ]);
+  });
+
+  it('POST /api/memory/add stores a PG memory fact', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/add',
+      payload: {
+        messages: [
+          { role: 'user', content: 'Remember this' },
+          { role: 'assistant', content: 'Stored' },
+        ],
+        agentId: 'agent-1',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.addFact).toHaveBeenCalledWith({
+      scope: 'agent:agent-1',
+      content: 'user: Remember this\nassistant: Stored',
+      entity_type: 'concept',
+      source: {
+        session_id: null,
+        agent_id: 'agent-1',
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      },
+      confidence: 0.8,
+    });
+  });
+
+  it('GET /api/memory lists PG memory facts', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.listFacts).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+    });
+
+    const body = response.json();
+    expect(body.results).toEqual([
+      expect.objectContaining({
+        id: 'fact-list-1',
+        memory: 'Global memory fact',
+      }),
+    ]);
+  });
+
+  it('DELETE /api/memory/:id deletes a PG fact', async () => {
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/memory/fact-delete-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.deleteFact).toHaveBeenCalledWith('fact-delete-1');
+    expect(response.json()).toEqual({
+      ok: true,
+      memoryId: 'fact-delete-1',
     });
   });
 });

@@ -34,6 +34,11 @@ export type AddEdgeInput = {
   weight?: number;
 };
 
+export type ListFactsInput = {
+  agentId?: string;
+  limit?: number;
+};
+
 function generateMemoryId(): string {
   const timestamp = Date.now().toString(36).padStart(10, '0');
   const random = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(
@@ -170,6 +175,32 @@ export class MemoryStore {
 
     const row = rows[0] as Record<string, unknown> | undefined;
     return row ? this.rowToFact(row) : null;
+  }
+
+  async listFacts(input: ListFactsInput = {}): Promise<MemoryFact[]> {
+    const params: unknown[] = [];
+    const conditions = ['valid_until IS NULL'];
+
+    if (input.agentId) {
+      params.push(`agent:${input.agentId}`, 'global');
+      conditions.push(`scope IN ($${params.length - 1}, $${params.length})`);
+    }
+
+    const limit = input.limit ?? 100;
+    params.push(limit);
+
+    const { rows } = await this.pool.query(
+      `SELECT id, scope, content, content_model, entity_type,
+              confidence::real, strength::real, source_json,
+              valid_from, valid_until, created_at, accessed_at
+       FROM memory_facts
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY created_at DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+
+    return (rows as Record<string, unknown>[]).map((row) => this.rowToFact(row));
   }
 
   async deleteFact(id: string): Promise<void> {

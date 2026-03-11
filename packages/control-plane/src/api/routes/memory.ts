@@ -1,18 +1,39 @@
+import type { MemoryFact, MemorySearchResult } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
-import type { Mem0Client } from '../../memory/mem0-client.js';
+import type { Mem0Client, MemoryEntry } from '../../memory/mem0-client.js';
+import type { MemorySearch } from '../../memory/memory-search.js';
+import type { MemoryStore } from '../../memory/memory-store.js';
 
-export type MemoryRoutesOptions = {
-  mem0Client: Mem0Client;
+type MemoryRouteResult = MemoryEntry & {
+  score?: number;
+  sourcePath?: MemorySearchResult['source_path'];
 };
 
-export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app, opts) => {
-  const { mem0Client } = opts;
+type PostgresMemoryRoutesOptions = {
+  memorySearch: Pick<MemorySearch, 'search'>;
+  memoryStore: Pick<MemoryStore, 'addFact' | 'listFacts' | 'deleteFact'>;
+  mem0Client?: undefined;
+};
 
-  // ---------------------------------------------------------------------------
-  // Search memories by semantic query
-  // ---------------------------------------------------------------------------
+type Mem0MemoryRoutesOptions = {
+  mem0Client: Mem0Client;
+  memorySearch?: undefined;
+  memoryStore?: undefined;
+};
+
+export type MemoryRoutesOptions = PostgresMemoryRoutesOptions | Mem0MemoryRoutesOptions;
+
+export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app, opts) => {
+  const pgBackend =
+    opts.memorySearch && opts.memoryStore
+      ? {
+          memorySearch: opts.memorySearch,
+          memoryStore: opts.memoryStore,
+        }
+      : null;
+  const mem0Backend = opts.mem0Client ?? null;
 
   app.post<{
     Body: { query: string; agentId?: string; limit?: number };
@@ -29,9 +50,17 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       }
 
       try {
-        const result = await mem0Client.search({ query, agentId, limit });
+        if (pgBackend) {
+          const results = await pgBackend.memorySearch.search({
+            query,
+            visibleScopes: resolveVisibleScopes(agentId),
+            limit,
+          });
+          return { results: results.map(normalizeSearchResult) };
+        }
 
-        return { results: result.results };
+        const result = await requireMem0Backend(mem0Backend).search({ query, agentId, limit });
+        return { results: result.results.map(normalizeMemoryEntry) };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           return reply.code(502).send({ error: error.code, message: error.message });
@@ -42,10 +71,6 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       }
     },
   );
-
-  // ---------------------------------------------------------------------------
-  // Add a new memory
-  // ---------------------------------------------------------------------------
 
   app.post<{
     Body: {
@@ -66,9 +91,26 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       }
 
       try {
-        const result = await mem0Client.add({ messages, agentId, metadata });
+        if (pgBackend) {
+          const fact = await pgBackend.memoryStore.addFact({
+            scope: agentId ? `agent:${agentId}` : 'global',
+            content: formatMessages(messages),
+            entity_type: 'concept',
+            source: {
+              session_id: stringValue(metadata, 'sessionId') ?? stringValue(metadata, 'runId'),
+              agent_id: agentId ?? null,
+              machine_id: stringValue(metadata, 'machineId'),
+              turn_index: null,
+              extraction_method: 'manual',
+            },
+            confidence: 0.8,
+          });
 
-        return { ok: true, results: result.results };
+          return { ok: true, results: [normalizeFact(fact)] };
+        }
+
+        const result = await requireMem0Backend(mem0Backend).add({ messages, agentId, metadata });
+        return { ok: true, results: result.results.map(normalizeMemoryEntry) };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           return reply.code(502).send({ error: error.code, message: error.message });
@@ -77,10 +119,6 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       }
     },
   );
-
-  // ---------------------------------------------------------------------------
-  // List all memories (optionally filtered by userId or agentId)
-  // ---------------------------------------------------------------------------
 
   app.get<{
     Querystring: { userId?: string; agentId?: string };
@@ -91,9 +129,13 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       const { userId, agentId } = request.query;
 
       try {
-        const result = await mem0Client.getAll(userId, agentId);
+        if (pgBackend) {
+          const results = await pgBackend.memoryStore.listFacts({ agentId });
+          return { results: results.map(normalizeFact) };
+        }
 
-        return { results: result.results };
+        const result = await requireMem0Backend(mem0Backend).getAll(userId, agentId);
+        return { results: result.results.map(normalizeMemoryEntry) };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError) {
           return reply.code(502).send({ error: error.code, message: error.message });
@@ -103,10 +145,6 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
     },
   );
 
-  // ---------------------------------------------------------------------------
-  // Delete a specific memory by ID
-  // ---------------------------------------------------------------------------
-
   app.delete<{ Params: { id: string } }>(
     '/:id',
     { schema: { tags: ['memory'], summary: 'Delete a memory by ID' } },
@@ -114,7 +152,11 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
       const memoryId = request.params.id;
 
       try {
-        await mem0Client.delete(memoryId);
+        if (pgBackend) {
+          await pgBackend.memoryStore.deleteFact(memoryId);
+        } else {
+          await requireMem0Backend(mem0Backend).delete(memoryId);
+        }
 
         return { ok: true, memoryId };
       } catch (error: unknown) {
@@ -128,3 +170,54 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
     },
   );
 };
+
+function formatMessages(messages: Array<{ role: string; content: string }>): string {
+  return messages.map((message) => `${message.role}: ${message.content}`).join('\n');
+}
+
+function resolveVisibleScopes(agentId?: string): string[] {
+  return agentId ? [`agent:${agentId}`, 'global'] : ['global'];
+}
+
+function stringValue(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function requireMem0Backend(mem0Backend: Mem0Client | null): Mem0Client {
+  if (mem0Backend) {
+    return mem0Backend;
+  }
+
+  throw new Error('Mem0 backend is not configured');
+}
+
+function normalizeSearchResult(result: MemorySearchResult): MemoryRouteResult {
+  return {
+    ...normalizeFact(result.fact),
+    score: result.score,
+    sourcePath: result.source_path,
+  };
+}
+
+function normalizeFact(fact: MemoryFact): MemoryRouteResult {
+  return {
+    id: fact.id,
+    memory: fact.content,
+    userId: null,
+    agentId: fact.source.agent_id,
+    metadata: {
+      scope: fact.scope,
+      entityType: fact.entity_type,
+      source: fact.source,
+    },
+    createdAt: fact.created_at,
+    updatedAt: fact.accessed_at,
+  };
+}
+
+function normalizeMemoryEntry(entry: MemoryEntry): MemoryRouteResult {
+  return {
+    ...entry,
+  };
+}
