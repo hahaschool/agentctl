@@ -85,6 +85,7 @@ function CopyableTextBase({
 
   if (as === 'span') {
     return (
+      // biome-ignore lint/a11y/useSemanticElements: span variant needed when nesting inside interactive elements where button would be invalid HTML
       <span
         role="button"
         tabIndex={0}

@@ -13,6 +13,7 @@ const sizeClasses = {
 
 export function Spinner({ size = 'md', className = '' }: Props): React.JSX.Element {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: spinner is a decorative div with role="status" for screen readers, not an <output> element
     <div
       role="status"
       className={`animate-spin rounded-full border-muted-foreground/30 border-t-muted-foreground ${sizeClasses[size]} ${className}`}
