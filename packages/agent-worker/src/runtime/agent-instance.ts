@@ -5,8 +5,10 @@ import type {
   AgentConfig,
   AgentEvent,
   AgentStatus,
+  AutoHandoffPolicy,
   ExecutionSummary,
   ExecutionSummaryFileChange,
+  ManagedRuntime,
   SafetyDecision,
 } from '@agentctl/shared';
 import { AgentError, VALID_TRANSITIONS } from '@agentctl/shared';
@@ -19,7 +21,10 @@ import { createPostToolUseHook } from '../hooks/post-tool-use.js';
 import { createPreToolUseHook } from '../hooks/pre-tool-use.js';
 import { createStopHook } from '../hooks/stop-hook.js';
 import { EventedAgentOutputStream } from './agent-output-stream.js';
+import type { HandoffController } from './handoff-controller.js';
+import { LiveHandoffOrchestrator } from './live-handoff-orchestrator.js';
 import { OutputBuffer } from './output-buffer.js';
+import { RateLimitTrigger } from './rate-limit-trigger.js';
 import { runWithSdk, type SdkRunnerHooks } from './sdk-runner.js';
 import {
   checkWorkdirSafety,
@@ -50,6 +55,12 @@ export type AgentInstanceOptions = {
   resumeSession?: string;
   /** Current number of active tasks sharing this worker. */
   getActiveTaskCount?: () => number;
+  /** Auto-handoff policy for live rate-limit failover and cost-threshold switching. */
+  autoHandoffPolicy?: AutoHandoffPolicy;
+  /** HandoffController instance required when autoHandoffPolicy is provided. */
+  handoffController?: HandoffController;
+  /** The managed runtime this agent is running on (e.g. 'claude-code'). */
+  sourceRuntime?: ManagedRuntime;
 };
 
 type AgentInstanceState = {
@@ -200,6 +211,7 @@ export class AgentInstance extends EventEmitter {
   private pendingSafetyDecision: PendingSafetyDecision | null = null;
   private sandboxSetup: SandboxSetup | null = null;
   private executionProjectPath: string;
+  private readonly liveHandoffOrchestrator: LiveHandoffOrchestrator | null;
 
   constructor(options: AgentInstanceOptions) {
     super();
@@ -251,6 +263,21 @@ export class AgentInstance extends EventEmitter {
       resultText: null,
       isResumed: false,
     };
+
+    // Initialize live handoff orchestrator if policy and controller are provided.
+    if (options.autoHandoffPolicy?.enabled && options.handoffController && options.sourceRuntime) {
+      this.liveHandoffOrchestrator = new LiveHandoffOrchestrator({
+        sourceRuntime: options.sourceRuntime,
+        agentId: this.agentId,
+        projectPath: this.projectPath,
+        policy: options.autoHandoffPolicy,
+        handoffController: options.handoffController,
+        logger: this.log,
+        emitEvent: (event) => this.emitEvent(event),
+      });
+    } else {
+      this.liveHandoffOrchestrator = null;
+    }
   }
 
   async start(prompt: string): Promise<void> {
@@ -400,6 +427,24 @@ export class AgentInstance extends EventEmitter {
       if (resumeSessionId && err instanceof AgentError) {
         return 'resume_failed';
       }
+
+      // Check if this is a rate-limit error and attempt live handoff.
+      const errMessage = err instanceof Error ? err.message : String(err);
+      if (
+        this.liveHandoffOrchestrator &&
+        RateLimitTrigger.isRateLimitError({ message: errMessage })
+      ) {
+        const handoffTriggered = this.liveHandoffOrchestrator.observeError({
+          statusCode: 429,
+          message: errMessage,
+        });
+        if (handoffTriggered) {
+          this.log.info('Rate-limit handoff triggered during SDK run');
+          this.finishStop('rate_limit_handoff');
+          return true;
+        }
+      }
+
       throw err;
     }
   }
@@ -577,6 +622,9 @@ export class AgentInstance extends EventEmitter {
   private emitEvent(event: AgentEvent): void {
     if (event.event === 'cost') {
       this.state.costUsd = event.data.totalCost;
+
+      // Feed cost updates to the live handoff orchestrator for threshold monitoring.
+      this.liveHandoffOrchestrator?.observeCostUpdate(event.data.totalCost);
     }
 
     this.outputBuffer.push(event);
@@ -727,6 +775,16 @@ export class AgentInstance extends EventEmitter {
 
   private handleError(err: unknown): void {
     const message = err instanceof Error ? err.message : String(err);
+
+    // Check if this is a rate-limit error and attempt live handoff before
+    // transitioning to error state.
+    if (this.liveHandoffOrchestrator && RateLimitTrigger.isRateLimitError({ message })) {
+      const handoffTriggered = this.liveHandoffOrchestrator.observeError({ message });
+      if (handoffTriggered) {
+        this.log.info('Rate-limit handoff triggered, suppressing error transition');
+        return;
+      }
+    }
 
     this.log.error({ err }, 'Agent encountered an error');
     this.clearTimers();
