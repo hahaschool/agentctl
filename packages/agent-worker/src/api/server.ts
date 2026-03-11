@@ -23,6 +23,11 @@ import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { memoryFeedbackRoutes } from './routes/memory-feedback.js';
+import { memoryPromoteRoutes } from './routes/memory-promote.js';
+import { memoryRecallRoutes } from './routes/memory-recall.js';
+import { memoryReportRoutes } from './routes/memory-report.js';
+import { memorySearchRoutes } from './routes/memory-search.js';
+import { memoryStoreRoutes } from './routes/memory-store-route.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
@@ -246,6 +251,31 @@ export async function createWorkerServer({
 
   if (controlPlaneUrl) {
     await app.register(memoryFeedbackRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memorySearchRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memoryStoreRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memoryRecallRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memoryReportRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memoryPromoteRoutes, {
       prefix: '/api/mcp',
       controlPlaneUrl,
       logger,
