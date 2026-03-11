@@ -146,6 +146,29 @@ describe('CollapsibleSection', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('sets aria-controls to the content panel id', () => {
+    render(
+      <CollapsibleSection title="Section" open={true} onToggle={vi.fn()}>
+        <p>content</p>
+      </CollapsibleSection>,
+    );
+    const button = screen.getByRole('button');
+    const controls = button.getAttribute('aria-controls');
+    expect(controls).toBeTruthy();
+    const panel = controls ? document.getElementById(controls) : null;
+    expect(panel).toBeTruthy();
+  });
+
+  it('uses a stable content panel id when closed', () => {
+    render(
+      <CollapsibleSection title="Section" open={false} onToggle={vi.fn()}>
+        <p>content</p>
+      </CollapsibleSection>,
+    );
+    const button = screen.getByRole('button');
+    expect(button.getAttribute('aria-controls')).toMatch(/^collapsible-section-/);
+  });
+
   it('has type="button" on the toggle', () => {
     render(
       <CollapsibleSection title="Section" open={false} onToggle={vi.fn()}>
