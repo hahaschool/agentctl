@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
-import type { AgentConfig } from './api';
+import type { AgentConfig, MemoryReportTimeRange, MemoryReportType } from './api';
 import { api } from './api';
 import { STORAGE_KEYS } from './storage-keys';
 
@@ -91,6 +91,12 @@ export const queryKeys = {
     stats: ['memory', 'stats'] as const,
     timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
     observation: (id: number) => ['memory', 'observation', id] as const,
+    reports: (params?: { reportType?: MemoryReportType; scope?: string; limit?: number }) =>
+      params ? (['memory', 'reports', params] as const) : (['memory', 'reports'] as const),
+    consolidation: (params?: { type?: string; status?: string; limit?: number }) =>
+      params
+        ? (['memory', 'consolidation', params] as const)
+        : (['memory', 'consolidation'] as const),
   },
 };
 
@@ -749,6 +755,71 @@ export function useDeleteMemoryFact() {
   return useMutation({
     mutationFn: (id: string) => api.deleteMemoryFact(id),
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Memory reports
+// ---------------------------------------------------------------------------
+
+export function memoryReportsQuery(params?: {
+  reportType?: MemoryReportType;
+  scope?: string;
+  limit?: number;
+}) {
+  return queryOptions({
+    queryKey: queryKeys.memory.reports(params),
+    queryFn: () => api.listMemoryReports(params),
+    staleTime: 60_000,
+  });
+}
+
+export function useGenerateMemoryReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      reportType: MemoryReportType;
+      scope?: string;
+      timeRange?: MemoryReportTimeRange;
+    }) => api.generateMemoryReport(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.reports() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Memory consolidation
+// ---------------------------------------------------------------------------
+
+type ConsolidationQueryParams = Parameters<typeof api.getConsolidationItems>[0];
+
+export function consolidationQuery(params?: ConsolidationQueryParams) {
+  return queryOptions({
+    queryKey: queryKeys.memory.consolidation(params),
+    queryFn: () => api.getConsolidationItems(params),
+    staleTime: 30_000,
+  });
+}
+
+export function useResolveConsolidationItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: {
+      id: string;
+      action: 'accept' | 'skip' | 'delete';
+    }) => {
+      const statusMap = { accept: 'accepted', skip: 'skipped', delete: 'skipped' } as const;
+      return api.resolveConsolidationItem(variables.id, {
+        action: variables.action,
+        status: statusMap[variables.action],
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.consolidation() });
       void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
       void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
     },

@@ -9,6 +9,8 @@ import type {
   AgentRuntime,
   AgentStatus,
   AgentType,
+  ConsolidationItem,
+  ConsolidationStatus,
   ContentMessage,
   CreateManagedSessionRequest,
   EntityType,
@@ -332,6 +334,18 @@ export type TerminalInfo = {
   cols: number;
   rows: number;
   createdAt: string;
+};
+
+export type MemoryReportType = 'project-progress' | 'knowledge-health' | 'activity-digest';
+export type MemoryReportTimeRange = 'last-7d' | 'last-30d' | 'last-90d' | 'all-time';
+
+export type GeneratedMemoryReport = {
+  id: string;
+  reportType: MemoryReportType;
+  scope: string | null;
+  timeRange: MemoryReportTimeRange;
+  markdown: string;
+  generatedAt: string;
 };
 
 export class ApiError extends Error {
@@ -896,6 +910,55 @@ export const api = {
       `/api/claude-mem/timeline?${qs.toString()}`,
     );
   },
+
+  generateMemoryReport: (body: {
+    reportType: MemoryReportType;
+    scope?: string;
+    timeRange?: MemoryReportTimeRange;
+  }) =>
+    request<{ ok: boolean; report: GeneratedMemoryReport }>('/api/memory/reports/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  listMemoryReports: (params?: {
+    reportType?: MemoryReportType;
+    scope?: string;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.reportType) qs.set('reportType', params.reportType);
+    if (params?.scope) qs.set('scope', params.scope);
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<{ ok: boolean; reports: GeneratedMemoryReport[]; total: number }>(
+      `/api/memory/reports${suffix}`,
+    );
+  },
+
+  getConsolidationItems: (params?: {
+    type?: string;
+    status?: string;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.set('type', params.type);
+    if (params?.status) qs.set('status', params.status);
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<{ ok: boolean; items: ConsolidationItem[]; total: number }>(
+      `/api/memory/consolidation${suffix}`,
+    );
+  },
+
+  resolveConsolidationItem: (id: string, body: {
+    action: string;
+    status: ConsolidationStatus;
+  }) =>
+    request<{ ok: boolean }>(`/api/memory/consolidation/${id}/action`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // ---------------------------------------------------------------------------

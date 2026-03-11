@@ -2,7 +2,8 @@
 
 import React from 'react';
 import type { Session } from '@/lib/api';
-import { MODEL_OPTIONS_WITH_DEFAULT } from '@/lib/model-options';
+import type { AgentRuntime } from '@/lib/model-options';
+import { AGENT_RUNTIMES, MODEL_OPTIONS_WITH_DEFAULT } from '@/lib/model-options';
 import { cn } from '@/lib/utils';
 
 export type ForkConfigPanelProps = {
@@ -11,6 +12,8 @@ export type ForkConfigPanelProps = {
   onForkPromptChange: (prompt: string) => void;
   model: string;
   onModelChange: (model: string) => void;
+  runtime: AgentRuntime;
+  onRuntimeChange: (runtime: AgentRuntime) => void;
   detectedStrategy: 'jsonl-truncation' | 'context-injection' | 'resume';
   isSubmitting: boolean;
   onSubmit: () => void;
@@ -46,6 +49,8 @@ export const ForkConfigPanel = React.memo(function ForkConfigPanel({
   onForkPromptChange,
   model,
   onModelChange,
+  runtime,
+  onRuntimeChange,
   detectedStrategy,
   isSubmitting,
   onSubmit,
@@ -96,6 +101,36 @@ export const ForkConfigPanel = React.memo(function ForkConfigPanel({
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Runtime */}
+        <div>
+          <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Runtime</p>
+          <div role="radiogroup" aria-label="Fork runtime" className="flex flex-col gap-1.5">
+            {AGENT_RUNTIMES.map((r) => (
+              <label
+                key={r.value}
+                className={cn(
+                  'flex items-center gap-2 px-2.5 py-1.5 rounded-md border cursor-pointer transition-colors text-xs',
+                  runtime === r.value
+                    ? 'border-primary/50 bg-primary/5 text-foreground'
+                    : 'border-border text-muted-foreground hover:bg-muted/50',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="fork-runtime"
+                  value={r.value}
+                  checked={runtime === r.value}
+                  onChange={() => onRuntimeChange(r.value as AgentRuntime)}
+                  aria-label={`Runtime ${r.label}`}
+                  className="accent-primary"
+                />
+                <span className="font-medium">{r.label}</span>
+                <span className="text-[10px] text-muted-foreground ml-auto">{r.desc}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Strategy indicator */}
