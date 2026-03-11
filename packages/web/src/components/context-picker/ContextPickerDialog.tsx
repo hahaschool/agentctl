@@ -587,7 +587,11 @@ export function ContextPickerDialog({
           {/* Right panel */}
           <div className="w-full sm:w-80 shrink-0 flex flex-col overflow-hidden">
             {/* Tab toggle */}
-            <div role="tablist" aria-label="Context picker mode" className="flex border-b border-border shrink-0">
+            <div
+              role="tablist"
+              aria-label="Context picker mode"
+              className="flex border-b border-border shrink-0"
+            >
               <button
                 id="cpd-tab-fork"
                 role="tab"
