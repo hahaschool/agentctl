@@ -595,13 +595,13 @@ export function RuntimeSessionPanel({
         <div className="p-4 space-y-5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              <Layers3 className="h-3 w-3" />
+              <Layers3 className="h-3 w-3" aria-hidden="true" />
               {runtimeLabel(selectedSession.runtime)}
             </span>
             <StatusBadge status={selectedSession.status} />
             {selectedSession.handoffStrategy && (
               <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                <ArrowRightLeft className="h-3 w-3" />
+                <ArrowRightLeft className="h-3 w-3" aria-hidden="true" />
                 {selectedSession.handoffStrategy}
               </span>
             )}
@@ -901,7 +901,7 @@ export function RuntimeSessionPanel({
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
+              <ArrowRightLeft className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <div className="text-sm font-semibold text-foreground">Manual Handoff</div>
             </div>
             <div className="grid gap-3 lg:grid-cols-[220px_220px_minmax(0,1fr)_auto]">
@@ -1013,7 +1013,7 @@ export function RuntimeSessionPanel({
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <History className="h-4 w-4 text-muted-foreground" />
+              <History className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <div className="text-sm font-semibold text-foreground">Handoff History</div>
             </div>
             {handoffs.isLoading ? (
@@ -1099,16 +1099,16 @@ export function RuntimeSessionPanel({
 
           <div className="rounded-lg border border-border bg-background/40 p-3 text-xs text-muted-foreground space-y-2">
             <div className="flex items-center gap-2">
-              <Cable className="h-3.5 w-3.5" />
+              <Cable className="h-3.5 w-3.5" aria-hidden="true" />
               Active MCP servers:{' '}
               {(selectedSession.metadata?.activeMcpServers as string[] | undefined)?.length ?? 0}
             </div>
             <div className="flex items-center gap-2">
-              <GitBranch className="h-3.5 w-3.5" />
+              <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
               Worktree path {selectedSession.worktreePath ? 'tracked' : 'not recorded'}
             </div>
             <div className="flex items-center gap-2">
-              <History className="h-3.5 w-3.5" />
+              <History className="h-3.5 w-3.5" aria-hidden="true" />
               Session duration{' '}
               {formatDuration(
                 selectedSession.startedAt ?? new Date().toISOString(),

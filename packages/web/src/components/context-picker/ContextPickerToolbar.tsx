@@ -3,6 +3,7 @@
 import React from 'react';
 import { formatTokens } from '@/lib/format-utils';
 import { cn } from '@/lib/utils';
+import { SelectRelatedButton } from './SmartSelectTools';
 
 export type ContextPickerToolbarProps = {
   totalMessages: number;
@@ -20,6 +21,12 @@ export type ContextPickerToolbarProps = {
   // Smart select callbacks
   onSelectKeyDecisions?: () => void;
   onSelectByTopic?: (topic: string) => void;
+  /** When provided, exposes the "Select Related" smart-select button. */
+  onSelectRelated?: (indices: number[]) => void;
+  /** The full message list — required for "Select Related" feature. */
+  allMessages?: { type: string; content: string }[];
+  /** Currently selected message indices — required for "Select Related" feature. */
+  selectedIndices?: ReadonlySet<number>;
 };
 
 const FILTER_OPTIONS = [
@@ -95,6 +102,9 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
   onInvert,
   onSelectKeyDecisions,
   onSelectByTopic,
+  onSelectRelated,
+  allMessages,
+  selectedIndices,
 }: ContextPickerToolbarProps): React.ReactNode {
   return (
     <div className="px-3 py-2 border-b border-border bg-muted/20 space-y-2">
@@ -165,7 +175,7 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
       </div>
 
       {/* Row 4: Smart select tools */}
-      {(onSelectKeyDecisions || onSelectByTopic) && (
+      {(onSelectKeyDecisions || onSelectByTopic || onSelectRelated) && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-[10px] text-muted-foreground mr-0.5">Smart:</span>
           {onSelectKeyDecisions && (
@@ -179,6 +189,13 @@ export const ContextPickerToolbar = React.memo(function ContextPickerToolbar({
             </button>
           )}
           {onSelectByTopic && <TopicInput onSubmit={onSelectByTopic} />}
+          {onSelectRelated && allMessages && selectedIndices !== undefined && (
+            <SelectRelatedButton
+              selectedIndices={selectedIndices}
+              messages={allMessages}
+              onSelect={onSelectRelated}
+            />
+          )}
         </div>
       )}
 

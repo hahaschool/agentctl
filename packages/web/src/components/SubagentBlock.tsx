@@ -16,7 +16,11 @@ export function SubagentBlock({
   return (
     <div className="px-3 py-2 rounded-lg border-l-[3px] bg-orange-500/[0.06] border-l-orange-400/60">
       <div className="flex items-center gap-2 mb-1">
-        <GitBranch size={12} className="text-orange-600 dark:text-orange-400 shrink-0" />
+        <GitBranch
+          size={12}
+          className="text-orange-600 dark:text-orange-400 shrink-0"
+          aria-hidden="true"
+        />
         <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">
           Subagent
         </span>

@@ -23,6 +23,7 @@ import { findByTopicIndices, findKeyDecisionIndices } from './SmartSelectTools';
 export type ForkSubmitConfig = {
   prompt: string;
   model?: string;
+  runtime: AgentRuntime;
   strategy: 'jsonl-truncation' | 'context-injection' | 'resume';
   forkAtIndex?: number;
   selectedMessages?: SessionContentMessage[];
@@ -92,6 +93,7 @@ export function ContextPickerDialog({
 
   const [forkPrompt, setForkPrompt] = useState('');
   const [forkModel, setForkModel] = useState(session.model ?? '');
+  const [forkRuntime, setForkRuntime] = useState<AgentRuntime>('claude-code');
 
   // -------------------------------------------------------------------------
   // State — create-agent mode
@@ -316,6 +318,10 @@ export function ContextPickerDialog({
     [messages],
   );
 
+  const handleSelectRelated = useCallback((indices: number[]) => {
+    setSelectedIds(new Set(indices));
+  }, []);
+
   const handleSelectObservation = useCallback(
     (observation: MemoryObservation) => {
       setSelectedObservationId(observation.id);
@@ -349,6 +355,7 @@ export function ContextPickerDialog({
     onForkSubmit?.({
       prompt: forkPrompt.trim(),
       model: forkModel || undefined,
+      runtime: forkRuntime,
       strategy: detectedStrategy,
       forkAtIndex:
         detectedStrategy === 'jsonl-truncation' ? sortedIds[sortedIds.length - 1] : undefined,
@@ -359,7 +366,7 @@ export function ContextPickerDialog({
               .filter((m): m is SessionContentMessage => m != null) as SessionContentMessage[])
           : undefined,
     });
-  }, [forkPrompt, forkModel, selectedIds, detectedStrategy, messages, onForkSubmit]);
+  }, [forkPrompt, forkModel, forkRuntime, selectedIds, detectedStrategy, messages, onForkSubmit]);
 
   const handleCreateAgentSubmit = useCallback(() => {
     if (!agentName.trim()) return;
@@ -503,6 +510,9 @@ export function ContextPickerDialog({
               onInvert={handleInvert}
               onSelectKeyDecisions={handleSelectKeyDecisions}
               onSelectByTopic={handleSelectByTopic}
+              onSelectRelated={handleSelectRelated}
+              allMessages={messages}
+              selectedIndices={selectedIds}
             />
 
             <div className="border-b border-border bg-purple-500/[0.03]">
@@ -640,6 +650,8 @@ export function ContextPickerDialog({
                   onForkPromptChange={setForkPrompt}
                   model={forkModel}
                   onModelChange={setForkModel}
+                  runtime={forkRuntime}
+                  onRuntimeChange={setForkRuntime}
                   detectedStrategy={detectedStrategy}
                   isSubmitting={isSubmitting}
                   onSubmit={handleForkSubmit}
