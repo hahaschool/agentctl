@@ -1,3 +1,4 @@
+import type { ExecutionSummary } from '@agentctl/shared';
 import {
   type AnyPgColumn,
   bigint,
@@ -69,7 +70,7 @@ export const agentRuns = pgTable(
     provider: text('provider'),
     sessionId: text('session_id'),
     errorMessage: text('error_message'),
-    resultSummary: text('result_summary'),
+    resultSummary: jsonb('result_summary').$type<ExecutionSummary | string | null>(),
     /** Which iteration of a loop this run represents (null for non-loop runs). */
     loopIteration: integer('loop_iteration'),
     /** Links sub-runs to their parent loop run (null for top-level runs). */

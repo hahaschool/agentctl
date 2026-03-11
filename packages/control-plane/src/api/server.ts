@@ -47,6 +47,7 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
+import { runSummaryRoutes } from './routes/run-summary.js';
 import { type RuntimeConfigRouteStore, runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
@@ -306,6 +307,11 @@ export async function createServer({
 
   // Register audit ingestion routes only when the database is configured.
   if (dbRegistry) {
+    await app.register(runSummaryRoutes, {
+      prefix: '/api/runs',
+      dbRegistry,
+    });
+
     await app.register(auditRoutes, {
       prefix: '/api/audit',
       dbRegistry,

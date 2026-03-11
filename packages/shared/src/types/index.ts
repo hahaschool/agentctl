@@ -27,6 +27,19 @@ export type {
 } from './agent-run.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
+  ExecutionSummary,
+  ExecutionSummaryContext,
+  ExecutionSummaryFileAction,
+  ExecutionSummaryFileChange,
+  ExecutionSummaryStatus,
+} from './execution-summary.js';
+export {
+  EXECUTION_SUMMARY_FILE_ACTIONS,
+  EXECUTION_SUMMARY_STATUSES,
+  isExecutionSummary,
+  toExecutionSummary,
+} from './execution-summary.js';
+export type {
   LoopConfig,
   LoopMode,
   LoopState,
