@@ -7,7 +7,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, normalize, resolve as resolvePath } from 'node:path';
 
 import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
@@ -112,6 +112,68 @@ const MAX_JSONL_FILE_SIZE = 100 * 1024 * 1024;
 // ---------------------------------------------------------------------------
 
 const SSE_BUFFER_LIMIT = Number(process.env.SSE_BUFFER_LIMIT) || 100;
+
+// ---------------------------------------------------------------------------
+// Path security helpers
+// ---------------------------------------------------------------------------
+
+/** Sensitive path segments that must never appear in a resolved project path. */
+const DENIED_PATH_SEGMENTS = ['.ssh', '.gnupg', '.aws', '.env', 'credentials'];
+
+/**
+ * Validate a Claude session ID from an HTTP request.
+ * Security: session IDs are used as file name components; reject any value
+ * containing path separators, dots, or characters that could enable
+ * directory traversal (js/path-injection).
+ */
+function validateSessionId(raw: unknown): string {
+  if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
+    throw new WorkerError('INVALID_INPUT', 'A non-empty session ID is required');
+  }
+  // Allow only alphanumeric characters, dashes, and underscores
+  if (!/^[A-Za-z0-9_-]+$/.test(raw)) {
+    throw new WorkerError('INVALID_INPUT', 'Session ID contains invalid characters', {
+      sessionId: raw.slice(0, 64),
+    });
+  }
+  return raw;
+}
+
+/**
+ * Validate that a project path from an HTTP request is safe to use as a
+ * file-system path. Rejects traversal sequences and sensitive directories.
+ *
+ * Security: prevents js/path-injection by (a) normalising the path to remove
+ * any `..` traversal components via resolvePath, (b) requiring an absolute
+ * path, and (c) disallowing sensitive directory names such as .ssh and .aws
+ * anywhere in the resolved path.
+ *
+ * Note: we intentionally do NOT restrict to a specific set of root prefixes
+ * (e.g. homedir, /tmp) because agent workers legitimately operate on project
+ * directories anywhere on the filesystem (/home, /Users, /mnt, /opt, etc.).
+ * The denied-segment check is the primary guard against accessing credentials.
+ */
+function validateProjectPath(raw: unknown): string {
+  if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
+    throw new WorkerError('INVALID_PATH', 'A non-empty project path is required');
+  }
+
+  // resolvePath + normalize collapses any `..` components, eliminating traversal
+  const resolved = resolvePath(normalize(raw));
+
+  const segments = resolved.split('/');
+  for (const segment of segments) {
+    if (DENIED_PATH_SEGMENTS.includes(segment)) {
+      throw new WorkerError(
+        'INVALID_PATH',
+        `Access to "${segment}" directories is denied for security reasons`,
+        { path: resolved, deniedSegment: segment },
+      );
+    }
+  }
+
+  return resolved;
+}
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -378,8 +440,25 @@ export async function sessionRoutes(
   app.get<{ Params: ContentParams; Querystring: ContentQuerystring }>(
     '/content/:claudeSessionId',
     async (request, reply) => {
-      const { claudeSessionId } = request.params;
-      const { projectPath, limit: limitStr, offset: offsetStr } = request.query;
+      // Security: validate session ID and project path from HTTP request to
+      // prevent path injection (js/path-injection, js/http-to-file-access).
+      let claudeSessionId: string;
+      try {
+        claudeSessionId = validateSessionId(request.params.claudeSessionId);
+      } catch {
+        return reply.status(400).send({ error: 'Invalid session ID', code: 'INVALID_INPUT' });
+      }
+
+      let safeProjectPath: string | undefined;
+      if (request.query.projectPath) {
+        try {
+          safeProjectPath = validateProjectPath(request.query.projectPath);
+        } catch {
+          return reply.status(400).send({ error: 'Invalid project path', code: 'INVALID_INPUT' });
+        }
+      }
+
+      const { limit: limitStr, offset: offsetStr } = request.query;
 
       let limit = DEFAULT_CONTENT_LIMIT;
       if (limitStr !== undefined) {
@@ -398,7 +477,7 @@ export async function sessionRoutes(
         }
       }
 
-      const jsonlPath = findSessionJsonl(claudeSessionId, projectPath);
+      const jsonlPath = findSessionJsonl(claudeSessionId, safeProjectPath);
 
       if (!jsonlPath) {
         return reply.status(404).send({
@@ -536,11 +615,31 @@ export async function sessionRoutes(
       });
     }
 
-    // Handle JSONL truncation fork: copy + truncate parent JSONL
-    let effectiveResumeSessionId = resumeSessionId;
+    // Security: validate project path and resume session ID from request body
+    // to prevent path injection (js/path-injection, js/http-to-file-access).
+    let safeProjectPath: string;
+    try {
+      safeProjectPath = validateProjectPath(projectPath);
+    } catch {
+      return reply.status(400).send({ error: 'Invalid project path', code: 'INVALID_INPUT' });
+    }
 
-    if (forkAtIndex !== undefined && forkAtIndex >= 0 && resumeSessionId) {
-      const parentJsonlPath = findSessionJsonl(resumeSessionId, projectPath);
+    let safeResumeSessionId: string | null | undefined = resumeSessionId;
+    if (resumeSessionId) {
+      try {
+        safeResumeSessionId = validateSessionId(resumeSessionId);
+      } catch {
+        return reply
+          .status(400)
+          .send({ error: 'Invalid resume session ID', code: 'INVALID_INPUT' });
+      }
+    }
+
+    // Handle JSONL truncation fork: copy + truncate parent JSONL
+    let effectiveResumeSessionId = safeResumeSessionId;
+
+    if (forkAtIndex !== undefined && forkAtIndex >= 0 && safeResumeSessionId) {
+      const parentJsonlPath = findSessionJsonl(safeResumeSessionId, safeProjectPath);
       if (parentJsonlPath) {
         const raw = readFileSync(parentJsonlPath, 'utf-8');
         const allLines = raw.split('\n').filter((l) => l.trim());
@@ -578,14 +677,17 @@ export async function sessionRoutes(
           'Created truncated JSONL fork',
         );
       } else {
-        logger.warn({ resumeSessionId, projectPath }, 'Parent JSONL not found for truncation fork');
+        logger.warn(
+          { resumeSessionId: safeResumeSessionId, projectPath: safeProjectPath },
+          'Parent JSONL not found for truncation fork',
+        );
       }
     }
 
     try {
       const session = sessionManager.startSession({
         agentId,
-        projectPath,
+        projectPath: safeProjectPath,
         prompt: prompt ?? 'Continue working.',
         model: model ?? undefined,
         resumeSessionId: effectiveResumeSessionId ?? undefined,

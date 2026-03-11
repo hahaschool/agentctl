@@ -109,6 +109,60 @@ export type SteerAckEvent = {
   };
 };
 
+/**
+ * Emitted when the agent detects a rate limit (HTTP 429) and is about to
+ * hand off execution to a different runtime.
+ */
+export type RateLimitHandoffEvent = {
+  event: 'rate_limit_handoff';
+  data: {
+    /** The runtime that hit the rate limit. */
+    sourceRuntime: string;
+    /** The runtime being handed off to. */
+    targetRuntime: string;
+    /** Number of rate limit hits seen in this session before triggering handoff. */
+    hitCount: number;
+    /** ISO 8601 timestamp when the rate limit was detected. */
+    detectedAt: string;
+  };
+};
+
+/**
+ * Emitted when the session cost crosses 80% of the configured threshold —
+ * a warning before the cost-threshold handoff fires.
+ */
+export type CostThresholdWarningEvent = {
+  event: 'cost_threshold_warning';
+  data: {
+    /** Current accumulated cost in USD. */
+    currentCostUsd: number;
+    /** Configured maximum cost threshold in USD. */
+    thresholdUsd: number;
+    /** Fraction of threshold consumed (0–1). */
+    fraction: number;
+  };
+};
+
+/**
+ * Emitted when session cost exceeds the configured threshold and the
+ * agent is being handed off to a cheaper model/runtime.
+ */
+export type CostThresholdHandoffEvent = {
+  event: 'cost_threshold_handoff';
+  data: {
+    /** The runtime that exceeded the cost threshold. */
+    sourceRuntime: string;
+    /** The cheaper runtime being handed off to. */
+    targetRuntime: string;
+    /** Final accumulated cost in USD at the time of handoff. */
+    currentCostUsd: number;
+    /** Configured maximum cost threshold in USD. */
+    thresholdUsd: number;
+    /** ISO 8601 timestamp when the threshold was exceeded. */
+    exceededAt: string;
+  };
+};
+
 export type AgentEvent =
   | AgentOutputEvent
   | AgentRawOutputEvent
@@ -122,7 +176,10 @@ export type AgentEvent =
   | AgentExecutionSummaryEvent
   | AgentSafetyEvent
   | SteerSentEvent
-  | SteerAckEvent;
+  | SteerAckEvent
+  | RateLimitHandoffEvent
+  | CostThresholdWarningEvent
+  | CostThresholdHandoffEvent;
 
 // ---------------------------------------------------------------------------
 // Session content messages — parsed from JSONL session files and served via

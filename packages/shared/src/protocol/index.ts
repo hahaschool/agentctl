@@ -26,8 +26,11 @@ export type {
   AgentUserMessageEvent,
   ContentMessage,
   ContentMessageType,
+  CostThresholdHandoffEvent,
+  CostThresholdWarningEvent,
   LoopCompleteEvent,
   LoopIterationEvent,
+  RateLimitHandoffEvent,
   SteerAckEvent,
   SteerSentEvent,
 } from './events.js';
