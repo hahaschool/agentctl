@@ -82,6 +82,15 @@ describe('NotificationBell', () => {
       expect(screen.queryByText('Notifications', { selector: 'span' })).toBeNull();
     });
 
+    it('sets aria-expanded on the trigger based on open state', () => {
+      render(<NotificationBell {...defaultProps} />);
+      const bell = screen.getByRole('button', { name: /Notifications/ });
+      expect(bell.getAttribute('aria-expanded')).toBe('false');
+
+      fireEvent.click(bell);
+      expect(bell.getAttribute('aria-expanded')).toBe('true');
+    });
+
     it('opens dropdown on bell click', () => {
       render(<NotificationBell {...defaultProps} />);
       fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
@@ -116,8 +125,25 @@ describe('NotificationBell', () => {
       fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
       expect(screen.getByText('Notifications', { selector: 'span' })).toBeDefined();
 
-      fireEvent.mouseDown(screen.getByTestId('outside'));
+      fireEvent.pointerDown(screen.getByTestId('outside'));
       expect(screen.queryByText('Notifications', { selector: 'span' })).toBeNull();
+    });
+
+    it('moves focus into the popover when it opens', () => {
+      const notifications = [makeNotification({ id: 'n-1', message: 'Needs attention' })];
+      render(<NotificationBell {...defaultProps} notifications={notifications} unreadCount={1} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mark all read' }));
+    });
+
+    it('renders a mobile-safe popover width', () => {
+      render(<NotificationBell {...defaultProps} />);
+      fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
+
+      const content = screen.getByRole('dialog', { name: 'Notifications' });
+      expect(content?.className).toContain('w-full');
+      expect(content?.className).toContain('sm:w-80');
     });
   });
 

@@ -121,6 +121,15 @@ describe('CommandPalette', () => {
     expect(screen.getByRole('dialog', { name: /command palette/i })).toBeDefined();
   });
 
+  it('tracks the active option through aria-activedescendant on the listbox', () => {
+    renderPalette({ open: true });
+
+    const listbox = screen.getByRole('listbox', { name: 'Commands' });
+    const options = screen.getAllByRole('option');
+
+    expect(listbox.getAttribute('aria-activedescendant')).toBe(options[0]?.id ?? null);
+  });
+
   // -----------------------------------------------------------------------
   // Search input
   // -----------------------------------------------------------------------
@@ -265,9 +274,12 @@ describe('CommandPalette', () => {
   it('navigates down with ArrowDown and wraps around', () => {
     renderPalette({ open: true });
     const input = screen.getByPlaceholderText(/type a command or search/i);
+    const listbox = screen.getByRole('listbox', { name: 'Commands' });
+    const options = screen.getAllByRole('option');
 
     // Move down once — now on Machines (index 1)
     fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(listbox.getAttribute('aria-activedescendant')).toBe(options[1]?.id ?? null);
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(mockPush).toHaveBeenCalledWith('/machines');
   });
@@ -339,10 +351,12 @@ describe('CommandPalette', () => {
 
   it('changes active item on mouseEnter', () => {
     renderPalette({ open: true });
+    const listbox = screen.getByRole('listbox', { name: 'Commands' });
     const machinesOption = screen.getByText('Machines').closest('button');
     if (machinesOption) {
       fireEvent.mouseEnter(machinesOption);
     }
+    expect(listbox.getAttribute('aria-activedescendant')).toBe(machinesOption?.id ?? null);
     const input = screen.getByPlaceholderText(/type a command or search/i);
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(mockPush).toHaveBeenCalledWith('/machines');

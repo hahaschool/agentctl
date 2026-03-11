@@ -176,7 +176,21 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
       }
 
       try {
-        // Create the agent in the pool if it doesn't exist yet.
+        // Remove stale instance from pool if it's in a terminal state.
+        // This ensures each new run gets a fresh instance with the correct
+        // runId, controlPlaneUrl, and clean event listeners / output buffer.
+        const existing = pool.getAgent(id);
+        if (existing) {
+          const existingStatus = existing.getStatus();
+          if (
+            existingStatus === 'stopped' ||
+            existingStatus === 'error' ||
+            existingStatus === 'timeout'
+          ) {
+            await pool.removeAgent(id);
+          }
+        }
+
         let instance = pool.getAgent(id);
 
         if (!instance) {

@@ -199,6 +199,13 @@ describe('CopyableText', () => {
     expect(screen.getByRole('button')).toBeDefined();
   });
 
+  it('renders span mode with button semantics for keyboard users', () => {
+    render(<CopyableText value="span-value" as="span" />);
+    const el = screen.getByRole('button');
+    expect(el.tagName).toBe('SPAN');
+    expect(el.getAttribute('tabindex')).toBe('0');
+  });
+
   it('shows the full value when shorter than maxDisplay', () => {
     render(<CopyableText value="abc" maxDisplay={8} />);
     expect(screen.getByText('abc')).toBeDefined();
@@ -234,6 +241,28 @@ describe('CopyableText', () => {
     });
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('my-api-key-123');
+  });
+
+  it('copies on Enter in span mode', async () => {
+    render(<CopyableText value="keyboard-copy-enter" as="span" />);
+    const el = screen.getByRole('button');
+
+    await act(async () => {
+      fireEvent.keyDown(el, { key: 'Enter' });
+    });
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('keyboard-copy-enter');
+  });
+
+  it('copies on Space in span mode', async () => {
+    render(<CopyableText value="keyboard-copy-space" as="span" />);
+    const el = screen.getByRole('button');
+
+    await act(async () => {
+      fireEvent.keyDown(el, { key: ' ' });
+    });
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('keyboard-copy-space');
   });
 
   it('shows "Copied!" text after a successful click', async () => {
