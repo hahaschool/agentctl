@@ -1,3 +1,5 @@
+export type { BuildContextBudgetInput } from './context-budget.js';
+export { buildContextBudget, estimateTokens, matchesTrigger } from './context-budget.js';
 export type {
   AddMemoryRequest,
   Mem0ClientOptions,

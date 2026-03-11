@@ -1,6 +1,8 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import type { InjectionBudget, TriggerContext } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_INJECTION_BUDGET } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
+import { buildContextBudget } from './context-budget.js';
 import type { Mem0Client } from './mem0-client.js';
 import type { MemorySearch } from './memory-search.js';
 import type { MemoryStore } from './memory-store.js';
@@ -13,8 +15,9 @@ export type MemoryInjectorOptions = {
   backend?: MemoryBackend;
   mem0Client?: Mem0Client;
   memorySearch?: Pick<MemorySearch, 'search'>;
-  memoryStore?: Pick<MemoryStore, 'addFact'>;
+  memoryStore?: Pick<MemoryStore, 'addFact' | 'listFacts'>;
   maxMemories?: number;
+  injectionBudget?: InjectionBudget;
   logger: Logger;
 };
 
@@ -22,8 +25,9 @@ export class MemoryInjector {
   private readonly backend: MemoryBackend | null;
   private readonly mem0Client: Mem0Client | null;
   private readonly memorySearch: Pick<MemorySearch, 'search'> | null;
-  private readonly memoryStore: Pick<MemoryStore, 'addFact'> | null;
+  private readonly memoryStore: Pick<MemoryStore, 'addFact' | 'listFacts'> | null;
   private readonly maxMemories: number;
+  private readonly injectionBudget: InjectionBudget;
   private readonly logger: Logger;
 
   constructor(options: MemoryInjectorOptions) {
@@ -31,6 +35,7 @@ export class MemoryInjector {
     this.memorySearch = options.memorySearch ?? null;
     this.memoryStore = options.memoryStore ?? null;
     this.maxMemories = options.maxMemories ?? DEFAULT_MAX_MEMORIES;
+    this.injectionBudget = options.injectionBudget ?? DEFAULT_INJECTION_BUDGET;
     this.logger = options.logger;
     this.backend = this.resolveBackend(options.backend ?? null);
   }
@@ -38,12 +43,21 @@ export class MemoryInjector {
   /**
    * Fetch relevant memories for the given agent and task prompt,
    * and format them as a prompt section to inject into the agent's system prompt.
+   *
+   * When using the postgres backend, applies 3-tier context budget injection:
+   *   1. Pinned facts (always included, no decay)
+   *   2. On-demand facts (ranked by relevance, fills remaining budget)
+   *   3. Triggered facts (matched against current tool/file/keyword context)
    */
-  async buildMemoryContext(agentId: string, taskPrompt: string): Promise<string> {
+  async buildMemoryContext(
+    agentId: string,
+    taskPrompt: string,
+    triggerContext?: TriggerContext,
+  ): Promise<string> {
     this.logger.debug({ agentId, promptLength: taskPrompt.length }, 'Building memory context');
 
     if (this.backend === 'postgres') {
-      return this.buildPostgresMemoryContext(agentId, taskPrompt);
+      return this.buildPostgresMemoryContext(agentId, taskPrompt, triggerContext);
     }
 
     if (this.backend !== 'mem0' || !this.mem0Client) {
@@ -154,27 +168,54 @@ export class MemoryInjector {
     return null;
   }
 
-  private async buildPostgresMemoryContext(agentId: string, taskPrompt: string): Promise<string> {
+  private async buildPostgresMemoryContext(
+    agentId: string,
+    taskPrompt: string,
+    triggerContext?: TriggerContext,
+  ): Promise<string> {
     if (!this.memorySearch) {
       return '';
     }
 
     try {
-      const results = await this.memorySearch.search({
+      const visibleScopes = [`agent:${agentId}`, 'global'];
+
+      // Fetch relevance-ranked search results for on-demand tier
+      const searchResults = await this.memorySearch.search({
         query: taskPrompt,
-        visibleScopes: [`agent:${agentId}`, 'global'],
-        limit: this.maxMemories,
+        visibleScopes,
+        limit: this.injectionBudget.maxFacts,
       });
 
-      if (results.length === 0) {
+      // Fetch all visible facts for pinned + triggered tiers
+      const allFacts = this.memoryStore
+        ? await this.memoryStore.listFacts({ visibleScopes, limit: 200 })
+        : searchResults.map((result) => result.fact);
+
+      const injectionResult = buildContextBudget({
+        allFacts,
+        searchResults,
+        triggerContext,
+        budget: this.injectionBudget,
+      });
+
+      if (injectionResult.facts.length === 0) {
         this.logger.debug({ agentId }, 'No relevant PG memories found');
         return '';
       }
 
-      const memoryLines = results.map((entry) => `- ${entry.fact.content}`);
+      const memoryLines = injectionResult.facts.map((fact) => `- ${fact.content}`);
       const context = `## Relevant Memories\n${memoryLines.join('\n')}`;
 
-      this.logger.info({ agentId, memoryCount: results.length }, 'PG memory context built');
+      this.logger.info(
+        {
+          agentId,
+          memoryCount: injectionResult.facts.length,
+          tokenCount: injectionResult.tokenCount,
+          tierBreakdown: injectionResult.tierBreakdown,
+        },
+        'PG memory context built with 3-tier budget',
+      );
       return context;
     } catch (error: unknown) {
       if (error instanceof ControlPlaneError) {

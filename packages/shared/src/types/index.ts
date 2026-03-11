@@ -80,6 +80,8 @@ export type {
   ImportJobSource,
   ImportJobStatus,
   InjectionBudget,
+  InjectionResult,
+  InjectionTier,
   MemoryEdge,
   MemoryFact,
   MemoryObservation,
@@ -89,6 +91,8 @@ export type {
   MemorySearchResult,
   MemoryStats,
   RelationType,
+  TriggerContext,
+  TriggerSpec,
 } from './memory.js';
 export { DEFAULT_INJECTION_BUDGET } from './memory.js';
 export type {

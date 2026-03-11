@@ -37,6 +37,12 @@ export type FactSource = {
   extraction_method: 'llm' | 'rule' | 'manual' | 'import';
 };
 
+export type TriggerSpec = {
+  tool?: string;
+  file_pattern?: string;
+  keyword?: string;
+};
+
 export type MemoryFact = {
   id: string;
   scope: MemoryScope;
@@ -50,6 +56,8 @@ export type MemoryFact = {
   valid_until: string | null;
   created_at: string;
   accessed_at: string;
+  pinned?: boolean;
+  trigger_spec?: TriggerSpec;
 };
 
 export type MemoryEdge = {
@@ -67,6 +75,8 @@ export type MemorySearchResult = {
   source_path: 'vector' | 'bm25' | 'graph';
 };
 
+export type InjectionTier = 'pinned' | 'on-demand' | 'triggered';
+
 export type InjectionBudget = {
   maxTokens: number;
   maxFacts: number;
@@ -76,17 +86,33 @@ export type InjectionBudget = {
     strength: number;
     scopeProximity: number;
   };
+  tiers: readonly InjectionTier[];
+  pinnedCap: number;
 };
 
 export const DEFAULT_INJECTION_BUDGET: InjectionBudget = {
-  maxTokens: 2000,
-  maxFacts: 15,
+  maxTokens: 2400,
+  maxFacts: 20,
   priorityWeights: {
     relevance: 0.5,
     recency: 0.2,
     strength: 0.2,
     scopeProximity: 0.1,
   },
+  tiers: ['pinned', 'on-demand', 'triggered'] as const,
+  pinnedCap: 5,
+};
+
+export type TriggerContext = {
+  tool?: string;
+  filePath?: string;
+  keywords?: readonly string[];
+};
+
+export type InjectionResult = {
+  facts: readonly MemoryFact[];
+  tokenCount: number;
+  tierBreakdown: Readonly<Record<InjectionTier, number>>;
 };
 
 export type ConsolidationItemType = 'contradiction' | 'near-duplicate' | 'stale' | 'orphan';
