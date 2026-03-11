@@ -35,6 +35,10 @@ describe('memory types', () => {
       'person',
       'concept',
       'preference',
+      'skill',
+      'experience',
+      'principle',
+      'question',
     ];
     const relationTypes: RelationType[] = [
       'modifies',
@@ -44,12 +48,95 @@ describe('memory types', () => {
       'supersedes',
       'related_to',
       'summarizes',
+      'derived_from',
+      'validates',
+      'contradicts',
     ];
 
-    expect(entityTypes).toHaveLength(7);
-    expect(relationTypes).toHaveLength(7);
+    expect(entityTypes).toHaveLength(11);
+    expect(relationTypes).toHaveLength(10);
     expect(new Set(entityTypes).size).toBe(entityTypes.length);
     expect(new Set(relationTypes).size).toBe(relationTypes.length);
+  });
+
+  it('supports knowledge-engineering entity types on MemoryFact', () => {
+    const source: FactSource = {
+      session_id: null,
+      agent_id: 'agent-1',
+      machine_id: null,
+      turn_index: null,
+      extraction_method: 'llm',
+    };
+
+    const base = {
+      id: 'ke-fact-1',
+      scope: 'global' as MemoryScope,
+      content_model: 'text-embedding-3-small',
+      confidence: 0.9,
+      strength: 1.0,
+      source,
+      valid_from: '2026-03-11T00:00:00.000Z',
+      valid_until: null as string | null,
+      created_at: '2026-03-11T00:00:00.000Z',
+      accessed_at: '2026-03-11T00:00:00.000Z',
+    };
+
+    const skillFact: MemoryFact = {
+      ...base,
+      id: 'ke-skill-1',
+      content: 'Proficient in TypeScript generics and discriminated unions',
+      entity_type: 'skill',
+    };
+
+    const experienceFact: MemoryFact = {
+      ...base,
+      id: 'ke-experience-1',
+      content: 'Migrated control-plane from Express to Fastify in March 2026',
+      entity_type: 'experience',
+    };
+
+    const principleFact: MemoryFact = {
+      ...base,
+      id: 'ke-principle-1',
+      content: 'Always write tests before implementation (TDD)',
+      entity_type: 'principle',
+      pinned: true,
+    };
+
+    const questionFact: MemoryFact = {
+      ...base,
+      id: 'ke-question-1',
+      content: 'Should we migrate from BullMQ to Temporal for durable workflows?',
+      entity_type: 'question',
+    };
+
+    expect(skillFact.entity_type).toBe('skill');
+    expect(experienceFact.entity_type).toBe('experience');
+    expect(principleFact.entity_type).toBe('principle');
+    expect(principleFact.pinned).toBe(true);
+    expect(questionFact.entity_type).toBe('question');
+  });
+
+  it('supports knowledge-engineering relation types on MemoryEdge', () => {
+    const base = {
+      id: 'ke-edge-1',
+      source_fact_id: 'fact-a',
+      target_fact_id: 'fact-b',
+      weight: 0.8,
+      created_at: '2026-03-11T00:00:00.000Z',
+    };
+
+    const derivedEdge: MemoryEdge = { ...base, id: 'ke-edge-derived', relation: 'derived_from' };
+    const validatesEdge: MemoryEdge = { ...base, id: 'ke-edge-validates', relation: 'validates' };
+    const contradictsEdge: MemoryEdge = {
+      ...base,
+      id: 'ke-edge-contradicts',
+      relation: 'contradicts',
+    };
+
+    expect(derivedEdge.relation).toBe('derived_from');
+    expect(validatesEdge.relation).toBe('validates');
+    expect(contradictsEdge.relation).toBe('contradicts');
   });
 
   it('defines a memory fact, edge, and search result shape', () => {

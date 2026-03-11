@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-11 (merged PRs #45 mid-execution steering, #46 responsive/touch/perf, #47 memory browser page; prior: #43 context budget, #44 theming normalization, #39 live summary streaming)
+> Last updated: 2026-03-11 (knowledge engineering §3.6: expanded EntityType×11, RelationType×10, pinned facts, TriggerSpec; prior: PRs #45 mid-execution steering, #46 responsive/touch/perf, #47 memory browser page; #43 context budget, #44 theming normalization, #39 live summary streaming)
 
 ## Current State
 
@@ -297,10 +297,10 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 > Frontend UI: see §4.8 Unified Memory System UI for the full 8-page UI plan + integration points
 
 **Knowledge Engineering** (inspired by [stonepage's Agent 知识工程实践](https://zhuanlan.zhihu.com/p/1898602837)):
-- [ ] Expanded EntityType: +`skill`, +`experience`, +`principle`, +`question` (11 total)
-- [ ] Expanded RelationType: +`derived_from`, +`validates`, +`contradicts` (10 total)
-- [ ] Pinned facts: always-injected guardrails, no decay, hard cap per scope
-- [ ] Trigger-based injection: `TriggerSpec` (tool/file_pattern/keyword) integrated with PreToolUse hooks
+- [x] Expanded EntityType: +`skill`, +`experience`, +`principle`, +`question` (11 total)
+- [x] Expanded RelationType: +`derived_from`, +`validates`, +`contradicts` (10 total)
+- [x] Pinned facts: always-injected guardrails, no decay, hard cap per scope
+- [x] Trigger-based injection: `TriggerSpec` (tool/file_pattern/keyword) integrated with PreToolUse hooks
 - [ ] Role-aware search: `tags[]` field + `roleAffinity` boost in RRF reranking
 - [ ] Meta-cognition: extraction quality rules embedded in extraction LLM prompt
 - [ ] `memory_feedback` MCP tool: `used` / `irrelevant` / `outdated` signals

@@ -483,4 +483,73 @@ describe('buildContextBudget', () => {
       expect(result.tokenCount).toBeGreaterThan(0);
     });
   });
+
+  describe('knowledge engineering entity types', () => {
+    it('injects pinned principle facts before on-demand facts', () => {
+      const principle = makeFact({
+        id: 'principle-1',
+        content: 'Always write tests before implementation (TDD)',
+        entity_type: 'principle',
+        pinned: true,
+      });
+      const skill = makeFact({
+        id: 'skill-1',
+        content: 'Proficient in TypeScript generics and discriminated unions',
+        entity_type: 'skill',
+      });
+
+      const result = buildContextBudget({
+        allFacts: [principle, skill],
+        searchResults: [makeSearchResult(skill, 0.88)],
+      });
+
+      expect(result.facts[0]?.id).toBe('principle-1');
+      expect(result.facts[0]?.entity_type).toBe('principle');
+      expect(result.tierBreakdown.pinned).toBe(1);
+      expect(result.tierBreakdown['on-demand']).toBe(1);
+    });
+
+    it('triggers experience and question facts based on keyword context', () => {
+      const experience = makeFact({
+        id: 'experience-1',
+        content: 'Migrated control-plane from Express to Fastify in March 2026',
+        entity_type: 'experience',
+        trigger_spec: { keyword: 'fastify' },
+      });
+
+      const question = makeFact({
+        id: 'question-1',
+        content: 'Should we migrate from BullMQ to Temporal for durable workflows?',
+        entity_type: 'question',
+        trigger_spec: { keyword: 'temporal' },
+      });
+
+      const result = buildContextBudget({
+        allFacts: [experience, question],
+        searchResults: [],
+        triggerContext: { keywords: ['fastify', 'migration'] },
+      });
+
+      expect(result.facts).toHaveLength(1);
+      expect(result.facts[0]?.id).toBe('experience-1');
+      expect(result.tierBreakdown.triggered).toBe(1);
+    });
+
+    it('injects skill facts via on-demand tier when matched by search', () => {
+      const skillFact = makeFact({
+        id: 'skill-ts',
+        content: 'Expert in TypeScript type system and advanced generics',
+        entity_type: 'skill',
+      });
+
+      const result = buildContextBudget({
+        allFacts: [skillFact],
+        searchResults: [makeSearchResult(skillFact, 0.94)],
+      });
+
+      expect(result.facts).toHaveLength(1);
+      expect(result.facts[0]?.entity_type).toBe('skill');
+      expect(result.tierBreakdown['on-demand']).toBe(1);
+    });
+  });
 });
