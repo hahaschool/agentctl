@@ -1,8 +1,8 @@
 import {
   ControlPlaneError,
-  toExecutionSummary,
   type ExecutionSummary,
   type ExecutionSummaryStatus,
+  toExecutionSummary,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -86,7 +86,9 @@ export const runSummaryRoutes: FastifyPluginAsync<RunSummaryRoutesOptions> = asy
   );
 };
 
-function toAuditEntry(action: Awaited<ReturnType<DbAgentRegistry['queryActions']>>['actions'][number]): AuditEntry {
+function toAuditEntry(
+  action: Awaited<ReturnType<DbAgentRegistry['queryActions']>>['actions'][number],
+): AuditEntry {
   return {
     kind: action.actionType,
     timestamp: action.timestamp
@@ -115,12 +117,15 @@ function inferAgentId(entries: AuditEntry[]): string {
   return '';
 }
 
-function toExecutionSummaryFromReplay(summary: SessionSummary, run: {
-  status: string;
-  costUsd: number | null;
-  tokensIn: number | null;
-  tokensOut: number | null;
-}): ExecutionSummary {
+function toExecutionSummaryFromReplay(
+  summary: SessionSummary,
+  run: {
+    status: string;
+    costUsd: number | null;
+    tokensIn: number | null;
+    tokensOut: number | null;
+  },
+): ExecutionSummary {
   const toolUsageBreakdown: Record<string, number> = {};
   for (const tool of summary.uniqueTools) {
     toolUsageBreakdown[tool] = 1;

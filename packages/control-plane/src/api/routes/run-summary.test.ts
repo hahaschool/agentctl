@@ -1,4 +1,4 @@
-import { ControlPlaneError, type AgentRun, type ExecutionSummary } from '@agentctl/shared';
+import { type AgentRun, ControlPlaneError, type ExecutionSummary } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -117,7 +117,9 @@ describe('Run summary route — /api/runs/:runId/summary', () => {
   });
 
   it('normalizes a stored legacy string summary into the structured response shape', async () => {
-    vi.mocked(mockDbRegistry.getRun).mockResolvedValue(makeRun({ resultSummary: 'All tests passed' }));
+    vi.mocked(mockDbRegistry.getRun).mockResolvedValue(
+      makeRun({ resultSummary: 'All tests passed' }),
+    );
 
     const response = await app.inject({
       method: 'GET',

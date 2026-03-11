@@ -1,5 +1,5 @@
-import type { AgentRun } from './agent-run.js';
 import { describe, expect, it } from 'vitest';
+import type { AgentRun } from './agent-run.js';
 import {
   type ExecutionSummary,
   isExecutionSummary,

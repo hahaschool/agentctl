@@ -25,6 +25,7 @@ export type {
   RunStatus,
   RunTrigger,
 } from './agent-run.js';
+export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   ExecutionSummary,
   ExecutionSummaryContext,
@@ -38,7 +39,6 @@ export {
   isExecutionSummary,
   toExecutionSummary,
 } from './execution-summary.js';
-export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   LoopConfig,
   LoopMode,
