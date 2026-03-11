@@ -42,14 +42,14 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
         aria-label="Keyboard shortcuts"
         className={cn(
           'relative bg-card border border-border rounded-xl shadow-2xl',
-          'max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto',
+          'w-full mx-2 sm:mx-4 max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[80vh] overflow-y-auto',
           'animate-fade-in',
         )}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-4 rounded-t-xl">
+        <div className="sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 py-4 rounded-t-xl">
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-semibold">Keyboard Shortcuts</h2>
             <button
@@ -66,7 +66,7 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
         </div>
 
         {/* Shortcut groups */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6 p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6 p-4 sm:p-6">
           {SHORTCUT_GROUPS.map((group) => (
             <div key={group.title}>
               <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 pb-1.5 border-b border-border/50">
@@ -99,7 +99,7 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border/50 px-6 py-3">
+        <div className="border-t border-border/50 px-4 sm:px-6 py-3">
           <p className="text-[11px] text-muted-foreground">
             Press{' '}
             <kbd className="bg-muted border border-border rounded px-1.5 py-0.5 font-mono text-[10px]">

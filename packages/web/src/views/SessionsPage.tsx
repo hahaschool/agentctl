@@ -2,8 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Filter, MessageSquare } from 'lucide-react';
-import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
@@ -127,7 +126,7 @@ type RuntimeSessionListItemProps = {
   onSelect: (id: string) => void;
 };
 
-function RuntimeSessionListItem({
+const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
   row,
   isSelected,
   isFocused,
@@ -184,7 +183,7 @@ function RuntimeSessionListItem({
       </button>
     </div>
   );
-}
+});
 
 export function SessionsPage(): React.JSX.Element {
   const toast = useToast();

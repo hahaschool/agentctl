@@ -266,6 +266,7 @@ export function Sidebar(): React.JSX.Element {
                     'text-muted-foreground/60 hover:text-primary hover:bg-primary/10',
                     'opacity-0 group-hover/nav:opacity-100 focus:opacity-100',
                     'hidden lg:flex items-center justify-center',
+                    'min-w-[44px] min-h-[44px]',
                   )}
                 >
                   <Plus size={14} />
