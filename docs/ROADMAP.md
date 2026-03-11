@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-11 (knowledge engineering §3.6: expanded EntityType×11, RelationType×10, pinned facts, TriggerSpec; prior: PRs #45 mid-execution steering, #46 responsive/touch/perf, #47 memory browser page; #43 context budget, #44 theming normalization, #39 live summary streaming)
+> Last updated: 2026-03-11 (PRs #50 knowledge graph, #51 ARIA+a11y, #52 memory dashboard, #53 consolidation+reports+fact-editor, #54 ARIA hardening, #55 scope-manager+import-wizard+integration-points; prior: PRs #45-#47, #43-#44, #39)
 
 ## Current State
 
@@ -436,23 +436,23 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 **Pages (priority order):**
 
 - [x] Memory Browser (`/memory/browser`) — searchable, filterable data table of all facts; 3-column layout (filter sidebar, results list, detail panel); hybrid search (semantic + keyword); bulk actions; URL state via `nuqs`
-- [ ] Knowledge Graph (`/memory/graph`) — multi-view visualization (Graph/Table/Timeline/Clusters); react-force-graph-2d; click node → detail panel; focus mode, time-lapse animation
-- [ ] Memory Dashboard (`/memory/dashboard`) — KPI cards (total facts, new this week, avg confidence, pending consolidation); recharts line/donut/bar charts; GitHub-style activity heatmap; recent activity feed
-- [ ] Consolidation Board (`/memory/consolidation`) — human-in-the-loop knowledge quality review; category cards (contradictions, near-duplicates, stale, orphans); severity-sorted priority queue; AI suggestions with accept/edit/skip/delete actions
-- [ ] Reports (`/memory/reports`) — 3 report types (Project Progress, Knowledge Health, Activity Digest); scope + time range selector; LLM-generated summaries; rendered markdown with download/copy
-- [ ] Import Wizard (`/memory/import`) — 4-step claude-mem migration wizard (source detection → preview/mapping → progress → summary); dedup via embedding similarity; rollback support
-- [ ] Fact Editor (modal) — accessible from Browser/Graph/command palette; content, entity type, scope, confidence, pinned toggle, relationships editor
-- [ ] Scope Manager (`/memory/scopes`) — scope hierarchy tree with fact counts; promote, merge, rename, delete scope operations
+- [x] Knowledge Graph (`/memory/graph`) — multi-view visualization (Graph/Table/Timeline/Clusters); react-force-graph-2d; click node → detail panel; focus mode, time-lapse animation *(PR #50)*
+- [x] Memory Dashboard (`/memory/dashboard`) — KPI cards (total facts, new this week, avg confidence, pending consolidation); recharts line/donut/bar charts; GitHub-style activity heatmap; recent activity feed *(PR #52)*
+- [x] Consolidation Board (`/memory/consolidation`) — human-in-the-loop knowledge quality review; category cards (contradictions, near-duplicates, stale, orphans); severity-sorted priority queue; AI suggestions with accept/edit/skip/delete actions *(PR #53)*
+- [x] Reports (`/memory/reports`) — 3 report types (Project Progress, Knowledge Health, Activity Digest); scope + time range selector; LLM-generated summaries; rendered markdown with download/copy *(PR #53)*
+- [x] Import Wizard (`/memory/import`) — 4-step claude-mem migration wizard (source detection → preview/mapping → progress → summary); dedup via embedding similarity; rollback support *(PR #55)*
+- [x] Fact Editor (modal) — accessible from Browser/Graph/command palette; content, entity type, scope, confidence, pinned toggle, relationships editor *(PR #53)*
+- [x] Scope Manager (`/memory/scopes`) — scope hierarchy tree with fact counts; promote, merge, rename, delete scope operations *(PR #55)*
 
 **Integration points (memory woven into existing pages):**
 
-- [ ] Session Detail: new "Memory" tab showing facts read/created/updated during session
-- [ ] Agent Detail: memory usage section with scope distribution + mini knowledge graph
+- [x] Session Detail: new "Memory" tab showing facts read/created/updated during session *(PR #55)*
+- [x] Agent Detail: memory usage section with scope distribution + mini knowledge graph *(PR #55)*
 - [ ] Runtime Sessions: memory injection status with token budget usage
 - [ ] Machine Page: per-machine memory stats and cross-machine sync status
-- [ ] Main Dashboard: memory health card (total facts, growth trend, pending consolidation)
+- [x] Main Dashboard: memory health card (total facts, growth trend, pending consolidation) *(PR #55)*
 - [ ] Context Picker: replace current claude-mem panel with unified memory search
-- [ ] Command Palette: `memory:search`, `memory:create`, `memory:graph` commands
+- [x] Command Palette: `memory:search`, `memory:create`, `memory:graph` commands *(PR #55)*
 - [ ] Session Creation Form: scope selector + memory budget override
 
 **Backend API (`/api/memory/*`):**
@@ -646,8 +646,8 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
-| **P1** | Unified Memory Layer | 3.6 | Near-complete — injector/routes/MCP/migration/context budget landed; knowledge engineering remains |
-| **P1** | Unified Memory System UI | 4.8 | In progress — Memory Browser page delivered (PR #47); 7 sub-pages remain |
+| **P1** | Unified Memory Layer | 3.6 | Near-complete — core/UI delivered; knowledge engineering items remain (role-aware search, meta-cognition, feedback, synthesis, contradiction) |
+| **P1** | Unified Memory System UI | 4.8 | Near-complete — all 8 pages delivered (PRs #47,#50,#52,#53,#55); integration points + MCP tools + shared components remain |
 | **P1** | UI Quality & Accessibility | 4.7 | Near-complete — critical fixes + ARIA + theming + responsive/touch/perf delivered; 5 ARIA items remain |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
