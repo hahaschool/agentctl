@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-11 (added §4.8 Unified Memory System UI)
 
 ## Current State
 
@@ -267,6 +267,7 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [ ] Claude-mem data migration: audit → import script (PG target) → API dual-read → UI migration → MCP transition → cleanup
 
 > Migration plan: [plans/2026-03-11-claude-mem-migration-plan.md](plans/2026-03-11-claude-mem-migration-plan.md)
+> Frontend UI: see §4.8 Unified Memory System UI for the full 8-page UI plan + integration points
 
 **Knowledge Engineering** (inspired by [stonepage's Agent 知识工程实践](https://zhuanlan.zhihu.com/p/1898602837)):
 - [ ] Expanded EntityType: +`skill`, +`experience`, +`principle`, +`question` (11 total)
@@ -398,7 +399,66 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 **Deliverable**: Zero critical a11y violations, design token compliance, mobile-safe layouts, optimized list rendering
 
-### 4.8 Fork UX Extensions — P2
+### 4.8 Unified Memory System UI — P1
+
+> Design spec: [specs/2026-03-11-memory-ui-design.md](superpowers/specs/2026-03-11-memory-ui-design.md)
+> Impl plan: [plans/2026-03-11-memory-ui-implementation.md](superpowers/plans/2026-03-11-memory-ui-implementation.md)
+>
+> Full-stack vertical implementation: each page ships API route → component → test.
+> Top-level `/memory` route with left sidebar, 8 sub-pages, plus memory data
+> surfaced contextually across existing agent/session/machine pages.
+
+**Pages (priority order):**
+
+- [ ] Memory Browser (`/memory/browser`) — searchable, filterable data table of all facts; 3-column layout (filter sidebar, results list, detail panel); hybrid search (semantic + keyword); bulk actions; URL state via `nuqs`
+- [ ] Knowledge Graph (`/memory/graph`) — multi-view visualization (Graph/Table/Timeline/Clusters); react-force-graph-2d; click node → detail panel; focus mode, time-lapse animation
+- [ ] Memory Dashboard (`/memory/dashboard`) — KPI cards (total facts, new this week, avg confidence, pending consolidation); recharts line/donut/bar charts; GitHub-style activity heatmap; recent activity feed
+- [ ] Consolidation Board (`/memory/consolidation`) — human-in-the-loop knowledge quality review; category cards (contradictions, near-duplicates, stale, orphans); severity-sorted priority queue; AI suggestions with accept/edit/skip/delete actions
+- [ ] Reports (`/memory/reports`) — 3 report types (Project Progress, Knowledge Health, Activity Digest); scope + time range selector; LLM-generated summaries; rendered markdown with download/copy
+- [ ] Import Wizard (`/memory/import`) — 4-step claude-mem migration wizard (source detection → preview/mapping → progress → summary); dedup via embedding similarity; rollback support
+- [ ] Fact Editor (modal) — accessible from Browser/Graph/command palette; content, entity type, scope, confidence, pinned toggle, relationships editor
+- [ ] Scope Manager (`/memory/scopes`) — scope hierarchy tree with fact counts; promote, merge, rename, delete scope operations
+
+**Integration points (memory woven into existing pages):**
+
+- [ ] Session Detail: new "Memory" tab showing facts read/created/updated during session
+- [ ] Agent Detail: memory usage section with scope distribution + mini knowledge graph
+- [ ] Runtime Sessions: memory injection status with token budget usage
+- [ ] Machine Page: per-machine memory stats and cross-machine sync status
+- [ ] Main Dashboard: memory health card (total facts, growth trend, pending consolidation)
+- [ ] Context Picker: replace current claude-mem panel with unified memory search
+- [ ] Command Palette: `memory:search`, `memory:create`, `memory:graph` commands
+- [ ] Session Creation Form: scope selector + memory budget override
+
+**Backend API (`/api/memory/*`):**
+
+- [ ] Facts CRUD: `GET/POST/PATCH/DELETE /api/memory/facts`
+- [ ] Edges CRUD: `GET/POST/DELETE /api/memory/edges`
+- [ ] Graph data: `GET /api/memory/graph` (nodes + edges for visualization)
+- [ ] Scopes: `GET/POST /api/memory/scopes`
+- [ ] Consolidation: `GET /api/memory/consolidation`, `POST .../action`
+- [ ] Reports: `POST /api/memory/reports`, `GET /api/memory/reports/:id`
+- [ ] Import: `POST /api/memory/import`, `GET /api/memory/import/status`
+- [ ] Stats: `GET /api/memory/stats` (dashboard metrics)
+- [ ] Cross-entity queries: `?sessionId=X`, `?agentId=X`, `?machineId=X`
+
+**MCP tools (agent runtime access):**
+
+- [ ] `memory_search` — hybrid search (vector + BM25 + graph), ranked results
+- [ ] `memory_store` — store new fact with scope + entity_type
+- [ ] `memory_recall` — graph traversal (2-hop BFS) from entity
+- [ ] `memory_feedback` — signal relevance (used / irrelevant / outdated)
+- [ ] `memory_report` — generate scoped report
+- [ ] `memory_promote` — escalate fact to parent scope
+
+**Shared components:**
+
+- [ ] `FactCard`, `EntityTypeBadge`, `ScopeBadge`, `ConfidenceBar`, `StrengthMeter`
+- [ ] `MemorySidebar`, `ScopeSelector`, `FactDetailPanel`
+
+**Tech stack:** react-force-graph-2d, @tanstack/react-table, recharts, @tanstack/react-virtual, nuqs, react-activity-calendar
+
+### 4.9 Fork UX Extensions — P2
 
 > Design doc: [plans/2026-03-09-fork-ux-overhaul.md](plans/2026-03-09-fork-ux-overhaul.md)
 >
@@ -562,12 +622,13 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P1** | Unified Memory Layer | 3.6 | Partial — core types/schema/store/search landed; injector/routes/MCP cutover remains |
+| **P1** | Unified Memory System UI | 4.8 | Not started — 8 pages + 8 integration points + backend API + MCP tools |
 | **P1** | UI Quality & Accessibility | 4.7 | Not started — 2 critical, 11 high, 18 medium from audit |
 | **P1** | Structured Execution Summary | 2.5 | Not started |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P2** | AgentOutputStream | 3.3 | Not started |
-| **P2** | Fork UX Extensions | 4.8 | Partial — auto-related-message/runtime-in-direct-fork work remains |
+| **P2** | Fork UX Extensions | 4.9 | Partial — auto-related-message/runtime-in-direct-fork work remains |
 | **P2** | Mid-Execution Steering | 2.8 | Not started |
 | **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
 | **P2** | Automatic Handoff Triggers | 3.5 | Not started |
@@ -598,6 +659,8 @@ steer:           chat input → control plane proxy → worker → SDK streamInp
 safety check:    workdir classify (4 tiers) → SSE event → approve/reject/sandbox → execute
 runtime mgmt:    config sync → managed sessions → native import preflight → snapshot fallback
 memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → 3-tier injection
+memory UI:       /memory (8 pages) → browser/graph/dashboard/consolidation/reports/import/editor/scopes
+memory integ:    session/agent/machine/dashboard/context-picker/cmd-palette → contextual memory data
 knowledge:       extract → lint (dedup+contradict) → synthesize (LLM propose) → human review → promote
 feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) → adjust strength/ranking
 ```
@@ -608,6 +671,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
 | Unified Memory Layer (P1) | None | Core types/schema/search/store have landed; remaining work is injector/routes/MCP cutover. Claude-mem migration is part of this — see [migration plan](plans/2026-03-11-claude-mem-migration-plan.md) |
+| Unified Memory System UI (P1) | Unified Memory Layer (§3.6) backend routes | Backend API routes build on existing MemoryStore/MemorySearch; UI pages can start with mock data while backend catches up |
 | UI Quality & Accessibility (P1) | None | Can start immediately — 2 critical, 11 high, 18 medium issues from audit |
 | Execution Summary (P1) | None | Can start immediately |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
@@ -617,7 +681,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | Codex Operational Parity (P2) | None | Partial on `main`; LiteLLM routing/failover is done, remaining work is runtime-level sandbox enforcement/evidence |
 | Automatic Handoff (P2) | AgentOutputStream for live signals | Policy/history/task-affinity groundwork can land before it; live trigger execution waits on unified runtime signals |
 | Remote Control Integration (P2) | None | Relay decision and narrow manual takeover are already on `main`; only relay re-evaluation remains |
-| Fork UX Extensions (P2) | Unified Memory Layer | Memory integration in fork context selection; extends existing `ContextPickerDialog`, memory panel, and prompt preview |
+| Fork UX Extensions (P2) | Unified Memory Layer + Memory UI (§4.8) | Memory integration in fork context selection; extends existing `ContextPickerDialog`, memory panel, and prompt preview |
 | Layered Knowledge Loading (P2) | None | Can start immediately; restructure `.claude/rules/` with trigger-based loading |
 | Knowledge Sedimentation Rules (P2) | None | Can start immediately; meta-rules for knowledge management |
 | Mobile Session Browser (P3) | None | Web unification patterns are already on `main`; remaining work is mobile-side unification/filtering/actions |
@@ -681,6 +745,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Delivered | 2.4 |
 | [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Delivered | 2.4 |
 | [claude-mem-migration-plan](plans/2026-03-11-claude-mem-migration-plan.md) | Active | 3.6 |
+| [memory-ui-design](superpowers/specs/2026-03-11-memory-ui-design.md) | Approved | 4.8 |
+| [memory-ui-implementation](superpowers/plans/2026-03-11-memory-ui-implementation.md) | Planned | 4.8 |
 
 ### Knowledge Engineering
 - [Agent 知识工程实践 (stonepage)](https://zhuanlan.zhihu.com/p/1898602837) — Knowledge types, layered loading, dreaming/synthesis, meta-cognition
