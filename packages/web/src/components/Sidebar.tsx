@@ -3,6 +3,7 @@
 import {
   Bot,
   Compass,
+  Database,
   Gauge,
   Menu,
   MessageSquare,
@@ -52,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/discover', label: 'Discover', icon: Compass, shortcut: '5' },
   { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6' },
   { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
+  { href: '/memory', label: 'Memory', icon: Database, shortcut: '8' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
@@ -106,7 +108,7 @@ export function Sidebar(): React.JSX.Element {
   const pendingKeyRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keyboard shortcuts: 1-7 to navigate pages, Cmd+K for command palette, Esc to close
+  // Keyboard shortcuts: 1-8 to navigate pages, Cmd+K for command palette, Esc to close
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
       // Cmd+K / Ctrl+K — command palette (works even in inputs)
@@ -298,7 +300,7 @@ export function Sidebar(): React.JSX.Element {
           {/* Keyboard hints (hidden on medium, shown on large) */}
           <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex-wrap gap-x-3 gap-y-0.5 hidden lg:flex">
             <span>
-              <Kbd>1</Kbd>-<Kbd>7</Kbd> Nav
+              <Kbd>1</Kbd>-<Kbd>8</Kbd> Nav
             </span>
             <span>
               <Kbd>{'\u2318'}K</Kbd> Search

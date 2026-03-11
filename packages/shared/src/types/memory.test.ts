@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_INJECTION_BUDGET } from '../index.js';
 import type {
+  ConsolidationItem,
+  ImportJob,
+  MemoryReport,
+  MemoryStats,
   EntityType,
   FactSource,
   InjectionBudget,
@@ -101,5 +105,71 @@ describe('memory types', () => {
         scopeProximity: 0.1,
       },
     });
+  });
+
+  it('represents a consolidation review item', () => {
+    const item: ConsolidationItem = {
+      id: 'ci-1',
+      type: 'contradiction',
+      severity: 'high',
+      factIds: ['fact-1', 'fact-2'],
+      suggestion: 'Keep fact-1, supersede fact-2',
+      reason: 'fact-1 is newer and higher confidence',
+      status: 'pending',
+      createdAt: '2026-03-11T10:00:00Z',
+    };
+
+    expect(item.type).toBe('contradiction');
+    expect(item.severity).toBe('high');
+  });
+
+  it('represents a generated memory report', () => {
+    const report: MemoryReport = {
+      id: 'rpt-1',
+      type: 'project-progress',
+      scope: 'project:agentctl',
+      periodStart: '2026-03-04T00:00:00Z',
+      periodEnd: '2026-03-11T00:00:00Z',
+      content: '## Weekly Progress\n...',
+      metadata: { factCount: 120, newFacts: 15, topEntities: ['pgvector', 'Biome'] },
+      generatedAt: '2026-03-11T12:00:00Z',
+    };
+
+    expect(report.type).toBe('project-progress');
+  });
+
+  it('represents an import job', () => {
+    const job: ImportJob = {
+      id: 'imp-1',
+      source: 'claude-mem',
+      status: 'running',
+      progress: { current: 42, total: 847 },
+      imported: 40,
+      skipped: 2,
+      errors: 0,
+      startedAt: '2026-03-11T10:00:00Z',
+      completedAt: null,
+    };
+
+    expect(job.status).toBe('running');
+  });
+
+  it('represents dashboard memory statistics', () => {
+    const stats: MemoryStats = {
+      totalFacts: 1247,
+      newThisWeek: 87,
+      avgConfidence: 0.82,
+      pendingConsolidation: 7,
+      byScope: { global: 124, 'project:agentctl': 892 },
+      byEntityType: { pattern: 420, decision: 280 },
+      strengthDistribution: { active: 1110, decaying: 100, archived: 37 },
+      growthTrend: [
+        { date: '2026-03-10', count: 12 },
+        { date: '2026-03-11', count: 15 },
+      ],
+    };
+
+    expect(stats.totalFacts).toBe(1247);
+    expect(stats.byEntityType.pattern).toBe(420);
   });
 });

@@ -5,6 +5,8 @@ import { api } from './api';
 import { STORAGE_KEYS } from './storage-keys';
 
 type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
+type MemoryFactsQueryParams = Parameters<typeof api.searchMemoryFacts>[0];
+type MemoryGraphQueryParams = Parameters<typeof api.getMemoryGraph>[0];
 
 // ---------------------------------------------------------------------------
 // Helpers — read user preferences from localStorage
@@ -81,6 +83,12 @@ export const queryKeys = {
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
+    facts: (params?: MemoryFactsQueryParams) =>
+      params ? (['memory', 'facts', params] as const) : (['memory', 'facts'] as const),
+    fact: (id: string) => ['memory', 'fact', id] as const,
+    graph: (params?: MemoryGraphQueryParams) =>
+      params ? (['memory', 'graph', params] as const) : (['memory', 'graph'] as const),
+    stats: ['memory', 'stats'] as const,
     timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
     observation: (id: number) => ['memory', 'observation', id] as const,
   },
@@ -342,6 +350,40 @@ export function memorySearchQuery(q: string, opts?: { project?: string; type?: s
     queryFn: () => api.searchMemory({ q, ...opts }),
     enabled: q.length >= 2,
     staleTime: 60_000,
+  });
+}
+
+export function memoryFactsQuery(params?: MemoryFactsQueryParams) {
+  return queryOptions({
+    queryKey: queryKeys.memory.facts(params),
+    queryFn: () => api.searchMemoryFacts(params ?? {}),
+    staleTime: 30_000,
+  });
+}
+
+export function memoryFactQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.memory.fact(id),
+    queryFn: () => api.getMemoryFact(id),
+    enabled: !!id,
+    staleTime: 30_000,
+  });
+}
+
+export function memoryGraphQuery(params?: MemoryGraphQueryParams) {
+  return queryOptions({
+    queryKey: queryKeys.memory.graph(params),
+    queryFn: () => api.getMemoryGraph(params),
+    staleTime: 30_000,
+  });
+}
+
+export function memoryStatsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.memory.stats,
+    queryFn: api.getMemoryStats,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 

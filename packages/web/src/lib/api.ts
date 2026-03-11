@@ -11,7 +11,9 @@ import type {
   AgentType,
   ContentMessage,
   CreateManagedSessionRequest,
+  EntityType,
   ExecutionSummary,
+  FactSource,
   ForkManagedSessionRequest,
   HandoffManagedSessionRequest,
   HandoffReason,
@@ -25,7 +27,11 @@ import type {
   ManagedSessionStatus,
   ManualTakeoverResponse,
   ManualTakeoverState,
+  MemoryEdge,
+  MemoryFact,
   MemoryObservation,
+  MemoryScope,
+  MemoryStats,
   NativeImportAttempt,
   NativeImportPreflightResponse,
   ResumeManagedSessionRequest,
@@ -779,7 +785,87 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ cols, rows }) },
     ),
 
-  // Memory
+  // Unified memory foundation
+  searchMemoryFacts: (params: {
+    q?: string;
+    scope?: MemoryScope;
+    entityType?: EntityType;
+    sessionId?: string;
+    agentId?: string;
+    machineId?: string;
+    minConfidence?: number;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.scope) qs.set('scope', params.scope);
+    if (params.entityType) qs.set('entityType', params.entityType);
+    if (params.sessionId) qs.set('sessionId', params.sessionId);
+    if (params.agentId) qs.set('agentId', params.agentId);
+    if (params.machineId) qs.set('machineId', params.machineId);
+    if (params.minConfidence !== undefined) qs.set('minConfidence', String(params.minConfidence));
+    if (params.limit !== undefined) qs.set('limit', String(params.limit));
+    if (params.offset !== undefined) qs.set('offset', String(params.offset));
+    const suffix = qs.toString();
+
+    return request<{ ok: boolean; facts: MemoryFact[]; total: number }>(
+      suffix ? `/api/memory/facts?${suffix}` : '/api/memory/facts',
+    );
+  },
+
+  getMemoryFact: (id: string) =>
+    request<{ ok: boolean; fact: MemoryFact; edges: MemoryEdge[] }>(
+      `/api/memory/facts/${encodeURIComponent(id)}`,
+    ),
+
+  createMemoryFact: (body: {
+    content: string;
+    scope: MemoryScope;
+    entityType: EntityType;
+    confidence?: number;
+    source?: FactSource;
+  }) =>
+    request<{ ok: boolean; fact: MemoryFact }>('/api/memory/facts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateMemoryFact: (
+    id: string,
+    patch: {
+      scope?: MemoryScope;
+      content?: string;
+      entityType?: EntityType;
+      confidence?: number;
+      strength?: number;
+    },
+  ) =>
+    request<{ ok: boolean; fact: MemoryFact }>(`/api/memory/facts/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  deleteMemoryFact: (id: string) =>
+    request<{ ok: boolean; id: string }>(`/api/memory/facts/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  getMemoryGraph: (params?: { scope?: MemoryScope; entityType?: EntityType; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.scope) qs.set('scope', params.scope);
+    if (params?.entityType) qs.set('entityType', params.entityType);
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    const suffix = qs.toString();
+
+    return request<{ ok: boolean; nodes: MemoryFact[]; edges: MemoryEdge[] }>(
+      suffix ? `/api/memory/graph?${suffix}` : '/api/memory/graph',
+    );
+  },
+
+  getMemoryStats: () => request<{ ok: boolean; stats: MemoryStats }>('/api/memory/stats'),
+
+  // Claude-mem compatibility
   searchMemory: (params: { q: string; project?: string; type?: string; limit?: number }) => {
     const qs = new URLSearchParams({ q: params.q });
     if (params.project) qs.set('project', params.project);

@@ -47,6 +47,9 @@ import { gitProxyRoutes } from './routes/git.js';
 import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
+import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
+import { memoryFactRoutes } from './routes/memory-facts.js';
+import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { memoryRoutes } from './routes/memory.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
@@ -76,7 +79,19 @@ type CreateServerOptions = {
   litellmClient?: LiteLLMClient;
   mem0Client?: Mem0Client;
   memorySearch?: Pick<MemorySearch, 'search'>;
-  memoryStore?: Pick<MemoryStore, 'addFact' | 'listFacts' | 'deleteFact'>;
+  memoryStore?: Pick<
+    MemoryStore,
+    | 'addEdge'
+    | 'addFact'
+    | 'deleteEdge'
+    | 'deleteFact'
+    | 'getFact'
+    | 'getStats'
+    | 'invalidateFact'
+    | 'listEdges'
+    | 'listFacts'
+    | 'updateFact'
+  >;
   memoryInjector?: MemoryInjector | null;
   workerPort?: number;
   isProduction?: boolean;
@@ -351,6 +366,23 @@ export async function createServer({
   }
 
   if (memorySearch && memoryStore) {
+    await app.register(memoryFactRoutes, {
+      prefix: '/api/memory/facts',
+      memorySearch,
+      memoryStore,
+    });
+    await app.register(memoryEdgeRoutes, {
+      prefix: '/api/memory/edges',
+      memoryStore,
+    });
+    await app.register(memoryGraphRoutes, {
+      prefix: '/api/memory/graph',
+      memoryStore,
+    });
+    await app.register(memoryStatsRoutes, {
+      prefix: '/api/memory/stats',
+      memoryStore,
+    });
     await app.register(memoryRoutes, {
       prefix: '/api/memory',
       memorySearch,

@@ -71,6 +71,21 @@ function parseSource(value: unknown): FactSource {
   }) as FactSource;
 }
 
+function buildScopeCondition(
+  scopes: string[],
+  startIndex: number,
+): { clause: string; params: unknown[] } {
+  if (scopes.length === 0) {
+    return { clause: '', params: [] };
+  }
+
+  const placeholders = scopes.map((_, index) => `$${startIndex + index}`).join(', ');
+  return {
+    clause: ` AND scope IN (${placeholders})`,
+    params: scopes,
+  };
+}
+
 export class MemorySearch {
   private readonly pool: Pool;
   private readonly embeddingClient: EmbeddingClient;
@@ -211,18 +226,17 @@ export class MemorySearch {
       return [];
     }
 
-    const scopePlaceholders = scopes.map((_, index) => `$${index + 2}`).join(', ');
-    const params: unknown[] = [`[${queryEmbedding.join(',')}]`, ...scopes];
+    const scopeCondition = buildScopeCondition(scopes, 2);
+    const params: unknown[] = [`[${queryEmbedding.join(',')}]`, ...scopeCondition.params];
     let sql = `
       SELECT id, scope, content, content_model, entity_type,
              confidence::real, strength::real, source_json,
              valid_from, valid_until, created_at, accessed_at,
              ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS rank
       FROM memory_facts
-      WHERE scope IN (${scopePlaceholders})
-        AND valid_until IS NULL
+      WHERE valid_until IS NULL
         AND strength > ${DEFAULT_STRENGTH_THRESHOLD}
-        AND embedding IS NOT NULL`;
+        AND embedding IS NOT NULL${scopeCondition.clause}`;
 
     if (entityType) {
       sql += ` AND entity_type = $${params.length + 1}`;
@@ -255,8 +269,8 @@ export class MemorySearch {
       return [];
     }
 
-    const scopePlaceholders = scopes.map((_, index) => `$${index + 2}`).join(', ');
-    const params: unknown[] = [tsQuery, ...scopes];
+    const scopeCondition = buildScopeCondition(scopes, 2);
+    const params: unknown[] = [tsQuery, ...scopeCondition.params];
     let sql = `
       SELECT id, scope, content, content_model, entity_type,
              confidence::real, strength::real, source_json,
@@ -266,9 +280,8 @@ export class MemorySearch {
              ) AS rank
       FROM memory_facts
       WHERE content_tsv @@ to_tsquery('english', $1)
-        AND scope IN (${scopePlaceholders})
         AND valid_until IS NULL
-        AND strength > ${DEFAULT_STRENGTH_THRESHOLD}`;
+        AND strength > ${DEFAULT_STRENGTH_THRESHOLD}${scopeCondition.clause}`;
 
     if (entityType) {
       sql += ` AND entity_type = $${params.length + 1}`;
@@ -296,18 +309,17 @@ export class MemorySearch {
       return [];
     }
 
-    const scopePlaceholders = scopes.map((_, index) => `$${index + 1}`).join(', ');
+    const scopeCondition = buildScopeCondition(scopes, 1);
     const keywordPattern = keywords.join('|');
     const seedSql = `
       SELECT id
       FROM memory_facts
-      WHERE scope IN (${scopePlaceholders})
-        AND valid_until IS NULL
+      WHERE valid_until IS NULL
         AND strength > ${DEFAULT_STRENGTH_THRESHOLD}
-        AND content ~* $${scopes.length + 1}
+        AND content ~* $${scopeCondition.params.length + 1}${scopeCondition.clause}
       LIMIT 10`;
 
-    const seedResult = await this.pool.query(seedSql, [...scopes, keywordPattern]);
+    const seedResult = await this.pool.query(seedSql, [...scopeCondition.params, keywordPattern]);
     const seedIds = (seedResult.rows as Array<{ id: string }>).map((row) => row.id);
     if (seedIds.length === 0) {
       return [];

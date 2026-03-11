@@ -56,17 +56,17 @@ describe('ALL_SHORTCUTS', () => {
     expect(ALL_SHORTCUTS.length).toBeGreaterThan(0);
   });
 
-  it('has 12 total entries (7 nav + 5 global)', () => {
-    expect(ALL_SHORTCUTS).toHaveLength(12);
+  it('has 13 total entries (8 nav + 5 global)', () => {
+    expect(ALL_SHORTCUTS).toHaveLength(13);
   });
 
-  it('starts with navigation shortcuts (keys 1-7)', () => {
-    const navKeys = ALL_SHORTCUTS.slice(0, 7).map((e) => e.keys[0]);
-    expect(navKeys).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+  it('starts with navigation shortcuts (keys 1-8)', () => {
+    const navKeys = ALL_SHORTCUTS.slice(0, 8).map((e) => e.keys[0]);
+    expect(navKeys).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
   });
 
   it('has navigation descriptions in correct order', () => {
-    const navDescs = ALL_SHORTCUTS.slice(0, 7).map((e) => e.desc);
+    const navDescs = ALL_SHORTCUTS.slice(0, 8).map((e) => e.desc);
     expect(navDescs).toEqual([
       'Dashboard',
       'Machines',
@@ -75,6 +75,7 @@ describe('ALL_SHORTCUTS', () => {
       'Discover',
       'Logs & Metrics',
       'Settings',
+      'Memory',
     ]);
   });
 

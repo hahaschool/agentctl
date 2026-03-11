@@ -2,7 +2,7 @@
  * Single source of truth for keyboard shortcut definitions displayed in
  * SettingsView and KeyboardHelpOverlay.
  *
- * Navigation shortcuts (1-7) are derived from NAV_ITEMS in Sidebar.tsx at
+ * Navigation shortcuts (1-8) are derived from NAV_ITEMS in Sidebar.tsx at
  * runtime, but the "shape" metadata lives here so every display surface stays
  * in sync.
  */
@@ -22,7 +22,7 @@ export type ShortcutGroup = {
 };
 
 /**
- * Navigation page shortcuts (number keys 1-7).
+ * Navigation page shortcuts (number keys 1-8).
  * Order must match the sidebar nav order.
  */
 const NAV_SHORTCUTS: ShortcutEntry[] = [
@@ -33,6 +33,7 @@ const NAV_SHORTCUTS: ShortcutEntry[] = [
   { keys: ['5'], desc: 'Discover' },
   { keys: ['6'], desc: 'Logs & Metrics' },
   { keys: ['7'], desc: 'Settings' },
+  { keys: ['8'], desc: 'Memory' },
 ];
 
 /** Global (non-navigation) shortcuts. */
@@ -59,7 +60,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['?'], desc: 'Show keyboard shortcuts' },
       { keys: ['\u2318K'], desc: 'Command palette' },
-      { keys: ['1\u20137'], desc: 'Navigate to page' },
+      { keys: ['1\u20138'], desc: 'Navigate to page' },
       { keys: ['Esc'], desc: 'Close panels / Cancel' },
       { keys: ['g', 'd'], desc: 'Go to Dashboard' },
       { keys: ['g', 's'], desc: 'Go to Sessions' },

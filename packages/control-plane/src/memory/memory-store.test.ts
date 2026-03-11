@@ -142,7 +142,7 @@ describe('MemoryStore', () => {
     await expect(store.getFact('missing')).resolves.toBeNull();
   });
 
-  it('lists facts and filters to agent plus global scopes when agentId is provided', async () => {
+  it('lists facts within explicit visible scopes', async () => {
     const now = new Date().toISOString();
     const query = vi.fn().mockResolvedValue({
       rows: [
@@ -165,7 +165,10 @@ describe('MemoryStore', () => {
     });
     const { store } = makeStore({ query });
 
-    const results = await store.listFacts({ agentId: 'agent-1', limit: 25 });
+    const results = await store.listFacts({
+      visibleScopes: ['agent:agent-1', 'global'],
+      limit: 25,
+    });
 
     expect(results).toHaveLength(1);
     expect(results[0]?.id).toBe('fact-1');
@@ -173,6 +176,7 @@ describe('MemoryStore', () => {
       'agent:agent-1',
       'global',
       25,
+      0,
     ]);
   });
 
@@ -185,6 +189,122 @@ describe('MemoryStore', () => {
     await store.invalidateFact('fact-1');
 
     expect(query).toHaveBeenCalledTimes(3);
+  });
+
+  it('updates a fact and regenerates embeddings when the content changes', async () => {
+    const now = new Date().toISOString();
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'fact-1',
+            scope: 'project:agentctl',
+            content: 'Updated fact',
+            content_model: 'text-embedding-3-small',
+            entity_type: 'decision',
+            confidence: 0.75,
+            strength: 0.9,
+            source_json: {},
+            valid_from: now,
+            valid_until: null,
+            created_at: now,
+            accessed_at: now,
+          },
+        ],
+        rowCount: 1,
+      });
+    const { store, embedding } = makeStore({ query });
+
+    const result = await store.updateFact('fact-1', {
+      content: 'Updated fact',
+      entity_type: 'decision',
+      confidence: 0.75,
+    });
+
+    expect(embedding.embed).toHaveBeenCalledWith('Updated fact');
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(result?.content).toBe('Updated fact');
+  });
+
+  it('lists edges filtered by fact id and source id', async () => {
+    const now = new Date().toISOString();
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          id: 'edge-1',
+          source_fact_id: 'fact-1',
+          target_fact_id: 'fact-2',
+          relation: 'related_to',
+          weight: 0.7,
+          created_at: now,
+        },
+      ],
+      rowCount: 1,
+    });
+    const { store } = makeStore({ query });
+
+    const results = await store.listEdges({ factId: 'fact-1', sourceFactId: 'fact-1' });
+
+    expect(results).toHaveLength(1);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('source_fact_id = $1'), [
+      'fact-1',
+      'fact-1',
+    ]);
+  });
+
+  it('executes edge deletion mutations', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    const { store } = makeStore({ query });
+
+    await store.deleteEdge('edge-1');
+
+    expect(query).toHaveBeenCalledWith('DELETE FROM memory_edges WHERE id = $1', ['edge-1']);
+  });
+
+  it('aggregates memory stats', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ total_facts: '12', new_this_week: '3', avg_confidence: '0.75' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { key: 'global', count: '4' },
+          { key: 'project:agentctl', count: '8' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { key: 'decision', count: '5' },
+          { key: 'pattern', count: '7' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ active: '9', decaying: '2', archived: '1' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { date: '2026-03-10', count: '1' },
+          { date: '2026-03-11', count: '2' },
+        ],
+      });
+    const { store } = makeStore({ query });
+
+    const stats = await store.getStats();
+
+    expect(stats).toEqual({
+      totalFacts: 12,
+      newThisWeek: 3,
+      avgConfidence: 0.75,
+      pendingConsolidation: 0,
+      byScope: { global: 4, 'project:agentctl': 8 },
+      byEntityType: { decision: 5, pattern: 7 },
+      strengthDistribution: { active: 9, decaying: 2, archived: 1 },
+      growthTrend: [
+        { date: '2026-03-10', count: 1 },
+        { date: '2026-03-11', count: 2 },
+      ],
+    });
   });
 
   it('resolves visible scopes from agent/project context', () => {

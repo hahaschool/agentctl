@@ -94,6 +94,7 @@ const NAV_ITEMS = [
   { label: 'Discover', href: '/discover', shortcut: '5' },
   { label: 'Logs', href: '/logs', shortcut: '6' },
   { label: 'Settings', href: '/settings', shortcut: '7' },
+  { label: 'Memory', href: '/memory', shortcut: '8' },
 ];
 
 // ===========================================================================
@@ -239,7 +240,7 @@ describe('Sidebar', () => {
       }
     });
 
-    it('displays keyboard hint text for 1-7 Nav', () => {
+    it('displays keyboard hint text for 1-8 Nav', () => {
       render(<Sidebar />);
       expect(screen.getByText(/Nav/)).toBeDefined();
     });

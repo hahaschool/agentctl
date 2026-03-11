@@ -325,6 +325,7 @@ describe('SettingsView', () => {
     expect(screen.getByText('Machines')).toBeDefined();
     expect(screen.getByText('Agents')).toBeDefined();
     expect(screen.getByText('Sessions')).toBeDefined();
+    expect(screen.getByText('Memory')).toBeDefined();
     // "Settings" appears as both h1 and shortcut desc — use getAllByText
     const settingsEls = screen.getAllByText('Settings');
     expect(settingsEls.length).toBeGreaterThanOrEqual(2);
@@ -340,8 +341,8 @@ describe('SettingsView', () => {
   it('renders the correct number of kbd elements for all shortcuts', () => {
     renderSettings();
     const kbdElements = document.querySelectorAll('kbd');
-    // ALL_SHORTCUTS has 12 entries, each with 1 key = 12 kbd elements
-    expect(kbdElements.length).toBe(12);
+    // ALL_SHORTCUTS has 13 entries, each with 1 key = 13 kbd elements
+    expect(kbdElements.length).toBe(13);
   });
 
   it('renders specific shortcut key labels', () => {

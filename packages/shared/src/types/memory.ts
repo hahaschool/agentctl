@@ -88,3 +88,74 @@ export const DEFAULT_INJECTION_BUDGET: InjectionBudget = {
     scopeProximity: 0.1,
   },
 };
+
+export type ConsolidationItemType = 'contradiction' | 'near-duplicate' | 'stale' | 'orphan';
+
+export type ConsolidationSeverity = 'high' | 'medium' | 'low';
+
+export type ConsolidationStatus = 'pending' | 'accepted' | 'skipped';
+
+export type ConsolidationItem = {
+  id: string;
+  type: ConsolidationItemType;
+  severity: ConsolidationSeverity;
+  factIds: string[];
+  suggestion: string;
+  reason: string;
+  status: ConsolidationStatus;
+  createdAt: string;
+};
+
+export type MemoryReportType = 'project-progress' | 'knowledge-health' | 'activity-digest';
+
+export type MemoryReport = {
+  id: string;
+  type: MemoryReportType;
+  scope: string;
+  periodStart: string;
+  periodEnd: string;
+  content: string;
+  metadata: {
+    factCount: number;
+    newFacts: number;
+    topEntities: string[];
+  };
+  generatedAt: string;
+};
+
+export type ImportJobSource = 'claude-mem' | 'jsonl-history';
+
+export type ImportJobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export type ImportJob = {
+  id: string;
+  source: ImportJobSource;
+  status: ImportJobStatus;
+  progress: {
+    current: number;
+    total: number;
+  };
+  imported: number;
+  skipped: number;
+  errors: number;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+export type MemoryStats = {
+  totalFacts: number;
+  newThisWeek: number;
+  avgConfidence: number;
+  pendingConsolidation: number;
+  byScope: Record<string, number>;
+  byEntityType: Record<string, number>;
+  strengthDistribution: {
+    active: number;
+    decaying: number;
+    archived: number;
+  };
+  growthTrend: ReadonlyArray<{
+    date: string;
+    count: number;
+  }>;
+};
