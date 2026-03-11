@@ -1,12 +1,15 @@
 import { createHash } from 'node:crypto';
 
 import type {
+  ManagedRuntime,
   ManagedRuntimeConfig,
+  RuntimeCapabilityState,
   RuntimeConfigSyncRequest,
   RuntimeConfigSyncResponse,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type {
   MachineRuntimeStateRecord,
   RuntimeConfigStore,
@@ -14,18 +17,20 @@ import type {
 
 export type RuntimeConfigRouteStore = Pick<
   RuntimeConfigStore,
-  'getLatestRevision' | 'saveRevision' | 'listMachineStates'
+  'getLatestRevision' | 'saveRevision' | 'listMachineStates' | 'upsertMachineState'
 >;
 
 export type RuntimeConfigRoutesOptions = {
   runtimeConfigStore: RuntimeConfigRouteStore;
+  dbRegistry?: DbAgentRegistry | null;
+  workerPort?: number;
 };
 
 export const runtimeConfigRoutes: FastifyPluginAsync<RuntimeConfigRoutesOptions> = async (
   app,
   opts,
 ) => {
-  const { runtimeConfigStore } = opts;
+  const { runtimeConfigStore, dbRegistry = null, workerPort = 9000 } = opts;
 
   app.get(
     '/defaults',
@@ -127,6 +132,93 @@ export const runtimeConfigRoutes: FastifyPluginAsync<RuntimeConfigRoutesOptions>
         activeHash: effective.hash,
         items: states.map((state) => toDriftItem(state, effective.version, effective.hash)),
       };
+    },
+  );
+
+  app.post<{
+    Body: { machineId?: string };
+  }>(
+    '/refresh',
+    {
+      schema: {
+        tags: ['runtime-config'],
+        summary: 'Probe workers for runtime installation status and persist results',
+      },
+    },
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply.code(503).send({
+          error: 'REGISTRY_UNAVAILABLE',
+          message: 'Database registry is not configured — cannot resolve worker URLs',
+        });
+      }
+
+      const targetMachineId = request.body?.machineId;
+      const allMachines = targetMachineId
+        ? await dbRegistry.listMachines().then((list) => list.filter((m) => m.id === targetMachineId))
+        : await dbRegistry.listMachines();
+
+      const onlineMachines = allMachines.filter((m) => m.status !== 'offline');
+
+      if (onlineMachines.length === 0) {
+        return { refreshed: 0, items: [] };
+      }
+
+      type RefreshResult = {
+        machineId: string;
+        runtime: ManagedRuntime;
+        isInstalled: boolean;
+        isAuthenticated: boolean;
+      };
+
+      const results: RefreshResult[] = [];
+
+      const probePromises = onlineMachines.map(async (machine) => {
+        const address = machine.tailscaleIp ?? machine.hostname;
+        const workerUrl = `http://${address}:${String(workerPort)}`;
+        try {
+          const res = await fetch(`${workerUrl}/runtime-config/state`, {
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!res.ok) return;
+
+          const body = (await res.json()) as {
+            runtimes?: Record<ManagedRuntime, RuntimeCapabilityState>;
+          };
+          if (!body.runtimes) return;
+
+          for (const [runtime, state] of Object.entries(body.runtimes) as [
+            ManagedRuntime,
+            RuntimeCapabilityState,
+          ][]) {
+            await runtimeConfigStore.upsertMachineState({
+              machineId: machine.id,
+              runtime,
+              isInstalled: state.installed,
+              isAuthenticated: state.authenticated,
+              syncStatus: 'unknown',
+              configVersion: null,
+              configHash: null,
+              metadata: {},
+            });
+            results.push({
+              machineId: machine.id,
+              runtime,
+              isInstalled: state.installed,
+              isAuthenticated: state.authenticated,
+            });
+          }
+        } catch {
+          app.log.warn(
+            { machineId: machine.id, workerUrl },
+            'Failed to probe worker runtime state',
+          );
+        }
+      });
+
+      await Promise.all(probePromises);
+
+      return { refreshed: results.length, items: results };
     },
   );
 };
