@@ -808,10 +808,7 @@ export function consolidationQuery(params?: ConsolidationQueryParams) {
 export function useResolveConsolidationItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (variables: {
-      id: string;
-      action: 'accept' | 'skip' | 'delete';
-    }) => {
+    mutationFn: (variables: { id: string; action: 'accept' | 'skip' | 'delete' }) => {
       const statusMap = { accept: 'accepted', skip: 'skipped', delete: 'skipped' } as const;
       return api.resolveConsolidationItem(variables.id, {
         action: variables.action,

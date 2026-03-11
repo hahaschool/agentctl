@@ -936,11 +936,7 @@ export const api = {
     );
   },
 
-  getConsolidationItems: (params?: {
-    type?: string;
-    status?: string;
-    limit?: number;
-  }) => {
+  getConsolidationItems: (params?: { type?: string; status?: string; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.type) qs.set('type', params.type);
     if (params?.status) qs.set('status', params.status);
@@ -951,10 +947,13 @@ export const api = {
     );
   },
 
-  resolveConsolidationItem: (id: string, body: {
-    action: string;
-    status: ConsolidationStatus;
-  }) =>
+  resolveConsolidationItem: (
+    id: string,
+    body: {
+      action: string;
+      status: ConsolidationStatus;
+    },
+  ) =>
     request<{ ok: boolean }>(`/api/memory/consolidation/${id}/action`, {
       method: 'POST',
       body: JSON.stringify(body),
