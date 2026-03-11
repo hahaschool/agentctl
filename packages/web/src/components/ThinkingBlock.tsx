@@ -21,8 +21,8 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
         onClick={() => setExpanded(true)}
         className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-left font-[inherit] border-none border-l-2 bg-purple-500/[0.06] border-l-purple-400/60"
       >
-        <ChevronRight size={12} className="text-purple-600 dark:text-purple-400 shrink-0" />
-        <Brain size={12} className="text-purple-600 dark:text-purple-400 shrink-0" />
+        <ChevronRight size={12} className="text-purple-600 dark:text-purple-400 shrink-0" aria-hidden="true" />
+        <Brain size={12} className="text-purple-600 dark:text-purple-400 shrink-0" aria-hidden="true" />
         <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 shrink-0">
           Thinking
         </span>
@@ -36,8 +36,8 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
     <div className="px-3 py-2 rounded-lg border-l-[3px] bg-purple-500/[0.06] border-l-purple-400/60">
       <div className="flex justify-between items-center mb-1">
         <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-          <ChevronDown size={12} />
-          <Brain size={12} />
+          <ChevronDown size={12} aria-hidden="true" />
+          <Brain size={12} aria-hidden="true" />
           Thinking
         </span>
         <div className="flex gap-2 items-center">

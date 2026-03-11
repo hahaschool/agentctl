@@ -94,7 +94,7 @@ export function BrowserFilterSidebar({
           Search
         </h3>
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
           <Input
             placeholder="Search facts..."
             value={filters.q}
@@ -170,7 +170,7 @@ export function BrowserFilterSidebar({
 
       {hasActiveFilters ? (
         <Button variant="ghost" size="sm" onClick={handleClearFilters} className="w-full gap-1.5">
-          <XIcon className="size-3.5" />
+          <XIcon className="size-3.5" aria-hidden="true" />
           Clear filters
         </Button>
       ) : null}

@@ -84,13 +84,13 @@ export function BrowserDetailPanel({
         <h3 className="text-sm font-semibold">Fact Detail</h3>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon-xs" onClick={handleStartEdit} aria-label="Edit fact">
-            <PencilIcon className="size-3.5" />
+            <PencilIcon className="size-3.5" aria-hidden="true" />
           </Button>
           <Button variant="ghost" size="icon-xs" onClick={handleDelete} aria-label="Delete fact">
-            <Trash2Icon className="size-3.5 text-destructive" />
+            <Trash2Icon className="size-3.5 text-destructive" aria-hidden="true" />
           </Button>
           <Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Close detail panel">
-            <XIcon className="size-3.5" />
+            <XIcon className="size-3.5" aria-hidden="true" />
           </Button>
         </div>
       </div>

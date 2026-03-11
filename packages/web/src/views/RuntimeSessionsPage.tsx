@@ -416,7 +416,7 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                       <div className="space-y-2 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                            <Cpu className="h-3 w-3" />
+                            <Cpu className="h-3 w-3" aria-hidden="true" />
                             {runtimeLabel(session.runtime)}
                           </span>
                           <StatusBadge status={session.status} />
