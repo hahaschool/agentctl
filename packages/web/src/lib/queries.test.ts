@@ -9,6 +9,10 @@ import {
   discoverQuery,
   healthQuery,
   machinesQuery,
+  memoryFactQuery,
+  memoryFactsQuery,
+  memoryGraphQuery,
+  memoryStatsQuery,
   metricsQuery,
   projectAccountsQuery,
   queryKeys,
@@ -191,6 +195,24 @@ describe('queryKeys', () => {
 
   it('routerModelsInfo key is correct', () => {
     expect(queryKeys.routerModelsInfo).toEqual(['router', 'models-info']);
+  });
+
+  it('memory facts key includes params', () => {
+    const params = { q: 'memory', scope: 'project:agentctl', limit: 20 };
+    expect(queryKeys.memory.facts(params)).toEqual(['memory', 'facts', params]);
+  });
+
+  it('memory fact key includes id', () => {
+    expect(queryKeys.memory.fact('fact-1')).toEqual(['memory', 'fact', 'fact-1']);
+  });
+
+  it('memory graph key includes params', () => {
+    const params = { scope: 'project:agentctl', entityType: 'decision', limit: 10 };
+    expect(queryKeys.memory.graph(params)).toEqual(['memory', 'graph', params]);
+  });
+
+  it('memory stats key is correct', () => {
+    expect(queryKeys.memory.stats).toEqual(['memory', 'stats']);
   });
 });
 
@@ -742,5 +764,43 @@ describe('routerModelsInfoQuery', () => {
   it('has queryFn property', () => {
     const options = routerModelsInfoQuery();
     expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('memoryFactsQuery', () => {
+  it('returns queryOptions with the memory facts queryKey', () => {
+    const params = { q: 'memory', scope: 'project:agentctl', limit: 10 };
+    const options = memoryFactsQuery(params);
+
+    expect(options.queryKey).toEqual(queryKeys.memory.facts(params));
+    expect(options.staleTime).toBe(30_000);
+  });
+});
+
+describe('memoryFactQuery', () => {
+  it('returns queryOptions with the memory fact queryKey', () => {
+    const options = memoryFactQuery('fact-1');
+
+    expect(options.queryKey).toEqual(queryKeys.memory.fact('fact-1'));
+    expect(options.enabled).toBe(true);
+  });
+});
+
+describe('memoryGraphQuery', () => {
+  it('returns queryOptions with the memory graph queryKey', () => {
+    const params = { scope: 'project:agentctl', entityType: 'decision', limit: 15 };
+    const options = memoryGraphQuery(params);
+
+    expect(options.queryKey).toEqual(queryKeys.memory.graph(params));
+    expect(options.staleTime).toBe(30_000);
+  });
+});
+
+describe('memoryStatsQuery', () => {
+  it('returns queryOptions with the memory stats queryKey', () => {
+    const options = memoryStatsQuery();
+
+    expect(options.queryKey).toEqual(queryKeys.memory.stats);
+    expect(options.refetchInterval).toBe(60_000);
   });
 });

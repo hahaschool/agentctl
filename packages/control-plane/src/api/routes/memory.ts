@@ -130,7 +130,9 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (app,
 
       try {
         if (pgBackend) {
-          const results = await pgBackend.memoryStore.listFacts({ agentId });
+          const results = await pgBackend.memoryStore.listFacts({
+            visibleScopes: resolveVisibleScopes(agentId),
+          });
           return { results: results.map(normalizeFact) };
         }
 

@@ -663,7 +663,7 @@ describe('Memory routes — /api/memory (postgres backend)', () => {
 
     expect(response.statusCode).toBe(200);
     expect(memoryStore.listFacts).toHaveBeenCalledWith({
-      agentId: 'agent-1',
+      visibleScopes: ['agent:agent-1', 'global'],
     });
 
     const body = response.json();

@@ -70,14 +70,24 @@ export type {
 } from './loop.js';
 export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
 export type {
+  ConsolidationItem,
+  ConsolidationItemType,
+  ConsolidationSeverity,
+  ConsolidationStatus,
   EntityType,
   FactSource,
+  ImportJob,
+  ImportJobSource,
+  ImportJobStatus,
   InjectionBudget,
   MemoryEdge,
   MemoryFact,
   MemoryObservation,
+  MemoryReport,
+  MemoryReportType,
   MemoryScope,
   MemorySearchResult,
+  MemoryStats,
   RelationType,
 } from './memory.js';
 export { DEFAULT_INJECTION_BUDGET } from './memory.js';

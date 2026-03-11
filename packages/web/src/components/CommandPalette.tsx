@@ -5,6 +5,7 @@ import {
   BellOff,
   Bot,
   Compass,
+  Database,
   Gauge,
   HelpCircle,
   MessageSquare,
@@ -60,6 +61,7 @@ const NAV_COMMANDS = [
   },
   { href: '/logs', label: 'Logs & Metrics', icon: ScrollText, shortcut: '6', section: 'Navigate' },
   { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7', section: 'Navigate' },
+  { href: '/memory', label: 'Memory', icon: Database, shortcut: '8', section: 'Navigate' },
 ] as const;
 
 const STATUS_BADGE_VARIANTS: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {

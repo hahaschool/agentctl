@@ -269,6 +269,137 @@ describe('api.listSessions', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Unified memory foundation
+// ---------------------------------------------------------------------------
+
+describe('api.searchMemoryFacts', () => {
+  it('calls GET /api/memory/facts with query params', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, facts: [], total: 0 }));
+
+    await api.searchMemoryFacts({
+      q: 'memory',
+      scope: 'project:agentctl',
+      entityType: 'decision',
+      agentId: 'agent-1',
+      minConfidence: 0.7,
+      limit: 20,
+      offset: 5,
+    });
+
+    const [url] = lastFetchCall();
+    const parsed = new URL(url as string, 'http://localhost');
+    expect(parsed.pathname).toBe('/api/memory/facts');
+    expect(parsed.searchParams.get('q')).toBe('memory');
+    expect(parsed.searchParams.get('scope')).toBe('project:agentctl');
+    expect(parsed.searchParams.get('entityType')).toBe('decision');
+    expect(parsed.searchParams.get('agentId')).toBe('agent-1');
+    expect(parsed.searchParams.get('minConfidence')).toBe('0.7');
+    expect(parsed.searchParams.get('limit')).toBe('20');
+    expect(parsed.searchParams.get('offset')).toBe('5');
+  });
+});
+
+describe('api.getMemoryFact', () => {
+  it('calls GET /api/memory/facts/:id', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, fact: {}, edges: [] }));
+
+    await api.getMemoryFact('fact-1');
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/memory/facts/fact-1');
+  });
+});
+
+describe('api.createMemoryFact', () => {
+  it('calls POST /api/memory/facts with JSON body', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, fact: { id: 'fact-1' } }));
+
+    await api.createMemoryFact({
+      content: 'Remember the route shell',
+      scope: 'project:agentctl',
+      entityType: 'decision',
+      confidence: 0.8,
+      source: {
+        session_id: 'session-1',
+        agent_id: 'agent-1',
+        machine_id: 'machine-1',
+        turn_index: 1,
+        extraction_method: 'manual',
+      },
+    });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/memory/facts');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({
+      content: 'Remember the route shell',
+      scope: 'project:agentctl',
+      entityType: 'decision',
+      confidence: 0.8,
+      source: {
+        session_id: 'session-1',
+        agent_id: 'agent-1',
+        machine_id: 'machine-1',
+        turn_index: 1,
+        extraction_method: 'manual',
+      },
+    });
+  });
+});
+
+describe('api.updateMemoryFact', () => {
+  it('calls PATCH /api/memory/facts/:id', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, fact: { id: 'fact-1' } }));
+
+    await api.updateMemoryFact('fact-1', { content: 'Updated', confidence: 0.6 });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/memory/facts/fact-1');
+    expect(init?.method).toBe('PATCH');
+    expect(JSON.parse(init?.body as string)).toEqual({ content: 'Updated', confidence: 0.6 });
+  });
+});
+
+describe('api.deleteMemoryFact', () => {
+  it('calls DELETE /api/memory/facts/:id without Content-Type', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, id: 'fact-1' }));
+
+    await api.deleteMemoryFact('fact-1');
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/memory/facts/fact-1');
+    expect(init?.method).toBe('DELETE');
+    expect((init?.headers as Record<string, string> | undefined)?.['Content-Type']).toBeUndefined();
+  });
+});
+
+describe('api.getMemoryGraph', () => {
+  it('calls GET /api/memory/graph with filters', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, nodes: [], edges: [] }));
+
+    await api.getMemoryGraph({ scope: 'project:agentctl', entityType: 'concept', limit: 10 });
+
+    const [url] = lastFetchCall();
+    const parsed = new URL(url as string, 'http://localhost');
+    expect(parsed.pathname).toBe('/api/memory/graph');
+    expect(parsed.searchParams.get('scope')).toBe('project:agentctl');
+    expect(parsed.searchParams.get('entityType')).toBe('concept');
+    expect(parsed.searchParams.get('limit')).toBe('10');
+  });
+});
+
+describe('api.getMemoryStats', () => {
+  it('calls GET /api/memory/stats', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, stats: { totalFacts: 0 } }));
+
+    await api.getMemoryStats();
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/memory/stats');
+  });
+});
+
 describe('api.listRuntimeSessions', () => {
   const emptyPage = { sessions: [], count: 0 };
 
