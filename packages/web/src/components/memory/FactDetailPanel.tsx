@@ -3,13 +3,7 @@
 import type { MemoryEdge, MemoryFact } from '@agentctl/shared';
 import type React from 'react';
 
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '../ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
 import { ScopeBadge } from './ScopeBadge';

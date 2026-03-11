@@ -37,50 +37,59 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       limit?: string;
       offset?: string;
     };
-  }>('/', { schema: { tags: ['memory'], summary: 'Search or list memory facts' } }, async (request) => {
-    const { q, scope, entityType, sessionId, agentId, machineId, minConfidence } = request.query;
-    const limit = parseInteger(request.query.limit, DEFAULT_LIMIT);
-    const offset = parseInteger(request.query.offset, 0);
-    const minConfidenceValue = parseFloatValue(minConfidence);
+  }>(
+    '/',
+    { schema: { tags: ['memory'], summary: 'Search or list memory facts' } },
+    async (request) => {
+      const { q, scope, entityType, sessionId, agentId, machineId, minConfidence } = request.query;
+      const limit = parseInteger(request.query.limit, DEFAULT_LIMIT);
+      const offset = parseInteger(request.query.offset, 0);
+      const minConfidenceValue = parseFloatValue(minConfidence);
 
-    if (q && q.trim().length > 0) {
-      const visibleScopes = scope ? [scope] : [];
-      const results = await memorySearch.search({
-        query: q,
-        visibleScopes,
-        limit: limit + offset,
+      if (q && q.trim().length > 0) {
+        const visibleScopes = scope ? [scope] : [];
+        const results = await memorySearch.search({
+          query: q,
+          visibleScopes,
+          limit: limit + offset,
+          entityType,
+        });
+        const facts = results
+          .map((result) => result.fact)
+          .filter((fact) =>
+            factMatchesFilters(fact, {
+              sessionId,
+              agentId,
+              machineId,
+              minConfidence: minConfidenceValue,
+            }),
+          );
+
+        return {
+          ok: true,
+          facts: facts.slice(offset, offset + limit),
+          total: facts.length,
+        };
+      }
+
+      const facts = await memoryStore.listFacts({
+        scope,
         entityType,
+        sessionId,
+        agentId,
+        machineId,
+        minConfidence: minConfidenceValue,
+        limit,
+        offset,
       });
-      const facts = results
-        .map((result) => result.fact)
-        .filter((fact) =>
-          factMatchesFilters(fact, { sessionId, agentId, machineId, minConfidence: minConfidenceValue }),
-        );
 
       return {
         ok: true,
-        facts: facts.slice(offset, offset + limit),
+        facts,
         total: facts.length,
       };
-    }
-
-    const facts = await memoryStore.listFacts({
-      scope,
-      entityType,
-      sessionId,
-      agentId,
-      machineId,
-      minConfidence: minConfidenceValue,
-      limit,
-      offset,
-    });
-
-    return {
-      ok: true,
-      facts,
-      total: facts.length,
-    };
-  });
+    },
+  );
 
   app.post<{
     Body: {
@@ -90,19 +99,23 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       confidence?: number;
       source?: FactSource;
     };
-  }>('/', { schema: { tags: ['memory'], summary: 'Create a memory fact' } }, async (request, reply) => {
-    const { content, scope, entityType, confidence, source } = request.body;
+  }>(
+    '/',
+    { schema: { tags: ['memory'], summary: 'Create a memory fact' } },
+    async (request, reply) => {
+      const { content, scope, entityType, confidence, source } = request.body;
 
-    const fact = await memoryStore.addFact({
-      content,
-      scope,
-      entity_type: entityType,
-      confidence,
-      source: source ?? DEFAULT_SOURCE,
-    });
+      const fact = await memoryStore.addFact({
+        content,
+        scope,
+        entity_type: entityType,
+        confidence,
+        source: source ?? DEFAULT_SOURCE,
+      });
 
-    return reply.code(201).send({ ok: true, fact });
-  });
+      return reply.code(201).send({ ok: true, fact });
+    },
+  );
 
   app.get<{ Params: { id: string } }>(
     '/:id',

@@ -20,8 +20,8 @@ export function MemoryPlaceholderView({
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>{description}</p>
           <p>
-            This route is part of the memory foundation chunk. The page shell is ready, but the
-            full workflow UI lands in later chunks.
+            This route is part of the memory foundation chunk. The page shell is ready, but the full
+            workflow UI lands in later chunks.
           </p>
         </CardContent>
       </Card>

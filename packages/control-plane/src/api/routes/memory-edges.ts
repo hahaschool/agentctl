@@ -32,16 +32,20 @@ export const memoryEdgeRoutes: FastifyPluginAsync<MemoryEdgeRoutesOptions> = asy
       relation: RelationType;
       weight?: number;
     };
-  }>('/', { schema: { tags: ['memory'], summary: 'Create a memory edge' } }, async (request, reply) => {
-    const edge = await memoryStore.addEdge({
-      source_fact_id: request.body.sourceFactId,
-      target_fact_id: request.body.targetFactId,
-      relation: request.body.relation,
-      weight: request.body.weight,
-    });
+  }>(
+    '/',
+    { schema: { tags: ['memory'], summary: 'Create a memory edge' } },
+    async (request, reply) => {
+      const edge = await memoryStore.addEdge({
+        source_fact_id: request.body.sourceFactId,
+        target_fact_id: request.body.targetFactId,
+        relation: request.body.relation,
+        weight: request.body.weight,
+      });
 
-    return reply.code(201).send({ ok: true, edge });
-  });
+      return reply.code(201).send({ ok: true, edge });
+    },
+  );
 
   app.delete<{ Params: { id: string } }>(
     '/:id',
@@ -53,7 +57,10 @@ export const memoryEdgeRoutes: FastifyPluginAsync<MemoryEdgeRoutesOptions> = asy
   );
 };
 
-export const memoryGraphRoutes: FastifyPluginAsync<MemoryGraphRoutesOptions> = async (app, opts) => {
+export const memoryGraphRoutes: FastifyPluginAsync<MemoryGraphRoutesOptions> = async (
+  app,
+  opts,
+) => {
   const { memoryStore } = opts;
 
   app.get<{
@@ -62,22 +69,26 @@ export const memoryGraphRoutes: FastifyPluginAsync<MemoryGraphRoutesOptions> = a
       entityType?: EntityType;
       limit?: string;
     };
-  }>('/', { schema: { tags: ['memory'], summary: 'List graph nodes and edges' } }, async (request) => {
-    const limit = parseInteger(request.query.limit, 200);
-    const nodes = await memoryStore.listFacts({
-      scope: request.query.scope,
-      entityType: request.query.entityType,
-      limit,
-      offset: 0,
-    });
-    const edges = await memoryStore.listEdges({ factIds: nodes.map((node) => node.id) });
+  }>(
+    '/',
+    { schema: { tags: ['memory'], summary: 'List graph nodes and edges' } },
+    async (request) => {
+      const limit = parseInteger(request.query.limit, 200);
+      const nodes = await memoryStore.listFacts({
+        scope: request.query.scope,
+        entityType: request.query.entityType,
+        limit,
+        offset: 0,
+      });
+      const edges = await memoryStore.listEdges({ factIds: nodes.map((node) => node.id) });
 
-    return {
-      ok: true,
-      nodes,
-      edges,
-    };
-  });
+      return {
+        ok: true,
+        nodes,
+        edges,
+      };
+    },
+  );
 };
 
 function parseInteger(value: string | undefined, fallback: number): number {

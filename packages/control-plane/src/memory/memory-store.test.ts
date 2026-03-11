@@ -266,7 +266,9 @@ describe('MemoryStore', () => {
   it('aggregates memory stats', async () => {
     const query = vi
       .fn()
-      .mockResolvedValueOnce({ rows: [{ total_facts: '12', new_this_week: '3', avg_confidence: '0.75' }] })
+      .mockResolvedValueOnce({
+        rows: [{ total_facts: '12', new_this_week: '3', avg_confidence: '0.75' }],
+      })
       .mockResolvedValueOnce({
         rows: [
           { key: 'global', count: '4' },

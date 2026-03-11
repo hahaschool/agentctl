@@ -3,16 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_INJECTION_BUDGET } from '../index.js';
 import type {
   ConsolidationItem,
-  ImportJob,
-  MemoryReport,
-  MemoryStats,
   EntityType,
   FactSource,
+  ImportJob,
   InjectionBudget,
   MemoryEdge,
   MemoryFact,
+  MemoryReport,
   MemoryScope,
   MemorySearchResult,
+  MemoryStats,
   RelationType,
 } from './memory.js';
 

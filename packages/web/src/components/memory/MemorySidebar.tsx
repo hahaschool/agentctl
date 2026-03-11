@@ -14,7 +14,11 @@ const MEMORY_NAV_ITEMS = [
   { href: '/memory/browser', label: 'Browser', description: 'Inspect facts and filters' },
   { href: '/memory/graph', label: 'Graph', description: 'Explore relationships' },
   { href: '/memory/dashboard', label: 'Dashboard', description: 'Track memory health' },
-  { href: '/memory/consolidation', label: 'Consolidation', description: 'Review cleanup candidates' },
+  {
+    href: '/memory/consolidation',
+    label: 'Consolidation',
+    description: 'Review cleanup candidates',
+  },
   { href: '/memory/reports', label: 'Reports', description: 'Generated summaries and exports' },
   { href: '/memory/import', label: 'Import', description: 'Bring in external memory sources' },
   { href: '/memory/scopes', label: 'Scopes', description: 'Inspect scope boundaries' },

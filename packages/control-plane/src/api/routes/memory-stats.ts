@@ -10,8 +10,12 @@ export const memoryStatsRoutes: FastifyPluginAsync<MemoryStatsRoutesOptions> = a
   app,
   opts,
 ) => {
-  app.get('/', { schema: { tags: ['memory'], summary: 'Get memory dashboard statistics' } }, async () => {
-    const stats = await opts.memoryStore.getStats();
-    return { ok: true, stats };
-  });
+  app.get(
+    '/',
+    { schema: { tags: ['memory'], summary: 'Get memory dashboard statistics' } },
+    async () => {
+      const stats = await opts.memoryStore.getStats();
+      return { ok: true, stats };
+    },
+  );
 };

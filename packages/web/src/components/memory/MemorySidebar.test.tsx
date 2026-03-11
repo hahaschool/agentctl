@@ -53,9 +53,7 @@ describe('MemorySidebar', () => {
     expect(screen.getByRole('link', { name: /Browser/i }).getAttribute('href')).toBe(
       '/memory/browser',
     );
-    expect(screen.getByRole('link', { name: /Graph/i }).getAttribute('href')).toBe(
-      '/memory/graph',
-    );
+    expect(screen.getByRole('link', { name: /Graph/i }).getAttribute('href')).toBe('/memory/graph');
     expect(screen.getByRole('link', { name: /Scopes/i }).getAttribute('href')).toBe(
       '/memory/scopes',
     );
