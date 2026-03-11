@@ -17,6 +17,26 @@ export {
   sha256,
 } from './audit-logger.js';
 export {
+  createExperienceExtractionHook,
+  type ExperienceExtractionHookFn,
+  type ExperienceExtractionHookInput,
+  type ExperienceExtractionHookOptions,
+} from './experience-extraction-hook.js';
+export {
+  buildExperienceExtractionPrompt,
+  EXPERIENCE_ENTITY_TYPES,
+  EXPERIENCE_EXTRACTION_RULES,
+  type ExperienceEntityType,
+  type ExtractedExperience,
+} from './experience-extraction-prompt.js';
+export {
+  computeTextSimilarity,
+  ExperienceExtractor,
+  type ExperienceExtractorOptions,
+  type ExtractionInput,
+  type ExtractionResult,
+} from './experience-extractor.js';
+export {
   createPostToolUseHook,
   type PostToolUseHookOptions,
   type PostToolUseInput,
