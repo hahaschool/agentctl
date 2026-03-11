@@ -1,10 +1,10 @@
 import type {
   HandoffReason,
-  ManualTakeoverPermissionMode,
-  ManualTakeoverState,
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
+  ManualTakeoverPermissionMode,
+  ManualTakeoverState,
 } from '../types/runtime-management.js';
 
 export type RuntimeCapabilityState = {

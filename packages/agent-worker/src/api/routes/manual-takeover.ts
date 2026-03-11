@@ -4,10 +4,7 @@ import type {
   ManualTakeoverState,
   StartManualTakeoverRequest,
 } from '@agentctl/shared';
-import {
-  isManualTakeoverPermissionMode,
-  WorkerError,
-} from '@agentctl/shared';
+import { isManualTakeoverPermissionMode, WorkerError } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
 

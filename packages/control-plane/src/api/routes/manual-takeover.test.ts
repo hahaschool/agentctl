@@ -1,16 +1,11 @@
+import type { ManualTakeoverState } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { ManualTakeoverState } from '@agentctl/shared';
-
 import type { ManagedSessionRecord } from '../../runtime-management/managed-session-store.js';
 import { manualTakeoverRoutes } from './manual-takeover.js';
-import {
-  createMockDbRegistry,
-  mockFetchOk,
-  saveOriginalFetch,
-} from './test-helpers.js';
+import { createMockDbRegistry, mockFetchOk, saveOriginalFetch } from './test-helpers.js';
 
 const originalFetch = saveOriginalFetch();
 

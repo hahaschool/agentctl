@@ -18,12 +18,12 @@ import type {
   HandoffStrategy,
   MachineCapabilities,
   MachineStatus,
-  ManualTakeoverResponse,
-  ManualTakeoverState,
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
   ManagedSessionStatus,
+  ManualTakeoverResponse,
+  ManualTakeoverState,
   MemoryObservation,
   NativeImportAttempt,
   NativeImportPreflightResponse,
@@ -31,8 +31,8 @@ import type {
   RuntimeConfigSyncRequest,
   RuntimeConfigSyncResponse,
   RuntimeHandoffSummaryResponse,
-  StartManualTakeoverRequest,
   ApiAccount as SharedApiAccount,
+  StartManualTakeoverRequest,
 } from '@agentctl/shared';
 
 export type { AgentConfig };

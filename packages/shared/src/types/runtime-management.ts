@@ -23,11 +23,7 @@ export const MANUAL_TAKEOVER_STATUSES = [
 
 export type ManualTakeoverStatus = (typeof MANUAL_TAKEOVER_STATUSES)[number];
 
-export const MANUAL_TAKEOVER_PERMISSION_MODES = [
-  'default',
-  'accept-edits',
-  'plan',
-] as const;
+export const MANUAL_TAKEOVER_PERMISSION_MODES = ['default', 'accept-edits', 'plan'] as const;
 
 export type ManualTakeoverPermissionMode = (typeof MANUAL_TAKEOVER_PERMISSION_MODES)[number];
 

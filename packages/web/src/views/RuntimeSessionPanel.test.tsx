@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RuntimeSessionPanel } from './RuntimeSessionPanel';
@@ -163,12 +162,17 @@ function setupUseQuery() {
   mockRuntimeSessionManualTakeoverQuery.mockImplementation((id: string) => ({
     queryKey: ['runtime-sessions', id, 'manual-takeover'],
   }));
-  mockRuntimeSessionPreflightQuery.mockImplementation((id: string, params: Record<string, unknown>) => ({
-    queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
-  }));
+  mockRuntimeSessionPreflightQuery.mockImplementation(
+    (id: string, params: Record<string, unknown>) => ({
+      queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
+    }),
+  );
 
   mockResumeMutateAsync.mockResolvedValue({ ok: true, session: createRuntimeSession() });
-  mockForkMutateAsync.mockResolvedValue({ ok: true, session: createRuntimeSession({ id: 'ms-2' }) });
+  mockForkMutateAsync.mockResolvedValue({
+    ok: true,
+    session: createRuntimeSession({ id: 'ms-2' }),
+  });
   mockHandoffMutateAsync.mockResolvedValue({
     ok: true,
     handoffId: 'handoff-1',
@@ -264,7 +268,10 @@ describe('RuntimeSessionPanel', () => {
 
   it('renders the manual takeover section only for Claude runtime sessions', () => {
     const { rerender } = render(
-      <RuntimeSessionPanel selectedSession={createRuntimeSession()} onSelectedSessionChange={vi.fn()} />,
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession()}
+        onSelectedSessionChange={vi.fn()}
+      />,
     );
 
     expect(screen.getByText('Manual Takeover')).toBeDefined();
@@ -282,7 +289,10 @@ describe('RuntimeSessionPanel', () => {
 
   it('starts manual takeover and then shows Open, Copy URL, and Revoke controls', async () => {
     const view = render(
-      <RuntimeSessionPanel selectedSession={createRuntimeSession()} onSelectedSessionChange={vi.fn()} />,
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession()}
+        onSelectedSessionChange={vi.fn()}
+      />,
     );
 
     fireEvent.change(screen.getByLabelText('Takeover permission mode'), {
@@ -299,7 +309,10 @@ describe('RuntimeSessionPanel', () => {
 
     mockQueryState.manualTakeover = createManualTakeover();
     view.rerender(
-      <RuntimeSessionPanel selectedSession={createRuntimeSession()} onSelectedSessionChange={vi.fn()} />,
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession()}
+        onSelectedSessionChange={vi.fn()}
+      />,
     );
 
     expect(screen.getByRole('button', { name: 'Open' })).toBeDefined();
@@ -328,7 +341,10 @@ describe('RuntimeSessionPanel', () => {
 
   it('keeps the existing handoff UI visible alongside manual takeover controls', () => {
     render(
-      <RuntimeSessionPanel selectedSession={createRuntimeSession()} onSelectedSessionChange={vi.fn()} />,
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession()}
+        onSelectedSessionChange={vi.fn()}
+      />,
     );
 
     expect(screen.getByText('Manual Handoff')).toBeDefined();

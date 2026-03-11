@@ -2,22 +2,22 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   HandoffSnapshot,
-  ManualTakeoverState,
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
+  ManualTakeoverState,
 } from './runtime-management.js';
 import {
   HANDOFF_STRATEGIES,
-  MANUAL_TAKEOVER_PERMISSION_MODES,
-  MANUAL_TAKEOVER_STATUSES,
   isHandoffStrategy,
-  isManualTakeoverPermissionMode,
-  isManualTakeoverStatus,
   isManagedRuntime,
   isManagedSessionStatus,
+  isManualTakeoverPermissionMode,
+  isManualTakeoverStatus,
   MANAGED_RUNTIMES,
   MANAGED_SESSION_STATUSES,
+  MANUAL_TAKEOVER_PERMISSION_MODES,
+  MANUAL_TAKEOVER_STATUSES,
 } from './runtime-management.js';
 
 describe('runtime-management types', () => {
@@ -146,11 +146,7 @@ describe('runtime-management types', () => {
       'stopped',
       'error',
     ]);
-    expect(MANUAL_TAKEOVER_PERMISSION_MODES).toEqual([
-      'default',
-      'accept-edits',
-      'plan',
-    ]);
+    expect(MANUAL_TAKEOVER_PERMISSION_MODES).toEqual(['default', 'accept-edits', 'plan']);
     expect(isManualTakeoverStatus('online')).toBe(true);
     expect(isManualTakeoverStatus('paused')).toBe(false);
     expect(isManualTakeoverPermissionMode('accept-edits')).toBe(true);

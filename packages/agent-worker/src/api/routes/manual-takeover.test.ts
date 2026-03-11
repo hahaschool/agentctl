@@ -4,14 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSilentLogger } from '../../test-helpers.js';
 import { manualTakeoverRoutes } from './manual-takeover.js';
 
-async function buildApp(
-  rcSessionManager: {
-    startSession: ReturnType<typeof vi.fn>;
-    getSessionByNativeSessionId: ReturnType<typeof vi.fn>;
-    getSessionByProjectPath: ReturnType<typeof vi.fn>;
-    stopSession: ReturnType<typeof vi.fn>;
-  },
-): Promise<FastifyInstance> {
+async function buildApp(rcSessionManager: {
+  startSession: ReturnType<typeof vi.fn>;
+  getSessionByNativeSessionId: ReturnType<typeof vi.fn>;
+  getSessionByProjectPath: ReturnType<typeof vi.fn>;
+  stopSession: ReturnType<typeof vi.fn>;
+}): Promise<FastifyInstance> {
   const Fastify = await import('fastify');
   const app = Fastify.default({ logger: false });
   await app.register(manualTakeoverRoutes, {

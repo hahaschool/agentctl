@@ -170,7 +170,8 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
       }
 
       const manualTakeover =
-        extractManualTakeover(result.data) ?? reconcileMissingManualTakeover(readStoredManualTakeover(session.metadata));
+        extractManualTakeover(result.data) ??
+        reconcileMissingManualTakeover(readStoredManualTakeover(session.metadata));
       if (manualTakeover) {
         await managedSessionStore.patchMetadata(session.id, { manualTakeover });
       }
@@ -266,7 +267,7 @@ function reconcileMissingManualTakeover(
     lastVerifiedAt: new Date().toISOString(),
     error:
       manualTakeover.status === 'error'
-        ? manualTakeover.error ?? 'Worker no longer owns this manual takeover session'
+        ? (manualTakeover.error ?? 'Worker no longer owns this manual takeover session')
         : null,
   };
 }
