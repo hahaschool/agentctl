@@ -58,7 +58,7 @@ const SETTINGS_NAV = [
 
 export function SettingsView(): React.JSX.Element {
   return (
-    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_35%)] p-4 md:p-6 animate-page-enter">
+    <div className="min-h-full p-4 md:p-6 animate-page-enter">
       <div className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
@@ -73,7 +73,7 @@ export function SettingsView(): React.JSX.Element {
               Codex from one control plane.
             </p>
           </div>
-          <div className="rounded-[22px] border border-border/40 bg-card/70 px-4 py-3 text-sm text-muted-foreground shadow-[0_18px_48px_rgba(0,0,0,0.08)] backdrop-blur">
+          <div className="rounded-[22px] border border-border/40 bg-card px-4 py-3 text-sm text-muted-foreground shadow-md">
             Session, agent, project, machine, then global runtime defaults.
           </div>
         </div>

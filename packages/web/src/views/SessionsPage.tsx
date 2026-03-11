@@ -1171,7 +1171,7 @@ export function SessionsPage(): React.JSX.Element {
 
         {/* Floating bulk action bar — sticky so always visible when scrolled */}
         {checkedIds.size > 0 && (
-          <div className="sticky bottom-0 z-10 border-t border-border bg-card px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.1)] flex-wrap">
+          <div className="sticky bottom-0 z-10 border-t border-border bg-card px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-lg flex-wrap">
             <span className="text-xs font-medium tabular-nums text-foreground">
               {checkedIds.size} selected
             </span>

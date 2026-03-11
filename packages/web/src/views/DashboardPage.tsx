@@ -225,8 +225,7 @@ export function DashboardPage(): React.JSX.Element {
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Link
             href="/sessions"
-            style={{ color: '#ffffff' }}
-            className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium no-underline transition-colors bg-blue-600 text-white border border-blue-500 hover:bg-blue-500 hover:text-white hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+            className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium no-underline transition-colors bg-primary text-primary-foreground border border-primary hover:bg-primary/90 hover:text-primary-foreground hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
             New Session
           </Link>
@@ -254,9 +253,7 @@ export function DashboardPage(): React.JSX.Element {
       <div
         className={cn(
           'px-4 sm:px-5 py-4 bg-card border rounded-lg mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3',
-          healthStatus === 'ok'
-            ? 'border-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.04)]'
-            : 'border-border',
+          healthStatus === 'ok' ? 'border-green-500/20 shadow-sm' : 'border-border',
         )}
       >
         <div className="flex items-center gap-3">
@@ -264,7 +261,7 @@ export function DashboardPage(): React.JSX.Element {
             className={cn(
               'w-3 h-3 rounded-full shrink-0',
               healthBgClass,
-              healthStatus === 'ok' && 'shadow-[0_0_8px_rgba(34,197,94,0.5)]',
+              healthStatus === 'ok' && 'shadow-sm shadow-green-500/50',
             )}
           />
           <div>
@@ -665,10 +662,10 @@ export function DashboardPage(): React.JSX.Element {
               const isHighLatency = isOk && latencyMs > 500;
 
               const dotClass = isError
-                ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+                ? 'bg-red-500 shadow-sm shadow-red-500/50'
                 : isHighLatency
-                  ? 'bg-yellow-500 shadow-[0_0_6px_rgba(234,179,8,0.4)]'
-                  : 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.4)]';
+                  ? 'bg-yellow-500 shadow-sm shadow-yellow-500/40'
+                  : 'bg-green-500 shadow-sm shadow-green-500/40';
 
               const borderClass = isError
                 ? 'border-red-500/20'

@@ -266,7 +266,7 @@ export function MessageList({
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showThinking
-              ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30'
+              ? 'bg-accent text-accent-foreground border-border'
               : 'bg-muted text-muted-foreground',
           )}
         >
@@ -281,7 +281,7 @@ export function MessageList({
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showTools
-              ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30'
+              ? 'bg-accent text-accent-foreground border-border'
               : 'bg-muted text-muted-foreground',
           )}
         >
@@ -296,7 +296,7 @@ export function MessageList({
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             showProgress
-              ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border-cyan-500/30'
+              ? 'bg-accent text-accent-foreground border-border'
               : 'bg-muted text-muted-foreground',
           )}
         >
@@ -311,7 +311,7 @@ export function MessageList({
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors',
             renderMarkdown
-              ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30'
+              ? 'bg-accent text-accent-foreground border-border'
               : 'bg-muted text-muted-foreground',
           )}
         >
@@ -326,7 +326,7 @@ export function MessageList({
             className={cn(
               'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors inline-flex items-center gap-1',
               autoRefresh
-                ? 'bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30'
+                ? 'bg-accent text-accent-foreground border-border'
                 : 'bg-muted text-muted-foreground',
             )}
           >
@@ -352,7 +352,7 @@ export function MessageList({
           className={cn(
             'px-2 py-0.5 rounded-md border border-border text-[10px] cursor-pointer transition-colors inline-flex items-center gap-1',
             autoScroll
-              ? 'bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30'
+              ? 'bg-accent text-accent-foreground border-border'
               : 'bg-muted text-muted-foreground',
           )}
         >
@@ -361,10 +361,10 @@ export function MessageList({
         </button>
         {isActive && autoScroll && !userScrolledUp && (
           <span
-            className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 ml-1"
+            className="flex items-center gap-1 text-[10px] text-primary ml-1"
             title="Auto-scroll active"
           >
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
             Following
           </span>
         )}
@@ -448,7 +448,7 @@ export function MessageList({
           <div className="py-2 text-center text-xs">
             <button
               type="button"
-              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline cursor-pointer"
+              className="text-primary hover:text-primary/80 hover:underline cursor-pointer"
               onClick={onLoadMore}
             >
               Load older messages ({formatNumber(totalMessages - messages.length)} more)
