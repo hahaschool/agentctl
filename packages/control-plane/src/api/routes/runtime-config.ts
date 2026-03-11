@@ -155,7 +155,9 @@ export const runtimeConfigRoutes: FastifyPluginAsync<RuntimeConfigRoutesOptions>
 
       const targetMachineId = request.body?.machineId;
       const allMachines = targetMachineId
-        ? await dbRegistry.listMachines().then((list) => list.filter((m) => m.id === targetMachineId))
+        ? await dbRegistry
+            .listMachines()
+            .then((list) => list.filter((m) => m.id === targetMachineId))
         : await dbRegistry.listMachines();
 
       const onlineMachines = allMachines.filter((m) => m.status !== 'offline');
