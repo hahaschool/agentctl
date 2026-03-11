@@ -1,11 +1,13 @@
 'use client';
 
+import type { ExecutionSummary } from '@agentctl/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { FetchingBar } from '../components/FetchingBar';
@@ -17,6 +19,7 @@ import { TerminalView } from '../components/TerminalView';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
+import { formatCost, formatDurationMs } from '../lib/format-utils';
 import { queryKeys, sessionContentQuery, sessionQuery } from '../lib/queries';
 import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-export';
 
@@ -57,6 +60,7 @@ export function SessionDetailView(): React.JSX.Element {
   const clearStreamRef = useRef<() => void>(() => {});
   const stream = useSessionStream({
     sessionId,
+    agentId: s?.agentId ?? undefined,
     enabled: isActive,
     onEvent: useCallback(
       (event: SessionStreamEvent) => {
@@ -215,6 +219,12 @@ export function SessionDetailView(): React.JSX.Element {
         onToggleFiles={toggleFiles}
         escapeRef={escapeRef}
       />
+
+      {stream.latestExecutionSummary && (
+        <div className="px-5 pt-4 shrink-0">
+          <ExecutionSummaryCard summary={stream.latestExecutionSummary} />
+        </div>
+      )}
 
       {/* Content area */}
       <div className="flex-1 overflow-hidden flex">
@@ -379,6 +389,42 @@ function ErrorState({ error }: { error: string }): React.JSX.Element {
         <div className="text-[13px] text-muted-foreground mb-4">{error}</div>
         <Breadcrumb items={[{ label: 'Sessions', href: '/sessions' }, { label: 'Error' }]} />
       </div>
+    </div>
+  );
+}
+
+function ExecutionSummaryCard({ summary }: { summary: ExecutionSummary }): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium text-foreground">Latest Run Summary</div>
+          <div className="text-xs text-muted-foreground">
+            {summary.commandsRun} tool call{summary.commandsRun === 1 ? '' : 's'} ·{' '}
+            {formatCost(summary.costUsd)} · {formatDurationMs(summary.durationMs)}
+          </div>
+        </div>
+        <StatusBadge status={summary.status} />
+      </div>
+      <div className="text-sm text-foreground leading-6">{summary.executiveSummary}</div>
+      {summary.keyFindings.length > 0 && (
+        <div className="space-y-1">
+          {summary.keyFindings.map((finding) => (
+            <div key={finding} className="text-xs text-muted-foreground">
+              • {finding}
+            </div>
+          ))}
+        </div>
+      )}
+      {summary.followUps.length > 0 && (
+        <div className="space-y-1">
+          {summary.followUps.map((item) => (
+            <div key={item} className="text-xs text-muted-foreground">
+              Next: {item}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

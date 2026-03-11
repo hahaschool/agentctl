@@ -509,6 +509,45 @@ describe('AgentDetailPresenter', () => {
   // -------------------------------------------------------------------------
 
   describe('output buffering', () => {
+    it('updates latestRunSummary when an execution_summary event arrives over SSE', async () => {
+      const api = makeApiClient();
+      const sse = makeSseClient();
+      const presenter = new AgentDetailPresenter({
+        apiClient: api as never,
+        sseClient: sse as never,
+      });
+      await presenter.loadAgent('agent-1');
+      presenter.startStreaming();
+
+      sse._emit('event', {
+        event: 'execution_summary',
+        data: {
+          summary: {
+            status: 'success',
+            workCompleted: 'Refreshed the mobile summary card live.',
+            executiveSummary: 'Refreshed the mobile summary card live.',
+            keyFindings: ['The presenter state updates immediately from SSE.'],
+            filesChanged: [],
+            commandsRun: 1,
+            toolUsageBreakdown: { Edit: 1 },
+            followUps: [],
+            branchName: null,
+            prUrl: null,
+            tokensUsed: { input: 42, output: 10 },
+            costUsd: 0.02,
+            durationMs: 900,
+          },
+        },
+      } satisfies AgentEvent);
+
+      const state = presenter.getState();
+      expect(state.latestRunSummary).toMatchObject({
+        executiveSummary: 'Refreshed the mobile summary card live.',
+        costUsd: 0.02,
+      });
+      expect(state.outputLines).toHaveLength(1);
+    });
+
     it('appends output lines from SSE events', async () => {
       const api = makeApiClient();
       const sse = makeSseClient();

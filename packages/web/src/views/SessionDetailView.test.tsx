@@ -289,6 +289,7 @@ function defaultStreamMock() {
     pendingUserMessages: [],
     latestStatus: null,
     latestCost: null,
+    latestExecutionSummary: null,
     clearStreamOutput: vi.fn(),
     clearPendingMessages: vi.fn(),
   };
@@ -456,6 +457,39 @@ describe('SessionDetailView', () => {
     await waitFor(() => {
       expect(screen.getByTestId('path-badge')).toBeDefined();
       expect(screen.getByTestId('path-badge').textContent).toBe('/home/user/project');
+    });
+  });
+
+  it('renders the latest execution summary from the live session stream', async () => {
+    mockUseSessionStream.mockReturnValue({
+      ...defaultStreamMock(),
+      latestExecutionSummary: {
+        status: 'success',
+        workCompleted: 'Rendered the latest summary without waiting for a refresh.',
+        executiveSummary: 'Rendered the latest summary without waiting for a refresh.',
+        keyFindings: ['Streaming summary events update the session page immediately.'],
+        filesChanged: [],
+        commandsRun: 2,
+        toolUsageBreakdown: { Edit: 1, Bash: 1 },
+        followUps: [],
+        branchName: null,
+        prUrl: null,
+        tokensUsed: { input: 80, output: 20 },
+        costUsd: 0.07,
+        durationMs: 2_500,
+      },
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByText('Latest Run Summary')).toBeDefined();
+      expect(
+        screen.getByText('Rendered the latest summary without waiting for a refresh.'),
+      ).toBeDefined();
+      expect(
+        screen.getByText(/Streaming summary events update the session page immediately\./),
+      ).toBeDefined();
     });
   });
 

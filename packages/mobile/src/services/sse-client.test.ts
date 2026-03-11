@@ -337,6 +337,41 @@ describe('SseClient', () => {
       expect(handler).toHaveBeenCalledOnce();
       expect(handler.mock.calls[0]?.[0]).toEqual(approvalEvent);
     });
+
+    it('reconstructs execution_summary events from the SSE event name and data payload', async () => {
+      const c = makeClient();
+      const handler = vi.fn();
+      c.on('event', handler);
+
+      const summaryEvent: AgentEvent = {
+        event: 'execution_summary',
+        data: {
+          summary: {
+            status: 'success',
+            workCompleted: 'Updated latestRunSummary from the live stream.',
+            executiveSummary: 'Updated latestRunSummary from the live stream.',
+            keyFindings: ['Mobile clients no longer wait for the next runs fetch.'],
+            filesChanged: [],
+            commandsRun: 1,
+            toolUsageBreakdown: { Edit: 1 },
+            followUps: [],
+            branchName: null,
+            prUrl: null,
+            tokensUsed: { input: 50, output: 12 },
+            costUsd: 0.03,
+            durationMs: 1_200,
+          },
+        },
+      };
+      const { response, done } = makeSseResponse(sseFrame('execution_summary', summaryEvent.data));
+      mocks.fetch.mockResolvedValueOnce(response);
+
+      c.connect('a1');
+      await done;
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0]?.[0]).toEqual(summaryEvent);
+    });
   });
 
   // -----------------------------------------------------------------------

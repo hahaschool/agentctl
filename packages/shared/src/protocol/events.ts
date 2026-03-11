@@ -1,4 +1,5 @@
 import type { AgentStatus } from '../types/agent.js';
+import type { ExecutionSummary } from '../types/execution-summary.js';
 import type { SafetyDecision, WorkdirSafetyTier } from './commands.js';
 
 export type AgentOutputEvent = {
@@ -73,6 +74,13 @@ export type AgentUserMessageEvent = {
   };
 };
 
+export type AgentExecutionSummaryEvent = {
+  event: 'execution_summary';
+  data: {
+    summary: ExecutionSummary;
+  };
+};
+
 export type AgentSafetyEvent = {
   event: 'safety_warning' | 'safety_approval_needed' | 'safety_blocked';
   data: {
@@ -94,6 +102,7 @@ export type AgentEvent =
   | LoopIterationEvent
   | LoopCompleteEvent
   | AgentUserMessageEvent
+  | AgentExecutionSummaryEvent
   | AgentSafetyEvent;
 
 // ---------------------------------------------------------------------------
