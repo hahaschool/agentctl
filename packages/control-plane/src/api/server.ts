@@ -17,6 +17,8 @@ import type { Logger } from 'pino';
 import type { Database } from '../db/index.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
+import type { MemorySearch } from '../memory/memory-search.js';
+import type { MemoryStore } from '../memory/memory-store.js';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
@@ -73,6 +75,8 @@ type CreateServerOptions = {
   redis?: { ping: () => Promise<string> };
   litellmClient?: LiteLLMClient;
   mem0Client?: Mem0Client;
+  memorySearch?: Pick<MemorySearch, 'search'>;
+  memoryStore?: Pick<MemoryStore, 'addFact' | 'listFacts' | 'deleteFact'>;
   memoryInjector?: MemoryInjector | null;
   workerPort?: number;
   isProduction?: boolean;
@@ -91,6 +95,8 @@ export async function createServer({
   redis,
   litellmClient,
   mem0Client,
+  memorySearch,
+  memoryStore,
   memoryInjector = null,
   workerPort = 9000,
   isProduction: isProductionOverride,
@@ -182,7 +188,7 @@ export async function createServer({
         { name: 'machines', description: 'Machine registration and heartbeat' },
         { name: 'agents', description: 'Agent CRUD and lifecycle control' },
         { name: 'scheduler', description: 'Repeatable job scheduling' },
-        { name: 'memory', description: 'Mem0 memory search' },
+        { name: 'memory', description: 'Unified memory search and storage' },
         { name: 'router', description: 'LiteLLM model routing' },
         { name: 'runtime-config', description: 'Managed Claude/Codex configuration sync state' },
         { name: 'runtime-sessions', description: 'Unified Claude/Codex managed session lifecycle' },
@@ -344,8 +350,13 @@ export async function createServer({
     });
   }
 
-  // Register memory routes only when the Mem0 client is provided.
-  if (mem0Client) {
+  if (memorySearch && memoryStore) {
+    await app.register(memoryRoutes, {
+      prefix: '/api/memory',
+      memorySearch,
+      memoryStore,
+    });
+  } else if (mem0Client) {
     await app.register(memoryRoutes, {
       prefix: '/api/memory',
       mem0Client,

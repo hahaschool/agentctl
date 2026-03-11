@@ -1,10 +1,11 @@
-import type { AgentConfig, AgentEvent } from '@agentctl/shared';
+import type { AgentConfig } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
 import type { PostToolUseInput } from '../hooks/post-tool-use.js';
 import type { PreToolUseInput, PreToolUseResult } from '../hooks/pre-tool-use.js';
 import type { StopInput } from '../hooks/stop-hook.js';
+import type { AgentOutputStream } from './agent-output-stream.js';
 
 export type SdkRunnerHooks = {
   preToolUse?: (input: PreToolUseInput) => Promise<PreToolUseResult>;
@@ -19,7 +20,7 @@ export type SdkRunnerOptions = {
   config: AgentConfig;
   projectPath: string;
   logger: Logger;
-  onEvent: (event: AgentEvent) => void;
+  outputStream: AgentOutputStream;
   abortSignal?: AbortSignal;
   hooks?: SdkRunnerHooks;
   /** When set, instructs the SDK to resume a previous session instead of starting a fresh one. */
@@ -130,36 +131,21 @@ function buildSdkOptions(
  */
 function handleSdkMessage(
   message: SdkMessage,
-  onEvent: (event: AgentEvent) => void,
+  outputStream: AgentOutputStream,
   accumulator: { totalCost: number; tokensIn: number; tokensOut: number },
 ): void {
   const messageType = message.type;
 
   if (messageType === 'assistant') {
     const content = getString(message.content, '');
-    const outputEvent: AgentEvent = {
-      event: 'output',
-      data: { type: 'text', content },
-    };
-    onEvent(outputEvent);
+    outputStream.text(content);
   } else if (messageType === 'tool_use') {
     const toolName = message.tool_name ?? 'unknown';
     const toolInput = message.tool_input ?? {};
-    const outputEvent: AgentEvent = {
-      event: 'output',
-      data: {
-        type: 'tool_use',
-        content: JSON.stringify({ tool: toolName, input: toolInput }),
-      },
-    };
-    onEvent(outputEvent);
+    outputStream.toolUse(toolName, toolInput);
   } else if (messageType === 'tool_result') {
     const content = getString(message.content, '');
-    const outputEvent: AgentEvent = {
-      event: 'output',
-      data: { type: 'tool_result', content },
-    };
-    onEvent(outputEvent);
+    outputStream.toolResult(message.tool_name ?? 'unknown', content);
   }
 
   // Emit cost updates whenever usage information is present
@@ -172,11 +158,7 @@ function handleSdkMessage(
     accumulator.tokensIn = usage.input_tokens ?? accumulator.tokensIn;
     accumulator.tokensOut = usage.output_tokens ?? accumulator.tokensOut;
 
-    const costEvent: AgentEvent = {
-      event: 'cost',
-      data: { turnCost, totalCost },
-    };
-    onEvent(costEvent);
+    outputStream.costUpdate(turnCost, totalCost);
   }
 }
 
@@ -202,7 +184,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     config,
     projectPath,
     logger,
-    onEvent,
+    outputStream,
     abortSignal,
     hooks,
     resumeSessionId,
@@ -260,14 +242,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
 
         if (decision === 'deny') {
           // Emit a blocked event so consumers know the tool was denied
-          const blockedEvent: AgentEvent = {
-            event: 'output',
-            data: {
-              type: 'tool_blocked',
-              content: `Tool '${toolName}' was blocked by PreToolUse hook`,
-            },
-          };
-          onEvent(blockedEvent);
+          outputStream.toolBlocked(toolName, 'PreToolUse hook');
           // Skip further processing of this tool_use message
           continue;
         }
@@ -313,7 +288,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
       }
 
       // Map and emit the message as AgentEvent(s)
-      handleSdkMessage(message, onEvent, accumulator);
+      handleSdkMessage(message, outputStream, accumulator);
     }
   } catch (err) {
     stopReason = 'error';

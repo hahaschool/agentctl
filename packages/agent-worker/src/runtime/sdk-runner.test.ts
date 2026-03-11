@@ -2,13 +2,22 @@ import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createMockLogger } from '../test-helpers.js';
+import { EventedAgentOutputStream } from './agent-output-stream.js';
 import type { SdkRunnerOptions } from './sdk-runner.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
 const mockLogger = createMockLogger();
 
+function makeOutputStream(onEvent = vi.fn()) {
+  return {
+    onEvent,
+    outputStream: new EventedAgentOutputStream(onEvent),
+  };
+}
+
 function makeOptions(overrides?: Partial<SdkRunnerOptions>): SdkRunnerOptions {
+  const { outputStream } = makeOutputStream();
   return {
     prompt: 'Write a hello world function',
     agentId: 'agent-1',
@@ -16,7 +25,7 @@ function makeOptions(overrides?: Partial<SdkRunnerOptions>): SdkRunnerOptions {
     config: {} as AgentConfig,
     projectPath: '/tmp/test-project',
     logger: mockLogger,
-    onEvent: vi.fn(),
+    outputStream,
     ...overrides,
   };
 }
@@ -91,8 +100,8 @@ describe('sdk-runner', () => {
 
       const { runWithSdk } = await import('./sdk-runner.js');
 
-      const onEvent = vi.fn();
-      const result = await runWithSdk(makeOptions({ onEvent }));
+      const { onEvent, outputStream } = makeOutputStream();
+      const result = await runWithSdk(makeOptions({ outputStream }));
 
       expect(result).not.toBeNull();
       expect(result?.sessionId).toBe('session-from-sdk');
@@ -152,12 +161,12 @@ describe('sdk-runner', () => {
 
       const { runWithSdk } = await import('./sdk-runner.js');
 
-      const onEvent = vi.fn();
+      const { onEvent, outputStream } = makeOutputStream();
       const preToolUse = vi.fn().mockResolvedValue('deny');
 
       const result = await runWithSdk(
         makeOptions({
-          onEvent,
+          outputStream,
           hooks: { preToolUse },
         }),
       );
@@ -307,12 +316,12 @@ describe('sdk-runner', () => {
 
       const { runWithSdk } = await import('./sdk-runner.js');
 
-      const onEvent = vi.fn();
+      const { outputStream } = makeOutputStream();
       const stopHook = vi.fn().mockResolvedValue(undefined);
 
       const result = await runWithSdk(
         makeOptions({
-          onEvent,
+          outputStream,
           abortSignal: controller.signal,
           hooks: { stop: stopHook },
         }),
@@ -490,8 +499,8 @@ describe('sdk-runner', () => {
 
       const { runWithSdk } = await import('./sdk-runner.js');
 
-      const onEvent = vi.fn();
-      await runWithSdk(makeOptions({ onEvent }));
+      const { onEvent, outputStream } = makeOutputStream();
+      await runWithSdk(makeOptions({ outputStream }));
 
       const costEvents = onEvent.mock.calls
         .map((call: unknown[]) => call[0] as AgentEvent)
@@ -525,11 +534,11 @@ describe('sdk-runner', () => {
 
       const { runWithSdk } = await import('./sdk-runner.js');
 
-      const onEvent = vi.fn();
+      const { outputStream } = makeOutputStream();
       const preToolUse = vi.fn().mockResolvedValue('allow');
 
       // Should not throw even with missing fields
-      const result = await runWithSdk(makeOptions({ onEvent, hooks: { preToolUse } }));
+      const result = await runWithSdk(makeOptions({ outputStream, hooks: { preToolUse } }));
 
       expect(result).not.toBeNull();
     });
@@ -548,8 +557,8 @@ describe('sdk-runner', () => {
 
       const { runWithSdk } = await import('./sdk-runner.js');
 
-      const onEvent = vi.fn();
-      await runWithSdk(makeOptions({ onEvent }));
+      const { onEvent, outputStream } = makeOutputStream();
+      await runWithSdk(makeOptions({ outputStream }));
 
       const costEvents = onEvent.mock.calls
         .map((call: unknown[]) => call[0] as AgentEvent)

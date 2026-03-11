@@ -142,6 +142,40 @@ describe('MemoryStore', () => {
     await expect(store.getFact('missing')).resolves.toBeNull();
   });
 
+  it('lists facts and filters to agent plus global scopes when agentId is provided', async () => {
+    const now = new Date().toISOString();
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          id: 'fact-1',
+          scope: 'agent:agent-1',
+          content: 'agent fact',
+          content_model: 'text-embedding-3-small',
+          entity_type: 'pattern',
+          confidence: 0.9,
+          strength: 1.0,
+          source_json: {},
+          valid_from: now,
+          valid_until: null,
+          created_at: now,
+          accessed_at: now,
+        },
+      ],
+      rowCount: 1,
+    });
+    const { store } = makeStore({ query });
+
+    const results = await store.listFacts({ agentId: 'agent-1', limit: 25 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.id).toBe('fact-1');
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('scope IN ($1, $2)'), [
+      'agent:agent-1',
+      'global',
+      25,
+    ]);
+  });
+
   it('executes delete, strength update, and invalidation mutations', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
     const { store } = makeStore({ query });

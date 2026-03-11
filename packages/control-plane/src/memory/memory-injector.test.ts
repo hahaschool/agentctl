@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { Mem0Client, MemoryEntry } from './mem0-client.js';
 import { MemoryInjector } from './memory-injector.js';
+import type { MemorySearch } from './memory-search.js';
+import type { MemoryStore } from './memory-store.js';
 
 const logger = createMockLogger();
 
@@ -29,6 +31,20 @@ function makeMemoryEntry(memory: string): MemoryEntry {
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-01T00:00:00Z',
   };
+}
+
+function createMockMemorySearch(overrides: Partial<MemorySearch> = {}): MemorySearch {
+  return {
+    search: vi.fn().mockResolvedValue([]),
+    ...overrides,
+  } as unknown as MemorySearch;
+}
+
+function createMockMemoryStore(overrides: Partial<MemoryStore> = {}): MemoryStore {
+  return {
+    addFact: vi.fn(),
+    ...overrides,
+  } as unknown as MemoryStore;
 }
 
 describe('MemoryInjector', () => {
@@ -119,6 +135,132 @@ describe('MemoryInjector', () => {
 
       // Should not throw
       await expect(injector.syncAfterRun('agent-1', 'Summary')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('PostgreSQL backend', () => {
+    it('builds injected context from PG search results', async () => {
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([
+          {
+            fact: {
+              id: 'fact-1',
+              scope: 'agent:agent-1',
+              content: 'Use pnpm workspaces for monorepo installs',
+              content_model: 'text-embedding-3-small',
+              entity_type: 'pattern',
+              confidence: 0.91,
+              strength: 1,
+              source: {
+                session_id: null,
+                agent_id: 'agent-1',
+                machine_id: null,
+                turn_index: null,
+                extraction_method: 'manual',
+              },
+              valid_from: '2026-03-11T00:00:00.000Z',
+              valid_until: null,
+              created_at: '2026-03-11T00:00:00.000Z',
+              accessed_at: '2026-03-11T00:00:00.000Z',
+            },
+            score: 0.92,
+            source_path: 'vector',
+          },
+          {
+            fact: {
+              id: 'fact-2',
+              scope: 'global',
+              content: 'Project uses Biome for formatting and linting',
+              content_model: 'text-embedding-3-small',
+              entity_type: 'decision',
+              confidence: 0.89,
+              strength: 0.95,
+              source: {
+                session_id: null,
+                agent_id: null,
+                machine_id: null,
+                turn_index: null,
+                extraction_method: 'manual',
+              },
+              valid_from: '2026-03-11T00:00:00.000Z',
+              valid_until: null,
+              created_at: '2026-03-11T00:00:00.000Z',
+              accessed_at: '2026-03-11T00:00:00.000Z',
+            },
+            score: 0.81,
+            source_path: 'bm25',
+          },
+        ]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore: createMockMemoryStore(),
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe(
+        '## Relevant Memories\n- Use pnpm workspaces for monorepo installs\n- Project uses Biome for formatting and linting',
+      );
+      expect(memorySearch.search).toHaveBeenCalledWith({
+        query: 'Set up project tooling',
+        visibleScopes: ['agent:agent-1', 'global'],
+        limit: 10,
+      });
+    });
+
+    it('stores a PG fact when syncing a successful run summary', async () => {
+      const memoryStore = createMockMemoryStore({
+        addFact: vi.fn().mockResolvedValue({
+          id: 'fact-summary-1',
+          scope: 'agent:agent-1',
+          content: 'Completed feature X',
+          content_model: 'text-embedding-3-small',
+          entity_type: 'decision',
+          confidence: 0.8,
+          strength: 1,
+          source: {
+            session_id: 'run-42',
+            agent_id: 'agent-1',
+            machine_id: 'machine-7',
+            turn_index: null,
+            extraction_method: 'rule',
+          },
+          valid_from: '2026-03-11T00:00:00.000Z',
+          valid_until: null,
+          created_at: '2026-03-11T00:00:00.000Z',
+          accessed_at: '2026-03-11T00:00:00.000Z',
+        }),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch: createMockMemorySearch(),
+        memoryStore,
+        logger,
+      });
+
+      await injector.syncAfterRun('agent-1', 'Completed feature X', {
+        runId: 'run-42',
+        machineId: 'machine-7',
+      });
+
+      expect(memoryStore.addFact).toHaveBeenCalledWith({
+        scope: 'agent:agent-1',
+        content: 'Completed feature X',
+        entity_type: 'decision',
+        source: {
+          session_id: 'run-42',
+          agent_id: 'agent-1',
+          machine_id: 'machine-7',
+          turn_index: null,
+          extraction_method: 'rule',
+        },
+        confidence: 0.8,
+      });
     });
   });
 });

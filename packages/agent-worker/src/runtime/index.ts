@@ -1,4 +1,9 @@
 export { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
+export {
+  type AgentOutputFileAction,
+  type AgentOutputStream,
+  EventedAgentOutputStream,
+} from './agent-output-stream.js';
 export { AgentPool } from './agent-pool.js';
 export { ClaudeRuntimeAdapter } from './claude-runtime-adapter.js';
 export {
