@@ -169,3 +169,38 @@ cd infra/litellm && docker compose up
 3. `docs/REFERENCE_INDEX.md` — Categorized links to all external tools and documentation
 4. `docs/KNOWLEDGE_SEDIMENTATION.md` — What should become a lesson, rule, or CLAUDE guidance
 5. `docs/QUICKSTART.md` — Step-by-step: from zero to first agent running
+
+## Design Context
+
+### Users
+
+Primary: independent developers managing personal AI agent fleets across multiple machines (laptop, Mac Mini, EC2). Secondary: small teams (2-10) sharing agent clusters, and DevOps engineers managing agent infrastructure. The typical context is remote monitoring and control from iOS devices — checking agent status, steering running sessions, reviewing summaries — while away from the desk.
+
+### Brand Personality
+
+**Cyber · Geeky · Futuristic**
+
+The interface should feel like a command center for AI agents — technical depth without complexity, information density without clutter. Think Warp terminal meets a sci-fi mission control. The emotional register is: confident control, technical mastery, quiet power.
+
+### Aesthetic Direction
+
+- **Dark-first**: `#0a0a0a` base, already established. Dark mode is the primary experience.
+- **Primary blue**: `#3b82f6` (Tailwind blue-500) for actions and focus states.
+- **Typography**: Geist Sans + Geist Mono — clean, technical, excellent for data-dense UIs.
+- **Density**: High information density done well. Tables, metrics, status indicators — not excessive whitespace.
+- **Terminal heritage**: The xterm.js integration and monospace elements are a feature, not a compromise. Lean into the terminal aesthetic where it fits.
+- **Motion**: Purposeful and minimal. `fadeIn`, `fadeInUp` at 200-300ms. No bouncy/elastic easing, no gratuitous transitions. Respect `prefers-reduced-motion`.
+
+### Anti-References
+
+- **AWS Console**: Information overload, inconsistent patterns, navigation maze. AgentCTL should have clear hierarchy and predictable navigation.
+- **Enterprise SaaS**: Blue-white blandness, rounded-card pileups, zero personality. AgentCTL has a distinct identity.
+- **Flashy effects**: Gradients, glassmorphism, parallax, decorative animations. Every visual element should serve a purpose.
+
+### Design Principles
+
+1. **Information density over decoration** — Show more data, less chrome. Every pixel should inform or enable action.
+2. **Terminal-native feel** — Monospace where it fits (logs, metrics, agent output). The product lives in the developer's world.
+3. **Dark-first, light-compatible** — Design for dark mode first, ensure light mode works. Never the reverse.
+4. **Purposeful motion only** — Animations communicate state changes (loading, success, error), never decorate. Max 300ms.
+5. **Progressive disclosure** — Surface what matters (status, cost, errors), let users drill down. Don't front-load everything.
