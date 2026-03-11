@@ -104,16 +104,17 @@ describe('CodexConfigRenderer', () => {
     expect(configFile?.content).toContain('model_reasoning_effort = "high"');
   });
 
-  it.each(['read-only', 'workspace-write', 'danger-full-access'] as const)(
-    'serializes sandbox mode %s without rewriting the managed value',
-    (sandbox) => {
-      const renderer = new CodexConfigRenderer();
-      const rendered = renderer.render(makeConfig({ sandbox }));
-      const configFile = rendered.files.find(
-        (file) => file.scope === 'home' && file.path === '.codex/config.toml',
-      );
+  it.each([
+    'read-only',
+    'workspace-write',
+    'danger-full-access',
+  ] as const)('serializes sandbox mode %s without rewriting the managed value', (sandbox) => {
+    const renderer = new CodexConfigRenderer();
+    const rendered = renderer.render(makeConfig({ sandbox }));
+    const configFile = rendered.files.find(
+      (file) => file.scope === 'home' && file.path === '.codex/config.toml',
+    );
 
-      expect(configFile?.content).toContain(`sandbox_mode = "${sandbox}"`);
-    },
-  );
+    expect(configFile?.content).toContain(`sandbox_mode = "${sandbox}"`);
+  });
 });
