@@ -38,7 +38,7 @@ export function EmptyState({
             : 'w-16 h-16 bg-gradient-to-b from-muted/70 to-muted/30',
         )}
       >
-        <Icon size={isCompact ? 20 : 28} className="text-muted-foreground/40" />
+        <Icon size={isCompact ? 20 : 28} className="text-muted-foreground/40" aria-hidden="true" />
       </div>
     );
   };

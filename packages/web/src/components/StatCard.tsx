@@ -37,7 +37,7 @@ function StatCardBase({ label, value, sublabel, accent, tooltip }: Props): React
           <SimpleTooltip content={tooltip}>
             <span className="inline-flex items-center gap-1 cursor-default">
               {label}
-              <Info size={10} className="text-muted-foreground/60" />
+              <Info size={10} className="text-muted-foreground/60" aria-hidden="true" />
             </span>
           </SimpleTooltip>
         ) : (

@@ -210,7 +210,7 @@ function ToastCard({ item }: { item: ToastItem }) {
         item.dismissing ? 'animate-toast-out' : 'animate-toast-in',
       ].join(' ')}
     >
-      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${iconClass}`} />
+      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${iconClass}`} aria-hidden="true" />
       <p className="flex-1 text-sm leading-snug text-foreground">{item.message}</p>
       <button
         type="button"
@@ -218,7 +218,7 @@ function ToastCard({ item }: { item: ToastItem }) {
         onClick={() => dismissToast(item.id)}
         className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <X className="h-4 w-4" />
+        <X className="h-4 w-4" aria-hidden="true" />
       </button>
 
       {/* Progress bar */}

@@ -22,7 +22,7 @@ export function ErrorBanner({ message, hint, onRetry, className }: Props): React
       role="alert"
     >
       <div className="flex items-start gap-2.5">
-        <AlertCircle size={16} className="shrink-0 mt-0.5" />
+        <AlertCircle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
         <div>
           <div className="text-[13px] font-medium">{message}</div>
           {hint && <div className="text-[12px] opacity-80 mt-0.5">{hint}</div>}

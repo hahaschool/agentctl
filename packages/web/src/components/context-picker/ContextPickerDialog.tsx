@@ -587,11 +587,13 @@ export function ContextPickerDialog({
           {/* Right panel */}
           <div className="w-full sm:w-80 shrink-0 flex flex-col overflow-hidden">
             {/* Tab toggle */}
-            <div role="tablist" className="flex border-b border-border shrink-0">
+            <div role="tablist" aria-label="Context picker mode" className="flex border-b border-border shrink-0">
               <button
+                id="cpd-tab-fork"
                 role="tab"
                 type="button"
                 aria-selected={activeTab === 'fork'}
+                aria-controls="cpd-tabpanel-fork"
                 onClick={() => setActiveTab('fork')}
                 className={cn(
                   'flex-1 px-3 py-2 text-xs font-medium transition-colors cursor-pointer',
@@ -603,9 +605,11 @@ export function ContextPickerDialog({
                 Quick Fork
               </button>
               <button
+                id="cpd-tab-agent"
                 role="tab"
                 type="button"
                 aria-selected={activeTab === 'agent'}
+                aria-controls="cpd-tabpanel-agent"
                 onClick={() => setActiveTab('agent')}
                 className={cn(
                   'flex-1 px-3 py-2 text-xs font-medium transition-colors cursor-pointer',
@@ -620,18 +624,30 @@ export function ContextPickerDialog({
 
             {/* Tab content */}
             {activeTab === 'fork' ? (
-              <ForkConfigPanel
-                session={session}
-                forkPrompt={forkPrompt}
-                onForkPromptChange={setForkPrompt}
-                model={forkModel}
-                onModelChange={setForkModel}
-                detectedStrategy={detectedStrategy}
-                isSubmitting={isSubmitting}
-                onSubmit={handleForkSubmit}
-              />
+              <div
+                id="cpd-tabpanel-fork"
+                role="tabpanel"
+                aria-labelledby="cpd-tab-fork"
+                className="flex flex-col flex-1 min-h-0 overflow-hidden"
+              >
+                <ForkConfigPanel
+                  session={session}
+                  forkPrompt={forkPrompt}
+                  onForkPromptChange={setForkPrompt}
+                  model={forkModel}
+                  onModelChange={setForkModel}
+                  detectedStrategy={detectedStrategy}
+                  isSubmitting={isSubmitting}
+                  onSubmit={handleForkSubmit}
+                />
+              </div>
             ) : (
-              <div className="p-4 space-y-3.5 overflow-y-auto">
+              <div
+                id="cpd-tabpanel-agent"
+                role="tabpanel"
+                aria-labelledby="cpd-tab-agent"
+                className="p-4 space-y-3.5 overflow-y-auto"
+              >
                 {/* Agent Name */}
                 <div>
                   <label

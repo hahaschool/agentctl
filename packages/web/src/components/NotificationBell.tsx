@@ -75,7 +75,7 @@ export function NotificationBell({
           aria-controls={contentId}
           title="Notifications"
         >
-          <Bell size={16} />
+          <Bell size={16} aria-hidden="true" />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] leading-none font-bold text-white">
               {unreadCount > 99 ? '99+' : unreadCount}
@@ -146,7 +146,7 @@ export function NotificationBell({
                   {(() => {
                     const Icon = TYPE_ICONS[n.type];
                     return (
-                      <Icon size={14} className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])} />
+                      <Icon size={14} className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])} aria-hidden="true" />
                     );
                   })()}
                   <div className="min-w-0 flex-1">
@@ -169,7 +169,7 @@ export function NotificationBell({
                     aria-label="Dismiss notification"
                     title={n.read ? 'Already read' : 'Mark as read'}
                   >
-                    <X size={12} />
+                    <X size={12} aria-hidden="true" />
                   </button>
                 </div>
               ))
