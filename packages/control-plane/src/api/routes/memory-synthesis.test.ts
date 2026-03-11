@@ -1,9 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { createMockLogger } from './test-helpers.js';
 import { memorySynthesisRoutes } from './memory-synthesis.js';
+import { createMockLogger } from './test-helpers.js';
 
 const logger = createMockLogger();
 
