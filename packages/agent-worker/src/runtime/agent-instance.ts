@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
-import type { AgentConfig, AgentEvent, AgentStatus, SafetyDecision } from '@agentctl/shared';
+import type {
+  AgentConfig,
+  AgentEvent,
+  AgentStatus,
+  ExecutionSummary,
+  ExecutionSummaryFileChange,
+  SafetyDecision,
+} from '@agentctl/shared';
 import { AgentError, VALID_TRANSITIONS } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
@@ -51,7 +58,10 @@ type AgentInstanceState = {
   startedAt: Date | null;
   stoppedAt: Date | null;
   costUsd: number;
+  tokensIn: number;
+  tokensOut: number;
   prompt: string | null;
+  resultText: string | null;
   /** Whether this run is a resumed session (vs. a fresh start). */
   isResumed: boolean;
 };
@@ -66,6 +76,102 @@ type PendingSafetyDecision = {
   resumeSessionId: string | undefined;
   check: SafetyCheckResult;
 };
+
+type ParsedToolUse = {
+  toolName: string;
+  fileChanges: ExecutionSummaryFileChange[];
+};
+
+function truncateSummaryText(value: string, maxLength: number = 240): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+}
+
+function extractLatestTextOutput(events: AgentEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.event !== 'output' || event.data.type !== 'text') {
+      continue;
+    }
+
+    const content = event.data.content.trim();
+    if (content.length > 0) {
+      return truncateSummaryText(content);
+    }
+  }
+
+  return null;
+}
+
+function parseToolUse(content: string): ParsedToolUse | null {
+  try {
+    const parsed = JSON.parse(content) as {
+      tool?: string;
+      input?: Record<string, unknown>;
+    };
+    const toolName = typeof parsed.tool === 'string' ? parsed.tool : null;
+    if (!toolName) {
+      return null;
+    }
+
+    const input = parsed.input ?? {};
+    const candidatePath =
+      typeof input.file_path === 'string'
+        ? input.file_path
+        : typeof input.filePath === 'string'
+          ? input.filePath
+          : typeof input.path === 'string'
+            ? input.path
+            : null;
+
+    const fileChanges: ExecutionSummaryFileChange[] =
+      candidatePath === null
+        ? []
+        : [
+            {
+              path: candidatePath,
+              action: toolName === 'Write' ? 'created' : 'modified',
+            },
+          ];
+
+    return { toolName, fileChanges };
+  } catch {
+    return null;
+  }
+}
+
+function summarizeToolUsage(events: AgentEvent[]): {
+  commandsRun: number;
+  toolUsageBreakdown: Record<string, number>;
+  filesChanged: ExecutionSummaryFileChange[];
+} {
+  const toolUsageBreakdown: Record<string, number> = {};
+  const filesByKey = new Map<string, ExecutionSummaryFileChange>();
+  let commandsRun = 0;
+
+  for (const event of events) {
+    if (event.event !== 'output' || event.data.type !== 'tool_use') {
+      continue;
+    }
+
+    const parsed = parseToolUse(event.data.content);
+    if (!parsed) {
+      continue;
+    }
+
+    commandsRun += 1;
+    toolUsageBreakdown[parsed.toolName] = (toolUsageBreakdown[parsed.toolName] ?? 0) + 1;
+
+    for (const change of parsed.fileChanges) {
+      filesByKey.set(`${change.action}:${change.path}`, change);
+    }
+  }
+
+  return {
+    commandsRun,
+    toolUsageBreakdown,
+    filesChanged: [...filesByKey.values()],
+  };
+}
 
 export class AgentInstance extends EventEmitter {
   readonly agentId: string;
@@ -139,7 +245,10 @@ export class AgentInstance extends EventEmitter {
       startedAt: null,
       stoppedAt: null,
       costUsd: 0,
+      tokensIn: 0,
+      tokensOut: 0,
       prompt: null,
+      resultText: null,
       isResumed: false,
     };
   }
@@ -153,7 +262,10 @@ export class AgentInstance extends EventEmitter {
     this.state.sessionId = randomUUID();
     this.state.stoppedAt = null;
     this.state.costUsd = 0;
+    this.state.tokensIn = 0;
+    this.state.tokensOut = 0;
     this.state.prompt = prompt;
+    this.state.resultText = null;
     this.state.isResumed = false;
     this.pendingSafetyDecision = null;
     this.executionProjectPath = this.projectPath;
@@ -253,7 +365,10 @@ export class AgentInstance extends EventEmitter {
       if (result) {
         // SDK run completed successfully
         this.state.costUsd = result.costUsd;
+        this.state.tokensIn = result.tokensIn;
+        this.state.tokensOut = result.tokensOut;
         this.state.sessionId = result.sessionId;
+        this.state.resultText = result.result;
         if (resumeSessionId) {
           this.state.isResumed = true;
         }
@@ -376,6 +491,8 @@ export class AgentInstance extends EventEmitter {
       startedAt: this.state.startedAt?.toISOString() ?? null,
       stoppedAt: this.state.stoppedAt?.toISOString() ?? null,
       costUsd: this.state.costUsd,
+      tokensIn: this.state.tokensIn,
+      tokensOut: this.state.tokensOut,
       projectPath: this.executionProjectPath,
       isResumed: this.state.isResumed,
     };
@@ -406,6 +523,10 @@ export class AgentInstance extends EventEmitter {
   }
 
   private emitEvent(event: AgentEvent): void {
+    if (event.event === 'cost') {
+      this.state.costUsd = event.data.totalCost;
+    }
+
     this.outputBuffer.push(event);
     this.emit('agent-event', event);
   }
@@ -711,9 +832,12 @@ export class AgentInstance extends EventEmitter {
       runId: this.runId,
       status,
       costUsd: this.state.costUsd,
+      tokensIn: this.state.tokensIn,
+      tokensOut: this.state.tokensOut,
       durationMs,
       sessionId: this.state.sessionId ?? undefined,
       errorMessage,
+      resultSummary: this.buildExecutionSummary(status, errorMessage),
     };
 
     const CALLBACK_TIMEOUT_MS = 10_000;
@@ -817,6 +941,7 @@ export class AgentInstance extends EventEmitter {
           },
         };
 
+        this.state.resultText = finalEvent.data.content;
         this.emitEvent(finalEvent);
         this.finishStop('completed');
 
@@ -825,5 +950,66 @@ export class AgentInstance extends EventEmitter {
         void this.fireStopHook('completed', STUB_TURNS);
       }
     }, STUB_RUN_DURATION_MS);
+  }
+
+  private buildExecutionSummary(
+    status: 'success' | 'failure',
+    errorMessage?: string,
+  ): ExecutionSummary {
+    const events = this.outputBuffer.getRecent(this.outputBuffer.size);
+    const { commandsRun, toolUsageBreakdown, filesChanged } = summarizeToolUsage(events);
+    const latestText =
+      this.state.resultText?.trim() ||
+      extractLatestTextOutput(events) ||
+      this.state.prompt?.trim() ||
+      '';
+    const executiveSummary =
+      status === 'success'
+        ? truncateSummaryText(latestText || 'Completed the requested run.')
+        : truncateSummaryText(
+            errorMessage || latestText || 'Run failed before completing the requested work.',
+          );
+
+    const keyFindings: string[] = [];
+    if (commandsRun > 0) {
+      keyFindings.push(
+        `Executed ${commandsRun} tool call${commandsRun === 1 ? '' : 's'} across ${Object.keys(toolUsageBreakdown).length} tool${Object.keys(toolUsageBreakdown).length === 1 ? '' : 's'}.`,
+      );
+    }
+    if (filesChanged.length > 0) {
+      keyFindings.push(
+        `Touched ${filesChanged.length} file${filesChanged.length === 1 ? '' : 's'} during the run.`,
+      );
+    }
+    if (status === 'failure' && errorMessage) {
+      keyFindings.push(`Failure reason: ${truncateSummaryText(errorMessage, 180)}`);
+    }
+
+    const followUps =
+      status === 'failure' && errorMessage
+        ? [`Investigate failure: ${truncateSummaryText(errorMessage, 180)}`]
+        : [];
+
+    return {
+      status: status === 'success' ? 'success' : 'failure',
+      workCompleted: executiveSummary,
+      executiveSummary,
+      keyFindings,
+      filesChanged,
+      commandsRun,
+      toolUsageBreakdown,
+      followUps,
+      branchName: null,
+      prUrl: null,
+      tokensUsed: {
+        input: this.state.tokensIn,
+        output: this.state.tokensOut,
+      },
+      costUsd: this.state.costUsd,
+      durationMs:
+        this.state.startedAt && this.state.stoppedAt
+          ? Math.max(0, this.state.stoppedAt.getTime() - this.state.startedAt.getTime())
+          : 0,
+    };
   }
 }

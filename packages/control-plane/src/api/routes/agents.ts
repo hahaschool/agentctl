@@ -2,6 +2,7 @@ import type {
   AgentRuntime,
   AgentStatus,
   DispatchVerificationConfig,
+  ExecutionSummary,
   HeartbeatRequest,
   RegisterWorkerRequest,
   SafetyDecisionRequest,
@@ -567,8 +568,11 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       status: 'success' | 'failure';
       errorMessage?: string;
       costUsd?: number;
+      tokensIn?: number;
+      tokensOut?: number;
       durationMs?: number;
       sessionId?: string;
+      resultSummary?: ExecutionSummary;
     };
   }>(
     '/:id/complete',
@@ -581,7 +585,17 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
-      const { runId, status, errorMessage, costUsd, durationMs, sessionId } = request.body;
+      const {
+        runId,
+        status,
+        errorMessage,
+        costUsd,
+        tokensIn,
+        tokensOut,
+        durationMs,
+        sessionId,
+        resultSummary,
+      } = request.body;
 
       if (!runId || typeof runId !== 'string') {
         return reply.code(400).send({
@@ -602,6 +616,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           status,
           errorMessage: errorMessage ?? null,
           costUsd: costUsd != null ? String(costUsd) : null,
+          tokensIn: tokensIn ?? null,
+          tokensOut: tokensOut ?? null,
+          resultSummary: resultSummary ?? null,
         });
 
         app.log.info(
@@ -610,6 +627,8 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
             runId,
             status,
             costUsd: costUsd ?? null,
+            tokensIn: tokensIn ?? null,
+            tokensOut: tokensOut ?? null,
             durationMs: durationMs ?? null,
             sessionId: sessionId ?? null,
           },
@@ -621,7 +640,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         // -----------------------------------------------------------------
         if (memoryInjector && status === 'success') {
           const agentId = request.params.id;
-          const summary = `Agent run ${runId} completed successfully.`;
+          const summary =
+            resultSummary?.executiveSummary ??
+            resultSummary?.workCompleted ??
+            `Agent run ${runId} completed successfully.`;
 
           memoryInjector
             .syncAfterRun(agentId, summary, {

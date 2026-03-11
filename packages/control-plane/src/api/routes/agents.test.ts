@@ -855,6 +855,51 @@ describe('Agent routes — with dbRegistry', () => {
   // -------------------------------------------------------------------------
 
   describe('POST /api/agents/:id/complete', () => {
+    it('passes structured execution summary fields through to dbRegistry.completeRun', async () => {
+      const resultSummary = {
+        status: 'success',
+        workCompleted: 'Implemented summary persistence.',
+        executiveSummary: 'Implemented summary persistence.',
+        keyFindings: ['Worker now posts structured summary payloads.'],
+        filesChanged: [],
+        commandsRun: 3,
+        toolUsageBreakdown: { Read: 1, Edit: 1, Bash: 1 },
+        followUps: [],
+        branchName: null,
+        prUrl: null,
+        tokensUsed: { input: 800, output: 220 },
+        costUsd: 0.42,
+        durationMs: 12_000,
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: {
+          runId: 'run-001',
+          status: 'success',
+          costUsd: 0.42,
+          tokensIn: 800,
+          tokensOut: 220,
+          durationMs: 12000,
+          sessionId: 'sess-abc',
+          resultSummary,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.completeRun).toHaveBeenCalledWith(
+        'run-001',
+        expect.objectContaining({
+          status: 'success',
+          costUsd: '0.42',
+          tokensIn: 800,
+          tokensOut: 220,
+          resultSummary,
+        }),
+      );
+    });
+
     it('completes a run successfully', async () => {
       const response = await app.inject({
         method: 'POST',

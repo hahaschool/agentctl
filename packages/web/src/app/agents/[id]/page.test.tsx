@@ -1081,6 +1081,44 @@ describe('AgentDetailPage', () => {
     });
   });
 
+  it('renders the latest structured execution summary when a recent run has one', async () => {
+    mockAgentRunsQuery.mockReturnValue(
+      makeQueryResult('agent-runs', [
+        createRun({
+          resultSummary: {
+            status: 'success',
+            workCompleted: 'Implemented structured summary generation.',
+            executiveSummary: 'Implemented structured summary generation.',
+            keyFindings: ['Run completion now persists structured summaries.'],
+            filesChanged: [
+              {
+                path: 'packages/agent-worker/src/runtime/agent-instance.ts',
+                action: 'modified',
+              },
+            ],
+            commandsRun: 3,
+            toolUsageBreakdown: { Read: 1, Edit: 1, Bash: 1 },
+            followUps: ['Hook the same summary into mobile.'],
+            branchName: 'codex/p1-structured-execution-summary-last-mile',
+            prUrl: null,
+            tokensUsed: { input: 1200, output: 450 },
+            costUsd: 0.42,
+            durationMs: 120000,
+          },
+        }),
+      ]),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Latest Run Summary')).toBeDefined();
+      expect(screen.getByText('Implemented structured summary generation.')).toBeDefined();
+      expect(screen.getByText(/persists structured summaries/)).toBeDefined();
+      expect(screen.getByText(/Hook the same summary into mobile/)).toBeDefined();
+    });
+  });
+
   it('shows empty state when no runs exist', async () => {
     mockAgentRunsQuery.mockReturnValue(makeQueryResult('agent-runs', []));
     renderPage();

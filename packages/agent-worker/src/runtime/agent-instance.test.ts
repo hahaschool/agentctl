@@ -315,6 +315,8 @@ describe('AgentInstance', () => {
       startedAt: null,
       stoppedAt: null,
       costUsd: 0,
+      tokensIn: 0,
+      tokensOut: 0,
       projectPath: '/my/project',
       isResumed: false,
     });
@@ -1051,6 +1053,44 @@ describe('AgentInstance', () => {
   // ── notifyRunCompletion ────────────────────────────────────────
 
   describe('notifyRunCompletion', () => {
+    it('posts a structured resultSummary and token usage to control plane after a successful SDK run', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+      vi.mocked(runWithSdk).mockResolvedValueOnce({
+        sessionId: 'sess-summary-1',
+        costUsd: 0.42,
+        tokensIn: 1200,
+        tokensOut: 450,
+        result: 'Implemented the structured execution summary end-to-end.',
+      });
+
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-summary-1',
+        }),
+      );
+
+      await agent.start('finish structured summaries');
+      await vi.advanceTimersByTimeAsync(0);
+
+      const callBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(callBody.tokensIn).toBe(1200);
+      expect(callBody.tokensOut).toBe(450);
+      expect(callBody.resultSummary).toMatchObject({
+        status: 'success',
+        workCompleted: 'Implemented the structured execution summary end-to-end.',
+        executiveSummary: 'Implemented the structured execution summary end-to-end.',
+        tokensUsed: { input: 1200, output: 450 },
+        costUsd: 0.42,
+      });
+
+      fetchSpy.mockRestore();
+    });
+
     it('posts completion to control plane when controlPlaneUrl and runId are set', async () => {
       const fetchSpy = vi
         .spyOn(globalThis, 'fetch')
@@ -1298,6 +1338,10 @@ describe('AgentInstance', () => {
       const callBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
       expect(callBody.status).toBe('failure');
       expect(callBody.errorMessage).toContain('SDK crashed');
+      expect(callBody.resultSummary).toMatchObject({
+        status: 'failure',
+        executiveSummary: expect.stringContaining('SDK crashed'),
+      });
 
       fetchSpy.mockRestore();
       vi.runAllTimers();

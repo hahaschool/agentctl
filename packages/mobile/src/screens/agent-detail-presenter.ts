@@ -4,7 +4,8 @@
 // start/stop/signal actions, SSE streaming, and output buffering.
 // ---------------------------------------------------------------------------
 
-import type { Agent, AgentEvent, AgentRun } from '@agentctl/shared';
+import type { Agent, AgentEvent, AgentRun, ExecutionSummary } from '@agentctl/shared';
+import { toExecutionSummary } from '@agentctl/shared';
 
 import type {
   ApiClient,
@@ -31,6 +32,7 @@ export type OutputLine = {
 export type AgentDetailState = {
   agent: Agent | null;
   runs: AgentRun[];
+  latestRunSummary: ExecutionSummary | null;
   outputLines: OutputLine[];
   isLoading: boolean;
   isStreaming: boolean;
@@ -58,6 +60,25 @@ export type AgentDetailPresenterConfig = {
 const DEFAULT_MAX_OUTPUT_LINES = 10_000;
 const DEFAULT_MAX_RUNS = 20;
 
+function getLatestRunSummary(runs: AgentRun[]): ExecutionSummary | null {
+  for (const run of runs) {
+    const summary = toExecutionSummary(run.resultSummary, {
+      status: run.status,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      costUsd: run.costUsd,
+      tokensIn: run.tokensIn,
+      tokensOut: run.tokensOut,
+    });
+
+    if (summary) {
+      return summary;
+    }
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Presenter
 // ---------------------------------------------------------------------------
@@ -75,6 +96,7 @@ export class AgentDetailPresenter {
   private state: AgentDetailState = {
     agent: null,
     runs: [],
+    latestRunSummary: null,
     outputLines: [],
     isLoading: false,
     isStreaming: false,
@@ -124,6 +146,7 @@ export class AgentDetailPresenter {
       this.setState({
         agent,
         runs,
+        latestRunSummary: getLatestRunSummary(runs),
         isLoading: false,
         lastUpdated: new Date(),
       });
@@ -247,6 +270,7 @@ export class AgentDetailPresenter {
     this.state = {
       agent: null,
       runs: [],
+      latestRunSummary: null,
       outputLines: [],
       isLoading: false,
       isStreaming: false,

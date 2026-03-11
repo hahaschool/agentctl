@@ -213,6 +213,9 @@ describe('Integration: dispatch → completion lifecycle', () => {
         status: 'success',
         errorMessage: null,
         costUsd: '0.42',
+        tokensIn: null,
+        tokensOut: null,
+        resultSummary: null,
       });
     });
   });
@@ -292,6 +295,9 @@ describe('Integration: dispatch → completion lifecycle', () => {
         status: 'failure',
         errorMessage: 'Agent exceeded token limit and was terminated',
         costUsd: null,
+        tokensIn: null,
+        tokensOut: null,
+        resultSummary: null,
       });
     });
   });
