@@ -39,7 +39,11 @@ describe('MemoryStore', () => {
 
   it('generates an embedding and inserts a fact into the database', async () => {
     const { store, pool, embedding } = makeStore({
-      query: vi.fn().mockResolvedValue({ rows: [{ id: 'fact-1' }], rowCount: 1 }),
+      // First call: INSERT fact; second call: SELECT for contradiction detection (no rows)
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
     });
 
     const result = await store.addFact({
@@ -56,7 +60,8 @@ describe('MemoryStore', () => {
     });
 
     expect(embedding.embed).toHaveBeenCalledWith('Use Biome instead of ESLint');
-    expect(pool.query).toHaveBeenCalledOnce();
+    // 2 calls: INSERT fact + SELECT for contradiction detection
+    expect(pool.query).toHaveBeenCalledTimes(2);
     expect(result.scope).toBe('global');
     expect(result.content).toBe('Use Biome instead of ESLint');
     expect(result.source.agent_id).toBe('agent-1');
@@ -64,7 +69,11 @@ describe('MemoryStore', () => {
 
   it('stores a fact even when embedding generation fails', async () => {
     const pool = createMockPool();
-    pool.query = vi.fn().mockResolvedValue({ rows: [{ id: 'fact-2' }], rowCount: 1 });
+    // First call: INSERT fact; second call: SELECT for contradiction detection
+    pool.query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
     const embedding = {
       embed: vi.fn().mockRejectedValue(new Error('API down')),
       embedBatch: vi.fn(),
@@ -85,10 +94,11 @@ describe('MemoryStore', () => {
     });
 
     expect(result.id).toBeTruthy();
-    expect(pool.query).toHaveBeenCalledOnce();
+    // 2 calls: INSERT fact + SELECT for contradiction detection
+    expect(pool.query).toHaveBeenCalledTimes(2);
   });
 
-  it('inserts an edge between two facts', async () => {
+  it('inserts an edge between two facts (non-contradiction)', async () => {
     const { store, pool } = makeStore({
       query: vi.fn().mockResolvedValue({ rows: [{ id: 'edge-1' }], rowCount: 1 }),
     });
@@ -101,6 +111,7 @@ describe('MemoryStore', () => {
 
     expect(result.source_fact_id).toBe('fact-1');
     expect(result.target_fact_id).toBe('fact-2');
+    // Only 1 call for related_to edges (no consolidation item)
     expect(pool.query).toHaveBeenCalledOnce();
   });
 
@@ -122,6 +133,8 @@ describe('MemoryStore', () => {
             valid_until: null,
             created_at: now,
             accessed_at: now,
+            tags: [],
+            usage_count: 0,
           },
         ],
         rowCount: 1,
@@ -159,6 +172,8 @@ describe('MemoryStore', () => {
           valid_until: null,
           created_at: now,
           accessed_at: now,
+          tags: [],
+          usage_count: 0,
         },
       ],
       rowCount: 1,
@@ -211,6 +226,8 @@ describe('MemoryStore', () => {
             valid_until: null,
             created_at: now,
             accessed_at: now,
+            tags: [],
+            usage_count: 0,
           },
         ],
         rowCount: 1,
@@ -322,5 +339,226 @@ describe('MemoryStore', () => {
       'global',
     ]);
     expect(store.resolveVisibleScopes(undefined, undefined)).toEqual(['global']);
+  });
+
+  // ── §3.6 Knowledge Engineering Tests ─────────────────────────────────────
+
+  it('stores a fact with tags and includes them in the returned result', async () => {
+    const { store, pool } = makeStore({
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // INSERT
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }), // contradiction detection
+    });
+
+    const result = await store.addFact({
+      scope: 'global' as MemoryScope,
+      content: 'Security review checklist item',
+      entity_type: 'pattern' as EntityType,
+      source: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      },
+      tags: ['security-reviewer', 'code-reviewer'],
+    });
+
+    expect(result.tags).toEqual(['security-reviewer', 'code-reviewer']);
+    // tags should be passed as $11 parameter in the INSERT (index 10, 0-based)
+    const insertCall = vi.mocked(pool.query).mock.calls[0] as [string, unknown[]];
+    const insertParams = insertCall[1];
+    expect(insertParams[10]).toEqual(['security-reviewer', 'code-reviewer']);
+  });
+
+  it('defaults tags to empty array when not provided', async () => {
+    const { store } = makeStore({
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
+    });
+
+    const result = await store.addFact({
+      scope: 'global' as MemoryScope,
+      content: 'Simple fact without tags',
+      entity_type: 'pattern' as EntityType,
+      source: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      },
+    });
+
+    expect(result.tags).toEqual([]);
+    expect(result.usage_count).toBe(0);
+  });
+
+  it('records used feedback: increments usage_count and boosts strength', async () => {
+    const now = new Date().toISOString();
+    const factRow = {
+      id: 'fact-1',
+      scope: 'global',
+      content: 'test fact',
+      content_model: 'text-embedding-3-small',
+      entity_type: 'pattern',
+      confidence: 0.9,
+      strength: 0.8,
+      source_json: {},
+      valid_from: now,
+      valid_until: null,
+      created_at: now,
+      accessed_at: now,
+      tags: [],
+      usage_count: 1,
+    };
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // UPDATE
+      .mockResolvedValueOnce({ rows: [factRow], rowCount: 1 }); // getFact SELECT
+    const { store } = makeStore({ query });
+
+    const result = await store.recordFeedback('fact-1', 'used');
+
+    expect(query).toHaveBeenCalledTimes(2);
+    const updateCall = vi.mocked(query).mock.calls[0] as [string, unknown[]];
+    expect(updateCall[0]).toContain('usage_count = usage_count + 1');
+    expect(result?.id).toBe('fact-1');
+  });
+
+  it('records irrelevant feedback: decreases strength', async () => {
+    const now = new Date().toISOString();
+    const factRow = {
+      id: 'fact-1',
+      scope: 'global',
+      content: 'test',
+      content_model: 'text-embedding-3-small',
+      entity_type: 'pattern',
+      confidence: 0.9,
+      strength: 0.7,
+      source_json: {},
+      valid_from: now,
+      valid_until: null,
+      created_at: now,
+      accessed_at: now,
+      tags: [],
+      usage_count: 0,
+    };
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // UPDATE strength
+      .mockResolvedValueOnce({ rows: [factRow], rowCount: 1 }); // getFact
+    const { store } = makeStore({ query });
+
+    await store.recordFeedback('fact-1', 'irrelevant');
+
+    const updateCall = vi.mocked(query).mock.calls[0] as [string, unknown[]];
+    expect(updateCall[0]).toContain('strength = GREATEST(0.0, strength - 0.1)');
+  });
+
+  it('records outdated feedback: decreases confidence and creates stale consolidation item', async () => {
+    const now = new Date().toISOString();
+    const factRow = {
+      id: 'fact-1',
+      scope: 'global',
+      content: 'test',
+      content_model: 'text-embedding-3-small',
+      entity_type: 'pattern',
+      confidence: 0.6,
+      strength: 0.8,
+      source_json: {},
+      valid_from: now,
+      valid_until: null,
+      created_at: now,
+      accessed_at: now,
+      tags: [],
+      usage_count: 0,
+    };
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // UPDATE confidence
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // addConsolidationItem INSERT
+      .mockResolvedValueOnce({ rows: [factRow], rowCount: 1 }); // final getFact
+    const { store } = makeStore({ query });
+
+    const result = await store.recordFeedback('fact-1', 'outdated');
+
+    const updateCall = vi.mocked(query).mock.calls[0] as [string, unknown[]];
+    expect(updateCall[0]).toContain('confidence = GREATEST(0.0, confidence - 0.2)');
+    // Should insert a consolidation item (second query call)
+    const consolidationCall = vi.mocked(query).mock.calls[1] as [string, unknown[]];
+    expect(consolidationCall[0]).toContain('memory_consolidation_items');
+    expect(result).toBeDefined();
+  });
+
+  it('creates a contradiction consolidation item when a contradicts edge is added', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    const { store } = makeStore({ query });
+
+    const result = await store.addEdge({
+      source_fact_id: 'fact-a',
+      target_fact_id: 'fact-b',
+      relation: 'contradicts',
+    });
+
+    expect(result.relation).toBe('contradicts');
+    // 2 calls: INSERT edge + INSERT consolidation item
+    expect(query).toHaveBeenCalledTimes(2);
+    const consolidationCall = vi.mocked(query).mock.calls[1] as [string, unknown[]];
+    expect(consolidationCall[0]).toContain('memory_consolidation_items');
+    expect(consolidationCall[1]).toContain('contradiction');
+    expect(consolidationCall[1]).toContain('high');
+  });
+
+  it('does NOT create a consolidation item for non-contradicts edges', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    const { store } = makeStore({ query });
+
+    await store.addEdge({
+      source_fact_id: 'fact-a',
+      target_fact_id: 'fact-b',
+      relation: 'related_to',
+    });
+
+    // Only 1 call: the edge INSERT — no consolidation item
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('flags contradiction via detectAndFlagContradictions when adding a new fact with existing contradicts edge', async () => {
+    const query = vi
+      .fn()
+      // 1. INSERT fact
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      // 2. detectAndFlagContradictions: SELECT from memory_edges
+      .mockResolvedValueOnce({
+        rows: [{ source_fact_id: 'existing-fact', target_fact_id: 'new-fact-id' }],
+        rowCount: 1,
+      })
+      // 3. addConsolidationItem INSERT
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+    const { store } = makeStore({ query });
+
+    await store.addFact({
+      scope: 'global' as MemoryScope,
+      content: 'New fact that contradicts existing one',
+      entity_type: 'decision' as EntityType,
+      source: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'llm',
+      },
+    });
+
+    // Should have: INSERT fact, SELECT edges for contradiction, INSERT consolidation
+    expect(query).toHaveBeenCalledTimes(3);
+    const consolidationCall = vi.mocked(query).mock.calls[2] as [string, unknown[]];
+    expect(consolidationCall[0]).toContain('memory_consolidation_items');
+    expect(consolidationCall[1]).toContain('contradiction');
   });
 });

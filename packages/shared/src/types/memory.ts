@@ -50,6 +50,8 @@ export type TriggerSpec = {
   keyword?: string;
 };
 
+export type FeedbackSignal = 'used' | 'irrelevant' | 'outdated';
+
 export type MemoryFact = {
   id: string;
   scope: MemoryScope;
@@ -63,6 +65,8 @@ export type MemoryFact = {
   valid_until: string | null;
   created_at: string;
   accessed_at: string;
+  tags?: string[];
+  usage_count?: number;
   pinned?: boolean;
   trigger_spec?: TriggerSpec;
 };
@@ -154,6 +158,17 @@ export type MemoryReport = {
     topEntities: string[];
   };
   generatedAt: string;
+};
+
+export type MemoryScopeType = 'global' | 'project' | 'agent' | 'session';
+
+export type MemoryScopeRecord = {
+  id: string;
+  name: string;
+  type: MemoryScopeType;
+  parentId: string | null;
+  factCount: number;
+  createdAt: string;
 };
 
 export type ImportJobSource = 'claude-mem' | 'jsonl-history';

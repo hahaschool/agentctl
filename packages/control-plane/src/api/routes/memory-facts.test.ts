@@ -64,6 +64,7 @@ function createMockMemoryStore(overrides: Partial<MemoryStore> = {}): MemoryStor
     addEdge: vi.fn(),
     deleteEdge: vi.fn().mockResolvedValue(undefined),
     getStats: vi.fn(),
+    recordFeedback: vi.fn().mockResolvedValue(null),
     ...overrides,
   } as unknown as MemoryStore;
 }
@@ -217,5 +218,75 @@ describe('memory fact routes', () => {
     expect(response.statusCode).toBe(200);
     expect(memoryStore.invalidateFact).toHaveBeenCalledWith('fact-1');
     expect(response.json()).toEqual({ ok: true, id: 'fact-1' });
+  });
+
+  // ── §3.6 Feedback Endpoint Tests ──────────────────────────────────────────
+
+  it('records used feedback signal and returns updated fact', async () => {
+    const updatedFact = makeFact({ strength: 0.9 });
+    vi.mocked(memoryStore.recordFeedback).mockResolvedValueOnce(updatedFact);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts/fact-1/feedback',
+      payload: { signal: 'used' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.recordFeedback).toHaveBeenCalledWith('fact-1', 'used');
+    expect(response.json()).toEqual({ ok: true, fact: updatedFact });
+  });
+
+  it('records irrelevant feedback signal', async () => {
+    const updatedFact = makeFact({ strength: 0.7 });
+    vi.mocked(memoryStore.recordFeedback).mockResolvedValueOnce(updatedFact);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts/fact-1/feedback',
+      payload: { signal: 'irrelevant' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.recordFeedback).toHaveBeenCalledWith('fact-1', 'irrelevant');
+  });
+
+  it('records outdated feedback signal', async () => {
+    const updatedFact = makeFact({ confidence: 0.7 });
+    vi.mocked(memoryStore.recordFeedback).mockResolvedValueOnce(updatedFact);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts/fact-1/feedback',
+      payload: { signal: 'outdated' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.recordFeedback).toHaveBeenCalledWith('fact-1', 'outdated');
+  });
+
+  it('returns 400 for an invalid feedback signal', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts/fact-1/feedback',
+      payload: { signal: 'unknown-signal' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_SIGNAL' });
+    expect(memoryStore.recordFeedback).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when fact is not found during feedback', async () => {
+    vi.mocked(memoryStore.recordFeedback).mockResolvedValueOnce(null);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts/nonexistent/feedback',
+      payload: { signal: 'used' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: 'NOT_FOUND' });
   });
 });

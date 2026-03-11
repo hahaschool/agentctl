@@ -170,6 +170,12 @@ vi.mock('@/lib/queries', () => ({
   runtimeHandoffSummaryQuery: () => mockRuntimeHandoffSummaryQuery(),
 }));
 
+vi.mock('../components/memory/DashboardMemoryCard', () => ({
+  DashboardMemoryCard: () => (
+    <div data-testid="dashboard-memory-card-mock">Memory Health</div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Component import — AFTER mocks
 // ---------------------------------------------------------------------------

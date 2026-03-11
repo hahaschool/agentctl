@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 import { DashboardActionButton } from '../components/DashboardActionButton';
+import { DashboardMemoryCard } from '../components/memory/DashboardMemoryCard';
 import { DashboardActivityIcon } from '../components/DashboardActivityIcon';
 import { DashboardCostOverview } from '../components/DashboardCostOverview';
 import { DashboardEmptyPanel } from '../components/DashboardEmptyPanel';
@@ -383,6 +384,11 @@ export function DashboardPage(): React.JSX.Element {
           />
         </div>
       )}
+
+      {/* Memory health card */}
+      <div className="mb-5">
+        <DashboardMemoryCard />
+      </div>
 
       {/* Two-column layout: Recent Sessions Activity + Machine Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

@@ -1,14 +1,28 @@
-import type { EntityType, FactSource, MemoryFact, MemoryScope } from '@agentctl/shared';
+import type {
+  EntityType,
+  FactSource,
+  FeedbackSignal,
+  MemoryFact,
+  MemoryScope,
+} from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MemorySearch } from '../../memory/memory-search.js';
 import type { MemoryStore, UpdateFactInput } from '../../memory/memory-store.js';
 
+const VALID_FEEDBACK_SIGNALS: FeedbackSignal[] = ['used', 'irrelevant', 'outdated'];
+
 type MemoryFactRoutesOptions = {
   memorySearch: Pick<MemorySearch, 'search'>;
   memoryStore: Pick<
     MemoryStore,
-    'addFact' | 'getFact' | 'invalidateFact' | 'listEdges' | 'listFacts' | 'updateFact'
+    | 'addFact'
+    | 'getFact'
+    | 'invalidateFact'
+    | 'listEdges'
+    | 'listFacts'
+    | 'recordFeedback'
+    | 'updateFact'
   >;
 };
 
@@ -166,6 +180,31 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
     async (request) => {
       await memoryStore.invalidateFact(request.params.id);
       return { ok: true, id: request.params.id };
+    },
+  );
+
+  app.post<{
+    Params: { id: string };
+    Body: { signal: string };
+  }>(
+    '/:id/feedback',
+    { schema: { tags: ['memory'], summary: 'Record feedback signal for a memory fact' } },
+    async (request, reply) => {
+      const { signal } = request.body;
+
+      if (!signal || !VALID_FEEDBACK_SIGNALS.includes(signal as FeedbackSignal)) {
+        return reply.code(400).send({
+          error: 'INVALID_SIGNAL',
+          message: `signal must be one of: ${VALID_FEEDBACK_SIGNALS.join(', ')}`,
+        });
+      }
+
+      const fact = await memoryStore.recordFeedback(request.params.id, signal as FeedbackSignal);
+      if (!fact) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: 'Memory fact not found' });
+      }
+
+      return { ok: true, fact };
     },
   );
 };

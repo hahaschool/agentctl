@@ -108,6 +108,7 @@ vi.mock('@/lib/queries', () => ({
     mockRuntimeSessionHandoffsQuery(id, limit),
   runtimeSessionPreflightQuery: (id: string, params: Record<string, unknown>) =>
     mockRuntimeSessionPreflightQuery(id, params),
+  runtimeSessionManualTakeoverQuery: (id: string) => mockRuntimeSessionHandoffsQuery(id),
   machinesQuery: () => mockMachinesQuery(),
   useCreateRuntimeSession: () => ({
     mutateAsync: mockCreateMutateAsync,
@@ -123,6 +124,14 @@ vi.mock('@/lib/queries', () => ({
   }),
   useHandoffRuntimeSession: () => ({
     mutateAsync: mockHandoffMutateAsync,
+    isPending: false,
+  }),
+  useStartRuntimeSessionManualTakeover: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useStopRuntimeSessionManualTakeover: () => ({
+    mutateAsync: vi.fn(),
     isPending: false,
   }),
 }));

@@ -22,6 +22,7 @@ import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
+import { memoryFeedbackRoutes } from './routes/memory-feedback.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
@@ -243,6 +244,14 @@ export async function createWorkerServer({
     });
   }
 
+  if (controlPlaneUrl) {
+    await app.register(memoryFeedbackRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+  }
+
   // --- Global error handler ---
   app.setErrorHandler<FastifyError>((err, request, reply) => {
     if (err instanceof WorkerError || err instanceof AgentError) {
@@ -297,7 +306,7 @@ function workerErrorToStatus(code: string): number {
   if (code.endsWith('_NOT_FOUND')) {
     return 404;
   }
-  if (code.endsWith('_UNAVAILABLE') || code.endsWith('_OFFLINE')) {
+  if (code.endsWith('_UNAVAILABLE') || code.endsWith('_OFFLINE') || code.endsWith('_UNREACHABLE')) {
     return 503;
   }
   if (code.startsWith('INVALID_')) {
