@@ -50,7 +50,7 @@ export function GraphNodeDetail({
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h3 className="text-sm font-semibold">Node Detail</h3>
         <Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Close node detail">
-          <XIcon className="size-3.5" />
+          <XIcon className="size-3.5" aria-hidden="true" />
         </Button>
       </div>
 

@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center animate-fade-in">
           <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
-            <AlertTriangle size={24} className="text-destructive" />
+            <AlertTriangle size={24} className="text-destructive" aria-hidden="true" />
           </div>
           <div className="text-lg font-semibold text-foreground mb-1">Something went wrong</div>
           <p className="text-sm text-muted-foreground mb-6 max-w-md">
@@ -56,7 +56,7 @@ export class ErrorBoundary extends Component<Props, State> {
               className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity cursor-pointer"
               onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
             >
-              <RotateCcw size={14} />
+              <RotateCcw size={14} aria-hidden="true" />
               Try again
             </button>
             <button
@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
               className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-muted text-foreground border border-border rounded-md hover:bg-accent transition-colors cursor-pointer"
               onClick={() => window.location.reload()}
             >
-              <RefreshCw size={14} />
+              <RefreshCw size={14} aria-hidden="true" />
               Reload page
             </button>
           </div>

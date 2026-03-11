@@ -177,7 +177,10 @@ export function GraphTableView({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
         <div className="relative min-w-[160px] flex-1">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <SearchIcon
+            className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
             placeholder="Filter nodes…"
             value={filters.q}
@@ -232,7 +235,7 @@ export function GraphTableView({
             onClick={handleClearFilters}
             className="shrink-0 gap-1.5"
           >
-            <XIcon className="size-3.5" />
+            <XIcon className="size-3.5" aria-hidden="true" />
             Clear
           </Button>
         ) : null}

@@ -221,7 +221,7 @@ export function InteractiveTerminal({
             'Copied!'
           ) : (
             <span className="flex items-center gap-1">
-              <ClipboardCopy size={10} />
+              <ClipboardCopy size={10} aria-hidden="true" />
               Copy
             </span>
           )}

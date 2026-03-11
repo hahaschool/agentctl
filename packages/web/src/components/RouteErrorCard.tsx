@@ -34,7 +34,7 @@ export function RouteErrorCard({
       <Card className="max-w-[460px] w-full">
         <CardContent className="pt-6 text-center">
           <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4 mx-auto">
-            <AlertTriangle size={24} className="text-destructive" />
+            <AlertTriangle size={24} className="text-destructive" aria-hidden="true" />
           </div>
           <h1 className="text-xl font-semibold mb-2">{title}</h1>
           <p className="text-sm text-muted-foreground mb-4">{description}</p>
@@ -57,11 +57,11 @@ export function RouteErrorCard({
           )}
           <div className="flex gap-3 justify-center">
             <Button onClick={() => router.back()} variant="outline" size="sm">
-              <ArrowLeft size={14} className="mr-1.5" />
+              <ArrowLeft size={14} className="mr-1.5" aria-hidden="true" />
               Go Back
             </Button>
             <Button onClick={reset} size="sm">
-              <RefreshCw size={14} className="mr-1.5" />
+              <RefreshCw size={14} className="mr-1.5" aria-hidden="true" />
               Try Again
             </Button>
             <Button variant="outline" size="sm" asChild>
