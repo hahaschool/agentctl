@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-11 (added §4.8 Unified Memory System UI)
+> Last updated: 2026-03-11 (merged PRs #29 AgentOutputStream, #30 claude-mem migration, #31 memory cutover, #32 structured summary, #39 live summary streaming)
 
 ## Current State
 
@@ -116,24 +116,23 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > Manual takeover design: [plans/2026-03-11-manual-remote-takeover-design.md](plans/2026-03-11-manual-remote-takeover-design.md)
 > Impl plan: [plans/2026-03-11-manual-remote-takeover-impl-plan.md](plans/2026-03-11-manual-remote-takeover-impl-plan.md)
 
-### 2.5 Structured Execution Summary — P1
+### 2.5 Structured Execution Summary — P1 ✅
 
 > Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.1
 >
-> Status note: Partially delivered on `main`. Shared `ExecutionSummary` types,
-> the `agent_runs.result_summary` JSONB column, and `GET /api/runs/:id/summary`
-> with stored/replay fallback are already landed. Remaining work is generating
-> structured summaries in the worker completion path, emitting a dedicated SSE
-> event, and surfacing summary cards in web/mobile views.
+> Status note: Fully delivered on `main` via PRs #32 (generation + types) and
+> #39 (live SSE streaming + web/mobile rendering). The worker generates
+> summaries on completion, streams them via `execution_summary` SSE events,
+> and web/mobile render summary cards in session detail views.
 
 Auto-generate structured summary at task completion via session resume.
 
 - [x] Define `ExecutionSummary` type (status, workCompleted, executiveSummary, filesChanged, followUps, cost)
-- [ ] Implement summary generation in `AgentInstance.stop()`; post-hoc fallback already exists in the run summary route
+- [x] Implement summary generation in `AgentInstance.stop()`; post-hoc fallback already exists in the run summary route
 - [x] DB migration: `agent_runs.result_summary` JSONB
-- [ ] SSE event: `execution_summary`
+- [x] SSE event: `execution_summary`
 - [x] API: `GET /api/runs/:id/summary`
-- [ ] Summary card in web/mobile session view
+- [x] Summary card in web/mobile session view
 
 ### 2.6 Workdir Safety Tiers — P1 ✅
 
@@ -219,14 +218,18 @@ Orthogonal WHERE (local/Docker/SSH) vs WHAT (Claude/Codex) abstraction.
 
 </details>
 
-### 3.3 AgentOutputStream — Unified Output Streaming — P2
+### 3.3 AgentOutputStream — Unified Output Streaming — P2 ✅
+
+> Status note: Delivered on `main` via PR #29. Shared output contract,
+> EventEmitter-backed stream, OutputBuffer, and runtime adapter integration
+> are all landed.
 
 Shared output contract between runtime adapters. Foundation for multi-runtime.
 
-- [ ] Define `AgentOutputStream` interface (text, thinking, toolUse, toolResult, fileChange, costUpdate, error)
-- [ ] Refactor `sdk-runner.ts` to emit through `AgentOutputStream`
-- [ ] `AgentInstance` stream impl backed by EventEmitter + OutputBuffer
-- [ ] Both `ClaudeRuntimeAdapter` and `CodexRuntimeAdapter` use same interface
+- [x] Define `AgentOutputStream` interface (text, thinking, toolUse, toolResult, fileChange, costUpdate, error)
+- [x] Refactor `sdk-runner.ts` to emit through `AgentOutputStream`
+- [x] `AgentInstance` stream impl backed by EventEmitter + OutputBuffer
+- [x] Both `ClaudeRuntimeAdapter` and `CodexRuntimeAdapter` use same interface
 
 ### 3.4 Codex Operational Parity — P2
 
@@ -264,11 +267,11 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 > Design doc: [plans/2026-03-10-unified-memory-layer-design.md](plans/2026-03-10-unified-memory-layer-design.md)
 > Impl plan: [plans/2026-03-10-unified-memory-layer-impl-plan.md](plans/2026-03-10-unified-memory-layer-impl-plan.md)
 >
-> Status note: Partially delivered on `main`. Shared memory types, the `0010`
-> migration, Drizzle schema, embedding client, `MemoryStore`, and
-> `MemorySearch` are present. The remaining cutover work is centered on
-> replacing the current Mem0-backed injector/routes, adding runtime-side access,
-> and finishing migration/knowledge-engineering follow-through.
+> Status note: Substantially delivered on `main` via PRs #30 (claude-mem
+> migration tooling: audit + import scripts for PG target) and #31 (memory
+> cutover: dual-backend `MemoryInjector` via `MEMORY_BACKEND` env var,
+> memory API routes with scope filtering, memory MCP server). Remaining
+> work is context budget fine-tuning and knowledge-engineering follow-through.
 
 PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolation (global > project > agent > session), pgvector + tsvector + graph traversal fused via Reciprocal Rank Fusion.
 
@@ -278,12 +281,12 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [x] Drizzle schema + embedding client (text-embedding-3-small via LiteLLM)
 - [x] `MemoryStore`: CRUD with scope isolation, dedup, Ebbinghaus decay
 - [x] `MemorySearch`: hybrid search (vector + BM25 + graph CTE + RRF fusion)
-- [ ] `MemoryInjector` refactor: dual-backend (Mem0 / PG) via `MEMORY_BACKEND` env var
-- [ ] Memory API routes: search, add, list, delete (with scope filtering)
+- [x] `MemoryInjector` refactor: dual-backend (Mem0 / PG) via `MEMORY_BACKEND` env var
+- [x] Memory API routes: search, add, list, delete (with scope filtering)
 - [ ] Context budget: maxTokens 2400, maxFacts 20, 3-tier injection (pinned + on-demand + triggered)
-- [ ] Memory MCP server for runtime-side access
-- [ ] Migration path: dual-write → import → cutover
-- [ ] Claude-mem data migration: audit → import script (PG target) → API dual-read → UI migration → MCP transition → cleanup
+- [x] Memory MCP server for runtime-side access
+- [x] Migration path: dual-write → import → cutover
+- [x] Claude-mem data migration: audit → import script (PG target) → API dual-read → UI migration → MCP transition → cleanup
 
 > Migration plan: [plans/2026-03-11-claude-mem-migration-plan.md](plans/2026-03-11-claude-mem-migration-plan.md)
 > Frontend UI: see §4.8 Unified Memory System UI for the full 8-page UI plan + integration points
@@ -640,13 +643,13 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
-| **P1** | Unified Memory Layer | 3.6 | Partial — core types/schema/store/search landed; injector/routes/MCP cutover remains |
+| **P1** | Unified Memory Layer | 3.6 | Near-complete — injector/routes/MCP/migration landed; context budget tuning remains |
 | **P1** | Unified Memory System UI | 4.8 | Not started — 8 pages + 8 integration points + backend API + MCP tools |
-| **P1** | UI Quality & Accessibility | 4.7 | Not started — 2 critical, 11 high, 18 medium from audit |
-| **P1** | Structured Execution Summary | 2.5 | Not started |
+| **P1** | UI Quality & Accessibility | 4.7 | In progress — PRs #36 (critical) + #37 (overlays) pending merge |
+| **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
-| **P2** | AgentOutputStream | 3.3 | Not started |
+| **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | Fork UX Extensions | 4.9 | Partial — auto-related-message/runtime-in-direct-fork work remains |
 | **P2** | Mid-Execution Steering | 2.8 | Not started |
 | **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
@@ -689,13 +692,13 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | Item | Depends On | Notes |
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
-| Unified Memory Layer (P1) | None | Core types/schema/search/store have landed; remaining work is injector/routes/MCP cutover. Claude-mem migration is part of this — see [migration plan](plans/2026-03-11-claude-mem-migration-plan.md) |
+| Unified Memory Layer (P1) | None | Near-complete — injector/routes/MCP/migration all landed via PRs #30-#31; context budget tuning remains |
 | Unified Memory System UI (P1) | Unified Memory Layer (§3.6) backend routes | Backend API routes build on existing MemoryStore/MemorySearch; UI pages can start with mock data while backend catches up |
 | UI Quality & Accessibility (P1) | None | Can start immediately — 2 critical, 11 high, 18 medium issues from audit |
-| Execution Summary (P1) | None | Can start immediately |
+| ~~Execution Summary (P1)~~ | None | ✅ Delivered (PRs #32, #39) |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
-| AgentOutputStream (P2) | None | Foundation for multi-runtime unification |
+| ~~AgentOutputStream (P2)~~ | None | ✅ Delivered (PR #29) |
 | Mid-Execution Steering (P2) | AgentOutputStream | Needs stream interface for response routing |
 | Codex Operational Parity (P2) | None | Partial on `main`; LiteLLM routing/failover is done, remaining work is runtime-level sandbox enforcement/evidence |
 | Automatic Handoff (P2) | AgentOutputStream for live signals | Policy/history/task-affinity groundwork can land before it; live trigger execution waits on unified runtime signals |
