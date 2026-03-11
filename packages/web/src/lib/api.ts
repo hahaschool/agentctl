@@ -19,6 +19,7 @@ import type {
   HandoffReason,
   HandoffSnapshot,
   HandoffStrategy,
+  ImportJob,
   MachineCapabilities,
   MachineStatus,
   ManagedRuntime,
@@ -31,6 +32,8 @@ import type {
   MemoryFact,
   MemoryObservation,
   MemoryScope,
+  MemoryScopeRecord,
+  MemoryScopeType,
   MemoryStats,
   NativeImportAttempt,
   NativeImportPreflightResponse,
@@ -42,7 +45,7 @@ import type {
   StartManualTakeoverRequest,
 } from '@agentctl/shared';
 
-export type { AgentConfig };
+export type { AgentConfig, ImportJob, MemoryScopeRecord, MemoryScopeType };
 
 export type HealthResponse = {
   status: 'ok' | 'degraded';
@@ -875,6 +878,40 @@ export const api = {
 
   getMemoryStats: () => request<{ ok: boolean; stats: MemoryStats }>('/api/memory/stats'),
 
+  // Memory scope management
+  listMemoryScopes: () =>
+    request<{ ok: boolean; scopes: MemoryScopeRecord[] }>('/api/memory/scopes'),
+
+  createMemoryScope: (body: { name: string; type: MemoryScopeType }) =>
+    request<{ ok: boolean; scope: MemoryScopeRecord }>('/api/memory/scopes', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  renameMemoryScope: (id: string, name: string) =>
+    request<{ ok: boolean; scope: MemoryScopeRecord }>(
+      `/api/memory/scopes/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body: JSON.stringify({ name }) },
+    ),
+
+  deleteMemoryScope: (id: string, cascade?: boolean) =>
+    request<{ ok: boolean; id: string; deleted: number }>(
+      `/api/memory/scopes/${encodeURIComponent(id)}${cascade ? '?cascade=true' : ''}`,
+      { method: 'DELETE' },
+    ),
+
+  promoteScopeFacts: (id: string) =>
+    request<{ ok: boolean; promoted: number; fromScope: string; toScope: string }>(
+      `/api/memory/scopes/${encodeURIComponent(id)}/promote`,
+      { method: 'POST' },
+    ),
+
+  mergeScopes: (sourceId: string, targetId: string) =>
+    request<{ ok: boolean; merged: number; fromScope: string; toScope: string }>(
+      `/api/memory/scopes/${encodeURIComponent(sourceId)}/merge`,
+      { method: 'POST', body: JSON.stringify({ targetId }) },
+    ),
+
   // Claude-mem compatibility
   searchMemory: (params: { q: string; project?: string; type?: string; limit?: number }) => {
     const qs = new URLSearchParams({ q: params.q });
@@ -896,6 +933,20 @@ export const api = {
       `/api/claude-mem/timeline?${qs.toString()}`,
     );
   },
+
+  // Memory import
+  startMemoryImport: (body: { source: ImportJob['source']; dbPath: string }) =>
+    request<{ ok: boolean; job: ImportJob }>('/api/memory/import', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getImportStatus: () => request<{ ok: boolean; job: ImportJob }>('/api/memory/import/status'),
+
+  cancelImport: (id: string) =>
+    request<{ ok: boolean; job: ImportJob }>(`/api/memory/import/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 };
 
 // ---------------------------------------------------------------------------

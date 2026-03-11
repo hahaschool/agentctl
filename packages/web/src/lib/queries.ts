@@ -91,6 +91,8 @@ export const queryKeys = {
     stats: ['memory', 'stats'] as const,
     timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
     observation: (id: number) => ['memory', 'observation', id] as const,
+    scopes: ['memory', 'scopes'] as const,
+    importStatus: ['memory', 'import', 'status'] as const,
   },
 };
 
@@ -751,6 +753,111 @@ export function useDeleteMemoryFact() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
       void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Memory scope queries + mutations
+// ---------------------------------------------------------------------------
+
+export function memoryScopesQuery() {
+  return queryOptions({
+    queryKey: queryKeys.memory.scopes,
+    queryFn: api.listMemoryScopes,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateScope() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createMemoryScope,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.scopes });
+    },
+  });
+}
+
+export function useRenameScope() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.renameMemoryScope(id, name),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.scopes });
+    },
+  });
+}
+
+export function useDeleteScope() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, cascade }: { id: string; cascade?: boolean }) =>
+      api.deleteMemoryScope(id, cascade),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.scopes });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+    },
+  });
+}
+
+export function usePromoteScope() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.promoteScopeFacts(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.scopes });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+    },
+  });
+}
+
+export function useMergeScopes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceId, targetId }: { sourceId: string; targetId: string }) =>
+      api.mergeScopes(sourceId, targetId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.scopes });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Memory import queries + mutations
+// ---------------------------------------------------------------------------
+
+/** Polling query for an active import job. Polls every 2s while running. */
+export function importStatusQuery(isRunning: boolean) {
+  return queryOptions({
+    queryKey: queryKeys.memory.importStatus,
+    queryFn: api.getImportStatus,
+    refetchInterval: isRunning ? 2_000 : false,
+    retry: false,
+  });
+}
+
+export function useStartImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { source: import('./api').ImportJob['source']; dbPath: string }) =>
+      api.startMemoryImport(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.importStatus });
+    },
+  });
+}
+
+export function useCancelImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelImport(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.importStatus });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
     },
   });
 }
