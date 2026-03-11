@@ -467,11 +467,11 @@ export function MemoryImportView() {
       </div>
 
       {/* Step indicator */}
-      <div className="flex items-center gap-1" role="navigation" aria-label="Import wizard steps">
+      <nav className="flex items-center gap-1" aria-label="Import wizard steps">
         {([1, 2, 3, 4] as WizardStep[]).map((s) => (
           <StepIndicator key={s} step={s} current={step} />
         ))}
-      </div>
+      </nav>
 
       {/* Step content */}
       <div className="rounded-lg border border-border p-6">

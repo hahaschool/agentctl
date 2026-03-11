@@ -11,6 +11,7 @@ import { SessionMemoryTab } from '@/components/memory/SessionMemoryTab';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { SessionMemoryTab } from '@/components/memory/SessionMemoryTab';
 import { FetchingBar } from '../components/FetchingBar';
 import { FileBrowser } from '../components/FileBrowser';
 import { MessageInput } from '../components/MessageInput';

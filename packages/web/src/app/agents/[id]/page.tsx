@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import type { AgentFormEditData } from '@/components/AgentFormDialog';
 import { AgentFormDialog } from '@/components/AgentFormDialog';
+import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
