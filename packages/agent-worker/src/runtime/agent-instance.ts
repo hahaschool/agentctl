@@ -959,11 +959,16 @@ export class AgentInstance extends EventEmitter {
     const events = this.outputBuffer.getRecent(this.outputBuffer.size);
     const { commandsRun, toolUsageBreakdown, filesChanged } = summarizeToolUsage(events);
     const latestText =
-      this.state.resultText?.trim() || extractLatestTextOutput(events) || this.state.prompt?.trim() || '';
+      this.state.resultText?.trim() ||
+      extractLatestTextOutput(events) ||
+      this.state.prompt?.trim() ||
+      '';
     const executiveSummary =
       status === 'success'
         ? truncateSummaryText(latestText || 'Completed the requested run.')
-        : truncateSummaryText(errorMessage || latestText || 'Run failed before completing the requested work.');
+        : truncateSummaryText(
+            errorMessage || latestText || 'Run failed before completing the requested work.',
+          );
 
     const keyFindings: string[] = [];
     if (commandsRun > 0) {

@@ -585,8 +585,17 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
-      const { runId, status, errorMessage, costUsd, tokensIn, tokensOut, durationMs, sessionId, resultSummary } =
-        request.body;
+      const {
+        runId,
+        status,
+        errorMessage,
+        costUsd,
+        tokensIn,
+        tokensOut,
+        durationMs,
+        sessionId,
+        resultSummary,
+      } = request.body;
 
       if (!runId || typeof runId !== 'string') {
         return reply.code(400).send({

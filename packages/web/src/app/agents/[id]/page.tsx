@@ -841,11 +841,7 @@ function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null
   );
 }
 
-function ExecutionSummaryCard({
-  summary,
-}: {
-  summary: ExecutionSummary;
-}): React.JSX.Element {
+function ExecutionSummaryCard({ summary }: { summary: ExecutionSummary }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
