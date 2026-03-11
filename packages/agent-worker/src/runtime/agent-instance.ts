@@ -460,6 +460,52 @@ export class AgentInstance extends EventEmitter {
   }
 
   /**
+   * Inject a steering message into a running agent session.
+   *
+   * Steering allows the user to redirect or guide an agent that is currently
+   * executing, without stopping and restarting. The message is forwarded to
+   * the SDK via `streamInput()` when supported. In stub simulation mode the
+   * message is acknowledged but has no effect on execution.
+   *
+   * Emits `steer_sent` immediately and `steer_ack` once the input has been
+   * accepted (or rejected if the agent is not in a steerable state).
+   */
+  async steer(message: string): Promise<{ accepted: boolean; reason?: string }> {
+    const timestamp = new Date().toISOString();
+
+    if (this.state.status !== 'running') {
+      const reason = `Agent is not running (current status: ${this.state.status})`;
+      this.log.warn({ agentId: this.agentId, status: this.state.status }, reason);
+      this.emitEvent({
+        event: 'steer_ack',
+        data: { accepted: false, reason, timestamp },
+      });
+      return { accepted: false, reason };
+    }
+
+    this.emitEvent({
+      event: 'steer_sent',
+      data: { message, timestamp },
+    });
+
+    this.log.info(
+      { agentId: this.agentId, messageLength: message.length },
+      'Steering message injected',
+    );
+
+    // TODO: When the real Claude Agent SDK exposes `streamInput()`, call it
+    // here to forward the message into the active session. For now, the steer
+    // is acknowledged but has no effect on the stub simulation.
+
+    this.emitEvent({
+      event: 'steer_ack',
+      data: { accepted: true, timestamp },
+    });
+
+    return { accepted: true };
+  }
+
+  /**
    * Register a callback for agent events. This is a convenience wrapper
    * around the underlying EventEmitter so callers don't need to know
    * the event name.

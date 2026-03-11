@@ -585,7 +585,7 @@ export function ContextPickerDialog({
           </div>
 
           {/* Right panel */}
-          <div className="w-80 shrink-0 flex flex-col overflow-hidden">
+          <div className="w-full sm:w-80 shrink-0 flex flex-col overflow-hidden">
             {/* Tab toggle */}
             <div role="tablist" className="flex border-b border-border shrink-0">
               <button

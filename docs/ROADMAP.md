@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-11 (merged PRs #29 AgentOutputStream, #30 claude-mem migration, #31 memory cutover, #32 structured summary, #39 live summary streaming)
+> Last updated: 2026-03-11 (merged PRs #43 context budget, #44 theming normalization; prior: #29 AgentOutputStream, #30 claude-mem migration, #31 memory cutover, #32 structured summary, #39 live summary streaming)
 
 ## Current State
 
@@ -268,10 +268,10 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 > Impl plan: [plans/2026-03-10-unified-memory-layer-impl-plan.md](plans/2026-03-10-unified-memory-layer-impl-plan.md)
 >
 > Status note: Substantially delivered on `main` via PRs #30 (claude-mem
-> migration tooling: audit + import scripts for PG target) and #31 (memory
-> cutover: dual-backend `MemoryInjector` via `MEMORY_BACKEND` env var,
-> memory API routes with scope filtering, memory MCP server). Remaining
-> work is context budget fine-tuning and knowledge-engineering follow-through.
+> migration tooling), #31 (memory cutover: dual-backend `MemoryInjector`,
+> memory API routes, memory MCP server), and #43 (3-tier context budget:
+> pinned + on-demand + triggered injection with token/fact limits).
+> Remaining work is knowledge-engineering follow-through.
 
 PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolation (global > project > agent > session), pgvector + tsvector + graph traversal fused via Reciprocal Rank Fusion.
 
@@ -283,7 +283,7 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [x] `MemorySearch`: hybrid search (vector + BM25 + graph CTE + RRF fusion)
 - [x] `MemoryInjector` refactor: dual-backend (Mem0 / PG) via `MEMORY_BACKEND` env var
 - [x] Memory API routes: search, add, list, delete (with scope filtering)
-- [ ] Context budget: maxTokens 2400, maxFacts 20, 3-tier injection (pinned + on-demand + triggered)
+- [x] Context budget: maxTokens 2400, maxFacts 20, 3-tier injection (pinned + on-demand + triggered)
 - [x] Memory MCP server for runtime-side access
 - [x] Migration path: dual-write → import → cutover
 - [x] Claude-mem data migration: audit → import script (PG target) → API dual-read → UI migration → MCP transition → cleanup
@@ -391,17 +391,16 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [ ] `ErrorBanner.tsx` — add `role="alert"` for screen reader announcement
 - [ ] Decorative Lucide icons — audit and add `aria-hidden="true"` where missing
 
-#### 4.7.3 Theming Normalization (Kill AI Palette)
+#### 4.7.3 Theming Normalization (Kill AI Palette) ✅
 
-- [ ] `ProgressIndicator.tsx` — replace hard-coded `cyan-500/400/600` with `--color-primary` tokens
-- [ ] `SessionContent.tsx:419-461` — replace cyan/purple/yellow/blue toggles with semantic theme colors
-- [ ] `SessionMessageList.tsx:299` — same cyan replacement
-- [ ] `SettingsView.tsx:260-289` — extract 14 hard-coded hex colors into CSS variables or constants
-- [ ] `DashboardPage.tsx:228` — replace inline `style={{ color: '#ffffff' }}` with token
-- [ ] `terminal-theme.ts` — migrate 20 hard-coded xterm colors to CSS variable-backed config
-- [ ] Replace all `rgba(0,0,0,...)` shadows (6 instances in SettingsShell, SessionPreview, SessionsPage) with theme-aware values
-- [ ] `MemoryPanel.tsx:12` — fix gray-on-gray contrast (gray-600 on gray-500/10)
-- [ ] Reduce glassmorphism: keep `backdrop-blur` only on overlays (CommandPalette, Dialog), remove from SettingsShell, SettingsView decorative use
+- [x] `ProgressIndicator.tsx` — replace hard-coded `cyan-500/400/600` with `--color-primary` tokens
+- [x] `SessionMessageList.tsx:299` — same cyan replacement
+- [x] `SettingsView.tsx:260-289` — extract hard-coded hex colors into CSS variables
+- [x] `DashboardPage.tsx:228` — replace inline `style={{ color: '#ffffff' }}` with token
+- [x] `terminal-theme.ts` — migrate hard-coded xterm colors to CSS variable-backed config
+- [x] Replace `rgba(0,0,0,...)` shadows (SettingsShell, SessionPreview, SessionsPage) with theme-aware values
+- [x] `MemoryPanel.tsx:12` — fix gray-on-gray contrast
+- [x] CSS custom properties in `globals.css` for semantic theming
 
 #### 4.7.4 Responsive & Touch Target Hardening
 
@@ -643,9 +642,9 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
-| **P1** | Unified Memory Layer | 3.6 | Near-complete — injector/routes/MCP/migration landed; context budget tuning remains |
+| **P1** | Unified Memory Layer | 3.6 | Near-complete — injector/routes/MCP/migration/context budget landed; knowledge engineering remains |
 | **P1** | Unified Memory System UI | 4.8 | Foundation started — shell route, shared components (FactCard, ScopeBadge, ScopeSelector), placeholder view delivered |
-| **P1** | UI Quality & Accessibility | 4.7 | In progress — critical fixes + 4/9 ARIA items delivered; theming/responsive/perf remain |
+| **P1** | UI Quality & Accessibility | 4.7 | In progress — critical fixes + 4/9 ARIA items + theming normalization delivered; responsive/perf remain |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
@@ -692,7 +691,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | Item | Depends On | Notes |
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
-| Unified Memory Layer (P1) | None | Near-complete — injector/routes/MCP/migration all landed via PRs #30-#31; context budget tuning remains |
+| Unified Memory Layer (P1) | None | Near-complete — injector/routes/MCP/migration/context budget all landed via PRs #30-#31, #43; knowledge engineering remains |
 | Unified Memory System UI (P1) | Unified Memory Layer (§3.6) backend routes | Backend API routes build on existing MemoryStore/MemorySearch; UI pages can start with mock data while backend catches up |
 | UI Quality & Accessibility (P1) | None | Can start immediately — 2 critical, 11 high, 18 medium issues from audit |
 | ~~Execution Summary (P1)~~ | None | ✅ Delivered (PRs #32, #39) |

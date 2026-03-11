@@ -65,7 +65,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
         className={cn(
           'w-full flex items-center gap-3 border-b border-border transition-colors duration-100 text-left text-foreground font-[inherit]',
           'border-t-0 border-r-0',
-          isFlat ? 'px-4 py-2' : 'py-2 pr-4 pl-[44px]',
+          isFlat ? 'px-4 py-2 min-h-[44px]' : 'py-2 pr-4 pl-[44px] min-h-[44px]',
           isSelected
             ? 'bg-muted border-l-[3px] border-l-primary'
             : 'bg-background border-l-[3px] border-l-transparent hover:bg-accent/10',
@@ -91,11 +91,16 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
           onClick={() => onSelect(s.sessionId)}
           className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer bg-transparent border-none p-0 text-left text-foreground font-[inherit]"
         >
-          {/* Recency dot */}
+          {/* Recency dot — wrapped in 44x44 touch target */}
           <span
-            className={cn('w-[7px] h-[7px] rounded-full shrink-0 inline-block', dotClass)}
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] shrink-0"
             title={recencyTitle(s.lastActivity)}
-          />
+          >
+            <span
+              className={cn('w-[7px] h-[7px] rounded-full inline-block', dotClass)}
+              aria-hidden="true"
+            />
+          </span>
 
           {/* Summary */}
           <SimpleTooltip content={s.summary || 'Untitled'}>
@@ -160,7 +165,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
             disabled={isImporting}
             aria-label={`Import session ${s.sessionId.slice(0, 8)}`}
             className={cn(
-              'px-2.5 py-1 bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0 transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
+              'px-2.5 py-1 min-h-[32px] bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0 transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
               isImporting && 'opacity-50 cursor-not-allowed',
             )}
           >

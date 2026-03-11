@@ -541,6 +541,63 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     },
   );
 
+  // ---------------------------------------------------------------------------
+  // POST /api/agents/:id/steer — proxy steering message to worker
+  // ---------------------------------------------------------------------------
+
+  app.post<{
+    Params: { id: string };
+    Body: { message: string };
+    Querystring: { workerUrl?: string; machineId?: string };
+  }>(
+    '/:id/steer',
+    {
+      schema: {
+        tags: ['agents'],
+        summary: 'Inject a steering message into a running agent session',
+      },
+    },
+    async (request, reply) => {
+      const agentId = request.params.id;
+      const { message } = request.body;
+      const query = request.query;
+
+      if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        return reply.code(400).send({
+          error: 'INVALID_STEER_MESSAGE',
+          message: 'A non-empty "message" string is required',
+        });
+      }
+
+      if (message.length > 32_000) {
+        return reply.code(400).send({
+          error: 'STEER_MESSAGE_TOO_LONG',
+          message: 'Steering message must be under 32,000 characters',
+        });
+      }
+
+      const resolved = await resolveWorkerUrl(agentId, query, {
+        registry,
+        dbRegistry,
+        workerPort,
+      });
+      if (!resolved.ok) {
+        return reply
+          .status(resolved.status)
+          .send({ error: resolved.error, message: resolved.message });
+      }
+
+      const result = await proxyWorkerRequest({
+        workerBaseUrl: resolved.url,
+        path: `/api/agents/${encodeURIComponent(agentId)}/steer`,
+        method: 'POST',
+        body: request.body,
+      });
+
+      return replyWithProxyResult(reply, result);
+    },
+  );
+
   app.post<{ Params: { id: string }; Body: StopAgentRequest }>(
     '/:id/stop',
     { schema: { tags: ['agents'], summary: 'Stop an agent' } },
