@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 import { SHORTCUT_GROUPS } from '@/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
@@ -12,8 +12,6 @@ type Props = {
 };
 
 export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element | null {
-  const panelRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent): void => {
@@ -29,18 +27,18 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onClose}
-      aria-hidden="true"
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity"
+        onClick={onClose}
+        aria-label="Close keyboard shortcuts overlay"
+      />
 
       {/* Panel */}
       <div
-        ref={panelRef}
         role="dialog"
+        aria-modal="true"
         aria-label="Keyboard shortcuts"
         className={cn(
           'relative bg-card border border-border rounded-xl shadow-2xl',

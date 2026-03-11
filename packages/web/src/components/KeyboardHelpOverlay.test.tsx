@@ -42,6 +42,11 @@ describe('KeyboardHelpOverlay', () => {
       expect(screen.getByRole('dialog', { hidden: true })).toBeDefined();
     });
 
+    it('exposes the dialog to assistive tech when open', () => {
+      render(<KeyboardHelpOverlay open={true} onClose={vi.fn()} />);
+      expect(screen.getByRole('dialog')).toBeDefined();
+    });
+
     it('shows the heading "Keyboard Shortcuts"', () => {
       render(<KeyboardHelpOverlay open={true} onClose={vi.fn()} />);
       expect(screen.getByText('Keyboard Shortcuts')).toBeDefined();
@@ -94,9 +99,8 @@ describe('KeyboardHelpOverlay', () => {
 
     it('calls onClose when backdrop is clicked', () => {
       const onClose = vi.fn();
-      const { container } = render(<KeyboardHelpOverlay open={true} onClose={onClose} />);
-      // The outermost div is the backdrop wrapper
-      const backdrop = container.firstElementChild as HTMLElement;
+      render(<KeyboardHelpOverlay open={true} onClose={onClose} />);
+      const backdrop = screen.getByRole('button', { name: 'Close keyboard shortcuts overlay' });
       fireEvent.click(backdrop);
       expect(onClose).toHaveBeenCalledTimes(1);
     });

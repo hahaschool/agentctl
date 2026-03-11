@@ -2,7 +2,8 @@
 
 import { AlertTriangle, Bell, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Popover as PopoverPrimitive } from 'radix-ui';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { Notification, NotificationType } from '../hooks/use-notifications';
@@ -38,64 +39,73 @@ export function NotificationBell({
   onClearAll,
 }: NotificationBellProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const contentId = `notification-bell-popover-${useId().replaceAll(':', '')}`;
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent): void => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (contentRef.current?.contains(target) || triggerRef.current?.contains(target)) {
+        return;
       }
+      setOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [open]);
-
-  const toggle = useCallback(() => {
-    setOpen((prev) => !prev);
-  }, []);
 
   return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={toggle}
-        className={cn(
-          'relative text-lg text-muted-foreground hover:text-foreground transition-colors duration-150 px-1.5 py-0.5 rounded-md hover:bg-muted',
-          open && 'text-foreground bg-muted',
-        )}
-        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
-        title="Notifications"
-      >
-        <Bell size={16} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1 leading-none">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+      <PopoverPrimitive.Trigger asChild>
+        <button
+          ref={triggerRef}
+          type="button"
           className={cn(
-            'absolute bottom-full left-0 mb-2 w-80 max-h-96 bg-popover border border-border rounded-md shadow-lg flex flex-col z-50',
-            // On mobile, position differently
-            'md:left-0 md:bottom-full',
+            'relative rounded-md px-1.5 py-0.5 text-lg text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
+            open && 'bg-muted text-foreground',
+          )}
+          aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={contentId}
+          title="Notifications"
+        >
+          <Bell size={16} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] leading-none font-bold text-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </PopoverPrimitive.Trigger>
+
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          ref={contentRef}
+          id={contentId}
+          role="dialog"
+          aria-label="Notifications"
+          side="top"
+          align="start"
+          sideOffset={8}
+          onPointerDownOutside={() => setOpen(false)}
+          onEscapeKeyDown={() => setOpen(false)}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            const firstFocusable = contentRef.current?.querySelector<HTMLElement>('button');
+            firstFocusable?.focus();
+          }}
+          className={cn(
+            'z-50 flex max-h-96 w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-md border border-border bg-popover shadow-lg outline-none sm:w-80',
+            'data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
           )}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <span className="text-sm font-semibold text-foreground">Notifications</span>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
@@ -119,7 +129,6 @@ export function NotificationBell({
             </div>
           </div>
 
-          {/* Notification list */}
           <div className="flex-1 overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -130,7 +139,7 @@ export function NotificationBell({
                 <div
                   key={n.id}
                   className={cn(
-                    'flex items-start gap-2 px-3 py-2 border-b border-border/50 hover:bg-accent/5 transition-colors',
+                    'flex items-start gap-2 border-b border-border/50 px-3 py-2 transition-colors hover:bg-accent/5',
                     !n.read && 'bg-accent/10',
                   )}
                 >
@@ -140,7 +149,7 @@ export function NotificationBell({
                       <Icon size={14} className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])} />
                     );
                   })()}
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p
                       className={cn(
                         'text-sm leading-snug',
@@ -156,7 +165,7 @@ export function NotificationBell({
                   <button
                     type="button"
                     onClick={() => onMarkRead(n.id)}
-                    className="shrink-0 text-muted-foreground hover:text-foreground text-xs px-1 py-0.5 rounded hover:bg-muted transition-colors"
+                    className="shrink-0 rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     aria-label="Dismiss notification"
                     title={n.read ? 'Already read' : 'Mark as read'}
                   >
@@ -166,8 +175,8 @@ export function NotificationBell({
               ))
             )}
           </div>
-        </div>
-      )}
-    </div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 }

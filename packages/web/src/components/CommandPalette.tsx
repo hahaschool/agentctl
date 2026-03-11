@@ -21,7 +21,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from '@/components/Toast';
 
 import { fuzzyScore } from '@/lib/fuzzy-search';
@@ -113,6 +113,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const deleteSession = useDeleteSession();
+  const optionIdPrefix = useId().replaceAll(':', '');
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
@@ -430,6 +431,8 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
   if (!open) return null;
 
   let flatIndex = 0;
+  const activeOptionId =
+    filtered.length > 0 ? `${optionIdPrefix}-command-option-${activeIndex}` : undefined;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]">
@@ -471,6 +474,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           className="max-h-[360px] overflow-auto py-1"
           role="listbox"
           aria-label="Commands"
+          aria-activedescendant={activeOptionId}
         >
           {filtered.length === 0 && (
             <div className="px-4 py-6 text-center text-muted-foreground text-sm">
@@ -486,9 +490,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
               {items.map((cmd) => {
                 const idx = flatIndex++;
                 const isActive = idx === activeIndex;
+                const optionId = `${optionIdPrefix}-command-option-${idx}`;
                 return (
                   <button
                     key={cmd.id}
+                    id={optionId}
                     type="button"
                     role="option"
                     aria-selected={isActive}
