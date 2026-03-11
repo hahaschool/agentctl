@@ -582,7 +582,9 @@ describe('MemoryStore', () => {
       })
       // 4. detectSemanticContradictions: find similar facts
       .mockResolvedValueOnce({
-        rows: [{ id: 'similar-fact', content: 'Different but similar fact', cosine_similarity: 0.95 }],
+        rows: [
+          { id: 'similar-fact', content: 'Different but similar fact', cosine_similarity: 0.95 },
+        ],
         rowCount: 1,
       })
       // 5. detectSemanticContradictions: check existing contradicts edge (none)
