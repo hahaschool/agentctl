@@ -467,6 +467,60 @@ describe('api.preflightRuntimeSessionHandoff', () => {
   });
 });
 
+describe('api.getRuntimeSessionManualTakeover', () => {
+  it('calls GET /api/runtime-sessions/:id/manual-takeover', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ ok: true, manualTakeover: { workerSessionId: 'worker-1' } }),
+    );
+
+    await api.getRuntimeSessionManualTakeover('ms-1');
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/ms-1/manual-takeover');
+    expect(init?.method).toBeUndefined();
+  });
+});
+
+describe('api.startRuntimeSessionManualTakeover', () => {
+  it('calls POST /api/runtime-sessions/:id/manual-takeover with permission mode', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ ok: true, manualTakeover: { workerSessionId: 'worker-1' } }),
+    );
+
+    await api.startRuntimeSessionManualTakeover('ms-1', { permissionMode: 'plan' });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/ms-1/manual-takeover');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({ permissionMode: 'plan' });
+  });
+});
+
+describe('api.stopRuntimeSessionManualTakeover', () => {
+  it('calls DELETE /api/runtime-sessions/:id/manual-takeover', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ ok: true, manualTakeover: { workerSessionId: 'worker-1' } }),
+    );
+
+    await api.stopRuntimeSessionManualTakeover('ms-1');
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/runtime-sessions/ms-1/manual-takeover');
+    expect(init?.method).toBe('DELETE');
+  });
+
+  it('does not set Content-Type when no body is provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ ok: true, manualTakeover: { workerSessionId: 'worker-1' } }),
+    );
+
+    await api.stopRuntimeSessionManualTakeover('ms-1');
+
+    const [, init] = lastFetchCall();
+    expect((init?.headers as Record<string, string>)?.['Content-Type']).toBeUndefined();
+  });
+});
+
 describe('api.getSession', () => {
   it('calls GET /api/sessions/:id', async () => {
     const session = { id: 's1', status: 'running' };

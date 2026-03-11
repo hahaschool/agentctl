@@ -11,6 +11,7 @@ import { CodexRuntimeAdapter } from '../runtime/codex-runtime-adapter.js';
 import { CodexSessionManager } from '../runtime/codex-session-manager.js';
 import { RuntimeConfigApplier } from '../runtime/config/runtime-config-applier.js';
 import { HandoffController } from '../runtime/handoff-controller.js';
+import { RcSessionManager } from '../runtime/rc-session-manager.js';
 import { RuntimeRegistry } from '../runtime/runtime-registry.js';
 import { TerminalManager } from '../runtime/terminal-manager.js';
 import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
@@ -19,6 +20,7 @@ import { emergencyStopRoutes } from './routes/emergency-stop.js';
 import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
+import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
@@ -32,6 +34,7 @@ type CreateWorkerServerOptions = {
   machineId: string;
   controlPlaneUrl?: string;
   sessionManager?: CliSessionManager;
+  rcSessionManager?: RcSessionManager;
   maxTerminals?: number;
   runtimeConfigApplier?: RuntimeConfigApplier;
   runtimeRegistry?: RuntimeRegistry;
@@ -44,6 +47,7 @@ export async function createWorkerServer({
   machineId,
   controlPlaneUrl,
   sessionManager,
+  rcSessionManager,
   maxTerminals,
   runtimeConfigApplier = new RuntimeConfigApplier(),
   runtimeRegistry: externalRuntimeRegistry,
@@ -56,6 +60,12 @@ export async function createWorkerServer({
     logger,
     runtimeRegistry,
   });
+  const manualTakeoverManager =
+    rcSessionManager ??
+    new RcSessionManager({
+      logger,
+      machineId,
+    });
 
   // Register @fastify/websocket before any WebSocket route plugins.
   await app.register(fastifyWebsocket);
@@ -193,6 +203,12 @@ export async function createWorkerServer({
     logger,
   });
 
+  await app.register(manualTakeoverRoutes, {
+    prefix: '/api/runtime-sessions',
+    logger,
+    rcSessionManager: manualTakeoverManager,
+  });
+
   await app.register(fileRoutes, {
     prefix: '/api/files',
     logger,
@@ -244,6 +260,7 @@ export async function createWorkerServer({
 
   // --- Graceful shutdown: kill all terminals ---
   app.addHook('onClose', async () => {
+    await manualTakeoverManager.stopAll();
     terminalManager.killAll();
   });
 

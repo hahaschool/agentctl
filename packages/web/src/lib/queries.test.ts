@@ -18,6 +18,7 @@ import {
   runtimeConfigDriftQuery,
   runtimeHandoffSummaryQuery,
   runtimeSessionHandoffsQuery,
+  runtimeSessionManualTakeoverQuery,
   runtimeSessionPreflightQuery,
   runtimeSessionsQuery,
   sessionContentQuery,
@@ -91,6 +92,14 @@ describe('queryKeys', () => {
       'ms-123',
       'handoffs',
       10,
+    ]);
+  });
+
+  it('runtimeSessionManualTakeover key includes id', () => {
+    expect(queryKeys.runtimeSessionManualTakeover('ms-123')).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'manual-takeover',
     ]);
   });
 
@@ -280,6 +289,23 @@ describe('runtimeHandoffSummaryQuery', () => {
   it('has queryFn property', () => {
     const options = runtimeHandoffSummaryQuery(100);
     expect(options.queryFn).toBeDefined();
+  });
+});
+
+describe('runtimeSessionManualTakeoverQuery', () => {
+  it('returns queryOptions with manual takeover queryKey', () => {
+    const options = runtimeSessionManualTakeoverQuery('ms-123');
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessionManualTakeover('ms-123'));
+  });
+
+  it('has refetchOnWindowFocus enabled', () => {
+    const options = runtimeSessionManualTakeoverQuery('ms-123');
+    expect(options.refetchOnWindowFocus).toBe(true);
+  });
+
+  it('is disabled when no id is provided', () => {
+    const options = runtimeSessionManualTakeoverQuery('');
+    expect(options.enabled).toBe(false);
   });
 });
 

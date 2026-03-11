@@ -27,6 +27,68 @@ vi.mock('../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-server';
 
+describe('manual takeover route registration', () => {
+  let app: FastifyInstance;
+  let pool: AgentPool;
+  let rcSessionManager: {
+    startSession: ReturnType<typeof vi.fn>;
+    getSessionByNativeSessionId: ReturnType<typeof vi.fn>;
+    getSessionByProjectPath: ReturnType<typeof vi.fn>;
+    stopSession: ReturnType<typeof vi.fn>;
+    stopAll: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(async () => {
+    const logger = createSilentLogger();
+    pool = new AgentPool({ logger, maxConcurrent: 3 });
+    rcSessionManager = {
+      startSession: vi.fn(async () => ({
+        id: 'rc-1',
+        agentId: 'agent-1',
+        pid: 1234,
+        sessionUrl: 'https://claude.ai/code/session-123',
+        nativeSessionId: 'claude-native-1',
+        status: 'online',
+        permissionMode: 'default',
+        projectPath: '/workspace/app',
+        startedAt: new Date('2026-03-11T10:00:00Z'),
+        lastHeartbeat: new Date('2026-03-11T10:00:10Z'),
+        error: null,
+      })),
+      getSessionByNativeSessionId: vi.fn(() => null),
+      getSessionByProjectPath: vi.fn(() => null),
+      stopSession: vi.fn(async () => undefined),
+      stopAll: vi.fn(async () => undefined),
+    };
+    app = await createWorkerServer({
+      logger,
+      agentPool: pool,
+      machineId: MACHINE_ID,
+      rcSessionManager: rcSessionManager as never,
+    });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await pool.stopAll();
+    await app.close();
+  });
+
+  it('registers manual takeover routes on the worker server', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/claude-native-1/manual-takeover',
+      payload: {
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().manualTakeover.workerSessionId).toBe('rc-1');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Global error handler — WorkerError, AgentError, validation, generic errors
 // ---------------------------------------------------------------------------

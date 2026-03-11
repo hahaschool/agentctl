@@ -13,6 +13,20 @@ export const MANAGED_SESSION_STATUSES = [
 
 export type ManagedSessionStatus = (typeof MANAGED_SESSION_STATUSES)[number];
 
+export const MANUAL_TAKEOVER_STATUSES = [
+  'starting',
+  'online',
+  'reconnecting',
+  'stopped',
+  'error',
+] as const;
+
+export type ManualTakeoverStatus = (typeof MANUAL_TAKEOVER_STATUSES)[number];
+
+export const MANUAL_TAKEOVER_PERMISSION_MODES = ['default', 'accept-edits', 'plan'] as const;
+
+export type ManualTakeoverPermissionMode = (typeof MANUAL_TAKEOVER_PERMISSION_MODES)[number];
+
 export const HANDOFF_STRATEGIES = ['native-import', 'snapshot-handoff'] as const;
 
 export type HandoffStrategy = (typeof HANDOFF_STRATEGIES)[number];
@@ -87,6 +101,19 @@ export type ManagedSession = {
   metadata: Record<string, unknown>;
 };
 
+export type ManualTakeoverState = {
+  workerSessionId: string;
+  nativeSessionId: string;
+  projectPath: string;
+  status: ManualTakeoverStatus;
+  permissionMode: ManualTakeoverPermissionMode;
+  sessionUrl: string | null;
+  startedAt: string;
+  lastHeartbeat: string | null;
+  lastVerifiedAt: string | null;
+  error: string | null;
+};
+
 export type HandoffSnapshot = {
   sourceRuntime: ManagedRuntime;
   sourceSessionId: string;
@@ -112,6 +139,16 @@ export function isManagedRuntime(value: string): value is ManagedRuntime {
 
 export function isManagedSessionStatus(value: string): value is ManagedSessionStatus {
   return (MANAGED_SESSION_STATUSES as readonly string[]).includes(value);
+}
+
+export function isManualTakeoverStatus(value: string): value is ManualTakeoverStatus {
+  return (MANUAL_TAKEOVER_STATUSES as readonly string[]).includes(value);
+}
+
+export function isManualTakeoverPermissionMode(
+  value: string,
+): value is ManualTakeoverPermissionMode {
+  return (MANUAL_TAKEOVER_PERMISSION_MODES as readonly string[]).includes(value);
 }
 
 export function isHandoffStrategy(value: string): value is HandoffStrategy {

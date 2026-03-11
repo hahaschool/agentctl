@@ -3,6 +3,8 @@ import type {
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
+  ManualTakeoverPermissionMode,
+  ManualTakeoverState,
 } from '../types/runtime-management.js';
 
 export type RuntimeCapabilityState = {
@@ -66,4 +68,14 @@ export type HandoffManagedSessionRequest = {
 export type ManagedSessionResponse = {
   ok: true;
   session: ManagedSession;
+};
+
+// Valid only for Claude managed runtime sessions in the first manual takeover slice.
+export type StartManualTakeoverRequest = {
+  permissionMode?: ManualTakeoverPermissionMode | null;
+};
+
+export type ManualTakeoverResponse = {
+  ok: true;
+  manualTakeover: ManualTakeoverState | null;
 };

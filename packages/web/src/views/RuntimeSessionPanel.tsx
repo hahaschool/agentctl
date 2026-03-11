@@ -24,15 +24,23 @@ import { PathBadge } from '@/components/PathBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
-import type { Machine, RuntimeSession, RuntimeSessionHandoff } from '../lib/api';
+import type {
+  Machine,
+  RuntimeSession,
+  RuntimeSessionHandoff,
+  RuntimeSessionManualTakeover,
+} from '../lib/api';
 import { formatDateTime, formatDuration, timeAgo, truncate } from '../lib/format-utils';
 import {
   machinesQuery,
   runtimeSessionHandoffsQuery,
+  runtimeSessionManualTakeoverQuery,
   runtimeSessionPreflightQuery,
   useForkRuntimeSession,
   useHandoffRuntimeSession,
   useResumeRuntimeSession,
+  useStartRuntimeSessionManualTakeover,
+  useStopRuntimeSessionManualTakeover,
 } from '../lib/queries';
 
 const RUNTIME_OPTIONS = [
@@ -84,6 +92,15 @@ function formatSourceStorage(sourceStorage: Record<string, unknown>): string | n
   if (typeof sourceStorage.sessionPath === 'string') return sourceStorage.sessionPath;
   if (typeof sourceStorage.rootPath === 'string') return sourceStorage.rootPath;
   return null;
+}
+
+function extractManualTakeoverState(
+  metadata: Record<string, unknown> | null | undefined,
+): RuntimeSessionManualTakeover | null {
+  const candidate = metadata?.manualTakeover;
+  return typeof candidate === 'object' && candidate !== null
+    ? (candidate as RuntimeSessionManualTakeover)
+    : null;
 }
 
 function describeNativeImportAttempt(attempt?: {
@@ -254,6 +271,9 @@ export function RuntimeSessionPanel({
     useState<RuntimeSession['runtime']>('claude-code');
   const [handoffMachineId, setHandoffMachineId] = useState('');
   const [handoffPrompt, setHandoffPrompt] = useState('');
+  const [manualTakeoverPermissionMode, setManualTakeoverPermissionMode] = useState<
+    'default' | 'accept-edits' | 'plan'
+  >('default');
   const [handoffHistoryFilter, setHandoffHistoryFilter] = useState<
     'all' | 'native-import' | 'fallback' | 'failed'
   >('all');
@@ -268,6 +288,11 @@ export function RuntimeSessionPanel({
     [availableMachines],
   );
   const handoffs = useQuery(runtimeSessionHandoffsQuery(selectedSession?.id ?? '', 20));
+  const manualTakeoverQuery = useQuery(
+    runtimeSessionManualTakeoverQuery(
+      selectedSession?.runtime === 'claude-code' ? (selectedSession?.id ?? '') : '',
+    ),
+  );
   const preflight = useQuery(
     runtimeSessionPreflightQuery(selectedSession?.id ?? '', {
       targetRuntime: handoffTargetRuntime,
@@ -277,8 +302,24 @@ export function RuntimeSessionPanel({
   const resumeMutation = useResumeRuntimeSession();
   const forkMutation = useForkRuntimeSession();
   const handoffMutation = useHandoffRuntimeSession();
+  const startManualTakeoverMutation = useStartRuntimeSessionManualTakeover();
+  const stopManualTakeoverMutation = useStopRuntimeSessionManualTakeover();
 
   const metadataSummary = selectedSession ? summarizeMetadata(selectedSession.metadata) : [];
+  const manualTakeoverResponse = manualTakeoverQuery.data as
+    | { manualTakeover?: RuntimeSessionManualTakeover | null }
+    | undefined;
+  const manualTakeover =
+    manualTakeoverResponse !== undefined
+      ? (manualTakeoverResponse.manualTakeover ?? null)
+      : extractManualTakeoverState(selectedSession?.metadata);
+  const hasManualTakeover =
+    manualTakeover !== null &&
+    manualTakeover.status !== 'stopped' &&
+    !(manualTakeover.status === 'error' && !manualTakeover.sessionUrl);
+  const canManualTakeover = Boolean(
+    selectedSession?.runtime === 'claude-code' && selectedSession.nativeSessionId,
+  );
   const canHandoff = Boolean(
     selectedSession?.nativeSessionId &&
       (selectedSession.status === 'active' || selectedSession.status === 'paused'),
@@ -338,6 +379,15 @@ export function RuntimeSessionPanel({
     setForkMachineId(preferredMachineId);
     setHandoffMachineId(preferredMachineId);
   }, [availableMachines, selectedSession]);
+
+  useEffect(() => {
+    if (!selectedSession || selectedSession.runtime !== 'claude-code') {
+      setManualTakeoverPermissionMode('default');
+      return;
+    }
+
+    setManualTakeoverPermissionMode(manualTakeover?.permissionMode ?? 'default');
+  }, [manualTakeover?.permissionMode, selectedSession]);
 
   const invalidateRuntimeQueries = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['runtime-sessions'] });
@@ -445,6 +495,73 @@ export function RuntimeSessionPanel({
     selectedSession,
     toast,
   ]);
+
+  const handleStartManualTakeover = useCallback(async () => {
+    if (!selectedSession || !canManualTakeover) {
+      toast.error('Manual takeover requires a Claude session with a native session id');
+      return;
+    }
+
+    try {
+      await startManualTakeoverMutation.mutateAsync({
+        id: selectedSession.id,
+        permissionMode: manualTakeoverPermissionMode,
+      });
+      toast.success('Manual takeover is ready in Claude Remote Control');
+      invalidateRuntimeQueries();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to start manual takeover');
+    }
+  }, [
+    canManualTakeover,
+    invalidateRuntimeQueries,
+    manualTakeoverPermissionMode,
+    selectedSession,
+    startManualTakeoverMutation,
+    toast,
+  ]);
+
+  const handleOpenManualTakeover = useCallback(() => {
+    if (!manualTakeover?.sessionUrl) {
+      toast.error('No manual takeover URL is available yet');
+      return;
+    }
+
+    window.open(manualTakeover.sessionUrl, '_blank', 'noopener,noreferrer');
+  }, [manualTakeover?.sessionUrl, toast]);
+
+  const handleCopyManualTakeoverUrl = useCallback(async () => {
+    if (!manualTakeover?.sessionUrl) {
+      toast.error('No manual takeover URL is available yet');
+      return;
+    }
+
+    if (!('clipboard' in navigator) || typeof navigator.clipboard?.writeText !== 'function') {
+      toast.error('Clipboard access is unavailable in this browser');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(manualTakeover.sessionUrl);
+      toast.success('Manual takeover URL copied');
+    } catch {
+      toast.error('Failed to copy manual takeover URL');
+    }
+  }, [manualTakeover?.sessionUrl, toast]);
+
+  const handleStopManualTakeover = useCallback(async () => {
+    if (!selectedSession?.id) {
+      return;
+    }
+
+    try {
+      await stopManualTakeoverMutation.mutateAsync({ id: selectedSession.id });
+      toast.success('Manual takeover revoked');
+      invalidateRuntimeQueries();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to revoke manual takeover');
+    }
+  }, [invalidateRuntimeQueries, selectedSession?.id, stopManualTakeoverMutation, toast]);
 
   return (
     <section className="rounded-xl border border-border bg-card overflow-hidden">
@@ -662,6 +779,125 @@ export function RuntimeSessionPanel({
               </div>
             </div>
           </div>
+
+          {selectedSession.runtime === 'claude-code' && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-foreground">Manual Takeover</div>
+              <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                <div className="text-xs text-muted-foreground">
+                  Opens this Claude session in Claude Remote Control for operator intervention. This
+                  is a sidecar surface and does not replace the managed runtime backend.
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <label className="space-y-1.5 text-sm text-muted-foreground">
+                    <span>Takeover permission mode</span>
+                    <select
+                      aria-label="Takeover permission mode"
+                      value={manualTakeoverPermissionMode}
+                      disabled={
+                        !canManualTakeover ||
+                        hasManualTakeover ||
+                        startManualTakeoverMutation.isPending
+                      }
+                      onChange={(event) =>
+                        setManualTakeoverPermissionMode(
+                          event.target.value as 'default' | 'accept-edits' | 'plan',
+                        )
+                      }
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="default">Default</option>
+                      <option value="accept-edits">Accept edits</option>
+                      <option value="plan">Plan</option>
+                    </select>
+                  </label>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={manualTakeover?.status ?? 'idle'} />
+                      <span className="text-xs text-muted-foreground">
+                        {manualTakeover
+                          ? `Last verified ${timeAgo(manualTakeover.lastVerifiedAt ?? manualTakeover.startedAt)}`
+                          : 'No active manual takeover'}
+                      </span>
+                    </div>
+                    {manualTakeover && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-lg border border-border bg-card/60 p-3">
+                          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            Worker Session
+                          </div>
+                          <div className="mt-2 text-sm text-foreground break-all">
+                            {manualTakeover.workerSessionId}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-card/60 p-3">
+                          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            Heartbeat
+                          </div>
+                          <div className="mt-2 text-sm text-foreground">
+                            {manualTakeover.lastHeartbeat
+                              ? timeAgo(manualTakeover.lastHeartbeat)
+                              : 'Not available'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {manualTakeover?.error && (
+                      <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-500">
+                        {manualTakeover.error}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {hasManualTakeover ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleOpenManualTakeover}
+                            disabled={!manualTakeover?.sessionUrl}
+                            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyManualTakeoverUrl()}
+                            disabled={!manualTakeover?.sessionUrl}
+                            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Copy URL
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleStopManualTakeover()}
+                            disabled={stopManualTakeoverMutation.isPending}
+                            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {stopManualTakeoverMutation.isPending ? 'Revoking...' : 'Revoke'}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleStartManualTakeover()}
+                          disabled={!canManualTakeover || startManualTakeoverMutation.isPending}
+                          className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {startManualTakeoverMutation.isPending
+                            ? 'Starting...'
+                            : 'Start Manual Takeover'}
+                        </button>
+                      )}
+                    </div>
+                    {!canManualTakeover && (
+                      <div className="text-xs text-muted-foreground">
+                        Manual takeover requires a Claude session with a native session id.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">

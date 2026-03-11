@@ -22,6 +22,8 @@ import type {
   ManagedRuntimeConfig,
   ManagedSession,
   ManagedSessionStatus,
+  ManualTakeoverResponse,
+  ManualTakeoverState,
   MemoryObservation,
   NativeImportAttempt,
   NativeImportPreflightResponse,
@@ -30,6 +32,7 @@ import type {
   RuntimeConfigSyncResponse,
   RuntimeHandoffSummaryResponse,
   ApiAccount as SharedApiAccount,
+  StartManualTakeoverRequest,
 } from '@agentctl/shared';
 
 export type { AgentConfig };
@@ -168,6 +171,7 @@ export type RuntimeSessionHandoffsPage = {
 };
 
 export type RuntimeHandoffSummary = RuntimeHandoffSummaryResponse;
+export type RuntimeSessionManualTakeover = ManualTakeoverState;
 
 export type RuntimeConfigDefaultsResponse = {
   version: number;
@@ -503,6 +507,25 @@ export const api = {
       `/api/runtime-sessions/${encodeURIComponent(id)}/handoff/preflight?${qs}`,
     );
   },
+  getRuntimeSessionManualTakeover: (id: string) =>
+    request<ManualTakeoverResponse>(
+      `/api/runtime-sessions/${encodeURIComponent(id)}/manual-takeover`,
+    ),
+  startRuntimeSessionManualTakeover: (id: string, body: StartManualTakeoverRequest = {}) =>
+    request<ManualTakeoverResponse>(
+      `/api/runtime-sessions/${encodeURIComponent(id)}/manual-takeover`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    ),
+  stopRuntimeSessionManualTakeover: (id: string) =>
+    request<ManualTakeoverResponse>(
+      `/api/runtime-sessions/${encodeURIComponent(id)}/manual-takeover`,
+      {
+        method: 'DELETE',
+      },
+    ),
   createSession: (body: {
     agentId: string;
     machineId: string;

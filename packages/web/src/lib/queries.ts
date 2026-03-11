@@ -45,6 +45,8 @@ export const queryKeys = {
     limit !== undefined
       ? (['runtime-sessions', id, 'handoffs', limit] as const)
       : (['runtime-sessions', id, 'handoffs'] as const),
+  runtimeSessionManualTakeover: (id: string) =>
+    ['runtime-sessions', id, 'manual-takeover'] as const,
   runtimeSessionPreflight: (id: string, targetRuntime: string, targetMachineId?: string) =>
     targetMachineId
       ? (['runtime-sessions', id, 'preflight', targetRuntime, targetMachineId] as const)
@@ -182,6 +184,16 @@ export function runtimeSessionHandoffsQuery(id: string, limit?: number) {
   return queryOptions({
     queryKey: queryKeys.runtimeSessionHandoffs(id, limit),
     queryFn: () => api.listRuntimeSessionHandoffs(id, limit),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionManualTakeoverQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessionManualTakeover(id),
+    queryFn: () => api.getRuntimeSessionManualTakeover(id),
     enabled: !!id,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
@@ -509,6 +521,38 @@ export function useHandoffRuntimeSession() {
     } & Parameters<typeof api.handoffRuntimeSession>[1]) => api.handoffRuntimeSession(id, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+    },
+  });
+}
+
+export function useStartRuntimeSessionManualTakeover() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+    } & Parameters<typeof api.startRuntimeSessionManualTakeover>[1]) =>
+      api.startRuntimeSessionManualTakeover(id, body),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeSessionManualTakeover(variables.id),
+      });
+    },
+  });
+}
+
+export function useStopRuntimeSessionManualTakeover() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => api.stopRuntimeSessionManualTakeover(id),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeSessionManualTakeover(variables.id),
+      });
     },
   });
 }

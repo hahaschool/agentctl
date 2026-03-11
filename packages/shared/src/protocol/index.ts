@@ -48,10 +48,12 @@ export type {
   ForkManagedSessionRequest,
   HandoffManagedSessionRequest,
   ManagedSessionResponse,
+  ManualTakeoverResponse,
   ResumeManagedSessionRequest,
   RuntimeCapabilityState,
   RuntimeConfigSyncRequest,
   RuntimeConfigSyncResponse,
+  StartManualTakeoverRequest,
 } from './runtime-management.js';
 export type { WsClientMessage, WsServerMessage } from './ws-messages.js';
 export {

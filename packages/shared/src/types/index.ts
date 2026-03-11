@@ -57,6 +57,9 @@ export type {
   ManagedSession,
   ManagedSessionStatus,
   ManagedSkill,
+  ManualTakeoverPermissionMode,
+  ManualTakeoverState,
+  ManualTakeoverStatus,
 } from './runtime-management.js';
 export {
   HANDOFF_REASONS,
@@ -64,8 +67,12 @@ export {
   isHandoffStrategy,
   isManagedRuntime,
   isManagedSessionStatus,
+  isManualTakeoverPermissionMode,
+  isManualTakeoverStatus,
   MANAGED_RUNTIMES,
   MANAGED_SESSION_STATUSES,
+  MANUAL_TAKEOVER_PERMISSION_MODES,
+  MANUAL_TAKEOVER_STATUSES,
 } from './runtime-management.js';
 export type {
   ReplayEvent,
