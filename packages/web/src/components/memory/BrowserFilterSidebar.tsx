@@ -94,7 +94,10 @@ export function BrowserFilterSidebar({
           Search
         </h3>
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
+          <SearchIcon
+            className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
             placeholder="Search facts..."
             value={filters.q}

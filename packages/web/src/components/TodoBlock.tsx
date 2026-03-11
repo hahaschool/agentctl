@@ -43,7 +43,11 @@ export function TodoBlock({ content, timestamp }: TodoBlockProps): React.JSX.Ele
   return (
     <div className="px-3 py-2 rounded-lg border-l-[3px] bg-blue-500/[0.06] border-l-blue-400/60">
       <div className="flex items-center gap-2 mb-1.5">
-        <ListTodo size={12} className="text-blue-600 dark:text-blue-400 shrink-0" aria-hidden="true" />
+        <ListTodo
+          size={12}
+          className="text-blue-600 dark:text-blue-400 shrink-0"
+          aria-hidden="true"
+        />
         <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">Tasks</span>
         <span className="text-[10px] text-muted-foreground">
           {completed}/{todos.length} complete
@@ -62,7 +66,11 @@ export function TodoBlock({ content, timestamp }: TodoBlockProps): React.JSX.Ele
                 aria-hidden="true"
               />
             ) : (
-              <Circle size={13} className="shrink-0 mt-0.5 text-muted-foreground" aria-hidden="true" />
+              <Circle
+                size={13}
+                className="shrink-0 mt-0.5 text-muted-foreground"
+                aria-hidden="true"
+              />
             )}
             <span
               className={cn(

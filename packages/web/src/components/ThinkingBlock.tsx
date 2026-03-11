@@ -21,8 +21,16 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
         onClick={() => setExpanded(true)}
         className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-left font-[inherit] border-none border-l-2 bg-purple-500/[0.06] border-l-purple-400/60"
       >
-        <ChevronRight size={12} className="text-purple-600 dark:text-purple-400 shrink-0" aria-hidden="true" />
-        <Brain size={12} className="text-purple-600 dark:text-purple-400 shrink-0" aria-hidden="true" />
+        <ChevronRight
+          size={12}
+          className="text-purple-600 dark:text-purple-400 shrink-0"
+          aria-hidden="true"
+        />
+        <Brain
+          size={12}
+          className="text-purple-600 dark:text-purple-400 shrink-0"
+          aria-hidden="true"
+        />
         <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 shrink-0">
           Thinking
         </span>
