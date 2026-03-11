@@ -21,7 +21,7 @@ const DECISION_PATTERNS = [
 ];
 
 /** Matches file paths in message content (absolute or relative paths with extensions). */
-const FILE_PATH_REGEX = /(?:^|\s)((?:\/[\w.\-/]+|[\w.\-]+\/[\w.\-/]+)(?:\.\w{1,10})?)/gm;
+const FILE_PATH_REGEX = /(?:^|\s)((?:\/[\w./-]+|[\w.-]+\/[\w./-]+)(?:\.\w{1,10})?)/gm;
 
 /** Matches recognised Claude Code tool names referenced in message content. */
 const TOOL_NAME_REGEX = /\b(Read|Write|Edit|Bash|Glob|Grep|Task|WebFetch|WebSearch)\b/g;
@@ -100,9 +100,7 @@ export function findByTopicIndices(
 
 function extractFilePaths(content: string): string[] {
   const found = new Set<string>();
-  const re = new RegExp(FILE_PATH_REGEX.source, FILE_PATH_REGEX.flags);
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(content)) !== null) {
+  for (const match of content.matchAll(FILE_PATH_REGEX)) {
     const path = match[1];
     if (path) found.add(path);
   }
@@ -111,9 +109,7 @@ function extractFilePaths(content: string): string[] {
 
 function extractToolNames(content: string): string[] {
   const found = new Set<string>();
-  const re = new RegExp(TOOL_NAME_REGEX.source, TOOL_NAME_REGEX.flags);
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(content)) !== null) {
+  for (const match of content.matchAll(TOOL_NAME_REGEX)) {
     const name = match[1];
     if (name) found.add(name);
   }
@@ -163,8 +159,7 @@ export function findRelatedMessages(
 
     const sharesFilePath =
       anchorFilePaths.size > 0 && filePaths.some((p) => anchorFilePaths.has(p));
-    const sharesTool =
-      anchorToolNames.size > 0 && toolNames.some((t) => anchorToolNames.has(t));
+    const sharesTool = anchorToolNames.size > 0 && toolNames.some((t) => anchorToolNames.has(t));
 
     if (sharesFilePath || sharesTool) {
       relatedIndices.add(i);
