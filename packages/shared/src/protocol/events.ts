@@ -92,6 +92,23 @@ export type AgentSafetyEvent = {
   };
 };
 
+export type SteerSentEvent = {
+  event: 'steer_sent';
+  data: {
+    message: string;
+    timestamp: string;
+  };
+};
+
+export type SteerAckEvent = {
+  event: 'steer_ack';
+  data: {
+    accepted: boolean;
+    reason?: string;
+    timestamp: string;
+  };
+};
+
 export type AgentEvent =
   | AgentOutputEvent
   | AgentRawOutputEvent
@@ -103,7 +120,9 @@ export type AgentEvent =
   | LoopCompleteEvent
   | AgentUserMessageEvent
   | AgentExecutionSummaryEvent
-  | AgentSafetyEvent;
+  | AgentSafetyEvent
+  | SteerSentEvent
+  | SteerAckEvent;
 
 // ---------------------------------------------------------------------------
 // Session content messages — parsed from JSONL session files and served via

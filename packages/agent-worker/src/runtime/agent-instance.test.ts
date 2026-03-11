@@ -1481,4 +1481,72 @@ describe('AgentInstance', () => {
       expect(loggerInstance.write).toHaveBeenCalledWith(auditEntry);
     });
   });
+
+  // ── steer() ─────────────────────────────────────────────────────
+
+  describe('steer()', () => {
+    it('rejects steering when the agent is not running', async () => {
+      const agent = new AgentInstance(makeOptions());
+      const events: AgentEvent[] = [];
+      agent.onEvent((event) => events.push(event));
+
+      const result = await agent.steer('adjust focus');
+
+      expect(result.accepted).toBe(false);
+      expect(result.reason).toContain('not running');
+
+      const ackEvents = events.filter((e) => e.event === 'steer_ack');
+      expect(ackEvents).toHaveLength(1);
+      expect(ackEvents[0].data).toMatchObject({
+        accepted: false,
+      });
+    });
+
+    it('accepts a steering message when the agent is running', async () => {
+      const agent = new AgentInstance(makeOptions());
+      const events: AgentEvent[] = [];
+      agent.onEvent((event) => events.push(event));
+
+      const startPromise = agent.start('initial task');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(agent.getStatus()).toBe('running');
+
+      const result = await agent.steer('please focus on tests');
+
+      expect(result.accepted).toBe(true);
+      expect(result.reason).toBeUndefined();
+
+      const steerSent = events.filter((e) => e.event === 'steer_sent');
+      expect(steerSent).toHaveLength(1);
+      expect(steerSent[0].data).toMatchObject({
+        message: 'please focus on tests',
+      });
+
+      const steerAck = events.filter((e) => e.event === 'steer_ack');
+      expect(steerAck).toHaveLength(1);
+      expect(steerAck[0].data).toMatchObject({
+        accepted: true,
+      });
+
+      await agent.stop(false);
+      vi.runAllTimers();
+      await startPromise;
+    });
+
+    it('rejects steering after the agent has been stopped', async () => {
+      const agent = new AgentInstance(makeOptions());
+
+      const startPromise = agent.start('test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      await agent.stop(false);
+      vi.runAllTimers();
+      await startPromise;
+
+      const result = await agent.steer('too late');
+
+      expect(result.accepted).toBe(false);
+      expect(result.reason).toContain('not running');
+    });
+  });
 });

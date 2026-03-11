@@ -28,6 +28,8 @@ export type {
   ContentMessageType,
   LoopCompleteEvent,
   LoopIterationEvent,
+  SteerAckEvent,
+  SteerSentEvent,
 } from './events.js';
 export type {
   ExportHandoffSnapshotRequest,

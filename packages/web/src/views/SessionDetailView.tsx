@@ -15,6 +15,7 @@ import { FileBrowser } from '../components/FileBrowser';
 import { MessageInput } from '../components/MessageInput';
 import { SessionHeader } from '../components/SessionHeader';
 import { MessageList, ViewModeToggle } from '../components/SessionMessageList';
+import { SteerInput } from '../components/SteerInput';
 import { TerminalView } from '../components/TerminalView';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
@@ -262,8 +263,12 @@ export function SessionDetailView(): React.JSX.Element {
             </div>
           )}
 
-          {/* Input area */}
-          <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
+          {/* Input area — steer (agent) or message (session) */}
+          {isActive && s.agentId ? (
+            <SteerInput agentId={s.agentId} isRunning={isActive} />
+          ) : (
+            <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
+          )}
         </div>
 
         {/* File browser panel */}

@@ -411,6 +411,11 @@ export const api = {
     request<{ ok: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
+  steerAgent: (id: string, message: string) =>
+    request<{ ok: boolean; accepted: boolean; reason?: string }>(`/api/agents/${id}/steer`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
   updateAgent: (
     id: string,
     body: {

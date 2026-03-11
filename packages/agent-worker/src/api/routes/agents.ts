@@ -39,6 +39,10 @@ type StopAgentBody = {
   graceful?: boolean;
 };
 
+type SteerAgentBody = {
+  message: string;
+};
+
 type SafetyDecisionBody = SafetyDecisionRequest;
 
 type AgentIdParams = {
@@ -53,6 +57,7 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   AGENT_STILL_RUNNING: 409,
   SAFETY_BLOCKED: 409,
   SAFETY_DECISION_NOT_PENDING: 409,
+  STEER_NOT_RUNNING: 409,
 };
 
 function errorToStatusCode(err: unknown): number {
@@ -251,6 +256,52 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
           agentId: id,
           sessionId: instance.getSessionId(),
           status: instance.getStatus(),
+        });
+      } catch (err) {
+        const statusCode = errorToStatusCode(err);
+        return reply.status(statusCode).send(errorToResponse(err));
+      }
+    },
+  );
+
+  // POST /api/agents/:id/steer — inject steering guidance into a running agent
+  app.post<{ Params: AgentIdParams; Body: SteerAgentBody }>(
+    '/:id/steer',
+    async (request, reply) => {
+      const { id } = request.params;
+      const { message } = request.body ?? {};
+
+      if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        return reply.status(400).send({
+          error: 'A non-empty "message" string is required',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      if (message.length > 32_000) {
+        return reply.status(400).send({
+          error: 'STEER_MESSAGE_TOO_LONG',
+          message: 'Steering message must be under 32,000 characters',
+        });
+      }
+
+      const instance = pool.getAgent(id);
+
+      if (!instance) {
+        return reply.status(404).send({
+          error: `Agent '${id}' not found`,
+          code: 'AGENT_NOT_FOUND',
+        });
+      }
+
+      try {
+        const result = await instance.steer(message);
+
+        return reply.status(200).send({
+          ok: result.accepted,
+          agentId: id,
+          accepted: result.accepted,
+          ...(result.reason ? { reason: result.reason } : {}),
         });
       } catch (err) {
         const statusCode = errorToStatusCode(err);

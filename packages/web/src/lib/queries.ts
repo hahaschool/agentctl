@@ -474,6 +474,13 @@ export function useSendMessage() {
   });
 }
 
+export function useSteerAgent() {
+  return useMutation({
+    mutationFn: ({ agentId, message }: { agentId: string; message: string }) =>
+      api.steerAgent(agentId, message),
+  });
+}
+
 export function useDeleteSession() {
   const queryClient = useQueryClient();
   return useMutation({
