@@ -31,21 +31,21 @@ const REPORT_CONFIGS: readonly ReportCardConfig[] = [
     title: 'Project Progress',
     description:
       'Summarise completed milestones, open tasks, and upcoming priorities extracted from memory.',
-    icon: <CheckCircle2Icon className="size-4" />,
+    icon: <CheckCircle2Icon className="size-4" aria-hidden="true" />,
   },
   {
     type: 'knowledge-health',
     title: 'Knowledge Health',
     description:
       'Analyse confidence distribution, staleness, and coverage gaps across stored facts.',
-    icon: <HeartPulseIcon className="size-4" />,
+    icon: <HeartPulseIcon className="size-4" aria-hidden="true" />,
   },
   {
     type: 'activity-digest',
     title: 'Activity Digest',
     description:
       'Digest of agent activity, tool usage patterns, and notable events over the selected period.',
-    icon: <ActivityIcon className="size-4" />,
+    icon: <ActivityIcon className="size-4" aria-hidden="true" />,
   },
 ] as const;
 
@@ -140,11 +140,11 @@ function ReportDisplay({
         <span className="text-sm font-medium text-muted-foreground">Generated report</span>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleCopy} aria-label="Copy report">
-            <ClipboardCopyIcon className="size-3.5" />
+            <ClipboardCopyIcon className="size-3.5" aria-hidden="true" />
             {copied ? 'Copied' : 'Copy'}
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownload} aria-label="Download report">
-            <DownloadIcon className="size-3.5" />
+            <DownloadIcon className="size-3.5" aria-hidden="true" />
             Download
           </Button>
         </div>
@@ -238,7 +238,7 @@ export function MemoryReportsView(): React.JSX.Element {
         >
           {generateMutation.isPending ? (
             <>
-              <Loader2Icon className="size-4 animate-spin" />
+              <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
               Generating…
             </>
           ) : (
