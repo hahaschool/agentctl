@@ -35,6 +35,7 @@ export function ViewModeToggle({
         <button
           type="button"
           onClick={() => onViewModeChange('messages')}
+          aria-pressed={viewMode === 'messages'}
           className={cn(
             'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
             viewMode === 'messages'
@@ -47,6 +48,7 @@ export function ViewModeToggle({
         <button
           type="button"
           onClick={() => onViewModeChange('terminal')}
+          aria-pressed={viewMode === 'terminal'}
           className={cn(
             'px-2 py-0.5 text-[10px] cursor-pointer transition-colors border-none',
             viewMode === 'terminal'

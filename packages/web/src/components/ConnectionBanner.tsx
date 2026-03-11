@@ -52,7 +52,7 @@ export function ConnectionBanner({ status }: ConnectionBannerProps): React.JSX.E
       className="fixed top-0 right-0 left-0 md:left-[60px] lg:left-[220px] z-30 bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-1.5 text-[12px] text-yellow-600 dark:text-yellow-400 flex items-center justify-between animate-banner-pulse"
     >
       <span className="flex items-center gap-1.5">
-        <WifiOff className="h-3.5 w-3.5 shrink-0" />
+        <WifiOff className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         Connection lost — Disconnected {formatElapsed(elapsed)}
       </span>
       <span className="flex items-center gap-2 shrink-0 ml-4">
@@ -61,7 +61,7 @@ export function ConnectionBanner({ status }: ConnectionBannerProps): React.JSX.E
           className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-medium bg-yellow-500/20 hover:bg-yellow-500/30 transition-colors text-yellow-700 dark:text-yellow-300 text-xs"
           onClick={() => window.location.reload()}
         >
-          <RefreshCw className="h-3 w-3" />
+          <RefreshCw className="h-3 w-3" aria-hidden="true" />
           Retry now
         </button>
         <button

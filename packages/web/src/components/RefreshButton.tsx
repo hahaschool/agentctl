@@ -34,6 +34,7 @@ export function RefreshButton({
       <RefreshCw
         size={12}
         className={cn('transition-transform duration-300', isFetching && 'animate-spin')}
+        aria-hidden="true"
       />
       {label}
     </button>

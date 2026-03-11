@@ -217,7 +217,7 @@ export function DashboardPage(): React.JSX.Element {
               className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
               aria-label="Show keyboard shortcuts"
             >
-              <Keyboard className="w-4 h-4" />
+              <Keyboard className="w-4 h-4" aria-hidden="true" />
             </button>
           </SimpleTooltip>
           <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />

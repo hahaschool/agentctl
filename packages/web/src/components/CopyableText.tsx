@@ -75,9 +75,9 @@ function CopyableTextBase({
   const content = (
     <>
       {copied ? (
-        <Check size={10} className="text-green-500" />
+        <Check size={10} className="text-green-500" aria-hidden="true" />
       ) : (
-        <Copy size={10} className="opacity-40" />
+        <Copy size={10} className="opacity-40" aria-hidden="true" />
       )}
       {copied ? 'Copied!' : display}
     </>

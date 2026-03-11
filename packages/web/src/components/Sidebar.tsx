@@ -182,7 +182,7 @@ export function Sidebar(): React.JSX.Element {
           className="text-foreground p-2.5 -ml-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md active:bg-accent/10"
           aria-label="Toggle navigation"
         >
-          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+          {mobileOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
         </button>
         <span className="text-sm font-bold text-foreground tracking-tight">AgentCTL</span>
         <span className="text-[9px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
@@ -244,7 +244,7 @@ export function Sidebar(): React.JSX.Element {
                     : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
                 )}
               >
-                <Icon size={16} className="shrink-0" />
+                <Icon size={16} className="shrink-0" aria-hidden="true" />
                 <span className="flex-1 max-md:inline hidden lg:inline">{item.label}</span>
                 <span
                   className={cn(
@@ -269,7 +269,7 @@ export function Sidebar(): React.JSX.Element {
                     'min-w-[44px] min-h-[44px]',
                   )}
                 >
-                  <Plus size={14} />
+                  <Plus size={14} aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -325,9 +325,9 @@ export function Sidebar(): React.JSX.Element {
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               >
                 {theme === 'dark' ? (
-                  <Moon size={16} className="md:w-[13px] md:h-[13px]" />
+                  <Moon size={16} className="md:w-[13px] md:h-[13px]" aria-hidden="true" />
                 ) : (
-                  <Sun size={16} className="md:w-[13px] md:h-[13px]" />
+                  <Sun size={16} className="md:w-[13px] md:h-[13px]" aria-hidden="true" />
                 )}
               </button>
             ) : (
