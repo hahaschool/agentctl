@@ -230,6 +230,37 @@ export const nativeImportAttempts = pgTable(
   ],
 );
 
+export const runHandoffDecisions = pgTable(
+  'run_handoff_decisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceRunId: uuid('source_run_id')
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: 'cascade' }),
+    sourceManagedSessionId: uuid('source_managed_session_id').references(() => managedSessions.id, {
+      onDelete: 'set null',
+    }),
+    targetRunId: uuid('target_run_id').references(() => agentRuns.id, { onDelete: 'set null' }),
+    handoffId: uuid('handoff_id').references(() => sessionHandoffs.id, { onDelete: 'set null' }),
+    trigger: text('trigger').notNull(),
+    stage: text('stage').notNull(),
+    mode: text('mode').notNull(),
+    status: text('status').notNull(),
+    dedupeKey: text('dedupe_key').notNull(),
+    policySnapshot: jsonb('policy_snapshot').notNull().default({}),
+    signalPayload: jsonb('signal_payload').notNull().default({}),
+    reason: text('reason'),
+    skippedReason: text('skipped_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_run_handoff_decisions_source_run_id').on(table.sourceRunId),
+    index('idx_run_handoff_decisions_trigger').on(table.trigger),
+    index('idx_run_handoff_decisions_created_at').on(table.createdAt),
+  ],
+);
+
 export const memoryScopes = pgTable('memory_scopes', {
   scope: text('scope').primaryKey(),
   parentScope: text('parent_scope').references((): AnyPgColumn => memoryScopes.scope),

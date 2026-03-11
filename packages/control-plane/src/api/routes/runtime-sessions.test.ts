@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type { RunHandoffDecision } from '@agentctl/shared';
 import type { ManagedSessionRecord } from '../../runtime-management/managed-session-store.js';
 import { runtimeSessionRoutes } from './runtime-sessions.js';
 import {
@@ -22,6 +23,11 @@ type ManagedSessionStoreMock = {
 
 type RuntimeConfigStoreMock = {
   getLatestRevision: ReturnType<typeof vi.fn>;
+};
+
+type RunHandoffDecisionStoreMock = {
+  create: ReturnType<typeof vi.fn>;
+  listForRun: ReturnType<typeof vi.fn>;
 };
 
 function makeManagedSession(overrides: Partial<ManagedSessionRecord> = {}): ManagedSessionRecord {
@@ -45,9 +51,42 @@ function makeManagedSession(overrides: Partial<ManagedSessionRecord> = {}): Mana
   };
 }
 
+function makeRunHandoffDecision(
+  overrides: Partial<RunHandoffDecision> = {},
+): RunHandoffDecision {
+  return {
+    id: 'decision-1',
+    sourceRunId: 'run-1',
+    sourceManagedSessionId: 'ms-1',
+    targetRunId: null,
+    handoffId: null,
+    trigger: 'task-affinity',
+    stage: 'dispatch',
+    mode: 'dry-run',
+    status: 'suggested',
+    dedupeKey: 'run-1:dispatch:task-affinity:claude-code',
+    reason: 'Frontend-heavy interface work benefits from Claude Code session context.',
+    skippedReason: null,
+    policySnapshot: {
+      enabled: true,
+      mode: 'dry-run',
+      maxAutomaticHandoffsPerRun: 1,
+      cooldownMs: 600000,
+    },
+    signalPayload: {
+      prompt: 'Polish the React CSS UI for this page.',
+      targetRuntime: 'claude-code',
+    },
+    createdAt: '2026-03-11T10:00:00.000Z',
+    updatedAt: '2026-03-11T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
 async function buildApp(
   managedSessionStore: ManagedSessionStoreMock,
   runtimeConfigStore: RuntimeConfigStoreMock,
+  runHandoffDecisionStore: RunHandoffDecisionStoreMock,
   options?: {
     dbRegistry?: ReturnType<typeof createMockDbRegistry>;
   },
@@ -57,6 +96,7 @@ async function buildApp(
     prefix: '/api/runtime-sessions',
     managedSessionStore: managedSessionStore as never,
     runtimeConfigStore: runtimeConfigStore as never,
+    runHandoffDecisionStore: runHandoffDecisionStore as never,
     dbRegistry: (options?.dbRegistry ?? createMockDbRegistry()) as never,
     workerPort: 9000,
   });
@@ -68,6 +108,7 @@ describe('runtimeSessionRoutes', () => {
   let app: FastifyInstance;
   let managedSessionStore: ManagedSessionStoreMock;
   let runtimeConfigStore: RuntimeConfigStoreMock;
+  let runHandoffDecisionStore: RunHandoffDecisionStoreMock;
 
   beforeAll(async () => {
     managedSessionStore = {
@@ -85,7 +126,11 @@ describe('runtimeSessionRoutes', () => {
         createdAt: new Date('2026-03-09T09:00:00Z'),
       }),
     };
-    app = await buildApp(managedSessionStore, runtimeConfigStore);
+    runHandoffDecisionStore = {
+      create: vi.fn(),
+      listForRun: vi.fn().mockResolvedValue([]),
+    };
+    app = await buildApp(managedSessionStore, runtimeConfigStore, runHandoffDecisionStore);
   });
 
   afterEach(() => {
@@ -156,7 +201,165 @@ describe('runtimeSessionRoutes', () => {
         configRevision: 9,
       }),
     );
+    expect(runHandoffDecisionStore.listForRun).not.toHaveBeenCalled();
+    expect(runHandoffDecisionStore.create).not.toHaveBeenCalled();
     expect(response.json().session.status).toBe('active');
+  });
+
+  it('POST /api/runtime-sessions records a dry-run task-affinity suggestion when runId is present', async () => {
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-affinity',
+        runtime: 'codex',
+        nativeSessionId: null,
+        status: 'starting',
+      }),
+    );
+    managedSessionStore.updateStatus.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-affinity',
+        runtime: 'codex',
+        nativeSessionId: 'codex-native-1',
+        status: 'active',
+      }),
+    );
+    runHandoffDecisionStore.listForRun.mockResolvedValue([]);
+    runHandoffDecisionStore.create.mockImplementation(async (input: RunHandoffDecision) =>
+      makeRunHandoffDecision({
+        ...input,
+        id: 'decision-affinity',
+        sourceRunId: input.sourceRunId,
+        sourceManagedSessionId: input.sourceManagedSessionId,
+        status: input.status,
+        dedupeKey: input.dedupeKey,
+        reason: input.reason,
+        skippedReason: input.skippedReason,
+        policySnapshot: input.policySnapshot,
+        signalPayload: input.signalPayload,
+      }),
+    );
+    mockFetchOk({
+      ok: true,
+      session: {
+        runtime: 'codex',
+        sessionId: 'managed-worker-1',
+        nativeSessionId: 'codex-native-1',
+        status: 'active',
+      },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: 'machine-1',
+        projectPath: '/workspace/app',
+        prompt: 'Polish the React CSS UI for this page.',
+        runId: 'run-affinity-1',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(runHandoffDecisionStore.listForRun).toHaveBeenCalledWith('run-affinity-1', 100);
+    expect(runHandoffDecisionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceRunId: 'run-affinity-1',
+        sourceManagedSessionId: 'ms-affinity',
+        trigger: 'task-affinity',
+        stage: 'dispatch',
+        status: 'suggested',
+        dedupeKey: 'run-affinity-1:dispatch:task-affinity:claude-code',
+        signalPayload: expect.objectContaining({
+          prompt: 'Polish the React CSS UI for this page.',
+          targetRuntime: 'claude-code',
+          matchedRuleId: 'frontend-heavy-to-claude',
+        }),
+      }),
+    );
+  });
+
+  it('POST /api/runtime-sessions collapses duplicate task-affinity evaluations within the same run', async () => {
+    managedSessionStore.create
+      .mockResolvedValueOnce(
+        makeManagedSession({
+          id: 'ms-affinity-1',
+          runtime: 'codex',
+          nativeSessionId: null,
+          status: 'starting',
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeManagedSession({
+          id: 'ms-affinity-2',
+          runtime: 'codex',
+          nativeSessionId: null,
+          status: 'starting',
+        }),
+      );
+    managedSessionStore.updateStatus
+      .mockResolvedValueOnce(
+        makeManagedSession({
+          id: 'ms-affinity-1',
+          runtime: 'codex',
+          nativeSessionId: 'codex-native-1',
+          status: 'active',
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeManagedSession({
+          id: 'ms-affinity-2',
+          runtime: 'codex',
+          nativeSessionId: 'codex-native-2',
+          status: 'active',
+        }),
+      );
+    const existingDecision = makeRunHandoffDecision({
+      id: 'decision-existing',
+      sourceRunId: 'run-affinity-dup',
+      sourceManagedSessionId: 'ms-affinity-1',
+      dedupeKey: 'run-affinity-dup:dispatch:task-affinity:claude-code',
+    });
+    runHandoffDecisionStore.listForRun
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([existingDecision]);
+    runHandoffDecisionStore.create.mockResolvedValue(existingDecision);
+    mockFetchOk({
+      ok: true,
+      session: {
+        runtime: 'codex',
+        sessionId: 'managed-worker-1',
+        nativeSessionId: 'codex-native-1',
+        status: 'active',
+      },
+    });
+
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: 'machine-1',
+        projectPath: '/workspace/app',
+        prompt: 'Polish the React CSS UI for this page.',
+        runId: 'run-affinity-dup',
+      },
+    });
+    const secondResponse = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: 'machine-1',
+        projectPath: '/workspace/app',
+        prompt: 'Polish the React CSS UI for this page.',
+        runId: 'run-affinity-dup',
+      },
+    });
+
+    expect(firstResponse.statusCode).toBe(201);
+    expect(secondResponse.statusCode).toBe(201);
+    expect(runHandoffDecisionStore.create).toHaveBeenCalledTimes(1);
   });
 
   it('POST /api/runtime-sessions/:id/resume resumes the stored runtime session', async () => {
@@ -247,28 +450,33 @@ describe('runtimeSessionRoutes', () => {
   });
 
   it('POST /api/runtime-sessions/:id/fork targets the requested machine worker', async () => {
-    const appWithTargetRegistry = await buildApp(managedSessionStore, runtimeConfigStore, {
-      dbRegistry: createMockDbRegistry({
-        getMachine: vi.fn(async (machineId: string) => {
-          if (machineId === 'machine-2') {
-            return makeMachine({
-              id: 'machine-2',
-              hostname: 'ec2-runner',
-              tailscaleIp: '100.64.0.2',
-              os: 'linux',
-            });
-          }
+    const appWithTargetRegistry = await buildApp(
+      managedSessionStore,
+      runtimeConfigStore,
+      runHandoffDecisionStore,
+      {
+        dbRegistry: createMockDbRegistry({
+          getMachine: vi.fn(async (machineId: string) => {
+            if (machineId === 'machine-2') {
+              return makeMachine({
+                id: 'machine-2',
+                hostname: 'ec2-runner',
+                tailscaleIp: '100.64.0.2',
+                os: 'linux',
+              });
+            }
 
-          return makeMachine({
-            id: 'machine-1',
-            hostname: 'mac-mini',
-            tailscaleIp: '100.64.0.1',
-            os: 'darwin',
-            arch: 'arm64',
-          });
+            return makeMachine({
+              id: 'machine-1',
+              hostname: 'mac-mini',
+              tailscaleIp: '100.64.0.1',
+              os: 'darwin',
+              arch: 'arm64',
+            });
+          }),
         }),
-      }),
-    });
+      },
+    );
 
     managedSessionStore.get.mockResolvedValue(
       makeManagedSession({

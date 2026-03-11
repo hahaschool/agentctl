@@ -54,6 +54,7 @@ describe('runtime-management protocol', () => {
       runtime: 'codex',
       machineId: 'machine-1',
       agentId: 'agent-1',
+      runId: 'run-1',
       projectPath: '/tmp/project',
       prompt: 'Investigate the failing tests.',
       model: 'gpt-5-codex',
@@ -67,6 +68,7 @@ describe('runtime-management protocol', () => {
     };
 
     expect(createRequest.runtime).toBe('codex');
+    expect(createRequest.runId).toBe('run-1');
     expect(handoffRequest.reason).toBe('manual');
   });
 

@@ -26,6 +26,10 @@ import {
   type ManagedSessionRecord,
   ManagedSessionStore,
 } from '../runtime-management/managed-session-store.js';
+import {
+  type CreateRunHandoffDecisionInput,
+  RunHandoffDecisionStore,
+} from '../runtime-management/run-handoff-decision-store.js';
 import { RuntimeConfigStore } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
@@ -46,6 +50,7 @@ import { memoryRoutes } from './routes/memory.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
+import { runHandoffRoutes } from './routes/run-handoffs.js';
 import { routerRoutes } from './routes/router.js';
 import { type RuntimeConfigRouteStore, runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
@@ -106,6 +111,9 @@ export async function createServer({
     ? new ManagedSessionStore(db, logger)
     : createFallbackManagedSessionStore();
   const handoffStore = db ? new HandoffStore(db, logger) : createFallbackHandoffStore();
+  const runHandoffDecisionStore = db
+    ? new RunHandoffDecisionStore(db, logger)
+    : createFallbackRunHandoffDecisionStore();
 
   // --- Metrics request tracking ---
   // Registered at the root level so it captures requests to all routes.
@@ -243,6 +251,10 @@ export async function createServer({
     litellmClient,
     requestTracker,
   });
+  await app.register(runHandoffRoutes, {
+    prefix: '/api/runs',
+    runHandoffDecisionStore,
+  });
   await app.register(runtimeConfigRoutes, {
     prefix: '/api/runtime-config',
     runtimeConfigStore,
@@ -251,6 +263,7 @@ export async function createServer({
     prefix: '/api/runtime-sessions',
     managedSessionStore,
     runtimeConfigStore,
+    runHandoffDecisionStore,
     dbRegistry,
     workerPort,
   });
@@ -638,6 +651,34 @@ function createFallbackHandoffStore(): Pick<
           };
         }),
       );
+    },
+  };
+}
+
+function createFallbackRunHandoffDecisionStore(): Pick<
+  RunHandoffDecisionStore,
+  'create' | 'listForRun'
+> {
+  const decisions = new Map<string, Awaited<ReturnType<RunHandoffDecisionStore['create']>>>();
+
+  return {
+    async create(input: CreateRunHandoffDecisionInput) {
+      const createdAt = input.createdAt ?? new Date();
+      const updatedAt = input.updatedAt ?? createdAt;
+      const record = {
+        ...input,
+        id: crypto.randomUUID(),
+        createdAt: createdAt.toISOString(),
+        updatedAt: updatedAt.toISOString(),
+      };
+      decisions.set(record.id, record);
+      return record;
+    },
+    async listForRun(runId, limit = 50) {
+      return [...decisions.values()]
+        .filter((decision) => decision.sourceRunId === runId)
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+        .slice(0, limit);
     },
   };
 }
