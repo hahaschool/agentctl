@@ -7,7 +7,17 @@
 // (.ssh, .gnupg, .aws, .env, credentials) per project security rules.
 // ---------------------------------------------------------------------------
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, normalize, resolve } from 'node:path';
 
@@ -103,20 +113,29 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>('/', async (request) => {
     const dirPath = validatePath(request.query.path);
 
-    if (!existsSync(dirPath)) {
-      throw new WorkerError('PATH_NOT_FOUND', `Directory does not exist: ${dirPath}`, {
+    // Avoid TOCTOU: attempt the operation directly and handle errors
+    let dirents: Dirent[];
+    try {
+      const stat = statSync(dirPath);
+      if (!stat.isDirectory()) {
+        throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: dirPath });
+      }
+      dirents = readdirSync(dirPath, { withFileTypes: true }) as Dirent[];
+    } catch (err) {
+      if (err instanceof WorkerError) throw err;
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        throw new WorkerError('PATH_NOT_FOUND', `Directory does not exist: ${dirPath}`, {
+          path: dirPath,
+        });
+      }
+      throw new WorkerError('FS_ERROR', `Failed to read directory: ${nodeErr.message}`, {
         path: dirPath,
       });
     }
 
-    const stat = statSync(dirPath);
-    if (!stat.isDirectory()) {
-      throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: dirPath });
-    }
-
     logger.debug({ path: dirPath }, 'listing directory');
 
-    const dirents = readdirSync(dirPath, { withFileTypes: true });
     const entries: FileEntry[] = [];
 
     for (const dirent of dirents) {
@@ -156,34 +175,56 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>('/content', async (request) => {
     const filePath = validatePath(request.query.path);
 
-    if (!existsSync(filePath)) {
-      throw new WorkerError('PATH_NOT_FOUND', `File does not exist: ${filePath}`, {
+    // Avoid TOCTOU (js/file-system-race): open the file atomically instead of
+    // checking existence first, then reading. O_NOFOLLOW prevents symlink attacks.
+    let fd: number;
+    try {
+      fd = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        throw new WorkerError('PATH_NOT_FOUND', `File does not exist: ${filePath}`, {
+          path: filePath,
+        });
+      }
+      if (nodeErr.code === 'ELOOP') {
+        throw new WorkerError('INVALID_PATH', 'Symlinks are not allowed', { path: filePath });
+      }
+      throw new WorkerError('FS_ERROR', `Failed to open file: ${nodeErr.message}`, {
         path: filePath,
       });
     }
 
-    const stat = statSync(filePath);
-    if (stat.isDirectory()) {
-      throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', { path: filePath });
+    try {
+      const stat = statSync(filePath);
+      if (stat.isDirectory()) {
+        throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
+          path: filePath,
+        });
+      }
+
+      if (stat.size > MAX_FILE_SIZE_BYTES) {
+        throw new WorkerError(
+          'INVALID_PATH',
+          `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
+          { path: filePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
+        );
+      }
+
+      logger.debug({ path: filePath, size: stat.size }, 'reading file content');
+
+      const buffer = Buffer.alloc(stat.size);
+      readSync(fd, buffer, 0, stat.size, 0);
+      const content = buffer.toString('utf-8');
+
+      return {
+        content,
+        path: filePath,
+        size: stat.size,
+      };
+    } finally {
+      closeSync(fd);
     }
-
-    if (stat.size > MAX_FILE_SIZE_BYTES) {
-      throw new WorkerError(
-        'INVALID_PATH',
-        `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
-        { path: filePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
-      );
-    }
-
-    logger.debug({ path: filePath, size: stat.size }, 'reading file content');
-
-    const content = readFileSync(filePath, 'utf-8');
-
-    return {
-      content,
-      path: filePath,
-      size: stat.size,
-    };
   });
 
   // -------------------------------------------------------------------------
@@ -198,11 +239,19 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
       throw new WorkerError('INVALID_PATH', 'Request body must include a "content" string field');
     }
 
-    // Create parent directories if they don't exist
+    // Also validate the parent directory path to prevent js/http-to-file-access
     const dir = dirname(filePath);
-    if (!existsSync(dir)) {
-      logger.info({ dir }, 'creating parent directories');
+    validatePath(dir);
+
+    // Create parent directories if they don't exist (use recursive which is idempotent,
+    // avoiding TOCTOU from existsSync check)
+    try {
       mkdirSync(dir, { recursive: true });
+    } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      throw new WorkerError('FS_ERROR', `Failed to create directory: ${nodeErr.message}`, {
+        path: dir,
+      });
     }
 
     logger.info({ path: filePath, contentLength: body.content.length }, 'writing file content');

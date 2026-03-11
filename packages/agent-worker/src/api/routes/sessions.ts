@@ -5,7 +5,18 @@
 // Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
 // ---------------------------------------------------------------------------
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, normalize, resolve as resolvePath } from 'node:path';
 
@@ -217,6 +228,39 @@ type SessionEventBuffer = {
 // ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Simple rate limiter for session-creation endpoints (js/missing-rate-limiting)
+// ---------------------------------------------------------------------------
+
+type RateLimitBucket = { count: number; resetAt: number };
+
+function createRateLimiter(
+  maxRequests: number,
+  windowMs: number,
+): {
+  check: (key: string) => boolean;
+} {
+  const buckets = new Map<string, RateLimitBucket>();
+
+  return {
+    check(key: string): boolean {
+      const now = Date.now();
+      const bucket = buckets.get(key);
+
+      if (!bucket || now >= bucket.resetAt) {
+        buckets.set(key, { count: 1, resetAt: now + windowMs });
+        return true;
+      }
+
+      bucket.count++;
+      return bucket.count <= maxRequests;
+    },
+  };
+}
+
+/** Rate limiter: 30 session-creation requests per minute per IP */
+const sessionCreateLimiter = createRateLimiter(30, 60_000);
 
 export async function sessionRoutes(
   app: FastifyInstance,
@@ -434,7 +478,16 @@ export async function sessionRoutes(
 
   app.get<{ Querystring: { projectPath?: string } }>('/discover', async (request) => {
     const { projectPath } = request.query;
-    const discovered = sessionManager.discoverLocalSessions(projectPath ?? undefined);
+    // Security: validate project path from query to prevent path injection
+    let safeProjectPath: string | undefined;
+    if (projectPath) {
+      try {
+        safeProjectPath = validateProjectPath(projectPath);
+      } catch {
+        return { sessions: [], count: 0, machineId };
+      }
+    }
+    const discovered = sessionManager.discoverLocalSessions(safeProjectPath);
     return { sessions: discovered, count: discovered.length, machineId };
   });
 
@@ -492,15 +545,39 @@ export async function sessionRoutes(
       }
 
       try {
-        const stat = statSync(jsonlPath);
-        if (stat.size > MAX_JSONL_FILE_SIZE) {
-          // 100MB limit
-          return reply.status(413).send({
-            error: 'Session JSONL file too large (> 100 MB)',
-            code: 'CONTENT_TOO_LARGE',
-          });
+        // Avoid TOCTOU (js/file-system-race): open atomically, then fstat + read
+        // from the same fd to prevent race between stat and read.
+        let fd: number;
+        try {
+          fd = openSync(jsonlPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+        } catch (openErr) {
+          const nodeErr = openErr as NodeJS.ErrnoException;
+          if (nodeErr.code === 'ENOENT') {
+            return reply.status(404).send({
+              error: `JSONL file for session '${claudeSessionId}' was removed`,
+              code: 'SESSION_CONTENT_NOT_FOUND',
+            });
+          }
+          throw openErr;
         }
-        const raw = readFileSync(jsonlPath, 'utf-8');
+
+        let raw: string;
+        try {
+          const stat = fstatSync(fd);
+          if (stat.size > MAX_JSONL_FILE_SIZE) {
+            closeSync(fd);
+            return reply.status(413).send({
+              error: 'Session JSONL file too large (> 100 MB)',
+              code: 'CONTENT_TOO_LARGE',
+            });
+          }
+          const buffer = Buffer.alloc(stat.size);
+          const bytesRead = readSync(fd, buffer, 0, stat.size, 0);
+          raw = buffer.subarray(0, bytesRead).toString('utf-8');
+        } finally {
+          closeSync(fd);
+        }
+
         const lines = raw.split('\n').filter((line) => line.trim().length > 0);
 
         const allMessages: ContentMessage[] = [];
@@ -563,7 +640,16 @@ export async function sessionRoutes(
   // POST /cleanup — manually trigger stale session cleanup
   // -----------------------------------------------------------------------
 
-  app.post('/cleanup', async () => {
+  app.post('/cleanup', async (request, reply) => {
+    // Rate limit cleanup requests (js/missing-rate-limiting)
+    const clientIp = request.ip ?? 'unknown';
+    if (!sessionCreateLimiter.check(clientIp)) {
+      return reply.status(429).send({
+        error: 'Too many requests. Try again later.',
+        code: 'RATE_LIMITED',
+      });
+    }
+
     const cleaned = sessionManager.cleanupStaleSessions();
     logger.info({ cleaned, machineId }, 'Manual session cleanup executed');
     return { ok: true, cleaned };
@@ -593,6 +679,15 @@ export async function sessionRoutes(
   // -----------------------------------------------------------------------
 
   app.post<{ Body: CreateSessionBody }>('/', async (request, reply) => {
+    // Rate limit session creation (js/missing-rate-limiting)
+    const clientIp = request.ip ?? 'unknown';
+    if (!sessionCreateLimiter.check(clientIp)) {
+      return reply.status(429).send({
+        error: 'Too many session creation requests. Try again later.',
+        code: 'RATE_LIMITED',
+      });
+    }
+
     const {
       sessionId: cpSessionId,
       agentId,
@@ -842,10 +937,20 @@ export async function sessionRoutes(
         });
       }
 
+      // Security: validate body projectPath before using it as cwd for a spawned process
+      let safeBodyProjectPath: string | undefined;
+      if (projectPath) {
+        try {
+          safeBodyProjectPath = validateProjectPath(projectPath);
+        } catch {
+          return reply.status(400).send({ error: 'Invalid project path', code: 'INVALID_INPUT' });
+        }
+      }
+
       try {
         const newSession = sessionManager.resumeSession(resumeId, {
           agentId: existingSession?.agentId ?? agentId ?? 'adhoc',
-          projectPath: existingSession?.projectPath ?? projectPath ?? process.cwd(),
+          projectPath: existingSession?.projectPath ?? safeBodyProjectPath ?? process.cwd(),
           prompt,
           model: existingSession?.model ?? model ?? undefined,
           accountCredential: accountCredential ?? undefined,

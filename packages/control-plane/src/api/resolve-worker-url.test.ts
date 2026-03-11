@@ -43,13 +43,13 @@ describe('resolveWorkerUrl', () => {
   it('returns explicit workerUrl when provided', async () => {
     const result = await resolveWorkerUrl(
       'agent-1',
-      { workerUrl: 'http://custom:8080' },
+      { workerUrl: 'http://localhost:8080' },
       {
         workerPort: WORKER_PORT,
       },
     );
 
-    expect(result).toEqual({ ok: true, url: 'http://custom:8080' });
+    expect(result).toEqual({ ok: true, url: 'http://localhost:8080' });
   });
 
   it('resolves via machineId through registry', async () => {
@@ -206,11 +206,11 @@ describe('resolveWorkerUrl', () => {
 
     const result = await resolveWorkerUrl(
       'agent-1',
-      { workerUrl: 'http://override:7777', machineId: 'machine-1' },
+      { workerUrl: 'http://127.0.0.1:7777', machineId: 'machine-1' },
       { registry, workerPort: WORKER_PORT },
     );
 
-    expect(result).toEqual({ ok: true, url: 'http://override:7777' });
+    expect(result).toEqual({ ok: true, url: 'http://127.0.0.1:7777' });
     expect(registry.getMachine).not.toHaveBeenCalled();
   });
 
@@ -249,13 +249,13 @@ describe('resolveWorkerUrlOrThrow', () => {
   it('returns the URL on success', async () => {
     const url = await resolveWorkerUrlOrThrow(
       'agent-1',
-      { workerUrl: 'http://x:1' },
+      { workerUrl: 'http://localhost:1' },
       {
         workerPort: 9000,
       },
     );
 
-    expect(url).toBe('http://x:1');
+    expect(url).toBe('http://localhost:1');
   });
 
   it('throws ControlPlaneError on failure', async () => {

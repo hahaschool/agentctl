@@ -23,9 +23,13 @@ vi.mock('node:fs', async (importOriginal) => {
     ...actual,
     existsSync: vi.fn(actual.existsSync),
     statSync: vi.fn(actual.statSync),
+    fstatSync: vi.fn(actual.fstatSync),
     readFileSync: vi.fn(actual.readFileSync),
     readdirSync: vi.fn(actual.readdirSync),
     writeFileSync: vi.fn(),
+    openSync: vi.fn(actual.openSync),
+    readSync: vi.fn(actual.readSync),
+    closeSync: vi.fn(actual.closeSync),
   };
 });
 
@@ -37,7 +41,17 @@ vi.mock('node:os', async (importOriginal) => {
   };
 });
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 
 // ---------------------------------------------------------------------------
@@ -916,6 +930,8 @@ describe('Worker session routes', () => {
     const JSONL_DIR = `${FAKE_HOME}/.claude/projects/${ENCODED_PATH}`;
     const JSONL_FILE = `${JSONL_DIR}/${CLAUDE_SESSION_ID}.jsonl`;
 
+    const MOCK_FD = 99;
+
     function setupFsMocks(opts: {
       fileExists?: boolean;
       fileSize?: number;
@@ -943,6 +959,29 @@ describe('Worker session routes', () => {
         vi.mocked(readFileSync).mockImplementation((p: string | URL | number) => {
           if (String(p) === JSONL_FILE) return fileContent;
           throw new Error(`ENOENT: ${String(p)}`);
+        });
+
+        // Mock atomic file reading (openSync/fstatSync/readSync/closeSync).
+        // fstatSync returns fileSize (for the size-limit check), but readSync
+        // writes the actual content bytes and returns the real byte length.
+        const contentBuf = Buffer.from(fileContent, 'utf-8');
+        vi.mocked(openSync).mockReturnValue(MOCK_FD);
+        vi.mocked(fstatSync).mockReturnValue({
+          size: fileSize,
+          isDirectory: () => false,
+        } as ReturnType<typeof fstatSync>);
+        vi.mocked(readSync).mockImplementation((_fd, buf: Buffer | NodeJS.ArrayBufferView) => {
+          const b = buf instanceof Buffer ? buf : Buffer.from(buf.buffer as ArrayBuffer);
+          contentBuf.copy(b, 0, 0, contentBuf.length);
+          return contentBuf.length;
+        });
+        vi.mocked(closeSync).mockImplementation(() => {});
+      } else {
+        // File does not exist — openSync should throw ENOENT
+        const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+        enoent.code = 'ENOENT';
+        vi.mocked(openSync).mockImplementation(() => {
+          throw enoent;
         });
       }
 

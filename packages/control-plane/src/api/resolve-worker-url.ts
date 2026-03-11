@@ -3,6 +3,76 @@ import { ControlPlaneError } from '@agentctl/shared';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
 
+// ---------------------------------------------------------------------------
+// SSRF protection: validate that a URL points to an internal network address
+// ---------------------------------------------------------------------------
+
+/** Tailscale CGNAT range: 100.64.0.0/10 */
+const TAILSCALE_PREFIX = '100.';
+
+/**
+ * Validate that a user-supplied worker URL points to an internal address only.
+ * Rejects external URLs to prevent SSRF (js/request-forgery).
+ *
+ * Allowed targets:
+ * - localhost / 127.0.0.1 / [::1]
+ * - Tailscale CGNAT range (100.64.0.0 - 100.127.255.255)
+ * - Private RFC1918 ranges (10.x, 172.16-31.x, 192.168.x)
+ * - MagicDNS .ts.net hostnames
+ */
+function validateInternalUrl(raw: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new ControlPlaneError('INVALID_WORKER_URL', `"${raw}" is not a valid URL`);
+  }
+
+  const { hostname } = parsed;
+
+  // Allow localhost
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return;
+  }
+
+  // Allow Tailscale MagicDNS
+  if (hostname.endsWith('.ts.net')) {
+    return;
+  }
+
+  // Allow private IP ranges
+  if (hostname.startsWith(TAILSCALE_PREFIX)) {
+    // Tailscale CGNAT 100.64.0.0/10 — check second octet
+    const parts = hostname.split('.');
+    const secondOctet = Number(parts[1]);
+    if (secondOctet >= 64 && secondOctet <= 127) {
+      return;
+    }
+  }
+
+  if (hostname.startsWith('10.')) {
+    return;
+  }
+
+  if (hostname.startsWith('192.168.')) {
+    return;
+  }
+
+  if (hostname.startsWith('172.')) {
+    const parts = hostname.split('.');
+    const secondOctet = Number(parts[1]);
+    if (secondOctet >= 16 && secondOctet <= 31) {
+      return;
+    }
+  }
+
+  throw new ControlPlaneError(
+    'SSRF_BLOCKED',
+    `Worker URL "${raw}" points to a non-internal address. Only localhost, Tailscale, and private network addresses are allowed.`,
+    { hostname },
+  );
+}
+
 export type ResolvedWorkerUrl =
   | { ok: true; url: string }
   | { ok: false; status: number; error: string; message: string };
@@ -30,6 +100,9 @@ export async function resolveWorkerUrl(
   const { workerUrl: explicitUrl, machineId } = query;
 
   if (explicitUrl) {
+    // Security: validate that user-provided URL targets internal network only
+    // to prevent SSRF (js/request-forgery).
+    validateInternalUrl(explicitUrl);
     return { ok: true, url: explicitUrl };
   }
 

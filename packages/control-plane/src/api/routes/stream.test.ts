@@ -209,13 +209,13 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       await app.inject({
         method: 'GET',
-        url: '/my-agent/stream?workerUrl=http://custom-host:8080',
+        url: '/my-agent/stream?workerUrl=http://192.168.1.50:8080',
       });
 
       // The route was reached and fetch was called with the custom URL
       expect(globalThis.fetch).toHaveBeenCalledOnce();
       const fetchUrl = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(fetchUrl).toBe('http://custom-host:8080/api/agents/my-agent/stream');
+      expect(fetchUrl).toBe('http://192.168.1.50:8080/api/agents/my-agent/stream');
 
       // Registry getMachine was NOT called because workerUrl was provided
       expect(registry.getMachine).not.toHaveBeenCalled();
@@ -519,7 +519,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://dead-host:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.99:9000',
       });
 
       expect(response.statusCode).toBe(500);
@@ -543,7 +543,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://dead-host:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.99:9000',
       });
 
       expect(response.statusCode).toBe(500);
@@ -577,7 +577,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://worker:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.1:9000',
       });
 
       expect(response.statusCode).toBe(500);
@@ -611,7 +611,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://worker:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.1:9000',
       });
 
       expect(response.statusCode).toBe(500);
@@ -658,7 +658,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://worker:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.1:9000',
       });
 
       // When using Fastify inject with a hijacked reply, the raw socket is
@@ -697,7 +697,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
       // Should not throw — the pump catches errors internally
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://worker:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.1:9000',
       });
 
       expect(response.statusCode).toBe(200);
@@ -737,7 +737,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://worker:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.1:9000',
       });
 
       // The route uses reply.hijack(), so the response is handled manually
@@ -771,7 +771,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
       // Should not throw even though cancel rejects
       const response = await app.inject({
         method: 'GET',
-        url: '/agent-1/stream?workerUrl=http://worker:9000',
+        url: '/agent-1/stream?workerUrl=http://10.0.0.1:9000',
       });
 
       expect(response.statusCode).toBe(200);
@@ -807,7 +807,7 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       await app.inject({
         method: 'GET',
-        url: '/agent%20with%20spaces/stream?workerUrl=http://worker:9000',
+        url: '/agent%20with%20spaces/stream?workerUrl=http://10.0.0.1:9000',
       });
 
       const fetchUrl = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0];
