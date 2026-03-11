@@ -606,9 +606,9 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 Restructure `.claude/rules/` to avoid always-loading all rules. Most rules should be on-demand with trigger-based loading.
 
 - [x] Add front-matter `triggers:` to `.claude/rules/` files specifying when each ruleset should activate
-- [ ] Split always-on rules (critical guardrails) from on-demand rules (coding style, patterns)
-- [ ] Minimize MEMORY.md to only irreversible-damage rules; move everything else to topic-specific files
-- [ ] Audit existing rules for relevance and remove outdated entries
+- [x] Split always-on rules (critical guardrails) from on-demand rules (coding style, patterns)
+- [x] Minimize MEMORY.md to only irreversible-damage rules; move everything else to topic-specific files
+- [x] Audit existing rules for relevance and remove outdated entries
 
 ### 7.2 Knowledge Sedimentation Rules — P2
 
@@ -658,7 +658,7 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
 | **P2** | Automatic Handoff Triggers | 3.5 | Not started |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
-| **P2** | Layered Knowledge Loading | 7.1 | Partial — rule triggers landed; split/audit work remains |
+| **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
 | **P3** | Mobile Session Browser | 5.1-5.3 | Partial — unified browser/filtering exists; richer cards, time range, and deeper replay/live entry remain |
 | **P3** | Execution Environment Registry | 2.9 | Not started |
@@ -707,7 +707,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | Automatic Handoff (P2) | AgentOutputStream for live signals | Policy/history/task-affinity groundwork can land before it; live trigger execution waits on unified runtime signals |
 | Remote Control Integration (P2) | None | Relay decision and narrow manual takeover are already on `main`; only relay re-evaluation remains |
 | Fork UX Extensions (P2) | Unified Memory Layer + Memory UI (§4.8) | Memory integration in fork context selection; extends existing `ContextPickerDialog`, memory panel, and prompt preview |
-| Layered Knowledge Loading (P2) | None | Can start immediately; restructure `.claude/rules/` with trigger-based loading |
+| ~~Layered Knowledge Loading (P2)~~ | None | ✅ Delivered — see §7.1 |
 | Knowledge Sedimentation Rules (P2) | None | Can start immediately; meta-rules for knowledge management |
 | Mobile Session Browser (P3) | None | Web unification patterns are already on `main`; remaining work is mobile-side unification/filtering/actions |
 | Execution Environment Registry (P3) | AgentOutputStream for adapter context + Docker | Capability model, direct environment, and worker reporting can land earlier; adapter plumbing and Docker execution wait on a stable output boundary |
