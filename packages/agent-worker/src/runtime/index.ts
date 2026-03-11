@@ -21,6 +21,10 @@ export {
   type CodexSessionManagerOptions,
   type CodexSessionStatus,
 } from './codex-session-manager.js';
+export {
+  CostThresholdTrigger,
+  type CostThresholdTriggerOptions,
+} from './cost-threshold-trigger.js';
 export { DirectEnvironment } from './direct-environment.js';
 export type {
   ExecutionEnvironment,
@@ -34,6 +38,11 @@ export {
   LoopCheckpoint,
 } from './loop-checkpoint.js';
 export { OutputBuffer } from './output-buffer.js';
+export {
+  type RateLimitErrorContext,
+  RateLimitTrigger,
+  type RateLimitTriggerOptions,
+} from './rate-limit-trigger.js';
 export {
   type RcSession,
   type RcSessionEvent,
