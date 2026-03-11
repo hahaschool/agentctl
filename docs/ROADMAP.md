@@ -346,7 +346,59 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Redirect `/runtime-sessions` → `/sessions?type=runtime`
 - [x] Collapse dashboard/sidebar/command-palette session navigation
 
-### 4.7 Fork UX Extensions — P2
+### 4.7 UI Quality & Accessibility — P1
+
+> Based on comprehensive `/audit` scan (2026-03-11). See `docs/superpowers/specs/2026-03-10-public-repo-prep-design.md` for public repo context.
+
+#### 4.7.1 Critical Accessibility Fixes (Immediate)
+
+- [ ] `CopyableText.tsx:77` — span mode: add `role="button"`, `tabIndex={0}`, `onKeyDown` for keyboard access (WCAG 2.1.1)
+- [ ] `Spinner.tsx:16` — replace `<output>` with `<div role="status">` (WCAG 1.3.1, 4.1.2)
+- [ ] `layout.tsx` — remove `userScalable: false` to allow pinch-zoom (WCAG 2.5.5)
+
+#### 4.7.2 ARIA & Keyboard Hardening
+
+- [ ] `CommandPalette.tsx:469` — add `aria-activedescendant` management to listbox
+- [ ] `NotificationBell.tsx:90` — migrate manual dropdown to Radix `Popover` with focus trap
+- [ ] `ContextPickerDialog.tsx` — add `role="tablist"`/`role="tab"`/`role="tabpanel"` to tab interface
+- [ ] `KeyboardHelpOverlay.tsx:32` — fix backdrop `aria-hidden` + `onClick` conflict
+- [ ] `CollapsibleSection.tsx:21` — add `aria-controls` pointing to content panel
+- [ ] `Sidebar.tsx` — add `aria-current="page"` to active navigation link
+- [ ] `SessionMessageList.tsx:25` — add `aria-pressed` to ViewModeToggle buttons
+- [ ] `ErrorBanner.tsx` — add `role="alert"` for screen reader announcement
+- [ ] Decorative Lucide icons — audit and add `aria-hidden="true"` where missing
+
+#### 4.7.3 Theming Normalization (Kill AI Palette)
+
+- [ ] `ProgressIndicator.tsx` — replace hard-coded `cyan-500/400/600` with `--color-primary` tokens
+- [ ] `SessionContent.tsx:419-461` — replace cyan/purple/yellow/blue toggles with semantic theme colors
+- [ ] `SessionMessageList.tsx:299` — same cyan replacement
+- [ ] `SettingsView.tsx:260-289` — extract 14 hard-coded hex colors into CSS variables or constants
+- [ ] `DashboardPage.tsx:228` — replace inline `style={{ color: '#ffffff' }}` with token
+- [ ] `terminal-theme.ts` — migrate 20 hard-coded xterm colors to CSS variable-backed config
+- [ ] Replace all `rgba(0,0,0,...)` shadows (6 instances in SettingsShell, SessionPreview, SessionsPage) with theme-aware values
+- [ ] `MemoryPanel.tsx:12` — fix gray-on-gray contrast (gray-600 on gray-500/10)
+- [ ] Reduce glassmorphism: keep `backdrop-blur` only on overlays (CommandPalette, Dialog), remove from SettingsShell, SettingsView decorative use
+
+#### 4.7.4 Responsive & Touch Target Hardening
+
+- [ ] `ContextPickerDialog.tsx:588` — make `w-80` right panel responsive: `w-full sm:w-80`
+- [ ] `ForkConfigPanel.tsx:57` — same responsive fix
+- [ ] `NotificationBell.tsx:44` — responsive dropdown: `w-full sm:w-80`
+- [ ] `KeyboardHelpOverlay.tsx:47` — add responsive breakpoints for mobile
+- [ ] `ContextPickerToolbar.tsx:76` — increase "By Topic" button from `py-0.5` to min 44px touch target
+- [ ] `DiscoverSessionRow.tsx:96` — wrap 7x7px dot in 44x44px touch-target container
+- [ ] `Sidebar.tsx:262` — increase Plus icon button padding for 44px minimum
+
+#### 4.7.5 Performance Optimization
+
+- [ ] `SessionListItem.tsx` — wrap export with `React.memo()`
+- [ ] `SessionsPage.tsx:130` — wrap `RuntimeSessionListItem` with `React.memo()`
+- [ ] `button.tsx`, `input.tsx` — verify focus ring `ring-ring/50` meets 3:1 contrast ratio (WCAG 2.4.7)
+
+**Deliverable**: Zero critical a11y violations, design token compliance, mobile-safe layouts, optimized list rendering
+
+### 4.8 Fork UX Extensions — P2
 
 > Design doc: [plans/2026-03-09-fork-ux-overhaul.md](plans/2026-03-09-fork-ux-overhaul.md)
 >
@@ -510,15 +562,16 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P1** | Unified Memory Layer | 3.6 | Partial — core types/schema/store/search landed; injector/routes/MCP cutover remains |
+| **P1** | UI Quality & Accessibility | 4.7 | Not started — 2 critical, 11 high, 18 medium from audit |
 | **P1** | Structured Execution Summary | 2.5 | Not started |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P2** | AgentOutputStream | 3.3 | Not started |
+| **P2** | Fork UX Extensions | 4.8 | Partial — auto-related-message/runtime-in-direct-fork work remains |
 | **P2** | Mid-Execution Steering | 2.8 | Not started |
 | **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
 | **P2** | Automatic Handoff Triggers | 3.5 | Not started |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
-| **P2** | Fork UX Extensions | 4.7 | Partial — auto-related-message/runtime-in-direct-fork work remains |
 | **P2** | Layered Knowledge Loading | 7.1 | Partial — rule triggers landed; split/audit work remains |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
 | **P3** | Mobile Session Browser | 5.1-5.3 | Partial — unified browser/filtering exists; richer cards, time range, and deeper replay/live entry remain |
@@ -555,6 +608,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
 | Unified Memory Layer (P1) | None | Core types/schema/search/store have landed; remaining work is injector/routes/MCP cutover. Claude-mem migration is part of this — see [migration plan](plans/2026-03-11-claude-mem-migration-plan.md) |
+| UI Quality & Accessibility (P1) | None | Can start immediately — 2 critical, 11 high, 18 medium issues from audit |
 | Execution Summary (P1) | None | Can start immediately |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
@@ -607,7 +661,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [advanced-fork-impl-plan](plans/2026-03-08-advanced-fork-impl-plan.md) | Archived | 4.3 |
 | [codex-claude-runtime-unification-design](plans/2026-03-09-codex-claude-runtime-unification-design.md) | Delivered | 3.1, 3.2 |
 | [codex-claude-runtime-unification-impl-plan](plans/2026-03-09-codex-claude-runtime-unification-impl-plan.md) | Delivered | 3.1, 3.2 |
-| [fork-ux-overhaul](plans/2026-03-09-fork-ux-overhaul.md) | Active | 4.7 |
+| [fork-ux-overhaul](plans/2026-03-09-fork-ux-overhaul.md) | Active | 4.8 |
 | [astro-agent-patterns-design](plans/2026-03-10-astro-agent-patterns-design.md) | Active | 2.5-2.9, 3.3 |
 | [runtime-centric-settings-redesign-design](plans/2026-03-10-runtime-centric-settings-redesign-design.md) | Delivered | 4.5 |
 | [runtime-centric-settings-redesign-impl-plan](plans/2026-03-10-runtime-centric-settings-redesign-impl-plan.md) | Delivered | 4.5 |
