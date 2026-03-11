@@ -11,6 +11,8 @@ export interface AgentOutputStream {
   fileChange(path: string, action: AgentOutputFileAction, diff?: string): void;
   costUpdate(turnCost: number, totalCost: number): void;
   error(code: string, message: string): void;
+  /** Report a rate-limit error for live handoff detection. */
+  rateLimitError(statusCode: number | undefined, message: string): void;
 }
 
 export class EventedAgentOutputStream implements AgentOutputStream {
@@ -59,6 +61,16 @@ export class EventedAgentOutputStream implements AgentOutputStream {
 
   error(code: string, message: string): void {
     this.emitOutput('text', `[error:${code}] ${message}`);
+  }
+
+  rateLimitError(statusCode: number | undefined, message: string): void {
+    this.emitEvent({
+      event: 'output',
+      data: {
+        type: 'text',
+        content: `[rate_limit_hit] status=${statusCode ?? 'unknown'} ${message}`,
+      },
+    });
   }
 
   private emitOutput(type: 'text' | 'tool_use' | 'tool_result' | 'tool_blocked', content: string) {

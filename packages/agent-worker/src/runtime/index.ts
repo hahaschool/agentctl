@@ -33,6 +33,15 @@ export type {
 } from './execution-environment.js';
 export { ExecutionEnvironmentRegistry } from './execution-environment-registry.js';
 export {
+  HandoffController,
+  type HandoffExecutionResult,
+} from './handoff-controller.js';
+export {
+  type HandoffOutcome,
+  LiveHandoffOrchestrator,
+  type LiveHandoffOrchestratorOptions,
+} from './live-handoff-orchestrator.js';
+export {
   type CheckpointConfig,
   type CheckpointData,
   LoopCheckpoint,
