@@ -28,6 +28,10 @@ vi.mock('@/components/ui/skeleton', () => ({
 vi.mock('@/lib/queries', () => ({
   machinesQuery: () => mockMachinesQuery(),
   runtimeConfigDriftQuery: () => mockRuntimeConfigDriftQuery(),
+  useRefreshRuntimeConfig: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 vi.mock('@/lib/utils', () => ({

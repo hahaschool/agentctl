@@ -52,6 +52,10 @@ vi.mock('@/lib/queries', () => ({
     mutate: mockSyncMutate,
     isPending: false,
   }),
+  useRefreshRuntimeConfig: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 import { RuntimeAccessSection } from './RuntimeAccessSection';

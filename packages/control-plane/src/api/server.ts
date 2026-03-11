@@ -54,6 +54,7 @@ import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
+import { memoryImportRoutes } from './routes/memory-import.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
@@ -405,6 +406,9 @@ export async function createServer({
       mem0Client,
     });
   }
+
+  // Register memory import routes (in-memory job tracking, no DB required).
+  await app.register(memoryImportRoutes, { prefix: '/api/memory' });
 
   // Register claude-mem routes for querying the local claude-mem SQLite database.
   await app.register(claudeMemRoutes, {

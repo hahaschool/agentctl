@@ -995,6 +995,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // Memory import
+  startMemoryImport: (body: { source: ImportJob['source']; dbPath: string }) =>
+    request<{ ok: boolean; job: ImportJob }>('/api/memory/import', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getImportStatus: () => request<{ ok: boolean; job: ImportJob }>('/api/memory/import/status'),
+
+  cancelImport: (id: string) =>
+    request<{ ok: boolean; job: ImportJob }>(`/api/memory/import/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 };
 
 // ---------------------------------------------------------------------------

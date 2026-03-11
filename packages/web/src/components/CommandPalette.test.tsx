@@ -310,8 +310,8 @@ describe('CommandPalette', () => {
 
   it('shows result count in footer', () => {
     renderPalette({ open: true });
-    // 7 nav + 5 action = 12 results
-    expect(screen.getByText('12 results')).toBeDefined();
+    // 8 nav + 3 memory + 5 action = 16 results
+    expect(screen.getByText('16 results')).toBeDefined();
   });
 
   it('updates result count when filtering', () => {

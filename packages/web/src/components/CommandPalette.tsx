@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BellOff,
   Bot,
+  Brain,
   Compass,
   Database,
   Gauge,
@@ -252,6 +253,41 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       }
     }
 
+    // ----- Memory commands -----
+    items.push({
+      id: 'memory-search',
+      label: 'memory:search',
+      description: 'Search memory facts',
+      icon: Brain,
+      section: 'Memory',
+      action: () => {
+        router.push('/memory/browser');
+        onClose();
+      },
+    });
+    items.push({
+      id: 'memory-create',
+      label: 'memory:create',
+      description: 'Create a new memory fact',
+      icon: Brain,
+      section: 'Memory',
+      action: () => {
+        router.push('/memory/browser?create=true');
+        onClose();
+      },
+    });
+    items.push({
+      id: 'memory-graph',
+      label: 'memory:graph',
+      description: 'View the memory knowledge graph',
+      icon: Database,
+      section: 'Memory',
+      action: () => {
+        router.push('/memory/graph');
+        onClose();
+      },
+    });
+
     // ----- Action commands -----
     items.push({
       id: 'action-new-session',
@@ -351,7 +387,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
 
   // Group by section with stable ordering
   const sections = useMemo(() => {
-    const sectionOrder = ['Navigate', 'Agents', 'Machines', 'Sessions', 'Actions'];
+    const sectionOrder = ['Navigate', 'Memory', 'Agents', 'Machines', 'Sessions', 'Actions'];
     const map = new Map<string, CommandItem[]>();
     for (const cmd of filtered) {
       const arr = map.get(cmd.section);

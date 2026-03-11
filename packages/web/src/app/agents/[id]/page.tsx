@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import type { AgentFormEditData } from '@/components/AgentFormDialog';
 import { AgentFormDialog } from '@/components/AgentFormDialog';
+import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
@@ -599,6 +600,16 @@ export default function AgentDetailPage(): React.JSX.Element {
               )}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Memory usage */}
+      <Card className="mb-4" data-testid="agent-memory-card">
+        <CardHeader className="pb-0">
+          <CardTitle className="text-sm">Memory</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AgentMemorySection agentId={agentId} />
         </CardContent>
       </Card>
 

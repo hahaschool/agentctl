@@ -215,6 +215,12 @@ vi.mock('@/components/context-picker', () => ({
   ContextPickerDialog: () => <div data-testid="context-picker-dialog" />,
 }));
 
+vi.mock('@/components/memory/SessionMemoryTab', () => ({
+  SessionMemoryTab: ({ sessionId }: { sessionId: string }) => (
+    <div data-testid="session-memory-tab">{sessionId}</div>
+  ),
+}));
+
 vi.mock('@/lib/api', () => ({
   api: {
     getSessionContent: vi.fn().mockResolvedValue({ messages: [] }),
@@ -235,6 +241,7 @@ vi.mock('@/lib/queries', () => ({
   useCreateAgent: () => mockUseCreateAgent(),
   useResumeSession: () => mockUseResumeSession(),
   useSendMessage: () => mockUseSendMessage(),
+  useSteerAgent: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // ---------------------------------------------------------------------------
