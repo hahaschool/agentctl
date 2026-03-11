@@ -26,6 +26,8 @@ export type SessionStreamEvent =
 type UseSessionStreamOptions = {
   /** RC session UUID — the control-plane will resolve to claudeSessionId internally. */
   sessionId: string;
+  /** Agent ID for subscribing to agent-level summary events. */
+  agentId?: string;
   /** Only connect when the session is active. */
   enabled?: boolean;
   /** Called for each parsed SSE event. */
@@ -62,7 +64,7 @@ const MAX_RECONNECT_MS = 30_000;
 const RECONNECT_JITTER = 0.3;
 
 export function useSessionStream(options: UseSessionStreamOptions): UseSessionStreamResult {
-  const { sessionId, enabled = true, onEvent } = options;
+  const { sessionId, agentId, enabled = true, onEvent } = options;
 
   const [connected, setConnected] = useState(false);
   const [streamOutput, setStreamOutput] = useState<string[]>([]);
@@ -82,8 +84,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
   onEventRef.current = onEvent;
 
   const eventSourceRef = useRef<EventSource | null>(null);
+  const summaryEventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
+  const summaryReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const summaryReconnectAttemptRef = useRef(0);
 
   // Reset state when sessionId changes
   const resetState = useCallback(() => {
@@ -207,6 +212,78 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       }
     };
   }, [sessionId, enabled, resetState]);
+
+  useEffect(() => {
+    if (!enabled || !agentId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const connectSummaryStream = (): void => {
+      if (cancelled) return;
+
+      const url = `/api/agents/${encodeURIComponent(agentId)}/stream`;
+      const es = new EventSource(url);
+      summaryEventSourceRef.current = es;
+
+      es.onopen = () => {
+        if (!cancelled) {
+          summaryReconnectAttemptRef.current = 0;
+        }
+      };
+
+      es.onerror = () => {
+        if (cancelled) return;
+        es.close();
+        summaryEventSourceRef.current = null;
+
+        const attempt = summaryReconnectAttemptRef.current;
+        const base = Math.min(BASE_RECONNECT_MS * 2 ** attempt, MAX_RECONNECT_MS);
+        const jitter = base * RECONNECT_JITTER * (Math.random() * 2 - 1);
+        const delay = Math.max(0, base + jitter);
+        summaryReconnectAttemptRef.current = attempt + 1;
+
+        summaryReconnectTimerRef.current = setTimeout(() => {
+          summaryReconnectTimerRef.current = null;
+          connectSummaryStream();
+        }, delay);
+      };
+
+      es.addEventListener('execution_summary', (e: MessageEvent) => {
+        if (cancelled) return;
+        try {
+          const data = JSON.parse(String(e.data)) as { summary?: ExecutionSummary };
+          const summary = data.summary ?? null;
+          setLatestExecutionSummary(summary);
+          if (summary) {
+            onEventRef.current?.({
+              event: 'execution_summary',
+              data: { summary },
+            });
+          }
+        } catch {
+          // Ignore unparseable events
+        }
+      });
+    };
+
+    connectSummaryStream();
+
+    return () => {
+      cancelled = true;
+
+      if (summaryReconnectTimerRef.current !== null) {
+        clearTimeout(summaryReconnectTimerRef.current);
+        summaryReconnectTimerRef.current = null;
+      }
+
+      if (summaryEventSourceRef.current) {
+        summaryEventSourceRef.current.close();
+        summaryEventSourceRef.current = null;
+      }
+    };
+  }, [agentId, enabled]);
 
   const clearStreamOutput = useCallback(() => {
     setStreamOutput([]);

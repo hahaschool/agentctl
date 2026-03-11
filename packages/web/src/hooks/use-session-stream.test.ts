@@ -271,6 +271,37 @@ describe('useSessionStream — cost events', () => {
 // ---------------------------------------------------------------------------
 
 describe('useSessionStream — execution summary events', () => {
+  it('subscribes to the agent stream for execution_summary events when agentId is provided', () => {
+    const { result } = renderHook(() =>
+      useSessionStream({ sessionId: 'sess-1', agentId: 'agent-1' }),
+    );
+
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1]?.url).toContain('/api/agents/agent-1/stream');
+
+    const summary = {
+      status: 'success' as const,
+      workCompleted: 'Received the summary from the agent stream.',
+      executiveSummary: 'Received the summary from the agent stream.',
+      keyFindings: ['Session detail subscribes to the correct live source.'],
+      filesChanged: [],
+      commandsRun: 1,
+      toolUsageBreakdown: { Edit: 1 },
+      followUps: [],
+      branchName: null,
+      prUrl: null,
+      tokensUsed: { input: 40, output: 10 },
+      costUsd: 0.02,
+      durationMs: 1_200,
+    };
+
+    act(() => {
+      MockEventSource.instances[1]?.simulateEvent('execution_summary', { summary });
+    });
+
+    expect(result.current.latestExecutionSummary).toEqual(summary);
+  });
+
   it('updates latestExecutionSummary from execution_summary events', () => {
     const { result } = renderHook(() => useSessionStream({ sessionId: 'sess-1' }));
 

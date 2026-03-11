@@ -60,6 +60,7 @@ export function SessionDetailView(): React.JSX.Element {
   const clearStreamRef = useRef<() => void>(() => {});
   const stream = useSessionStream({
     sessionId,
+    agentId: s?.agentId ?? undefined,
     enabled: isActive,
     onEvent: useCallback(
       (event: SessionStreamEvent) => {
