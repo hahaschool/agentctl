@@ -2,6 +2,7 @@ import type { RunHandoffDecision } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import type { ManagedSessionRecord } from '../../runtime-management/managed-session-store.js';
 import { runtimeSessionRoutes } from './runtime-sessions.js';
 import {
@@ -40,6 +41,7 @@ function makeManagedSession(overrides: Partial<ManagedSessionRecord> = {}): Mana
     worktreePath: null,
     status: 'active',
     configRevision: 9,
+    executionEnvironment: null,
     handoffStrategy: null,
     handoffSourceSessionId: null,
     metadata: {},
@@ -357,6 +359,258 @@ describe('runtimeSessionRoutes', () => {
     expect(firstResponse.statusCode).toBe(201);
     expect(secondResponse.statusCode).toBe(201);
     expect(runHandoffDecisionStore.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('POST /api/runtime-sessions persists an explicitly requested execution environment', async () => {
+    const dbRegistry = createMockDbRegistry({
+      getMachine: vi.fn().mockResolvedValue(
+        makeMachine({
+          capabilities: {
+            gpu: false,
+            docker: true,
+            maxConcurrentAgents: 4,
+            executionEnvironments: [
+              {
+                id: 'direct',
+                available: true,
+                isDefault: true,
+                isolation: 'host',
+                metadata: {},
+              },
+              {
+                id: 'docker',
+                available: true,
+                isDefault: false,
+                isolation: 'container',
+                metadata: {},
+              },
+            ],
+            defaultExecutionEnvironment: 'direct',
+          },
+        }),
+      ),
+    });
+    const appWithRegistry = await buildApp(
+      managedSessionStore,
+      runtimeConfigStore,
+      runHandoffDecisionStore,
+      { dbRegistry },
+    );
+
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-explicit-env',
+        nativeSessionId: null,
+        status: 'starting',
+        executionEnvironment: 'direct',
+      }),
+    );
+    managedSessionStore.updateStatus.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-explicit-env',
+        nativeSessionId: 'codex-native-1',
+        status: 'active',
+        executionEnvironment: 'direct',
+      }),
+    );
+    mockFetchOk({
+      ok: true,
+      session: {
+        runtime: 'codex',
+        sessionId: 'managed-worker-1',
+        nativeSessionId: 'codex-native-1',
+        status: 'active',
+      },
+    });
+
+    const response = await appWithRegistry.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: 'machine-1',
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+        prompt: 'Start working',
+        executionRequirements: {
+          environment: 'direct',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(managedSessionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        machineId: 'machine-1',
+        executionEnvironment: 'direct',
+      }),
+    );
+    expect(response.json().session.executionEnvironment).toBe('direct');
+
+    await appWithRegistry.close();
+  });
+
+  it('POST /api/runtime-sessions defaults to the machine default execution environment', async () => {
+    const dbRegistry = createMockDbRegistry({
+      getMachine: vi.fn().mockResolvedValue(
+        makeMachine({
+          capabilities: {
+            gpu: false,
+            docker: true,
+            maxConcurrentAgents: 4,
+            executionEnvironments: [
+              {
+                id: 'direct',
+                available: true,
+                isDefault: true,
+                isolation: 'host',
+                metadata: {},
+              },
+            ],
+            defaultExecutionEnvironment: 'direct',
+          },
+        }),
+      ),
+    });
+    const appWithRegistry = await buildApp(
+      managedSessionStore,
+      runtimeConfigStore,
+      runHandoffDecisionStore,
+      { dbRegistry },
+    );
+
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-default-env',
+        nativeSessionId: null,
+        status: 'starting',
+        executionEnvironment: 'direct',
+      }),
+    );
+    managedSessionStore.updateStatus.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-default-env',
+        nativeSessionId: 'codex-native-1',
+        status: 'active',
+        executionEnvironment: 'direct',
+      }),
+    );
+    mockFetchOk({
+      ok: true,
+      session: {
+        runtime: 'codex',
+        sessionId: 'managed-worker-1',
+        nativeSessionId: 'codex-native-1',
+        status: 'active',
+      },
+    });
+
+    const response = await appWithRegistry.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: 'machine-1',
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+        prompt: 'Start working',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(managedSessionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionEnvironment: 'direct',
+      }),
+    );
+    expect(response.json().session.executionEnvironment).toBe('direct');
+
+    await appWithRegistry.close();
+  });
+
+  it('POST /api/runtime-sessions rejects unavailable execution environments for the selected machine', async () => {
+    const appWithRegistry = await buildApp(
+      managedSessionStore,
+      runtimeConfigStore,
+      runHandoffDecisionStore,
+      {
+        dbRegistry: createMockDbRegistry({
+          getMachine: vi.fn().mockResolvedValue(
+            makeMachine({
+              capabilities: {
+                gpu: false,
+                docker: false,
+                maxConcurrentAgents: 4,
+                executionEnvironments: [
+                  {
+                    id: 'direct',
+                    available: true,
+                    isDefault: true,
+                    isolation: 'host',
+                    metadata: {},
+                  },
+                  {
+                    id: 'docker',
+                    available: false,
+                    isDefault: false,
+                    isolation: 'container',
+                    reasonUnavailable: 'Docker daemon unavailable',
+                    metadata: {},
+                  },
+                ],
+                defaultExecutionEnvironment: 'direct',
+              },
+            }),
+          ),
+        }),
+      },
+    );
+
+    const response = await appWithRegistry.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: 'machine-1',
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+        prompt: 'Start working',
+        executionRequirements: {
+          environment: 'docker',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: 'EXECUTION_ENVIRONMENT_UNAVAILABLE',
+    });
+    expect(managedSessionStore.create).not.toHaveBeenCalled();
+
+    await appWithRegistry.close();
+  });
+
+  it('POST /api/runtime-sessions rejects unknown execution environments', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: 'machine-1',
+        agentId: 'agent-1',
+        projectPath: '/workspace/app',
+        prompt: 'Start working',
+        executionRequirements: {
+          environment: 'slurm',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: 'INVALID_EXECUTION_ENVIRONMENT',
+    });
+    expect(managedSessionStore.create).not.toHaveBeenCalled();
   });
 
   it('POST /api/runtime-sessions/:id/resume resumes the stored runtime session', async () => {

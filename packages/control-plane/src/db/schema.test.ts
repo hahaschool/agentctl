@@ -503,18 +503,19 @@ describe('agentRuns table columns', () => {
     });
   });
 
-  it('model, provider, sessionId, errorMessage, resultSummary are nullable text', () => {
-    for (const key of [
-      'model',
-      'provider',
-      'sessionId',
-      'errorMessage',
-      'resultSummary',
-    ] as const) {
+  it('model, provider, sessionId, and errorMessage are nullable text', () => {
+    for (const key of ['model', 'provider', 'sessionId', 'errorMessage'] as const) {
       expect(meta[key].columnType).toBe('PgText');
       expect(meta[key].notNull).toBe(false);
       expect(meta[key].hasDefault).toBe(false);
     }
+  });
+
+  it('resultSummary is a nullable jsonb column without a default', () => {
+    expect(meta.resultSummary.columnType).toBe('PgJsonb');
+    expect(meta.resultSummary.dataType).toBe('json');
+    expect(meta.resultSummary.notNull).toBe(false);
+    expect(meta.resultSummary.hasDefault).toBe(false);
   });
 
   it('SQL column names match the migration (snake_case)', () => {
@@ -1063,8 +1064,8 @@ describe('runtimeConfigRevisions table columns', () => {
 describe('managedSessions table columns', () => {
   const meta = getColumnMeta(managedSessions);
 
-  it('has exactly 15 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(15);
+  it('has exactly 16 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(16);
   });
 
   it('has all expected column keys', () => {
@@ -1072,6 +1073,7 @@ describe('managedSessions table columns', () => {
       'id',
       'runtime',
       'nativeSessionId',
+      'executionEnvironment',
       'machineId',
       'agentId',
       'projectPath',

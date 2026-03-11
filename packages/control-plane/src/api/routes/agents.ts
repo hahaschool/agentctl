@@ -93,7 +93,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     { schema: { tags: ['machines'], summary: 'Machine heartbeat' } },
     async (request) => {
       if (dbRegistry) {
-        await dbRegistry.heartbeat(request.params.id);
+        await dbRegistry.heartbeat(request.params.id, request.body.capabilities);
       } else {
         await registry.heartbeat(request.params.id);
       }

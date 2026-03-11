@@ -1,4 +1,10 @@
-import type { Agent, AgentRun, Machine, RegisterWorkerRequest } from '@agentctl/shared';
+import type {
+  Agent,
+  AgentRun,
+  ExecutionSummary,
+  Machine,
+  RegisterWorkerRequest,
+} from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
 import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
@@ -31,7 +37,7 @@ type CompleteRunData = {
   tokensIn?: number | null;
   tokensOut?: number | null;
   errorMessage?: string | null;
-  resultSummary?: string | null;
+  resultSummary?: ExecutionSummary | string | null;
 };
 
 type InsertActionData = {
@@ -126,13 +132,19 @@ export class DbAgentRegistry {
     this.logger.info({ machineId, hostname }, 'Machine registered');
   }
 
-  async heartbeat(machineId: string): Promise<void> {
+  async heartbeat(machineId: string, capabilities?: Machine['capabilities']): Promise<void> {
+    const setClause: Partial<typeof machines.$inferInsert> = {
+      lastHeartbeat: new Date(),
+      status: 'online',
+    };
+
+    if (capabilities) {
+      setClause.capabilities = capabilities;
+    }
+
     const result = await this.db
       .update(machines)
-      .set({
-        lastHeartbeat: new Date(),
-        status: 'online',
-      })
+      .set(setClause)
       .where(eq(machines.id, machineId))
       .returning({ id: machines.id });
 
@@ -377,6 +389,16 @@ export class DbAgentRegistry {
     }
 
     this.logger.info({ runId, status: data.status }, 'Agent run completed');
+  }
+
+  async getRun(runId: string): Promise<AgentRun | undefined> {
+    const rows = await this.db.select().from(agentRuns).where(eq(agentRuns.id, runId));
+
+    if (rows.length === 0) {
+      return undefined;
+    }
+
+    return this.toRun(rows[0]);
   }
 
   async getRecentRuns(agentId: string, limit = 20): Promise<AgentRun[]> {
@@ -697,7 +719,7 @@ export class DbAgentRegistry {
       provider: row.provider as AgentRun['provider'],
       sessionId: row.sessionId,
       errorMessage: row.errorMessage,
-      resultSummary: row.resultSummary,
+      resultSummary: row.resultSummary ?? null,
     };
   }
 }

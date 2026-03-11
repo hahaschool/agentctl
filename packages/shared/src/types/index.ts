@@ -50,6 +50,19 @@ export {
 } from './auto-handoff.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
+  ExecutionSummary,
+  ExecutionSummaryContext,
+  ExecutionSummaryFileAction,
+  ExecutionSummaryFileChange,
+  ExecutionSummaryStatus,
+} from './execution-summary.js';
+export {
+  EXECUTION_SUMMARY_FILE_ACTIONS,
+  EXECUTION_SUMMARY_STATUSES,
+  isExecutionSummary,
+  toExecutionSummary,
+} from './execution-summary.js';
+export type {
   LoopConfig,
   LoopMode,
   LoopState,
@@ -69,10 +82,13 @@ export type {
 } from './memory.js';
 export { DEFAULT_INJECTION_BUDGET } from './memory.js';
 export type {
+  ExecutionEnvironmentCapability,
+  ExecutionEnvironmentId,
   HandoffReason,
   HandoffSnapshot,
   HandoffStrategy,
   ManagedEnvironmentPolicy,
+  ManagedExecutionRequirements,
   ManagedInstructionBundle,
   ManagedMcpServer,
   ManagedRuntime,
@@ -85,8 +101,10 @@ export type {
   ManualTakeoverStatus,
 } from './runtime-management.js';
 export {
+  EXECUTION_ENVIRONMENTS,
   HANDOFF_REASONS,
   HANDOFF_STRATEGIES,
+  isExecutionEnvironmentId,
   isHandoffStrategy,
   isManagedRuntime,
   isManagedSessionStatus,

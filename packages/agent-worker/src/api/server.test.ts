@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentPool } from '../runtime/agent-pool.js';
+import { ExecutionEnvironmentRegistry } from '../runtime/execution-environment-registry.js';
 import { createSilentLogger } from '../test-helpers.js';
 import { createWorkerServer } from './server.js';
 
@@ -86,6 +87,38 @@ describe('manual takeover route registration', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().manualTakeover.workerSessionId).toBe('rc-1');
+  });
+});
+
+describe('execution environment registry wiring', () => {
+  let app: FastifyInstance;
+  let pool: AgentPool;
+
+  beforeEach(async () => {
+    const logger = createSilentLogger();
+    pool = new AgentPool({ logger, maxConcurrent: 3 });
+    app = await createWorkerServer({
+      logger,
+      agentPool: pool,
+      machineId: MACHINE_ID,
+      executionEnvironmentRegistry: new ExecutionEnvironmentRegistry(),
+    });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await pool.stopAll();
+    await app.close();
+  });
+
+  it('accepts an injected execution environment registry when booting the worker server', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBeDefined();
   });
 });
 

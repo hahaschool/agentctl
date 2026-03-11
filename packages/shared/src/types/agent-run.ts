@@ -1,3 +1,5 @@
+import type { ExecutionSummary } from './execution-summary.js';
+
 export type RunTrigger = 'schedule' | 'manual' | 'signal' | 'adhoc' | 'heartbeat';
 
 export type RunStatus = 'running' | 'success' | 'failure' | 'timeout' | 'cancelled';
@@ -16,5 +18,5 @@ export type AgentRun = {
   provider: 'anthropic' | 'bedrock' | 'vertex' | null;
   sessionId: string | null;
   errorMessage: string | null;
-  resultSummary: string | null;
+  resultSummary: ExecutionSummary | string | null;
 };
