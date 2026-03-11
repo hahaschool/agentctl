@@ -283,12 +283,7 @@ describe('MemorySearch', () => {
 
   it('passes the role parameter through the search method', async () => {
     const vectorRow = makeFakeFactRow({ id: 'fact-vec', rank: 1, tags: ['security-reviewer'] });
-    const { search, embedding } = makeSearch([
-      [vectorRow],
-      [],
-      [],
-      [],
-    ]);
+    const { search, embedding } = makeSearch([[vectorRow], [], [], []]);
 
     const results = await search.search({
       query: 'security check',

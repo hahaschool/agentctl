@@ -221,7 +221,12 @@ export const memoryScopeRoutes: FastifyPluginAsync<MemoryScopeRoutesOptions> = a
       }
 
       const facts = await memoryStore.listFacts({ scope: scopeId as MemoryScope, limit: 10_000 });
-      return reply.send({ ok: true, promoted: facts.length, fromScope: scopeId, toScope: parentId });
+      return reply.send({
+        ok: true,
+        promoted: facts.length,
+        fromScope: scopeId,
+        toScope: parentId,
+      });
     },
   );
 
@@ -234,14 +239,26 @@ export const memoryScopeRoutes: FastifyPluginAsync<MemoryScopeRoutesOptions> = a
       const { targetId } = request.body;
 
       if (typeof targetId !== 'string' || !targetId) {
-        return reply.code(400).send({ error: 'INVALID_TARGET', message: 'targetId must be provided' });
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_TARGET', message: 'targetId must be provided' });
       }
       if (sourceId === targetId) {
-        return reply.code(400).send({ error: 'SAME_SCOPE', message: 'Cannot merge a scope into itself' });
+        return reply
+          .code(400)
+          .send({ error: 'SAME_SCOPE', message: 'Cannot merge a scope into itself' });
       }
 
-      const sourceFacts = await memoryStore.listFacts({ scope: sourceId as MemoryScope, limit: 10_000 });
-      return reply.send({ ok: true, merged: sourceFacts.length, fromScope: sourceId, toScope: targetId });
+      const sourceFacts = await memoryStore.listFacts({
+        scope: sourceId as MemoryScope,
+        limit: 10_000,
+      });
+      return reply.send({
+        ok: true,
+        merged: sourceFacts.length,
+        fromScope: sourceId,
+        toScope: targetId,
+      });
     },
   );
 };

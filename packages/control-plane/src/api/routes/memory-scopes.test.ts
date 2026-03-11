@@ -97,14 +97,21 @@ describe('memory scope routes', () => {
       const response = await app.inject({ method: 'GET', url: '/api/memory/scopes' });
 
       expect(response.statusCode).toBe(200);
-      const body = response.json<{ ok: boolean; scopes: Array<{ id: string; factCount: number; type: string }> }>();
+      const body = response.json<{
+        ok: boolean;
+        scopes: Array<{ id: string; factCount: number; type: string }>;
+      }>();
       expect(body.ok).toBe(true);
       expect(body.scopes).toHaveLength(3);
 
       // First scope should be global
       expect(body.scopes[0]).toMatchObject({ id: 'global', type: 'global', factCount: 1 });
       // Then project
-      expect(body.scopes[1]).toMatchObject({ id: 'project:agentctl', type: 'project', factCount: 2 });
+      expect(body.scopes[1]).toMatchObject({
+        id: 'project:agentctl',
+        type: 'project',
+        factCount: 2,
+      });
       // Then agent
       expect(body.scopes[2]).toMatchObject({ id: 'agent:worker-1', type: 'agent', factCount: 1 });
     });

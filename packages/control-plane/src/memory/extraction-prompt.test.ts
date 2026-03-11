@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  EXTRACTION_QUALITY_RULES,
-  buildExtractionPrompt,
-} from './extraction-prompt.js';
+import { buildExtractionPrompt, EXTRACTION_QUALITY_RULES } from './extraction-prompt.js';
 
 describe('extraction quality rules', () => {
   it('contains all four quality rule headings', () => {

@@ -43,13 +43,7 @@ vi.mock('@/components/ui/card', () => ({
 }));
 
 vi.mock('@/components/ui/button', () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-    type,
-    ...props
-  }: React.ComponentProps<'button'>) => (
+  Button: ({ children, onClick, disabled, type, ...props }: React.ComponentProps<'button'>) => (
     <button type={type ?? 'button'} onClick={onClick} disabled={disabled} {...props}>
       {children}
     </button>
@@ -170,14 +164,16 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
   }: {
     children: React.ReactNode;
     asChild?: boolean;
-  }) => <div data-testid="dropdown-trigger">{asChild ? children : <button type="button">{children}</button>}</div>,
-  DropdownMenuContent: ({
-    children,
-    align,
-  }: {
-    children: React.ReactNode;
-    align?: string;
-  }) => <div data-testid="dropdown-content" data-align={align}>{children}</div>,
+  }) => (
+    <div data-testid="dropdown-trigger">
+      {asChild ? children : <button type="button">{children}</button>}
+    </div>
+  ),
+  DropdownMenuContent: ({ children, align }: { children: React.ReactNode; align?: string }) => (
+    <div data-testid="dropdown-content" data-align={align}>
+      {children}
+    </div>
+  ),
   DropdownMenuItem: ({
     children,
     onClick,

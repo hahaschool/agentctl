@@ -46,7 +46,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   memoryScopesQuery,
   useCreateScope,
@@ -236,7 +242,10 @@ function ScopeTreeNode({
         </button>
 
         {/* Scope name */}
-        <span className="min-w-0 flex-1 truncate font-mono text-sm text-foreground" title={node.scope.id}>
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-sm text-foreground"
+          title={node.scope.id}
+        >
           {node.scope.name}
         </span>
 
@@ -264,9 +273,7 @@ function ScopeTreeNode({
             {node.scope.type !== 'global' && (
               <>
                 <DropdownMenuItem
-                  onClick={() =>
-                    onRename({ scopeId: node.scope.id, currentName: node.scope.name })
-                  }
+                  onClick={() => onRename({ scopeId: node.scope.id, currentName: node.scope.name })}
                 >
                   Rename
                 </DropdownMenuItem>
@@ -401,7 +408,10 @@ function CreateScopeDialog({ open, onClose }: CreateScopeDialogProps): React.JSX
               autoFocus
             />
             <p className="text-xs text-muted-foreground">
-              Scope ID will be <code className="font-mono">{type}:{name || '…'}</code>
+              Scope ID will be{' '}
+              <code className="font-mono">
+                {type}:{name || '…'}
+              </code>
             </p>
           </div>
           {createScope.error && (
@@ -440,10 +450,7 @@ function RenameDialog({ state, onClose }: RenameDialogProps): React.JSX.Element 
     (e: React.FormEvent) => {
       e.preventDefault();
       if (!state || !name.trim()) return;
-      renameScope.mutate(
-        { id: state.scopeId, name: name.trim() },
-        { onSuccess: onClose },
-      );
+      renameScope.mutate({ id: state.scopeId, name: name.trim() }, { onSuccess: onClose });
     },
     [state, name, renameScope, onClose],
   );
@@ -510,10 +517,7 @@ function MergeDialog({ state, allScopes, onClose }: MergeDialogProps): React.JSX
 
   const handleConfirm = useCallback(() => {
     if (!state || !targetId) return;
-    mergeScopes.mutate(
-      { sourceId: state.sourceId, targetId },
-      { onSuccess: onClose },
-    );
+    mergeScopes.mutate({ sourceId: state.sourceId, targetId }, { onSuccess: onClose });
   }, [state, targetId, mergeScopes, onClose]);
 
   return (
@@ -729,10 +733,7 @@ export function MemoryScopeManagerView(): React.JSX.Element {
           )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handlePromoteConfirm}
-              disabled={promoteScope.isPending}
-            >
+            <AlertDialogAction onClick={handlePromoteConfirm} disabled={promoteScope.isPending}>
               {promoteScope.isPending ? 'Promoting…' : 'Promote'}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -740,11 +741,7 @@ export function MemoryScopeManagerView(): React.JSX.Element {
       </AlertDialog>
 
       {/* Merge dialog */}
-      <MergeDialog
-        state={mergeState}
-        allScopes={scopes}
-        onClose={() => setMergeState(null)}
-      />
+      <MergeDialog state={mergeState} allScopes={scopes} onClose={() => setMergeState(null)} />
     </div>
   );
 }

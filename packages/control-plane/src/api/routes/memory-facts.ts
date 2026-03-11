@@ -1,4 +1,10 @@
-import type { EntityType, FactSource, FeedbackSignal, MemoryFact, MemoryScope } from '@agentctl/shared';
+import type {
+  EntityType,
+  FactSource,
+  FeedbackSignal,
+  MemoryFact,
+  MemoryScope,
+} from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MemorySearch } from '../../memory/memory-search.js';
