@@ -368,7 +368,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 ### 4.7 UI Quality & Accessibility — P1
 
-> Based on comprehensive `/audit` scan (2026-03-11). See `docs/superpowers/specs/2026-03-10-public-repo-prep-design.md` for public repo context.
+> Based on comprehensive `/audit` scan (2026-03-11). See `docs/plans/2026-03-10-public-repo-prep-design.md` for public repo context.
 
 #### 4.7.1 Critical Accessibility Fixes (Immediate)
 
@@ -420,8 +420,8 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 ### 4.8 Unified Memory System UI — P1
 
-> Design spec: [specs/2026-03-11-memory-ui-design.md](superpowers/specs/2026-03-11-memory-ui-design.md)
-> Impl plan: [plans/2026-03-11-memory-ui-implementation.md](superpowers/plans/2026-03-11-memory-ui-implementation.md)
+> Design spec: [plans/2026-03-11-memory-ui-design.md](plans/2026-03-11-memory-ui-design.md)
+> Impl plan: [plans/2026-03-11-memory-ui-implementation.md](plans/2026-03-11-memory-ui-implementation.md)
 >
 > Full-stack vertical implementation: each page ships API route → component → test.
 > Top-level `/memory` route with left sidebar, 8 sub-pages, plus memory data
@@ -744,7 +744,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [advanced-fork-impl-plan](plans/2026-03-08-advanced-fork-impl-plan.md) | Archived | 4.3 |
 | [codex-claude-runtime-unification-design](plans/2026-03-09-codex-claude-runtime-unification-design.md) | Delivered | 3.1, 3.2 |
 | [codex-claude-runtime-unification-impl-plan](plans/2026-03-09-codex-claude-runtime-unification-impl-plan.md) | Delivered | 3.1, 3.2 |
-| [fork-ux-overhaul](plans/2026-03-09-fork-ux-overhaul.md) | Active | 4.8 |
+| [fork-ux-overhaul](plans/2026-03-09-fork-ux-overhaul.md) | Active | 4.9 |
 | [astro-agent-patterns-design](plans/2026-03-10-astro-agent-patterns-design.md) | Active | 2.5-2.9, 3.3 |
 | [runtime-centric-settings-redesign-design](plans/2026-03-10-runtime-centric-settings-redesign-design.md) | Delivered | 4.5 |
 | [runtime-centric-settings-redesign-impl-plan](plans/2026-03-10-runtime-centric-settings-redesign-impl-plan.md) | Delivered | 4.5 |
@@ -764,8 +764,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Delivered | 2.4 |
 | [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Delivered | 2.4 |
 | [claude-mem-migration-plan](plans/2026-03-11-claude-mem-migration-plan.md) | Active | 3.6 |
-| [memory-ui-design](superpowers/specs/2026-03-11-memory-ui-design.md) | Approved | 4.8 |
-| [memory-ui-implementation](superpowers/plans/2026-03-11-memory-ui-implementation.md) | Planned | 4.8 |
+| [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Approved | 4.8 |
+| [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Planned | 4.8 |
 
 ### Knowledge Engineering
 - [Agent 知识工程实践 (stonepage)](https://zhuanlan.zhihu.com/p/1898602837) — Knowledge types, layered loading, dreaming/synthesis, meta-cognition

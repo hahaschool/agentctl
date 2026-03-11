@@ -657,6 +657,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  refreshRuntimeConfig: (machineId?: string) =>
+    request<{ refreshed: number; items: unknown[] }>('/api/runtime-config/refresh', {
+      method: 'POST',
+      body: JSON.stringify(machineId ? { machineId } : {}),
+    }),
 
   // Project account mappings
   listProjectAccounts: () => request<ProjectAccountMapping[]>('/api/settings/project-accounts'),

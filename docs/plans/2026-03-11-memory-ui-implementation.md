@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Fastify (CP routes), Next.js 14 App Router, TanStack React Query + Table + Virtual, react-force-graph-2d, recharts, nuqs, shadcn/ui, Vitest, React Testing Library.
 
-**Design Spec:** `docs/superpowers/specs/2026-03-11-memory-ui-design.md`
+**Design Spec:** `docs/plans/2026-03-11-memory-ui-design.md`
 
 ---
 

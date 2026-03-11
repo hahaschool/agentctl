@@ -1053,6 +1053,54 @@ describe('AgentInstance', () => {
   // ── notifyRunCompletion ────────────────────────────────────────
 
   describe('notifyRunCompletion', () => {
+    it('emits an execution_summary event that matches the persisted resultSummary payload', async () => {
+      const { runWithSdk } = await import('./sdk-runner.js');
+      vi.mocked(runWithSdk).mockResolvedValueOnce({
+        sessionId: 'sess-summary-live',
+        costUsd: 0.42,
+        tokensIn: 1200,
+        tokensOut: 450,
+        result: 'Implemented the structured execution summary end-to-end.',
+      });
+
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+      const agent = new AgentInstance(
+        makeOptions({
+          controlPlaneUrl: 'http://localhost:4000',
+          runId: 'run-summary-live',
+        }),
+      );
+      const events: AgentEvent[] = [];
+      agent.onEvent((event) => events.push(event));
+
+      await agent.start('finish structured summaries');
+      await vi.advanceTimersByTimeAsync(0);
+
+      const summaryEvent = events.find((event) => event.event === 'execution_summary');
+      expect(summaryEvent).toBeDefined();
+      expect(summaryEvent).toMatchObject({
+        event: 'execution_summary',
+        data: {
+          summary: expect.objectContaining({
+            status: 'success',
+            executiveSummary: 'Implemented the structured execution summary end-to-end.',
+            tokensUsed: { input: 1200, output: 450 },
+            costUsd: 0.42,
+          }),
+        },
+      });
+
+      const callBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      if (summaryEvent?.event === 'execution_summary') {
+        expect(summaryEvent.data.summary).toEqual(callBody.resultSummary);
+      }
+
+      fetchSpy.mockRestore();
+    });
+
     it('posts a structured resultSummary and token usage to control plane after a successful SDK run', async () => {
       const { runWithSdk } = await import('./sdk-runner.js');
       vi.mocked(runWithSdk).mockResolvedValueOnce({

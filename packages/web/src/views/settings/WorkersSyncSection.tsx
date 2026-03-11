@@ -2,10 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query';
 
+import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { machinesQuery, runtimeConfigDriftQuery } from '@/lib/queries';
+import { machinesQuery, runtimeConfigDriftQuery, useRefreshRuntimeConfig } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 import { buildWorkerRuntimeInventory, RUNTIME_LABELS } from './types';
@@ -20,11 +21,23 @@ function statusTone(
 }
 
 export function WorkersSyncSection(): React.JSX.Element {
+  const toast = useToast();
   const machines = useQuery(machinesQuery());
   const drift = useQuery(runtimeConfigDriftQuery());
+  const refresh = useRefreshRuntimeConfig();
 
   const isLoading = machines.isLoading || drift.isLoading;
   const inventory = buildWorkerRuntimeInventory(machines.data ?? [], drift.data);
+
+  function handleInspect(machineId: string): void {
+    refresh.mutate(machineId, {
+      onSuccess: () => {
+        toast.success('Runtime status refreshed');
+        void drift.refetch?.();
+      },
+      onError: (err) => toast.error(`Failed to inspect: ${err.message}`),
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -58,8 +71,13 @@ export function WorkersSyncSection(): React.JSX.Element {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" disabled>
-                  Inspect local access
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={refresh.isPending}
+                  onClick={() => handleInspect(machine.machineId)}
+                >
+                  {refresh.isPending ? 'Inspecting…' : 'Inspect local access'}
                 </Button>
                 <Button size="sm" variant="outline" disabled>
                   Sync now
