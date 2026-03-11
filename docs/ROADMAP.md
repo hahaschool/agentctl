@@ -252,6 +252,9 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [ ] Context budget: maxTokens 2400, maxFacts 20, 3-tier injection (pinned + on-demand + triggered)
 - [ ] Memory MCP server for runtime-side access
 - [ ] Migration path: dual-write → import → cutover
+- [ ] Claude-mem data migration: audit → import script (PG target) → API dual-read → UI migration → MCP transition → cleanup
+
+> Migration plan: [plans/2026-03-11-claude-mem-migration-plan.md](plans/2026-03-11-claude-mem-migration-plan.md)
 
 **Knowledge Engineering** (inspired by [stonepage's Agent 知识工程实践](https://zhuanlan.zhihu.com/p/1898602837)):
 - [ ] Expanded EntityType: +`skill`, +`experience`, +`principle`, +`question` (11 total)
@@ -533,7 +536,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | Item | Depends On | Notes |
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
-| Unified Memory Layer (P1) | None | Can start immediately; replaces Mem0 |
+| Unified Memory Layer (P1) | None | Can start immediately; replaces Mem0. Claude-mem migration is part of this — see [migration plan](plans/2026-03-11-claude-mem-migration-plan.md) |
 | Execution Summary (P1) | None | Can start immediately |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
@@ -605,6 +608,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [execution-environment-registry-impl-plan](plans/2026-03-11-execution-environment-registry-impl-plan.md) | Planned | 2.9 |
 | [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Planned | 2.4 |
 | [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Planned | 2.4 |
+| [claude-mem-migration-plan](plans/2026-03-11-claude-mem-migration-plan.md) | Active | 3.6 |
 
 ### Knowledge Engineering
 - [Agent 知识工程实践 (stonepage)](https://zhuanlan.zhihu.com/p/1898602837) — Knowledge types, layered loading, dreaming/synthesis, meta-cognition
