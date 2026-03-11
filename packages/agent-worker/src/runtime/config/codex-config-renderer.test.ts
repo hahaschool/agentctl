@@ -47,6 +47,9 @@ describe('CodexConfigRenderer', () => {
       expect.objectContaining({ scope: 'home', path: '.codex/config.toml' }),
     );
     expect(rendered.files).toContainEqual(
+      expect.objectContaining({ scope: 'workspace', path: '.codex/config.toml' }),
+    );
+    expect(rendered.files).toContainEqual(
       expect.objectContaining({ scope: 'home', path: '.codex/AGENTS.md' }),
     );
     expect(rendered.files).toContainEqual(
@@ -63,10 +66,17 @@ describe('CodexConfigRenderer', () => {
   it('serializes config.toml with runtime settings and MCP servers', () => {
     const renderer = new CodexConfigRenderer();
     const rendered = renderer.render(makeConfig());
-    const configFile = rendered.files.find((file) => file.path === '.codex/config.toml');
+    const configFile = rendered.files.find(
+      (file) => file.scope === 'home' && file.path === '.codex/config.toml',
+    );
 
     expect(configFile?.content).toContain('model = "gpt-5-codex"');
     expect(configFile?.content).toContain('approval_policy = "on-request"');
+    expect(configFile?.content).toContain('sandbox_mode = "workspace-write"');
+    expect(configFile?.content).toContain('[shell_environment_policy]');
+    expect(configFile?.content).toContain('inherit = ["PATH"]');
+    expect(configFile?.content).toContain('[shell_environment_policy.set]');
+    expect(configFile?.content).toContain('NODE_ENV = "development"');
     expect(configFile?.content).toContain('[mcp_servers.filesystem]');
     expect(configFile?.content).toContain('command = "npx"');
   });
@@ -85,10 +95,26 @@ describe('CodexConfigRenderer', () => {
         },
       }),
     );
-    const configFile = rendered.files.find((file) => file.path === '.codex/config.toml');
+    const configFile = rendered.files.find(
+      (file) => file.scope === 'home' && file.path === '.codex/config.toml',
+    );
 
     expect(configFile?.content).toContain('model = "gpt-5.2-codex"');
     expect(configFile?.content).toContain('model_provider = "openai"');
     expect(configFile?.content).toContain('model_reasoning_effort = "high"');
+  });
+
+  it.each([
+    'read-only',
+    'workspace-write',
+    'danger-full-access',
+  ] as const)('serializes sandbox mode %s without rewriting the managed value', (sandbox) => {
+    const renderer = new CodexConfigRenderer();
+    const rendered = renderer.render(makeConfig({ sandbox }));
+    const configFile = rendered.files.find(
+      (file) => file.scope === 'home' && file.path === '.codex/config.toml',
+    );
+
+    expect(configFile?.content).toContain(`sandbox_mode = "${sandbox}"`);
   });
 });

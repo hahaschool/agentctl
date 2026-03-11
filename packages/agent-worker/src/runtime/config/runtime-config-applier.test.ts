@@ -94,6 +94,16 @@ describe('RuntimeConfigApplier', () => {
         hash: expect.stringMatching(/^sha256:/),
       }),
     );
+    expect(writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('/.codex/config.toml'),
+      expect.stringContaining('[shell_environment_policy]'),
+      'utf-8',
+    );
+    expect(writeFile).toHaveBeenCalledWith(
+      '/workspace/project/.codex/config.toml',
+      expect.stringContaining('[shell_environment_policy]'),
+      'utf-8',
+    );
     expect(response.runtimes['claude-code']).toEqual({ installed: true, authenticated: true });
     expect(response.runtimes.codex).toEqual({ installed: true, authenticated: false });
     expect(mkdir).toHaveBeenCalled();
