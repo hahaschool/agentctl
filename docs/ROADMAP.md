@@ -240,6 +240,7 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 
 PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolation (global > project > agent > session), pgvector + tsvector + graph traversal fused via Reciprocal Rank Fusion.
 
+**Core (MVP)**:
 - [ ] Shared types: `MemoryFact`, `MemoryEdge`, `MemoryScope`, `InjectionBudget`
 - [ ] SQL migration `0010`: pgvector extension, `memory_facts` (HNSW index), `memory_edges`, `memory_scopes`
 - [ ] Drizzle schema + embedding client (text-embedding-3-small via LiteLLM)
@@ -247,9 +248,20 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [ ] `MemorySearch`: hybrid search (vector + BM25 + graph CTE + RRF fusion)
 - [ ] `MemoryInjector` refactor: dual-backend (Mem0 / PG) via `MEMORY_BACKEND` env var
 - [ ] Memory API routes: search, add, list, delete (with scope filtering)
-- [ ] Context budget: maxTokens 2000, maxFacts 15, weighted scoring
+- [ ] Context budget: maxTokens 2400, maxFacts 20, 3-tier injection (pinned + on-demand + triggered)
 - [ ] Memory MCP server for runtime-side access
 - [ ] Migration path: dual-write → import → cutover
+
+**Knowledge Engineering** (inspired by [stonepage's Agent 知识工程实践](https://zhuanlan.zhihu.com/p/1898602837)):
+- [ ] Expanded EntityType: +`skill`, +`experience`, +`principle`, +`question` (11 total)
+- [ ] Expanded RelationType: +`derived_from`, +`validates`, +`contradicts` (10 total)
+- [ ] Pinned facts: always-injected guardrails, no decay, hard cap per scope
+- [ ] Trigger-based injection: `TriggerSpec` (tool/file_pattern/keyword) integrated with PreToolUse hooks
+- [ ] Role-aware search: `tags[]` field + `roleAffinity` boost in RRF reranking
+- [ ] Meta-cognition: extraction quality rules embedded in extraction LLM prompt
+- [ ] `memory_feedback` MCP tool: `used` / `irrelevant` / `outdated` signals
+- [ ] Knowledge synthesis: weekly cron Phase 1 (lint) + Phase 2 (LLM-proposed principles, human review)
+- [ ] Contradiction detection: `contradicts` edges trigger human review flags
 
 ---
 
@@ -426,6 +438,50 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 ---
 
+## 7. Developer Knowledge Engineering
+
+> Improvements to how agents learn and accumulate knowledge during AgentCTL development itself. Inspired by [stonepage's Agent 知识工程实践](https://zhuanlan.zhihu.com/p/1898602837).
+
+### 7.1 Layered Knowledge Loading — P2
+
+Restructure `.claude/rules/` to avoid always-loading all rules. Most rules should be on-demand with trigger-based loading.
+
+- [ ] Add front-matter `triggers:` to `.claude/rules/` files specifying when each ruleset should activate
+- [ ] Split always-on rules (critical guardrails) from on-demand rules (coding style, patterns)
+- [ ] Minimize MEMORY.md to only irreversible-damage rules; move everything else to topic-specific files
+- [ ] Audit existing rules for relevance and remove outdated entries
+
+### 7.2 Knowledge Sedimentation Rules — P2
+
+Meta-rules about when and how to add knowledge to the project's documentation and memory files.
+
+- [ ] Create `docs/KNOWLEDGE_SEDIMENTATION.md` defining:
+  - When an observation becomes a lesson (requires 2+ occurrences or irreversible impact)
+  - What makes a good principle (falsifiable, contextual, actionable)
+  - When to promote from session notes → LESSONS_LEARNED → CLAUDE.md rules
+  - How to format knowledge for AI agent consumption (atomic, standalone, outcome-included)
+- [ ] Reference sedimentation rules from CLAUDE.md
+
+### 7.3 Automated Experience Extraction — P3
+
+Post-session hooks that extract lessons from development sessions into appropriate knowledge files.
+
+- [ ] Claude Code Stop hook: summarize key decisions and lessons from session
+- [ ] Route extracted knowledge to correct file (LESSONS_LEARNED.md, debugging.md, or relevant topic file)
+- [ ] Dedup against existing entries before writing
+- [ ] Human review flag for non-obvious extractions
+
+### 7.4 Knowledge Maintenance / Dreaming — P3
+
+Periodic review of accumulated knowledge for staleness, contradictions, and synthesis opportunities.
+
+- [ ] Monthly lint of LESSONS_LEARNED.md, MEMORY.md, `.claude/rules/` for outdated entries
+- [ ] Cross-reference lessons against codebase changes (lessons about deleted code should be archived)
+- [ ] Synthesis pass: identify clusters of related lessons and propose higher-level principles
+- [ ] Track "knowledge coverage" — which areas of the codebase have lessons vs. knowledge gaps
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -441,8 +497,12 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 | **P2** | Automatic Handoff Triggers | 3.5 | Not started |
 | **P2** | Remote Control Spike | 2.4 | Not started |
 | **P2** | Fork UX Extensions | 4.7 | Partial — auto-related-message/runtime-in-direct-fork work remains |
+| **P2** | Layered Knowledge Loading | 7.1 | Not started |
+| **P2** | Knowledge Sedimentation Rules | 7.2 | Not started |
 | **P3** | Mobile Session Browser | 5.1-5.3 | Partial — browser/actions/handoff history exist |
 | **P3** | Execution Environment Registry | 2.9 | Not started |
+| **P3** | Automated Experience Extraction | 7.3 | Not started |
+| **P3** | Knowledge Maintenance / Dreaming | 7.4 | Not started |
 
 ---
 
@@ -462,7 +522,9 @@ task complete:   execution summary (session resume) → JSONB → summary card
 steer:           chat input → control plane proxy → worker → SDK streamInput → ack
 safety check:    workdir classify (4 tiers) → SSE event → approve/reject/sandbox → execute
 runtime mgmt:    config sync → managed sessions → native import preflight → snapshot fallback
-memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → context injection
+memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → 3-tier injection
+knowledge:       extract → lint (dedup+contradict) → synthesize (LLM propose) → human review → promote
+feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) → adjust strength/ranking
 ```
 
 ## Dependencies
@@ -480,8 +542,12 @@ memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+gra
 | Automatic Handoff (P2) | AgentOutputStream | Needs unified event stream for trigger detection |
 | Remote Control Spike (P2) | None | Evaluate only — no dependency on implementation |
 | Fork UX Extensions (P2) | Unified Memory Layer | Memory integration in fork context selection; extends existing `ContextPickerDialog`, memory panel, and prompt preview |
+| Layered Knowledge Loading (P2) | None | Can start immediately; restructure `.claude/rules/` with trigger-based loading |
+| Knowledge Sedimentation Rules (P2) | None | Can start immediately; meta-rules for knowledge management |
 | Mobile Session Browser (P3) | None | Web unification patterns are already on `main`; remaining work is mobile-side unification/filtering/actions |
 | Execution Environment Registry (P3) | AgentOutputStream | Needs adapter interface stable |
+| Automated Experience Extraction (P3) | Knowledge Sedimentation Rules | Needs sedimentation rules to know where to route extracted knowledge |
+| Knowledge Maintenance (P3) | Unified Memory Layer | Lint/synthesis features build on the memory layer's graph and contradiction detection |
 
 ## References
 
@@ -538,3 +604,6 @@ memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+gra
 | [execution-environment-registry-impl-plan](plans/2026-03-11-execution-environment-registry-impl-plan.md) | Planned | 2.9 |
 | [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Planned | 2.4 |
 | [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Planned | 2.4 |
+
+### Knowledge Engineering
+- [Agent 知识工程实践 (stonepage)](https://zhuanlan.zhihu.com/p/1898602837) — Knowledge types, layered loading, dreaming/synthesis, meta-cognition

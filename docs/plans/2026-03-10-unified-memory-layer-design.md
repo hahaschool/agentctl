@@ -406,6 +406,170 @@ packages/agent-worker/src/runtime/
 | LiteLLM proxy (existing) | $0 |
 | **Total** | **~$5/month** |
 
+## Knowledge Engineering Enhancements
+
+> Inspired by stonepage's "Agent 知识工程实践" article on making coding agents learn, remember, and grow. These enhancements upgrade the memory system from a passive fact store to an active knowledge engineering platform.
+
+### Expanded Knowledge Type System
+
+The original `EntityType` is biased toward code artifacts and misses several critical knowledge categories. Expand to 11 types:
+
+```typescript
+type EntityType =
+  | 'code_artifact'    // file, function, class, API endpoint
+  | 'decision'         // architectural choice + rationale
+  | 'pattern'          // recurring code pattern or convention
+  | 'error'            // bug, exception, failure mode + resolution
+  | 'person'           // developer, reviewer
+  | 'concept'          // abstract pattern, design principle
+  | 'preference'       // user/agent preference
+  // --- New knowledge-engineering types ---
+  | 'skill'            // procedural knowledge: "how to do X" (steps, workflow)
+  | 'experience'       // generalized experience: not limited to errors
+  | 'principle'        // explicit rule/constraint: "never do X", "always do Y"
+  | 'question';        // known unknown: "we don't know Y yet, needs investigation"
+```
+
+**Rationale**: `skill` captures procedural knowledge (e.g., "deploy to production: 1. run migrations, 2. blue-green swap, 3. smoke test"). `experience` generalizes beyond `error` to include positive outcomes. `principle` makes rules explicit and falsifiable. `question` tracks knowledge gaps — critical for agents that should ask rather than guess.
+
+### Expanded Relationship Types
+
+Add knowledge-provenance edges that track how knowledge evolves:
+
+```typescript
+type RelationType =
+  | 'modifies' | 'depends_on' | 'caused_by' | 'resolves'
+  | 'supersedes' | 'related_to' | 'summarizes'
+  // --- New knowledge-evolution edges ---
+  | 'derived_from'     // principle/insight derived from experiences
+  | 'validates'        // experience that confirms a principle
+  | 'contradicts';     // experience that contradicts a principle (triggers review)
+```
+
+**Key signal**: `contradicts` edges are the primary input for knowledge maintenance — when a new experience contradicts an existing principle, the system should flag it for human review rather than silently letting stale knowledge persist.
+
+### Layered Loading (3-Tier Injection)
+
+Replace flat injection with three tiers that respect the principle "precise context > more context":
+
+```
+Tier 1: Always-On (pinned facts)
+  │  Facts that prevent irreversible damage. Always injected.
+  │  Example: "Never DROP tables in production without backup"
+  │  Budget: maxTokens 400 (reserved from total 2400)
+  │
+Tier 2: On-Demand (hybrid search)
+  │  Current design — query-driven retrieval via vector+BM25+graph.
+  │  Budget: maxTokens 1600
+  │
+Tier 3: Triggered (hook-based)
+     Facts injected ONLY when specific conditions match.
+     Integrated with existing PreToolUse hook system.
+     Budget: maxTokens 400 (additive, outside normal budget)
+```
+
+#### Pinned Facts
+
+```typescript
+// New field on MemoryFact
+pinned: boolean;  // Default: false
+```
+
+- Pinned facts skip search ranking — always included in injection
+- Not subject to strength decay
+- Limited to ~10 facts per scope (hard cap to prevent bloat)
+- Use case: critical rules, guardrails, known-dangerous operations
+
+#### Trigger-Based Injection
+
+```typescript
+type TriggerSpec = {
+  tool?: string;          // "Bash", "Write", "Edit"
+  file_pattern?: string;  // "*.test.ts", "Dockerfile*", "*.sql"
+  keyword?: string;       // "deploy", "migration", "delete"
+};
+
+// New field on MemoryFact
+triggers: TriggerSpec[];  // Default: []
+```
+
+Integration point: Worker's PreToolUse hook queries `memory_facts WHERE triggers @> $condition`. Matched facts are injected into the tool-use context. This reuses the existing hook infrastructure without adding new middleware.
+
+#### Updated Injection Budget
+
+```typescript
+type InjectionBudget = {
+  maxTokens: number;        // Default: 2400 (was 2000)
+  maxFacts: number;         // Default: 20 (was 15)
+  pinnedBudget: number;     // Default: 400
+  onDemandBudget: number;   // Default: 1600
+  triggerBudget: number;    // Default: 400 (additive)
+  priorityWeights: {
+    relevance: number;      // 0.4 (was 0.5)
+    recency: number;        // 0.2
+    strength: number;       // 0.2
+    scopeProximity: number; // 0.1
+    roleAffinity: number;   // 0.1 (new)
+  };
+};
+```
+
+### Role-Aware Search
+
+Agents performing different tasks (security review, feature development, debugging) should see knowledge weighted by relevance to their role.
+
+```typescript
+// New field on MemoryFact
+tags: string[];  // e.g., ["security", "performance", "testing", "deployment"]
+```
+
+At search time, if the agent context includes a role hint (from agent config or task type), facts with matching tags receive a `roleAffinity` boost in RRF reranking. No scope model changes needed.
+
+### Knowledge Synthesis Lifecycle
+
+Upgrade weekly consolidation from simple summarization to a two-phase process:
+
+**Phase 1: Lint** (automated)
+- Detect duplicate facts (embedding cosine > 0.92)
+- Find `contradicts` edges → flag for human review
+- Identify orphan facts (no edges, low strength, never accessed)
+- Check for broken references (edges pointing to archived facts)
+
+**Phase 2: Synthesis** (LLM + human review)
+- Cluster experiences by entity_type + related edges
+- For clusters with 3+ experiences, prompt LLM to propose candidate `principle` or `insight` facts
+- Candidate facts are stored with `confidence: 0.5` + `extraction_method: 'synthesis'`
+- Require human approval (via `memory_promote` MCP tool or web UI) to raise confidence above 0.7
+- Approved candidates gain `derived_from` edges back to source experiences
+
+### Meta-Cognition: Extraction Quality Rules
+
+Embed knowledge quality guidelines into the extraction LLM prompt in `memory-extract.ts`:
+
+1. **Atomicity**: One fact = one piece of knowledge. Not "use pnpm and TypeScript" but two separate facts.
+2. **Context**: Include enough context to be useful standalone. Not "use pnpm" but "AgentCTL monorepo uses pnpm workspaces as package manager".
+3. **Falsifiability**: Principles must be testable. Not "write good code" but "functions must not exceed 50 lines".
+4. **Outcome**: Experiences must include result. Not "tried X" but "tried X, succeeded/failed because Y".
+5. **Actionability**: Skills must include concrete steps, not vague guidance.
+6. **Freshness**: Skip extraction for facts that already exist (dedup check before storing).
+
+### Memory Feedback Tool
+
+Add a feedback signal so agents can report whether injected knowledge was useful:
+
+```typescript
+// New MCP tool
+memory_feedback(fact_id: string, signal: 'used' | 'irrelevant' | 'outdated')
+```
+
+| Signal | Effect |
+|--------|--------|
+| `used` | `strength += 0.1`, `accessed_at = now()` |
+| `irrelevant` | Decrement relevance score for similar future queries (tracked per agent-query pair) |
+| `outdated` | Set `review_needed = true`, surface in knowledge lint |
+
+This closes the feedback loop: facts that are consistently irrelevant to the queries that surface them get demoted over time, improving injection precision.
+
 ## Deferred Items
 
 | Item | Trigger to Revisit |
