@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-11 (PRs #50 knowledge graph, #51 ARIA+a11y, #52 memory dashboard, #53 consolidation+reports+fact-editor, #54 ARIA hardening, #55 scope-manager+import-wizard+integration-points; prior: PRs #45-#47, #43-#44, #39)
+> Last updated: 2026-03-12 (PR #63 cross-entity queries + CodeQL security fixes; PRs #57-#62 shared components, MCP tools, ARIA hardening, layered knowledge, Codex sandbox, auto-handoff; PRs #50-#55 knowledge graph, a11y, memory dashboard, consolidation, scope manager; prior: PRs #39-#47)
 
 ## Current State
 
@@ -465,7 +465,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Reports: `POST /api/memory/reports`, `GET /api/memory/reports/:id`
 - [x] Import: `POST /api/memory/import`, `GET /api/memory/import/status`
 - [x] Stats: `GET /api/memory/stats` (dashboard metrics)
-- [ ] Cross-entity queries: `?sessionId=X`, `?agentId=X`, `?machineId=X`
+- [x] Cross-entity queries: `?sessionId=X`, `?agentId=X`, `?machineId=X` *(PR #63)*
 
 **MCP tools (agent runtime access):**
 
@@ -655,8 +655,8 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
-| **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
-| **P2** | Automatic Handoff Triggers | 3.5 | Not started |
+| **P2** | Codex Operational Parity | 3.4 | Partial — sandbox constraint enforcement delivered (PR #61); full bubblewrap/Seatbelt parity evidence remains |
+| **P2** | Automatic Handoff Triggers | 3.5 | Partial — task-affinity + handoff history delivered (PR #62); live rate-limit/cost-threshold remains |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
