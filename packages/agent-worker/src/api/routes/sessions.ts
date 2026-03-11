@@ -161,6 +161,11 @@ function validateProjectPath(raw: unknown): string {
   // resolvePath + normalize collapses any `..` components, eliminating traversal
   const resolved = resolvePath(normalize(raw));
 
+  // Must be absolute after normalisation
+  if (!resolved.startsWith('/')) {
+    throw new WorkerError('INVALID_PATH', 'Project path must be absolute', { path: raw });
+  }
+
   const segments = resolved.split('/');
   for (const segment of segments) {
     if (DENIED_PATH_SEGMENTS.includes(segment)) {

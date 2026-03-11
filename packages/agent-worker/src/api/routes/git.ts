@@ -5,6 +5,7 @@
 
 import { execFile } from 'node:child_process';
 import { statSync } from 'node:fs';
+import { normalize, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { WorkerError } from '@agentctl/shared';
@@ -63,6 +64,47 @@ type GitStatusResponse = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Sensitive path segments that must never appear in a validated git path. */
+const DENIED_GIT_SEGMENTS = ['.ssh', '.gnupg', '.aws', '.env', 'credentials'];
+
+/**
+ * Validate that a path string from an HTTP request is safe to use as a
+ * git working directory. Rejects path traversal (`..`) and access to
+ * sensitive directories.
+ *
+ * Security: prevents js/path-injection by (a) normalising the path via
+ * resolve/normalize to eliminate `..` traversal, (b) requiring an absolute
+ * path, and (c) rejecting any path that contains sensitive directory names
+ * such as .ssh or .aws.
+ */
+function validateGitPath(raw: unknown): string {
+  if (!raw || typeof raw !== 'string') {
+    throw new WorkerError('INVALID_PATH', 'A non-empty "path" query parameter is required');
+  }
+
+  // resolve + normalize collapses `..` components, eliminating traversal
+  const resolved = resolve(normalize(raw));
+
+  // Must be absolute after normalisation
+  if (!resolved.startsWith('/')) {
+    throw new WorkerError('INVALID_PATH', 'Path must be absolute', { path: raw });
+  }
+
+  // Reject paths that contain sensitive directory names
+  const segments = resolved.split('/');
+  for (const segment of segments) {
+    if (DENIED_GIT_SEGMENTS.includes(segment)) {
+      throw new WorkerError(
+        'INVALID_PATH',
+        `Access to "${segment}" directories is denied for security reasons`,
+        { path: resolved, deniedSegment: segment },
+      );
+    }
+  }
+
+  return resolved;
+}
 
 async function runGit(args: string[], cwd: string): Promise<string> {
   const { stdout } = await execFileAsync('git', args, {
@@ -180,16 +222,18 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
       },
     },
     async (request, reply) => {
-      const { path: dirPath } = request.query;
-
-      if (!dirPath || typeof dirPath !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_PATH',
-          message: 'A non-empty "path" query parameter is required',
-        });
+      // Security: validate and sanitize the path from the HTTP request to
+      // prevent path injection (js/path-injection). validateGitPath rejects
+      // traversal sequences and paths outside allowed directories.
+      let dirPath: string;
+      try {
+        dirPath = validateGitPath(request.query.path);
+      } catch (err) {
+        const msg = err instanceof WorkerError ? err.message : 'Invalid path';
+        return reply.code(400).send({ error: 'INVALID_PATH', message: msg });
       }
 
-      // Security: validate path exists and is a directory
+      // Validate path exists and is a directory
       try {
         const stat = statSync(dirPath);
         if (!stat.isDirectory()) {

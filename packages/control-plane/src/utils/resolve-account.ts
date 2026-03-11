@@ -19,7 +19,13 @@ export type AccountResolutionContext = {
  * E.g. `/Users/someone/agentctl` → `agentctl`, `my-project` → `my-project`.
  */
 export function extractProjectName(pathStr: string): string {
-  const trimmed = pathStr.replace(/\/+$/, '');
+  // Security: avoid regex with unbounded quantifiers on user-controlled input
+  // to prevent polynomial ReDoS. Use lastIndexOf instead.
+  let end = pathStr.length;
+  while (end > 0 && pathStr[end - 1] === '/') {
+    end--;
+  }
+  const trimmed = pathStr.slice(0, end);
   const lastSlash = trimmed.lastIndexOf('/');
   return lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
 }

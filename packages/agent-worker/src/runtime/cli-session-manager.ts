@@ -232,6 +232,8 @@ export class CliSessionManager extends EventEmitter {
     // Spawn the CLI process.
     // stdin is set to 'ignore' — the CLI in `-p` mode doesn't read from stdin,
     // and keeping stdin open can cause the process to hang waiting for EOF.
+    // Security: projectPath must be validated by the caller (sessionRoutes) via
+    // validateProjectPath() before reaching here to prevent js/path-injection.
     const child = spawn(options.claudePath ?? this.claudePath, args, {
       cwd: options.projectPath,
       env: childEnv,
