@@ -119,14 +119,20 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 ### 2.5 Structured Execution Summary — P1
 
 > Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.1
+>
+> Status note: Partially delivered on `main`. Shared `ExecutionSummary` types,
+> the `agent_runs.result_summary` JSONB column, and `GET /api/runs/:id/summary`
+> with stored/replay fallback are already landed. Remaining work is generating
+> structured summaries in the worker completion path, emitting a dedicated SSE
+> event, and surfacing summary cards in web/mobile views.
 
 Auto-generate structured summary at task completion via session resume.
 
-- [ ] Define `ExecutionSummary` type (status, workCompleted, executiveSummary, filesChanged, followUps, cost)
-- [ ] Implement summary generation in `AgentInstance.stop()` with post-hoc fallback
-- [ ] DB migration: `agent_runs.result_summary` JSONB
+- [x] Define `ExecutionSummary` type (status, workCompleted, executiveSummary, filesChanged, followUps, cost)
+- [ ] Implement summary generation in `AgentInstance.stop()`; post-hoc fallback already exists in the run summary route
+- [x] DB migration: `agent_runs.result_summary` JSONB
 - [ ] SSE event: `execution_summary`
-- [ ] API: `GET /api/runs/:id/summary`
+- [x] API: `GET /api/runs/:id/summary`
 - [ ] Summary card in web/mobile session view
 
 ### 2.6 Workdir Safety Tiers — P1 ✅
@@ -170,13 +176,20 @@ Inject guidance into running sessions via SDK `streamInput()`.
 
 > Design doc: [plans/2026-03-11-execution-environment-registry-design.md](plans/2026-03-11-execution-environment-registry-design.md)
 > Impl plan: [plans/2026-03-11-execution-environment-registry-impl-plan.md](plans/2026-03-11-execution-environment-registry-impl-plan.md)
+>
+> Status note: Phase 1 is already on `main`. Shared execution-environment
+> contracts, `ExecutionEnvironment`/`DirectEnvironment`, worker capability
+> reporting, and control-plane environment selection are landed. The remaining
+> gap here is `DockerEnvironment`, which the plan intentionally stages after
+> `AgentOutputStream` stabilizes.
 
 Orthogonal WHERE (local/Docker/SSH) vs WHAT (Claude/Codex) abstraction.
 
-- [ ] `ExecutionEnvironment` interface: detect, prepare, cleanup
-- [ ] `DirectEnvironment` (subprocess) + `DockerEnvironment` (gVisor)
-- [ ] Auto-detect at startup, report in heartbeat
-- [ ] Dispatch routing considers environment requirements
+- [x] `ExecutionEnvironment` interface: detect, prepare, cleanup
+- [x] `DirectEnvironment` (subprocess)
+- [ ] `DockerEnvironment` (gVisor)
+- [x] Auto-detect at startup, report in heartbeat
+- [x] Dispatch routing considers environment requirements
 
 ---
 
@@ -234,11 +247,17 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 
 > Design doc: [plans/2026-03-11-automatic-handoff-triggers-design.md](plans/2026-03-11-automatic-handoff-triggers-design.md)
 > Impl plan: [plans/2026-03-11-automatic-handoff-triggers-impl-plan.md](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md)
+>
+> Status note: Phase 1 is already on `main`. Shared auto-handoff contracts,
+> decision persistence, policy evaluation, run handoff history, and
+> dispatch-time task-affinity dry-run suggestions are landed. Live
+> rate-limit/cost-threshold execution remains deferred until
+> `AgentOutputStream` is stable.
 
 - [ ] Rate limit hit → failover to other agent type
 - [ ] Cost threshold → switch to cheaper model/provider
-- [ ] Task-type affinity rules (e.g., prefer Codex for Python-heavy)
-- [ ] Handoff history API: `GET /api/runs/:id/handoff-history`
+- [x] Task-type affinity rules (dispatch-time dry-run suggestions + decision logging)
+- [x] Handoff history API: `GET /api/runs/:id/handoff-history`
 
 ### 3.6 Unified Memory Layer — P1
 
