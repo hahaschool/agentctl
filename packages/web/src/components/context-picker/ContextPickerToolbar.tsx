@@ -73,7 +73,7 @@ const TopicInput = React.memo(function TopicInput({
       type="button"
       onClick={() => setShowInput(true)}
       aria-label="Select messages by topic"
-      className="px-2 py-0.5 text-[10px] text-purple-600 dark:text-purple-400 border border-purple-300/50 dark:border-purple-800/50 rounded-md hover:bg-purple-100/50 dark:hover:bg-purple-900/30 cursor-pointer transition-colors"
+      className="px-2 py-0.5 min-h-[44px] min-w-[44px] text-[10px] text-purple-600 dark:text-purple-400 border border-purple-300/50 dark:border-purple-800/50 rounded-md hover:bg-purple-100/50 dark:hover:bg-purple-900/30 cursor-pointer transition-colors inline-flex items-center justify-center"
     >
       By Topic
     </button>

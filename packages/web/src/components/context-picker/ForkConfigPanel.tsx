@@ -54,7 +54,7 @@ export const ForkConfigPanel = React.memo(function ForkConfigPanel({
   const canSubmit = forkPrompt.trim().length > 0 && !isSubmitting;
 
   return (
-    <div className="w-80 shrink-0 flex flex-col overflow-y-auto">
+    <div className="w-full sm:w-80 shrink-0 flex flex-col overflow-y-auto">
       <div className="p-4 space-y-3.5">
         {/* Fork Prompt */}
         <div>
