@@ -41,6 +41,7 @@ import { gitProxyRoutes } from './routes/git.js';
 import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
+import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { memoryRoutes } from './routes/memory.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { oauthRoutes } from './routes/oauth.js';
@@ -258,6 +259,12 @@ export async function createServer({
     managedSessionStore,
     handoffStore,
     runtimeConfigStore,
+    dbRegistry,
+    workerPort,
+  });
+  await app.register(manualTakeoverRoutes, {
+    prefix: '/api/runtime-sessions',
+    managedSessionStore,
     dbRegistry,
     workerPort,
   });
@@ -497,7 +504,7 @@ function createFallbackRuntimeConfigStore(): RuntimeConfigRouteStore {
 
 function createFallbackManagedSessionStore(): Pick<
   ManagedSessionStore,
-  'list' | 'create' | 'get' | 'updateStatus'
+  'list' | 'create' | 'get' | 'updateStatus' | 'patchMetadata'
 > {
   const sessions = new Map<string, ManagedSessionRecord>();
   return {
@@ -541,6 +548,22 @@ function createFallbackManagedSessionStore(): Pick<
         metadata: patch.metadata ?? existing.metadata,
         lastHeartbeat: patch.lastHeartbeat ?? existing.lastHeartbeat,
         endedAt: patch.endedAt ?? existing.endedAt,
+      };
+      sessions.set(id, updated);
+      return updated;
+    },
+    async patchMetadata(id, metadataPatch) {
+      const existing = sessions.get(id);
+      if (!existing) {
+        throw new Error(`Managed session '${id}' not found`);
+      }
+
+      const updated: ManagedSessionRecord = {
+        ...existing,
+        metadata: {
+          ...existing.metadata,
+          ...metadataPatch,
+        },
       };
       sessions.set(id, updated);
       return updated;

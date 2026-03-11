@@ -210,6 +210,28 @@ describe('structured request logging', () => {
   });
 });
 
+describe('manual takeover route registration', () => {
+  it('registers manual takeover routes on the control-plane server', async () => {
+    const app = await createServer({ logger });
+    await app.ready();
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/runtime-sessions/ms-1/manual-takeover',
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({
+        error: 'MANAGED_SESSION_NOT_FOUND',
+        message: "Managed session 'ms-1' was not found",
+      });
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 // ===========================================================================
 // Metrics self-exclusion
 // ===========================================================================

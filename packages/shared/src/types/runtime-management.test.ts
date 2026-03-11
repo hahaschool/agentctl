@@ -2,13 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   HandoffSnapshot,
+  ManualTakeoverState,
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
 } from './runtime-management.js';
 import {
   HANDOFF_STRATEGIES,
+  MANUAL_TAKEOVER_PERMISSION_MODES,
+  MANUAL_TAKEOVER_STATUSES,
   isHandoffStrategy,
+  isManualTakeoverPermissionMode,
+  isManualTakeoverStatus,
   isManagedRuntime,
   isManagedSessionStatus,
   MANAGED_RUNTIMES,
@@ -118,5 +123,39 @@ describe('runtime-management types', () => {
     expect(session.runtime).toBe('codex');
     expect(snapshot.reason).toBe('manual');
     expect(snapshot.activeConfigRevision).toBe(3);
+  });
+
+  it('defines manual takeover lifecycle contracts', () => {
+    const manualTakeover: ManualTakeoverState = {
+      workerSessionId: 'rc-1',
+      nativeSessionId: 'claude-session-1',
+      projectPath: '/tmp/project',
+      status: 'online',
+      permissionMode: 'default',
+      sessionUrl: 'https://claude.ai/code/session-123',
+      startedAt: '2026-03-11T10:00:00.000Z',
+      lastHeartbeat: '2026-03-11T10:00:10.000Z',
+      lastVerifiedAt: '2026-03-11T10:00:10.000Z',
+      error: null,
+    };
+
+    expect(MANUAL_TAKEOVER_STATUSES).toEqual([
+      'starting',
+      'online',
+      'reconnecting',
+      'stopped',
+      'error',
+    ]);
+    expect(MANUAL_TAKEOVER_PERMISSION_MODES).toEqual([
+      'default',
+      'accept-edits',
+      'plan',
+    ]);
+    expect(isManualTakeoverStatus('online')).toBe(true);
+    expect(isManualTakeoverStatus('paused')).toBe(false);
+    expect(isManualTakeoverPermissionMode('accept-edits')).toBe(true);
+    expect(isManualTakeoverPermissionMode('danger-full-access')).toBe(false);
+    expect(manualTakeover.permissionMode).toBe('default');
+    expect(manualTakeover.sessionUrl).toContain('claude.ai/code');
   });
 });

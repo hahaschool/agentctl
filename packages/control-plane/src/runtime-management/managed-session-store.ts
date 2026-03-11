@@ -135,6 +135,11 @@ export class ManagedSessionStore {
     status: ManagedSessionStatus,
     patch: UpdateManagedSessionStatusPatch = {},
   ): Promise<ManagedSessionRecord> {
+    const mergedMetadata =
+      patch.metadata === undefined
+        ? undefined
+        : mergeMetadata(await this.requireMetadataBase(sessionId), patch.metadata);
+
     const rows = await this.db
       .update(managedSessions)
       .set({
@@ -143,7 +148,7 @@ export class ManagedSessionStore {
         handoffStrategy: patch.handoffStrategy,
         lastHeartbeat: patch.lastHeartbeat,
         endedAt: patch.endedAt,
-        metadata: patch.metadata,
+        metadata: mergedMetadata,
       })
       .where(eq(managedSessions.id, sessionId))
       .returning();
@@ -162,6 +167,72 @@ export class ManagedSessionStore {
     this.logger.info({ managedSessionId: sessionId, status }, 'Managed session status updated');
     return mapManagedSessionRow(row);
   }
+
+  async patchMetadata(
+    sessionId: string,
+    metadataPatch: Record<string, unknown>,
+  ): Promise<ManagedSessionRecord> {
+    const rows = await this.db
+      .update(managedSessions)
+      .set({
+        metadata: mergeMetadata(await this.requireMetadataBase(sessionId), metadataPatch),
+      })
+      .where(eq(managedSessions.id, sessionId))
+      .returning();
+
+    const row = rows[0];
+    if (!row) {
+      throw new ControlPlaneError(
+        'MANAGED_SESSION_NOT_FOUND',
+        `Managed session '${sessionId}' was not found`,
+        {
+          sessionId,
+        },
+      );
+    }
+
+    this.logger.info({ managedSessionId: sessionId }, 'Managed session metadata patched');
+    return mapManagedSessionRow(row);
+  }
+
+  private async requireMetadataBase(sessionId: string): Promise<Record<string, unknown>> {
+    const existing = await this.get(sessionId);
+    if (!existing) {
+      throw new ControlPlaneError(
+        'MANAGED_SESSION_NOT_FOUND',
+        `Managed session '${sessionId}' was not found`,
+        {
+          sessionId,
+        },
+      );
+    }
+
+    return existing.metadata;
+  }
+}
+
+function mergeMetadata(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base };
+
+  for (const [key, value] of Object.entries(patch)) {
+    const existingValue = merged[key];
+
+    if (isPlainObject(existingValue) && isPlainObject(value)) {
+      merged[key] = mergeMetadata(existingValue, value);
+      continue;
+    }
+
+    merged[key] = value;
+  }
+
+  return merged;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function mapManagedSessionRow(row: typeof managedSessions.$inferSelect): ManagedSessionRecord {

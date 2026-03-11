@@ -178,4 +178,90 @@ describe('ManagedSessionStore', () => {
     expect(session?.id).toBe('ms-lookup');
     expect(session?.runtime).toBe('codex');
   });
+
+  it('patches metadata without overwriting unrelated fields', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: 'ms-merge',
+        runtime: 'claude-code',
+        nativeSessionId: 'claude-native-1',
+        machineId: 'machine-1',
+        agentId: null,
+        projectPath: '/workspace/app',
+        worktreePath: null,
+        status: 'active',
+        configVersion: 8,
+        handoffStrategy: null,
+        handoffSourceSessionId: null,
+        metadata: {
+          reason: 'manual',
+          sourceRuntime: 'claude-code',
+          manualTakeover: {
+            status: 'starting',
+            workerSessionId: 'rc-old',
+          },
+        },
+        startedAt: new Date('2026-03-11T10:00:00Z'),
+        lastHeartbeat: new Date('2026-03-11T10:05:00Z'),
+        endedAt: null,
+      },
+    ]);
+
+    mockDb.returning.mockResolvedValueOnce([
+      {
+        id: 'ms-merge',
+        runtime: 'claude-code',
+        nativeSessionId: 'claude-native-1',
+        machineId: 'machine-1',
+        agentId: null,
+        projectPath: '/workspace/app',
+        worktreePath: null,
+        status: 'active',
+        configVersion: 8,
+        handoffStrategy: null,
+        handoffSourceSessionId: null,
+        metadata: {
+          reason: 'manual',
+          sourceRuntime: 'claude-code',
+          manualTakeover: {
+            status: 'online',
+            workerSessionId: 'rc-1',
+            sessionUrl: 'https://claude.ai/code/session-123',
+          },
+        },
+        startedAt: new Date('2026-03-11T10:00:00Z'),
+        lastHeartbeat: new Date('2026-03-11T10:10:00Z'),
+        endedAt: null,
+      },
+    ]);
+
+    const updated = await store.patchMetadata('ms-merge', {
+      manualTakeover: {
+        status: 'online',
+        workerSessionId: 'rc-1',
+        sessionUrl: 'https://claude.ai/code/session-123',
+      },
+    });
+
+    expect(mockDb.set).toHaveBeenCalledWith({
+      metadata: {
+        reason: 'manual',
+        sourceRuntime: 'claude-code',
+        manualTakeover: {
+          status: 'online',
+          workerSessionId: 'rc-1',
+          sessionUrl: 'https://claude.ai/code/session-123',
+        },
+      },
+    });
+    expect(updated.metadata).toEqual({
+      reason: 'manual',
+      sourceRuntime: 'claude-code',
+      manualTakeover: {
+        status: 'online',
+        workerSessionId: 'rc-1',
+        sessionUrl: 'https://claude.ai/code/session-123',
+      },
+    });
+  });
 });

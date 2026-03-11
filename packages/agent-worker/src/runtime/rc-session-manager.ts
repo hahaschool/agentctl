@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
+import type { ManualTakeoverPermissionMode } from '@agentctl/shared';
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
@@ -25,8 +26,9 @@ export type RcSession = {
   agentId: string;
   pid: number | null;
   sessionUrl: string | null;
-  claudeSessionId: string | null;
+  nativeSessionId: string | null;
   status: RcSessionStatus;
+  permissionMode: ManualTakeoverPermissionMode;
   projectPath: string;
   startedAt: Date;
   lastHeartbeat: Date | null;
@@ -45,6 +47,7 @@ export type StartSessionOptions = {
   projectPath: string;
   /** Resume an existing Claude Code session by ID. */
   resumeSessionId?: string;
+  permissionMode?: ManualTakeoverPermissionMode;
   /** Additional CLI flags to pass to `claude remote-control`. */
   extraArgs?: string[];
 };
@@ -112,8 +115,9 @@ export class RcSessionManager extends EventEmitter {
       agentId,
       process: child,
       sessionUrl: null,
-      claudeSessionId: null,
+      nativeSessionId: options.resumeSessionId ?? null,
       status: 'starting',
+      permissionMode: options.permissionMode ?? 'default',
       projectPath,
       startedAt: new Date(),
       lastHeartbeat: null,
@@ -146,10 +150,21 @@ export class RcSessionManager extends EventEmitter {
 
     managed.status = 'online';
     managed.lastHeartbeat = new Date();
-    this.emitSessionEvent(managed, 'session_online', { sessionUrl: managed.sessionUrl });
+    this.emitSessionEvent(managed, 'session_online', {
+      hasSessionUrl: managed.sessionUrl !== null,
+      nativeSessionId: managed.nativeSessionId,
+      permissionMode: managed.permissionMode,
+    });
 
     this.logger.info(
-      { sessionId, agentId, sessionUrl: managed.sessionUrl, pid: child.pid },
+      {
+        sessionId,
+        agentId,
+        nativeSessionId: managed.nativeSessionId,
+        permissionMode: managed.permissionMode,
+        hasSessionUrl: managed.sessionUrl !== null,
+        pid: child.pid,
+      },
       'Remote Control session is online',
     );
 
@@ -219,6 +234,26 @@ export class RcSessionManager extends EventEmitter {
     return managed ? this.toRcSession(managed) : null;
   }
 
+  getSessionByNativeSessionId(nativeSessionId: string): RcSession | null {
+    for (const managed of this.sessions.values()) {
+      if (managed.nativeSessionId === nativeSessionId) {
+        return this.toRcSession(managed);
+      }
+    }
+
+    return null;
+  }
+
+  getSessionByProjectPath(projectPath: string): RcSession | null {
+    for (const managed of this.sessions.values()) {
+      if (managed.projectPath === projectPath) {
+        return this.toRcSession(managed);
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Stop all sessions (used during worker shutdown).
    */
@@ -237,15 +272,16 @@ export class RcSessionManager extends EventEmitter {
   // ── Private helpers ────────────────────────────────────────────────
 
   private buildCliArgs(options: StartSessionOptions): string[] {
-    const { resumeSessionId, extraArgs } = options;
+    const { resumeSessionId, permissionMode, extraArgs } = options;
+    const args = resumeSessionId
+      ? ['--resume', resumeSessionId, '--remote-control']
+      : ['remote-control'];
 
-    if (resumeSessionId) {
-      // Resume an existing session and enable remote control
-      return ['--resume', resumeSessionId, '--remote-control', ...(extraArgs ?? [])];
+    if (permissionMode) {
+      args.push('--permission-mode', permissionMode);
     }
 
-    // Start a new standalone remote control session
-    return ['remote-control', ...(extraArgs ?? [])];
+    return [...args, ...(extraArgs ?? [])];
   }
 
   private attachProcessHandlers(managed: ManagedSession): void {
@@ -382,8 +418,9 @@ export class RcSessionManager extends EventEmitter {
       agentId: managed.agentId,
       pid: managed.process.pid ?? null,
       sessionUrl: managed.sessionUrl,
-      claudeSessionId: managed.claudeSessionId,
+      nativeSessionId: managed.nativeSessionId,
       status: managed.status,
+      permissionMode: managed.permissionMode,
       projectPath: managed.projectPath,
       startedAt: managed.startedAt,
       lastHeartbeat: managed.lastHeartbeat,
@@ -399,8 +436,9 @@ type ManagedSession = {
   agentId: string;
   process: ChildProcess;
   sessionUrl: string | null;
-  claudeSessionId: string | null;
+  nativeSessionId: string | null;
   status: RcSessionStatus;
+  permissionMode: ManualTakeoverPermissionMode;
   projectPath: string;
   startedAt: Date;
   lastHeartbeat: Date | null;

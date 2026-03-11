@@ -113,6 +113,42 @@ describe('RcSessionManager', () => {
     });
   });
 
+  describe('lookup helpers', () => {
+    it('finds a session by native session id', async () => {
+      setTimeout(() => {
+        mockChild.pushStdout('https://claude.ai/code/native-lookup\n');
+      }, 50);
+
+      const session = await manager.startSession({
+        agentId: 'agent-lookup',
+        projectPath: '/tmp/project',
+        resumeSessionId: 'claude-native-1',
+      });
+
+      expect(manager.getSessionByNativeSessionId('claude-native-1')).toMatchObject({
+        id: session.id,
+        nativeSessionId: 'claude-native-1',
+      });
+    });
+
+    it('finds a session by project path', async () => {
+      setTimeout(() => {
+        mockChild.pushStdout('https://claude.ai/code/project-lookup\n');
+      }, 50);
+
+      const session = await manager.startSession({
+        agentId: 'agent-project',
+        projectPath: '/tmp/project',
+        resumeSessionId: 'claude-native-2',
+      });
+
+      expect(manager.getSessionByProjectPath('/tmp/project')).toMatchObject({
+        id: session.id,
+        projectPath: '/tmp/project',
+      });
+    });
+  });
+
   describe('startSession', () => {
     it('spawns claude remote-control process and parses session URL', async () => {
       setTimeout(() => {
@@ -138,6 +174,7 @@ describe('RcSessionManager', () => {
       expect(session.agentId).toBe('agent-1');
       expect(session.status).toBe('online');
       expect(session.sessionUrl).toBe('https://claude.ai/code/session-abc123');
+      expect(session.nativeSessionId).toBeNull();
       expect(session.pid).toBe(12345);
       expect(session.projectPath).toBe('/home/user/project');
       expect(session.lastHeartbeat).toBeInstanceOf(Date);
@@ -158,6 +195,25 @@ describe('RcSessionManager', () => {
       expect(spawnSpy).toHaveBeenCalledWith(
         '/usr/local/bin/claude',
         ['--resume', 'prev-session-id', '--remote-control'],
+        expect.any(Object),
+      );
+    });
+
+    it('passes permission mode flags when provided', async () => {
+      setTimeout(() => {
+        mockChild.pushStdout('https://claude.ai/code/permission-mode\n');
+      }, 50);
+
+      await manager.startSession({
+        agentId: 'agent-2',
+        projectPath: '/tmp/project',
+        resumeSessionId: 'prev-session-id',
+        permissionMode: 'plan',
+      });
+
+      expect(spawnSpy).toHaveBeenCalledWith(
+        '/usr/local/bin/claude',
+        ['--resume', 'prev-session-id', '--remote-control', '--permission-mode', 'plan'],
         expect.any(Object),
       );
     });

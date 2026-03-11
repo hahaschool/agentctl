@@ -5,7 +5,9 @@ import type {
   ApplyRuntimeConfigResponse,
   CreateManagedSessionRequest,
   HandoffManagedSessionRequest,
+  ManualTakeoverResponse,
   RuntimeConfigSyncRequest,
+  StartManualTakeoverRequest,
 } from './runtime-management.js';
 
 describe('runtime-management protocol', () => {
@@ -76,5 +78,31 @@ describe('runtime-management protocol', () => {
 
     expect(syncRequest.machineIds).toHaveLength(2);
     expect(syncRequest.configVersion).toBe(4);
+  });
+
+  it('defines manual takeover request and response payloads', () => {
+    const request: StartManualTakeoverRequest = {
+      permissionMode: 'plan',
+    };
+
+    const response: ManualTakeoverResponse = {
+      ok: true,
+      manualTakeover: {
+        workerSessionId: 'rc-1',
+        nativeSessionId: 'claude-session-1',
+        projectPath: '/tmp/project',
+        status: 'online',
+        permissionMode: 'default',
+        sessionUrl: 'https://claude.ai/code/session-123',
+        startedAt: '2026-03-11T10:00:00.000Z',
+        lastHeartbeat: '2026-03-11T10:00:10.000Z',
+        lastVerifiedAt: '2026-03-11T10:00:10.000Z',
+        error: null,
+      },
+    };
+
+    expect(request.permissionMode).toBe('plan');
+    expect(response.manualTakeover?.status).toBe('online');
+    expect(response.manualTakeover?.sessionUrl).toContain('claude.ai/code');
   });
 });

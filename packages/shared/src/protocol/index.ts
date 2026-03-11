@@ -47,11 +47,13 @@ export type {
   CreateManagedSessionRequest,
   ForkManagedSessionRequest,
   HandoffManagedSessionRequest,
+  ManualTakeoverResponse,
   ManagedSessionResponse,
   ResumeManagedSessionRequest,
   RuntimeCapabilityState,
   RuntimeConfigSyncRequest,
   RuntimeConfigSyncResponse,
+  StartManualTakeoverRequest,
 } from './runtime-management.js';
 export type { WsClientMessage, WsServerMessage } from './ws-messages.js';
 export {

@@ -38,6 +38,9 @@ export type {
   HandoffReason,
   HandoffSnapshot,
   HandoffStrategy,
+  ManualTakeoverPermissionMode,
+  ManualTakeoverState,
+  ManualTakeoverStatus,
   ManagedEnvironmentPolicy,
   ManagedInstructionBundle,
   ManagedMcpServer,
@@ -50,9 +53,13 @@ export type {
 export {
   HANDOFF_REASONS,
   HANDOFF_STRATEGIES,
+  isManualTakeoverPermissionMode,
+  isManualTakeoverStatus,
   isHandoffStrategy,
   isManagedRuntime,
   isManagedSessionStatus,
+  MANUAL_TAKEOVER_PERMISSION_MODES,
+  MANUAL_TAKEOVER_STATUSES,
   MANAGED_RUNTIMES,
   MANAGED_SESSION_STATUSES,
 } from './runtime-management.js';

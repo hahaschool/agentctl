@@ -1,5 +1,7 @@
 import type {
   HandoffReason,
+  ManualTakeoverPermissionMode,
+  ManualTakeoverState,
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
@@ -66,4 +68,14 @@ export type HandoffManagedSessionRequest = {
 export type ManagedSessionResponse = {
   ok: true;
   session: ManagedSession;
+};
+
+// Valid only for Claude managed runtime sessions in the first manual takeover slice.
+export type StartManualTakeoverRequest = {
+  permissionMode?: ManualTakeoverPermissionMode | null;
+};
+
+export type ManualTakeoverResponse = {
+  ok: true;
+  manualTakeover: ManualTakeoverState | null;
 };
