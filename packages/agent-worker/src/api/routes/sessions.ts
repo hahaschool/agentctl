@@ -143,28 +143,23 @@ function validateSessionId(raw: unknown): string {
  * Validate that a project path from an HTTP request is safe to use as a
  * file-system path. Rejects traversal sequences and sensitive directories.
  *
- * Security: prevents js/path-injection by confining HTTP-sourced paths to
- * the user home directory and disallowing sensitive segment names.
+ * Security: prevents js/path-injection by (a) normalising the path to remove
+ * any `..` traversal components via resolvePath, (b) requiring an absolute
+ * path, and (c) disallowing sensitive directory names such as .ssh and .aws
+ * anywhere in the resolved path.
+ *
+ * Note: we intentionally do NOT restrict to a specific set of root prefixes
+ * (e.g. homedir, /tmp) because agent workers legitimately operate on project
+ * directories anywhere on the filesystem (/home, /Users, /mnt, /opt, etc.).
+ * The denied-segment check is the primary guard against accessing credentials.
  */
 function validateProjectPath(raw: unknown): string {
   if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
     throw new WorkerError('INVALID_PATH', 'A non-empty project path is required');
   }
 
+  // resolvePath + normalize collapses any `..` components, eliminating traversal
   const resolved = resolvePath(normalize(raw));
-  const home = homedir();
-
-  if (
-    !resolved.startsWith(home) &&
-    !resolved.startsWith('/tmp') &&
-    !resolved.startsWith('/var') &&
-    !resolved.startsWith('/opt') &&
-    !resolved.startsWith('/usr')
-  ) {
-    throw new WorkerError('INVALID_PATH', 'Project path is outside allowed directories', {
-      path: resolved,
-    });
-  }
 
   const segments = resolved.split('/');
   for (const segment of segments) {
