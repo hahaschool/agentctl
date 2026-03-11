@@ -146,7 +146,11 @@ export function NotificationBell({
                   {(() => {
                     const Icon = TYPE_ICONS[n.type];
                     return (
-                      <Icon size={14} className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])} aria-hidden="true" />
+                      <Icon
+                        size={14}
+                        className={cn('mt-0.5 shrink-0', TYPE_COLORS[n.type])}
+                        aria-hidden="true"
+                      />
                     );
                   })()}
                   <div className="min-w-0 flex-1">
