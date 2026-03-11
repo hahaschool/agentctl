@@ -18,8 +18,11 @@ import type { Database } from './db/index.js';
 import { createDb } from './db/index.js';
 import { ensureSchemaCompatibility } from './db/schema-compat.js';
 import { createLogger } from './logger.js';
+import { EmbeddingClient } from './memory/embedding-client.js';
 import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
+import { MemorySearch } from './memory/memory-search.js';
+import { MemoryStore } from './memory/memory-store.js';
 import { DbAgentRegistry } from './registry/db-registry.js';
 import { LiteLLMClient } from './router/litellm-client.js';
 import { MachineCircuitBreaker } from './scheduler/circuit-breaker.js';
@@ -52,6 +55,12 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
   {
     name: 'MEM0_URL',
     description: 'Mem0 server URL for cross-device memory',
+  },
+  {
+    name: 'MEMORY_BACKEND',
+    default: 'auto',
+    validate: (value) => ['auto', 'mem0', 'postgres'].includes(value),
+    description: 'Memory backend selection: auto, mem0, or postgres',
   },
   {
     name: 'LITELLM_URL',
@@ -119,6 +128,7 @@ const HOST = env.HOST as string;
 const REDIS_URL = env.REDIS_URL as string;
 const DATABASE_URL = env.DATABASE_URL || '';
 const MEM0_URL = env.MEM0_URL || '';
+const MEMORY_BACKEND = env.MEMORY_BACKEND || 'auto';
 const LITELLM_URL = env.LITELLM_URL || '';
 const CONTROL_PLANE_URL = env.CONTROL_PLANE_URL || `http://${HOST}:${PORT}`;
 const WORKER_CONCURRENCY = Number(env.WORKER_CONCURRENCY) || 5;
@@ -303,22 +313,73 @@ async function main(): Promise<void> {
     logger.warn('DATABASE_URL not set — falling back to in-memory registry');
   }
 
-  // Optionally initialise Mem0-backed memory injector when MEM0_URL is provided.
+  // Optionally initialise the PostgreSQL memory layer or Mem0 fallback.
   let mem0Client: Mem0Client | undefined;
+  let memorySearch: MemorySearch | undefined;
+  let memoryStore: MemoryStore | undefined;
   let memoryInjector: MemoryInjector | undefined;
 
-  if (MEM0_URL) {
+  const canUsePostgresMemory = Boolean(db && LITELLM_URL);
+
+  if (MEMORY_BACKEND === 'postgres' || (MEMORY_BACKEND === 'auto' && canUsePostgresMemory)) {
+    if (db && LITELLM_URL) {
+      const embeddingClient = new EmbeddingClient({
+        baseUrl: LITELLM_URL,
+        model: 'text-embedding-3-small',
+        logger: logger.child({ component: 'embedding-client' }),
+      });
+      const pool = (db as Database & { $client: import('pg').Pool }).$client;
+
+      memoryStore = new MemoryStore({
+        pool,
+        embeddingClient,
+        logger: logger.child({ component: 'memory-store' }),
+      });
+      memorySearch = new MemorySearch({
+        pool,
+        embeddingClient,
+        logger: logger.child({ component: 'memory-search' }),
+      });
+      memoryInjector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        logger: logger.child({ component: 'memory-injector' }),
+      });
+      logger.info({ memoryBackend: 'postgres' }, 'PostgreSQL memory backend initialised');
+    } else {
+      logger.warn(
+        {
+          memoryBackend: MEMORY_BACKEND,
+          hasDatabase: Boolean(db),
+          hasLiteLlm: Boolean(LITELLM_URL),
+        },
+        'PostgreSQL memory backend requested but prerequisites are missing',
+      );
+    }
+  }
+
+  if (!memoryInjector && MEM0_URL) {
     mem0Client = new Mem0Client({
       baseUrl: MEM0_URL,
       logger: logger.child({ component: 'mem0-client' }),
     });
     memoryInjector = new MemoryInjector({
+      backend: 'mem0',
       mem0Client,
       logger: logger.child({ component: 'memory-injector' }),
     });
-    logger.info({ mem0Url: MEM0_URL }, 'Memory injector initialised');
-  } else {
-    logger.info('MEM0_URL not set — memory injection disabled');
+    logger.info({ mem0Url: MEM0_URL, memoryBackend: 'mem0' }, 'Mem0 memory backend initialised');
+  } else if (!memoryInjector) {
+    logger.info(
+      {
+        memoryBackend: MEMORY_BACKEND,
+        hasDatabase: Boolean(db),
+        hasLiteLlm: Boolean(LITELLM_URL),
+        hasMem0: Boolean(MEM0_URL),
+      },
+      'No memory backend available — memory injection disabled',
+    );
   }
 
   // Optionally initialise LiteLLM client when LITELLM_URL is provided.
@@ -366,6 +427,8 @@ async function main(): Promise<void> {
     redis: redisConnection,
     litellmClient,
     mem0Client,
+    memorySearch,
+    memoryStore,
     memoryInjector: memoryInjector ?? null,
     workerPort: REMOTE_WORKER_PORT,
     isProduction: IS_PRODUCTION,
