@@ -7,6 +7,7 @@ triggers:
   - sql
   - docker
 always_on: true
+last_reviewed: "2026-03-12"
 ---
 
 # Security Rules

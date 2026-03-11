@@ -61,8 +61,9 @@ AgentCTL is a unified control plane for remotely orchestrating AI coding agents 
 agentctl/
 ├── CLAUDE.md                    # This file
 ├── .claude/rules/               # Agent-specific rules with trigger-based loading hints
-│   ├── security.md
-│   └── code-style.md
+│   ├── security.md              # always-on: secrets, docker, SQL injection guardrails
+│   ├── error-handling.md        # always-on: typed errors, async handling, logging
+│   └── code-style.md            # on-demand: TS style, naming, testing conventions
 ├── packages/
 │   ├── control-plane/           # Central orchestration server
 │   │   ├── src/
