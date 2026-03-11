@@ -43,6 +43,7 @@ function createMockMemorySearch(overrides: Partial<MemorySearch> = {}): MemorySe
 function createMockMemoryStore(overrides: Partial<MemoryStore> = {}): MemoryStore {
   return {
     addFact: vi.fn(),
+    listFacts: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as MemoryStore;
 }
@@ -140,63 +141,62 @@ describe('MemoryInjector', () => {
 
   describe('PostgreSQL backend', () => {
     it('builds injected context from PG search results', async () => {
+      const fact1 = {
+        id: 'fact-1',
+        scope: 'agent:agent-1',
+        content: 'Use pnpm workspaces for monorepo installs',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'pattern',
+        confidence: 0.91,
+        strength: 1,
+        source: {
+          session_id: null,
+          agent_id: 'agent-1',
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+      const fact2 = {
+        id: 'fact-2',
+        scope: 'global',
+        content: 'Project uses Biome for formatting and linting',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'decision',
+        confidence: 0.89,
+        strength: 0.95,
+        source: {
+          session_id: null,
+          agent_id: null,
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+
       const memorySearch = createMockMemorySearch({
         search: vi.fn().mockResolvedValue([
-          {
-            fact: {
-              id: 'fact-1',
-              scope: 'agent:agent-1',
-              content: 'Use pnpm workspaces for monorepo installs',
-              content_model: 'text-embedding-3-small',
-              entity_type: 'pattern',
-              confidence: 0.91,
-              strength: 1,
-              source: {
-                session_id: null,
-                agent_id: 'agent-1',
-                machine_id: null,
-                turn_index: null,
-                extraction_method: 'manual',
-              },
-              valid_from: '2026-03-11T00:00:00.000Z',
-              valid_until: null,
-              created_at: '2026-03-11T00:00:00.000Z',
-              accessed_at: '2026-03-11T00:00:00.000Z',
-            },
-            score: 0.92,
-            source_path: 'vector',
-          },
-          {
-            fact: {
-              id: 'fact-2',
-              scope: 'global',
-              content: 'Project uses Biome for formatting and linting',
-              content_model: 'text-embedding-3-small',
-              entity_type: 'decision',
-              confidence: 0.89,
-              strength: 0.95,
-              source: {
-                session_id: null,
-                agent_id: null,
-                machine_id: null,
-                turn_index: null,
-                extraction_method: 'manual',
-              },
-              valid_from: '2026-03-11T00:00:00.000Z',
-              valid_until: null,
-              created_at: '2026-03-11T00:00:00.000Z',
-              accessed_at: '2026-03-11T00:00:00.000Z',
-            },
-            score: 0.81,
-            source_path: 'bm25',
-          },
+          { fact: fact1, score: 0.92, source_path: 'vector' },
+          { fact: fact2, score: 0.81, source_path: 'bm25' },
         ]),
+      });
+
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact1, fact2]),
       });
 
       const injector = new MemoryInjector({
         backend: 'postgres',
         memorySearch,
-        memoryStore: createMockMemoryStore(),
+        memoryStore,
         logger,
       });
 
@@ -208,7 +208,7 @@ describe('MemoryInjector', () => {
       expect(memorySearch.search).toHaveBeenCalledWith({
         query: 'Set up project tooling',
         visibleScopes: ['agent:agent-1', 'global'],
-        limit: 10,
+        limit: 20,
       });
     });
 
@@ -261,6 +261,98 @@ describe('MemoryInjector', () => {
         },
         confidence: 0.8,
       });
+    });
+
+    it('uses 3-tier context budget with pinned, on-demand, and triggered facts', async () => {
+      const pinnedFact = {
+        id: 'pinned-1',
+        scope: 'global',
+        content: 'Never commit secrets',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'decision',
+        confidence: 1.0,
+        strength: 1.0,
+        source: {
+          session_id: null,
+          agent_id: null,
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+        pinned: true,
+      };
+
+      const onDemandFact = {
+        id: 'on-demand-1',
+        scope: 'agent:agent-1',
+        content: 'Use Biome for linting',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'pattern',
+        confidence: 0.9,
+        strength: 1.0,
+        source: {
+          session_id: null,
+          agent_id: 'agent-1',
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+
+      const triggeredFact = {
+        id: 'triggered-1',
+        scope: 'global',
+        content: 'Use --cap-drop=ALL in Docker',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'pattern',
+        confidence: 0.95,
+        strength: 1.0,
+        source: {
+          session_id: null,
+          agent_id: null,
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+        trigger_spec: { keyword: 'docker' },
+      };
+
+      const memorySearch = createMockMemorySearch({
+        search: vi
+          .fn()
+          .mockResolvedValue([{ fact: onDemandFact, score: 0.9, source_path: 'vector' }]),
+      });
+
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([pinnedFact, onDemandFact, triggeredFact]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up Docker container', {
+        keywords: ['docker', 'container'],
+      });
+
+      expect(context).toContain('Never commit secrets');
+      expect(context).toContain('Use Biome for linting');
+      expect(context).toContain('Use --cap-drop=ALL in Docker');
     });
   });
 });

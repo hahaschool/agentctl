@@ -7,6 +7,8 @@ import type {
   FactSource,
   ImportJob,
   InjectionBudget,
+  InjectionResult,
+  InjectionTier,
   MemoryEdge,
   MemoryFact,
   MemoryReport,
@@ -14,6 +16,8 @@ import type {
   MemorySearchResult,
   MemoryStats,
   RelationType,
+  TriggerContext,
+  TriggerSpec,
 } from './memory.js';
 
 describe('memory types', () => {
@@ -96,15 +100,100 @@ describe('memory types', () => {
     const budget: InjectionBudget = DEFAULT_INJECTION_BUDGET;
 
     expect(budget).toEqual({
-      maxTokens: 2000,
-      maxFacts: 15,
+      maxTokens: 2400,
+      maxFacts: 20,
       priorityWeights: {
         relevance: 0.5,
         recency: 0.2,
         strength: 0.2,
         scopeProximity: 0.1,
       },
+      tiers: ['pinned', 'on-demand', 'triggered'],
+      pinnedCap: 5,
     });
+  });
+
+  it('supports pinned and trigger_spec fields on MemoryFact', () => {
+    const source: FactSource = {
+      session_id: null,
+      agent_id: null,
+      machine_id: null,
+      turn_index: null,
+      extraction_method: 'manual',
+    };
+
+    const pinnedFact: MemoryFact = {
+      id: 'pinned-1',
+      scope: 'global',
+      content: 'Always remember this',
+      content_model: 'text-embedding-3-small',
+      entity_type: 'decision',
+      confidence: 1.0,
+      strength: 1.0,
+      source,
+      valid_from: '2026-03-11T00:00:00.000Z',
+      valid_until: null,
+      created_at: '2026-03-11T00:00:00.000Z',
+      accessed_at: '2026-03-11T00:00:00.000Z',
+      pinned: true,
+    };
+
+    const triggeredFact: MemoryFact = {
+      id: 'triggered-1',
+      scope: 'global',
+      content: 'Use --cap-drop=ALL for Docker',
+      content_model: 'text-embedding-3-small',
+      entity_type: 'pattern',
+      confidence: 0.95,
+      strength: 1.0,
+      source,
+      valid_from: '2026-03-11T00:00:00.000Z',
+      valid_until: null,
+      created_at: '2026-03-11T00:00:00.000Z',
+      accessed_at: '2026-03-11T00:00:00.000Z',
+      trigger_spec: { tool: 'Bash', keyword: 'docker' },
+    };
+
+    expect(pinnedFact.pinned).toBe(true);
+    expect(triggeredFact.trigger_spec?.tool).toBe('Bash');
+    expect(triggeredFact.trigger_spec?.keyword).toBe('docker');
+  });
+
+  it('defines injection tier type', () => {
+    const tiers: InjectionTier[] = ['pinned', 'on-demand', 'triggered'];
+    expect(tiers).toHaveLength(3);
+  });
+
+  it('defines trigger spec shape', () => {
+    const spec: TriggerSpec = {
+      tool: 'Bash',
+      file_pattern: '\\.test\\.ts$',
+      keyword: 'docker',
+    };
+    expect(spec.tool).toBe('Bash');
+    expect(spec.file_pattern).toBe('\\.test\\.ts$');
+    expect(spec.keyword).toBe('docker');
+  });
+
+  it('defines trigger context shape', () => {
+    const context: TriggerContext = {
+      tool: 'Edit',
+      filePath: 'src/memory/context-budget.ts',
+      keywords: ['memory', 'injection'],
+    };
+    expect(context.tool).toBe('Edit');
+    expect(context.filePath).toContain('context-budget');
+    expect(context.keywords).toHaveLength(2);
+  });
+
+  it('defines injection result shape', () => {
+    const result: InjectionResult = {
+      facts: [],
+      tokenCount: 0,
+      tierBreakdown: { pinned: 0, 'on-demand': 0, triggered: 0 },
+    };
+    expect(result.tokenCount).toBe(0);
+    expect(result.tierBreakdown.pinned).toBe(0);
   });
 
   it('represents a consolidation review item', () => {
