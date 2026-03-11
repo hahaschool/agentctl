@@ -6,8 +6,8 @@ import Link from 'next/link';
 import type React from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { memoryFactsQuery } from '@/lib/queries';
+import { cn } from '@/lib/utils';
 import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
 
@@ -51,10 +51,7 @@ export function AgentMemorySection({ agentId }: Props): React.JSX.Element {
 
   if (error) {
     return (
-      <div
-        className="text-sm text-red-600 dark:text-red-400"
-        data-testid="agent-memory-error"
-      >
+      <div className="text-sm text-red-600 dark:text-red-400" data-testid="agent-memory-error">
         Failed to load memory: {error.message}
       </div>
     );

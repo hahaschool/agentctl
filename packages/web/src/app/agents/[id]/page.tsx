@@ -11,7 +11,6 @@ import { useCallback, useMemo, useState } from 'react';
 
 import type { AgentFormEditData } from '@/components/AgentFormDialog';
 import { AgentFormDialog } from '@/components/AgentFormDialog';
-import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
@@ -19,6 +18,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { LastUpdated } from '@/components/LastUpdated';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
+import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
 import { RefreshButton } from '@/components/RefreshButton';
 import { SimpleTooltip } from '@/components/SimpleTooltip';
 import { StatusBadge } from '@/components/StatusBadge';

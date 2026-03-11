@@ -7,10 +7,10 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { SessionMemoryTab } from '@/components/memory/SessionMemoryTab';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { SessionMemoryTab } from '@/components/memory/SessionMemoryTab';
 import { FetchingBar } from '../components/FetchingBar';
 import { FileBrowser } from '../components/FileBrowser';
 import { MessageInput } from '../components/MessageInput';
@@ -258,56 +258,56 @@ export function SessionDetailView(): React.JSX.Element {
 
       {/* Content area — session tab only */}
       {primaryTab === 'session' && (
-      <div className="flex-1 overflow-hidden flex">
-        {/* Messages / Terminal panel */}
-        <div className={cn('flex-1 overflow-hidden flex flex-col', showFiles && 'w-1/2')}>
-          {viewMode === 'messages' ? (
-            <MessageList
-              messages={content.data?.messages ?? []}
-              totalMessages={content.data?.totalMessages ?? 0}
-              isLoading={content.isLoading}
-              error={content.error?.message}
-              isActive={s.status === 'active'}
-              isActiveOrStarting={isActive}
-              autoRefresh={autoRefresh}
-              onAutoRefreshChange={setAutoRefresh}
-              streamOutput={stream.streamOutput}
-              streamConnected={stream.connected}
-              pendingUserMessages={stream.pendingUserMessages}
-              optimisticMessages={optimisticMessages.map((om) => om.text)}
-              onLoadMore={() => setContentLimit((prev) => prev * 2)}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Terminal toolbar */}
-              <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
-                <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-              </div>
-              <TerminalView
-                rawOutput={stream.rawOutput.length > 0 ? stream.rawOutput : replayOutput}
-                isActive={isActive}
-                className="flex-1 min-h-0"
+        <div className="flex-1 overflow-hidden flex">
+          {/* Messages / Terminal panel */}
+          <div className={cn('flex-1 overflow-hidden flex flex-col', showFiles && 'w-1/2')}>
+            {viewMode === 'messages' ? (
+              <MessageList
+                messages={content.data?.messages ?? []}
+                totalMessages={content.data?.totalMessages ?? 0}
+                isLoading={content.isLoading}
+                error={content.error?.message}
+                isActive={s.status === 'active'}
+                isActiveOrStarting={isActive}
+                autoRefresh={autoRefresh}
+                onAutoRefreshChange={setAutoRefresh}
+                streamOutput={stream.streamOutput}
+                streamConnected={stream.connected}
+                pendingUserMessages={stream.pendingUserMessages}
+                optimisticMessages={optimisticMessages.map((om) => om.text)}
+                onLoadMore={() => setContentLimit((prev) => prev * 2)}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
               />
+            ) : (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Terminal toolbar */}
+                <div className="px-5 py-1.5 border-b border-border flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 bg-background">
+                  <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+                </div>
+                <TerminalView
+                  rawOutput={stream.rawOutput.length > 0 ? stream.rawOutput : replayOutput}
+                  isActive={isActive}
+                  className="flex-1 min-h-0"
+                />
+              </div>
+            )}
+
+            {/* Input area — steer (agent) or message (session) */}
+            {isActive && s.agentId ? (
+              <SteerInput agentId={s.agentId} isRunning={isActive} />
+            ) : (
+              <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
+            )}
+          </div>
+
+          {/* File browser panel */}
+          {showFiles && (
+            <div className="w-1/2 overflow-hidden">
+              <FileBrowser machineId={s.machineId} initialPath={s.projectPath ?? undefined} />
             </div>
           )}
-
-          {/* Input area — steer (agent) or message (session) */}
-          {isActive && s.agentId ? (
-            <SteerInput agentId={s.agentId} isRunning={isActive} />
-          ) : (
-            <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
-          )}
         </div>
-
-        {/* File browser panel */}
-        {showFiles && (
-          <div className="w-1/2 overflow-hidden">
-            <FileBrowser machineId={s.machineId} initialPath={s.projectPath ?? undefined} />
-          </div>
-        )}
-      </div>
       )}
     </div>
   );

@@ -253,6 +253,12 @@ vi.mock('@/lib/queries', () => ({
   useUpdateAgent: () => mockUpdateAgent(),
 }));
 
+vi.mock('@/components/memory/AgentMemorySection', () => ({
+  AgentMemorySection: ({ agentId }: { agentId: string }) => (
+    <div data-testid="agent-memory-section-mock">{agentId}</div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Import component AFTER mocks
 // ---------------------------------------------------------------------------

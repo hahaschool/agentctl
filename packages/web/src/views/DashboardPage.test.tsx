@@ -171,9 +171,7 @@ vi.mock('@/lib/queries', () => ({
 }));
 
 vi.mock('../components/memory/DashboardMemoryCard', () => ({
-  DashboardMemoryCard: () => (
-    <div data-testid="dashboard-memory-card-mock">Memory Health</div>
-  ),
+  DashboardMemoryCard: () => <div data-testid="dashboard-memory-card-mock">Memory Health</div>,
 }));
 
 // ---------------------------------------------------------------------------

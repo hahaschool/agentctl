@@ -41,7 +41,10 @@ export function SessionMemoryTab({ sessionId }: Props): React.JSX.Element {
 
   if (facts.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground py-4 text-center" data-testid="session-memory-empty">
+      <div
+        className="text-sm text-muted-foreground py-4 text-center"
+        data-testid="session-memory-empty"
+      >
         No memory facts recorded for this session yet.
       </div>
     );
