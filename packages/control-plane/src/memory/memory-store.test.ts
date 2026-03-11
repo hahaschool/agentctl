@@ -39,10 +39,11 @@ describe('MemoryStore', () => {
 
   it('generates an embedding and inserts a fact into the database', async () => {
     const { store, pool, embedding } = makeStore({
-      // First call: INSERT fact; second call: SELECT for contradiction detection (no rows)
+      // 1. INSERT fact; 2. SELECT pre-existing edges; 3. SELECT embedding (no rows → exits early)
       query: vi
         .fn()
         .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
     });
 
@@ -60,8 +61,8 @@ describe('MemoryStore', () => {
     });
 
     expect(embedding.embed).toHaveBeenCalledWith('Use Biome instead of ESLint');
-    // 2 calls: INSERT fact + SELECT for contradiction detection
-    expect(pool.query).toHaveBeenCalledTimes(2);
+    // 3 calls: INSERT fact + SELECT edges + SELECT embedding
+    expect(pool.query).toHaveBeenCalledTimes(3);
     expect(result.scope).toBe('global');
     expect(result.content).toBe('Use Biome instead of ESLint');
     expect(result.source.agent_id).toBe('agent-1');
@@ -69,10 +70,11 @@ describe('MemoryStore', () => {
 
   it('stores a fact even when embedding generation fails', async () => {
     const pool = createMockPool();
-    // First call: INSERT fact; second call: SELECT for contradiction detection
+    // 1. INSERT fact; 2. SELECT pre-existing edges; 3. SELECT embedding (no rows → exits early)
     pool.query = vi
       .fn()
       .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
       .mockResolvedValueOnce({ rows: [], rowCount: 0 });
     const embedding = {
       embed: vi.fn().mockRejectedValue(new Error('API down')),
@@ -94,8 +96,8 @@ describe('MemoryStore', () => {
     });
 
     expect(result.id).toBeTruthy();
-    // 2 calls: INSERT fact + SELECT for contradiction detection
-    expect(pool.query).toHaveBeenCalledTimes(2);
+    // 3 calls: INSERT fact + SELECT edges + SELECT embedding
+    expect(pool.query).toHaveBeenCalledTimes(3);
   });
 
   it('inserts an edge between two facts (non-contradiction)', async () => {
@@ -348,7 +350,8 @@ describe('MemoryStore', () => {
       query: vi
         .fn()
         .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // INSERT
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }), // contradiction detection
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT edges (contradiction detection)
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }), // SELECT embedding (semantic detection → exits early)
     });
 
     const result = await store.addFact({
@@ -377,7 +380,8 @@ describe('MemoryStore', () => {
       query: vi
         .fn()
         .mockResolvedValueOnce({ rows: [], rowCount: 1 })
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }), // SELECT embedding → exits early
     });
 
     const result = await store.addFact({
@@ -538,7 +542,9 @@ describe('MemoryStore', () => {
         rowCount: 1,
       })
       // 3. addConsolidationItem INSERT
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      // 4. detectSemanticContradictions: SELECT embedding for new fact
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // no embedding found → exits early
 
     const { store } = makeStore({ query });
 
@@ -555,10 +561,89 @@ describe('MemoryStore', () => {
       },
     });
 
-    // Should have: INSERT fact, SELECT edges for contradiction, INSERT consolidation
-    expect(query).toHaveBeenCalledTimes(3);
+    // Should have: INSERT fact, SELECT edges, INSERT consolidation, SELECT embedding
+    expect(query).toHaveBeenCalledTimes(4);
     const consolidationCall = vi.mocked(query).mock.calls[2] as [string, unknown[]];
     expect(consolidationCall[0]).toContain('memory_consolidation_items');
     expect(consolidationCall[1]).toContain('contradiction');
+  });
+
+  it('creates contradicts edge for semantically similar facts with different content', async () => {
+    const query = vi
+      .fn()
+      // 1. INSERT fact
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      // 2. detectAndFlagContradictions: SELECT pre-existing edges (none)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      // 3. detectSemanticContradictions: SELECT embedding for new fact
+      .mockResolvedValueOnce({
+        rows: [{ content: 'New conflicting fact', embedding: '[0.1,0.2,0.3,0.4]' }],
+        rowCount: 1,
+      })
+      // 4. detectSemanticContradictions: find similar facts
+      .mockResolvedValueOnce({
+        rows: [
+          { id: 'similar-fact', content: 'Different but similar fact', cosine_similarity: 0.95 },
+        ],
+        rowCount: 1,
+      })
+      // 5. detectSemanticContradictions: check existing contradicts edge (none)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      // 6. addEdge INSERT (contradicts relation)
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      // 7. addConsolidationItem INSERT (from addEdge for contradicts)
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+    const { store } = makeStore({ query });
+
+    await store.addFact({
+      scope: 'global' as MemoryScope,
+      content: 'New conflicting fact',
+      entity_type: 'decision' as EntityType,
+      source: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'llm',
+      },
+    });
+
+    // Edge INSERT call should use 'contradicts' relation
+    const edgeCall = vi.mocked(query).mock.calls[5] as [string, unknown[]];
+    expect(edgeCall[0]).toContain('memory_edges');
+    expect(edgeCall[1]).toContain('contradicts');
+    // Consolidation item should be created
+    const consolidationCall = vi.mocked(query).mock.calls[6] as [string, unknown[]];
+    expect(consolidationCall[0]).toContain('memory_consolidation_items');
+  });
+
+  it('skips semantic contradiction detection when fact has no embedding', async () => {
+    const query = vi
+      .fn()
+      // 1. INSERT fact
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      // 2. detectAndFlagContradictions: SELECT pre-existing edges (none)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      // 3. detectSemanticContradictions: SELECT embedding — not found
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { store } = makeStore({ query });
+
+    await store.addFact({
+      scope: 'global' as MemoryScope,
+      content: 'Fact without embedding',
+      entity_type: 'concept' as EntityType,
+      source: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      },
+    });
+
+    // Only 3 queries: INSERT, SELECT edges, SELECT embedding (exits early)
+    expect(query).toHaveBeenCalledTimes(3);
   });
 });
