@@ -217,6 +217,11 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
   let currentToolName: string | null = null;
   let currentToolInput: Record<string, unknown> | null = null;
 
+  // Strip CLAUDECODE env var so the SDK-spawned Claude Code subprocess
+  // doesn't refuse to start with "cannot be launched inside another session".
+  const savedClaudeCode = process.env.CLAUDECODE;
+  delete process.env.CLAUDECODE;
+
   try {
     for await (const message of sdk.query({ prompt, options: sdkOptions })) {
       // Check for abort between messages
@@ -314,6 +319,11 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
       agentId,
       sessionId: finalSessionId,
     });
+  } finally {
+    // Restore CLAUDECODE env var so it doesn't affect the rest of the process.
+    if (savedClaudeCode !== undefined) {
+      process.env.CLAUDECODE = savedClaudeCode;
+    }
   }
 
   // ── Stop hook: record session end ──
