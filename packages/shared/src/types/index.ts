@@ -33,7 +33,18 @@ export type {
   LoopStatus,
 } from './loop.js';
 export type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
-export type { MemoryObservation } from './memory.js';
+export type {
+  EntityType,
+  FactSource,
+  InjectionBudget,
+  MemoryEdge,
+  MemoryFact,
+  MemoryObservation,
+  MemoryScope,
+  MemorySearchResult,
+  RelationType,
+} from './memory.js';
+export { DEFAULT_INJECTION_BUDGET } from './memory.js';
 export type {
   HandoffReason,
   HandoffSnapshot,

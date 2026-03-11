@@ -11,6 +11,9 @@ import {
   machineRuntimeState,
   machines,
   managedSessions,
+  memoryEdges,
+  memoryFacts,
+  memoryScopes,
   nativeImportAttempts,
   runtimeConfigRevisions,
   sessionHandoffs,
@@ -93,6 +96,15 @@ describe('Schema module exports', () => {
   it('exports the nativeImportAttempts table', () => {
     expect(nativeImportAttempts).toBeDefined();
     expect(getTableName(nativeImportAttempts)).toBe('native_import_attempts');
+  });
+
+  it('exports the memory layer tables', () => {
+    expect(memoryScopes).toBeDefined();
+    expect(memoryFacts).toBeDefined();
+    expect(memoryEdges).toBeDefined();
+    expect(getTableName(memoryScopes)).toBe('memory_scopes');
+    expect(getTableName(memoryFacts)).toBe('memory_facts');
+    expect(getTableName(memoryEdges)).toBe('memory_edges');
   });
 });
 
@@ -1230,6 +1242,152 @@ describe('nativeImportAttempts table columns', () => {
   });
 });
 
+describe('memoryScopes table columns', () => {
+  const meta = getColumnMeta(memoryScopes);
+
+  it('has exactly 4 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(4);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual(['scope', 'parentScope', 'displayName', 'configJson']);
+  });
+
+  it('stores scope as a text primary key and config as jsonb with default', () => {
+    expect(meta.scope).toEqual({
+      name: 'scope',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: true,
+    });
+    expect(meta.configJson).toEqual({
+      name: 'config_json',
+      columnType: 'PgJsonb',
+      dataType: 'json',
+      notNull: true,
+      hasDefault: true,
+      primary: false,
+    });
+  });
+});
+
+describe('memoryFacts table columns', () => {
+  const meta = getColumnMeta(memoryFacts);
+
+  it('has exactly 12 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(12);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'scope',
+      'content',
+      'contentModel',
+      'entityType',
+      'confidence',
+      'strength',
+      'sourceJson',
+      'validFrom',
+      'validUntil',
+      'createdAt',
+      'accessedAt',
+    ]);
+  });
+
+  it('stores fact identity and content as required text columns', () => {
+    expect(meta.id).toEqual({
+      name: 'id',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: true,
+    });
+    expect(meta.scope).toEqual({
+      name: 'scope',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+    expect(meta.content).toEqual({
+      name: 'content',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+  });
+
+  it('tracks content model and metadata defaults for memory facts', () => {
+    expect(meta.contentModel.columnType).toBe('PgText');
+    expect(meta.contentModel.notNull).toBe(true);
+    expect(meta.contentModel.hasDefault).toBe(true);
+    expect(meta.sourceJson.columnType).toBe('PgJsonb');
+    expect(meta.sourceJson.hasDefault).toBe(true);
+  });
+
+  it('uses numeric scoring columns and timestamp lifecycle columns', () => {
+    expect(meta.confidence.columnType).toBe('PgNumeric');
+    expect(meta.confidence.notNull).toBe(true);
+    expect(meta.confidence.hasDefault).toBe(true);
+    expect(meta.strength.columnType).toBe('PgNumeric');
+    expect(meta.strength.notNull).toBe(true);
+    expect(meta.strength.hasDefault).toBe(true);
+    expect(meta.validFrom.columnType).toBe('PgTimestamp');
+    expect(meta.validFrom.notNull).toBe(true);
+    expect(meta.validUntil.columnType).toBe('PgTimestamp');
+    expect(meta.createdAt.columnType).toBe('PgTimestamp');
+    expect(meta.accessedAt.columnType).toBe('PgTimestamp');
+  });
+});
+
+describe('memoryEdges table columns', () => {
+  const meta = getColumnMeta(memoryEdges);
+
+  it('has exactly 6 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(6);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'sourceFactId',
+      'targetFactId',
+      'relation',
+      'weight',
+      'createdAt',
+    ]);
+  });
+
+  it('stores both fact references as required text columns and weight as numeric', () => {
+    expect(meta.sourceFactId).toEqual({
+      name: 'source_fact_id',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+    expect(meta.targetFactId).toEqual({
+      name: 'target_fact_id',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      primary: false,
+    });
+    expect(meta.weight.columnType).toBe('PgNumeric');
+    expect(meta.weight.notNull).toBe(true);
+    expect(meta.weight.hasDefault).toBe(true);
+  });
+});
+
 describe('Runtime management foreign key relationships', () => {
   it('managedSessions references machines, agents, and prior managed sessions', () => {
     const config = getTableConfig(managedSessions);
@@ -1280,6 +1438,19 @@ describe('Runtime management foreign key relationships', () => {
       (fk) => fk.reference().columns[0].name === 'target_session_id',
     );
     expect(getTableName(targetFk?.reference().foreignTable)).toBe('managed_sessions');
+  });
+
+  it('memoryScopes can reference a parent memory scope', () => {
+    const config = getTableConfig(memoryScopes);
+    expect(config.foreignKeys).toHaveLength(1);
+    expect(getTableName(config.foreignKeys[0].reference().foreignTable)).toBe('memory_scopes');
+  });
+
+  it('memoryEdges references source and target memory facts', () => {
+    const config = getTableConfig(memoryEdges);
+    expect(config.foreignKeys).toHaveLength(2);
+    expect(getTableName(config.foreignKeys[0].reference().foreignTable)).toBe('memory_facts');
+    expect(getTableName(config.foreignKeys[1].reference().foreignTable)).toBe('memory_facts');
   });
 });
 
