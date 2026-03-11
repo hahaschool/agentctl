@@ -1058,8 +1058,8 @@ describe('runtimeConfigRevisions table columns', () => {
 describe('managedSessions table columns', () => {
   const meta = getColumnMeta(managedSessions);
 
-  it('has exactly 15 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(15);
+  it('has exactly 16 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(16);
   });
 
   it('has all expected column keys', () => {
@@ -1067,6 +1067,7 @@ describe('managedSessions table columns', () => {
       'id',
       'runtime',
       'nativeSessionId',
+      'executionEnvironment',
       'machineId',
       'agentId',
       'projectPath',

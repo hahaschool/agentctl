@@ -1,9 +1,12 @@
 import type {
   CreateManagedSessionRequest,
+  ExecutionEnvironmentCapability,
+  ExecutionEnvironmentId,
   ForkManagedSessionRequest,
   ManagedRuntime,
   ResumeManagedSessionRequest,
 } from '@agentctl/shared';
+import { ControlPlaneError, isExecutionEnvironmentId } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -63,10 +66,30 @@ export const runtimeSessionRoutes: FastifyPluginAsync<RuntimeSessionRoutesOption
       },
     },
     async (request, reply) => {
+      const machine = await requireMachine(request.body.machineId, dbRegistry);
+      const executionEnvironmentResult = selectExecutionEnvironment(
+        machine.capabilities.executionEnvironments ?? [],
+        machine.capabilities.defaultExecutionEnvironment ?? null,
+        request.body.executionRequirements?.environment ?? null,
+      );
+
+      if (!executionEnvironmentResult.ok) {
+        return reply.code(executionEnvironmentResult.status).send({
+          error: executionEnvironmentResult.error,
+          message: executionEnvironmentResult.message,
+        });
+      }
+
+      const executionRequirements =
+        executionEnvironmentResult.executionEnvironment === null
+          ? null
+          : { environment: executionEnvironmentResult.executionEnvironment };
+
       const configRevision = await getActiveConfigRevision(runtimeConfigStore);
       const session = await managedSessionStore.create({
         runtime: request.body.runtime,
         nativeSessionId: null,
+        executionEnvironment: executionEnvironmentResult.executionEnvironment,
         machineId: request.body.machineId,
         agentId: request.body.agentId ?? null,
         projectPath: request.body.projectPath,
@@ -89,6 +112,7 @@ export const runtimeSessionRoutes: FastifyPluginAsync<RuntimeSessionRoutesOption
           projectPath: request.body.projectPath,
           prompt: request.body.prompt,
           model: request.body.model ?? null,
+          executionRequirements,
         },
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
@@ -268,6 +292,96 @@ async function resolveWorker(
   }
 
   return resolveWorkerUrlByMachineIdOrThrow(machineId, { dbRegistry, workerPort });
+}
+
+async function requireMachine(machineId: string, dbRegistry: DbAgentRegistry | undefined) {
+  if (!dbRegistry) {
+    throw new ControlPlaneError(
+      'REGISTRY_UNAVAILABLE',
+      'Runtime session routes require dbRegistry to validate machine capabilities',
+      { machineId },
+    );
+  }
+
+  const machine = await dbRegistry.getMachine(machineId);
+  if (!machine) {
+    throw new ControlPlaneError('MACHINE_NOT_FOUND', `Machine '${machineId}' is not registered`, {
+      machineId,
+    });
+  }
+
+  return machine;
+}
+
+function selectExecutionEnvironment(
+  capabilities: ExecutionEnvironmentCapability[],
+  defaultExecutionEnvironment: ExecutionEnvironmentId | null,
+  requestedEnvironment: string | null,
+):
+  | { ok: true; executionEnvironment: ExecutionEnvironmentId | null }
+  | { ok: false; status: number; error: string; message: string } {
+  if (requestedEnvironment !== null) {
+    if (!isExecutionEnvironmentId(requestedEnvironment)) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'INVALID_EXECUTION_ENVIRONMENT',
+        message: `Execution environment '${requestedEnvironment}' is not supported`,
+      };
+    }
+
+    const requestedCapability = capabilities.find(
+      (capability) => capability.id === requestedEnvironment,
+    );
+    if (!requestedCapability?.available) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'EXECUTION_ENVIRONMENT_UNAVAILABLE',
+        message: buildUnavailableEnvironmentMessage(requestedEnvironment, requestedCapability),
+      };
+    }
+
+    return {
+      ok: true,
+      executionEnvironment: requestedEnvironment,
+    };
+  }
+
+  if (defaultExecutionEnvironment === null) {
+    return {
+      ok: true,
+      executionEnvironment: null,
+    };
+  }
+
+  const defaultCapability = capabilities.find(
+    (capability) => capability.id === defaultExecutionEnvironment,
+  );
+  if (!defaultCapability?.available) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'EXECUTION_ENVIRONMENT_UNAVAILABLE',
+      message: buildUnavailableEnvironmentMessage(defaultExecutionEnvironment, defaultCapability),
+    };
+  }
+
+  return {
+    ok: true,
+    executionEnvironment: defaultExecutionEnvironment,
+  };
+}
+
+function buildUnavailableEnvironmentMessage(
+  environment: ExecutionEnvironmentId,
+  capability?: ExecutionEnvironmentCapability,
+): string {
+  if (capability?.reasonUnavailable) {
+    return `Execution environment '${environment}' is unavailable on this machine: ${capability.reasonUnavailable}`;
+  }
+
+  return `Execution environment '${environment}' is unavailable on this machine`;
 }
 
 function extractWorkerSession(data: unknown): {

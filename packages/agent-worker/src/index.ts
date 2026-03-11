@@ -11,7 +11,7 @@ import type { IpcMessage, IpcResponse } from './ipc/index.js';
 import { createIpcResponse, IpcServer } from './ipc/index.js';
 import { createLogger } from './logger.js';
 import { CliSessionManager } from './runtime/cli-session-manager.js';
-import { AgentPool } from './runtime/index.js';
+import { AgentPool, ExecutionEnvironmentRegistry } from './runtime/index.js';
 import { WorktreeManager } from './worktree/index.js';
 
 // ── Environment validation ────────────────────────────────────────────
@@ -244,6 +244,7 @@ async function main(): Promise<void> {
     maxConcurrentSessions: MAX_CONCURRENT_AGENTS * 2,
     logger: logger.child({ component: 'cli-session-manager' }),
   });
+  const executionEnvironmentRegistry = new ExecutionEnvironmentRegistry();
 
   const healthReporter = new HealthReporter({
     machineId: MACHINE_ID,
@@ -251,6 +252,7 @@ async function main(): Promise<void> {
     intervalMs: HEALTH_REPORTER_INTERVAL_MS,
     logger,
     agentPool: pool,
+    executionEnvironmentRegistry,
   });
 
   const server = await createWorkerServer({
@@ -259,6 +261,7 @@ async function main(): Promise<void> {
     machineId: MACHINE_ID,
     controlPlaneUrl: CONTROL_PLANE_URL,
     sessionManager,
+    executionEnvironmentRegistry,
     getDispatchVerificationConfig: () => healthReporter.getDispatchVerificationConfig(),
   });
 

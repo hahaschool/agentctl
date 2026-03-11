@@ -10,6 +10,7 @@ import type { CliSessionManager } from '../runtime/cli-session-manager.js';
 import { CodexRuntimeAdapter } from '../runtime/codex-runtime-adapter.js';
 import { CodexSessionManager } from '../runtime/codex-session-manager.js';
 import { RuntimeConfigApplier } from '../runtime/config/runtime-config-applier.js';
+import { ExecutionEnvironmentRegistry } from '../runtime/execution-environment-registry.js';
 import { HandoffController } from '../runtime/handoff-controller.js';
 import { RcSessionManager } from '../runtime/rc-session-manager.js';
 import { RuntimeRegistry } from '../runtime/runtime-registry.js';
@@ -38,6 +39,7 @@ type CreateWorkerServerOptions = {
   maxTerminals?: number;
   runtimeConfigApplier?: RuntimeConfigApplier;
   runtimeRegistry?: RuntimeRegistry;
+  executionEnvironmentRegistry?: ExecutionEnvironmentRegistry;
   getDispatchVerificationConfig?: () => DispatchVerificationConfig | null;
 };
 
@@ -51,10 +53,13 @@ export async function createWorkerServer({
   maxTerminals,
   runtimeConfigApplier = new RuntimeConfigApplier(),
   runtimeRegistry: externalRuntimeRegistry,
+  executionEnvironmentRegistry: externalExecutionEnvironmentRegistry,
   getDispatchVerificationConfig,
 }: CreateWorkerServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   const runtimeRegistry = externalRuntimeRegistry ?? buildRuntimeRegistry(sessionManager);
+  const executionEnvironmentRegistry =
+    externalExecutionEnvironmentRegistry ?? new ExecutionEnvironmentRegistry();
   const handoffController = new HandoffController({
     machineId,
     logger,
@@ -90,7 +95,7 @@ export async function createWorkerServer({
     };
 
     // Run dependency checks in parallel.
-    const [controlPlaneResult] = await Promise.allSettled([
+    const [controlPlaneResult, executionEnvironmentResult] = await Promise.allSettled([
       controlPlaneUrl
         ? checkWithTimeout(
             'controlPlane',
@@ -110,6 +115,7 @@ export async function createWorkerServer({
             HEALTH_CHECK_TIMEOUT_MS,
           )
         : Promise.resolve({ status: 'ok' as const, latencyMs: 0 }),
+      executionEnvironmentRegistry.detectAll(),
     ]);
 
     const cpStatus: DependencyStatus =
@@ -153,6 +159,8 @@ export async function createWorkerServer({
       dependencies: {
         controlPlane: cpStatus,
       },
+      executionEnvironments:
+        executionEnvironmentResult.status === 'fulfilled' ? executionEnvironmentResult.value : [],
     };
   });
 

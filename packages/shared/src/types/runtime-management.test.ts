@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
+  ExecutionEnvironmentCapability,
+  ExecutionEnvironmentId,
   HandoffSnapshot,
+  ManagedExecutionRequirements,
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
   ManualTakeoverState,
 } from './runtime-management.js';
 import {
+  EXECUTION_ENVIRONMENTS,
   HANDOFF_STRATEGIES,
+  isExecutionEnvironmentId,
   isHandoffStrategy,
   isManagedRuntime,
   isManagedSessionStatus,
@@ -26,6 +31,28 @@ describe('runtime-management types', () => {
     expect(runtimes).toEqual(MANAGED_RUNTIMES);
     expect(isManagedRuntime('codex')).toBe(true);
     expect(isManagedRuntime('nanoclaw')).toBe(false);
+  });
+
+  it('defines the supported execution environments', () => {
+    const environment: ExecutionEnvironmentId = 'direct';
+    const capability: ExecutionEnvironmentCapability = {
+      id: 'direct',
+      available: true,
+      isDefault: true,
+      isolation: 'host',
+      reasonUnavailable: null,
+      metadata: { staged: false },
+    };
+    const requirements: ManagedExecutionRequirements = {
+      environment: 'docker',
+    };
+
+    expect(EXECUTION_ENVIRONMENTS).toEqual(['direct', 'docker']);
+    expect(environment).toBe('direct');
+    expect(capability.isolation).toBe('host');
+    expect(isExecutionEnvironmentId('direct')).toBe(true);
+    expect(isExecutionEnvironmentId('ssh')).toBe(false);
+    expect(requirements.environment).toBe('docker');
   });
 
   it('defines handoff and session lifecycle constants', () => {

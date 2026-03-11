@@ -1,9 +1,16 @@
+import type {
+  ExecutionEnvironmentCapability,
+  ExecutionEnvironmentId,
+} from './runtime-management.js';
+
 export type MachineStatus = 'online' | 'offline' | 'degraded';
 
 export type MachineCapabilities = {
   gpu: boolean;
   docker: boolean;
   maxConcurrentAgents: number;
+  executionEnvironments?: ExecutionEnvironmentCapability[];
+  defaultExecutionEnvironment?: ExecutionEnvironmentId | null;
 };
 
 export type Machine = {

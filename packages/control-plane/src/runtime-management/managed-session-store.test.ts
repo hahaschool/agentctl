@@ -27,6 +27,7 @@ describe('ManagedSessionStore', () => {
         worktreePath: '/workspace/.trees/task-1',
         status: 'starting',
         configVersion: 7,
+        executionEnvironment: 'direct',
         handoffStrategy: null,
         handoffSourceSessionId: null,
         metadata: { source: 'manual' },
@@ -45,6 +46,7 @@ describe('ManagedSessionStore', () => {
       worktreePath: '/workspace/.trees/task-1',
       status: 'starting',
       configRevision: 7,
+      executionEnvironment: 'direct',
       handoffStrategy: null,
       handoffSourceSessionId: null,
       metadata: { source: 'manual' },
@@ -57,6 +59,7 @@ describe('ManagedSessionStore', () => {
         machineId: 'machine-1',
         projectPath: '/workspace/app',
         configVersion: 7,
+        executionEnvironment: 'direct',
       }),
     );
     expect(session).toMatchObject({
@@ -65,6 +68,7 @@ describe('ManagedSessionStore', () => {
       machineId: 'machine-1',
       status: 'starting',
       configRevision: 7,
+      executionEnvironment: 'direct',
     });
   });
 
@@ -80,6 +84,7 @@ describe('ManagedSessionStore', () => {
         worktreePath: null,
         status: 'active',
         configVersion: 8,
+        executionEnvironment: 'direct',
         handoffStrategy: 'snapshot-handoff',
         handoffSourceSessionId: 'ms-1',
         metadata: {},
@@ -106,6 +111,7 @@ describe('ManagedSessionStore', () => {
       runtime: 'claude-code',
       status: 'active',
       configRevision: 8,
+      executionEnvironment: 'direct',
       handoffStrategy: 'snapshot-handoff',
     });
   });
@@ -122,6 +128,7 @@ describe('ManagedSessionStore', () => {
         worktreePath: null,
         status: 'ended',
         configVersion: 7,
+        executionEnvironment: 'direct',
         handoffStrategy: 'native-import',
         handoffSourceSessionId: null,
         metadata: { source: 'manual' },
@@ -146,6 +153,7 @@ describe('ManagedSessionStore', () => {
       }),
     );
     expect(session.status).toBe('ended');
+    expect(session.executionEnvironment).toBe('direct');
     expect(session.handoffStrategy).toBe('native-import');
   });
 
@@ -161,6 +169,7 @@ describe('ManagedSessionStore', () => {
         worktreePath: null,
         status: 'active',
         configVersion: 7,
+        executionEnvironment: 'direct',
         handoffStrategy: null,
         handoffSourceSessionId: null,
         metadata: {},
@@ -177,6 +186,7 @@ describe('ManagedSessionStore', () => {
     expect(mockDb.limit).toHaveBeenCalledWith(1);
     expect(session?.id).toBe('ms-lookup');
     expect(session?.runtime).toBe('codex');
+    expect(session?.executionEnvironment).toBe('direct');
   });
 
   it('patches metadata without overwriting unrelated fields', async () => {
@@ -191,6 +201,7 @@ describe('ManagedSessionStore', () => {
         worktreePath: null,
         status: 'active',
         configVersion: 8,
+        executionEnvironment: 'direct',
         handoffStrategy: null,
         handoffSourceSessionId: null,
         metadata: {
@@ -218,6 +229,7 @@ describe('ManagedSessionStore', () => {
         worktreePath: null,
         status: 'active',
         configVersion: 8,
+        executionEnvironment: 'direct',
         handoffStrategy: null,
         handoffSourceSessionId: null,
         metadata: {

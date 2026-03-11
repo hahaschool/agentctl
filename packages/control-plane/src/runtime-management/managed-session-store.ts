@@ -1,4 +1,5 @@
 import type {
+  ExecutionEnvironmentId,
   HandoffStrategy,
   ManagedRuntime,
   ManagedSession,
@@ -55,6 +56,7 @@ export class ManagedSessionStore {
       .values({
         runtime: input.runtime,
         nativeSessionId: input.nativeSessionId,
+        executionEnvironment: input.executionEnvironment ?? null,
         machineId: input.machineId,
         agentId: input.agentId,
         projectPath: input.projectPath,
@@ -240,6 +242,7 @@ function mapManagedSessionRow(row: typeof managedSessions.$inferSelect): Managed
     id: row.id,
     runtime: row.runtime as ManagedRuntime,
     nativeSessionId: row.nativeSessionId ?? null,
+    executionEnvironment: (row.executionEnvironment as ExecutionEnvironmentId | null) ?? null,
     machineId: row.machineId,
     agentId: row.agentId ?? null,
     projectPath: row.projectPath,

@@ -16,6 +16,13 @@ export {
   type CodexSessionManagerOptions,
   type CodexSessionStatus,
 } from './codex-session-manager.js';
+export { DirectEnvironment } from './direct-environment.js';
+export type {
+  ExecutionEnvironment,
+  ExecutionEnvironmentPreparation,
+  PrepareExecutionEnvironmentInput,
+} from './execution-environment.js';
+export { ExecutionEnvironmentRegistry } from './execution-environment-registry.js';
 export {
   type CheckpointConfig,
   type CheckpointData,
