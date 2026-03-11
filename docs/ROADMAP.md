@@ -373,19 +373,19 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 > Based on comprehensive `/audit` scan (2026-03-11). See `docs/plans/2026-03-10-public-repo-prep-design.md` for public repo context.
 
-#### 4.7.1 Critical Accessibility Fixes (Immediate)
+#### 4.7.1 Critical Accessibility Fixes (Immediate) ✅
 
-- [ ] `CopyableText.tsx:77` — span mode: add `role="button"`, `tabIndex={0}`, `onKeyDown` for keyboard access (WCAG 2.1.1)
-- [ ] `Spinner.tsx:16` — replace `<output>` with `<div role="status">` (WCAG 1.3.1, 4.1.2)
-- [ ] `layout.tsx` — remove `userScalable: false` to allow pinch-zoom (WCAG 2.5.5)
+- [x] `CopyableText.tsx:77` — span mode: add `role="button"`, `tabIndex={0}`, `onKeyDown` for keyboard access (WCAG 2.1.1)
+- [x] `Spinner.tsx:16` — replace `<output>` with `<div role="status">` (WCAG 1.3.1, 4.1.2)
+- [x] `layout.tsx` — remove `userScalable: false` to allow pinch-zoom (WCAG 2.5.5)
 
 #### 4.7.2 ARIA & Keyboard Hardening
 
-- [ ] `CommandPalette.tsx:469` — add `aria-activedescendant` management to listbox
-- [ ] `NotificationBell.tsx:90` — migrate manual dropdown to Radix `Popover` with focus trap
+- [x] `CommandPalette.tsx:469` — add `aria-activedescendant` management to listbox
+- [x] `NotificationBell.tsx:90` — migrate manual dropdown to Radix `Popover` with focus trap
 - [ ] `ContextPickerDialog.tsx` — add `role="tablist"`/`role="tab"`/`role="tabpanel"` to tab interface
-- [ ] `KeyboardHelpOverlay.tsx:32` — fix backdrop `aria-hidden` + `onClick` conflict
-- [ ] `CollapsibleSection.tsx:21` — add `aria-controls` pointing to content panel
+- [x] `KeyboardHelpOverlay.tsx:32` — fix backdrop `aria-hidden` + `onClick` conflict
+- [x] `CollapsibleSection.tsx:21` — add `aria-controls` pointing to content panel
 - [ ] `Sidebar.tsx` — add `aria-current="page"` to active navigation link
 - [ ] `SessionMessageList.tsx:25` — add `aria-pressed` to ViewModeToggle buttons
 - [ ] `ErrorBanner.tsx` — add `role="alert"` for screen reader announcement
@@ -644,8 +644,8 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P1** | Unified Memory Layer | 3.6 | Near-complete — injector/routes/MCP/migration landed; context budget tuning remains |
-| **P1** | Unified Memory System UI | 4.8 | Not started — 8 pages + 8 integration points + backend API + MCP tools |
-| **P1** | UI Quality & Accessibility | 4.7 | In progress — PRs #36 (critical) + #37 (overlays) pending merge |
+| **P1** | Unified Memory System UI | 4.8 | Foundation started — shell route, shared components (FactCard, ScopeBadge, ScopeSelector), placeholder view delivered |
+| **P1** | UI Quality & Accessibility | 4.7 | In progress — critical fixes + 4/9 ARIA items delivered; theming/responsive/perf remain |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
