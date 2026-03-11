@@ -159,7 +159,8 @@ export function MemoryBrowserView(): React.JSX.Element {
             const start = Math.min(lastIndex, currentIndex);
             const end = Math.max(lastIndex, currentIndex);
             for (let i = start; i <= end; i++) {
-              next.add(filteredFacts[i].id);
+              const fact = filteredFacts[i];
+              if (fact) next.add(fact.id);
             }
           }
         } else if (next.has(factId)) {
