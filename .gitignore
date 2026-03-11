@@ -37,3 +37,4 @@ credentials.json
 packages/agent-worker/.agentctl/
 coverage/
 test-results/
+.superpowers/
