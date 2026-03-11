@@ -57,6 +57,9 @@ describe('runtime-management protocol', () => {
       projectPath: '/tmp/project',
       prompt: 'Investigate the failing tests.',
       model: 'gpt-5-codex',
+      executionRequirements: {
+        environment: 'docker',
+      },
     };
 
     const handoffRequest: HandoffManagedSessionRequest = {
@@ -67,6 +70,7 @@ describe('runtime-management protocol', () => {
     };
 
     expect(createRequest.runtime).toBe('codex');
+    expect(createRequest.executionRequirements?.environment).toBe('docker');
     expect(handoffRequest.reason).toBe('manual');
   });
 

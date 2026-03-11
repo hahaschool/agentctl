@@ -602,6 +602,97 @@ describe('Agent routes — with dbRegistry', () => {
     });
   });
 
+  describe('machine registration and heartbeat with dbRegistry', () => {
+    it('passes execution environment capability snapshots during register', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/register',
+        payload: {
+          machineId: 'machine-env-1',
+          hostname: 'env-host',
+          tailscaleIp: '100.64.0.9',
+          os: 'linux',
+          arch: 'x64',
+          capabilities: {
+            gpu: false,
+            docker: true,
+            maxConcurrentAgents: 4,
+            defaultExecutionEnvironment: 'direct',
+            executionEnvironments: [
+              {
+                id: 'direct',
+                available: true,
+                isDefault: true,
+                isolation: 'host',
+                reasonUnavailable: null,
+                metadata: { worktreeReuse: true },
+              },
+            ],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.registerMachine).toHaveBeenCalledWith(
+        expect.objectContaining({
+          capabilities: expect.objectContaining({
+            defaultExecutionEnvironment: 'direct',
+            executionEnvironments: [expect.objectContaining({ id: 'direct' })],
+          }),
+        }),
+      );
+    });
+
+    it('passes heartbeat capability snapshots through to dbRegistry', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/machine-1/heartbeat',
+        payload: {
+          machineId: 'machine-1',
+          runningAgents: [],
+          cpuPercent: 11,
+          memoryPercent: 22,
+          capabilities: {
+            gpu: false,
+            docker: true,
+            maxConcurrentAgents: 4,
+            defaultExecutionEnvironment: 'direct',
+            executionEnvironments: [
+              {
+                id: 'direct',
+                available: true,
+                isDefault: true,
+                isolation: 'host',
+                reasonUnavailable: null,
+                metadata: { worktreeReuse: true },
+              },
+              {
+                id: 'docker',
+                available: false,
+                isDefault: false,
+                isolation: 'container',
+                reasonUnavailable: 'Docker daemon unavailable',
+                metadata: { runtime: 'docker' },
+              },
+            ],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.heartbeat).toHaveBeenCalledWith(
+        'machine-1',
+        expect.objectContaining({
+          defaultExecutionEnvironment: 'direct',
+          executionEnvironments: [
+            expect.objectContaining({ id: 'direct' }),
+            expect.objectContaining({ id: 'docker' }),
+          ],
+        }),
+      );
+    });
+  });
+
   // -------------------------------------------------------------------------
   // PATCH /api/agents/:agentId/status — validation
   // -------------------------------------------------------------------------

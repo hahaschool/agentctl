@@ -2,6 +2,23 @@ export const MANAGED_RUNTIMES = ['claude-code', 'codex'] as const;
 
 export type ManagedRuntime = (typeof MANAGED_RUNTIMES)[number];
 
+export const EXECUTION_ENVIRONMENTS = ['direct', 'docker'] as const;
+
+export type ExecutionEnvironmentId = (typeof EXECUTION_ENVIRONMENTS)[number];
+
+export type ExecutionEnvironmentCapability = {
+  id: ExecutionEnvironmentId;
+  available: boolean;
+  isDefault: boolean;
+  isolation: 'host' | 'container';
+  reasonUnavailable?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type ManagedExecutionRequirements = {
+  environment?: ExecutionEnvironmentId | null;
+};
+
 export const MANAGED_SESSION_STATUSES = [
   'starting',
   'active',
@@ -96,6 +113,7 @@ export type ManagedSession = {
   worktreePath: string | null;
   status: ManagedSessionStatus;
   configRevision: number;
+  executionEnvironment?: ExecutionEnvironmentId | null;
   handoffStrategy: HandoffStrategy | null;
   handoffSourceSessionId: string | null;
   metadata: Record<string, unknown>;
@@ -135,6 +153,10 @@ export type HandoffSnapshot = {
 
 export function isManagedRuntime(value: string): value is ManagedRuntime {
   return (MANAGED_RUNTIMES as readonly string[]).includes(value);
+}
+
+export function isExecutionEnvironmentId(value: string): value is ExecutionEnvironmentId {
+  return (EXECUTION_ENVIRONMENTS as readonly string[]).includes(value);
 }
 
 export function isManagedSessionStatus(value: string): value is ManagedSessionStatus {

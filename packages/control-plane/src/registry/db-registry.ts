@@ -126,13 +126,19 @@ export class DbAgentRegistry {
     this.logger.info({ machineId, hostname }, 'Machine registered');
   }
 
-  async heartbeat(machineId: string): Promise<void> {
+  async heartbeat(machineId: string, capabilities?: Machine['capabilities']): Promise<void> {
+    const setClause: Partial<typeof machines.$inferInsert> = {
+      lastHeartbeat: new Date(),
+      status: 'online',
+    };
+
+    if (capabilities) {
+      setClause.capabilities = capabilities;
+    }
+
     const result = await this.db
       .update(machines)
-      .set({
-        lastHeartbeat: new Date(),
-        status: 'online',
-      })
+      .set(setClause)
       .where(eq(machines.id, machineId))
       .returning({ id: machines.id });
 

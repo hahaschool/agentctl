@@ -129,6 +129,7 @@ export const managedSessions = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     runtime: text('runtime').notNull(),
     nativeSessionId: text('native_session_id'),
+    executionEnvironment: text('execution_environment'),
     machineId: text('machine_id')
       .notNull()
       .references(() => machines.id),

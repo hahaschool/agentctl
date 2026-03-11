@@ -19,6 +19,7 @@ function makeMockAgentPool(
 ): AgentPool {
   return {
     listAgents: vi.fn().mockReturnValue(agents),
+    getMaxConcurrent: vi.fn().mockReturnValue(3),
   } as unknown as AgentPool;
 }
 
@@ -32,6 +33,10 @@ function makeReporter(
   overrides?: Partial<{
     agentPool: AgentPool;
     intervalMs: number;
+    executionEnvironmentRegistry: {
+      detectAll: ReturnType<typeof vi.fn>;
+      getDefault: ReturnType<typeof vi.fn>;
+    };
   }>,
 ): HealthReporter {
   return new HealthReporter({
@@ -40,7 +45,31 @@ function makeReporter(
     intervalMs: overrides?.intervalMs ?? 10_000,
     logger: mockLogger,
     agentPool: overrides?.agentPool,
+    executionEnvironmentRegistry: overrides?.executionEnvironmentRegistry as never,
   });
+}
+
+function makeMockExecutionEnvironmentRegistry() {
+  return {
+    detectAll: vi.fn().mockResolvedValue([
+      {
+        id: 'direct',
+        available: true,
+        isDefault: true,
+        isolation: 'host',
+        reasonUnavailable: null,
+        metadata: { worktreeReuse: true },
+      },
+    ]),
+    getDefault: vi.fn().mockResolvedValue({
+      id: 'direct',
+      available: true,
+      isDefault: true,
+      isolation: 'host',
+      reasonUnavailable: null,
+      metadata: { worktreeReuse: true },
+    }),
+  };
 }
 
 function mockFetchOk(body: Record<string, unknown> = { ok: true }): void {
@@ -107,11 +136,27 @@ describe('HealthReporter', () => {
       expect(body.tailscaleIp).toBeDefined();
       expect(body.os).toBeDefined();
       expect(body.arch).toBeDefined();
-      expect(body.capabilities).toEqual({
+      expect(body.capabilities).toMatchObject({
         gpu: false,
         docker: false,
         maxConcurrentAgents: 3,
       });
+    });
+
+    it('includes execution environment capability snapshots during register when registry is provided', async () => {
+      mockFetchOk();
+      const executionEnvironmentRegistry = makeMockExecutionEnvironmentRegistry();
+      const reporter = makeReporter({ executionEnvironmentRegistry });
+
+      await reporter.register();
+
+      const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+      expect(body.capabilities.defaultExecutionEnvironment).toBe('direct');
+      expect(body.capabilities.executionEnvironments).toEqual([
+        expect.objectContaining({ id: 'direct', available: true }),
+      ]);
+      expect(executionEnvironmentRegistry.detectAll).toHaveBeenCalledOnce();
+      expect(executionEnvironmentRegistry.getDefault).toHaveBeenCalledOnce();
     });
 
     it('logs success on 200 response', async () => {
@@ -260,6 +305,25 @@ describe('HealthReporter', () => {
       expect(typeof body.cpuPercent).toBe('number');
       expect(typeof body.memoryPercent).toBe('number');
       expect(Array.isArray(body.runningAgents)).toBe(true);
+
+      reporter.stop();
+    });
+
+    it('heartbeat includes execution environment capability snapshots when registry is provided', async () => {
+      mockFetchOk();
+      const executionEnvironmentRegistry = makeMockExecutionEnvironmentRegistry();
+      const reporter = makeReporter({ intervalMs: 1_000, executionEnvironmentRegistry });
+
+      reporter.start();
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+      expect(body.capabilities.defaultExecutionEnvironment).toBe('direct');
+      expect(body.capabilities.executionEnvironments).toEqual([
+        expect.objectContaining({ id: 'direct', available: true }),
+      ]);
+      expect(executionEnvironmentRegistry.detectAll).toHaveBeenCalledOnce();
+      expect(executionEnvironmentRegistry.getDefault).toHaveBeenCalledOnce();
 
       reporter.stop();
     });

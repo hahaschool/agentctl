@@ -46,9 +46,12 @@ export type {
 } from './memory.js';
 export { DEFAULT_INJECTION_BUDGET } from './memory.js';
 export type {
+  ExecutionEnvironmentCapability,
+  ExecutionEnvironmentId,
   HandoffReason,
   HandoffSnapshot,
   HandoffStrategy,
+  ManagedExecutionRequirements,
   ManagedEnvironmentPolicy,
   ManagedInstructionBundle,
   ManagedMcpServer,
@@ -62,8 +65,10 @@ export type {
   ManualTakeoverStatus,
 } from './runtime-management.js';
 export {
+  EXECUTION_ENVIRONMENTS,
   HANDOFF_REASONS,
   HANDOFF_STRATEGIES,
+  isExecutionEnvironmentId,
   isHandoffStrategy,
   isManagedRuntime,
   isManagedSessionStatus,

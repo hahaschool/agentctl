@@ -1,4 +1,5 @@
 import type {
+  ManagedExecutionRequirements,
   HandoffReason,
   ManagedRuntime,
   ManagedRuntimeConfig,
@@ -44,6 +45,7 @@ export type CreateManagedSessionRequest = {
   projectPath: string;
   prompt: string;
   model?: string | null;
+  executionRequirements?: ManagedExecutionRequirements | null;
 };
 
 export type ResumeManagedSessionRequest = {

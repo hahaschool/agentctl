@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import os from 'node:os';
 
 import {
+  type ExecutionEnvironmentCapability,
   type DispatchVerificationConfig,
   isDispatchVerificationConfig,
   WorkerError,
@@ -18,6 +19,10 @@ type HealthReporterOptions = {
   intervalMs: number;
   logger: Logger;
   agentPool?: AgentPool;
+  executionEnvironmentRegistry?: {
+    detectAll: () => Promise<ExecutionEnvironmentCapability[]>;
+    getDefault: () => Promise<ExecutionEnvironmentCapability | null>;
+  };
 };
 
 /**
@@ -63,6 +68,7 @@ export class HealthReporter {
   private readonly intervalMs: number;
   private readonly logger: Logger;
   private readonly agentPool: AgentPool | null;
+  private readonly executionEnvironmentRegistry: HealthReporterOptions['executionEnvironmentRegistry'];
   private tailscaleIp: string = '127.0.0.1';
   private dispatchVerificationConfig: DispatchVerificationConfig | null = null;
 
@@ -72,12 +78,14 @@ export class HealthReporter {
     this.intervalMs = options.intervalMs;
     this.logger = options.logger;
     this.agentPool = options.agentPool ?? null;
+    this.executionEnvironmentRegistry = options.executionEnvironmentRegistry;
   }
 
   async register(): Promise<void> {
     this.tailscaleIp = await resolveTailscaleIp(this.logger);
 
     try {
+      const capabilities = await this.buildCapabilitiesSnapshot();
       const response = await fetch(`${this.controlPlaneUrl}/api/agents/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -87,11 +95,7 @@ export class HealthReporter {
           tailscaleIp: this.tailscaleIp,
           os: process.platform === 'darwin' ? 'darwin' : 'linux',
           arch: process.arch === 'arm64' ? 'arm64' : 'x64',
-          capabilities: {
-            gpu: false,
-            docker: false,
-            maxConcurrentAgents: 3,
-          },
+          capabilities,
         }),
       });
 
@@ -143,6 +147,7 @@ export class HealthReporter {
   }
 
   private async sendHeartbeat(): Promise<void> {
+    const capabilities = await this.buildCapabilitiesSnapshot();
     const heartbeatRequest = () =>
       fetch(`${this.controlPlaneUrl}/api/agents/${this.machineId}/heartbeat`, {
         method: 'POST',
@@ -152,6 +157,7 @@ export class HealthReporter {
           runningAgents: this.getRunningAgentsSummary(),
           cpuPercent: (os.loadavg()[0] * 100) / os.cpus().length,
           memoryPercent: (1 - os.freemem() / os.totalmem()) * 100,
+          capabilities,
         }),
       });
 
@@ -194,6 +200,32 @@ export class HealthReporter {
     }
 
     this.dispatchVerificationConfig = candidate;
+  }
+
+  private async buildCapabilitiesSnapshot(): Promise<{
+    gpu: boolean;
+    docker: boolean;
+    maxConcurrentAgents: number;
+    executionEnvironments?: ExecutionEnvironmentCapability[];
+    defaultExecutionEnvironment?: ExecutionEnvironmentCapability['id'] | null;
+  }> {
+    const executionEnvironments = this.executionEnvironmentRegistry
+      ? await this.executionEnvironmentRegistry.detectAll()
+      : undefined;
+    const defaultEnvironment = this.executionEnvironmentRegistry
+      ? await this.executionEnvironmentRegistry.getDefault()
+      : null;
+
+    return {
+      gpu: false,
+      docker:
+        executionEnvironments?.some(
+          (capability) => capability.id === 'docker' && capability.available,
+        ) ?? false,
+      maxConcurrentAgents: this.agentPool?.getMaxConcurrent() ?? 3,
+      ...(executionEnvironments ? { executionEnvironments } : {}),
+      ...(defaultEnvironment ? { defaultExecutionEnvironment: defaultEnvironment.id } : {}),
+    };
   }
 }
 

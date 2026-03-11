@@ -1,3 +1,5 @@
+import type { MachineCapabilities } from '../types/machine.js';
+
 export type StartAgentRequest = {
   prompt?: string;
   resumeSession?: string;
@@ -21,11 +23,7 @@ export type RegisterWorkerRequest = {
   tailscaleIp: string;
   os: 'linux' | 'darwin';
   arch: 'x64' | 'arm64';
-  capabilities: {
-    gpu: boolean;
-    docker: boolean;
-    maxConcurrentAgents: number;
-  };
+  capabilities: MachineCapabilities;
 };
 
 export type HeartbeatRequest = {
@@ -33,6 +31,7 @@ export type HeartbeatRequest = {
   runningAgents: Array<{ agentId: string; sessionId: string | null }>;
   cpuPercent: number;
   memoryPercent: number;
+  capabilities?: MachineCapabilities;
 };
 
 export type SignalAgentRequest = {
