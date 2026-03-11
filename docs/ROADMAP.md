@@ -301,11 +301,11 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [x] Expanded RelationType: +`derived_from`, +`validates`, +`contradicts` (10 total)
 - [x] Pinned facts: always-injected guardrails, no decay, hard cap per scope
 - [x] Trigger-based injection: `TriggerSpec` (tool/file_pattern/keyword) integrated with PreToolUse hooks
-- [ ] Role-aware search: `tags[]` field + `roleAffinity` boost in RRF reranking
-- [ ] Meta-cognition: extraction quality rules embedded in extraction LLM prompt
-- [ ] `memory_feedback` MCP tool: `used` / `irrelevant` / `outdated` signals
-- [ ] Knowledge synthesis: weekly cron Phase 1 (lint) + Phase 2 (LLM-proposed principles, human review)
-- [ ] Contradiction detection: `contradicts` edges trigger human review flags
+- [x] Role-aware search: `tags[]` field + `roleAffinity` boost in RRF reranking *(PR #55, direct commits)*
+- [x] Meta-cognition: extraction quality rules embedded in extraction LLM prompt *(direct commit)*
+- [x] `memory_feedback` MCP tool: `used` / `irrelevant` / `outdated` signals *(PR #58)*
+- [x] Knowledge synthesis: weekly cron Phase 1 (lint) + Phase 2 (LLM-proposed principles, human review) *(direct commit)*
+- [x] Contradiction detection: `contradicts` edges trigger human review flags *(direct commit)*
 
 ---
 
@@ -388,13 +388,13 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 - [x] `CommandPalette.tsx:469` — add `aria-activedescendant` management to listbox
 - [x] `NotificationBell.tsx:90` — migrate manual dropdown to Radix `Popover` with focus trap
-- [ ] `ContextPickerDialog.tsx` — add `role="tablist"`/`role="tab"`/`role="tabpanel"` to tab interface
+- [x] `ContextPickerDialog.tsx` — add `role="tablist"`/`role="tab"`/`role="tabpanel"` to tab interface *(PR #51, #54)*
 - [x] `KeyboardHelpOverlay.tsx:32` — fix backdrop `aria-hidden` + `onClick` conflict
 - [x] `CollapsibleSection.tsx:21` — add `aria-controls` pointing to content panel
-- [ ] `Sidebar.tsx` — add `aria-current="page"` to active navigation link
-- [ ] `SessionMessageList.tsx:25` — add `aria-pressed` to ViewModeToggle buttons
-- [ ] `ErrorBanner.tsx` — add `role="alert"` for screen reader announcement
-- [ ] Decorative Lucide icons — audit and add `aria-hidden="true"` where missing
+- [x] `Sidebar.tsx` — add `aria-current="page"` to active navigation link *(PR #59)*
+- [x] `SessionMessageList.tsx:25` — add `aria-pressed` to ViewModeToggle buttons *(PR #59)*
+- [x] `ErrorBanner.tsx` — add `role="alert"` for screen reader announcement *(PR #59)*
+- [x] Decorative Lucide icons — audit and add `aria-hidden="true"` where missing *(PR #59)*
 
 #### 4.7.3 Theming Normalization (Kill AI Palette) ✅
 
@@ -448,38 +448,38 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 - [x] Session Detail: new "Memory" tab showing facts read/created/updated during session *(PR #55)*
 - [x] Agent Detail: memory usage section with scope distribution + mini knowledge graph *(PR #55)*
-- [ ] Runtime Sessions: memory injection status with token budget usage
-- [ ] Machine Page: per-machine memory stats and cross-machine sync status
+- [x] Runtime Sessions: memory injection status with token budget usage *(direct commit)*
+- [x] Machine Page: per-machine memory stats and cross-machine sync status *(direct commit)*
 - [x] Main Dashboard: memory health card (total facts, growth trend, pending consolidation) *(PR #55)*
-- [ ] Context Picker: replace current claude-mem panel with unified memory search
+- [x] Context Picker: replace current claude-mem panel with unified memory search *(direct commit)*
 - [x] Command Palette: `memory:search`, `memory:create`, `memory:graph` commands *(PR #55)*
-- [ ] Session Creation Form: scope selector + memory budget override
+- [x] Session Creation Form: scope selector + memory budget override *(direct commit)*
 
 **Backend API (`/api/memory/*`):**
 
-- [ ] Facts CRUD: `GET/POST/PATCH/DELETE /api/memory/facts`
-- [ ] Edges CRUD: `GET/POST/DELETE /api/memory/edges`
-- [ ] Graph data: `GET /api/memory/graph` (nodes + edges for visualization)
-- [ ] Scopes: `GET/POST /api/memory/scopes`
-- [ ] Consolidation: `GET /api/memory/consolidation`, `POST .../action`
-- [ ] Reports: `POST /api/memory/reports`, `GET /api/memory/reports/:id`
-- [ ] Import: `POST /api/memory/import`, `GET /api/memory/import/status`
-- [ ] Stats: `GET /api/memory/stats` (dashboard metrics)
+- [x] Facts CRUD: `GET/POST/PATCH/DELETE /api/memory/facts`
+- [x] Edges CRUD: `GET/POST/DELETE /api/memory/edges`
+- [x] Graph data: `GET /api/memory/graph` (nodes + edges for visualization)
+- [x] Scopes: `GET/POST /api/memory/scopes`
+- [x] Consolidation: `GET /api/memory/consolidation`, `POST .../action`
+- [x] Reports: `POST /api/memory/reports`, `GET /api/memory/reports/:id`
+- [x] Import: `POST /api/memory/import`, `GET /api/memory/import/status`
+- [x] Stats: `GET /api/memory/stats` (dashboard metrics)
 - [ ] Cross-entity queries: `?sessionId=X`, `?agentId=X`, `?machineId=X`
 
 **MCP tools (agent runtime access):**
 
-- [ ] `memory_search` — hybrid search (vector + BM25 + graph), ranked results
-- [ ] `memory_store` — store new fact with scope + entity_type
-- [ ] `memory_recall` — graph traversal (2-hop BFS) from entity
-- [ ] `memory_feedback` — signal relevance (used / irrelevant / outdated)
-- [ ] `memory_report` — generate scoped report
-- [ ] `memory_promote` — escalate fact to parent scope
+- [x] `memory_search` — hybrid search (vector + BM25 + graph), ranked results *(PR #58)*
+- [x] `memory_store` — store new fact with scope + entity_type *(PR #58)*
+- [x] `memory_recall` — graph traversal (2-hop BFS) from entity *(PR #58)*
+- [x] `memory_feedback` — signal relevance (used / irrelevant / outdated) *(PR #58)*
+- [x] `memory_report` — generate scoped report *(PR #58)*
+- [x] `memory_promote` — escalate fact to parent scope *(PR #58)*
 
 **Shared components:**
 
-- [ ] `FactCard`, `EntityTypeBadge`, `ScopeBadge`, `ConfidenceBar`, `StrengthMeter`
-- [ ] `MemorySidebar`, `ScopeSelector`, `FactDetailPanel`
+- [x] `FactCard`, `EntityTypeBadge`, `ScopeBadge`, `ConfidenceBar`, `StrengthMeter` *(PRs #47, #53, #57)*
+- [x] `MemorySidebar`, `ScopeSelector`, `FactDetailPanel` *(PRs #47, direct commits)*
 
 **Tech stack:** react-force-graph-2d, @tanstack/react-table, recharts, @tanstack/react-virtual, nuqs, react-activity-calendar
 
@@ -495,10 +495,10 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 - [x] claude-mem memory integration in fork context selection
 - [x] Smart selection helpers for key decisions/topics
-- [ ] Smart selection tools (auto-select related messages)
+- [x] Smart selection tools (auto-select related messages) *(PR #57 — verified wiring)*
 - [x] Live prompt preview in fork dialog
 - [x] Runtime dimension in create-agent flow from session context
-- [ ] Runtime dimension in direct session fork flow
+- [x] Runtime dimension in direct session fork flow *(PR #57 — verified wiring)*
 
 ---
 
@@ -646,14 +646,14 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
-| **P1** | Unified Memory Layer | 3.6 | Near-complete — core/UI delivered; knowledge engineering items remain (role-aware search, meta-cognition, feedback, synthesis, contradiction) |
-| **P1** | Unified Memory System UI | 4.8 | Near-complete — all 8 pages delivered (PRs #47,#50,#52,#53,#55); integration points + MCP tools + shared components remain |
-| **P1** | UI Quality & Accessibility | 4.7 | Near-complete — critical fixes + ARIA + theming + responsive/touch/perf delivered; 5 ARIA items remain |
+| **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
+| **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — all 8 pages, integration points, MCP tools, shared components (PRs #47,#50,#52-#59) |
+| **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all ARIA items complete (PRs #51,#54,#59) |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
-| **P2** | Fork UX Extensions | 4.9 | Partial — auto-related-message/runtime-in-direct-fork work remains |
+| **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
 | **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
 | **P2** | Automatic Handoff Triggers | 3.5 | Not started |
