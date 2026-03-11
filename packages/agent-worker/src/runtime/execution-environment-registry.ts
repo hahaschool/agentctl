@@ -1,7 +1,4 @@
-import type {
-  ExecutionEnvironmentCapability,
-  ExecutionEnvironmentId,
-} from '@agentctl/shared';
+import type { ExecutionEnvironmentCapability, ExecutionEnvironmentId } from '@agentctl/shared';
 
 import { DirectEnvironment } from './direct-environment.js';
 import type { ExecutionEnvironment } from './execution-environment.js';

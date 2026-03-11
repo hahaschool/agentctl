@@ -1,7 +1,4 @@
-import type {
-  ExecutionEnvironmentCapability,
-  ExecutionEnvironmentId,
-} from '@agentctl/shared';
+import type { ExecutionEnvironmentCapability, ExecutionEnvironmentId } from '@agentctl/shared';
 
 export type PrepareExecutionEnvironmentInput = {
   executionRoot: string;

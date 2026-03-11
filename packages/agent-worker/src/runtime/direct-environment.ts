@@ -27,9 +27,7 @@ export class DirectEnvironment implements ExecutionEnvironment {
     };
   }
 
-  async prepare(
-    input: PrepareExecutionEnvironmentInput,
-  ): Promise<ExecutionEnvironmentPreparation> {
+  async prepare(input: PrepareExecutionEnvironmentInput): Promise<ExecutionEnvironmentPreparation> {
     return {
       environmentId: this.id,
       executionRoot: input.executionRoot,

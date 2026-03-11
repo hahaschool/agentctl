@@ -2,8 +2,8 @@ import { execSync } from 'node:child_process';
 import os from 'node:os';
 
 import {
-  type ExecutionEnvironmentCapability,
   type DispatchVerificationConfig,
+  type ExecutionEnvironmentCapability,
   isDispatchVerificationConfig,
   WorkerError,
 } from '@agentctl/shared';

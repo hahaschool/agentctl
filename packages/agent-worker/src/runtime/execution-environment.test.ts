@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-
+import { DirectEnvironment } from './direct-environment.js';
 import type {
   ExecutionEnvironmentPreparation,
   PrepareExecutionEnvironmentInput,
 } from './execution-environment.js';
-import { DirectEnvironment } from './direct-environment.js';
 
 describe('execution-environment contracts', () => {
   it('describes preparation payloads for runtime launch', async () => {

@@ -4,9 +4,9 @@ import type {
   ExecutionEnvironmentCapability,
   ExecutionEnvironmentId,
   HandoffSnapshot,
+  ManagedExecutionRequirements,
   ManagedRuntime,
   ManagedRuntimeConfig,
-  ManagedExecutionRequirements,
   ManagedSession,
   ManualTakeoverState,
 } from './runtime-management.js';

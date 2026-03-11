@@ -294,10 +294,7 @@ async function resolveWorker(
   return resolveWorkerUrlByMachineIdOrThrow(machineId, { dbRegistry, workerPort });
 }
 
-async function requireMachine(
-  machineId: string,
-  dbRegistry: DbAgentRegistry | undefined,
-) {
+async function requireMachine(machineId: string, dbRegistry: DbAgentRegistry | undefined) {
   if (!dbRegistry) {
     throw new ControlPlaneError(
       'REGISTRY_UNAVAILABLE',
@@ -333,7 +330,9 @@ function selectExecutionEnvironment(
       };
     }
 
-    const requestedCapability = capabilities.find((capability) => capability.id === requestedEnvironment);
+    const requestedCapability = capabilities.find(
+      (capability) => capability.id === requestedEnvironment,
+    );
     if (!requestedCapability?.available) {
       return {
         ok: false,
