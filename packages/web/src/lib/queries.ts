@@ -699,3 +699,51 @@ export function useRefreshRuntimeConfig() {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Memory fact mutations
+// ---------------------------------------------------------------------------
+
+export function useCreateMemoryFact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createMemoryFact,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+    },
+  });
+}
+
+export function useUpdateMemoryFact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      scope?: import('@agentctl/shared').MemoryScope;
+      content?: string;
+      entityType?: import('@agentctl/shared').EntityType;
+      confidence?: number;
+      strength?: number;
+    }) => api.updateMemoryFact(id, patch),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.fact(variables.id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+    },
+  });
+}
+
+export function useDeleteMemoryFact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteMemoryFact(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+    },
+  });
+}
