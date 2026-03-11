@@ -371,9 +371,32 @@ export class SseClient {
       return;
     }
 
-    // The event field from the SSE frame maps to the AgentEvent.event discriminant
-    const agentEvent = parsed as AgentEvent;
+    const agentEvent = this.toAgentEvent(frame, parsed);
+    if (!agentEvent) {
+      return;
+    }
     this.emit('event', agentEvent);
+  }
+
+  private toAgentEvent(frame: SseFrame, parsed: unknown): AgentEvent | null {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'event' in parsed &&
+      typeof parsed.event === 'string' &&
+      'data' in parsed
+    ) {
+      return parsed as AgentEvent;
+    }
+
+    if (!frame.event) {
+      return null;
+    }
+
+    return {
+      event: frame.event as AgentEvent['event'],
+      data: parsed as AgentEvent['data'],
+    } as AgentEvent;
   }
 
   // -----------------------------------------------------------------------

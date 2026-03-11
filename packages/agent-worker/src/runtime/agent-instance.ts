@@ -818,6 +818,14 @@ export class AgentInstance extends EventEmitter {
     status: 'success' | 'failure',
     errorMessage?: string,
   ): Promise<void> {
+    const resultSummary = this.buildExecutionSummary(status, errorMessage);
+    this.emitEvent({
+      event: 'execution_summary',
+      data: {
+        summary: resultSummary,
+      },
+    });
+
     if (!this.controlPlaneUrl || !this.runId) {
       return;
     }
@@ -837,7 +845,7 @@ export class AgentInstance extends EventEmitter {
       durationMs,
       sessionId: this.state.sessionId ?? undefined,
       errorMessage,
-      resultSummary: this.buildExecutionSummary(status, errorMessage),
+      resultSummary,
     };
 
     const CALLBACK_TIMEOUT_MS = 10_000;
