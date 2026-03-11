@@ -298,7 +298,11 @@ export class AgentDetailPresenter {
       newLines.splice(0, newLines.length - this.maxOutputLines);
     }
 
-    this.setState({ outputLines: newLines });
+    this.setState({
+      outputLines: newLines,
+      latestRunSummary:
+        event.event === 'execution_summary' ? event.data.summary : this.state.latestRunSummary,
+    });
   }
 
   private setState(partial: Partial<AgentDetailState>): void {

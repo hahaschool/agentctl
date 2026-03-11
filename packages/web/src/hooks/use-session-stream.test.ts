@@ -89,6 +89,7 @@ describe('useSessionStream — initial state', () => {
     expect(result.current.streamOutput).toEqual([]);
     expect(result.current.latestStatus).toBeNull();
     expect(result.current.latestCost).toBeNull();
+    expect(result.current.latestExecutionSummary).toBeNull();
   });
 
   it('does not create an EventSource when enabled is false', () => {
@@ -266,6 +267,42 @@ describe('useSessionStream — cost events', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Event handling — execution summary
+// ---------------------------------------------------------------------------
+
+describe('useSessionStream — execution summary events', () => {
+  it('updates latestExecutionSummary from execution_summary events', () => {
+    const { result } = renderHook(() => useSessionStream({ sessionId: 'sess-1' }));
+
+    act(() => {
+      latestEs().simulateOpen();
+    });
+
+    const summary = {
+      status: 'success' as const,
+      workCompleted: 'Rendered the latest execution summary live.',
+      executiveSummary: 'Rendered the latest execution summary live.',
+      keyFindings: ['Session detail view no longer waits for a full refresh.'],
+      filesChanged: [],
+      commandsRun: 2,
+      toolUsageBreakdown: { Edit: 1, Bash: 1 },
+      followUps: [],
+      branchName: null,
+      prUrl: null,
+      tokensUsed: { input: 100, output: 25 },
+      costUsd: 0.08,
+      durationMs: 3_500,
+    };
+
+    act(() => {
+      latestEs().simulateEvent('execution_summary', { summary });
+    });
+
+    expect(result.current.latestExecutionSummary).toEqual(summary);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // onEvent callback
 // ---------------------------------------------------------------------------
 
@@ -354,6 +391,36 @@ describe('useSessionStream — onEvent callback', () => {
     );
   });
 
+  it('calls onEvent for execution_summary events', () => {
+    const onEvent = vi.fn();
+    renderHook(() => useSessionStream({ sessionId: 'sess-1', onEvent }));
+
+    act(() => {
+      latestEs().simulateOpen();
+    });
+    act(() => {
+      latestEs().simulateEvent('execution_summary', {
+        summary: {
+          status: 'success',
+          workCompleted: 'Live summary arrived.',
+          executiveSummary: 'Live summary arrived.',
+          keyFindings: [],
+          filesChanged: [],
+          commandsRun: 1,
+          toolUsageBreakdown: { Edit: 1 },
+          followUps: [],
+          branchName: null,
+          prUrl: null,
+          tokensUsed: { input: 10, output: 5 },
+          costUsd: 0.01,
+          durationMs: 500,
+        },
+      });
+    });
+
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ event: 'execution_summary' }));
+  });
+
   it('ignores events with invalid JSON', () => {
     const onEvent = vi.fn();
     renderHook(() => useSessionStream({ sessionId: 'sess-1', onEvent }));
@@ -421,6 +488,42 @@ describe('useSessionStream — state reset', () => {
     rerender({ sessionId: 'sess-2' });
 
     expect(result.current.latestStatus).toBeNull();
+  });
+
+  it('resets latestExecutionSummary when sessionId changes', () => {
+    const { result, rerender } = renderHook(
+      ({ sessionId }: { sessionId: string }) => useSessionStream({ sessionId }),
+      { initialProps: { sessionId: 'sess-1' } },
+    );
+
+    act(() => {
+      latestEs().simulateOpen();
+    });
+    act(() => {
+      latestEs().simulateEvent('execution_summary', {
+        summary: {
+          status: 'success',
+          workCompleted: 'Old summary',
+          executiveSummary: 'Old summary',
+          keyFindings: [],
+          filesChanged: [],
+          commandsRun: 0,
+          toolUsageBreakdown: {},
+          followUps: [],
+          branchName: null,
+          prUrl: null,
+          tokensUsed: { input: 0, output: 0 },
+          costUsd: 0,
+          durationMs: 0,
+        },
+      });
+    });
+
+    expect(result.current.latestExecutionSummary?.executiveSummary).toBe('Old summary');
+
+    rerender({ sessionId: 'sess-2' });
+
+    expect(result.current.latestExecutionSummary).toBeNull();
   });
 });
 

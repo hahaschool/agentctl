@@ -4,6 +4,7 @@ import type {
   AgentApprovalEvent,
   AgentCostEvent,
   AgentEvent,
+  AgentExecutionSummaryEvent,
   AgentOutputEvent,
   AgentRawOutputEvent,
   AgentSafetyEvent,
@@ -101,6 +102,30 @@ describe('AgentEvent union', () => {
     expect(event.event).toBe('user_message');
   });
 
+  it('accepts an execution_summary event', () => {
+    const event: AgentEvent = {
+      event: 'execution_summary',
+      data: {
+        summary: {
+          status: 'success',
+          workCompleted: 'Streamed the structured summary to clients.',
+          executiveSummary: 'Streamed the structured summary to clients.',
+          keyFindings: ['Session surfaces can update without a full refresh.'],
+          filesChanged: [],
+          commandsRun: 2,
+          toolUsageBreakdown: { Edit: 1, Bash: 1 },
+          followUps: [],
+          branchName: null,
+          prUrl: null,
+          tokensUsed: { input: 120, output: 40 },
+          costUsd: 0.12,
+          durationMs: 4_200,
+        },
+      },
+    };
+    expect(event.event).toBe('execution_summary');
+  });
+
   it('accepts a safety_approval_needed event', () => {
     const event: AgentEvent = {
       event: 'safety_approval_needed',
@@ -169,6 +194,36 @@ describe('AgentCostEvent', () => {
     };
     expect(event.data.turnCost).toBe(0);
     expect(event.data.totalCost).toBe(0);
+  });
+});
+
+describe('AgentExecutionSummaryEvent', () => {
+  it('carries a structured execution summary payload', () => {
+    const event: AgentExecutionSummaryEvent = {
+      event: 'execution_summary',
+      data: {
+        summary: {
+          status: 'partial',
+          workCompleted: 'Completed most of the live summary plumbing.',
+          executiveSummary: 'Completed most of the live summary plumbing.',
+          keyFindings: ['Web and mobile can consume the same summary shape.'],
+          filesChanged: [{ path: 'packages/shared/src/protocol/events.ts', action: 'modified' }],
+          commandsRun: 3,
+          toolUsageBreakdown: { Edit: 2, Bash: 1 },
+          followUps: ['Wire the final session view fallback.'],
+          branchName: 'codex/p1-execution-summary-live',
+          prUrl: null,
+          tokensUsed: { input: 240, output: 80 },
+          costUsd: 0.31,
+          durationMs: 9_500,
+        },
+      },
+    };
+
+    expect(event.data.summary.executiveSummary).toBe(
+      'Completed most of the live summary plumbing.',
+    );
+    expect(event.data.summary.commandsRun).toBe(3);
   });
 });
 

@@ -1,5 +1,6 @@
 'use client';
 
+import type { ExecutionSummary } from '@agentctl/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ---------------------------------------------------------------------------
@@ -12,6 +13,7 @@ export type SessionStreamEvent =
   | { event: 'user_message'; data: { text: string } }
   | { event: 'status'; data: { status: string; sessionId?: string } }
   | { event: 'cost'; data: { totalCostUsd: number; inputTokens: number; outputTokens: number } }
+  | { event: 'execution_summary'; data: { summary: ExecutionSummary } }
   | { event: 'approval_needed'; data: { toolName: string; args: Record<string, unknown> } }
   | { event: 'heartbeat'; data: Record<string, never> }
   | { event: 'loop_iteration'; data: { iteration: number } }
@@ -43,6 +45,8 @@ type UseSessionStreamResult = {
   latestStatus: string | null;
   /** Latest cost data, if any. */
   latestCost: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
+  /** Latest structured execution summary, if any. */
+  latestExecutionSummary: ExecutionSummary | null;
   /** Clear accumulated stream output (e.g. after content refetch absorbs it). */
   clearStreamOutput: () => void;
   /** Clear pending user messages (e.g. after JSONL content includes them). */
@@ -70,6 +74,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     inputTokens: number;
     outputTokens: number;
   } | null>(null);
+  const [latestExecutionSummary, setLatestExecutionSummary] = useState<ExecutionSummary | null>(
+    null,
+  );
 
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
@@ -85,6 +92,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     setPendingUserMessages([]);
     setLatestStatus(null);
     setLatestCost(null);
+    setLatestExecutionSummary(null);
   }, []);
 
   useEffect(() => {
@@ -163,6 +171,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             setLatestCost(
               data as { totalCostUsd: number; inputTokens: number; outputTokens: number },
             );
+          } else if (eventType === 'execution_summary') {
+            setLatestExecutionSummary((data as { summary?: ExecutionSummary }).summary ?? null);
           }
         } catch {
           // Ignore unparseable events
@@ -174,6 +184,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       es.addEventListener('user_message', handleEvent('user_message'));
       es.addEventListener('status', handleEvent('status'));
       es.addEventListener('cost', handleEvent('cost'));
+      es.addEventListener('execution_summary', handleEvent('execution_summary'));
       es.addEventListener('approval_needed', handleEvent('approval_needed'));
       es.addEventListener('loop_iteration', handleEvent('loop_iteration'));
       es.addEventListener('loop_complete', handleEvent('loop_complete'));
@@ -214,6 +225,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     pendingUserMessages,
     latestStatus,
     latestCost,
+    latestExecutionSummary,
     clearStreamOutput,
     clearPendingMessages,
   };

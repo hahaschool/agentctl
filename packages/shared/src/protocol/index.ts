@@ -17,6 +17,7 @@ export type {
   AgentApprovalEvent,
   AgentCostEvent,
   AgentEvent,
+  AgentExecutionSummaryEvent,
   AgentHeartbeatEvent,
   AgentOutputEvent,
   AgentRawOutputEvent,
