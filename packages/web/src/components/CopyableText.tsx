@@ -48,6 +48,19 @@ function CopyableTextBase({
     [copyValue, toast],
   );
 
+  const handleSpanKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLSpanElement>) => {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      void copyValue().catch(() => toast.error('Failed to copy'));
+    },
+    [copyValue, toast],
+  );
+
   const display =
     label ?? (value && value.length > maxDisplay ? value.slice(0, maxDisplay) : (value ?? ''));
 
@@ -72,10 +85,11 @@ function CopyableTextBase({
 
   if (as === 'span') {
     return (
-      // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard interaction is handled by parent row button
-      // biome-ignore lint/a11y/noStaticElementInteractions: span avoids invalid nested <button> markup
       <span
+        role="button"
+        tabIndex={0}
         onClick={handleCopy}
+        onKeyDown={handleSpanKeyDown}
         title={copied ? 'Copied!' : `Click to copy: ${value}`}
         className={baseClassName}
       >

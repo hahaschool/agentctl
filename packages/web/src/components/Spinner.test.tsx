@@ -5,10 +5,9 @@ import { Spinner } from './Spinner';
 
 describe('Spinner', () => {
   describe('rendering', () => {
-    it('renders an element with role implied by the output tag', () => {
+    it('renders a div with explicit status role', () => {
       const { container } = render(<Spinner />);
-      // <output> has implicit role="status"
-      const el = container.querySelector('output');
+      const el = container.querySelector('div[role="status"]');
       expect(el).not.toBeNull();
     });
 
@@ -74,11 +73,11 @@ describe('Spinner', () => {
   });
 
   describe('accessibility', () => {
-    it('uses the <output> element which has implicit status role', () => {
+    it('uses a div with role="status"', () => {
       render(<Spinner />);
-      // <output> has implicit role="status" in accessibility tree
       const spinner = screen.getByLabelText('Loading');
-      expect(spinner.tagName).toBe('OUTPUT');
+      expect(spinner.tagName).toBe('DIV');
+      expect(spinner.getAttribute('role')).toBe('status');
     });
 
     it('is accessible by aria-label for screen readers', () => {

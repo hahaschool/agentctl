@@ -13,7 +13,8 @@ const sizeClasses = {
 
 export function Spinner({ size = 'md', className = '' }: Props): React.JSX.Element {
   return (
-    <output
+    <div
+      role="status"
       className={`animate-spin rounded-full border-muted-foreground/30 border-t-muted-foreground ${sizeClasses[size]} ${className}`}
       aria-label="Loading"
     />
