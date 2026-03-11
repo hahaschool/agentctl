@@ -1,0 +1,9 @@
+# Test fixture false positives — fake keys used in unit tests
+834c4d42e4d7dd77d715ee8c224db658891393f9:packages/control-plane/src/api/routes/sessions.test.ts:generic-api-key:1191
+6cf9913c862c851ff24fcfd7d05469381c578697:packages/control-plane/src/api/routes/accounts.test.ts:private-key:561
+6a50481eac2c0ed11f7190919ac89ec2bb67a390:packages/mobile/src/services/websocket-client.test.ts:generic-api-key:238
+6a50481eac2c0ed11f7190919ac89ec2bb67a390:packages/mobile/src/services/websocket-client.test.ts:generic-api-key:325
+6a50481eac2c0ed11f7190919ac89ec2bb67a390:packages/mobile/src/services/websocket-client.test.ts:generic-api-key:348
+173dfef4a96597ac47f84011805c0c38f5c81ddd:packages/control-plane/src/audit/security-audit-agent.test.ts:generic-api-key:25
+614a193785a878b368da7820ec5614719f522304:packages/control-plane/src/audit/audit-scheduler.test.ts:generic-api-key:56
+cfd3ce49d06a256479db3caf1b47fb41b236e32e:packages/control-plane/src/memory/memory-security.test.ts:private-key:204
