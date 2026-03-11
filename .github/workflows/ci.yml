@@ -33,6 +33,7 @@ jobs:
       control-plane: ${{ steps.filter.outputs.control-plane }}
       agent-worker: ${{ steps.filter.outputs.agent-worker }}
       mobile: ${{ steps.filter.outputs.mobile }}
+      web: ${{ steps.filter.outputs.web }}
       infra: ${{ steps.filter.outputs.infra }}
       any-package: >-
         ${{
@@ -40,6 +41,7 @@ jobs:
           || steps.filter.outputs.control-plane == 'true'
           || steps.filter.outputs.agent-worker == 'true'
           || steps.filter.outputs.mobile == 'true'
+          || steps.filter.outputs.web == 'true'
         }}
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +66,11 @@ jobs:
               - 'pnpm-lock.yaml'
             mobile:
               - 'packages/mobile/**'
+              - 'packages/shared/**'
+              - 'tsconfig.base.json'
+              - 'pnpm-lock.yaml'
+            web:
+              - 'packages/web/**'
               - 'packages/shared/**'
               - 'tsconfig.base.json'
               - 'pnpm-lock.yaml'
@@ -104,6 +111,7 @@ jobs:
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
             packages/mobile/node_modules
+            packages/web/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
   # ---------------------------------------------------------------------------
@@ -136,6 +144,7 @@ jobs:
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
             packages/mobile/node_modules
+            packages/web/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Single Biome invocation covers all categories — no need for separate
@@ -178,6 +187,7 @@ jobs:
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
             packages/mobile/node_modules
+            packages/web/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Cache both .tsbuildinfo AND dist/ together — restoring only
@@ -220,6 +230,10 @@ jobs:
       - name: Build mobile
         if: github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true'
         run: pnpm --filter @agentctl/mobile... build
+
+      - name: Build web
+        if: github.event_name == 'pull_request' && needs.changes.outputs.web == 'true'
+        run: pnpm --filter @agentctl/web... build
 
       # Upload dist/ artifacts so the test job does not need to rebuild
       - name: Upload build artifacts
@@ -278,6 +292,7 @@ jobs:
             packages/control-plane/node_modules
             packages/agent-worker/node_modules
             packages/mobile/node_modules
+            packages/web/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Reuse build output from the build job — no second `pnpm build`
