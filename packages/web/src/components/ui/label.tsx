@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 
 function Label({ className, ...props }: React.ComponentProps<'label'>) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: htmlFor is passed via spread props
     <label
       data-slot="label"
       className={cn('block text-sm font-medium leading-none text-foreground', className)}
