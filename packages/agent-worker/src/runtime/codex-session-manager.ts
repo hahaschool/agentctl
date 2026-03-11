@@ -18,11 +18,15 @@ export type CodexSession = {
   lastError: string | null;
 };
 
+export type CodexSandboxLevel = 'read-only' | 'workspace-write' | 'danger-full-access';
+
 export type StartCodexSessionOptions = {
   agentId: string;
   projectPath: string;
   prompt: string;
   model?: string | null;
+  /** Sandbox constraint level passed as --sandbox to the Codex CLI. */
+  sandboxLevel?: CodexSandboxLevel | null;
 };
 
 export type ResumeCodexSessionOptions = StartCodexSessionOptions & {
@@ -35,6 +39,8 @@ export type ForkCodexSessionOptions = {
   nativeSessionId: string;
   prompt?: string | null;
   model?: string | null;
+  /** Sandbox constraint level passed as --sandbox to the Codex CLI. */
+  sandboxLevel?: CodexSandboxLevel | null;
 };
 
 export type CodexSessionManagerOptions = {
@@ -67,6 +73,7 @@ export class CodexSessionManager extends EventEmitter {
   }
 
   async startSession(options: StartCodexSessionOptions): Promise<CodexSession> {
+    const sandboxArgs = buildSandboxArgs(options.sandboxLevel);
     return this.spawnSession(
       {
         agentId: options.agentId,
@@ -74,11 +81,18 @@ export class CodexSessionManager extends EventEmitter {
         model: options.model ?? DEFAULT_MODEL,
         isResumed: false,
       },
-      ['exec', '--json', ...(options.model ? ['-m', options.model] : []), options.prompt],
+      [
+        'exec',
+        '--json',
+        ...(options.model ? ['-m', options.model] : []),
+        ...sandboxArgs,
+        options.prompt,
+      ],
     );
   }
 
   async resumeSession(options: ResumeCodexSessionOptions): Promise<CodexSession> {
+    const sandboxArgs = buildSandboxArgs(options.sandboxLevel);
     return this.spawnSession(
       {
         agentId: options.agentId,
@@ -94,11 +108,13 @@ export class CodexSessionManager extends EventEmitter {
         options.prompt,
         '--json',
         ...(options.model ? ['-m', options.model] : []),
+        ...sandboxArgs,
       ],
     );
   }
 
   async forkSession(options: ForkCodexSessionOptions): Promise<CodexSession> {
+    const sandboxArgs = buildSandboxArgs(options.sandboxLevel);
     return this.spawnSession(
       {
         agentId: options.agentId,
@@ -111,6 +127,7 @@ export class CodexSessionManager extends EventEmitter {
         options.nativeSessionId,
         ...(options.prompt ? [options.prompt] : []),
         ...(options.model ? ['-m', options.model] : []),
+        ...sandboxArgs,
         '--no-alt-screen',
       ],
     );
@@ -252,6 +269,23 @@ export class CodexSessionManager extends EventEmitter {
       // Ignore non-JSON lines; Codex may print inline progress.
     }
   }
+}
+
+/**
+ * Map an AgentCTL sandbox level to the Codex CLI `--sandbox` flag arguments.
+ *
+ * - `read-only`          → `['--sandbox', 'read-only']`    (no writes allowed)
+ * - `workspace-write`    → `['--sandbox', 'workspace-write']` (writes inside workspace only)
+ * - `danger-full-access` → `[]` (no restriction flag; Codex default is unrestricted)
+ *
+ * When no level is provided the function returns an empty array so no flag is
+ * appended, preserving backward-compatible behaviour.
+ */
+function buildSandboxArgs(level: CodexSandboxLevel | null | undefined): string[] {
+  if (!level || level === 'danger-full-access') {
+    return [];
+  }
+  return ['--sandbox', level];
 }
 
 function pickString(value: unknown): string | null {

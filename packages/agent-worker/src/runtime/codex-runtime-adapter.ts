@@ -24,6 +24,7 @@ export class CodexRuntimeAdapter implements RuntimeAdapter {
       projectPath: input.projectPath,
       prompt: input.prompt,
       model: input.model ?? undefined,
+      sandboxLevel: input.sandboxLevel ?? null,
     });
     return mapCodexSession(session);
   }
@@ -35,6 +36,7 @@ export class CodexRuntimeAdapter implements RuntimeAdapter {
       nativeSessionId: input.nativeSessionId,
       prompt: input.prompt,
       model: input.model ?? undefined,
+      sandboxLevel: input.sandboxLevel ?? null,
     });
     return mapCodexSession(session);
   }
@@ -46,6 +48,7 @@ export class CodexRuntimeAdapter implements RuntimeAdapter {
       nativeSessionId: input.nativeSessionId,
       prompt: input.prompt ?? null,
       model: input.model ?? undefined,
+      sandboxLevel: input.sandboxLevel ?? null,
     });
     return mapCodexSession(session);
   }
