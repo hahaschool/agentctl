@@ -1,8 +1,6 @@
 import {
   describeHandoffCompletion,
-  describeHandoffExecution,
   formatHandoffHistoryFilterLabel,
-  formatHandoffStrategyLabel,
   HANDOFF_HISTORY_FILTERS,
   isMachineSelectable,
   type Machine,
@@ -26,17 +24,25 @@ import {
   View,
 } from 'react-native';
 
+import { DateRangePicker } from '../components/date-range-picker.js';
+import { ExpandableDiff } from '../components/expandable-diff.js';
+import { HandoffTimeline } from '../components/handoff-timeline.js';
+import { SessionActionBar } from '../components/session-action-bar.js';
+import { SessionCard } from '../components/session-card.js';
 import { useAppContext } from '../context/app-context.js';
 import type { RuntimeSessionScreenState } from '../screens/runtime-session-presenter.js';
 import { RuntimeSessionPresenter } from '../screens/runtime-session-presenter.js';
 import type { SessionBrowserItem, SessionBrowserStatus } from '../screens/session-browser-model.js';
 import {
   buildSessionBrowserItems,
+  type DateRange,
+  type DateRangePresetKey,
+  dateRangeFromPreset,
   filterSessionBrowserItems,
 } from '../screens/session-browser-model.js';
 import type { SessionScreenState } from '../screens/session-presenter.js';
 import { SessionPresenter } from '../screens/session-presenter.js';
-import type { RuntimeSessionHandoff, RuntimeSessionInfo } from '../services/runtime-session-api.js';
+import type { RuntimeSessionInfo } from '../services/runtime-session-api.js';
 import type { SessionMessage } from '../services/session-api.js';
 
 export type SessionBrowserScreenProps = {
@@ -62,10 +68,6 @@ function runtimeLabel(runtime: RuntimeSessionInfo['runtime']): string {
   return runtime === 'claude-code' ? 'Claude Code' : 'Codex';
 }
 
-function sourceLabel(kind: SessionBrowserItem['kind']): string {
-  return kind === 'session' ? 'Classic' : 'Managed';
-}
-
 function sessionStatusColor(status: string): string {
   switch (status) {
     case 'active':
@@ -80,38 +82,6 @@ function sessionStatusColor(status: string): string {
       return '#8b5cf6';
     default:
       return '#6b7280';
-  }
-}
-
-function formatRelativeTime(isoString: string | null): string {
-  if (!isoString) return 'unknown';
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  if (diffMs < 60_000) return 'just now';
-  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
-  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
-  return `${Math.floor(diffMs / 86_400_000)}d ago`;
-}
-
-function formatDuration(startIso: string | null, endIso: string | null): string | null {
-  if (!startIso) return null;
-  const start = new Date(startIso).getTime();
-  const end = new Date(endIso ?? Date.now()).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null;
-  const diffMs = end - start;
-  if (diffMs < 60_000) return '<1m';
-  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m`;
-  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h`;
-  return `${Math.floor(diffMs / 86_400_000)}d`;
-}
-
-function handoffStatusColor(status: RuntimeSessionHandoff['status']): string {
-  switch (status) {
-    case 'succeeded':
-      return '#22c55e';
-    case 'failed':
-      return '#ef4444';
-    default:
-      return '#f59e0b';
   }
 }
 
@@ -224,6 +194,13 @@ export function SessionBrowserScreen({
   const [runtimeFilter, setRuntimeFilter] = useState<'all' | RuntimeSessionInfo['runtime']>('all');
   const [machineFilter, setMachineFilter] = useState<'all' | string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | SessionBrowserStatus>('all');
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePresetKey>('all');
+  const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
+
+  const handleDateRangeChange = useCallback((key: DateRangePresetKey) => {
+    setDateRangePreset(key);
+    setDateRange(dateRangeFromPreset(key));
+  }, []);
 
   const [showClassicCreateModal, setShowClassicCreateModal] = useState(false);
   const [showRuntimeCreateModal, setShowRuntimeCreateModal] = useState(false);
@@ -333,8 +310,9 @@ export function SessionBrowserScreen({
         runtime: runtimeFilter,
         machineId: machineFilter,
         status: statusFilter,
+        dateRange,
       }),
-    [browserItems, machineFilter, runtimeFilter, statusFilter, typeFilter],
+    [browserItems, dateRange, machineFilter, runtimeFilter, statusFilter, typeFilter],
   );
 
   const lastUpdated = useMemo(() => {
@@ -533,71 +511,9 @@ export function SessionBrowserScreen({
   }, [handoffMachineId, handoffPrompt, handoffTargetRuntime, runtimeState.selectedSession]);
 
   const renderBrowserItem = useCallback(
-    ({ item }: { item: SessionBrowserItem }) => {
-      const runtimeSession = isRuntimeItem(item) ? item.original : null;
-      const duration = runtimeSession
-        ? formatDuration(runtimeSession.startedAt, runtimeSession.endedAt ?? item.lastActivityAt)
-        : null;
-
-      return (
-        <TouchableOpacity
-          style={styles.sessionCard}
-          onPress={() => handleBrowserItemPress(item)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.sessionHeader}>
-            <View style={styles.badgeRow}>
-              <Text style={styles.sourcePill}>{sourceLabel(item.kind)}</Text>
-              <Text style={styles.runtimePill}>{runtimeLabel(item.runtime)}</Text>
-            </View>
-            <View
-              style={[styles.statusBadge, { backgroundColor: sessionStatusColor(item.status) }]}
-            >
-              <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.sessionId}>{truncateId(item.id, 12)}</Text>
-          <Text style={styles.sessionDetail} numberOfLines={1}>
-            {item.projectPath}
-          </Text>
-
-          <View style={styles.sessionMeta}>
-            <Text style={styles.metaText}>{formatRelativeTime(item.lastActivityAt)}</Text>
-            {item.machineLabel && (
-              <>
-                <Text style={styles.metaDot}> · </Text>
-                <Text style={styles.metaText}>{item.machineLabel}</Text>
-              </>
-            )}
-            {item.model && (
-              <>
-                <Text style={styles.metaDot}> · </Text>
-                <Text style={styles.metaText}>{item.model}</Text>
-              </>
-            )}
-            {item.messageCount !== null && (
-              <>
-                <Text style={styles.metaDot}> · </Text>
-                <Text style={styles.metaText}>
-                  {item.messageCount} msg{item.messageCount === 1 ? '' : 's'}
-                </Text>
-              </>
-            )}
-            {duration && (
-              <>
-                <Text style={styles.metaDot}> · </Text>
-                <Text style={styles.metaText}>duration {duration}</Text>
-              </>
-            )}
-          </View>
-
-          {item.costUsd !== null && item.costUsd > 0 && (
-            <Text style={styles.costText}>Cost: ${item.costUsd.toFixed(4)}</Text>
-          )}
-        </TouchableOpacity>
-      );
-    },
+    ({ item }: { item: SessionBrowserItem }) => (
+      <SessionCard item={item} onPress={handleBrowserItemPress} />
+    ),
     [handleBrowserItemPress],
   );
 
@@ -618,44 +534,22 @@ export function SessionBrowserScreen({
     [],
   );
 
-  const renderHandoff = useCallback(
-    (handoff: RuntimeSessionHandoff, index: number) => (
-      <View key={`${handoff.id}-${index}`} style={styles.handoffCard}>
-        <View style={styles.handoffHeader}>
-          <Text style={styles.handoffStrategy}>{formatHandoffStrategyLabel(handoff.strategy)}</Text>
-          <View
-            style={[
-              styles.handoffStatusBadge,
-              { backgroundColor: handoffStatusColor(handoff.status) },
-            ]}
-          >
-            <Text style={styles.handoffStatusText}>{handoff.status.toUpperCase()}</Text>
-          </View>
-        </View>
-        <Text style={styles.handoffText}>
-          {runtimeLabel(handoff.sourceRuntime)} to {runtimeLabel(handoff.targetRuntime)}
-        </Text>
-        <Text style={styles.handoffText}>
-          {describeHandoffExecution({
-            strategy: handoff.strategy,
-            nativeImportAttempt: handoff.nativeImportAttempt,
-          })}
-        </Text>
-        <Text style={styles.handoffText}>Reason: {handoff.reason}</Text>
-        <Text style={styles.handoffSummary} numberOfLines={3}>
-          {handoff.snapshot.diffSummary ||
-            handoff.snapshot.conversationSummary ||
-            'No snapshot summary'}
-        </Text>
-        {handoff.nativeImportAttempt && (
-          <Text style={styles.handoffMeta}>
-            {describeNativeImportAttempt(handoff.nativeImportAttempt)}
-          </Text>
-        )}
-      </View>
-    ),
-    [],
-  );
+  const handleStopRuntimeSession = useCallback(async () => {
+    const selected = runtimeState.selectedSession;
+    if (!selected) return;
+    try {
+      // Use the API client directly to stop an agent-backed session
+      if (selected.agentId) {
+        await apiClient.stopAgent(selected.agentId, 'user', true);
+        Alert.alert('Stopped', `Session ${truncateId(selected.id)} agent has been stopped.`);
+        void runtimePresenterRef.current?.loadSessions();
+      } else {
+        Alert.alert('Not Supported', 'This session does not have an associated agent to stop.');
+      }
+    } catch (err: unknown) {
+      Alert.alert('Stop Failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [apiClient, runtimeState.selectedSession]);
 
   const classicSelectedSession = classicState.selectedSession;
   const runtimeSelectedSession = runtimeState.selectedSession;
@@ -770,6 +664,8 @@ export function SessionBrowserScreen({
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      <DateRangePicker selected={dateRangePreset} onSelect={handleDateRangeChange} />
 
       <FlatList
         data={filteredItems}
@@ -1262,7 +1158,7 @@ export function SessionBrowserScreen({
                   )}
 
                   <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>Handoff History</Text>
+                    <Text style={styles.sectionTitle}>Handoff Timeline</Text>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
@@ -1284,21 +1180,22 @@ export function SessionBrowserScreen({
                       ))}
                     </ScrollView>
 
-                    {filteredHandoffs.length === 0 ? (
-                      <Text style={styles.emptyTranscript}>No handoffs for this session yet.</Text>
-                    ) : (
-                      filteredHandoffs.map(renderHandoff)
-                    )}
+                    <HandoffTimeline handoffs={filteredHandoffs} />
                   </View>
 
-                  <View style={styles.detailActions}>
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.closeDetailButton]}
-                      onPress={handleCloseRuntimeDetail}
-                    >
-                      <Text style={styles.buttonText}>Close</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {filteredHandoffs.length > 0 && (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionTitle}>Agent Contributions</Text>
+                      <ExpandableDiff handoffs={filteredHandoffs} />
+                    </View>
+                  )}
+
+                  <SessionActionBar
+                    sessionStatus={runtimeSelectedSession.status}
+                    onResume={runtimeResumable ? handleRuntimeResume : undefined}
+                    onStop={handleStopRuntimeSession}
+                    onClose={handleCloseRuntimeDetail}
+                  />
                 </ScrollView>
               </>
             ) : (
@@ -1390,43 +1287,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 8,
   },
-  sessionCard: {
-    backgroundColor: '#1e1e1e',
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    borderWidth: 1,
-    borderColor: '#2e2e2e',
-  },
-  sessionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  sourcePill: {
-    color: '#e5e7eb',
-    backgroundColor: '#374151',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    fontSize: 11,
-    fontWeight: '700',
-    overflow: 'hidden',
-  },
-  sessionId: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: 'Courier',
-    marginBottom: 8,
-  },
+  // SessionCard and DateRangePicker components handle their own styles.
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -1436,39 +1297,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '600',
-  },
-  runtimePill: {
-    color: '#bfdbfe',
-    backgroundColor: '#1e3a5f',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    fontSize: 11,
-    fontWeight: '700',
-    overflow: 'hidden',
-  },
-  sessionDetail: {
-    color: '#9ca3af',
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  sessionMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  metaText: {
-    color: '#6b7280',
-    fontSize: 12,
-  },
-  metaDot: {
-    color: '#4b5563',
-    fontSize: 12,
-  },
-  costText: {
-    color: '#60a5fa',
-    fontSize: 12,
-    marginTop: 8,
   },
   modalOverlay: {
     flex: 1,
@@ -1698,48 +1526,7 @@ const styles = StyleSheet.create({
     color: '#d1d5db',
     fontSize: 12,
   },
-  handoffCard: {
-    backgroundColor: '#1f2937',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-  },
-  handoffHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  handoffStrategy: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  handoffStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  handoffStatusText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  handoffText: {
-    color: '#d1d5db',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  handoffSummary: {
-    color: '#9ca3af',
-    fontSize: 12,
-    marginTop: 6,
-  },
-  handoffMeta: {
-    color: '#bfdbfe',
-    fontSize: 11,
-    marginTop: 8,
-  },
+  // HandoffTimeline and ExpandableDiff components handle their own styles.
   sendMessageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

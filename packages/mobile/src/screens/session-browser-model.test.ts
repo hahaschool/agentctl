@@ -2,7 +2,12 @@ import type { Machine } from '@agentctl/shared';
 import { describe, expect, it } from 'vitest';
 import type { RuntimeSessionInfo } from '../services/runtime-session-api.js';
 import type { SessionInfo } from '../services/session-api.js';
-import { buildSessionBrowserItems, filterSessionBrowserItems } from './session-browser-model.js';
+import {
+  buildSessionBrowserItems,
+  dateRangeFromPreset,
+  filterSessionBrowserItems,
+  matchesDateRange,
+} from './session-browser-model.js';
 
 function makeClassicSession(partial: Partial<SessionInfo> = {}): SessionInfo {
   return {
@@ -145,6 +150,7 @@ describe('session-browser-model', () => {
         runtime: 'claude-code',
         machineId: 'machine-2',
         status: 'paused',
+        dateRange: { from: null, to: null },
       }).map((item) => item.id),
     ).toEqual(['runtime-claude']);
 
@@ -154,7 +160,63 @@ describe('session-browser-model', () => {
         runtime: 'all',
         machineId: 'all',
         status: 'active',
+        dateRange: { from: null, to: null },
       }).map((item) => item.id),
     ).toEqual(['session-active']);
+  });
+
+  it('filters by date range', () => {
+    const items = buildSessionBrowserItems({
+      classicSessions: [
+        makeClassicSession({
+          id: 'session-recent',
+          lastActivity: '2026-03-09T12:00:00.000Z',
+        }),
+        makeClassicSession({
+          id: 'session-old',
+          lastActivity: '2026-03-01T12:00:00.000Z',
+        }),
+      ],
+      runtimeSessions: [],
+      machines: [],
+    });
+
+    const filtered = filterSessionBrowserItems(items, {
+      type: 'all',
+      runtime: 'all',
+      machineId: 'all',
+      status: 'all',
+      dateRange: {
+        from: new Date('2026-03-08T00:00:00.000Z'),
+        to: null,
+      },
+    });
+
+    expect(filtered.map((item) => item.id)).toEqual(['session-recent']);
+  });
+
+  it('matchesDateRange returns true for null range', () => {
+    expect(matchesDateRange('2026-03-09T12:00:00.000Z', { from: null, to: null })).toBe(true);
+  });
+
+  it('matchesDateRange returns false for timestamps before from', () => {
+    expect(
+      matchesDateRange('2026-03-01T12:00:00.000Z', {
+        from: new Date('2026-03-08T00:00:00.000Z'),
+        to: null,
+      }),
+    ).toBe(false);
+  });
+
+  it('dateRangeFromPreset returns null range for "all"', () => {
+    const range = dateRangeFromPreset('all');
+    expect(range.from).toBeNull();
+    expect(range.to).toBeNull();
+  });
+
+  it('dateRangeFromPreset returns non-null from for "24h"', () => {
+    const range = dateRangeFromPreset('24h');
+    expect(range.from).toBeInstanceOf(Date);
+    expect(range.to).toBeNull();
   });
 });

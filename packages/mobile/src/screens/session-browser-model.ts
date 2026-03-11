@@ -24,11 +24,17 @@ export type SessionBrowserItem = {
   original: SessionInfo | RuntimeSessionInfo;
 };
 
+export type DateRange = {
+  from: Date | null;
+  to: Date | null;
+};
+
 export type SessionBrowserFilters = {
   type: 'all' | SessionBrowserItemKind;
   runtime: 'all' | ManagedRuntime;
   machineId: 'all' | string;
   status: 'all' | SessionBrowserStatus;
+  dateRange: DateRange;
 };
 
 export function buildSessionBrowserItems(params: {
@@ -98,8 +104,40 @@ export function filterSessionBrowserItems(
     if (filters.runtime !== 'all' && item.runtime !== filters.runtime) return false;
     if (filters.machineId !== 'all' && item.machineId !== filters.machineId) return false;
     if (filters.status !== 'all' && item.status !== filters.status) return false;
+    if (!matchesDateRange(item.lastActivityAt, filters.dateRange)) return false;
     return true;
   });
+}
+
+export function matchesDateRange(isoString: string | null, range: DateRange): boolean {
+  if (!range.from && !range.to) return true;
+  const ts = timestampOrZero(isoString);
+  if (ts === 0) return false;
+  if (range.from && ts < range.from.getTime()) return false;
+  if (range.to && ts > range.to.getTime()) return false;
+  return true;
+}
+
+export const DATE_RANGE_PRESETS = [
+  { label: 'All time', key: 'all' },
+  { label: 'Last hour', key: '1h' },
+  { label: 'Last 24h', key: '24h' },
+  { label: 'Last 7d', key: '7d' },
+  { label: 'Last 30d', key: '30d' },
+] as const;
+
+export type DateRangePresetKey = (typeof DATE_RANGE_PRESETS)[number]['key'];
+
+export function dateRangeFromPreset(key: DateRangePresetKey): DateRange {
+  if (key === 'all') return { from: null, to: null };
+  const now = new Date();
+  const msLookup: Record<Exclude<DateRangePresetKey, 'all'>, number> = {
+    '1h': 3_600_000,
+    '24h': 86_400_000,
+    '7d': 604_800_000,
+    '30d': 2_592_000_000,
+  };
+  return { from: new Date(now.getTime() - msLookup[key]), to: null };
 }
 
 function timestampOrZero(value: string | null): number {
