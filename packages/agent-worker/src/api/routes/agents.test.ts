@@ -385,6 +385,106 @@ describe('Agent CRUD routes', () => {
     });
   });
 
+  // ── POST /api/agents/:id/steer ──────────────────────────────────
+
+  describe('POST /api/agents/:id/steer', () => {
+    it('steers a running agent and returns accepted', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-steer/start',
+        payload: { prompt: 'Do something' },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-steer/steer',
+        payload: { message: 'Please focus on tests' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.agentId).toBe('agent-steer');
+      expect(body.accepted).toBe(true);
+    });
+
+    it('returns 400 when message is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-steer-noinput/steer',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_INPUT');
+    });
+
+    it('returns 400 when message is an empty string', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-steer-empty/steer',
+        payload: { message: '   ' },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.code).toBe('INVALID_INPUT');
+    });
+
+    it('returns 400 when message exceeds 32,000 characters', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-steer-long/steer',
+        payload: { message: 'x'.repeat(32_001) },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = response.json();
+      expect(body.error).toBe('STEER_MESSAGE_TOO_LONG');
+    });
+
+    it('returns 404 when agent does not exist', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/ghost-agent/steer',
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = response.json();
+      expect(body.code).toBe('AGENT_NOT_FOUND');
+    });
+
+    it('returns accepted=false when agent is not running', async () => {
+      await pool.createAgent({
+        agentId: 'agent-steer-idle',
+        machineId: MACHINE_ID,
+        config: {},
+        projectPath: process.cwd(),
+        logger,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-steer-idle/steer',
+        payload: { message: 'Redirect focus' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.ok).toBe(false);
+      expect(body.accepted).toBe(false);
+      expect(body.reason).toBeDefined();
+    });
+  });
+
   // ── POST /api/agents/:id/stop ───────────────────────────────────
 
   describe('POST /api/agents/:id/stop', () => {

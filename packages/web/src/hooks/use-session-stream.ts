@@ -17,7 +17,9 @@ export type SessionStreamEvent =
   | { event: 'approval_needed'; data: { toolName: string; args: Record<string, unknown> } }
   | { event: 'heartbeat'; data: Record<string, never> }
   | { event: 'loop_iteration'; data: { iteration: number } }
-  | { event: 'loop_complete'; data: { reason: string } };
+  | { event: 'loop_complete'; data: { reason: string } }
+  | { event: 'steer_sent'; data: { message: string; timestamp: string } }
+  | { event: 'steer_ack'; data: { accepted: boolean; reason?: string; timestamp: string } };
 
 // ---------------------------------------------------------------------------
 // Hook options & return
@@ -193,6 +195,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
       es.addEventListener('approval_needed', handleEvent('approval_needed'));
       es.addEventListener('loop_iteration', handleEvent('loop_iteration'));
       es.addEventListener('loop_complete', handleEvent('loop_complete'));
+      es.addEventListener('steer_sent', handleEvent('steer_sent'));
+      es.addEventListener('steer_ack', handleEvent('steer_ack'));
     };
 
     connect();

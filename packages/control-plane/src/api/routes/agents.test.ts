@@ -370,6 +370,64 @@ describe('Agent routes — /api/agents', () => {
   });
 
   // -------------------------------------------------------------------------
+  // POST /api/agents/:id/steer — worker proxy (no dbRegistry)
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/agents/:id/steer (no dbRegistry)', () => {
+    it('returns 400 when the message is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/steer',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'INVALID_STEER_MESSAGE',
+      });
+    });
+
+    it('returns 400 when the message is an empty string', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/steer',
+        payload: { message: '   ' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'INVALID_STEER_MESSAGE',
+      });
+    });
+
+    it('returns 400 when the message exceeds 32,000 characters', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/steer',
+        payload: { message: 'x'.repeat(32_001) },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'STEER_MESSAGE_TOO_LONG',
+      });
+    });
+
+    it('returns 500 when the worker URL cannot be resolved', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/steer',
+        payload: { message: 'Focus on tests' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({
+        error: 'REGISTRY_UNAVAILABLE',
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // POST /api/agents/:id/complete — run completion (no dbRegistry)
   // -------------------------------------------------------------------------
 
@@ -1130,6 +1188,50 @@ describe('Agent routes — safety decision proxying', () => {
       method: 'POST',
       url: '/api/agents/agent-1/safety-decision',
       payload: { decision: 'approve' },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toMatchObject({
+      error: 'WORKER_UNREACHABLE',
+    });
+  });
+
+  it('proxies a steer message to the resolved worker', async () => {
+    mockFetchOk({
+      ok: true,
+      agentId: 'agent-1',
+      accepted: true,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/steer',
+      payload: { message: 'Focus on tests now' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      agentId: 'agent-1',
+      accepted: true,
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://100.64.0.1:9123/api/agents/agent-1/steer',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Focus on tests now' }),
+      }),
+    );
+  });
+
+  it('returns 502 when the worker cannot be reached for steer', async () => {
+    mockFetchThrow('connection refused');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/steer',
+      payload: { message: 'Redirect focus' },
     });
 
     expect(response.statusCode).toBe(502);
