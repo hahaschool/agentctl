@@ -4,6 +4,15 @@ export {
   MachineCircuitBreaker,
 } from './circuit-breaker.js';
 export {
+  createKnowledgeMaintenanceWorker,
+  DEFAULT_MAINTENANCE_CRON,
+  KNOWLEDGE_MAINTENANCE_JOB_NAME,
+  KNOWLEDGE_MAINTENANCE_QUEUE,
+  type KnowledgeMaintenanceJobData,
+  type KnowledgeMaintenanceJobOptions,
+  registerMaintenanceSchedule,
+} from './knowledge-maintenance-job.js';
+export {
   createRepeatableJobManager,
   type RepeatableJobInfo,
   type RepeatableJobManager,
