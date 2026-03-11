@@ -129,6 +129,62 @@ describe('memory fact routes', () => {
     });
   });
 
+  // ── §4.8 Cross-entity query filters ────────────────────────────────────────
+
+  it('filters facts by sessionId alone', async () => {
+    const factForSession = makeFact({
+      source: { ...makeFact().source, agent_id: null, machine_id: null },
+    });
+    vi.mocked(memoryStore.listFacts).mockResolvedValueOnce([factForSession]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?sessionId=session-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.listFacts).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-1' }),
+    );
+    expect(response.json().facts).toHaveLength(1);
+  });
+
+  it('filters facts by agentId alone', async () => {
+    const factForAgent = makeFact({
+      source: { ...makeFact().source, session_id: null, machine_id: null },
+    });
+    vi.mocked(memoryStore.listFacts).mockResolvedValueOnce([factForAgent]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?agentId=agent-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.listFacts).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'agent-1' }),
+    );
+    expect(response.json().facts).toHaveLength(1);
+  });
+
+  it('filters facts by machineId alone', async () => {
+    const factForMachine = makeFact({
+      source: { ...makeFact().source, session_id: null, agent_id: null },
+    });
+    vi.mocked(memoryStore.listFacts).mockResolvedValueOnce([factForMachine]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?machineId=machine-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memoryStore.listFacts).toHaveBeenCalledWith(
+      expect.objectContaining({ machineId: 'machine-1' }),
+    );
+    expect(response.json().facts).toHaveLength(1);
+  });
+
   it('creates a fact', async () => {
     vi.mocked(memoryStore.addFact).mockResolvedValueOnce(makeFact());
 
