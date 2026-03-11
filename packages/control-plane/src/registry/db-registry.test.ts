@@ -429,7 +429,21 @@ describe('DbAgentRegistry', () => {
       tokensIn: 1500,
       tokensOut: 300,
       errorMessage: null,
-      resultSummary: 'Fixed the login bug',
+      resultSummary: {
+        status: 'success',
+        workCompleted: 'Fixed the login bug',
+        executiveSummary: 'Fixed the login bug',
+        keyFindings: [],
+        filesChanged: [],
+        commandsRun: 0,
+        toolUsageBreakdown: {},
+        followUps: [],
+        branchName: null,
+        prUrl: null,
+        tokensUsed: { input: 1500, output: 300 },
+        costUsd: 0.042,
+        durationMs: 60_000,
+      },
     };
 
     it('updates the run with completion data', async () => {
@@ -448,7 +462,7 @@ describe('DbAgentRegistry', () => {
       expect(setValues.costUsd).toBe('0.042000');
       expect(setValues.tokensIn).toBe(1500);
       expect(setValues.tokensOut).toBe(300);
-      expect(setValues.resultSummary).toBe('Fixed the login bug');
+      expect(setValues.resultSummary).toEqual(completionData.resultSummary);
     });
 
     it('defaults optional fields to null', async () => {
@@ -655,6 +669,73 @@ describe('DbAgentRegistry', () => {
         errorMessage: null,
         resultSummary: 'Done',
       });
+    });
+  });
+
+  describe('getRun()', () => {
+    it('returns a mapped run when the row exists', async () => {
+      mockDb.where.mockResolvedValue([
+        {
+          id: 'run-001',
+          agentId: 'agent-1',
+          trigger: 'manual',
+          status: 'success',
+          startedAt: new Date('2026-03-11T10:00:00.000Z'),
+          finishedAt: new Date('2026-03-11T10:01:00.000Z'),
+          costUsd: '0.050000',
+          tokensIn: 100,
+          tokensOut: 50,
+          model: 'claude-sonnet-4-20250514',
+          provider: 'anthropic',
+          sessionId: 'sess-1',
+          errorMessage: null,
+          resultSummary: {
+            status: 'success',
+            workCompleted: 'Stored summary',
+            executiveSummary: 'Stored summary',
+            keyFindings: [],
+            filesChanged: [],
+            commandsRun: 0,
+            toolUsageBreakdown: {},
+            followUps: [],
+            branchName: null,
+            prUrl: null,
+            tokensUsed: { input: 100, output: 50 },
+            costUsd: 0.05,
+            durationMs: 60_000,
+          },
+        },
+      ]);
+
+      const run = await registry.getRun('run-001');
+
+      expect(run).toMatchObject({
+        id: 'run-001',
+        agentId: 'agent-1',
+        status: 'success',
+        costUsd: 0.05,
+      });
+      expect(run?.resultSummary).toEqual({
+        status: 'success',
+        workCompleted: 'Stored summary',
+        executiveSummary: 'Stored summary',
+        keyFindings: [],
+        filesChanged: [],
+        commandsRun: 0,
+        toolUsageBreakdown: {},
+        followUps: [],
+        branchName: null,
+        prUrl: null,
+        tokensUsed: { input: 100, output: 50 },
+        costUsd: 0.05,
+        durationMs: 60_000,
+      });
+    });
+
+    it('returns undefined when the run does not exist', async () => {
+      mockDb.where.mockResolvedValue([]);
+
+      await expect(registry.getRun('missing-run')).resolves.toBeUndefined();
     });
   });
 
