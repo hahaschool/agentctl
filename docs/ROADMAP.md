@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (PR #63 cross-entity queries + CodeQL security fixes; PRs #57-#62 shared components, MCP tools, ARIA hardening, layered knowledge, Codex sandbox, auto-handoff; PRs #50-#55 knowledge graph, a11y, memory dashboard, consolidation, scope manager; prior: PRs #39-#47)
+> Last updated: 2026-03-12 (PRs #64-#67 experience extraction, knowledge maintenance, live handoff triggers, mobile enhancements; PR #63 cross-entity queries + CodeQL security; PRs #57-#62 shared components, MCP tools, ARIA, knowledge loading, Codex sandbox, auto-handoff; PRs #50-#55 knowledge graph, a11y, memory dashboard, consolidation, scope manager; prior: PRs #39-#47)
 
 ## Current State
 
@@ -262,8 +262,8 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 > rate-limit/cost-threshold execution remains deferred until
 > `AgentOutputStream` is stable.
 
-- [ ] Rate limit hit → failover to other agent type
-- [ ] Cost threshold → switch to cheaper model/provider
+- [x] Rate limit hit → failover to other agent type *(PR #66 — LiveHandoffOrchestrator + AgentInstance integration)*
+- [x] Cost threshold → switch to cheaper model/provider *(PR #66 — CostThresholdTrigger wired into AgentInstance)*
 - [x] Task-type affinity rules (dispatch-time dry-run suggestions + decision logging)
 - [x] Handoff history API: `GET /api/runs/:id/handoff-history`
 
@@ -518,22 +518,22 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Discovered-session browser with status, message count, and last activity
 - [x] Managed runtime session browser with runtime/status/machine metadata
 - [x] Unified `SessionBrowser` screen filterable by session source, runtime, machine, and status
-- [ ] Add time-range filtering to the unified browser
-- [ ] Rich session cards across both surfaces: agent type badge, model, cost, duration, last tool call
+- [x] Add time-range filtering to the unified browser *(PR #67 — DateRangePicker with presets)*
+- [x] Rich session cards across both surfaces: agent type badge, model, cost, duration, last tool call *(PR #67 — SessionCard component)*
 - [ ] Tap from the browser into live SSE stream or session replay
 
 ### 5.2 Cross-Agent Run View — P3
 
 - [x] Handoff history cards with strategy, reason, preflight summary, and analytics
-- [ ] Handoff timeline with richer visual markers and context-transfer summary
-- [ ] Expandable diff of each agent's contribution
+- [x] Handoff timeline with richer visual markers and context-transfer summary *(PR #67 — HandoffTimeline component with reason-based icons)*
+- [x] Expandable diff of each agent's contribution *(PR #67 — ExpandableDiff component)*
 
 ### 5.3 Mobile Session Actions — P3
 
 - [x] Resume / fork / manual handoff from mobile managed-runtime screen
 - [x] Stop / signal / live SSE stream from mobile agent detail screen
-- [ ] Pause / resume / stop runtime sessions from one unified action surface
-- [ ] Push notifications for handoff events
+- [x] Pause / resume / stop runtime sessions from one unified action surface *(PR #67 — SessionActionBar component)*
+- [x] Push notifications for handoff events *(PR #67 — handoff-notifications service with Expo Notifications)*
 
 ---
 
@@ -625,19 +625,19 @@ Meta-rules about when and how to add knowledge to the project's documentation an
 
 Post-session hooks that extract lessons from development sessions into appropriate knowledge files.
 
-- [ ] Claude Code Stop hook: summarize key decisions and lessons from session
-- [ ] Route extracted knowledge to correct file (LESSONS_LEARNED.md, debugging.md, or relevant topic file)
-- [ ] Dedup against existing entries before writing
-- [ ] Human review flag for non-obvious extractions
+- [x] Claude Code Stop hook: summarize key decisions and lessons from session *(PR #64 — experience-extraction-hook.ts)*
+- [x] Route extracted knowledge to correct file (LESSONS_LEARNED.md, debugging.md, or relevant topic file) *(PR #64 — entity_type routing: decision, pattern, error, experience)*
+- [x] Dedup against existing entries before writing *(PR #64 — Jaccard similarity threshold 0.85)*
+- [x] Human review flag for non-obvious extractions *(PR #64 — `needs-review` tag for confidence < 0.7)*
 
 ### 7.4 Knowledge Maintenance / Dreaming — P3
 
 Periodic review of accumulated knowledge for staleness, contradictions, and synthesis opportunities.
 
-- [ ] Monthly lint of LESSONS_LEARNED.md, MEMORY.md, `.claude/rules/` for outdated entries
-- [ ] Cross-reference lessons against codebase changes (lessons about deleted code should be archived)
-- [ ] Synthesis pass: identify clusters of related lessons and propose higher-level principles
-- [ ] Track "knowledge coverage" — which areas of the codebase have lessons vs. knowledge gaps
+- [x] Monthly lint of LESSONS_LEARNED.md, MEMORY.md, `.claude/rules/` for outdated entries *(PR #65 — stale-entry lint pass)*
+- [x] Cross-reference lessons against codebase changes (lessons about deleted code should be archived) *(PR #65 — git log --diff-filter=D cross-reference)*
+- [x] Synthesis pass: identify clusters of related lessons and propose higher-level principles *(PR #65 — 2-hop BFS clustering + principle generation)*
+- [x] Track "knowledge coverage" — which areas of the codebase have lessons vs. knowledge gaps *(PR #65 — coverage report as knowledge-health MemoryReport)*
 
 ---
 
@@ -656,14 +656,14 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
 | **P2** | Codex Operational Parity | 3.4 | Partial — sandbox constraint enforcement delivered (PR #61); full bubblewrap/Seatbelt parity evidence remains |
-| **P2** | Automatic Handoff Triggers | 3.5 | Partial — task-affinity + handoff history delivered (PR #62); live rate-limit/cost-threshold remains |
+| **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
-| **P3** | Mobile Session Browser | 5.1-5.3 | Partial — unified browser/filtering exists; richer cards, time range, and deeper replay/live entry remain |
-| **P3** | Execution Environment Registry | 2.9 | Not started |
-| **P3** | Automated Experience Extraction | 7.3 | Not started |
-| **P3** | Knowledge Maintenance / Dreaming | 7.4 | Not started |
+| **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — time-range, rich cards, handoff timeline, expandable diff, action bar, push notifications (PR #67); only SSE replay remains |
+| **P3** | Execution Environment Registry | 2.9 | Partial — DirectEnvironment on main; DockerEnvironment remains |
+| **P3** | ~~Automated Experience Extraction~~ | 7.3 | ✅ Delivered — Stop hook, entity routing, Jaccard dedup, review flags (PR #64) |
+| **P3** | ~~Knowledge Maintenance / Dreaming~~ | 7.4 | ✅ Delivered — monthly lint, git cross-ref, synthesis, coverage reporting (PR #65) |
 
 ---
 
