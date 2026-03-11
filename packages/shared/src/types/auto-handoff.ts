@@ -1,10 +1,6 @@
 import type { ManagedRuntime } from './runtime-management.js';
 
-export const AUTO_HANDOFF_TRIGGERS = [
-  'task-affinity',
-  'rate-limit',
-  'cost-threshold',
-] as const;
+export const AUTO_HANDOFF_TRIGGERS = ['task-affinity', 'rate-limit', 'cost-threshold'] as const;
 
 export type AutoHandoffTrigger = (typeof AUTO_HANDOFF_TRIGGERS)[number];
 

@@ -32,9 +32,7 @@ function makePolicy(overrides: Partial<AutoHandoffPolicy> = {}): AutoHandoffPoli
   };
 }
 
-function makeSignal(
-  overrides: Partial<HandoffTriggerSignal> = {},
-): HandoffTriggerSignal {
+function makeSignal(overrides: Partial<HandoffTriggerSignal> = {}): HandoffTriggerSignal {
   return {
     runId: 'run-1',
     managedSessionId: 'ms-1',

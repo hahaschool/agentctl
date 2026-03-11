@@ -1,8 +1,7 @@
+import type { RunHandoffDecision } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-
-import type { RunHandoffDecision } from '@agentctl/shared';
 import type { ManagedSessionRecord } from '../../runtime-management/managed-session-store.js';
 import { runtimeSessionRoutes } from './runtime-sessions.js';
 import {
@@ -51,9 +50,7 @@ function makeManagedSession(overrides: Partial<ManagedSessionRecord> = {}): Mana
   };
 }
 
-function makeRunHandoffDecision(
-  overrides: Partial<RunHandoffDecision> = {},
-): RunHandoffDecision {
+function makeRunHandoffDecision(overrides: Partial<RunHandoffDecision> = {}): RunHandoffDecision {
   return {
     id: 'decision-1',
     sourceRunId: 'run-1',

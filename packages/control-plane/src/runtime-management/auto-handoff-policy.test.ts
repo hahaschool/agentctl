@@ -1,10 +1,7 @@
 import type { AutoHandoffPolicy } from '@agentctl/shared';
 import { describe, expect, it } from 'vitest';
 
-import {
-  DEFAULT_AUTO_HANDOFF_POLICY,
-  resolveAutoHandoffPolicy,
-} from './auto-handoff-policy.js';
+import { DEFAULT_AUTO_HANDOFF_POLICY, resolveAutoHandoffPolicy } from './auto-handoff-policy.js';
 
 describe('resolveAutoHandoffPolicy', () => {
   it('returns the default policy when no overrides are present', () => {

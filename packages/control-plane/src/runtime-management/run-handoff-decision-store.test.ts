@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { Database } from '../db/index.js';
-import { createMockDb, type MockDb } from './test-helpers.js';
 import { RunHandoffDecisionStore } from './run-handoff-decision-store.js';
+import { createMockDb, type MockDb } from './test-helpers.js';
 
 describe('RunHandoffDecisionStore', () => {
   let mockDb: MockDb;

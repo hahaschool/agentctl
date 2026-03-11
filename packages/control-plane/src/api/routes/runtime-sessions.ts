@@ -1,9 +1,9 @@
 import type {
   CreateManagedSessionRequest,
   ForkManagedSessionRequest,
-  RunHandoffDecision,
   ManagedRuntime,
   ResumeManagedSessionRequest,
+  RunHandoffDecision,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -14,8 +14,8 @@ import type {
   ManagedSessionRecord,
   ManagedSessionStore,
 } from '../../runtime-management/managed-session-store.js';
-import type { RuntimeConfigStore } from '../../runtime-management/runtime-config-store.js';
 import type { RunHandoffDecisionStore } from '../../runtime-management/run-handoff-decision-store.js';
+import type { RuntimeConfigStore } from '../../runtime-management/runtime-config-store.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
@@ -335,27 +335,21 @@ async function maybeRecordDispatchTaskAffinityDecision(params: {
         agentId: params.body.agentId ?? null,
       },
     };
-    const candidateDecision = evaluateTrigger(
-      signal,
-      {
-        policy,
-        automaticHandoffsSoFar: countAutomaticHandoffs(existingDecisions),
-        lastTriggeredAt: null,
-      },
-    );
+    const candidateDecision = evaluateTrigger(signal, {
+      policy,
+      automaticHandoffsSoFar: countAutomaticHandoffs(existingDecisions),
+      lastTriggeredAt: null,
+    });
 
     if (existingDecisions.some((existing) => existing.dedupeKey === candidateDecision.dedupeKey)) {
       return;
     }
 
-    const decision = evaluateTrigger(
-      signal,
-      {
-        policy,
-        automaticHandoffsSoFar: countAutomaticHandoffs(existingDecisions),
-        lastTriggeredAt: getLastTriggeredAt(existingDecisions, 'task-affinity'),
-      },
-    );
+    const decision = evaluateTrigger(signal, {
+      policy,
+      automaticHandoffsSoFar: countAutomaticHandoffs(existingDecisions),
+      lastTriggeredAt: getLastTriggeredAt(existingDecisions, 'task-affinity'),
+    });
 
     await params.runHandoffDecisionStore.create(decision);
   } catch (error) {

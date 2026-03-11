@@ -6,7 +6,10 @@ import type {
   RunHandoffDecision,
 } from '@agentctl/shared';
 
-export type EvaluatedHandoffDecision = Omit<RunHandoffDecision, 'id' | 'createdAt' | 'updatedAt'> & {
+export type EvaluatedHandoffDecision = Omit<
+  RunHandoffDecision,
+  'id' | 'createdAt' | 'updatedAt'
+> & {
   targetRuntime: ManagedRuntime | null;
 };
 
