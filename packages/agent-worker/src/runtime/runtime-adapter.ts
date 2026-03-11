@@ -13,11 +13,16 @@ export type ManagedSessionHandle = {
   lastActivity: Date | null;
 };
 
+/** Sandbox level sourced from ManagedRuntimeConfig.sandbox. */
+export type ManagedSandboxLevel = 'read-only' | 'workspace-write' | 'danger-full-access';
+
 export type StartManagedSessionInput = {
   agentId: string;
   projectPath: string;
   prompt: string;
   model?: string | null;
+  /** Sandbox constraint level to enforce for the spawned runtime process. */
+  sandboxLevel?: ManagedSandboxLevel | null;
 };
 
 export type ResumeManagedSessionInput = StartManagedSessionInput & {
@@ -30,6 +35,8 @@ export type ForkManagedSessionInput = {
   nativeSessionId: string;
   prompt?: string | null;
   model?: string | null;
+  /** Sandbox constraint level to enforce for the spawned runtime process. */
+  sandboxLevel?: ManagedSandboxLevel | null;
 };
 
 export type RuntimeCapabilities = {
