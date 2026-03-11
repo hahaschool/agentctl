@@ -43,6 +43,7 @@ export function AgentDetailScreen({ agentId }: AgentDetailScreenProps): React.JS
   const [state, setState] = useState<AgentDetailState>({
     agent: null,
     runs: [],
+    latestRunSummary: null,
     outputLines: [],
     isLoading: false,
     isStreaming: false,
@@ -151,6 +152,23 @@ export function AgentDetailScreen({ agentId }: AgentDetailScreenProps): React.JS
         {state.error && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{state.error.message}</Text>
+          </View>
+        )}
+
+        {state.latestRunSummary && (
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Latest Run Summary</Text>
+            <Text style={styles.summaryText}>{state.latestRunSummary.executiveSummary}</Text>
+            {state.latestRunSummary.keyFindings.map((finding) => (
+              <Text key={finding} style={styles.summaryMeta}>
+                • {finding}
+              </Text>
+            ))}
+            {state.latestRunSummary.followUps.map((item) => (
+              <Text key={item} style={styles.summaryMeta}>
+                Next: {item}
+              </Text>
+            ))}
           </View>
         )}
 
@@ -273,6 +291,32 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#fca5a5',
     fontSize: 13,
+  },
+  summaryCard: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#111827',
+  },
+  summaryTitle: {
+    color: '#f3f4f6',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  summaryText: {
+    color: '#e5e7eb',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  summaryMeta: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 18,
   },
   actions: {
     flexDirection: 'row',

@@ -1,5 +1,7 @@
 'use client';
 
+import type { ExecutionSummary } from '@agentctl/shared';
+import { toExecutionSummary } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, Download } from 'lucide-react';
 import Link from 'next/link';
@@ -84,6 +86,23 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const accountList = accounts.data ?? [];
   const machines = machinesList.data ?? [];
+  const runList = runs.data ?? [];
+  const latestRunSummary = useMemo(() => {
+    for (const run of runList) {
+      const summary = toExecutionSummary(run.resultSummary ?? null, {
+        status: run.status,
+        startedAt: run.startedAt,
+        finishedAt: run.endedAt ?? null,
+        costUsd: run.costUsd ?? null,
+      });
+
+      if (summary) {
+        return summary;
+      }
+    }
+
+    return null;
+  }, [runList]);
 
   // -- Handlers --
 
@@ -238,8 +257,6 @@ export default function AgentDetailPage(): React.JSX.Element {
       </div>
     );
   }
-
-  const runList = runs.data ?? [];
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
@@ -618,6 +635,8 @@ export default function AgentDetailPage(): React.JSX.Element {
             </div>
           ) : (
             <>
+              {latestRunSummary && <ExecutionSummaryCard summary={latestRunSummary} />}
+
               {/* Mobile card layout */}
               <div className="sm:hidden space-y-2">
                 {runList.map((run) => (
@@ -818,6 +837,46 @@ function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ExecutionSummaryCard({
+  summary,
+}: {
+  summary: ExecutionSummary;
+}): React.JSX.Element {
+  return (
+    <div className="mb-4 rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium text-foreground">Latest Run Summary</div>
+          <div className="text-xs text-muted-foreground">
+            {summary.commandsRun} tool call{summary.commandsRun === 1 ? '' : 's'} ·{' '}
+            {formatCost(summary.costUsd)} · {formatDurationMs(summary.durationMs)}
+          </div>
+        </div>
+        <StatusBadge status={summary.status} />
+      </div>
+      <div className="text-sm text-foreground leading-6">{summary.executiveSummary}</div>
+      {summary.keyFindings.length > 0 && (
+        <div className="space-y-1">
+          {summary.keyFindings.map((finding) => (
+            <div key={finding} className="text-xs text-muted-foreground">
+              • {finding}
+            </div>
+          ))}
+        </div>
+      )}
+      {summary.followUps.length > 0 && (
+        <div className="space-y-1">
+          {summary.followUps.map((item) => (
+            <div key={item} className="text-xs text-muted-foreground">
+              Next: {item}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

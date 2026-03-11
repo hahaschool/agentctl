@@ -121,6 +121,7 @@ describe('AgentDetailPresenter', () => {
 
       expect(state.agent).toBeNull();
       expect(state.runs).toEqual([]);
+      expect(state.latestRunSummary).toBeNull();
       expect(state.outputLines).toEqual([]);
       expect(state.isLoading).toBe(false);
       expect(state.isStreaming).toBe(false);
@@ -155,6 +156,45 @@ describe('AgentDetailPresenter', () => {
       expect(state.runs).toEqual(runs);
       expect(state.isLoading).toBe(false);
       expect(state.lastUpdated).toEqual(new Date('2024-06-15T12:00:00Z'));
+    });
+
+    it('derives latestRunSummary from the newest run that has structured summary data', async () => {
+      const api = makeApiClient({
+        getAgentRuns: vi.fn().mockResolvedValue([
+          makeRun({
+            id: 'run-structured',
+            resultSummary: {
+              status: 'success',
+              workCompleted: 'Implemented summary UI.',
+              executiveSummary: 'Implemented summary UI.',
+              keyFindings: ['Latest run summary is surfaced in mobile state.'],
+              filesChanged: [],
+              commandsRun: 1,
+              toolUsageBreakdown: { Edit: 1 },
+              followUps: [],
+              branchName: null,
+              prUrl: null,
+              tokensUsed: { input: 100, output: 20 },
+              costUsd: 0.01,
+              durationMs: 5_000,
+            },
+          }),
+        ]),
+      });
+      const sse = makeSseClient();
+
+      const presenter = new AgentDetailPresenter({
+        apiClient: api as never,
+        sseClient: sse as never,
+      });
+
+      await presenter.loadAgent('agent-1');
+      const state = presenter.getState();
+
+      expect(state.latestRunSummary).toMatchObject({
+        workCompleted: 'Implemented summary UI.',
+        executiveSummary: 'Implemented summary UI.',
+      });
     });
 
     it('passes maxRuns limit to getAgentRuns', async () => {

@@ -11,6 +11,7 @@ import type {
   AgentType,
   ContentMessage,
   CreateManagedSessionRequest,
+  ExecutionSummary,
   ForkManagedSessionRequest,
   HandoffManagedSessionRequest,
   HandoffReason,
@@ -211,6 +212,7 @@ export type AgentRun = {
   startedAt: string;
   endedAt?: string;
   errorMessage?: string;
+  resultSummary?: ExecutionSummary | string | null;
 };
 
 export type ApiAccount = SharedApiAccount;
