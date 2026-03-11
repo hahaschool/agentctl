@@ -9,7 +9,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **Web App**: Next.js 15 (App Router) + React Query + Tailwind CSS + shadcn/ui
 - **Control Plane**: Fastify + PostgreSQL + BullMQ + Drizzle ORM
 - **Agent Worker**: Claude Agent SDK + node-pty + PM2
-- **Mobile**: React Native (Expo) — early stage, but already ships discovered-session browsing, managed runtime session controls, and agent detail streaming
+- **Mobile**: React Native (Expo) — early stage, but already ships unified session browsing/filtering, managed runtime session controls, handoff history, and agent detail streaming
 - **CI/CD**: 9 GitHub Actions workflows (build, test, deploy, security, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
@@ -92,7 +92,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 
 </details>
 
-### 2.4 Remote Control Integration (Optional Manual Takeover) — P2
+### 2.4 Remote Control Integration (Relay Decision + Manual Takeover) — P2
 
 > Claude Code Remote Control is an outbound relay to `claude.ai/code`.
 > Current Anthropic docs no longer frame it as Max-only, but AgentCTL's managed
@@ -101,11 +101,17 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > structured control.
 > See [2026-03-10-remote-control-relay-decision.md](plans/2026-03-10-remote-control-relay-decision.md)
 > for the spike decision memo.
+>
+> Status note: The relay decision is complete, and a narrow manual takeover flow
+> is already on `main` for Claude managed sessions via shared contracts,
+> worker/control-plane lifecycle routes, `RcSessionManager`, and runtime-session
+> web controls. The remaining roadmap item here is re-evaluating the relay only
+> if Anthropic later exposes richer programmatic session APIs.
 
 - [x] Spike: evaluate Remote Control relay vs current CLI `-p`
 - [x] Decision: keep `claude -p` as the primary managed-session path for now
+- [x] Narrow manual takeover flow for Claude managed sessions (`RcSessionManager`, worker/control-plane routes, runtime-session web controls)
 - [ ] Re-evaluate only if Anthropic exposes programmatic relay events/session APIs
-- [ ] Optional later slice: add Remote Control as a narrow manual takeover flow without replacing loop or scheduler backends
 
 > Manual takeover design: [plans/2026-03-11-manual-remote-takeover-design.md](plans/2026-03-11-manual-remote-takeover-design.md)
 > Impl plan: [plans/2026-03-11-manual-remote-takeover-impl-plan.md](plans/2026-03-11-manual-remote-takeover-impl-plan.md)
@@ -238,15 +244,21 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 
 > Design doc: [plans/2026-03-10-unified-memory-layer-design.md](plans/2026-03-10-unified-memory-layer-design.md)
 > Impl plan: [plans/2026-03-10-unified-memory-layer-impl-plan.md](plans/2026-03-10-unified-memory-layer-impl-plan.md)
+>
+> Status note: Partially delivered on `main`. Shared memory types, the `0010`
+> migration, Drizzle schema, embedding client, `MemoryStore`, and
+> `MemorySearch` are present. The remaining cutover work is centered on
+> replacing the current Mem0-backed injector/routes, adding runtime-side access,
+> and finishing migration/knowledge-engineering follow-through.
 
 PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolation (global > project > agent > session), pgvector + tsvector + graph traversal fused via Reciprocal Rank Fusion.
 
 **Core (MVP)**:
-- [ ] Shared types: `MemoryFact`, `MemoryEdge`, `MemoryScope`, `InjectionBudget`
-- [ ] SQL migration `0010`: pgvector extension, `memory_facts` (HNSW index), `memory_edges`, `memory_scopes`
-- [ ] Drizzle schema + embedding client (text-embedding-3-small via LiteLLM)
-- [ ] `MemoryStore`: CRUD with scope isolation, dedup, Ebbinghaus decay
-- [ ] `MemorySearch`: hybrid search (vector + BM25 + graph CTE + RRF fusion)
+- [x] Shared types: `MemoryFact`, `MemoryEdge`, `MemoryScope`, `InjectionBudget`
+- [x] SQL migration `0010`: pgvector extension, `memory_facts` (HNSW index), `memory_edges`, `memory_scopes`
+- [x] Drizzle schema + embedding client (text-embedding-3-small via LiteLLM)
+- [x] `MemoryStore`: CRUD with scope isolation, dedup, Ebbinghaus decay
+- [x] `MemorySearch`: hybrid search (vector + BM25 + graph CTE + RRF fusion)
 - [ ] `MemoryInjector` refactor: dual-backend (Mem0 / PG) via `MEMORY_BACKEND` env var
 - [ ] Memory API routes: search, add, list, delete (with scope filtering)
 - [ ] Context budget: maxTokens 2400, maxFacts 20, 3-tier injection (pinned + on-demand + triggered)
@@ -361,9 +373,15 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 ### 5.1 Mobile Session Browser — P3
 
+> Status note: Partially delivered on `main`. The mobile app already has a
+> unified browser model and `SessionBrowserScreen` covering classic + managed
+> sessions with type/runtime/machine/status filters. Time-range filtering,
+> richer cards, and deeper replay/live entry remain.
+
 - [x] Discovered-session browser with status, message count, and last activity
 - [x] Managed runtime session browser with runtime/status/machine metadata
-- [ ] Unified `SessionBrowser` screen filterable by agent type, machine, status, time range
+- [x] Unified `SessionBrowser` screen filterable by session source, runtime, machine, and status
+- [ ] Add time-range filtering to the unified browser
 - [ ] Rich session cards across both surfaces: agent type badge, model, cost, duration, last tool call
 - [ ] Tap from the browser into live SSE stream or session replay
 
@@ -450,7 +468,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 Restructure `.claude/rules/` to avoid always-loading all rules. Most rules should be on-demand with trigger-based loading.
 
-- [ ] Add front-matter `triggers:` to `.claude/rules/` files specifying when each ruleset should activate
+- [x] Add front-matter `triggers:` to `.claude/rules/` files specifying when each ruleset should activate
 - [ ] Split always-on rules (critical guardrails) from on-demand rules (coding style, patterns)
 - [ ] Minimize MEMORY.md to only irreversible-damage rules; move everything else to topic-specific files
 - [ ] Audit existing rules for relevance and remove outdated entries
@@ -459,12 +477,12 @@ Restructure `.claude/rules/` to avoid always-loading all rules. Most rules shoul
 
 Meta-rules about when and how to add knowledge to the project's documentation and memory files.
 
-- [ ] Create `docs/KNOWLEDGE_SEDIMENTATION.md` defining:
+- [x] Create `docs/KNOWLEDGE_SEDIMENTATION.md` defining:
   - When an observation becomes a lesson (requires 2+ occurrences or irreversible impact)
   - What makes a good principle (falsifiable, contextual, actionable)
   - When to promote from session notes → LESSONS_LEARNED → CLAUDE.md rules
   - How to format knowledge for AI agent consumption (atomic, standalone, outcome-included)
-- [ ] Reference sedimentation rules from CLAUDE.md
+- [x] Reference sedimentation rules from CLAUDE.md
 
 ### 7.3 Automated Experience Extraction — P3
 
@@ -491,7 +509,7 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
-| **P1** | Unified Memory Layer | 3.6 | Not started |
+| **P1** | Unified Memory Layer | 3.6 | Partial — core types/schema/store/search landed; injector/routes/MCP cutover remains |
 | **P1** | Structured Execution Summary | 2.5 | Not started |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
@@ -499,11 +517,11 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P2** | Mid-Execution Steering | 2.8 | Not started |
 | **P2** | Codex Operational Parity | 3.4 | Partial — runtime-level sandbox enforcement/evidence still remains |
 | **P2** | Automatic Handoff Triggers | 3.5 | Not started |
-| **P2** | Remote Control Spike | 2.4 | Not started |
+| **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
 | **P2** | Fork UX Extensions | 4.7 | Partial — auto-related-message/runtime-in-direct-fork work remains |
-| **P2** | Layered Knowledge Loading | 7.1 | Not started |
-| **P2** | Knowledge Sedimentation Rules | 7.2 | Not started |
-| **P3** | Mobile Session Browser | 5.1-5.3 | Partial — browser/actions/handoff history exist |
+| **P2** | Layered Knowledge Loading | 7.1 | Partial — rule triggers landed; split/audit work remains |
+| **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
+| **P3** | Mobile Session Browser | 5.1-5.3 | Partial — unified browser/filtering exists; richer cards, time range, and deeper replay/live entry remain |
 | **P3** | Execution Environment Registry | 2.9 | Not started |
 | **P3** | Automated Experience Extraction | 7.3 | Not started |
 | **P3** | Knowledge Maintenance / Dreaming | 7.4 | Not started |
@@ -536,20 +554,20 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | Item | Depends On | Notes |
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
-| Unified Memory Layer (P1) | None | Can start immediately; replaces Mem0. Claude-mem migration is part of this — see [migration plan](plans/2026-03-11-claude-mem-migration-plan.md) |
+| Unified Memory Layer (P1) | None | Core types/schema/search/store have landed; remaining work is injector/routes/MCP cutover. Claude-mem migration is part of this — see [migration plan](plans/2026-03-11-claude-mem-migration-plan.md) |
 | Execution Summary (P1) | None | Can start immediately |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
 | AgentOutputStream (P2) | None | Foundation for multi-runtime unification |
 | Mid-Execution Steering (P2) | AgentOutputStream | Needs stream interface for response routing |
 | Codex Operational Parity (P2) | None | Partial on `main`; LiteLLM routing/failover is done, remaining work is runtime-level sandbox enforcement/evidence |
-| Automatic Handoff (P2) | AgentOutputStream | Needs unified event stream for trigger detection |
-| Remote Control Spike (P2) | None | Evaluate only — no dependency on implementation |
+| Automatic Handoff (P2) | AgentOutputStream for live signals | Policy/history/task-affinity groundwork can land before it; live trigger execution waits on unified runtime signals |
+| Remote Control Integration (P2) | None | Relay decision and narrow manual takeover are already on `main`; only relay re-evaluation remains |
 | Fork UX Extensions (P2) | Unified Memory Layer | Memory integration in fork context selection; extends existing `ContextPickerDialog`, memory panel, and prompt preview |
 | Layered Knowledge Loading (P2) | None | Can start immediately; restructure `.claude/rules/` with trigger-based loading |
 | Knowledge Sedimentation Rules (P2) | None | Can start immediately; meta-rules for knowledge management |
 | Mobile Session Browser (P3) | None | Web unification patterns are already on `main`; remaining work is mobile-side unification/filtering/actions |
-| Execution Environment Registry (P3) | AgentOutputStream | Needs adapter interface stable |
+| Execution Environment Registry (P3) | AgentOutputStream for adapter context + Docker | Capability model, direct environment, and worker reporting can land earlier; adapter plumbing and Docker execution wait on a stable output boundary |
 | Automated Experience Extraction (P3) | Knowledge Sedimentation Rules | Needs sedimentation rules to know where to route extracted knowledge |
 | Knowledge Maintenance (P3) | Unified Memory Layer | Lint/synthesis features build on the memory layer's graph and contradiction detection |
 
@@ -606,8 +624,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [automatic-handoff-triggers-impl-plan](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md) | Planned | 3.5 |
 | [execution-environment-registry-design](plans/2026-03-11-execution-environment-registry-design.md) | Planned | 2.9 |
 | [execution-environment-registry-impl-plan](plans/2026-03-11-execution-environment-registry-impl-plan.md) | Planned | 2.9 |
-| [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Planned | 2.4 |
-| [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Planned | 2.4 |
+| [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Delivered | 2.4 |
+| [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Delivered | 2.4 |
 | [claude-mem-migration-plan](plans/2026-03-11-claude-mem-migration-plan.md) | Active | 3.6 |
 
 ### Knowledge Engineering
