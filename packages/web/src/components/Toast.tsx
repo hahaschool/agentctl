@@ -95,21 +95,23 @@ export const toast = {
 // Hook (drop-in replacement for previous useToast)
 // ---------------------------------------------------------------------------
 
+const STABLE_TOAST_VALUE: ToastContextValue = {
+  toast(type, message) {
+    addToast(type, message, type === 'error' ? TOAST_ERROR_DURATION_MS : TOAST_DURATION_MS);
+  },
+  success: (message: string) => {
+    addToast('success', message);
+  },
+  error: (message: string) => {
+    addToast('error', message, TOAST_ERROR_DURATION_MS);
+  },
+  info: (message: string) => {
+    addToast('info', message);
+  },
+};
+
 export function useToast(): ToastContextValue {
-  return {
-    toast(type, message) {
-      addToast(type, message, type === 'error' ? TOAST_ERROR_DURATION_MS : TOAST_DURATION_MS);
-    },
-    success: (message: string) => {
-      addToast('success', message);
-    },
-    error: (message: string) => {
-      addToast('error', message, TOAST_ERROR_DURATION_MS);
-    },
-    info: (message: string) => {
-      addToast('info', message);
-    },
-  };
+  return STABLE_TOAST_VALUE;
 }
 
 // ---------------------------------------------------------------------------
