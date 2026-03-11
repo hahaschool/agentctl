@@ -408,6 +408,58 @@ describe('AgentInstance', () => {
     await startPromise;
   });
 
+  it('pipes sdk output stream events through subscribers and the output buffer', async () => {
+    const { runWithSdk } = await import('./sdk-runner.js');
+
+    vi.mocked(runWithSdk).mockImplementationOnce(async ({ outputStream, sessionId }) => {
+      outputStream.text('hello from stream');
+      outputStream.costUpdate(0.25, 0.25);
+
+      return {
+        sessionId,
+        costUsd: 0.25,
+        tokensIn: 10,
+        tokensOut: 5,
+        result: 'streamed result',
+      };
+    });
+
+    const agent = new AgentInstance(makeOptions());
+    const events: AgentEvent[] = [];
+    agent.onEvent((event) => events.push(event));
+
+    const startPromise = agent.start('stream test');
+    await vi.advanceTimersByTimeAsync(0);
+    await startPromise;
+
+    expect(runWithSdk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outputStream: expect.objectContaining({
+          text: expect.any(Function),
+          toolUse: expect.any(Function),
+          toolResult: expect.any(Function),
+          costUpdate: expect.any(Function),
+        }),
+      }),
+    );
+
+    expect(events).toContainEqual({
+      event: 'output',
+      data: {
+        type: 'text',
+        content: 'hello from stream',
+      },
+    });
+    expect(events).toContainEqual({
+      event: 'cost',
+      data: {
+        turnCost: 0.25,
+        totalCost: 0.25,
+      },
+    });
+    expect(agent.outputBuffer.getRecent(10)).toEqual(expect.arrayContaining(events));
+  });
+
   it('stub simulation completes and transitions to stopped after duration', async () => {
     const agent = new AgentInstance(makeOptions());
     const statuses: string[] = [];

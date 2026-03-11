@@ -11,6 +11,7 @@ import { AuditReporter } from '../hooks/audit-reporter.js';
 import { createPostToolUseHook } from '../hooks/post-tool-use.js';
 import { createPreToolUseHook } from '../hooks/pre-tool-use.js';
 import { createStopHook } from '../hooks/stop-hook.js';
+import { EventedAgentOutputStream } from './agent-output-stream.js';
 import { OutputBuffer } from './output-buffer.js';
 import { runWithSdk, type SdkRunnerHooks } from './sdk-runner.js';
 import {
@@ -235,6 +236,7 @@ export class AgentInstance extends EventEmitter {
     resumeSessionId: string | undefined,
   ): Promise<true | null | 'resume_failed'> {
     try {
+      const outputStream = new EventedAgentOutputStream((event) => this.emitEvent(event));
       const result = await runWithSdk({
         prompt,
         agentId: this.agentId,
@@ -242,7 +244,7 @@ export class AgentInstance extends EventEmitter {
         config: this.config,
         projectPath: this.executionProjectPath,
         logger: this.log,
-        onEvent: (event) => this.emitEvent(event),
+        outputStream,
         abortSignal: this.abortController?.signal,
         hooks: this.hooks,
         resumeSessionId,
