@@ -10,7 +10,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 import { DashboardActionButton } from '../components/DashboardActionButton';
-import { DashboardMemoryCard } from '../components/memory/DashboardMemoryCard';
 import { DashboardActivityIcon } from '../components/DashboardActivityIcon';
 import { DashboardCostOverview } from '../components/DashboardCostOverview';
 import { DashboardEmptyPanel } from '../components/DashboardEmptyPanel';
