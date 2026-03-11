@@ -475,6 +475,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           role="listbox"
           aria-label="Commands"
           aria-activedescendant={activeOptionId}
+          tabIndex={-1}
         >
           {filtered.length === 0 && (
             <div className="px-4 py-6 text-center text-muted-foreground text-sm">

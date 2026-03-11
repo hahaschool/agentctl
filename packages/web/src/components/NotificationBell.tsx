@@ -1,8 +1,8 @@
 'use client';
 
 import { AlertTriangle, Bell, CheckCircle2, Info, X, XCircle } from 'lucide-react';
-import type React from 'react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
+import type React from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';

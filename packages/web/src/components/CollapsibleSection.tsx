@@ -42,9 +42,9 @@ export function CollapsibleSection({
         <span className="text-[15px] font-semibold text-muted-foreground">{title}</span>
         {badge && <span className="text-[11px] text-muted-foreground font-normal">({badge})</span>}
       </button>
-      <div id={panelId} role="region" aria-labelledby={buttonId} hidden={!open}>
+      <section id={panelId} aria-labelledby={buttonId} hidden={!open}>
         {open ? children : null}
-      </div>
+      </section>
     </>
   );
 }
