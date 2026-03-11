@@ -5,15 +5,19 @@ import type {
   ForkManagedSessionRequest,
   ManagedRuntime,
   ResumeManagedSessionRequest,
+  RunHandoffDecision,
 } from '@agentctl/shared';
 import { ControlPlaneError, isExecutionEnvironmentId } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { resolveAutoHandoffPolicy } from '../../runtime-management/auto-handoff-policy.js';
+import { evaluateTrigger } from '../../runtime-management/handoff-trigger-evaluator.js';
 import type {
   ManagedSessionRecord,
   ManagedSessionStore,
 } from '../../runtime-management/managed-session-store.js';
+import type { RunHandoffDecisionStore } from '../../runtime-management/run-handoff-decision-store.js';
 import type { RuntimeConfigStore } from '../../runtime-management/runtime-config-store.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
@@ -22,6 +26,7 @@ import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 export type RuntimeSessionRoutesOptions = {
   managedSessionStore: Pick<ManagedSessionStore, 'list' | 'create' | 'get' | 'updateStatus'>;
   runtimeConfigStore?: Pick<RuntimeConfigStore, 'getLatestRevision'>;
+  runHandoffDecisionStore?: Pick<RunHandoffDecisionStore, 'create' | 'listForRun'>;
   dbRegistry?: DbAgentRegistry;
   workerPort?: number;
 };
@@ -30,7 +35,13 @@ export const runtimeSessionRoutes: FastifyPluginAsync<RuntimeSessionRoutesOption
   app,
   opts,
 ) => {
-  const { managedSessionStore, runtimeConfigStore, dbRegistry, workerPort = 9000 } = opts;
+  const {
+    managedSessionStore,
+    runtimeConfigStore,
+    runHandoffDecisionStore,
+    dbRegistry,
+    workerPort = 9000,
+  } = opts;
 
   app.get<{
     Querystring: { machineId?: string; runtime?: ManagedRuntime; status?: string; limit?: string };
@@ -99,6 +110,14 @@ export const runtimeSessionRoutes: FastifyPluginAsync<RuntimeSessionRoutesOption
         handoffStrategy: null,
         handoffSourceSessionId: null,
         metadata: {},
+      });
+
+      await maybeRecordDispatchTaskAffinityDecision({
+        body: request.body,
+        session,
+        dbRegistry,
+        runHandoffDecisionStore,
+        logger: app.log,
       });
 
       const workerBaseUrl = await resolveWorker(request.body.machineId, dbRegistry, workerPort);
@@ -392,4 +411,90 @@ function extractWorkerSession(data: unknown): {
     session?: { nativeSessionId?: string | null; status?: ManagedSessionRecord['status'] };
   };
   return record.session ?? {};
+}
+
+async function maybeRecordDispatchTaskAffinityDecision(params: {
+  body: CreateManagedSessionRequest;
+  session: ManagedSessionRecord;
+  dbRegistry?: DbAgentRegistry;
+  runHandoffDecisionStore?: Pick<RunHandoffDecisionStore, 'create' | 'listForRun'>;
+  logger: { warn: (obj: Record<string, unknown>, msg: string) => void };
+}): Promise<void> {
+  const runId = params.body.runId?.trim();
+  if (!runId || !params.runHandoffDecisionStore) {
+    return;
+  }
+
+  try {
+    const agent =
+      params.body.agentId && params.dbRegistry
+        ? await params.dbRegistry.getAgent(params.body.agentId)
+        : undefined;
+    const policy = resolveAutoHandoffPolicy({
+      agentConfig: toRecord(agent?.config),
+      managedSessionMetadata: params.session.metadata,
+    });
+    const existingDecisions = await params.runHandoffDecisionStore.listForRun(runId, 100);
+    const signal = {
+      runId,
+      managedSessionId: params.session.id,
+      sourceRuntime: params.body.runtime,
+      trigger: 'task-affinity' as const,
+      stage: 'dispatch' as const,
+      observedAt: new Date().toISOString(),
+      payload: {
+        prompt: params.body.prompt,
+        projectPath: params.body.projectPath,
+        machineId: params.body.machineId,
+        agentId: params.body.agentId ?? null,
+      },
+    };
+    const candidateDecision = evaluateTrigger(signal, {
+      policy,
+      automaticHandoffsSoFar: countAutomaticHandoffs(existingDecisions),
+      lastTriggeredAt: null,
+    });
+
+    if (existingDecisions.some((existing) => existing.dedupeKey === candidateDecision.dedupeKey)) {
+      return;
+    }
+
+    const decision = evaluateTrigger(signal, {
+      policy,
+      automaticHandoffsSoFar: countAutomaticHandoffs(existingDecisions),
+      lastTriggeredAt: getLastTriggeredAt(existingDecisions, 'task-affinity'),
+    });
+
+    await params.runHandoffDecisionStore.create(decision);
+  } catch (error) {
+    params.logger.warn(
+      {
+        err: error,
+        runId,
+        managedSessionId: params.session.id,
+      },
+      'Failed to record dispatch-time automatic handoff decision',
+    );
+  }
+}
+
+function countAutomaticHandoffs(decisions: RunHandoffDecision[]): number {
+  return decisions.filter(
+    (decision) => decision.status === 'scheduled' || decision.status === 'executed',
+  ).length;
+}
+
+function getLastTriggeredAt(
+  decisions: RunHandoffDecision[],
+  trigger: RunHandoffDecision['trigger'],
+): string | null {
+  return decisions.find((decision) => decision.trigger === trigger)?.createdAt ?? null;
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
 }

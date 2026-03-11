@@ -937,6 +937,64 @@ describe('E2E smoke tests — runtime management', () => {
     });
   });
 
+  it('records dispatch-time task-affinity suggestions in run handoff history', async () => {
+    const projectPath = '/workspace/runtime-affinity-smoke';
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        session: {
+          runtime: 'codex',
+          sessionId: 'worker-codex-affinity',
+          nativeSessionId: 'codex-native-affinity',
+          agentId: 'adhoc',
+          projectPath,
+          model: null,
+          status: 'active',
+        },
+      }),
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions',
+      payload: {
+        runtime: 'codex',
+        machineId: runtimeMachine.id,
+        projectPath,
+        prompt: 'Polish the React CSS UI before handoff.',
+        runId: 'run-affinity-smoke',
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+
+    const historyResponse = await app.inject({
+      method: 'GET',
+      url: '/api/runs/run-affinity-smoke/handoff-history?limit=10',
+    });
+
+    expect(historyResponse.statusCode).toBe(200);
+    expect(historyResponse.json()).toMatchObject({
+      count: 1,
+      decisions: [
+        {
+          sourceRunId: 'run-affinity-smoke',
+          trigger: 'task-affinity',
+          stage: 'dispatch',
+          status: 'suggested',
+          signalPayload: expect.objectContaining({
+            prompt: 'Polish the React CSS UI before handoff.',
+            targetRuntime: 'claude-code',
+            matchedRuleId: 'frontend-heavy-to-claude',
+          }),
+        },
+      ],
+    });
+  });
+
   it('tracks native-import handoffs in runtime summary analytics', async () => {
     const projectPath = '/workspace/runtime-native-smoke';
     const snapshot = {

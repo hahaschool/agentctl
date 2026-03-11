@@ -51,6 +51,7 @@ describe('OpenAPI / Swagger', () => {
     expect(spec.paths['/api/agents/register']).toBeDefined();
     expect(spec.paths['/api/runtime-config/defaults']).toBeDefined();
     expect(spec.paths['/api/runtime-config/drift']).toBeDefined();
+    expect(spec.paths['/api/runs/{id}/handoff-history']).toBeDefined();
     expect(spec.paths['/api/runtime-sessions/']).toBeDefined();
     expect(spec.paths['/api/runtime-sessions/handoffs/summary']).toBeDefined();
     expect(spec.paths['/api/runtime-sessions/{id}/handoffs']).toBeDefined();

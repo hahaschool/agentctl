@@ -42,6 +42,7 @@ export type CreateManagedSessionRequest = {
   runtime: ManagedRuntime;
   machineId: string;
   agentId?: string | null;
+  runId?: string | null;
   projectPath: string;
   prompt: string;
   model?: string | null;

@@ -15,6 +15,7 @@ import {
   memoryFacts,
   memoryScopes,
   nativeImportAttempts,
+  runHandoffDecisions,
   runtimeConfigRevisions,
   sessionHandoffs,
 } from './schema.js';
@@ -96,6 +97,11 @@ describe('Schema module exports', () => {
   it('exports the nativeImportAttempts table', () => {
     expect(nativeImportAttempts).toBeDefined();
     expect(getTableName(nativeImportAttempts)).toBe('native_import_attempts');
+  });
+
+  it('exports the runHandoffDecisions table', () => {
+    expect(runHandoffDecisions).toBeDefined();
+    expect(getTableName(runHandoffDecisions)).toBe('run_handoff_decisions');
   });
 
   it('exports the memory layer tables', () => {
@@ -1244,6 +1250,58 @@ describe('nativeImportAttempts table columns', () => {
   });
 });
 
+describe('runHandoffDecisions table columns', () => {
+  const meta = getColumnMeta(runHandoffDecisions);
+
+  it('has exactly 16 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(16);
+  });
+
+  it('has all expected column keys', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'sourceRunId',
+      'sourceManagedSessionId',
+      'targetRunId',
+      'handoffId',
+      'trigger',
+      'stage',
+      'mode',
+      'status',
+      'dedupeKey',
+      'policySnapshot',
+      'signalPayload',
+      'reason',
+      'skippedReason',
+      'createdAt',
+      'updatedAt',
+    ]);
+  });
+
+  it('stores decision payloads as jsonb and lifecycle timestamps with defaults', () => {
+    expect(meta.policySnapshot).toEqual({
+      name: 'policy_snapshot',
+      columnType: 'PgJsonb',
+      dataType: 'json',
+      notNull: true,
+      hasDefault: true,
+      primary: false,
+    });
+    expect(meta.signalPayload).toEqual({
+      name: 'signal_payload',
+      columnType: 'PgJsonb',
+      dataType: 'json',
+      notNull: true,
+      hasDefault: true,
+      primary: false,
+    });
+    expect(meta.createdAt.columnType).toBe('PgTimestamp');
+    expect(meta.createdAt.hasDefault).toBe(true);
+    expect(meta.updatedAt.columnType).toBe('PgTimestamp');
+    expect(meta.updatedAt.hasDefault).toBe(true);
+  });
+});
+
 describe('memoryScopes table columns', () => {
   const meta = getColumnMeta(memoryScopes);
 
@@ -1442,6 +1500,31 @@ describe('Runtime management foreign key relationships', () => {
     expect(getTableName(targetFk?.reference().foreignTable)).toBe('managed_sessions');
   });
 
+  it('runHandoffDecisions references runs, managed sessions, and session handoffs', () => {
+    const config = getTableConfig(runHandoffDecisions);
+    expect(config.foreignKeys).toHaveLength(4);
+
+    const sourceRunFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'source_run_id',
+    );
+    expect(getTableName(sourceRunFk?.reference().foreignTable)).toBe('agent_runs');
+
+    const sourceManagedSessionFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'source_managed_session_id',
+    );
+    expect(getTableName(sourceManagedSessionFk?.reference().foreignTable)).toBe('managed_sessions');
+
+    const targetRunFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'target_run_id',
+    );
+    expect(getTableName(targetRunFk?.reference().foreignTable)).toBe('agent_runs');
+
+    const handoffFk = config.foreignKeys.find(
+      (fk) => fk.reference().columns[0].name === 'handoff_id',
+    );
+    expect(getTableName(handoffFk?.reference().foreignTable)).toBe('session_handoffs');
+  });
+
   it('memoryScopes can reference a parent memory scope', () => {
     const config = getTableConfig(memoryScopes);
     expect(config.foreignKeys).toHaveLength(1);
@@ -1480,5 +1563,26 @@ describe('Runtime management default values', () => {
     const cols = getTableColumns(nativeImportAttempts);
     expect(cols.status.default).toBe('pending');
     expect(cols.metadata.default).toEqual({});
+  });
+
+  it('runHandoffDecisions defaults policy and signal payloads to an empty object', () => {
+    const cols = getTableColumns(runHandoffDecisions);
+    expect(cols.policySnapshot.default).toEqual({});
+    expect(cols.signalPayload.default).toEqual({});
+  });
+});
+
+describe('Runtime management indexes', () => {
+  it('runHandoffDecisions exposes indexes for source run, trigger, and created at', () => {
+    const config = getTableConfig(runHandoffDecisions);
+    const indexNames = config.indexes.map((idx) => idx.config.name);
+
+    expect(indexNames).toEqual(
+      expect.arrayContaining([
+        'idx_run_handoff_decisions_source_run_id',
+        'idx_run_handoff_decisions_trigger',
+        'idx_run_handoff_decisions_created_at',
+      ]),
+    );
   });
 });

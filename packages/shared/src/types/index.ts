@@ -25,6 +25,29 @@ export type {
   RunStatus,
   RunTrigger,
 } from './agent-run.js';
+export type {
+  AutoHandoffDecisionStatus,
+  AutoHandoffMode,
+  AutoHandoffPolicy,
+  AutoHandoffStage,
+  AutoHandoffTaskAffinityRule,
+  AutoHandoffTaskMatcher,
+  AutoHandoffTrigger,
+  HandoffTriggerSignal,
+  RunHandoffDecision,
+} from './auto-handoff.js';
+export {
+  AUTO_HANDOFF_DECISION_STATUSES,
+  AUTO_HANDOFF_MODES,
+  AUTO_HANDOFF_STAGES,
+  AUTO_HANDOFF_TASK_MATCHERS,
+  AUTO_HANDOFF_TRIGGERS,
+  isAutoHandoffDecisionStatus,
+  isAutoHandoffMode,
+  isAutoHandoffStage,
+  isAutoHandoffTaskMatcher,
+  isAutoHandoffTrigger,
+} from './auto-handoff.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   ExecutionSummary,
