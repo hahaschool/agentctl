@@ -396,7 +396,7 @@ export class SseClient {
     return {
       event: frame.event as AgentEvent['event'],
       data: parsed as AgentEvent['data'],
-    };
+    } as AgentEvent;
   }
 
   // -----------------------------------------------------------------------
