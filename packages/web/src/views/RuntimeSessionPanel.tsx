@@ -24,7 +24,12 @@ import { PathBadge } from '@/components/PathBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
-import type { Machine, RuntimeSession, RuntimeSessionHandoff } from '../lib/api';
+import type {
+  Machine,
+  RuntimeSession,
+  RuntimeSessionHandoff,
+  RuntimeSessionManualTakeover,
+} from '../lib/api';
 import { formatDateTime, formatDuration, timeAgo, truncate } from '../lib/format-utils';
 import {
   machinesQuery,
@@ -37,7 +42,6 @@ import {
   useStartRuntimeSessionManualTakeover,
   useStopRuntimeSessionManualTakeover,
 } from '../lib/queries';
-import type { RuntimeSessionManualTakeover } from '../lib/api';
 
 const RUNTIME_OPTIONS = [
   { value: 'all', label: 'All runtimes' },
@@ -781,8 +785,8 @@ export function RuntimeSessionPanel({
               <div className="text-sm font-semibold text-foreground">Manual Takeover</div>
               <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
                 <div className="text-xs text-muted-foreground">
-                  Opens this Claude session in Claude Remote Control for operator intervention.
-                  This is a sidecar surface and does not replace the managed runtime backend.
+                  Opens this Claude session in Claude Remote Control for operator intervention. This
+                  is a sidecar surface and does not replace the managed runtime backend.
                 </div>
                 <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
                   <label className="space-y-1.5 text-sm text-muted-foreground">
