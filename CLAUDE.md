@@ -10,7 +10,7 @@ AgentCTL is a unified control plane for remotely orchestrating AI coding agents 
 2. **Multi-Machine Fleet** — manage agents on EC2, Mac Mini, laptops via Tailscale mesh
 3. **Multiple Agent Types** — autonomous (long-running) + ad-hoc (one-shot) sessions
 4. **Trigger Modes** — heartbeat (periodic), cron (scheduled), manual, ad-hoc
-5. **Unified Memory** — cross-device memory system importing from Claude Code history + claude-mem
+5. **Unified Memory** — PostgreSQL-native hybrid memory with Mem0 / claude-mem bridges during cutover
 6. **Workspace Sync** — git worktree isolation per agent, bare-repo pattern for cross-machine
 7. **Multi-Provider Failover** — LiteLLM routing across Anthropic Direct + Bedrock + Vertex AI
 
@@ -19,11 +19,11 @@ AgentCTL is a unified control plane for remotely orchestrating AI coding agents 
 | Layer | Tool | Why |
 |-------|------|-----|
 | Language | TypeScript (primary), Python (scripts) | Agent SDK is TS-first; Python for data/ML tools |
-| Agent Runtime | Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) | Wraps Claude Code CLI, supports hooks/MCP/subagents |
+| Agent Runtime | Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) + Codex CLI | Managed Claude/Codex sessions, hooks, handoff, and runtime-specific control surfaces |
 | Process Mgmt | PM2 (single-machine) | Auto-restart, boot persistence, ecosystem config |
 | Workflow | BullMQ (Redis) for MVP → Temporal.io for scale | Durable scheduling with cron/signals/approval gates |
 | API Gateway | LiteLLM Proxy | Multi-provider routing, failover, cost tracking |
-| Memory | Mem0 (cross-device) + CLAUDE.md (Git) + .mv2 (portable) | Hybrid: vector + graph + key-value |
+| Memory | PostgreSQL-native hybrid memory + Mem0 / claude-mem bridge during cutover | Facts/edges/search are landing in the control plane while older surfaces are still being migrated |
 | Networking | Tailscale | Zero-config mesh, MagicDNS, built-in SSH, iOS app |
 | Monitoring | SSE streams + xterm.js (desktop) / parsed JSON (mobile) | Real-time agent output rendering |
 | iOS Client | React Native (Expo) following Happy Coder pattern | E2E encrypted relay, push notifications |
@@ -41,11 +41,12 @@ AgentCTL is a unified control plane for remotely orchestrating AI coding agents 
        │                    │                    │
        │         ┌──────────┴──────────┐         │
        └────────►│   Control Plane     │◄────────┘
-                 │  (FastAPI/Express)   │
+                 │      (Fastify)      │
                  │  ┌────────────────┐ │
-                 │  │ Task Scheduler │ │  ◄── BullMQ/Temporal
+                 │  │ Task Scheduler │ │  ◄── BullMQ
                  │  │ Agent Registry │ │  ◄── PostgreSQL
-                 │  │ Memory Sync    │ │  ◄── Mem0 API
+                 │  │ Runtime Mgmt   │ │  ◄── sessions + handoff
+                 │  │ Memory/Search  │ │  ◄── PG memory + bridges
                  │  │ LLM Router     │ │  ◄── LiteLLM Proxy
                  │  └────────────────┘ │
                  └─────────────────────┘
@@ -59,7 +60,7 @@ AgentCTL is a unified control plane for remotely orchestrating AI coding agents 
 ```
 agentctl/
 ├── CLAUDE.md                    # This file
-├── .claude/rules/               # Agent-specific rules
+├── .claude/rules/               # Agent-specific rules with trigger-based loading hints
 │   ├── security.md
 │   └── code-style.md
 ├── packages/
@@ -68,7 +69,7 @@ agentctl/
 │   │   │   ├── api/             # REST + WebSocket endpoints
 │   │   │   ├── scheduler/       # BullMQ job definitions
 │   │   │   ├── registry/        # Agent registration & health
-│   │   │   ├── memory/          # Mem0 integration + sync
+│   │   │   ├── memory/          # PG memory layer + Mem0 / claude-mem bridge during cutover
 │   │   │   └── router/          # LiteLLM config management
 │   │   └── package.json
 │   ├── agent-worker/            # Per-machine agent daemon
@@ -115,7 +116,7 @@ agentctl/
 - **Formatting**: Biome (replaces ESLint + Prettier)
 - **Testing**: Vitest for unit, Playwright for E2E
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`)
-- **Branches**: `main` (stable), `dev` (integration), `agent-{id}/{type}/{desc}` (agent work)
+- **Branches**: `main` (stable), `dev` (integration), `codex/<topic>` (agent-authored work)
 - **Error handling**: Always use typed errors with error codes, never bare `throw new Error()`
 - **Logging**: Structured JSON via pino, include `agentId`, `machineId`, `taskId` in every log
 
@@ -166,4 +167,5 @@ cd infra/litellm && docker compose up
 1. `docs/ARCHITECTURE.md` — Layer-by-layer design with data flow diagrams
 2. `docs/LESSONS_LEARNED.md` — Hard-won insights; read before making architectural choices
 3. `docs/REFERENCE_INDEX.md` — Categorized links to all external tools and documentation
-4. `docs/QUICKSTART.md` — Step-by-step: from zero to first agent running
+4. `docs/KNOWLEDGE_SEDIMENTATION.md` — What should become a lesson, rule, or CLAUDE guidance
+5. `docs/QUICKSTART.md` — Step-by-step: from zero to first agent running

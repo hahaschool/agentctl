@@ -1,3 +1,13 @@
+---
+triggers:
+  - typescript
+  - javascript
+  - react
+  - node
+  - testing
+always_on: false
+---
+
 # Code Style Rules
 
 ## TypeScript

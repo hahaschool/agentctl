@@ -1,3 +1,14 @@
+---
+triggers:
+  - security
+  - auth
+  - secrets
+  - shell
+  - sql
+  - docker
+always_on: true
+---
+
 # Security Rules
 
 When working on AgentCTL code:
