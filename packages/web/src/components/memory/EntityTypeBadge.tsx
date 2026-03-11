@@ -13,6 +13,10 @@ const ENTITY_TYPE_CLASSES: Record<EntityType, string> = {
   code_artifact: 'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300',
   preference: 'border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300',
   person: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+  skill: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300',
+  experience: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+  principle: 'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-300',
+  question: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
 };
 
 export function EntityTypeBadge({
