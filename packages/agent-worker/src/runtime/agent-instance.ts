@@ -254,12 +254,18 @@ export class AgentInstance extends EventEmitter {
   }
 
   async start(prompt: string): Promise<void> {
+    // Reset mutable state before transitioning so old events/timers
+    // from a previous run don't leak into the new one.
+    this.outputBuffer.clear();
+    this.clearTimers();
+
     this.transitionTo('starting');
     this.log.info({ prompt: prompt.slice(0, 100) }, 'Agent starting');
 
     const resumeSessionId = this.resumeSession ?? undefined;
 
     this.state.sessionId = randomUUID();
+    this.state.startedAt = null;
     this.state.stoppedAt = null;
     this.state.costUsd = 0;
     this.state.tokensIn = 0;
