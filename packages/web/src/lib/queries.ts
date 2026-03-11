@@ -689,3 +689,13 @@ export function useSyncRuntimeConfig() {
     },
   });
 }
+
+export function useRefreshRuntimeConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (machineId?: string) => api.refreshRuntimeConfig(machineId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.runtimeConfigDrift() });
+    },
+  });
+}

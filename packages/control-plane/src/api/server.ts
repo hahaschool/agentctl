@@ -32,7 +32,10 @@ import {
   type CreateRunHandoffDecisionInput,
   RunHandoffDecisionStore,
 } from '../runtime-management/run-handoff-decision-store.js';
-import { RuntimeConfigStore } from '../runtime-management/runtime-config-store.js';
+import {
+  type MachineRuntimeStateRecord,
+  RuntimeConfigStore,
+} from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
@@ -280,6 +283,8 @@ export async function createServer({
   await app.register(runtimeConfigRoutes, {
     prefix: '/api/runtime-config',
     runtimeConfigStore,
+    dbRegistry,
+    workerPort,
   });
   await app.register(runtimeSessionRoutes, {
     prefix: '/api/runtime-sessions',
@@ -545,6 +550,8 @@ export async function createServer({
 }
 
 function createFallbackRuntimeConfigStore(): RuntimeConfigRouteStore {
+  const stateMap = new Map<string, MachineRuntimeStateRecord>();
+
   return {
     async getLatestRevision() {
       return null;
@@ -558,8 +565,29 @@ function createFallbackRuntimeConfigStore(): RuntimeConfigRouteStore {
         createdAt: new Date(),
       };
     },
-    async listMachineStates() {
-      return [];
+    async listMachineStates(machineId) {
+      const all = [...stateMap.values()];
+      return machineId ? all.filter((s) => s.machineId === machineId) : all;
+    },
+    async upsertMachineState(input) {
+      const key = `${input.machineId}:${input.runtime}`;
+      const now = new Date();
+      const record: MachineRuntimeStateRecord = {
+        id: key,
+        machineId: input.machineId,
+        runtime: input.runtime,
+        isInstalled: input.isInstalled,
+        isAuthenticated: input.isAuthenticated,
+        syncStatus: input.syncStatus,
+        configVersion: input.configVersion,
+        configHash: input.configHash,
+        metadata: input.metadata,
+        lastConfigAppliedAt: input.lastConfigAppliedAt ?? null,
+        createdAt: stateMap.get(key)?.createdAt ?? now,
+        updatedAt: now,
+      };
+      stateMap.set(key, record);
+      return record;
     },
   };
 }

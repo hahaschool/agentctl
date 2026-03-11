@@ -9,6 +9,7 @@ import {
   machinesQuery,
   runtimeConfigDefaultsQuery,
   runtimeConfigDriftQuery,
+  useRefreshRuntimeConfig,
   useSyncRuntimeConfig,
 } from '@/lib/queries';
 
@@ -28,6 +29,7 @@ export function RuntimeAccessSection(): React.JSX.Element {
   const defaults = useQuery(runtimeConfigDefaultsQuery());
   const drift = useQuery(runtimeConfigDriftQuery());
   const sync = useSyncRuntimeConfig();
+  const refresh = useRefreshRuntimeConfig();
 
   const items = drift.data?.items ?? [];
 
@@ -51,7 +53,13 @@ export function RuntimeAccessSection(): React.JSX.Element {
   }
 
   function handleRefresh(): void {
-    void Promise.all([machines.refetch?.(), drift.refetch?.(), defaults.refetch?.()]);
+    refresh.mutate(undefined, {
+      onSuccess: () => {
+        toast.success('Runtime status refreshed');
+        void Promise.all([machines.refetch?.(), drift.refetch?.(), defaults.refetch?.()]);
+      },
+      onError: (err) => toast.error(`Failed to refresh runtime status: ${err.message}`),
+    });
   }
 
   return (
@@ -64,8 +72,8 @@ export function RuntimeAccessSection(): React.JSX.Element {
             complete CLI setup.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh}>
-          Refresh Status
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refresh.isPending}>
+          {refresh.isPending ? 'Refreshing…' : 'Refresh Status'}
         </Button>
       </div>
 
