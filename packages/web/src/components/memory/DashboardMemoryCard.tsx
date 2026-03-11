@@ -7,8 +7,8 @@ import Link from 'next/link';
 import type React from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { memoryStatsQuery } from '@/lib/queries';
+import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // DashboardMemoryCard — memory health summary for the main dashboard
@@ -51,16 +51,11 @@ export function DashboardMemoryCard(): React.JSX.Element {
     );
   }
 
-  return (
-    <MemoryCardContent stats={stats} />
-  );
+  return <MemoryCardContent stats={stats} />;
 }
 
 function MemoryCardContent({ stats }: { stats: MemoryStats }): React.JSX.Element {
-  const sparklineMax = Math.max(
-    1,
-    ...stats.growthTrend.map((p) => p.count),
-  );
+  const sparklineMax = Math.max(1, ...stats.growthTrend.map((p) => p.count));
   const recentPoints = stats.growthTrend.slice(-7);
 
   return (
@@ -83,25 +78,25 @@ function MemoryCardContent({ stats }: { stats: MemoryStats }): React.JSX.Element
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3">
-        <StatItem
-          label="Total Facts"
-          value={String(stats.totalFacts)}
-          accent="blue"
-        />
-        <StatItem
-          label="New This Week"
-          value={`+${stats.newThisWeek}`}
-          accent="green"
-        />
+        <StatItem label="Total Facts" value={String(stats.totalFacts)} accent="blue" />
+        <StatItem label="New This Week" value={`+${stats.newThisWeek}`} accent="green" />
         <StatItem
           label="Avg Confidence"
           value={`${Math.round(stats.avgConfidence * 100)}%`}
-          accent={stats.avgConfidence >= 0.8 ? 'green' : stats.avgConfidence >= 0.5 ? 'yellow' : 'red'}
+          accent={
+            stats.avgConfidence >= 0.8 ? 'green' : stats.avgConfidence >= 0.5 ? 'yellow' : 'red'
+          }
         />
         <StatItem
           label="Pending Review"
           value={String(stats.pendingConsolidation)}
-          accent={stats.pendingConsolidation > 10 ? 'red' : stats.pendingConsolidation > 0 ? 'yellow' : 'green'}
+          accent={
+            stats.pendingConsolidation > 10
+              ? 'red'
+              : stats.pendingConsolidation > 0
+                ? 'yellow'
+                : 'green'
+          }
         />
       </div>
 
@@ -109,6 +104,7 @@ function MemoryCardContent({ stats }: { stats: MemoryStats }): React.JSX.Element
       {recentPoints.length >= 2 && (
         <div
           className="flex items-end gap-0.5 h-8"
+          role="img"
           aria-label="Growth trend sparkline"
           data-testid="memory-sparkline"
         >

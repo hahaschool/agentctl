@@ -10,7 +10,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 import { DashboardActionButton } from '../components/DashboardActionButton';
-import { DashboardMemoryCard } from '../components/memory/DashboardMemoryCard';
 import { DashboardActivityIcon } from '../components/DashboardActivityIcon';
 import { DashboardCostOverview } from '../components/DashboardCostOverview';
 import { DashboardEmptyPanel } from '../components/DashboardEmptyPanel';
@@ -20,6 +19,7 @@ import { FetchingBar } from '../components/FetchingBar';
 import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { DashboardMemoryCard } from '../components/memory/DashboardMemoryCard';
 import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
 import { SimpleTooltip } from '../components/SimpleTooltip';

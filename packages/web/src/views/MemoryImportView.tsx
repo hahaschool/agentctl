@@ -1,7 +1,15 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle2, ChevronRight, Database, FileJson, Loader2, X } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  Database,
+  FileJson,
+  Loader2,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { importStatusQuery, useCancelImport, useStartImport } from '@/lib/queries';
@@ -64,7 +72,13 @@ type Step1Props = {
   onNext: () => void;
 };
 
-function Step1SourceDetection({ source, dbPath, onSourceChange, onDbPathChange, onNext }: Step1Props) {
+function Step1SourceDetection({
+  source,
+  dbPath,
+  onSourceChange,
+  onDbPathChange,
+  onNext,
+}: Step1Props) {
   return (
     <div className="space-y-6">
       <div>
@@ -122,9 +136,7 @@ function Step1SourceDetection({ source, dbPath, onSourceChange, onDbPathChange, 
           value={dbPath}
           onChange={(e) => onDbPathChange(e.target.value)}
           placeholder={
-            source === 'claude-mem'
-              ? '~/.claude-mem/claude-mem.db'
-              : '~/.claude/projects/'
+            source === 'claude-mem' ? '~/.claude-mem/claude-mem.db' : '~/.claude/projects/'
           }
           className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
           data-testid="db-path-input"
@@ -195,8 +207,12 @@ function Step2PreviewMapping({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Source field</th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Memory field</th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
+                Source field
+              </th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
+                Memory field
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -295,9 +311,7 @@ function Step3Progress({ jobId, progress, imported, status, onCancel }: Step3Pro
           <span className="font-mono">{progress}%</span>
         </div>
         <ProgressBar value={progress} />
-        <div className="text-xs text-muted-foreground">
-          {imported} facts imported
-        </div>
+        <div className="text-xs text-muted-foreground">{imported} facts imported</div>
       </div>
 
       {isRunning && (
@@ -412,7 +426,8 @@ export function MemoryImportView() {
   const skipped = job?.skipped ?? 0;
   const errors = job?.errors ?? 0;
   const jobStatus = job?.status ?? 'pending';
-  const isImportDone = jobStatus === 'completed' || jobStatus === 'cancelled' || jobStatus === 'failed';
+  const isImportDone =
+    jobStatus === 'completed' || jobStatus === 'cancelled' || jobStatus === 'failed';
 
   // Auto-advance from step 3 to step 4 when import completes
   useEffect(() => {
@@ -452,11 +467,11 @@ export function MemoryImportView() {
       </div>
 
       {/* Step indicator */}
-      <div className="flex items-center gap-1" role="navigation" aria-label="Import wizard steps">
+      <nav className="flex items-center gap-1" aria-label="Import wizard steps">
         {([1, 2, 3, 4] as WizardStep[]).map((s) => (
           <StepIndicator key={s} step={s} current={step} />
         ))}
-      </div>
+      </nav>
 
       {/* Step content */}
       <div className="rounded-lg border border-border p-6">

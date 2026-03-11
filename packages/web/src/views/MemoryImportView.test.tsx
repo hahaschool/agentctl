@@ -2,20 +2,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  mockUseQuery,
-  mockImportStatusQuery,
-  mockStartMutate,
-  mockCancelMutate,
-} = vi.hoisted(() => ({
-  mockUseQuery: vi.fn(),
-  mockImportStatusQuery: vi.fn(),
-  mockStartMutate: vi.fn(),
-  mockCancelMutate: vi.fn(),
-}));
+const { mockUseQuery, mockImportStatusQuery, mockStartMutate, mockCancelMutate } = vi.hoisted(
+  () => ({
+    mockUseQuery: vi.fn(),
+    mockImportStatusQuery: vi.fn(),
+    mockStartMutate: vi.fn(),
+    mockCancelMutate: vi.fn(),
+  }),
+);
 
 vi.mock('@tanstack/react-query', async () => {
-  const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
   return {
     ...actual,
     useQuery: (options: unknown) => mockUseQuery(options),
@@ -181,7 +179,14 @@ describe('MemoryImportView', () => {
 
     it('renders a cancel button while running', async () => {
       mockUseQuery.mockReturnValue({
-        data: { job: { id: 'job-1', status: 'running', progress: { current: 50, total: 100 }, imported: 30 } },
+        data: {
+          job: {
+            id: 'job-1',
+            status: 'running',
+            progress: { current: 50, total: 100 },
+            imported: 30,
+          },
+        },
         isLoading: false,
       });
       goToStep3();
@@ -192,7 +197,14 @@ describe('MemoryImportView', () => {
 
     it('calls cancelImport when cancel is clicked', async () => {
       mockUseQuery.mockReturnValue({
-        data: { job: { id: 'job-1', status: 'running', progress: { current: 50, total: 100 }, imported: 30 } },
+        data: {
+          job: {
+            id: 'job-1',
+            status: 'running',
+            progress: { current: 50, total: 100 },
+            imported: 30,
+          },
+        },
         isLoading: false,
       });
       goToStep3();
