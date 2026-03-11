@@ -129,7 +129,7 @@ export function SessionPreview({
         aria-labelledby="session-preview-title"
         tabIndex={-1}
         className={cn(
-          'fixed top-0 right-0 bottom-0 w-full sm:w-3/4 md:w-1/2 md:min-w-[400px] max-w-[800px] bg-background border-l border-border border-l-[3px] flex flex-col z-[100] shadow-[-4px_0_24px_rgba(0,0,0,0.15)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.4)] outline-none transition-colors hover:border-border',
+          'fixed top-0 right-0 bottom-0 w-full sm:w-3/4 md:w-1/2 md:min-w-[400px] max-w-[800px] bg-background border-l border-border border-l-[3px] flex flex-col z-[100] shadow-xl outline-none transition-colors hover:border-border',
           status ? statusBorderClass[status] : 'border-l-muted-foreground/30',
         )}
       >

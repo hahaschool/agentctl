@@ -13,14 +13,10 @@ export function ProgressIndicator({
   const Icon = toolName === 'bash' ? Terminal : toolName === 'task' ? Timer : Loader2;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-cyan-500/[0.04] border-l-2 border-l-cyan-400/50">
-      <Icon size={11} className="text-cyan-600 dark:text-cyan-400 shrink-0" />
+    <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-primary/[0.04] border-l-2 border-l-primary/50">
+      <Icon size={11} className="text-primary shrink-0" />
       <span className="text-[11px] font-mono text-muted-foreground truncate">{content}</span>
-      {toolName && (
-        <span className="text-[9px] text-cyan-600/60 dark:text-cyan-400/60 shrink-0 ml-auto">
-          {toolName}
-        </span>
-      )}
+      {toolName && <span className="text-[9px] text-primary/60 shrink-0 ml-auto">{toolName}</span>}
     </div>
   );
 }

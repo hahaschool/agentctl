@@ -9,7 +9,7 @@ const TYPE_COLORS: Record<string, string> = {
   feature: 'text-green-600 bg-green-500/10 border-green-500/20',
   refactor: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
   discovery: 'text-purple-600 bg-purple-500/10 border-purple-500/20',
-  change: 'text-gray-600 bg-gray-500/10 border-gray-500/20',
+  change: 'text-muted-foreground bg-muted/50 border-border',
 };
 
 /**
