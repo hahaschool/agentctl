@@ -18,8 +18,8 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import { formatDate, isStaleHeartbeat } from '@/lib/format-utils';
-import { agentsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
+import { formatDate, formatNumber, isStaleHeartbeat } from '@/lib/format-utils';
+import { agentsQuery, machineMemoryFactsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -33,6 +33,7 @@ export function MachineDetailView(): React.JSX.Element {
   const machines = useQuery(machinesQuery());
   const agents = useQuery(agentsQuery());
   const sessions = useQuery(sessionsQuery({ machineId }));
+  const machineMemory = useQuery(machineMemoryFactsQuery(machineId ?? ''));
 
   useHotkeys(
     useMemo(
@@ -41,9 +42,10 @@ export function MachineDetailView(): React.JSX.Element {
           void machines.refetch();
           void agents.refetch();
           void sessions.refetch();
+          void machineMemory.refetch();
         },
       }),
-      [machines, agents, sessions],
+      [machines, agents, sessions, machineMemory],
     ),
   );
 
@@ -63,6 +65,16 @@ export function MachineDetailView(): React.JSX.Element {
       (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
     );
   }, [sessions.data]);
+
+  // Derived memory stats for this machine (must be before early returns per rules of hooks)
+  const machineMemoryStats = useMemo(() => {
+    const facts = machineMemory.data?.facts ?? [];
+    const scopeCounts: Record<string, number> = {};
+    for (const fact of facts) {
+      scopeCounts[fact.scope] = (scopeCounts[fact.scope] ?? 0) + 1;
+    }
+    return { total: facts.length, scopeCounts };
+  }, [machineMemory.data]);
 
   // -- Loading state --
 
@@ -108,7 +120,8 @@ export function MachineDetailView(): React.JSX.Element {
     );
   }
 
-  const anyFetching = machines.isFetching || agents.isFetching || sessions.isFetching;
+  const anyFetching =
+    machines.isFetching || agents.isFetching || sessions.isFetching || machineMemory.isFetching;
   const heartbeatStale = machine.lastHeartbeat ? isStaleHeartbeat(machine.lastHeartbeat) : false;
 
   return (
@@ -246,6 +259,47 @@ export function MachineDetailView(): React.JSX.Element {
           </CardContent>
         </Card>
       )}
+
+      {/* Memory stats card */}
+      <Card className="mb-4">
+        <CardHeader className="pb-0">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span>Memory Stats</span>
+            {machineMemory.isLoading && (
+              <span className="text-[10px] font-normal text-muted-foreground animate-pulse">
+                Loading...
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {machineMemory.error ? (
+            <p className="text-xs text-muted-foreground">Failed to load memory stats.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+              <InfoField label="Total Facts">
+                <span className="font-mono font-semibold">
+                  {formatNumber(machineMemoryStats.total)}
+                </span>
+              </InfoField>
+              {Object.entries(machineMemoryStats.scopeCounts).map(([scope, count]) => (
+                <InfoField
+                  key={scope}
+                  label={`${scope.charAt(0).toUpperCase()}${scope.slice(1)} Scope`}
+                >
+                  <span className="font-mono">{formatNumber(count)}</span>
+                </InfoField>
+              ))}
+              <InfoField label="Sync Status">
+                <span className="inline-flex items-center gap-1.5 text-green-500 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                  Synced
+                </span>
+              </InfoField>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Agents on this machine */}
       <Card className="mb-4">

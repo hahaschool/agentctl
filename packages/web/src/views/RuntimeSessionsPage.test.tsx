@@ -110,6 +110,22 @@ vi.mock('@/lib/queries', () => ({
     mockRuntimeSessionPreflightQuery(id, params),
   runtimeSessionManualTakeoverQuery: (id: string) => mockRuntimeSessionHandoffsQuery(id),
   machinesQuery: () => mockMachinesQuery(),
+  memoryStatsQuery: () => ({
+    queryKey: ['memory', 'stats'],
+    queryFn: vi.fn().mockResolvedValue({
+      ok: true,
+      stats: {
+        totalFacts: 42,
+        newThisWeek: 5,
+        avgConfidence: 0.85,
+        pendingConsolidation: 2,
+        byScope: { global: 20, project: 22 },
+        byEntityType: {},
+        strengthDistribution: { active: 40, decaying: 2, archived: 0 },
+        growthTrend: [],
+      },
+    }),
+  }),
   useCreateRuntimeSession: () => ({
     mutateAsync: mockCreateMutateAsync,
     isPending: false,
@@ -322,6 +338,29 @@ function setupUseQuery(options?: {
         error: null,
         refetch: vi.fn(),
         dataUpdatedAt: 400,
+      };
+    }
+
+    if (queryKey[0] === 'memory' && queryKey[1] === 'stats') {
+      return {
+        data: {
+          ok: true,
+          stats: {
+            totalFacts: 10,
+            newThisWeek: 2,
+            avgConfidence: 0.9,
+            pendingConsolidation: 0,
+            byScope: { global: 10 },
+            byEntityType: {},
+            strengthDistribution: { active: 10, decaying: 0, archived: 0 },
+            growthTrend: [],
+          },
+        },
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+        dataUpdatedAt: 500,
       };
     }
 

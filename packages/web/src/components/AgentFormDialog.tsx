@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,15 @@ import { cn } from '@/lib/utils';
 import type { Agent, AgentConfig, Machine } from '../lib/api';
 import { shortenPath } from '../lib/format-utils';
 import { AGENT_TYPES, DEFAULT_MODEL, ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
+import { memoryScopesQuery } from '../lib/queries';
 import { STORAGE_KEYS } from '../lib/storage-keys';
+
+// ---------------------------------------------------------------------------
+// Memory budget defaults
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MEMORY_MAX_TOKENS = 2400;
+const DEFAULT_MEMORY_MAX_FACTS = 20;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,6 +64,12 @@ function pickDefaultMachine(machines: Machine[]): string {
 // Types
 // ---------------------------------------------------------------------------
 
+export type MemoryBudget = {
+  maxTokens: number;
+  maxFacts: number;
+  scopeId?: string;
+};
+
 export type AgentFormCreateData = {
   name: string;
   machineId: string;
@@ -62,6 +77,7 @@ export type AgentFormCreateData = {
   schedule?: string;
   projectPath?: string;
   config?: AgentConfig;
+  memoryBudget?: MemoryBudget;
 };
 
 export type AgentFormEditData = {
@@ -119,10 +135,16 @@ export function AgentFormDialog({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [memoryScopeId, setMemoryScopeId] = useState('');
+  const [memoryMaxTokens, setMemoryMaxTokens] = useState(String(DEFAULT_MEMORY_MAX_TOKENS));
+  const [memoryMaxFacts, setMemoryMaxFacts] = useState(String(DEFAULT_MEMORY_MAX_FACTS));
 
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const projectDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Memory scopes for the scope selector (create mode only)
+  const scopesQuery = useQuery({ ...memoryScopesQuery(), enabled: isCreate && open });
 
   // -----------------------------------------------------------------------
   // Derived data
@@ -162,6 +184,9 @@ export function AgentFormDialog({
     setSystemPrompt('');
     setProjectSearchQuery('');
     setShowProjectDropdown(false);
+    setMemoryScopeId('');
+    setMemoryMaxTokens(String(DEFAULT_MEMORY_MAX_TOKENS));
+    setMemoryMaxFacts(String(DEFAULT_MEMORY_MAX_FACTS));
   }, []);
 
   const populateEditForm = useCallback((a: Agent) => {
@@ -218,6 +243,20 @@ export function AgentFormDialog({
         }
       }
 
+      const maxTokensNum = Number(memoryMaxTokens);
+      const maxFactsNum = Number(memoryMaxFacts);
+      const hasCustomBudget =
+        maxTokensNum !== DEFAULT_MEMORY_MAX_TOKENS ||
+        maxFactsNum !== DEFAULT_MEMORY_MAX_FACTS ||
+        memoryScopeId.trim().length > 0;
+      const memoryBudget: MemoryBudget | undefined = hasCustomBudget
+        ? {
+            maxTokens: maxTokensNum > 0 ? maxTokensNum : DEFAULT_MEMORY_MAX_TOKENS,
+            maxFacts: maxFactsNum > 0 ? maxFactsNum : DEFAULT_MEMORY_MAX_FACTS,
+            ...(memoryScopeId.trim() ? { scopeId: memoryScopeId.trim() } : {}),
+          }
+        : undefined;
+
       onSubmit({
         name: agentName,
         machineId,
@@ -225,6 +264,7 @@ export function AgentFormDialog({
         ...(type === 'cron' && schedule.trim() ? { schedule: schedule.trim() } : {}),
         ...(projectPath.trim() ? { projectPath: projectPath.trim() } : {}),
         ...(Object.keys(config).length > 0 ? { config } : {}),
+        ...(memoryBudget ? { memoryBudget } : {}),
       } satisfies AgentFormCreateData);
     } else {
       if (!agent || !name.trim() || !machineId) return;
@@ -455,6 +495,83 @@ export function AgentFormDialog({
     </div>
   );
 
+  const memoryScopeSelect = isCreate ? (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium" htmlFor="create-agent-memory-scope">
+        Memory Scope
+      </label>
+      <Select
+        value={memoryScopeId || '__none__'}
+        onValueChange={(v) => setMemoryScopeId(v === '__none__' ? '' : v)}
+        disabled={isPending}
+      >
+        <SelectTrigger className="w-full" id="create-agent-memory-scope">
+          <SelectValue placeholder="All scopes (default)" />
+        </SelectTrigger>
+        <SelectContent position="popper" sideOffset={4}>
+          <SelectItem value="__none__">All scopes (default)</SelectItem>
+          {(scopesQuery.data?.scopes ?? []).map((scope) => (
+            <SelectItem key={scope.id} value={scope.id}>
+              <span className="font-medium capitalize">{scope.type}</span>
+              <span className="ml-2 text-muted-foreground text-[10px]">{scope.name}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-[11px] text-muted-foreground">
+        Restrict memory injection to a specific scope. Leave blank to include all scopes.
+      </p>
+    </div>
+  ) : null;
+
+  const memoryBudgetInputs = isCreate ? (
+    <div className="space-y-1.5">
+      <p className="text-sm font-medium">Memory Budget</p>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label
+            className="text-[11px] text-muted-foreground mb-1 block"
+            htmlFor="create-agent-mem-tokens"
+          >
+            Max Tokens
+          </label>
+          <Input
+            id="create-agent-mem-tokens"
+            type="number"
+            min={100}
+            max={32000}
+            value={memoryMaxTokens}
+            onChange={(e) => setMemoryMaxTokens(e.target.value)}
+            disabled={isPending}
+            placeholder={String(DEFAULT_MEMORY_MAX_TOKENS)}
+          />
+        </div>
+        <div>
+          <label
+            className="text-[11px] text-muted-foreground mb-1 block"
+            htmlFor="create-agent-mem-facts"
+          >
+            Max Facts
+          </label>
+          <Input
+            id="create-agent-mem-facts"
+            type="number"
+            min={1}
+            max={200}
+            value={memoryMaxFacts}
+            onChange={(e) => setMemoryMaxFacts(e.target.value)}
+            disabled={isPending}
+            placeholder={String(DEFAULT_MEMORY_MAX_FACTS)}
+          />
+        </div>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Override the memory injection budget for this agent (default: {DEFAULT_MEMORY_MAX_TOKENS}{' '}
+        tokens / {DEFAULT_MEMORY_MAX_FACTS} facts).
+      </p>
+    </div>
+  ) : null;
+
   // -----------------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------------
@@ -570,7 +687,10 @@ export function AgentFormDialog({
                   schedule.trim() ||
                   maxTurns.trim() ||
                   permissionMode !== 'default' ||
-                  systemPrompt.trim()) && (
+                  systemPrompt.trim() ||
+                  memoryScopeId.trim() ||
+                  memoryMaxTokens !== String(DEFAULT_MEMORY_MAX_TOKENS) ||
+                  memoryMaxFacts !== String(DEFAULT_MEMORY_MAX_FACTS)) && (
                   <span className="text-[10px] text-primary">(customized)</span>
                 )}
               </button>
@@ -653,6 +773,8 @@ export function AgentFormDialog({
                   {maxTurnsInput}
                   {permissionModeSelect}
                   {systemPromptTextarea}
+                  {memoryScopeSelect}
+                  {memoryBudgetInputs}
                 </div>
               )}
             </div>

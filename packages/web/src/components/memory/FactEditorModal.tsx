@@ -431,7 +431,7 @@ export function FactEditorModal({
               />
             </button>
             <label htmlFor={pinnedId} className="flex cursor-pointer items-center gap-1.5 text-sm">
-              <PinIcon className="size-3.5 text-muted-foreground" />
+              <PinIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
               Pinned
             </label>
           </div>
@@ -470,7 +470,7 @@ export function FactEditorModal({
                         }
                         className="ml-2 shrink-0 text-muted-foreground hover:text-destructive"
                       >
-                        <Trash2Icon className="size-3.5" />
+                        <Trash2Icon className="size-3.5" aria-hidden="true" />
                       </button>
                     </li>
                   );
@@ -547,7 +547,7 @@ export function FactEditorModal({
                 onClick={() => dispatch({ type: 'ADD_PENDING_EDGE' })}
                 disabled={!state.newEdgeTargetId.trim()}
               >
-                <PlusIcon className="size-4" />
+                <PlusIcon className="size-4" aria-hidden="true" />
               </Button>
             </div>
           </div>

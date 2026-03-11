@@ -1,9 +1,8 @@
+import type { MemoryStats } from '@agentctl/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
+import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-
-import type { MemoryStats } from '@agentctl/shared';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
