@@ -7,8 +7,8 @@ import type {
   MemorySearchResult,
 } from '@agentctl/shared';
 import { DEFAULT_INJECTION_BUDGET } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import type { Pool } from 'pg';
+import type { Logger } from 'pino';
 
 import type { EmbeddingClient } from './embedding-client.js';
 
@@ -98,7 +98,11 @@ export class MemorySearch {
       DEFAULT_CANDIDATE_LIMIT,
       input.entityType,
     );
-    const graphResults = await this.graphSearch(input.query, visibleScopes, DEFAULT_CANDIDATE_LIMIT);
+    const graphResults = await this.graphSearch(
+      input.query,
+      visibleScopes,
+      DEFAULT_CANDIDATE_LIMIT,
+    );
 
     const fused = new Map<string, { fact: MemoryFact; rrfScore: number; sources: Set<string> }>();
 

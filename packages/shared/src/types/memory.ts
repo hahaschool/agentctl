@@ -9,11 +9,7 @@ export type MemoryObservation = {
   created_at: string;
 };
 
-export type MemoryScope =
-  | 'global'
-  | `project:${string}`
-  | `agent:${string}`
-  | `session:${string}`;
+export type MemoryScope = 'global' | `project:${string}` | `agent:${string}` | `session:${string}`;
 
 export type EntityType =
   | 'code_artifact'

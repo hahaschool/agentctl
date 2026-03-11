@@ -230,15 +230,12 @@ export const nativeImportAttempts = pgTable(
   ],
 );
 
-export const memoryScopes = pgTable(
-  'memory_scopes',
-  {
-    scope: text('scope').primaryKey(),
-    parentScope: text('parent_scope').references((): AnyPgColumn => memoryScopes.scope),
-    displayName: text('display_name'),
-    configJson: jsonb('config_json').notNull().default({}),
-  },
-);
+export const memoryScopes = pgTable('memory_scopes', {
+  scope: text('scope').primaryKey(),
+  parentScope: text('parent_scope').references((): AnyPgColumn => memoryScopes.scope),
+  displayName: text('display_name'),
+  configJson: jsonb('config_json').notNull().default({}),
+});
 
 export const memoryFacts = pgTable(
   'memory_facts',

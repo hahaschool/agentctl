@@ -6,8 +6,8 @@ import type {
   MemoryScope,
   RelationType,
 } from '@agentctl/shared';
-import type { Logger } from 'pino';
 import type { Pool } from 'pg';
+import type { Logger } from 'pino';
 
 import type { EmbeddingClient } from './embedding-client.js';
 

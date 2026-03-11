@@ -14,7 +14,9 @@ function createMockEmbedding(): EmbeddingClient {
   } as unknown as EmbeddingClient;
 }
 
-function makeFakeFactRow(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function makeFakeFactRow(
+  overrides: Partial<Record<string, unknown>> = {},
+): Record<string, unknown> {
   const now = new Date().toISOString();
   return {
     id: 'fact-1',
@@ -112,7 +114,10 @@ describe('MemorySearch', () => {
     const pool = {
       query: vi
         .fn()
-        .mockResolvedValueOnce({ rows: [makeFakeFactRow({ id: 'fact-bm25', rank: 1 })], rowCount: 1 })
+        .mockResolvedValueOnce({
+          rows: [makeFakeFactRow({ id: 'fact-bm25', rank: 1 })],
+          rowCount: 1,
+        })
         .mockResolvedValueOnce({ rows: [], rowCount: 0 })
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
     };
