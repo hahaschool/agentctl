@@ -1,6 +1,6 @@
 'use client';
 
-import type { MemoryObservation } from '@agentctl/shared';
+import type { MemoryFact, MemoryObservation } from '@agentctl/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Session, type SessionContentMessage } from '@/lib/api';
@@ -12,7 +12,12 @@ import { ContextMessageRow } from './ContextMessageRow';
 import { ContextPickerToolbar } from './ContextPickerToolbar';
 import { ContextSummaryBar } from './ContextSummaryBar';
 import { ForkConfigPanel } from './ForkConfigPanel';
-import { MemoryPanel, matchObservationToMessages } from './MemoryPanel';
+import {
+  MemoryPanel,
+  matchFactToMessages,
+  matchObservationToMessages,
+  UnifiedMemoryPanel,
+} from './MemoryPanel';
 import { buildPromptPreview, PromptPreview } from './PromptPreview';
 import { findByTopicIndices, findKeyDecisionIndices } from './SmartSelectTools';
 
@@ -108,15 +113,19 @@ export function ContextPickerDialog({
   const [debouncedMemoryQuery, setDebouncedMemoryQuery] = useState('');
   const [timelineObservations, setTimelineObservations] = useState<MemoryObservation[]>([]);
   const [searchObservations, setSearchObservations] = useState<MemoryObservation[]>([]);
+  const [unifiedFacts, setUnifiedFacts] = useState<MemoryFact[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [selectedObservationId, setSelectedObservationId] = useState<number | undefined>();
+  const [selectedFactId, setSelectedFactId] = useState<string | undefined>();
 
   useEffect(() => {
     if (!open) {
       setMemoryQuery('');
       setDebouncedMemoryQuery('');
       setSelectedObservationId(undefined);
+      setSelectedFactId(undefined);
       setSearchObservations([]);
+      setUnifiedFacts([]);
       setMemoryLoading(false);
       return;
     }
@@ -160,23 +169,38 @@ export function ContextPickerDialog({
   useEffect(() => {
     if (!open || debouncedMemoryQuery.length < 2) {
       setSearchObservations([]);
+      setUnifiedFacts([]);
       return;
     }
 
     let cancelled = false;
     setMemoryLoading(true);
 
-    api
-      .searchMemory({
+    // Run legacy claude-mem search and unified memory search in parallel
+    Promise.allSettled([
+      api.searchMemory({
         q: debouncedMemoryQuery,
         ...(session.projectPath ? { project: session.projectPath } : {}),
         limit: 20,
-      })
-      .then((res) => {
-        if (!cancelled) setSearchObservations(res.observations ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setSearchObservations([]);
+      }),
+      api.searchMemoryFacts({
+        q: debouncedMemoryQuery,
+        ...(session.agentId ? { agentId: session.agentId } : {}),
+        limit: 20,
+      }),
+    ])
+      .then(([legacyResult, unifiedResult]) => {
+        if (cancelled) return;
+        if (legacyResult.status === 'fulfilled') {
+          setSearchObservations(legacyResult.value.observations ?? []);
+        } else {
+          setSearchObservations([]);
+        }
+        if (unifiedResult.status === 'fulfilled') {
+          setUnifiedFacts(unifiedResult.value.facts ?? []);
+        } else {
+          setUnifiedFacts([]);
+        }
       })
       .finally(() => {
         if (!cancelled) setMemoryLoading(false);
@@ -185,7 +209,7 @@ export function ContextPickerDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, debouncedMemoryQuery, session.projectPath]);
+  }, [open, debouncedMemoryQuery, session.projectPath, session.agentId]);
 
   // -------------------------------------------------------------------------
   // Derived data
@@ -325,7 +349,32 @@ export function ContextPickerDialog({
   const handleSelectObservation = useCallback(
     (observation: MemoryObservation) => {
       setSelectedObservationId(observation.id);
+      setSelectedFactId(undefined);
       const matches = matchObservationToMessages(observation, messages);
+      if (matches.length === 0) return;
+
+      setFilterType('all');
+      setSearchQuery('');
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const index of matches) next.add(index);
+        return next;
+      });
+
+      const firstMatch = matches[0];
+      window.setTimeout(() => {
+        const row = document.getElementById(`cpd-row-${String(firstMatch)}`);
+        row?.scrollIntoView({ block: 'center' });
+      }, 0);
+    },
+    [messages],
+  );
+
+  const handleSelectFact = useCallback(
+    (fact: MemoryFact) => {
+      setSelectedFactId(fact.id);
+      setSelectedObservationId(undefined);
+      const matches = matchFactToMessages(fact, messages);
       if (matches.length === 0) return;
 
       setFilterType('all');
@@ -519,12 +568,22 @@ export function ContextPickerDialog({
               <div className="px-3 pt-2 pb-1 text-[10px] text-muted-foreground">
                 {debouncedMemoryQuery.length >= 2 ? 'Memory Search Results' : 'Session Memories'}
               </div>
-              <MemoryPanel
-                observations={memoryObservations}
-                isLoading={memoryLoading}
-                onSelectObservation={handleSelectObservation}
-                selectedObservationId={selectedObservationId}
-              />
+              {debouncedMemoryQuery.length >= 2 && unifiedFacts.length > 0 ? (
+                <UnifiedMemoryPanel
+                  facts={unifiedFacts}
+                  isLoading={memoryLoading}
+                  onSelectFact={handleSelectFact}
+                  selectedFactId={selectedFactId}
+                  label="Searching unified memory..."
+                />
+              ) : (
+                <MemoryPanel
+                  observations={memoryObservations}
+                  isLoading={memoryLoading}
+                  onSelectObservation={handleSelectObservation}
+                  selectedObservationId={selectedObservationId}
+                />
+              )}
             </div>
 
             {/* Virtualized message list */}

@@ -563,6 +563,7 @@ export class MemoryStore {
   }
 
   private async detectAndFlagContradictions(newFactId: string): Promise<void> {
+    // Phase 1: flag pre-existing contradicts edges
     const { rows } = await this.pool.query(
       `SELECT source_fact_id, target_fact_id
        FROM memory_edges
@@ -578,6 +579,77 @@ export class MemoryStore {
         factIds: [row.source_fact_id, row.target_fact_id],
         suggestion: 'Review and resolve contradicting facts',
         reason: `New fact ${newFactId} has pre-existing contradicts relationship`,
+      });
+    }
+
+    // Phase 2: detect semantic contradictions via vector similarity (>0.9 cosine similarity)
+    await this.detectSemanticContradictions(newFactId);
+  }
+
+  private async detectSemanticContradictions(newFactId: string): Promise<void> {
+    // Fetch the new fact's embedding
+    const factResult = await this.pool.query(
+      `SELECT content, embedding
+       FROM memory_facts
+       WHERE id = $1 AND embedding IS NOT NULL`,
+      [newFactId],
+    );
+
+    const factRow = factResult.rows[0] as Record<string, unknown> | undefined;
+    if (!factRow) {
+      return;
+    }
+
+    const newContent = String(factRow.content);
+    const embeddingRaw = factRow.embedding;
+    if (!embeddingRaw) {
+      return;
+    }
+
+    // Find facts with cosine similarity > 0.9 but different content
+    const SIMILARITY_THRESHOLD = 0.9;
+    const { rows: similarRows } = await this.pool.query(
+      `SELECT id, content,
+              1 - (embedding <=> $1::vector) AS cosine_similarity
+       FROM memory_facts
+       WHERE id <> $2
+         AND valid_until IS NULL
+         AND embedding IS NOT NULL
+         AND 1 - (embedding <=> $1::vector) > $3`,
+      [embeddingRaw, newFactId, SIMILARITY_THRESHOLD],
+    );
+
+    for (const row of similarRows as Array<{
+      id: string;
+      content: string;
+      cosine_similarity: number;
+    }>) {
+      // Only flag as contradictions when content differs meaningfully
+      if (row.content === newContent) {
+        continue;
+      }
+
+      // Check if a contradicts edge already exists between these facts
+      const { rows: existingEdge } = await this.pool.query(
+        `SELECT id FROM memory_edges
+         WHERE relation = 'contradicts'
+           AND (
+             (source_fact_id = $1 AND target_fact_id = $2)
+             OR (source_fact_id = $2 AND target_fact_id = $1)
+           )`,
+        [newFactId, row.id],
+      );
+
+      if ((existingEdge as unknown[]).length > 0) {
+        continue;
+      }
+
+      // Create a contradicts edge between the two facts
+      await this.addEdge({
+        source_fact_id: newFactId,
+        target_fact_id: row.id,
+        relation: 'contradicts',
+        weight: Number(row.cosine_similarity),
       });
     }
   }

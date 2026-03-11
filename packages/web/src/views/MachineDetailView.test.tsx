@@ -118,10 +118,15 @@ vi.mock('@/components/Breadcrumb', () => ({
   ),
 }));
 
+const { mockMachineMemoryFactsQuery } = vi.hoisted(() => ({
+  mockMachineMemoryFactsQuery: vi.fn(),
+}));
+
 vi.mock('@/lib/queries', () => ({
   machinesQuery: () => mockMachinesQuery(),
   agentsQuery: () => mockAgentsQuery(),
   sessionsQuery: (...args: unknown[]) => mockSessionsQuery(...args),
+  machineMemoryFactsQuery: (...args: unknown[]) => mockMachineMemoryFactsQuery(...args),
 }));
 
 // ---------------------------------------------------------------------------
@@ -237,6 +242,11 @@ describe('MachineDetailView', () => {
         offset: 0,
         hasMore: false,
       }),
+    });
+
+    mockMachineMemoryFactsQuery.mockReturnValue({
+      queryKey: ['memory', 'facts', { machineId: 'machine-1' }],
+      queryFn: vi.fn().mockResolvedValue({ ok: true, facts: [], total: 0 }),
     });
   });
 

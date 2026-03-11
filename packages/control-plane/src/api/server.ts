@@ -12,6 +12,7 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyWebsocket from '@fastify/websocket';
 import type { Queue } from 'bullmq';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
@@ -57,6 +58,7 @@ import { memoryFactRoutes } from './routes/memory-facts.js';
 import { memoryImportRoutes } from './routes/memory-import.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
+import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
@@ -99,6 +101,7 @@ type CreateServerOptions = {
     | 'updateFact'
   >;
   memoryInjector?: MemoryInjector | null;
+  pgPool?: Pool;
   workerPort?: number;
   isProduction?: boolean;
   corsOrigins?: string;
@@ -119,6 +122,7 @@ export async function createServer({
   memorySearch,
   memoryStore,
   memoryInjector = null,
+  pgPool,
   workerPort = 9000,
   isProduction: isProductionOverride,
   corsOrigins: corsOriginsOverride,
@@ -404,6 +408,15 @@ export async function createServer({
     await app.register(memoryRoutes, {
       prefix: '/api/memory',
       mem0Client,
+    });
+  }
+
+  // Register knowledge synthesis route when a raw pg pool is available.
+  if (pgPool) {
+    await app.register(memorySynthesisRoutes, {
+      prefix: '/api/memory/synthesis',
+      pool: pgPool,
+      logger,
     });
   }
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildExtractionPrompt, EXTRACTION_QUALITY_RULES } from './extraction-prompt.js';
 
 describe('extraction quality rules', () => {
-  it('contains all four quality rule headings', () => {
+  it('contains all five quality rule headings', () => {
     expect(EXTRACTION_QUALITY_RULES).toContain('Rule 1');
     expect(EXTRACTION_QUALITY_RULES).toContain('Atomicity');
     expect(EXTRACTION_QUALITY_RULES).toContain('Rule 2');
@@ -12,6 +12,8 @@ describe('extraction quality rules', () => {
     expect(EXTRACTION_QUALITY_RULES).toContain('Outcome');
     expect(EXTRACTION_QUALITY_RULES).toContain('Rule 4');
     expect(EXTRACTION_QUALITY_RULES).toContain('Confidence');
+    expect(EXTRACTION_QUALITY_RULES).toContain('Rule 5');
+    expect(EXTRACTION_QUALITY_RULES).toContain('Contradiction');
   });
 
   it('specifies confidence scoring tiers', () => {
@@ -38,6 +40,16 @@ describe('extraction quality rules', () => {
   it('includes JSON output format', () => {
     expect(EXTRACTION_QUALITY_RULES).toContain('"content"');
     expect(EXTRACTION_QUALITY_RULES).toContain('"confidence"');
+  });
+
+  it('includes may_contradict flag in the expected output format', () => {
+    expect(EXTRACTION_QUALITY_RULES).toContain('may_contradict');
+    expect(EXTRACTION_QUALITY_RULES).toContain('true|false');
+  });
+
+  it('instructs model to use specific names and rate confidence', () => {
+    expect(EXTRACTION_QUALITY_RULES).toContain('specific names');
+    expect(EXTRACTION_QUALITY_RULES).toContain('Rate your own confidence');
   });
 });
 

@@ -395,6 +395,15 @@ export function memoryStatsQuery() {
   });
 }
 
+export function machineMemoryFactsQuery(machineId: string) {
+  return queryOptions({
+    queryKey: queryKeys.memory.facts({ machineId }),
+    queryFn: () => api.searchMemoryFacts({ machineId, limit: 200 }),
+    enabled: !!machineId,
+    staleTime: 30_000,
+  });
+}
+
 export function memoryTimelineQuery(sessionId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.memory.timeline(sessionId ?? ''),

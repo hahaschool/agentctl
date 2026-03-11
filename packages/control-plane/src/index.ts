@@ -318,6 +318,7 @@ async function main(): Promise<void> {
   let memorySearch: MemorySearch | undefined;
   let memoryStore: MemoryStore | undefined;
   let memoryInjector: MemoryInjector | undefined;
+  let pgPool: import('pg').Pool | undefined;
 
   const canUsePostgresMemory = Boolean(db && LITELLM_URL);
 
@@ -328,15 +329,15 @@ async function main(): Promise<void> {
         model: 'text-embedding-3-small',
         logger: logger.child({ component: 'embedding-client' }),
       });
-      const pool = (db as Database & { $client: import('pg').Pool }).$client;
+      pgPool = (db as Database & { $client: import('pg').Pool }).$client;
 
       memoryStore = new MemoryStore({
-        pool,
+        pool: pgPool,
         embeddingClient,
         logger: logger.child({ component: 'memory-store' }),
       });
       memorySearch = new MemorySearch({
-        pool,
+        pool: pgPool,
         embeddingClient,
         logger: logger.child({ component: 'memory-search' }),
       });
@@ -430,6 +431,7 @@ async function main(): Promise<void> {
     memorySearch,
     memoryStore,
     memoryInjector: memoryInjector ?? null,
+    pgPool,
     workerPort: REMOTE_WORKER_PORT,
     isProduction: IS_PRODUCTION,
     corsOrigins: CORS_ORIGINS || undefined,

@@ -1,4 +1,4 @@
-import type { MemoryObservation } from '@agentctl/shared';
+import type { MemoryFact, MemoryObservation } from '@agentctl/shared';
 import React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -10,6 +10,13 @@ const TYPE_COLORS: Record<string, string> = {
   refactor: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
   discovery: 'text-purple-600 bg-purple-500/10 border-purple-500/20',
   change: 'text-muted-foreground bg-muted/50 border-border',
+};
+
+const SCOPE_COLORS: Record<string, string> = {
+  global: 'text-violet-600 bg-violet-500/10 border-violet-500/20',
+  project: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
+  session: 'text-green-600 bg-green-500/10 border-green-500/20',
+  agent: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
 };
 
 /**
@@ -74,6 +81,40 @@ export function matchObservationToMessages(
   return Array.from(indices).sort((a, b) => a - b);
 }
 
+/**
+ * Match a unified MemoryFact to message indices by extracting keywords
+ * from the fact content, then checking which messages contain those keywords.
+ */
+export function matchFactToMessages(
+  fact: MemoryFact,
+  messages: { type: string; content: string }[],
+): number[] {
+  const indices = new Set<number>();
+  const keywords = fact.content
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 10)
+    .map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (!msg) continue;
+    const content = msg.content.toLowerCase();
+    for (const kw of keywords) {
+      if (kw.length >= 4 && content.includes(kw)) {
+        indices.add(i);
+        break;
+      }
+    }
+  }
+
+  return Array.from(indices).sort((a, b) => a - b);
+}
+
+// ---------------------------------------------------------------------------
+// Legacy claude-mem MemoryPanel
+// ---------------------------------------------------------------------------
+
 type MemoryPanelProps = {
   observations: MemoryObservation[];
   isLoading: boolean;
@@ -116,6 +157,71 @@ export const MemoryPanel = React.memo(function MemoryPanel({
           </div>
         </button>
       ))}
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Unified memory facts panel
+// ---------------------------------------------------------------------------
+
+type UnifiedMemoryPanelProps = {
+  facts: MemoryFact[];
+  isLoading: boolean;
+  onSelectFact: (fact: MemoryFact) => void;
+  selectedFactId?: string;
+  label?: string;
+};
+
+export const UnifiedMemoryPanel = React.memo(function UnifiedMemoryPanel({
+  facts,
+  isLoading,
+  onSelectFact,
+  selectedFactId,
+  label,
+}: UnifiedMemoryPanelProps): React.ReactNode {
+  if (isLoading) {
+    return (
+      <div className="p-3 text-xs text-muted-foreground animate-pulse">
+        {label ?? 'Searching memory...'}
+      </div>
+    );
+  }
+
+  if (facts.length === 0) {
+    return (
+      <div className="p-3 text-xs text-muted-foreground">No relevant facts found in memory.</div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1 p-2 max-h-48 overflow-y-auto">
+      {facts.map((fact) => {
+        const scopeClass = SCOPE_COLORS[fact.scope] ?? SCOPE_COLORS.project;
+        const confidencePct = Math.round((fact.confidence ?? 1) * 100);
+        return (
+          <button
+            key={fact.id}
+            type="button"
+            onClick={() => onSelectFact(fact)}
+            className={cn(
+              'text-left p-2 rounded-md border text-xs transition-colors cursor-pointer',
+              selectedFactId === fact.id ? 'ring-2 ring-primary/40' : 'hover:bg-muted/50',
+              scopeClass,
+            )}
+          >
+            <div className="flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[9px] font-medium uppercase opacity-70 shrink-0">
+                  {fact.scope}
+                </span>
+                <span className="font-medium truncate">{fact.content}</span>
+              </div>
+              <span className="text-[9px] opacity-60 shrink-0">{confidencePct}%</span>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 });

@@ -23,8 +23,19 @@ import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
 import type { RuntimeSession } from '../lib/api';
 import { formatDuration, formatNumber, timeAgo, truncate } from '../lib/format-utils';
-import { machinesQuery, runtimeSessionsQuery, useCreateRuntimeSession } from '../lib/queries';
+import {
+  machinesQuery,
+  memoryStatsQuery,
+  runtimeSessionsQuery,
+  useCreateRuntimeSession,
+} from '../lib/queries';
 import { RuntimeSessionPanel } from './RuntimeSessionPanel';
+
+// ---------------------------------------------------------------------------
+// Memory injection budget constants
+// ---------------------------------------------------------------------------
+
+const MEMORY_TOKEN_BUDGET = 2_400;
 
 const RUNTIME_OPTIONS = [
   { value: 'all', label: 'All runtimes' },
@@ -51,6 +62,40 @@ const SESSION_SKELETON_KEYS = [
 
 function runtimeLabel(runtime: RuntimeSession['runtime']): string {
   return runtime === 'claude-code' ? 'Claude Code' : 'Codex';
+}
+
+// ---------------------------------------------------------------------------
+// MemoryInjectionBadge sub-component
+// ---------------------------------------------------------------------------
+
+type MemoryInjectionBadgeProps = {
+  usedTokens: number;
+  budgetTokens: number;
+};
+
+function MemoryInjectionBadge({
+  usedTokens,
+  budgetTokens,
+}: MemoryInjectionBadgeProps): React.JSX.Element {
+  const pct = budgetTokens > 0 ? Math.min(usedTokens / budgetTokens, 1) : 0;
+  const isHigh = pct > 0.85;
+  const isMed = pct > 0.5;
+  const colorClass = isHigh ? 'text-amber-500' : isMed ? 'text-blue-400' : 'text-muted-foreground';
+
+  return (
+    <span
+      className={cn('inline-flex items-center gap-1 text-[10px]', colorClass)}
+      title={`Memory injection: ${String(usedTokens)} / ${String(budgetTokens)} tokens`}
+    >
+      <span
+        className={cn(
+          'h-1.5 w-1.5 rounded-full shrink-0',
+          isHigh ? 'bg-amber-500' : isMed ? 'bg-blue-400' : 'bg-muted-foreground/40',
+        )}
+      />
+      {formatNumber(usedTokens)} / {formatNumber(budgetTokens)} tkn
+    </span>
+  );
 }
 
 function getSessionActivity(session: RuntimeSession): string | null {
@@ -89,7 +134,22 @@ export function RuntimeSessionsPage(): React.JSX.Element {
 
   const sessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
   const machines = useQuery(machinesQuery());
+  const memStats = useQuery(memoryStatsQuery());
   const createMutation = useCreateRuntimeSession();
+
+  // Derive per-session memory injection token estimates from global stats
+  const sessionMemoryTokens = useMemo(() => {
+    const stats = memStats.data?.stats;
+    if (!stats) return 0;
+    // Rough estimate: totalFacts * avg chars per fact / chars-per-token
+    // We surface the global total as a proxy for what gets injected per session
+    const avgCharsPerFact = 120;
+    const charsPerToken = 3.5;
+    return Math.min(
+      Math.round((stats.totalFacts * avgCharsPerFact) / charsPerToken),
+      MEMORY_TOKEN_BUDGET,
+    );
+  }, [memStats.data]);
   const availableMachines = useMemo(
     () => sortMachinesForSelection(machines.data ?? []),
     [machines.data],
@@ -144,7 +204,11 @@ export function RuntimeSessionsPage(): React.JSX.Element {
   const handingOffCount = (sessions.data?.sessions ?? []).filter(
     (session) => session.status === 'handing_off',
   ).length;
-  const combinedUpdatedAt = Math.max(sessions.dataUpdatedAt || 0, machines.dataUpdatedAt || 0);
+  const combinedUpdatedAt = Math.max(
+    sessions.dataUpdatedAt || 0,
+    machines.dataUpdatedAt || 0,
+    memStats.dataUpdatedAt || 0,
+  );
 
   useEffect(() => {
     if (createMachineId) return;
@@ -441,6 +505,10 @@ export function RuntimeSessionsPage(): React.JSX.Element {
                             session.endedAt,
                           )}
                         </div>
+                        <MemoryInjectionBadge
+                          usedTokens={sessionMemoryTokens}
+                          budgetTokens={MEMORY_TOKEN_BUDGET}
+                        />
                       </div>
                     </div>
                   </button>
