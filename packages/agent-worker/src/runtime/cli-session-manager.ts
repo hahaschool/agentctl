@@ -14,6 +14,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { normalize, resolve as resolvePath } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 
@@ -229,13 +230,26 @@ export class CliSessionManager extends EventEmitter {
     // Build child environment with credential injection
     const childEnv = buildChildEnv(options.accountProvider, options.accountCredential);
 
+    // Security: sanitize projectPath used as cwd to prevent path injection
+    // (js/path-injection). Callers (sessionRoutes) should already validate,
+    // but we apply defense-in-depth here by normalizing and rejecting paths
+    // containing sensitive directory names.
+    const DENIED_CWD_SEGMENTS = ['.ssh', '.gnupg', '.aws', '.env', 'credentials'];
+    const sanitizedCwd = resolvePath(normalize(options.projectPath));
+    const cwdSegments = sanitizedCwd.split('/');
+    for (const segment of cwdSegments) {
+      if (DENIED_CWD_SEGMENTS.includes(segment)) {
+        throw new AgentError('INVALID_PATH', `Project path contains denied segment "${segment}"`, {
+          projectPath: sanitizedCwd,
+        });
+      }
+    }
+
     // Spawn the CLI process.
     // stdin is set to 'ignore' — the CLI in `-p` mode doesn't read from stdin,
     // and keeping stdin open can cause the process to hang waiting for EOF.
-    // Security: projectPath must be validated by the caller (sessionRoutes) via
-    // validateProjectPath() before reaching here to prevent js/path-injection.
     const child = spawn(options.claudePath ?? this.claudePath, args, {
-      cwd: options.projectPath,
+      cwd: sanitizedCwd,
       env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

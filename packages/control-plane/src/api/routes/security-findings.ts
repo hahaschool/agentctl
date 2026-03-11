@@ -519,6 +519,22 @@ export const securityFindingsRoutes: FastifyPluginAsync<SecurityFindingsRoutesOp
         });
       }
 
+      // Security: validate owner and repo to prevent SSRF (js/request-forgery).
+      // Only allow valid GitHub identifiers (alphanumeric, hyphens, underscores, dots).
+      const githubIdentifierPattern = /^[A-Za-z0-9._-]+$/;
+      if (!githubIdentifierPattern.test(owner)) {
+        return reply.code(400).send({
+          error: 'INVALID_OWNER',
+          message: 'Owner contains invalid characters',
+        });
+      }
+      if (!githubIdentifierPattern.test(repo)) {
+        return reply.code(400).send({
+          error: 'INVALID_REPO',
+          message: 'Repo contains invalid characters',
+        });
+      }
+
       if (labels !== undefined && !Array.isArray(labels)) {
         return reply.code(400).send({
           error: 'INVALID_LABELS',

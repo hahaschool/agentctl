@@ -7,6 +7,16 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const CLAUDE_MEM_DB_PATH = join(homedir(), '.claude-mem', 'claude-mem.db');
 
+// Per-route rate limit config (stricter than the global limit for memory queries)
+const CLAUDE_MEM_RATE_LIMIT = {
+  config: {
+    rateLimit: {
+      max: 60,
+      timeWindow: '1 minute',
+    },
+  },
+};
+
 function openDb(): Database.Database | null {
   if (!existsSync(CLAUDE_MEM_DB_PATH)) return null;
   return new Database(CLAUDE_MEM_DB_PATH, { readonly: true });
@@ -21,7 +31,10 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     Querystring: { q?: string; project?: string; type?: string; limit?: string };
   }>(
     '/search',
-    { schema: { tags: ['memory'], summary: 'Search claude-mem observations' } },
+    {
+      schema: { tags: ['memory'], summary: 'Search claude-mem observations' },
+      ...CLAUDE_MEM_RATE_LIMIT,
+    },
     async (request, reply) => {
       const { q, project, type, limit } = request.query;
       if (!q) {
@@ -75,7 +88,7 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     Params: { id: string };
   }>(
     '/observations/:id',
-    { schema: { tags: ['memory'], summary: 'Get observation by ID' } },
+    { schema: { tags: ['memory'], summary: 'Get observation by ID' }, ...CLAUDE_MEM_RATE_LIMIT },
     async (request, reply) => {
       const { id } = request.params;
       const db = openDb();
@@ -105,7 +118,10 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     Querystring: { sessionId?: string; limit?: string };
   }>(
     '/timeline',
-    { schema: { tags: ['memory'], summary: 'Get observation timeline for a session' } },
+    {
+      schema: { tags: ['memory'], summary: 'Get observation timeline for a session' },
+      ...CLAUDE_MEM_RATE_LIMIT,
+    },
     async (request, reply) => {
       const { sessionId, limit } = request.query;
       if (!sessionId) {

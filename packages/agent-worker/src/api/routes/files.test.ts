@@ -15,6 +15,11 @@ vi.mock('node:fs', () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+  openSync: vi.fn(),
+  readSync: vi.fn(),
+  closeSync: vi.fn(),
+  fstatSync: vi.fn(),
+  constants: { O_RDONLY: 0, O_NOFOLLOW: 0x20000 },
 }));
 
 // We need os.homedir() to return a stable path for validatePath()
@@ -22,7 +27,16 @@ vi.mock('node:os', () => ({
   homedir: () => '/Users/testuser',
 }));
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -197,7 +211,11 @@ describe('File routes', () => {
     });
 
     it('returns 404 when directory does not exist (ENOENT)', async () => {
-      vi.mocked(existsSync).mockReturnValue(false);
+      const err = new Error('ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      vi.mocked(statSync).mockImplementation(() => {
+        throw err;
+      });
 
       const res = await app.inject({
         method: 'GET',
@@ -261,9 +279,14 @@ describe('File routes', () => {
   describe('GET /api/files/content (read file)', () => {
     it('returns file content with path and size', async () => {
       const filePath = '/Users/testuser/project/index.ts';
-      vi.mocked(existsSync).mockReturnValue(true);
-      vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: 42 }));
-      vi.mocked(readFileSync).mockReturnValue('console.log("hello");');
+      const fileContent = 'console.log("hello");';
+      const fd = 42;
+      vi.mocked(openSync).mockReturnValue(fd);
+      vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: fileContent.length }));
+      vi.mocked(readSync).mockImplementation((_fd, buf: Buffer) => {
+        buf.write(fileContent);
+        return fileContent.length;
+      });
 
       const res = await app.inject({
         method: 'GET',
@@ -272,9 +295,10 @@ describe('File routes', () => {
 
       expect(res.statusCode).toBe(200);
       const body = res.json();
-      expect(body.content).toBe('console.log("hello");');
+      expect(body.content).toBe(fileContent);
       expect(body.path).toBe(filePath);
-      expect(body.size).toBe(42);
+      expect(body.size).toBe(fileContent.length);
+      expect(closeSync).toHaveBeenCalledWith(fd);
     });
 
     it('returns 400 when path is missing', async () => {
@@ -288,7 +312,11 @@ describe('File routes', () => {
     });
 
     it('returns 404 when file does not exist', async () => {
-      vi.mocked(existsSync).mockReturnValue(false);
+      const err = new Error('ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      vi.mocked(openSync).mockImplementation(() => {
+        throw err;
+      });
 
       const res = await app.inject({
         method: 'GET',
@@ -300,7 +328,8 @@ describe('File routes', () => {
     });
 
     it('returns 400 when path is a directory', async () => {
-      vi.mocked(existsSync).mockReturnValue(true);
+      const fd = 10;
+      vi.mocked(openSync).mockReturnValue(fd);
       vi.mocked(statSync).mockReturnValue(makeStat({ isDirectory: true }));
 
       const res = await app.inject({
@@ -312,10 +341,12 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.error).toBe('INVALID_PATH');
       expect(body.message).toContain('directory');
+      expect(closeSync).toHaveBeenCalledWith(fd);
     });
 
     it('returns 400 when file exceeds maximum size', async () => {
-      vi.mocked(existsSync).mockReturnValue(true);
+      const fd = 11;
+      vi.mocked(openSync).mockReturnValue(fd);
       vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: 2_000_000 }));
 
       const res = await app.inject({
@@ -327,6 +358,7 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.error).toBe('INVALID_PATH');
       expect(body.message).toContain('maximum size');
+      expect(closeSync).toHaveBeenCalledWith(fd);
     });
 
     it('returns 400 for denied path segments', async () => {

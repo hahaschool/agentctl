@@ -1,3 +1,4 @@
+import { constants } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 
 import { WorkerError } from '@agentctl/shared';
@@ -138,7 +139,10 @@ export class AuditReporter {
 
       const newBytes = fileSize - this.byteOffset;
       const buffer = Buffer.alloc(newBytes);
-      const handle = await open(this.auditFilePath, 'r');
+      // Security: use O_NOFOLLOW to prevent symlink attacks on predictable audit
+      // file paths (js/insecure-temporary-file). This ensures we only read the
+      // actual audit file and not a symlink planted by an attacker.
+      const handle = await open(this.auditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
 
       try {
         await handle.read(buffer, 0, newBytes, this.byteOffset);
