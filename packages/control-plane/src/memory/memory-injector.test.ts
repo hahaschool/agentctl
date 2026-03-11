@@ -354,5 +354,92 @@ describe('MemoryInjector', () => {
       expect(context).toContain('Use Biome for linting');
       expect(context).toContain('Use --cap-drop=ALL in Docker');
     });
+
+    it('prioritises pinned principle facts above on-demand skill and experience facts', async () => {
+      const principleSource = {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual' as const,
+      };
+
+      const principleFact = {
+        id: 'principle-1',
+        scope: 'global',
+        content: 'Always write tests before implementation (TDD)',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'principle',
+        confidence: 1.0,
+        strength: 1.0,
+        source: principleSource,
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+        pinned: true,
+      };
+
+      const skillFact = {
+        id: 'skill-1',
+        scope: 'agent:agent-1',
+        content: 'Proficient in TypeScript generics and discriminated unions',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'skill',
+        confidence: 0.85,
+        strength: 0.9,
+        source: { ...principleSource, agent_id: 'agent-1' },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+
+      const experienceFact = {
+        id: 'experience-1',
+        scope: 'agent:agent-1',
+        content: 'Migrated control-plane from Express to Fastify in March 2026',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'experience',
+        confidence: 0.9,
+        strength: 1.0,
+        source: { ...principleSource, agent_id: 'agent-1' },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([
+          { fact: skillFact, score: 0.91, source_path: 'vector' },
+          { fact: experienceFact, score: 0.85, source_path: 'bm25' },
+        ]),
+      });
+
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([principleFact, skillFact, experienceFact]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Implement a new feature');
+
+      // Principle fact (pinned) must appear before skill/experience facts
+      const principleIndex = context.indexOf('Always write tests before implementation');
+      const skillIndex = context.indexOf('Proficient in TypeScript generics');
+      const experienceIndex = context.indexOf('Migrated control-plane');
+
+      expect(principleIndex).toBeGreaterThanOrEqual(0);
+      expect(skillIndex).toBeGreaterThanOrEqual(0);
+      expect(experienceIndex).toBeGreaterThanOrEqual(0);
+      expect(principleIndex).toBeLessThan(skillIndex);
+      expect(principleIndex).toBeLessThan(experienceIndex);
+    });
   });
 });

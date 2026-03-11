@@ -18,7 +18,11 @@ export type EntityType =
   | 'error'
   | 'person'
   | 'concept'
-  | 'preference';
+  | 'preference'
+  | 'skill'
+  | 'experience'
+  | 'principle'
+  | 'question';
 
 export type RelationType =
   | 'modifies'
@@ -27,7 +31,10 @@ export type RelationType =
   | 'resolves'
   | 'supersedes'
   | 'related_to'
-  | 'summarizes';
+  | 'summarizes'
+  | 'derived_from'
+  | 'validates'
+  | 'contradicts';
 
 export type FactSource = {
   session_id: string | null;
