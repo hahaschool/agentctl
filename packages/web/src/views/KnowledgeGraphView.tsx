@@ -97,7 +97,7 @@ export function KnowledgeGraphView(): React.JSX.Element {
   const graphQuery = useQuery(
     memoryGraphQuery(
       Object.fromEntries(
-        Object.entries(graphQueryParams).filter(([, v]) => v !== '' && v !== undefined),
+        Object.entries(graphQueryParams).filter(([, v]) => v !== undefined),
       ) as Parameters<typeof memoryGraphQuery>[0],
     ),
   );
