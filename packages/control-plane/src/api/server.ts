@@ -54,6 +54,7 @@ import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
+import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { oauthRoutes } from './routes/oauth.js';
@@ -93,6 +94,7 @@ type CreateServerOptions = {
     | 'invalidateFact'
     | 'listEdges'
     | 'listFacts'
+    | 'recordFeedback'
     | 'updateFact'
   >;
   memoryInjector?: MemoryInjector | null;
@@ -386,6 +388,10 @@ export async function createServer({
     });
     await app.register(memoryStatsRoutes, {
       prefix: '/api/memory/stats',
+      memoryStore,
+    });
+    await app.register(memoryScopeRoutes, {
+      prefix: '/api/memory/scopes',
       memoryStore,
     });
     await app.register(memoryRoutes, {

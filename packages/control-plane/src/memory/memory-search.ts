@@ -28,6 +28,7 @@ export type SearchInput = {
   visibleScopes: string[];
   limit?: number;
   entityType?: EntityType;
+  role?: string;
 };
 
 type RankedFact = {
@@ -153,6 +154,7 @@ export class MemorySearch {
       })),
       visibleScopes[0],
       DEFAULT_INJECTION_BUDGET,
+      input.role,
     );
 
     const top = ranked.slice(0, limit);
@@ -184,6 +186,7 @@ export class MemorySearch {
     candidates: FusedCandidate[],
     queryScope: string | undefined,
     budget: InjectionBudget,
+    role?: string,
   ): Array<{ fact: MemoryFact; score: number }> {
     const now = Date.now();
 
@@ -193,16 +196,25 @@ export class MemorySearch {
         const recencyDays = recencyMs / (1000 * 60 * 60 * 24);
         const recencyBoost = Math.max(0.1, 1 - recencyDays * 0.01);
         const scopeBoost = this.computeScopeBoost(fact.scope, queryScope);
+        const roleAffinityMultiplier = this.computeRoleAffinityMultiplier(fact, role);
 
-        const score =
+        const baseScore =
           rrfScore * budget.priorityWeights.relevance +
           recencyBoost * budget.priorityWeights.recency +
           Number(fact.strength) * budget.priorityWeights.strength +
           scopeBoost * budget.priorityWeights.scopeProximity;
 
+        const score = baseScore * roleAffinityMultiplier;
+
         return { fact, score };
       })
       .sort((left, right) => right.score - left.score);
+  }
+
+  private computeRoleAffinityMultiplier(fact: MemoryFact, role: string | undefined): number {
+    if (!role) return 1.0;
+    if (Array.isArray(fact.tags) && fact.tags.includes(role)) return 1.5;
+    return 1.0;
   }
 
   private computeScopeBoost(factScope: string, queryScope: string | undefined): number {
@@ -232,6 +244,7 @@ export class MemorySearch {
       SELECT id, scope, content, content_model, entity_type,
              confidence::real, strength::real, source_json,
              valid_from, valid_until, created_at, accessed_at,
+             tags, usage_count,
              ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS rank
       FROM memory_facts
       WHERE valid_until IS NULL
@@ -275,6 +288,7 @@ export class MemorySearch {
       SELECT id, scope, content, content_model, entity_type,
              confidence::real, strength::real, source_json,
              valid_from, valid_until, created_at, accessed_at,
+             tags, usage_count,
              ROW_NUMBER() OVER (
                ORDER BY ts_rank(content_tsv, to_tsquery('english', $1)) DESC
              ) AS rank
@@ -354,6 +368,7 @@ export class MemorySearch {
       SELECT id, scope, content, content_model, entity_type,
              confidence::real, strength::real, source_json,
              valid_from, valid_until, created_at, accessed_at,
+             tags, usage_count,
              ROW_NUMBER() OVER (ORDER BY strength DESC, created_at DESC) AS rank
       FROM memory_facts
       WHERE id IN (${factPlaceholders})
@@ -392,6 +407,8 @@ export class MemorySearch {
       valid_until: row.valid_until == null ? null : toIsoString(row.valid_until),
       created_at: toIsoString(row.created_at),
       accessed_at: toIsoString(row.accessed_at),
+      tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+      usage_count: Number(row.usage_count ?? 0),
     };
   }
 }

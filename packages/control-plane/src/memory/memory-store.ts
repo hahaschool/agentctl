@@ -1,6 +1,10 @@
 import type {
+  ConsolidationItem,
+  ConsolidationItemType,
+  ConsolidationSeverity,
   EntityType,
   FactSource,
+  FeedbackSignal,
   MemoryEdge,
   MemoryFact,
   MemoryScope,
@@ -26,6 +30,15 @@ export type AddFactInput = {
   entity_type: EntityType;
   source: FactSource;
   confidence?: number;
+  tags?: string[];
+};
+
+export type AddConsolidationItemInput = {
+  type: ConsolidationItemType;
+  severity: ConsolidationSeverity;
+  factIds: string[];
+  suggestion: string;
+  reason: string;
 };
 
 export type AddEdgeInput = {
@@ -122,6 +135,7 @@ export class MemoryStore {
   async addFact(input: AddFactInput): Promise<MemoryFact> {
     const id = generateMemoryId();
     const now = new Date().toISOString();
+    const tags = input.tags ?? [];
 
     let embeddingLiteral: string | null = null;
     try {
@@ -137,9 +151,11 @@ export class MemoryStore {
     await this.pool.query(
       `INSERT INTO memory_facts (
          id, scope, content, embedding, content_model, entity_type,
-         confidence, strength, source_json, valid_from, created_at, accessed_at
+         confidence, strength, source_json, valid_from, created_at, accessed_at,
+         tags
        ) VALUES (
-         $1, $2, $3, $4::vector, $5, $6, $7, $8, $9, $10, $10, $10
+         $1, $2, $3, $4::vector, $5, $6, $7, $8, $9, $10, $10, $10,
+         $11
        )`,
       [
         id,
@@ -152,8 +168,11 @@ export class MemoryStore {
         1.0,
         input.source,
         now,
+        tags,
       ],
     );
+
+    await this.detectAndFlagContradictions(id);
 
     return {
       id,
@@ -168,6 +187,8 @@ export class MemoryStore {
       valid_until: null,
       created_at: now,
       accessed_at: now,
+      tags,
+      usage_count: 0,
     };
   }
 
@@ -183,6 +204,16 @@ export class MemoryStore {
       [id, input.source_fact_id, input.target_fact_id, input.relation, input.weight ?? 0.5, now],
     );
 
+    if (input.relation === 'contradicts') {
+      await this.addConsolidationItem({
+        type: 'contradiction',
+        severity: 'high',
+        factIds: [input.source_fact_id, input.target_fact_id],
+        suggestion: 'Review and resolve contradicting facts',
+        reason: `Facts ${input.source_fact_id} and ${input.target_fact_id} are marked as contradicting each other`,
+      });
+    }
+
     return {
       id,
       source_fact_id: input.source_fact_id,
@@ -193,11 +224,73 @@ export class MemoryStore {
     };
   }
 
+  async recordFeedback(id: string, signal: FeedbackSignal): Promise<MemoryFact | null> {
+    if (signal === 'used') {
+      await this.pool.query(
+        `UPDATE memory_facts
+         SET usage_count = usage_count + 1,
+             strength = LEAST(1.0, strength + 0.1),
+             accessed_at = now()
+         WHERE id = $1`,
+        [id],
+      );
+    } else if (signal === 'irrelevant') {
+      await this.pool.query(
+        `UPDATE memory_facts
+         SET strength = GREATEST(0.0, strength - 0.1),
+             accessed_at = now()
+         WHERE id = $1`,
+        [id],
+      );
+    } else if (signal === 'outdated') {
+      await this.pool.query(
+        `UPDATE memory_facts
+         SET confidence = GREATEST(0.0, confidence - 0.2),
+             accessed_at = now()
+         WHERE id = $1`,
+        [id],
+      );
+      await this.addConsolidationItem({
+        type: 'stale',
+        severity: 'medium',
+        factIds: [id],
+        suggestion: 'Review and update or invalidate this outdated fact',
+        reason: `Fact ${id} was flagged as outdated via feedback signal`,
+      });
+    }
+
+    return this.getFact(id);
+  }
+
+  async addConsolidationItem(input: AddConsolidationItemInput): Promise<ConsolidationItem> {
+    const id = generateMemoryId();
+    const now = new Date().toISOString();
+
+    await this.pool.query(
+      `INSERT INTO memory_consolidation_items
+         (id, type, severity, fact_ids, suggestion, reason, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)`,
+      [id, input.type, input.severity, input.factIds, input.suggestion, input.reason, now],
+    );
+
+    return {
+      id,
+      type: input.type,
+      severity: input.severity,
+      factIds: input.factIds,
+      suggestion: input.suggestion,
+      reason: input.reason,
+      status: 'pending',
+      createdAt: now,
+    };
+  }
+
   async getFact(id: string): Promise<MemoryFact | null> {
     const { rows } = await this.pool.query(
       `SELECT id, scope, content, content_model, entity_type,
               confidence::real, strength::real, source_json,
-              valid_from, valid_until, created_at, accessed_at
+              valid_from, valid_until, created_at, accessed_at,
+              tags, usage_count
        FROM memory_facts
        WHERE id = $1`,
       [id],
@@ -255,7 +348,8 @@ export class MemoryStore {
     const { rows } = await this.pool.query(
       `SELECT id, scope, content, content_model, entity_type,
               confidence::real, strength::real, source_json,
-              valid_from, valid_until, created_at, accessed_at
+              valid_from, valid_until, created_at, accessed_at,
+              tags, usage_count
        FROM memory_facts
        WHERE ${conditions.join(' AND ')}
        ORDER BY created_at DESC
@@ -468,6 +562,26 @@ export class MemoryStore {
     return [...new Set(scopes)];
   }
 
+  private async detectAndFlagContradictions(newFactId: string): Promise<void> {
+    const { rows } = await this.pool.query(
+      `SELECT source_fact_id, target_fact_id
+       FROM memory_edges
+       WHERE relation = 'contradicts'
+         AND (source_fact_id = $1 OR target_fact_id = $1)`,
+      [newFactId],
+    );
+
+    for (const row of rows as Array<{ source_fact_id: string; target_fact_id: string }>) {
+      await this.addConsolidationItem({
+        type: 'contradiction',
+        severity: 'high',
+        factIds: [row.source_fact_id, row.target_fact_id],
+        suggestion: 'Review and resolve contradicting facts',
+        reason: `New fact ${newFactId} has pre-existing contradicts relationship`,
+      });
+    }
+  }
+
   private rowToFact(row: Record<string, unknown>): MemoryFact {
     return {
       id: String(row.id),
@@ -482,6 +596,8 @@ export class MemoryStore {
       valid_until: row.valid_until == null ? null : toIsoString(row.valid_until),
       created_at: toIsoString(row.created_at),
       accessed_at: toIsoString(row.accessed_at),
+      tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+      usage_count: Number(row.usage_count ?? 0),
     };
   }
 
