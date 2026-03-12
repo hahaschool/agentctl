@@ -21,7 +21,8 @@
     "lint:fix": "biome check --write packages/ scripts/",
     "typecheck": "pnpm -r build",
     "clean": "pnpm -r exec rm -rf dist",
-    "agentctl": "tsx scripts/agentctl.ts"
+    "agentctl": "tsx scripts/agentctl.ts",
+    "agentctl:deploy": "npx tsx scripts/deploy.ts"
   },
   "pnpm": {
     "overrides": {

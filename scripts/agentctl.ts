@@ -36,6 +36,7 @@
 //   loop status <agentId>     Check continuous loop status
 //   loop stop <agentId>       Stop a continuous loop
 //   pool-stats                Worker pool statistics
+//   deploy <subcommand>       Deployment management (init, up, down, status, logs)
 //   help                      Show this help message
 // =============================================================================
 
@@ -1138,6 +1139,7 @@ ${bold('COMMANDS')}
   ${cyan('loop status')} <agentId>      Check continuous loop status
   ${cyan('loop stop')} <agentId>        Stop a continuous loop
   ${cyan('pool-stats')}                 Worker pool statistics
+  ${cyan('deploy')} <subcommand>        Deployment management (init, up, down, status, logs)
   ${cyan('help')}                       Show this help message
 
 ${bold('EXAMPLES')}
@@ -1456,6 +1458,23 @@ async function main(): Promise<void> {
     case 'pool-stats':
       await cmdPoolStats();
       break;
+
+    case 'deploy': {
+      // Delegate to the dedicated deploy CLI
+      const { execFileSync } = await import('node:child_process');
+      const deployArgs = args.slice(1);
+      try {
+        execFileSync('npx', ['tsx', 'scripts/deploy.ts', ...deployArgs], {
+          cwd: process.cwd(),
+          stdio: 'inherit',
+        });
+      } catch (e: unknown) {
+        const exitCode =
+          e && typeof e === 'object' && 'status' in e ? (e as { status: number }).status : 1;
+        process.exit(exitCode);
+      }
+      break;
+    }
 
     default:
       console.error(`${red('Error: ')}Unknown command: ${command}`);
