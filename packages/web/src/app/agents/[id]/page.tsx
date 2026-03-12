@@ -84,6 +84,7 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
+  const [expandedRunErrors, setExpandedRunErrors] = useState<Set<string>>(new Set());
 
   const accountList = accounts.data ?? [];
   const machines = machinesList.data ?? [];
@@ -676,12 +677,28 @@ export default function AgentDetailPage(): React.JSX.Element {
                           : '-'}
                       </span>
                       {run.errorMessage && (
-                        <div
-                          className="text-[11px] text-red-600 dark:text-red-400 mt-0.5 truncate"
-                          title={run.errorMessage}
+                        <button
+                          type="button"
+                          className="block text-left text-[11px] text-red-600 dark:text-red-400 mt-0.5 w-full cursor-pointer hover:text-red-500 dark:hover:text-red-300"
+                          onClick={() => {
+                            setExpandedRunErrors((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(run.id)) {
+                                next.delete(run.id);
+                              } else {
+                                next.add(run.id);
+                              }
+                              return next;
+                            });
+                          }}
+                          aria-expanded={expandedRunErrors.has(run.id)}
                         >
-                          {run.errorMessage}
-                        </div>
+                          {expandedRunErrors.has(run.id) ? (
+                            <span className="whitespace-pre-wrap break-all">{run.errorMessage}</span>
+                          ) : (
+                            <span className="block truncate">{run.errorMessage}</span>
+                          )}
+                        </button>
                       )}
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -729,7 +746,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                         <td className="py-2.5 pr-4">
                           <StatusBadge status={run.status} />
                         </td>
-                        <td className="py-2.5 pr-4 max-w-[200px]">
+                        <td className="py-2.5 pr-4 max-w-[400px]">
                           <span
                             className={cn(
                               'text-xs',
@@ -738,18 +755,35 @@ export default function AgentDetailPage(): React.JSX.Element {
                             title={run.prompt}
                           >
                             {run.prompt
-                              ? run.prompt.length > 50
-                                ? `${run.prompt.slice(0, 50)}...`
+                              ? run.prompt.length > 80
+                                ? `${run.prompt.slice(0, 80)}...`
                                 : run.prompt
                               : '-'}
                           </span>
                           {run.errorMessage && (
-                            <div
-                              className="text-[11px] text-red-600 dark:text-red-400 mt-0.5 truncate max-w-[200px]"
-                              title={run.errorMessage}
+                            <button
+                              type="button"
+                              className="block text-left text-[11px] text-red-600 dark:text-red-400 mt-0.5 w-full cursor-pointer hover:text-red-500 dark:hover:text-red-300"
+                              onClick={() => {
+                                setExpandedRunErrors((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(run.id)) {
+                                    next.delete(run.id);
+                                  } else {
+                                    next.add(run.id);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              aria-expanded={expandedRunErrors.has(run.id)}
+                              aria-label={expandedRunErrors.has(run.id) ? 'Collapse error' : 'Expand error'}
                             >
-                              {run.errorMessage}
-                            </div>
+                              {expandedRunErrors.has(run.id) ? (
+                                <span className="whitespace-pre-wrap break-all">{run.errorMessage}</span>
+                              ) : (
+                                <span className="block truncate max-w-[380px]">{run.errorMessage}</span>
+                              )}
+                            </button>
                           )}
                         </td>
                         <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">

@@ -181,9 +181,11 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
       }
 
       try {
-        // Remove stale instance from pool if it's in a terminal state.
-        // This ensures each new run gets a fresh instance with the correct
-        // runId, controlPlaneUrl, and clean event listeners / output buffer.
+        // Remove stale instance from pool so each new run gets a fresh
+        // instance with the correct runId, controlPlaneUrl, and clean
+        // event listeners / output buffer. Force-stop agents that are
+        // still running or starting — they may be stuck from a previous
+        // dispatch that never completed.
         const existing = pool.getAgent(id);
         if (existing) {
           const existingStatus = existing.getStatus();
@@ -192,6 +194,13 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
             existingStatus === 'error' ||
             existingStatus === 'timeout'
           ) {
+            await pool.removeAgent(id);
+          } else if (existingStatus === 'running' || existingStatus === 'starting') {
+            logger.warn(
+              { agentId: id, machineId, existingStatus },
+              'Force-stopping stuck agent instance before re-creating',
+            );
+            await existing.stop(false);
             await pool.removeAgent(id);
           }
         }

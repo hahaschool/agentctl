@@ -475,13 +475,19 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           machineId = agent.machineId;
         }
 
+        // Fall back to the agent's configured model and tools when
+        // not explicitly overridden in the start request.
+        const agentConfig = dbRegistry
+          ? (await dbRegistry.getAgent(agentId))?.config
+          : undefined;
+
         const jobData: AgentTaskJobData = {
           agentId,
           machineId,
           prompt: prompt ?? null,
-          model: model ?? null,
+          model: model ?? (agentConfig?.model as string | null) ?? null,
           trigger: 'manual',
-          allowedTools: allowedTools ?? null,
+          allowedTools: allowedTools ?? (agentConfig?.allowedTools as string[] | null) ?? null,
           resumeSession: resumeSession ?? null,
           createdAt: new Date().toISOString(),
         };
