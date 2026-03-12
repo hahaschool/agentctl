@@ -91,12 +91,14 @@ describe('native import integration', () => {
       (result.metadata.materializedSession as { nativeSessionId: string }).nativeSessionId,
     );
 
-    const codexArgs = await waitForFile(codexArgsLog);
+    const materializedSession = result.metadata.materializedSession as { nativeSessionId: string };
+
+    const codexArgs = await waitForFile(codexArgsLog, (content) =>
+      content.includes(materializedSession.nativeSessionId),
+    );
     expect(codexArgs).toContain('exec');
     expect(codexArgs).toContain('resume');
-    expect(codexArgs).toContain(
-      (result.metadata.materializedSession as { nativeSessionId: string }).nativeSessionId,
-    );
+    expect(codexArgs).toContain(materializedSession.nativeSessionId);
   });
 
   it('imports a Codex source session into Claude using fake CLI binaries and CODEX_HOME', async () => {
@@ -141,11 +143,13 @@ describe('native import integration', () => {
       (result.metadata.materializedSession as { nativeSessionId: string }).nativeSessionId,
     );
 
-    const claudeArgs = await waitForFile(claudeArgsLog);
-    expect(claudeArgs).toContain('--resume');
-    expect(claudeArgs).toContain(
-      (result.metadata.materializedSession as { nativeSessionId: string }).nativeSessionId,
+    const materializedSession = result.metadata.materializedSession as { nativeSessionId: string };
+
+    const claudeArgs = await waitForFile(claudeArgsLog, (content) =>
+      content.includes(materializedSession.nativeSessionId),
     );
+    expect(claudeArgs).toContain('--resume');
+    expect(claudeArgs).toContain(materializedSession.nativeSessionId);
   });
 });
 
@@ -307,13 +311,21 @@ async function seedCodexSourceSession(
   );
 }
 
-async function waitForFile(path: string): Promise<string> {
+async function waitForFile(
+  path: string,
+  predicate?: (content: string) => boolean,
+): Promise<string> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
-      return await readFile(path, 'utf8');
+      const content = await readFile(path, 'utf8');
+      if (!predicate || predicate(content)) {
+        return content;
+      }
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      // Ignore read races while the fake CLI process is still writing the log.
     }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
   throw new Error(`Timed out waiting for file: ${path}`);
