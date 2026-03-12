@@ -1021,9 +1021,9 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Delivered | 4.8 |
 | [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Delivered | 4.8 |
 
-| [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Draft | 10.1-10.5 |
-| [multi-agent-collaboration-phase1-impl-plan](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md) | Draft | 10.1 |
-| [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | In Progress | 11.1-11.7 |
+| [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Active | 10.1-10.5 |
+| [multi-agent-collaboration-phase1-impl-plan](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md) | Delivered | 10.1 |
+| [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
