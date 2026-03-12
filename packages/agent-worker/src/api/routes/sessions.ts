@@ -5,7 +5,18 @@
 // Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
 // ---------------------------------------------------------------------------
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, normalize, resolve as resolvePath } from 'node:path';
 
@@ -22,9 +33,6 @@ import type {
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
-  safeReadFileAtomic,
-  safeReadFileSync,
-  safeWriteFileSync,
   sanitizePath,
 } from '../../utils/path-security.js';
 import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
@@ -563,15 +571,14 @@ export async function sessionRoutes(
         });
       }
 
-      const jsonlPath = rawJsonlPath;
+      const jsonlPath = sanitizePath(rawJsonlPath, getClaudeProjectsDir());
 
       try {
-        // Safe atomic read: sanitises path, opens with O_RDONLY|O_NOFOLLOW,
-        // fstats for size, reads from same fd — prevents both path injection
-        // (js/path-injection) and TOCTOU races (js/file-system-race).
-        let result: { content: string; size: number };
+        // Open + fstat + read using the same file descriptor so the route
+        // performs the validated file access directly without a TOCTOU gap.
+        let fd: number;
         try {
-          result = safeReadFileAtomic(jsonlPath, getClaudeProjectsDir(), MAX_JSONL_FILE_SIZE);
+          fd = openSync(jsonlPath, constants.O_RDONLY | constants.O_NOFOLLOW);
         } catch (readErr) {
           const nodeErr = readErr as NodeJS.ErrnoException & { code?: string };
           if (nodeErr.code === 'ENOENT') {
@@ -589,7 +596,22 @@ export async function sessionRoutes(
           throw readErr;
         }
 
-        const raw = result.content;
+        let raw: string;
+        try {
+          const stat = fstatSync(fd);
+          if (stat.size > MAX_JSONL_FILE_SIZE) {
+            return reply.status(413).send({
+              error: 'Session JSONL file too large (> 100 MB)',
+              code: 'CONTENT_TOO_LARGE',
+            });
+          }
+
+          const buffer = Buffer.alloc(stat.size);
+          const bytesRead = readSync(fd, buffer, 0, stat.size, 0);
+          raw = buffer.subarray(0, bytesRead).toString('utf-8');
+        } finally {
+          closeSync(fd);
+        }
 
         const lines = raw.split('\n').filter((line) => line.trim().length > 0);
 
@@ -770,11 +792,9 @@ export async function sessionRoutes(
       if (forkAtIndex !== undefined && forkAtIndex >= 0 && safeResumeSessionId) {
         const rawParentJsonlPath = findSessionJsonl(safeResumeSessionId, safeProjectPath);
         if (rawParentJsonlPath) {
-          // Security: use safe wrappers that sanitise + validate before fs access
-          // to prevent path injection (js/path-injection).
           const projectsDir = getClaudeProjectsDir();
-          const parentJsonlPath = rawParentJsonlPath;
-          const raw = safeReadFileSync(parentJsonlPath, projectsDir);
+          const parentJsonlPath = sanitizePath(rawParentJsonlPath, projectsDir);
+          const raw = readFileSync(parentJsonlPath, 'utf-8');
           const allLines = raw.split('\n').filter((l) => l.trim());
 
           // Count parsed messages to determine where to truncate
@@ -795,7 +815,7 @@ export async function sessionRoutes(
           // Write truncated JSONL next to parent — validate output path too
           const dir = dirname(parentJsonlPath);
           const newJsonlPath = sanitizePath(join(dir, `${safeCpSessionId}.jsonl`), projectsDir);
-          safeWriteFileSync(newJsonlPath, projectsDir, `${truncatedLines.join('\n')}\n`);
+          writeFileSync(newJsonlPath, `${truncatedLines.join('\n')}\n`, 'utf-8');
 
           // Resume from the truncated copy (which uses the CP session ID)
           effectiveResumeSessionId = safeCpSessionId;

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentPool } from '../../runtime/agent-pool.js';
 import { createMockLogger, createSilentLogger } from '../../test-helpers.js';
 import { createWorkerServer } from '../server.js';
+import { agentRoutes } from './agents.js';
 
 // Mock the SDK runner so agents fall back to stub simulation immediately
 // (returning null means "SDK not available").
@@ -29,6 +30,29 @@ vi.mock('../../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-001';
 
+type RegisteredRoute = {
+  method: string | string[];
+  url: string;
+  config?: {
+    rateLimit?: {
+      max?: number;
+      timeWindow?: number;
+    };
+  };
+};
+
+function captureRoute(
+  routes: RegisteredRoute[],
+  method: string,
+  url: string,
+): RegisteredRoute | undefined {
+  return routes.find((route) => {
+    const methods = Array.isArray(route.method) ? route.method : [route.method];
+    const normalizedUrl = route.url === '/' ? route.url : route.url.replace(/\/$/, '');
+    return methods.includes(method) && normalizedUrl === url;
+  });
+}
+
 describe('Agent CRUD routes', () => {
   let app: FastifyInstance;
   let pool: AgentPool;
@@ -48,6 +72,36 @@ describe('Agent CRUD routes', () => {
   // ── POST /api/agents/:id/start ──────────────────────────────────
 
   describe('POST /api/agents/:id/start', () => {
+    it('registers explicit rate-limit config on the start route', async () => {
+      const routes: RegisteredRoute[] = [];
+      const Fastify = await import('fastify');
+      const routeApp = Fastify.default({ logger: false });
+      routeApp.addHook('onRoute', (route) => {
+        routes.push({
+          method: route.method as string | string[],
+          url: route.url,
+          config: route.config as RegisteredRoute['config'],
+        });
+      });
+      await routeApp.register(agentRoutes, {
+        prefix: '/api/agents',
+        pool,
+        machineId: MACHINE_ID,
+        logger,
+      });
+
+      try {
+        expect(
+          captureRoute(routes, 'POST', '/api/agents/:id/start')?.config?.rateLimit,
+        ).toMatchObject({
+          max: 30,
+          timeWindow: 60_000,
+        });
+      } finally {
+        await routeApp.close();
+      }
+    });
+
     it('rate limits repeated agent start requests when configured', async () => {
       process.env.AGENT_START_RATE_LIMIT_MAX = '1';
       process.env.AGENT_START_RATE_LIMIT_WINDOW_MS = '60000';

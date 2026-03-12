@@ -21,6 +21,17 @@ vi.mock('node:child_process', () => ({
 import { execFile } from 'node:child_process';
 import { lstatSync, realpathSync, statSync } from 'node:fs';
 
+type RegisteredRoute = {
+  method: string | string[];
+  url: string;
+  config?: {
+    rateLimit?: {
+      max?: number;
+      timeWindow?: number;
+    };
+  };
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -61,6 +72,18 @@ function makeStat(isDir: boolean): ReturnType<typeof statSync> {
     isFile: () => !isDir,
     isSymbolicLink: () => false,
   } as unknown as ReturnType<typeof statSync>;
+}
+
+function captureRoute(
+  routes: RegisteredRoute[],
+  method: string,
+  url: string,
+): RegisteredRoute | undefined {
+  return routes.find((route) => {
+    const methods = Array.isArray(route.method) ? route.method : [route.method];
+    const normalizedUrl = route.url === '/' ? route.url : route.url.replace(/\/$/, '');
+    return methods.includes(method) && normalizedUrl === url;
+  });
 }
 
 /**
@@ -140,6 +163,32 @@ describe('Git routes', () => {
   // =========================================================================
 
   describe('GET /api/git/status (success)', () => {
+    it('registers explicit rate-limit config on the git status route', async () => {
+      const routes: RegisteredRoute[] = [];
+      const Fastify = await import('fastify');
+      const routeApp = Fastify.default({ logger: false });
+      routeApp.addHook('onRoute', (route) => {
+        routes.push({
+          method: route.method as string | string[],
+          url: route.url,
+          config: route.config as RegisteredRoute['config'],
+        });
+      });
+      await routeApp.register(gitRoutes, {
+        prefix: '/api/git',
+        logger: createSilentLogger(),
+      });
+
+      try {
+        expect(captureRoute(routes, 'GET', '/api/git/status')?.config?.rateLimit).toMatchObject({
+          max: 60,
+          timeWindow: 60_000,
+        });
+      } finally {
+        await routeApp.close();
+      }
+    });
+
     it('returns full git status with all fields', async () => {
       const dirPath = '/Users/testuser/project';
       mockValidDirectory();

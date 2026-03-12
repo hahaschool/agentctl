@@ -38,6 +38,17 @@ import {
   writeFileSync,
 } from 'node:fs';
 
+type RegisteredRoute = {
+  method: string | string[];
+  url: string;
+  config?: {
+    rateLimit?: {
+      max?: number;
+      timeWindow?: number;
+    };
+  };
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -70,6 +81,18 @@ async function buildApp(): Promise<FastifyInstance> {
   });
 
   return app;
+}
+
+function captureRoute(
+  routes: RegisteredRoute[],
+  method: string,
+  url: string,
+): RegisteredRoute | undefined {
+  return routes.find((route) => {
+    const methods = Array.isArray(route.method) ? route.method : [route.method];
+    const normalizedUrl = route.url === '/' ? route.url : route.url.replace(/\/$/, '');
+    return methods.includes(method) && normalizedUrl === url;
+  });
 }
 
 function makeStat(
@@ -117,6 +140,40 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('GET /api/files (list directory)', () => {
+    it('registers explicit rate-limit config on each file route', async () => {
+      const routes: RegisteredRoute[] = [];
+      const Fastify = await import('fastify');
+      const routeApp = Fastify.default({ logger: false });
+      routeApp.addHook('onRoute', (route) => {
+        routes.push({
+          method: route.method as string | string[],
+          url: route.url,
+          config: route.config as RegisteredRoute['config'],
+        });
+      });
+      await routeApp.register(fileRoutes, {
+        prefix: '/api/files',
+        logger: createSilentLogger(),
+      });
+
+      try {
+        expect(captureRoute(routes, 'GET', '/api/files')?.config?.rateLimit).toMatchObject({
+          max: 60,
+          timeWindow: 60_000,
+        });
+        expect(captureRoute(routes, 'GET', '/api/files/content')?.config?.rateLimit).toMatchObject({
+          max: 60,
+          timeWindow: 60_000,
+        });
+        expect(captureRoute(routes, 'PUT', '/api/files/content')?.config?.rateLimit).toMatchObject({
+          max: 30,
+          timeWindow: 60_000,
+        });
+      } finally {
+        await routeApp.close();
+      }
+    });
+
     it('returns 429 when repeated directory listing requests exceed the configured limit', async () => {
       process.env.FILE_LIST_RATE_LIMIT_MAX = '1';
       process.env.FILE_LIST_RATE_LIMIT_WINDOW_MS = '60000';
@@ -449,6 +506,7 @@ describe('File routes', () => {
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('INVALID_PATH');
       expect(res.json().message).toContain('.gnupg');
+      expect(openSync).not.toHaveBeenCalled();
     });
   });
 
@@ -504,7 +562,7 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.success).toBe(true);
       expect(body.path).toBe(filePath);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, 'new content here');
+      expect(writeFileSync).toHaveBeenCalledWith(filePath, 'new content here', 'utf-8');
     });
 
     it('creates parent directories when they do not exist', async () => {
@@ -588,7 +646,7 @@ describe('File routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().success).toBe(true);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, '');
+      expect(writeFileSync).toHaveBeenCalledWith(filePath, '', 'utf-8');
     });
 
     it('accepts paths under /tmp', async () => {

@@ -19,6 +19,7 @@ import {
   readdirSync,
   readSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -31,7 +32,6 @@ import type { Logger } from 'pino';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
-  safeWriteFileSync,
   sanitizePath,
 } from '../../utils/path-security.js';
 import { readRateLimitEnv } from '../rate-limit.js';
@@ -384,7 +384,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
 
       // Write using the sanitized filePath — CodeQL traces this from the
       // sanitizePath call above through to the writeFileSync sink.
-      safeWriteFileSync(filePath, allowedBase, body.content);
+      writeFileSync(filePath, body.content, 'utf-8');
 
       return {
         success: true,
