@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§11 fully complete: all 7 agent detail page UX fixes delivered (PRs #86-90); §10 collaboration design reviewed by Codex GPT-5.4; PR #85 code quality fixes merged)
+> Last updated: 2026-03-12 (§10.1 collaboration Phase 1 delivered (PRs #91-92); §11 fully complete (PRs #86-90); PR #85 code quality fixes merged)
 
 ## Current State
 
@@ -818,17 +818,17 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 > Human-agent collaborative workspaces with cross-space context mobility.
 > Architecture: Hybrid Spaces + Task Graph (Option C from design evaluation).
 
-### 10.1 Phase 1: Spaces + Threads + Messages — P1
+### 10.1 Phase 1: Spaces + Threads + Messages — P1 ✅
 
-Foundation data model and CRUD for multi-agent collaboration.
+> Delivered in PRs #91-92. Shared types, Drizzle schema + migration, CP stores/routes, web Spaces UI (list + detail + thread feed), and session-space bridge.
 
-- [ ] Shared types: Space, Thread, SpaceEvent, SpaceMember (collaboration.ts)
-- [ ] DB schema: spaces, threads, space_events tables (Drizzle ORM + migration)
-- [ ] Control plane CRUD routes: spaces, threads, events
-- [ ] EventStore with atomic sequence generation
-- [ ] Web frontend: Spaces list page + Thread view
-- [ ] Session migration: existing sessions → solo Spaces
-- [ ] Integration tests + full build verification
+- [x] Shared types: Space, Thread, SpaceEvent, SpaceMember (collaboration.ts) *(committed to main)*
+- [x] DB schema: spaces, threads, space_events, space_members, session_space_links + migration *(PR #91)*
+- [x] CP stores: SpaceStore, ThreadStore, EventStore with atomic sequence *(PR #91)*
+- [x] CP routes: `/api/spaces/*` CRUD + members + threads + events *(PR #91)*
+- [x] Web: Spaces list page + Space detail with thread feed + EventComposer *(PR #92)*
+- [x] Session bridge: SessionSpaceLink component for solo Space creation *(PR #92)*
+- [x] Full build verification: shared + CP + web all pass *(PRs #91-92)*
 
 ### 10.2 Phase 2: Multi-Agent Communication — P2
 
@@ -907,7 +907,7 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Cost Display Still $0.00~~ | 11.3 | ✅ Delivered — computed from runs (PR #87) |
 | **P1** | ~~Run History Bar Redesign~~ | 11.4 | ✅ Delivered — recharts BarChart (PR #88) |
 | **P1** | ~~Execution History ↔ Session Linkage~~ | 11.5 | ✅ Delivered — sessionId + View Session link (PR #88) |
-| **P1** | Multi-Agent Collaboration Phase 1 | 10.1 | In progress — shared types + DB + routes + web UI |
+| **P1** | ~~Multi-Agent Collaboration Phase 1~~ | 10.1 | ✅ Delivered — schema + stores + routes + Spaces UI (PRs #91-92) |
 | **P2** | Multi-Agent Communication | 10.2 | Not started — Agent Bus + delegation |
 | **P2** | Task Graph + Fleet | 10.3 | Not started — DAG engine + approval gates |
 | **P3** | Context Bridge | 10.4 | Not started — cross-space context mobility |
