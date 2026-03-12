@@ -191,7 +191,7 @@ Orthogonal WHERE (local/Docker/SSH) vs WHAT (Claude/Codex) abstraction.
 
 - [x] `ExecutionEnvironment` interface: detect, prepare, cleanup
 - [x] `DirectEnvironment` (subprocess)
-- [ ] `DockerEnvironment` (gVisor)
+- [x] `DockerEnvironment` (gVisor) *(PR #69 — gVisor runtime, cap-drop, read-only FS, network=none)*
 - [x] Auto-detect at startup, report in heartbeat
 - [x] Dispatch routing considers environment requirements
 
@@ -661,7 +661,7 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
 | **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — time-range, rich cards, handoff timeline, expandable diff, action bar, push notifications (PR #67); only SSE replay remains |
-| **P3** | Execution Environment Registry | 2.9 | Partial — DirectEnvironment on main; DockerEnvironment remains |
+| **P3** | ~~Execution Environment Registry~~ | 2.9 | ✅ Delivered — DirectEnvironment + DockerEnvironment with gVisor (PR #69) |
 | **P3** | ~~Automated Experience Extraction~~ | 7.3 | ✅ Delivered — Stop hook, entity routing, Jaccard dedup, review flags (PR #64) |
 | **P3** | ~~Knowledge Maintenance / Dreaming~~ | 7.4 | ✅ Delivered — monthly lint, git cross-ref, synthesis, coverage reporting (PR #65) |
 
