@@ -157,11 +157,9 @@ export class ContextBridgeStore {
       .returning();
 
     if (rows.length === 0) {
-      throw new ControlPlaneError(
-        'SUBSCRIPTION_NOT_FOUND',
-        `Subscription '${id}' does not exist`,
-        { id },
-      );
+      throw new ControlPlaneError('SUBSCRIPTION_NOT_FOUND', `Subscription '${id}' does not exist`, {
+        id,
+      });
     }
 
     this.logger.info({ subscriptionId: id, active }, 'Subscription active state updated');
@@ -175,11 +173,9 @@ export class ContextBridgeStore {
       .returning({ id: crossSpaceSubscriptions.id });
 
     if (result.length === 0) {
-      throw new ControlPlaneError(
-        'SUBSCRIPTION_NOT_FOUND',
-        `Subscription '${id}' does not exist`,
-        { id },
-      );
+      throw new ControlPlaneError('SUBSCRIPTION_NOT_FOUND', `Subscription '${id}' does not exist`, {
+        id,
+      });
     }
 
     this.logger.info({ subscriptionId: id }, 'Cross-space subscription deleted');
@@ -203,9 +199,7 @@ export class ContextBridgeStore {
     };
   }
 
-  private toSubscription(
-    row: typeof crossSpaceSubscriptions.$inferSelect,
-  ): CrossSpaceSubscription {
+  private toSubscription(row: typeof crossSpaceSubscriptions.$inferSelect): CrossSpaceSubscription {
     return {
       id: row.id,
       sourceSpaceId: row.sourceSpaceId,
