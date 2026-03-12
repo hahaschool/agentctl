@@ -677,12 +677,48 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       try {
         await dbRegistry.completeRun(runId, {
           status,
+          sessionId: sessionId ?? null,
           errorMessage: errorMessage ?? null,
           costUsd: costUsd != null ? String(costUsd) : null,
           tokensIn: tokensIn ?? null,
           tokensOut: tokensOut ?? null,
           resultSummary: resultSummary ?? null,
         });
+
+        // Update agent's currentSessionId for session resume support
+        if (sessionId && status === 'success') {
+          try {
+            await dbRegistry.updateAgent(request.params.id, {
+              currentSessionId: sessionId,
+            });
+          } catch (err) {
+            app.log.warn(
+              { err, agentId: request.params.id, sessionId },
+              'Failed to update agent currentSessionId',
+            );
+          }
+        }
+
+        // Create rc_sessions entry so Sessions section shows agent runs
+        if (sessionId) {
+          try {
+            const agent = await dbRegistry.getAgent(request.params.id);
+            await dbRegistry.createSessionFromRun({
+              sessionId,
+              agentId: request.params.id,
+              machineId: agent?.machineId ?? 'unknown',
+              status,
+              projectPath: agent?.projectPath ?? null,
+              model: agent?.config?.model ?? null,
+              endedAt: new Date(),
+            });
+          } catch (sessionErr) {
+            app.log.warn(
+              { err: sessionErr, agentId: request.params.id, sessionId },
+              'Failed to create rc_sessions entry from run completion — ignoring',
+            );
+          }
+        }
 
         app.log.info(
           {

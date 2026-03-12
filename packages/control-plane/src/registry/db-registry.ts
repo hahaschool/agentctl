@@ -10,7 +10,7 @@ import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
-import { agentActions, agentRuns, agents, machines } from '../db/index.js';
+import { agentActions, agentRuns, agents, machines, rcSessions } from '../db/index.js';
 
 type CreateAgentData = {
   machineId: string;
@@ -33,6 +33,7 @@ type CreateRunData = {
 
 type CompleteRunData = {
   status: string;
+  sessionId?: string | null;
   costUsd?: string | null;
   tokensIn?: number | null;
   tokensOut?: number | null;
@@ -245,6 +246,7 @@ export class DbAgentRegistry {
       type?: string;
       schedule?: string | null;
       config?: Record<string, unknown>;
+      currentSessionId?: string | null;
     },
   ): Promise<Agent> {
     const setClause: Record<string, unknown> = {};
@@ -271,6 +273,10 @@ export class DbAgentRegistry {
 
     if ('config' in data && data.config !== undefined) {
       setClause.config = data.config;
+    }
+
+    if ('currentSessionId' in data) {
+      setClause.currentSessionId = data.currentSessionId ?? null;
     }
 
     if (Object.keys(setClause).length === 0) {
@@ -374,6 +380,7 @@ export class DbAgentRegistry {
       .update(agentRuns)
       .set({
         status: data.status,
+        ...(data.sessionId !== undefined ? { sessionId: data.sessionId ?? null } : {}),
         finishedAt: new Date(),
         costUsd: data.costUsd ?? null,
         tokensIn: data.tokensIn ?? null,
@@ -410,6 +417,47 @@ export class DbAgentRegistry {
       .limit(limit);
 
     return rows.map((row) => this.toRun(row));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session creation from agent runs
+  // ---------------------------------------------------------------------------
+
+  async createSessionFromRun(data: {
+    sessionId: string;
+    agentId: string;
+    machineId: string;
+    status: string;
+    projectPath?: string | null;
+    model?: string | null;
+    startedAt?: Date;
+    endedAt?: Date;
+  }): Promise<void> {
+    await this.db
+      .insert(rcSessions)
+      .values({
+        id: data.sessionId,
+        agentId: data.agentId,
+        machineId: data.machineId,
+        claudeSessionId: data.sessionId,
+        status: data.status === 'success' ? 'stopped' : 'error',
+        projectPath: data.projectPath ?? null,
+        model: data.model ?? null,
+        startedAt: data.startedAt ?? new Date(),
+        endedAt: data.endedAt ?? new Date(),
+      })
+      .onConflictDoUpdate({
+        target: rcSessions.id,
+        set: {
+          status: data.status === 'success' ? 'stopped' : 'error',
+          endedAt: data.endedAt ?? new Date(),
+        },
+      });
+
+    this.logger.info(
+      { sessionId: data.sessionId, agentId: data.agentId },
+      'Session record created from agent run completion',
+    );
   }
 
   // ---------------------------------------------------------------------------
