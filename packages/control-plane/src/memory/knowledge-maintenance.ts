@@ -18,7 +18,8 @@
 // ---------------------------------------------------------------------------
 
 import { execFile as execFileCb } from 'node:child_process';
-import { access, type Dirent, readdir } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { access, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { promisify } from 'node:util';
 
