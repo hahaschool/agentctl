@@ -871,7 +871,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [unified-sessions-ui-impl-plan](plans/2026-03-10-unified-sessions-ui-impl-plan.md) | Delivered | 4.6 |
 | [remote-control-relay-decision](plans/2026-03-10-remote-control-relay-decision.md) | Delivered | 2.4 |
 | [unified-memory-layer-design](plans/2026-03-10-unified-memory-layer-design.md) | Delivered | 3.6 |
-| [unified-memory-layer-impl-plan](plans/2026-03-10-unified-memory-layer-impl-plan.md) | Delivered (missing: standalone memory-decay module) | 3.6 |
+| [unified-memory-layer-impl-plan](plans/2026-03-10-unified-memory-layer-impl-plan.md) | Delivered | 3.6 |
 | [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md) | Delivered | — |
 | [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md) | Delivered | — |
 | [automatic-handoff-triggers-design](plans/2026-03-11-automatic-handoff-triggers-design.md) | Delivered | 3.5 |
@@ -882,7 +882,9 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Delivered | 2.4 |
 | [claude-mem-migration-plan](plans/2026-03-11-claude-mem-migration-plan.md) | Delivered | 3.6 |
 | [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Delivered | 4.8 |
-| [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Partial (missing: consolidation + reports backend routes) | 4.8 |
+| [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Delivered | 4.8 |
+
+| [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Draft | — |
 
 ### Knowledge Engineering
 - [Agent 知识工程实践 (stonepage)](https://zhuanlan.zhihu.com/p/1898602837) — Knowledge types, layered loading, dreaming/synthesis, meta-cognition
