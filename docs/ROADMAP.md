@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§10.1 collaboration Phase 1 delivered (PRs #91-92); §11 fully complete (PRs #86-90); PR #85 code quality fixes merged)
+> Last updated: 2026-03-12 (§10.1-10.3 collaboration Phases 1-3 delivered (PRs #91-95); §11 fully complete (PRs #86-90); worker probe URL fix (PR #93))
 
 ## Current State
 
@@ -830,23 +830,29 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Session bridge: SessionSpaceLink component for solo Space creation *(PR #92)*
 - [x] Full build verification: shared + CP + web all pass *(PRs #91-92)*
 
-### 10.2 Phase 2: Multi-Agent Communication — P2
+### 10.2 Phase 2: Multi-Agent Communication — P2 ✅
 
-Agent Bus for inter-agent messaging and delegation.
+> Delivered in PR #95. Outbox publisher, NATS JetStream transport, WebSocket event gateway, agent profiles/instances, approval gates, subscription filters.
 
-- [ ] Agent Bus (Redis PubSub same-machine / NATS cross-machine)
-- [ ] AgentMessage protocol: request/response/inform/delegate/escalate
-- [ ] Agent-to-agent delegation workflow
-- [ ] Space membership management (add/remove agents and humans)
+- [x] Agent Bus: Postgres outbox + NATS JetStream (EventBus interface + MockEventBus for CI) *(PR #95)*
+- [x] AgentMessage protocol: request/response/inform/delegate/escalate/ack with typed payloads *(PR #95)*
+- [x] Agent identity: AgentProfile + AgentInstance with CRUD routes *(PR #95)*
+- [x] Approval gates: multi-decision support + timeout policies *(PR #95)*
+- [x] WebSocket event gateway with visibility filtering *(PR #95)*
+- [x] Subscription filters on SpaceMember *(PR #95)*
+- [x] DB migration 0003: subscription_filter column + approval_gates/decisions tables *(PR #95)*
 
-### 10.3 Phase 3: Task Graph + Fleet — P2
+### 10.3 Phase 3: Task Graph + Fleet — P2 ✅
 
-DAG-based task scheduling and fleet-wide orchestration.
+> Delivered in PR #94. DAG validation, task graph CRUD, worker leases, BullMQ pluggable executor, fleet node management.
 
-- [ ] Task Graph engine: TaskNode, dependencies, fork/join
-- [ ] Approval gates: human sign-off before proceeding
-- [ ] Fleet overview Space: aggregate status across all machines
-- [ ] Temporal.io migration for durable multi-step workflows
+- [x] Task Graph engine: TaskDefinition/TaskEdge + DAG validation (cycle detection, topological sort) *(PR #94)*
+- [x] Task runs: lifecycle management + status transitions + heartbeat *(PR #94)*
+- [x] Worker leases: claim/renew/release/expire protocol *(PR #94)*
+- [x] BullMQ TaskExecutor implementing pluggable TaskExecutor interface *(PR #94)*
+- [x] Fleet overview: worker node CRUD + heartbeat + aggregate status *(PR #94)*
+- [x] DB migration 0002: task_graphs, task_definitions, task_edges, task_runs, worker_leases, worker_nodes *(PR #94)*
+- [ ] Temporal.io migration for durable multi-step workflows *(deferred — evaluate when approval waits become common)*
 
 ### 10.4 Phase 4: Context Bridge — P3
 
@@ -908,8 +914,8 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Run History Bar Redesign~~ | 11.4 | ✅ Delivered — recharts BarChart (PR #88) |
 | **P1** | ~~Execution History ↔ Session Linkage~~ | 11.5 | ✅ Delivered — sessionId + View Session link (PR #88) |
 | **P1** | ~~Multi-Agent Collaboration Phase 1~~ | 10.1 | ✅ Delivered — schema + stores + routes + Spaces UI (PRs #91-92) |
-| **P2** | Multi-Agent Communication | 10.2 | Not started — Agent Bus + delegation |
-| **P2** | Task Graph + Fleet | 10.3 | Not started — DAG engine + approval gates |
+| **P2** | ~~Multi-Agent Communication~~ | 10.2 | ✅ Delivered — outbox + NATS + WS gateway + approvals (PR #95) |
+| **P2** | ~~Task Graph + Fleet~~ | 10.3 | ✅ Delivered — DAG engine + leases + BullMQ executor (PR #94) |
 | **P3** | Context Bridge | 10.4 | Not started — cross-space context mobility |
 | **P3** | Intelligence Layer | 10.5 | Not started — smart routing + auto-compose |
 
@@ -1023,6 +1029,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 
 | [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Active | 10.1-10.5 |
 | [multi-agent-collaboration-phase1-impl-plan](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md) | Delivered | 10.1 |
+| [multi-agent-communication-impl-plan](plans/2026-03-12-multi-agent-communication-impl-plan.md) | Delivered | 10.2 |
+| [task-graph-fleet-impl-plan](plans/2026-03-12-task-graph-fleet-impl-plan.md) | Delivered | 10.3 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
