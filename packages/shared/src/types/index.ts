@@ -155,17 +155,33 @@ export {
   toExecutionSummary,
 } from './execution-summary.js';
 export type {
+  AggregateStats,
+  ApprovalTiming,
+  ApprovalTimingStats,
   DecomposedEdge,
   DecomposedTask,
   DecompositionConstraints,
   DecompositionRequest,
   DecompositionResponse,
   DecompositionResult,
+  NotificationChannel,
+  NotificationPreference,
+  NotificationPriority,
+  NotificationRoutingRule,
   RoutingCandidate,
   RoutingDecision,
+  RoutingMode,
   RoutingOutcome,
+  RoutingOutcomeStatus,
   RoutingRequest,
   RoutingScoreBreakdown,
+} from './intelligence.js';
+export {
+  isRoutingOutcomeStatus,
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_PRIORITIES,
+  ROUTING_MODES,
+  ROUTING_OUTCOME_STATUSES,
 } from './intelligence.js';
 export type {
   LoopConfig,
