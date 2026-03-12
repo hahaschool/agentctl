@@ -21,6 +21,7 @@ import { LastUpdated } from '@/components/LastUpdated';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
 import { RefreshButton } from '@/components/RefreshButton';
+import { RunTimeline } from '@/components/RunTimeline';
 import { SimpleTooltip } from '@/components/SimpleTooltip';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -625,6 +626,18 @@ export default function AgentDetailPage(): React.JSX.Element {
 
       {/* Run history visualization */}
       <RunHistoryBar runs={runList} />
+
+      {/* Run timeline chart */}
+      {runList.length >= 2 && (
+        <Card className="mb-4" data-testid="run-timeline-card">
+          <CardHeader>
+            <CardTitle className="text-sm">Run Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RunTimeline runs={runList} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Execution history — grouped by date with filters */}
       <Card>
