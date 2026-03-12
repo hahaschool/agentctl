@@ -56,7 +56,13 @@ export function isThreadType(v: string): v is ThreadType {
 
 // ── Space Event (append-only message/event model) ────────────
 
-export const SPACE_EVENT_TYPES = ['message', 'artifact', 'control', 'task-state', 'approval'] as const;
+export const SPACE_EVENT_TYPES = [
+  'message',
+  'artifact',
+  'control',
+  'task-state',
+  'approval',
+] as const;
 export type SpaceEventType = (typeof SPACE_EVENT_TYPES)[number];
 
 export const EVENT_SENDER_TYPES = ['human', 'agent', 'system'] as const;
