@@ -775,8 +775,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
                 code?: string;
                 hint?: string;
               };
-            } catch {
-              /* ignore parse errors */
+            } catch (parseErr) {
+              app.log.warn(
+                { sessionId, httpStatus: workerResponse.status, parseErr },
+                'Failed to parse worker error response body on resume',
+              );
             }
 
             const code = workerError.code ?? 'WORKER_ERROR';
@@ -1169,8 +1172,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
               code?: string;
               hint?: string;
             };
-          } catch {
-            /* ignore parse errors */
+          } catch (parseErr) {
+            app.log.warn(
+              { sessionId, httpStatus: workerResponse.status, parseErr },
+              'Failed to parse worker error response body on send-message',
+            );
           }
 
           const code = workerError.code ?? 'WORKER_ERROR';
@@ -1211,7 +1217,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         let workerBody: unknown;
         try {
           workerBody = await workerResponse.json();
-        } catch {
+        } catch (parseErr) {
+          app.log.warn(
+            { sessionId, parseErr },
+            'Failed to parse worker success response body on send-message, defaulting to { ok: true }',
+          );
           workerBody = { ok: true };
         }
 
