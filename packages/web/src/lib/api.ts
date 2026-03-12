@@ -232,6 +232,7 @@ export type AgentRun = {
   finishedAt?: string | null;
   errorMessage?: string;
   resultSummary?: ExecutionSummary | string | null;
+  sessionId?: string | null;
 };
 
 export type ApiAccount = SharedApiAccount;

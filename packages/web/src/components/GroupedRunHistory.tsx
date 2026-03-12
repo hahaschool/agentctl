@@ -1,8 +1,9 @@
 'use client';
 
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import type { RunStatusFilter, RunTriggerFilter } from '@/components/RunHistoryFilters';
@@ -30,6 +31,8 @@ export type GroupedRunHistoryProps = {
   runs: AgentRun[];
   /** Number of runs to show per "load more" page */
   pageSize?: number;
+  /** Run ID to visually highlight (e.g. when linked from a session) */
+  highlightedRunId?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -47,12 +50,24 @@ const FAILURE_STATUSES = new Set(['failure', 'error', 'timeout']);
 export function GroupedRunHistory({
   runs,
   pageSize = DEFAULT_PAGE_SIZE,
+  highlightedRunId,
 }: GroupedRunHistoryProps): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState<RunStatusFilter>('all');
   const [triggerFilter, setTriggerFilter] = useState<RunTriggerFilter>('all');
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
+  const highlightRef = useRef<HTMLTableRowElement | null>(null);
+  const highlightMobileRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll to highlighted run when it changes
+  useEffect(() => {
+    if (!highlightedRunId) return;
+    const el = highlightRef.current ?? highlightMobileRef.current;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightedRunId]);
 
   // -- Filter runs --
   const filteredRuns = useMemo(() => {
@@ -180,6 +195,10 @@ export function GroupedRunHistory({
                           run={run}
                           errorExpanded={expandedErrors.has(run.id)}
                           onToggleError={() => toggleError(run.id)}
+                          isHighlighted={run.id === highlightedRunId}
+                          highlightRef={
+                            run.id === highlightedRunId ? highlightMobileRef : undefined
+                          }
                         />
                       ))}
                     </div>
@@ -204,8 +223,11 @@ export function GroupedRunHistory({
                             <th scope="col" className="pb-1.5 pr-3 font-medium">
                               Cost
                             </th>
-                            <th scope="col" className="pb-1.5 font-medium">
+                            <th scope="col" className="pb-1.5 pr-3 font-medium">
                               Time
+                            </th>
+                            <th scope="col" className="pb-1.5 font-medium">
+                              Session
                             </th>
                           </tr>
                         </thead>
@@ -216,6 +238,8 @@ export function GroupedRunHistory({
                               run={run}
                               errorExpanded={expandedErrors.has(run.id)}
                               onToggleError={() => toggleError(run.id)}
+                              isHighlighted={run.id === highlightedRunId}
+                              highlightRef={run.id === highlightedRunId ? highlightRef : undefined}
                             />
                           ))}
                         </tbody>
@@ -296,13 +320,26 @@ function RunCardMobile({
   run,
   errorExpanded,
   onToggleError,
+  isHighlighted,
+  highlightRef,
 }: {
   run: AgentRun;
   errorExpanded: boolean;
   onToggleError: () => void;
+  isHighlighted?: boolean;
+  highlightRef?: React.Ref<HTMLDivElement>;
 }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border/50 p-3 space-y-1.5 transition-colors hover:border-border">
+    <div
+      ref={isHighlighted ? highlightRef : undefined}
+      className={cn(
+        'rounded-lg border p-3 space-y-1.5 transition-colors hover:border-border',
+        isHighlighted
+          ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/30'
+          : 'border-border/50',
+      )}
+      data-run-id={run.id}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <StatusBadge status={run.status} />
@@ -336,7 +373,19 @@ function RunCardMobile({
         )}
       </div>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-        <span className="font-mono">{formatCost(run.costUsd ?? null)}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono">{formatCost(run.costUsd ?? null)}</span>
+          {run.sessionId && (
+            <Link
+              href={`/sessions/${run.sessionId}`}
+              className="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+              Session
+            </Link>
+          )}
+        </div>
         <span>
           {run.finishedAt ? (
             <LiveTimeAgo date={run.finishedAt} />
@@ -353,13 +402,24 @@ function RunRowDesktop({
   run,
   errorExpanded,
   onToggleError,
+  isHighlighted,
+  highlightRef,
 }: {
   run: AgentRun;
   errorExpanded: boolean;
   onToggleError: () => void;
+  isHighlighted?: boolean;
+  highlightRef?: React.Ref<HTMLTableRowElement>;
 }): React.JSX.Element {
   return (
-    <tr className="border-b border-border/30 last:border-0">
+    <tr
+      ref={isHighlighted ? highlightRef : undefined}
+      className={cn(
+        'border-b border-border/30 last:border-0',
+        isHighlighted && 'bg-primary/5 ring-1 ring-primary/30 rounded',
+      )}
+      data-run-id={run.id}
+    >
       <td className="py-2 pr-3">
         <StatusBadge status={run.status} />
       </td>
@@ -392,11 +452,23 @@ function RunRowDesktop({
       <td className="py-2 pr-3 text-xs font-mono text-muted-foreground whitespace-nowrap">
         {formatCost(run.costUsd ?? null)}
       </td>
-      <td className="py-2 text-xs text-muted-foreground whitespace-nowrap">
+      <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">
         {run.finishedAt ? (
           <LiveTimeAgo date={run.finishedAt} />
         ) : (
           <LiveTimeAgo date={run.startedAt} />
+        )}
+      </td>
+      <td className="py-2 text-xs whitespace-nowrap">
+        {run.sessionId && (
+          <Link
+            href={`/sessions/${run.sessionId}`}
+            className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink className="h-3 w-3" />
+            <span>Session</span>
+          </Link>
         )}
       </td>
     </tr>

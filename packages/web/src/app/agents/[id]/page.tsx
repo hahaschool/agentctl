@@ -22,6 +22,7 @@ import { LastUpdated } from '@/components/LastUpdated';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
 import { RefreshButton } from '@/components/RefreshButton';
+import { RunHistoryChart } from '@/components/RunHistoryChart';
 import { RunTimeline } from '@/components/RunTimeline';
 import { SimpleTooltip } from '@/components/SimpleTooltip';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -38,7 +39,6 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import type { AgentRun } from '@/lib/api';
 import { describeCron, getNextRuns, isValidCron } from '@/lib/cron-utils';
 import { formatCost, formatDate, formatDuration, formatDurationMs } from '@/lib/format-utils';
 import {
@@ -51,7 +51,6 @@ import {
   useStopAgent,
   useUpdateAgent,
 } from '@/lib/queries';
-import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Main page component
@@ -88,10 +87,23 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
+  const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
 
   const accountList = accounts.data ?? [];
   const machines = machinesList.data ?? [];
   const runList = runs.data ?? [];
+
+  // Build a sessionId -> runId lookup for linkage
+  const sessionToRunMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const run of runList) {
+      if (run.sessionId) {
+        map.set(run.sessionId, run.id);
+      }
+    }
+    return map;
+  }, [runList]);
+
   const latestRunSummary = useMemo(() => {
     for (const run of runList) {
       const summary = toExecutionSummary(run.resultSummary ?? null, {
@@ -578,31 +590,48 @@ export default function AgentDetailPage(): React.JSX.Element {
             </div>
           ) : (
             <div className="space-y-1.5">
-              {(agentSessions.data?.sessions ?? []).map((sess) => (
-                <Link
-                  key={sess.id}
-                  href={`/sessions/${sess.id}`}
-                  className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors"
-                >
-                  <StatusBadge status={sess.status} />
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {sess.id.slice(0, 12)}
-                  </span>
-                  {sess.model && (
-                    <span className="text-[10px] font-mono text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1 py-0.5 rounded-sm">
-                      {sess.model}
-                    </span>
-                  )}
-                  {sess.startedAt && sess.endedAt && (
-                    <span className="text-[11px] text-muted-foreground">
-                      {formatDuration(sess.startedAt, sess.endedAt)}
-                    </span>
-                  )}
-                  <span className="ml-auto text-[11px] text-muted-foreground">
-                    <LiveTimeAgo date={sess.startedAt} />
-                  </span>
-                </Link>
-              ))}
+              {(agentSessions.data?.sessions ?? []).map((sess) => {
+                const linkedRunId = sessionToRunMap.get(sess.id);
+                return (
+                  <div
+                    key={sess.id}
+                    className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors"
+                  >
+                    <Link
+                      href={`/sessions/${sess.id}`}
+                      className="flex items-center gap-3 flex-1 min-w-0"
+                    >
+                      <StatusBadge status={sess.status} />
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {sess.id.slice(0, 12)}
+                      </span>
+                      {sess.model && (
+                        <span className="text-[10px] font-mono text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1 py-0.5 rounded-sm">
+                          {sess.model}
+                        </span>
+                      )}
+                      {sess.startedAt && sess.endedAt && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {formatDuration(sess.startedAt, sess.endedAt)}
+                        </span>
+                      )}
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        <LiveTimeAgo date={sess.startedAt} />
+                      </span>
+                    </Link>
+                    {linkedRunId && (
+                      <button
+                        type="button"
+                        className="shrink-0 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline cursor-pointer"
+                        onClick={() => setHighlightedRunId(linkedRunId)}
+                        title="Highlight the corresponding run in Execution History"
+                      >
+                        View Run
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               {(agentSessions.data?.sessions ?? []).length === 20 && (
                 <div className="pt-2 text-center">
                   <Link
@@ -629,7 +658,7 @@ export default function AgentDetailPage(): React.JSX.Element {
       </Card>
 
       {/* Run history visualization */}
-      <RunHistoryBar runs={runList} />
+      <RunHistoryChart runs={runList} onRunClick={setHighlightedRunId} />
 
       {/* Run timeline chart */}
       {runList.length >= 2 && (
@@ -670,7 +699,7 @@ export default function AgentDetailPage(): React.JSX.Element {
           ) : (
             <>
               {latestRunSummary && <ExecutionSummaryCard summary={latestRunSummary} />}
-              <GroupedRunHistory runs={runList} />
+              <GroupedRunHistory runs={runList} highlightedRunId={highlightedRunId} />
             </>
           )}
         </CardContent>
@@ -706,51 +735,6 @@ function InfoField({
     <div>
       <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
       <div className="text-foreground">{children}</div>
-    </div>
-  );
-}
-
-function getRunColor(status: string): { bg: string; label: string } {
-  if (status === 'success') {
-    return { bg: 'bg-green-500', label: 'success' };
-  }
-  if (status === 'failure' || status === 'error' || status === 'timeout') {
-    return { bg: 'bg-red-500', label: 'error' };
-  }
-  if (status === 'cancelled') {
-    return { bg: 'bg-zinc-500', label: 'cancelled' };
-  }
-  return { bg: 'bg-yellow-500', label: 'other' };
-}
-
-function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null {
-  const last20 = runs.slice(0, 20);
-  if (last20.length === 0) return null;
-
-  const successCount = last20.filter((r) => r.status === 'success').length;
-  const successRate = Math.round((successCount / last20.length) * 100);
-
-  return (
-    <div className="mb-4" data-testid="run-history-bar">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-medium text-muted-foreground">Run History</span>
-        <span className="text-[11px] text-muted-foreground">{successRate}% success rate</span>
-      </div>
-      <div className="flex gap-0.5">
-        {last20.map((run) => {
-          const { bg, label } = getRunColor(run.status);
-          const tooltip = `${formatDate(run.startedAt)} — ${run.status}`;
-          return (
-            <div
-              key={run.id}
-              role="img"
-              className={cn('h-5 flex-1 rounded-sm transition-opacity hover:opacity-80', bg)}
-              title={tooltip}
-              aria-label={`Run ${label}: ${run.status}`}
-            />
-          );
-        })}
-      </div>
     </div>
   );
 }
