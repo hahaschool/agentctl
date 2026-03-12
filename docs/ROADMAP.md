@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§10.5 Intelligence Layer PRs #111-113; §10.4 Context Bridge PR #97; CodeQL security PRs #98-99, #106, #115-116; migration fix PR #119; §12 Environment Isolation PRs #100-105)
+> Last updated: 2026-03-13 (scoped control-plane security hardening PR #123; §12.5 cleanup on PR completion PR #125; native-import CI stabilization PR #126)
 
 ## Current State
 
@@ -214,6 +214,11 @@ Orthogonal WHERE (local/Docker/SSH) vs WHAT (Claude/Codex) abstraction.
 > Design doc: [plans/2026-03-09-codex-claude-runtime-unification-design.md](plans/2026-03-09-codex-claude-runtime-unification-design.md)
 
 ### 3.2 Session Handoff Protocol
+
+> Status note: The native-import path remains experimental on `main`, but
+> PR #126 already stabilized the worker integration test/log coverage around
+> native-import preflight plus snapshot fallback. No broader native-import
+> feature scope should be inferred from that merge.
 
 - [x] `SessionHandoff` protocol: portable snapshot (worktree, branch, SHA, diff, conversation, MCP/skills)
 - [x] `HandoffController`: export snapshot → hydrate target runtime → preserve worktree
@@ -916,11 +921,11 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] `scripts/env-down.sh` — graceful shutdown + lock release
 - [ ] `scripts/env-promote.sh` — build + schema parity + migrate + restart + rollback (future)
 
-### 12.5 Agent Worktree Integration — P2
+### 12.5 Agent Worktree Integration — Partial
 
 - [ ] Tier assignment with flock-based locking
 - [ ] Auto-source `.env.dev-N` in agent worktree setup
-- [ ] Cleanup on PR completion
+- [x] Cleanup on PR completion *(PR #125)*
 
 ### 12.6 GitHub Actions CD Gate — P3 (Future)
 
@@ -981,9 +986,9 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P1** | ~~Environment Isolation: De-Hardcode Ports~~ | 12.0 | ✅ Delivered — env var config for all ports (PR #103) |
 | **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
 | **P2** | ~~Environment Isolation: Lifecycle Scripts~~ | 12.4 | ✅ Delivered — env-up.sh + env-down.sh with flock (PR #104) |
-| **P2** | Environment Isolation: Worktree Integration | 12.5 | Not started — auto-assign tier to agent worktrees |
+| **P2** | Environment Isolation: Worktree Integration | 12.5 | Partial — cleanup on PR completion shipped (PR #125); tier assignment + auto-source remain |
 | **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
-| **—** | Security: CodeQL rescan pending | — | Fixes merged (PRs #98, #99, #106, #115, #116); 21 alerts still shown — awaiting CodeQL to re-analyze patched main |
+| **—** | Security: CodeQL rescan pending | — | Fixes merged (PRs #98, #99, #106, #115, #116, #123); GitHub code scanning still needs to re-analyze patched `main` |
 
 ---
 
