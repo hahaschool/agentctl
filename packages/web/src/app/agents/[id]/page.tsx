@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import type { AgentFormEditData } from '@/components/AgentFormDialog';
 import { AgentFormDialog } from '@/components/AgentFormDialog';
+import { AgentHealthBadge } from '@/components/AgentHealthBadge';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
@@ -272,6 +273,9 @@ export default function AgentDetailPage(): React.JSX.Element {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-[22px] font-semibold tracking-tight">{data.name}</h1>
           <StatusBadge status={data.status} />
+          {(data.type === 'cron' || data.type === 'heartbeat' || data.type === 'loop') && (
+            <AgentHealthBadge agentId={agentId} />
+          )}
           {(data.config?.model as string | undefined) && (
             <span className="font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30 text-[11px]">
               {data.config?.model as string}

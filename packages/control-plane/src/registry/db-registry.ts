@@ -419,6 +419,85 @@ export class DbAgentRegistry {
     return rows.map((row) => this.toRun(row));
   }
 
+  async getAgentHealth(
+    agentId: string,
+    recentLimit = 10,
+  ): Promise<{
+    consecutiveFailures: number;
+    failureRate24h: number;
+    lastSuccessAt: string | null;
+    status: 'healthy' | 'warning' | 'critical';
+  }> {
+    // Fetch last N runs (most recent first)
+    const recentRows = await this.db
+      .select({
+        status: agentRuns.status,
+        finishedAt: agentRuns.finishedAt,
+      })
+      .from(agentRuns)
+      .where(eq(agentRuns.agentId, agentId))
+      .orderBy(desc(agentRuns.startedAt))
+      .limit(recentLimit);
+
+    // Calculate consecutive failures from most recent
+    let consecutiveFailures = 0;
+    for (const row of recentRows) {
+      if (row.status === 'failure' || row.status === 'timeout') {
+        consecutiveFailures++;
+      } else {
+        break;
+      }
+    }
+
+    // Find last success time
+    let lastSuccessAt: string | null = null;
+    for (const row of recentRows) {
+      if (row.status === 'success' && row.finishedAt) {
+        lastSuccessAt = row.finishedAt.toISOString();
+        break;
+      }
+    }
+
+    // If no success in recent runs, query specifically for the last success
+    if (!lastSuccessAt) {
+      const successRows = await this.db
+        .select({ finishedAt: agentRuns.finishedAt })
+        .from(agentRuns)
+        .where(and(eq(agentRuns.agentId, agentId), eq(agentRuns.status, 'success')))
+        .orderBy(desc(agentRuns.finishedAt))
+        .limit(1);
+
+      if (successRows.length > 0 && successRows[0].finishedAt) {
+        lastSuccessAt = successRows[0].finishedAt.toISOString();
+      }
+    }
+
+    // Calculate failure rate in last 24h
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const last24hRows = await this.db
+      .select({
+        status: agentRuns.status,
+      })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.agentId, agentId), gte(agentRuns.startedAt, twentyFourHoursAgo)));
+
+    const total24h = last24hRows.length;
+    const failures24h = last24hRows.filter(
+      (r) => r.status === 'failure' || r.status === 'timeout',
+    ).length;
+    const failureRate24h = total24h > 0 ? failures24h / total24h : 0;
+
+    // Determine health status
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    if (consecutiveFailures >= 5) {
+      status = 'critical';
+    } else if (consecutiveFailures >= 2) {
+      status = 'warning';
+    }
+
+    return { consecutiveFailures, failureRate24h, lastSuccessAt, status };
+  }
+
   // ---------------------------------------------------------------------------
   // Session creation from agent runs
   // ---------------------------------------------------------------------------
