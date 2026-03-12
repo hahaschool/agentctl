@@ -641,6 +641,42 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 
 ---
 
+## 8. Deployment & Operations
+
+> Production deployment tooling, CLI/TUI monitoring, and operational guides.
+
+### 8.1 Deploy CLI — P1
+
+Interactive deployment management via `agentctl deploy` subcommands.
+
+- [ ] `agentctl deploy init` — interactive .env generation, dependency checks (Node 22+, pnpm, Docker, PG, Redis), auto pnpm install + build + DB migration
+- [ ] `agentctl deploy up [--prod]` — dev mode (tsx watch) or prod mode (Docker Compose); `--worker` flag for worker-only machines
+- [ ] `agentctl deploy down` — stop all services (PM2 or Docker)
+- [ ] `agentctl deploy status` — parallel health checks on all services, table output
+- [ ] `agentctl deploy logs <service>` — stream logs from CP/Worker/Web
+
+### 8.2 TUI Monitoring Panel — P1
+
+Full-screen real-time monitoring via `agentctl tui` (Ink 4.x).
+
+- [ ] Layout: 3-panel (Services status, Agents list, Activity feed)
+- [ ] ServicePanel: 5s polling of /health endpoints, red/green status indicators
+- [ ] AgentPanel: live agent list with status/cost/duration, keyboard selection
+- [ ] ActivityFeed: SSE real-time event stream from control plane
+- [ ] LogViewer: drill-down log viewer for selected service
+- [ ] Keyboard shortcuts: q(quit), r(restart), s(stop), l(logs), Enter(detail)
+
+### 8.3 Deployment Guide — P1
+
+Step-by-step deployment documentation.
+
+- [ ] Quick Start: single-machine dev setup (5 minutes)
+- [ ] Production: Docker Compose deployment with security hardening
+- [ ] Multi-Machine: Tailscale mesh + per-machine worker setup
+- [ ] Troubleshooting: common errors + solutions quick reference
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -664,6 +700,9 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P3** | ~~Execution Environment Registry~~ | 2.9 | ✅ Delivered — DirectEnvironment + DockerEnvironment with gVisor (PR #69) |
 | **P3** | ~~Automated Experience Extraction~~ | 7.3 | ✅ Delivered — Stop hook, entity routing, Jaccard dedup, review flags (PR #64) |
 | **P3** | ~~Knowledge Maintenance / Dreaming~~ | 7.4 | ✅ Delivered — monthly lint, git cross-ref, synthesis, coverage reporting (PR #65) |
+| **P1** | Deploy CLI | 8.1 | Not started |
+| **P1** | TUI Monitoring Panel | 8.2 | Not started |
+| **P1** | Deployment Guide | 8.3 | Not started |
 
 ---
 
