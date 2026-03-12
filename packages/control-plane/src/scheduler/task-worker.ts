@@ -340,15 +340,28 @@ export function createTaskWorker({
         jobLogger.info({ runId }, 'Agent run record created');
 
         // -------------------------------------------------------------------
-        // 3. Optionally enrich the prompt with relevant memories
+        // 3. Resolve effective prompt: explicit prompt > agent config defaultPrompt
         // -------------------------------------------------------------------
-        let enrichedPrompt = prompt;
+        const effectivePrompt = prompt ?? agent.config?.defaultPrompt ?? null;
 
-        if (memoryInjector && prompt) {
-          const memoryContext = await memoryInjector.buildMemoryContext(agentId, prompt);
+        if (!effectivePrompt) {
+          throw new ControlPlaneError(
+            'NO_PROMPT_AVAILABLE',
+            `No prompt provided and agent '${agentId}' has no defaultPrompt configured`,
+            { agentId, trigger },
+          );
+        }
+
+        // -------------------------------------------------------------------
+        // 3b. Optionally enrich the prompt with relevant memories
+        // -------------------------------------------------------------------
+        let enrichedPrompt: string | null = effectivePrompt;
+
+        if (memoryInjector && effectivePrompt) {
+          const memoryContext = await memoryInjector.buildMemoryContext(agentId, effectivePrompt);
 
           if (memoryContext) {
-            enrichedPrompt = `${memoryContext}\n\n${prompt}`;
+            enrichedPrompt = `${memoryContext}\n\n${effectivePrompt}`;
             jobLogger.info(
               { memoryContextLength: memoryContext.length },
               'Prepended memory context to prompt',

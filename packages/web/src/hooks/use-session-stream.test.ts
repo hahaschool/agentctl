@@ -236,7 +236,7 @@ describe('useSessionStream — cost events', () => {
       latestEs().simulateOpen();
     });
 
-    const costData = { totalCostUsd: 0.05, inputTokens: 1000, outputTokens: 200 };
+    const costData = { turnCost: 0.01, totalCost: 0.05 };
     act(() => {
       latestEs().simulateEvent('cost', costData);
     });
@@ -252,17 +252,13 @@ describe('useSessionStream — cost events', () => {
     });
 
     act(() => {
-      latestEs().simulateEvent('cost', { totalCostUsd: 0.01, inputTokens: 100, outputTokens: 50 });
+      latestEs().simulateEvent('cost', { turnCost: 0.01, totalCost: 0.01 });
     });
     act(() => {
-      latestEs().simulateEvent('cost', {
-        totalCostUsd: 0.99,
-        inputTokens: 5000,
-        outputTokens: 1000,
-      });
+      latestEs().simulateEvent('cost', { turnCost: 0.05, totalCost: 0.99 });
     });
 
-    expect(result.current.latestCost?.totalCostUsd).toBe(0.99);
+    expect(result.current.latestCost?.totalCost).toBe(0.99);
   });
 });
 

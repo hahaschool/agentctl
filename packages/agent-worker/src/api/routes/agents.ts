@@ -166,14 +166,25 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
         }
       }
 
-      if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      // Resolve effective prompt: explicit prompt takes priority, then fall back
+      // to the agent config's defaultPrompt (used by cron/heartbeat triggers).
+      const effectivePrompt =
+        prompt && typeof prompt === 'string' && prompt.trim().length > 0
+          ? prompt
+          : config?.defaultPrompt &&
+              typeof config.defaultPrompt === 'string' &&
+              config.defaultPrompt.trim().length > 0
+            ? config.defaultPrompt
+            : null;
+
+      if (!effectivePrompt) {
         return reply.status(400).send({
-          error: 'A non-empty "prompt" string is required',
+          error: 'A non-empty "prompt" string is required (or set defaultPrompt in agent config)',
           code: 'INVALID_INPUT',
         });
       }
 
-      if (prompt.length > 32_000) {
+      if (effectivePrompt.length > 32_000) {
         return reply.status(400).send({
           error: 'PROMPT_TOO_LONG',
           message: 'Prompt must be under 32,000 characters',
@@ -220,7 +231,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
           });
         }
 
-        await instance.start(prompt);
+        await instance.start(effectivePrompt);
 
         return reply.status(200).send({
           ok: true,

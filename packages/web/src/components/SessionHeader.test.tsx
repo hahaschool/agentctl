@@ -447,7 +447,7 @@ describe('SessionHeader', () => {
   describe('cost display', () => {
     it('renders cost from streamCost when provided', () => {
       renderHeader({
-        streamCost: { totalCostUsd: 1.2345, inputTokens: 1000, outputTokens: 500 },
+        streamCost: { turnCost: 0.1, totalCost: 1.2345 },
       });
       // Cost appears in both the metadata row and SessionMetadataBadges
       const costTexts = screen.getAllByText('$1.2345');
@@ -848,7 +848,7 @@ describe('SessionHeader', () => {
         session: makeSession({
           metadata: { costUsd: 0.1, model: 'test' },
         }),
-        streamCost: { totalCostUsd: 0.5, inputTokens: 100, outputTokens: 50 },
+        streamCost: { turnCost: 0.05, totalCost: 0.5 },
       });
       // streamCost takes priority — $0.5000 should appear, not $0.1000
       const costTexts = screen.getAllByText('$0.5000');
