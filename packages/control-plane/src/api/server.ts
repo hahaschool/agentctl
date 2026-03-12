@@ -57,8 +57,10 @@ import { memoryRoutes } from './routes/memory.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
 import { memoryImportRoutes } from './routes/memory-import.js';
+import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
+import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { oauthRoutes } from './routes/oauth.js';
@@ -421,6 +423,12 @@ export async function createServer({
   if (pgPool) {
     await app.register(memorySynthesisRoutes, {
       prefix: '/api/memory/synthesis',
+      pool: pgPool,
+      logger,
+    });
+
+    await app.register(memoryConsolidationRoutes, {
+      prefix: '/api/memory/consolidation',
       pool: pgPool,
       logger,
     });
