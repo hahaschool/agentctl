@@ -683,6 +683,78 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ---
 
+## 9. Agent Execution Quality (UX Gaps)
+
+> Critical functional gaps in agent execution identified during real-world usage. These prevent agents from being usable in real workflows.
+
+### 9.1 CLAUDE.md / Project Instructions Discovery — P0
+
+Agent processes start in the correct working directory (`cwd: projectPath`), but Claude Code CLI is invoked without any mechanism to ensure it reads the project's `CLAUDE.md`. The `buildCliArgs()` function in `cli-session-manager.ts` only passes `-p`, `--output-format`, `--model`, `--verbose`, permission flags, tool controls, and `--append-system-prompt`.
+
+**Root cause:** Claude Code CLI should auto-discover `CLAUDE.md` from `cwd`, but the subprocess environment or spawn configuration may prevent this. Need investigation + fix.
+
+- [ ] Verify whether `claude -p` auto-discovers `CLAUDE.md` when `cwd` is set (manual test)
+- [ ] If not: add `--instructions` or `--cwd` flag explicitly, or pre-write `CLAUDE.md` content via `--append-system-prompt`
+- [ ] Ensure `projectPath` is always resolved to the actual project root (not the worktree)
+- [ ] Add integration test: agent start with `CLAUDE.md` in project dir → instructions are followed
+
+### 9.2 MCP Server Configuration for Agents — P0
+
+`RuntimeConfigApplier` can render MCP server maps to `<workspace>/.mcp.json` and `~/.claude.json`, but this is **never called before agent startup**. The control plane task dispatcher and agent start endpoint have no coordination with config application.
+
+**Root cause:** No pre-startup hook applies runtime config before spawning the CLI process.
+
+- [ ] Add pre-startup config application: write `.mcp.json` to project dir before `cli-session-manager.spawn()`
+- [ ] MCP server picker in agent creation/edit UI (web): select which MCP servers this agent needs
+- [ ] Store MCP server selection in agent config (`config.mcpServers: string[]`)
+- [ ] Control plane → worker config downlink: when dispatching, include MCP config in job payload
+- [ ] Verify MCP servers are available to the spawned Claude Code process
+
+### 9.3 Agent Config as Default Prompt — P1
+
+Currently `prompt` is required on every start (`POST /api/agents/:id/start`). Agent config already stores `systemPrompt`, `model`, `permissionMode`, etc., but has no `defaultPrompt` field. For cron/heartbeat agents, the prompt should come from config.
+
+- [ ] Add `defaultPrompt` field to `AgentConfig` type (shared)
+- [ ] Make `prompt` optional in `StartAgentBody` — fall back to `config.defaultPrompt` → `agent.config.defaultPrompt`
+- [ ] Cron/heartbeat scheduler: use agent's `defaultPrompt` when dispatching
+- [ ] UI: show default prompt in agent edit form; allow override on manual start
+
+### 9.4 Cost Tracking Display Fix — P1
+
+Cost tracking pipeline exists end-to-end (CLI stream-json → agent instance → SSE → CP completion callback), but cost always shows $0.00 in the UI. Likely causes:
+1. Claude Code CLI in `-p` mode may not emit `cost` events in stream-json format
+2. Completion callback may fail silently (worker → CP network issue)
+3. `costUsd` may be stored as string "0" due to type coercion
+
+- [ ] Debug: run agent with verbose logging, capture raw stream-json output, verify `cost` events exist
+- [ ] Verify completion callback reaches CP: add structured logging at both ends
+- [ ] Check DB: query `agent_runs` table for actual `cost_usd` values
+- [ ] Fix the broken link in the pipeline (likely CLI output parsing or DB storage)
+
+### 9.5 Cron UX Improvements — P1
+
+Current cron scheduling works (BullMQ repeatable jobs) but the UX is poor:
+1. No cron expression builder — users must write raw cron strings
+2. No visibility into cron job execution history or next-run time
+
+- [ ] Cron expression builder widget: visual picker for minute/hour/day/month/weekday with human-readable preview
+- [ ] Show next 5 scheduled run times when editing cron expression
+- [ ] Cron job execution log: list of past executions with status, duration, cost, trigger time
+- [ ] Cron job status indicators: last run status, next run countdown, active/paused toggle
+- [ ] Alerting: notify on N consecutive cron failures
+
+### 9.6 Agent Execution History Improvements — P2
+
+Execution history shows as a flat list of runs. For agents with many runs (especially cron agents), this becomes unusable.
+
+- [ ] Group runs by day/week with collapsible headers
+- [ ] Run timeline visualization (horizontal bar chart showing duration + status over time)
+- [ ] Pagination or virtual scroll for long run histories
+- [ ] Summary stats per time period: total runs, success rate, total cost, avg duration
+- [ ] Quick filters: status (success/failure/running), trigger type (manual/cron/heartbeat), date range
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -709,6 +781,12 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P1** | ~~Deploy CLI~~ | 8.1 | ✅ Delivered — `scripts/deploy.ts` with init/up/down/status/logs (PR #72) |
 | **P1** | ~~TUI Monitoring Panel~~ | 8.2 | ✅ Delivered — Ink 4.x 3-panel TUI `scripts/tui.tsx` (PR #73) |
 | **P1** | ~~Deployment Guide~~ | 8.3 | ✅ Delivered — `docs/DEPLOYMENT.md` quick-start/production/multi-machine (PR #72) |
+| **P0** | CLAUDE.md / Project Instructions Discovery | 9.1 | Not started — agent ignores project CLAUDE.md |
+| **P0** | MCP Server Configuration for Agents | 9.2 | Not started — no MCP config applied before agent startup |
+| **P1** | Agent Config as Default Prompt | 9.3 | Not started — prompt required even for cron agents |
+| **P1** | Cost Tracking Display Fix | 9.4 | Not started — cost always shows $0.00 |
+| **P1** | Cron UX Improvements | 9.5 | Not started — no cron builder, no execution monitoring |
+| **P2** | Agent Execution History Improvements | 9.6 | Not started — flat list unusable for many runs |
 
 ---
 
