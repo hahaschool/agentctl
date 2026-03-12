@@ -1,4 +1,5 @@
--- AgentCTL Migration: Intelligence layer tables for §10.5 Phase 5
+-- AgentCTL Migration 0016: Intelligence layer tables for §10.5 Phase 5
+-- Depends on: 0013 (collaboration), 0014 (task_graph/fleet), 0015 (agent_bus/approval_gates)
 -- Adds: routing_decisions, routing_outcomes, approval_timings, notification_preferences
 
 -- ── Routing Decisions (audit trail of every assignment) ─────
