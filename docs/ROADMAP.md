@@ -743,6 +743,64 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ---
 
+## 10. Multi-Agent Collaboration
+
+> Design doc: [plans/2026-03-12-multi-agent-collaboration-design.md](plans/2026-03-12-multi-agent-collaboration-design.md)
+> Impl plan: [plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md)
+>
+> Human-agent collaborative workspaces with cross-space context mobility.
+> Architecture: Hybrid Spaces + Task Graph (Option C from design evaluation).
+
+### 10.1 Phase 1: Spaces + Threads + Messages — P1
+
+Foundation data model and CRUD for multi-agent collaboration.
+
+- [ ] Shared types: Space, Thread, SpaceEvent, SpaceMember (collaboration.ts)
+- [ ] DB schema: spaces, threads, space_events tables (Drizzle ORM + migration)
+- [ ] Control plane CRUD routes: spaces, threads, events
+- [ ] EventStore with atomic sequence generation
+- [ ] Web frontend: Spaces list page + Thread view
+- [ ] Session migration: existing sessions → solo Spaces
+- [ ] Integration tests + full build verification
+
+### 10.2 Phase 2: Multi-Agent Communication — P2
+
+Agent Bus for inter-agent messaging and delegation.
+
+- [ ] Agent Bus (Redis PubSub same-machine / NATS cross-machine)
+- [ ] AgentMessage protocol: request/response/inform/delegate/escalate
+- [ ] Agent-to-agent delegation workflow
+- [ ] Space membership management (add/remove agents and humans)
+
+### 10.3 Phase 3: Task Graph + Fleet — P2
+
+DAG-based task scheduling and fleet-wide orchestration.
+
+- [ ] Task Graph engine: TaskNode, dependencies, fork/join
+- [ ] Approval gates: human sign-off before proceeding
+- [ ] Fleet overview Space: aggregate status across all machines
+- [ ] Temporal.io migration for durable multi-step workflows
+
+### 10.4 Phase 4: Context Bridge — P3
+
+Cross-space context mobility.
+
+- [ ] Reference mode: live pointer to source
+- [ ] Copy mode: ContextPicker snapshot
+- [ ] Live-sync mode: cross_space_query MCP tool
+- [ ] Context budget management across spaces
+
+### 10.5 Phase 5: Intelligence Layer — P3
+
+Smart routing, auto-composition, and learning.
+
+- [ ] Smart agent selection based on task type
+- [ ] Auto-compose agent teams from task description
+- [ ] Learning from collaboration outcomes
+- [ ] Notification routing optimization
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -775,6 +833,11 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P1** | ~~Cost Tracking Display Fix~~ | 9.4 | ✅ Delivered — sdk-runner + frontend field mismatch (PR #79) |
 | **P1** | ~~Cron UX Improvements~~ | 9.5 | ✅ Delivered — visual cron builder + next runs (PR #81) |
 | **P2** | ~~Agent Execution History Improvements~~ | 9.6 | ✅ Delivered — grouped by date, filters, stats (PR #81) |
+| **P1** | Multi-Agent Collaboration Phase 1 | 10.1 | In progress — shared types + DB + routes + web UI |
+| **P2** | Multi-Agent Communication | 10.2 | Not started — Agent Bus + delegation |
+| **P2** | Task Graph + Fleet | 10.3 | Not started — DAG engine + approval gates |
+| **P3** | Context Bridge | 10.4 | Not started — cross-space context mobility |
+| **P3** | Intelligence Layer | 10.5 | Not started — smart routing + auto-compose |
 
 ---
 
