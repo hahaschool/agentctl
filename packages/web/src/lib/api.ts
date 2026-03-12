@@ -213,6 +213,13 @@ export type RuntimeConfigDriftResponse = {
   items: RuntimeConfigDriftItem[];
 };
 
+export type AgentHealthResponse = {
+  consecutiveFailures: number;
+  failureRate24h: number;
+  lastSuccessAt: string | null;
+  status: 'healthy' | 'warning' | 'critical';
+};
+
 export type AgentRun = {
   id: string;
   agentId: string;
@@ -450,6 +457,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
+  getAgentHealth: (id: string) => request<AgentHealthResponse>(`/api/agents/${id}/health`),
 
   // Sessions
   listSessions: (params?: {

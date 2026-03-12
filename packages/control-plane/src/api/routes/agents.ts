@@ -404,6 +404,48 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   );
 
   // ---------------------------------------------------------------------------
+  // Agent health (cron failure alerting)
+  // ---------------------------------------------------------------------------
+
+  app.get<{ Params: { agentId: string }; Querystring: { limit?: string } }>(
+    '/:agentId/health',
+    {
+      schema: {
+        tags: ['agents'],
+        summary: 'Get agent health (consecutive failures, failure rate)',
+      },
+    },
+    async (request, reply) => {
+      if (!dbRegistry) {
+        return reply
+          .code(501)
+          .send({ error: 'DATABASE_NOT_CONFIGURED', message: 'Database not configured' });
+      }
+
+      const raw = request.query.limit;
+      let limit = 10;
+
+      if (raw !== undefined) {
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          return reply
+            .code(400)
+            .send({ error: 'INVALID_PARAMS', message: '"limit" must be a positive integer' });
+        }
+        limit = Math.min(Math.floor(parsed), 100);
+      }
+
+      const agent = await dbRegistry.getAgent(request.params.agentId);
+
+      if (!agent) {
+        return reply.code(404).send({ error: 'AGENT_NOT_FOUND', message: 'Agent not found' });
+      }
+
+      return await dbRegistry.getAgentHealth(request.params.agentId, limit);
+    },
+  );
+
+  // ---------------------------------------------------------------------------
   // Agent start / stop (existing BullMQ-based control)
   // ---------------------------------------------------------------------------
 
@@ -682,6 +724,40 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           tokensOut: tokensOut ?? null,
           resultSummary: resultSummary ?? null,
         });
+
+        // Check consecutive failures and log alerts
+        if (status === 'failure') {
+          try {
+            const health = await dbRegistry.getAgentHealth(request.params.id);
+            if (health.consecutiveFailures >= 5) {
+              app.log.error(
+                {
+                  agentId: request.params.id,
+                  consecutiveFailures: health.consecutiveFailures,
+                  lastError: errorMessage ?? null,
+                  failureRate24h: health.failureRate24h,
+                  lastSuccessAt: health.lastSuccessAt,
+                },
+                'Agent has critical consecutive failures — manual intervention recommended',
+              );
+            } else if (health.consecutiveFailures >= 3) {
+              app.log.warn(
+                {
+                  agentId: request.params.id,
+                  consecutiveFailures: health.consecutiveFailures,
+                  lastError: errorMessage ?? null,
+                  failureRate24h: health.failureRate24h,
+                },
+                'Agent has multiple consecutive failures',
+              );
+            }
+          } catch (healthErr) {
+            app.log.warn(
+              { err: healthErr, agentId: request.params.id },
+              'Failed to check agent health after failure — ignoring',
+            );
+          }
+        }
 
         // Update agent's currentSessionId for session resume support
         if (sessionId && status === 'success') {

@@ -29,6 +29,7 @@ export const queryKeys = {
   agents: ['agents'] as const,
   agent: (id: string) => ['agents', id] as const,
   agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
+  agentHealth: (agentId: string) => ['agents', agentId, 'health'] as const,
   sessions: (params?: {
     status?: string;
     machineId?: string;
@@ -150,6 +151,17 @@ export function agentRunsQuery(agentId: string) {
     enabled: !!agentId,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
+  });
+}
+
+export function agentHealthQuery(agentId: string) {
+  return queryOptions({
+    queryKey: queryKeys.agentHealth(agentId),
+    queryFn: () => api.getAgentHealth(agentId),
+    enabled: !!agentId,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
 }
 
