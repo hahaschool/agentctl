@@ -179,7 +179,7 @@ export const runtimeConfigRoutes: FastifyPluginAsync<RuntimeConfigRoutesOptions>
         const address = machine.tailscaleIp ?? machine.hostname;
         const workerUrl = `http://${address}:${String(workerPort)}`;
         try {
-          const res = await fetch(`${workerUrl}/runtime-config/state`, {
+          const res = await fetch(`${workerUrl}/api/runtime-config/state`, {
             signal: AbortSignal.timeout(5000),
           });
           if (!res.ok) return;
