@@ -749,53 +749,45 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 > Five user-reported issues on the agent detail page (`/agents/[id]`).
 
-### 11.1 Start Button Ignores defaultPrompt — P0
+### 11.1 Start Button Ignores defaultPrompt — P0 ✅
 
-Start button requires manual prompt entry even when agent has `config.defaultPrompt` configured. The backend (PR #79) accepts empty prompt and falls back to defaultPrompt, but the frontend blocks submission when prompt is empty.
+> Fixed in PR #86. `handleStart()` now computes `effectivePrompt = prompt.trim() || agent.config.defaultPrompt || ''` and only blocks when empty. Placeholder shows "Using default prompt..." when defaultPrompt exists.
 
-**Root cause:** `handleStart()` in `page.tsx:130` does `if (!prompt.trim()) return;` — doesn't check for defaultPrompt.
+- [x] Pre-fill prompt input with defaultPrompt *(PR #86)*
+- [x] Allow "Go" without text if defaultPrompt exists *(PR #86)*
 
 **Fix:**
 - Pre-fill prompt input with `agent.config.defaultPrompt` when available
 - Allow "Go" without entering text if defaultPrompt exists
 - Show placeholder like "Using default prompt: {truncated}" when pre-filled
 
-### 11.2 Agent Header Overflow — P1
+### 11.2 Agent Header Overflow — P1 ✅
 
-Agent name and controls overflow their container when the name is long or the viewport is narrow.
+> Fixed in PR #86. Added `truncate min-w-0 max-w-[300px]` + `title` tooltip to agent name `h1` element. Header flex container uses `min-w-0`.
 
-**Fix:** Add `truncate` / `overflow-hidden` / `text-ellipsis` to the agent name element.
+- [x] CSS truncation with tooltip on hover *(PR #86)*
 
-### 11.3 Cost Display Still $0.00 — P1
+### 11.3 Cost Display Still $0.00 — P1 ✅
 
-Cost tracking pipeline was fixed (PR #79: sdk-runner + frontend SSE field mismatch), but the agent detail page still shows $0.00 for both Last Run Cost and Total Cost. Two likely causes:
-1. Old runs created before the fix have $0 in the database — no backfill
-2. The agent detail page reads `data.lastCostUsd` and `data.totalCostUsd` from the agent record, but the completion callback may not be updating these fields correctly
+> Fixed in PR #87. Root cause: agent GET endpoint returned static 0 values. Fix: CP now computes `lastCostUsd` from most recent run and `totalCostUsd` as sum of all runs via DB registry methods.
 
-**Fix:**
-- Investigate: query DB for actual cost values on recent runs
-- If DB has correct values: fix the API response mapping
-- If DB has zeros: fix the completion callback to write cost correctly
-- Consider computing cost from runs (sum of `agent_runs.cost_usd`) as fallback
+- [x] `getLastRunCost(agentId)` — fetches most recent run's cost_usd *(PR #87)*
+- [x] `getTotalCost(agentId)` — sums all runs' cost_usd *(PR #87)*
+- [x] Agent GET route returns computed costs *(PR #87)*
 
-### 11.4 Run History Bar Too Thin — P1
+### 11.4 Run History Bar Too Thin — P1 ✅
 
-The `RunHistoryBar` component renders thin 20px colored blocks. With many runs it's hard to read and provides minimal information.
+> Fixed in PR #88. Replaced thin `RunHistoryBar` with recharts `BarChart` component (`RunHistoryChart.tsx`). Shows duration as bar height, colored by status, with hover tooltips showing date/duration/status/cost.
 
-**Fix:** Replace with a mini sparkline or small bar chart:
-- Use recharts `BarChart` (already installed) with minimal chrome
-- Height ~40px, show duration as bar height, color by status
-- Clickable bars that scroll to the corresponding run in Execution History
-- Keep the success rate badge
+- [x] `RunHistoryChart` component with recharts BarChart *(PR #88)*
+- [x] Status-based coloring + tooltips *(PR #88)*
 
-### 11.5 Execution History ↔ Session Linkage — P1
+### 11.5 Execution History ↔ Session Linkage — P1 ✅
 
-Execution History shows runs (id, status, duration, cost) and Sessions shows sessions (id, model, duration, time). There's no visible link between them — user can't tell which run corresponds to which session.
+> Fixed in PR #88. `GroupedRunHistory` now shows "View Session" link for runs with sessionId. Run type includes `sessionId` field. API response maps session associations.
 
-**Fix:**
-- Add `sessionId` to run entries in GroupedRunHistory (clickable link to session)
-- When clicking a session in the Sessions list, highlight the corresponding run(s) in Execution History
-- Consider merging Sessions + Execution History into a single unified timeline view
+- [x] `sessionId` on run entries with clickable session link *(PR #88)*
+- [x] API returns sessionId on runs *(PR #88)*
 
 ### 11.6 MCP Server Auto-Detection & Managed Config — P0
 
@@ -926,13 +918,13 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Cost Tracking Display Fix~~ | 9.4 | ✅ Delivered — sdk-runner + frontend field mismatch (PR #79) |
 | **P1** | ~~Cron UX Improvements~~ | 9.5 | ✅ Delivered — visual cron builder + next runs (PR #81) |
 | **P2** | ~~Agent Execution History Improvements~~ | 9.6 | ✅ Delivered — grouped by date, filters, stats (PR #81) |
-| **P0** | Start Button Ignores defaultPrompt | 11.1 | In progress — agent working in worktree |
-| **P0** | MCP Auto-Detection & Managed Config | 11.6 | In progress — agent working in worktree |
-| **P0** | Agent Settings Redesign (Tabbed) | 11.7 | In progress — agent working in worktree |
-| **P1** | Agent Header Overflow | 11.2 | In progress — agent working in worktree (with §11.1) |
-| **P1** | Cost Display Still $0.00 | 11.3 | In progress — agent investigating cost pipeline |
-| **P1** | Run History Bar Redesign | 11.4 | In progress — agent working in worktree |
-| **P1** | Execution History ↔ Session Linkage | 11.5 | In progress — agent working in worktree (with §11.4) |
+| **P0** | ~~Start Button Ignores defaultPrompt~~ | 11.1 | ✅ Delivered — effectivePrompt fallback + placeholder (PR #86) |
+| **P0** | MCP Auto-Detection & Managed Config | 11.6 | In progress — worker discover endpoint + templates + UI picker |
+| **P0** | Agent Settings Redesign (Tabbed) | 11.7 | In progress — full-page `/agents/[id]/settings` with tabs |
+| **P1** | ~~Agent Header Overflow~~ | 11.2 | ✅ Delivered — CSS truncate + tooltip (PR #86) |
+| **P1** | ~~Cost Display Still $0.00~~ | 11.3 | ✅ Delivered — computed from runs (PR #87) |
+| **P1** | ~~Run History Bar Redesign~~ | 11.4 | ✅ Delivered — recharts BarChart (PR #88) |
+| **P1** | ~~Execution History ↔ Session Linkage~~ | 11.5 | ✅ Delivered — sessionId + View Session link (PR #88) |
 | **P1** | Multi-Agent Collaboration Phase 1 | 10.1 | In progress — shared types + DB + routes + web UI |
 | **P2** | Multi-Agent Communication | 10.2 | Not started — Agent Bus + delegation |
 | **P2** | Task Graph + Fleet | 10.3 | Not started — DAG engine + approval gates |
