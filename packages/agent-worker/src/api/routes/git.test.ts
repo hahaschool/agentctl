@@ -291,6 +291,22 @@ describe('Git routes', () => {
       }
     });
 
+    it('returns 400 when the path is outside allowed directories', async () => {
+      vi.mocked(lstatSync).mockReturnValue(makeStat(true));
+      vi.mocked(statSync).mockReturnValue(makeStat(true));
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/git/status?path=/etc',
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: 'INVALID_PATH',
+      });
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
     it('returns 400 when path query parameter is missing', async () => {
       const res = await app.inject({
         method: 'GET',

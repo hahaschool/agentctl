@@ -117,6 +117,45 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('GET /api/files (list directory)', () => {
+    it('returns 429 when repeated directory listing requests exceed the configured limit', async () => {
+      process.env.FILE_LIST_RATE_LIMIT_MAX = '1';
+      process.env.FILE_LIST_RATE_LIMIT_WINDOW_MS = '60000';
+
+      const dirPath = '/Users/testuser/project';
+
+      await app.close();
+      app = await buildApp();
+
+      vi.mocked(statSync).mockImplementation((p) => {
+        if (p === dirPath) return makeStat({ isDirectory: true });
+        return makeStat({ isFile: true, size: 128 });
+      });
+      vi.mocked(readdirSync).mockReturnValue([makeDirent('src', true)] as unknown as ReturnType<
+        typeof readdirSync
+      >);
+
+      try {
+        const first = await app.inject({
+          method: 'GET',
+          url: '/api/files?path=/Users/testuser/project',
+        });
+        const second = await app.inject({
+          method: 'GET',
+          url: '/api/files?path=/Users/testuser/project',
+        });
+
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(429);
+        expect(second.json()).toEqual({
+          error: 'Too many directory listing requests. Try again later.',
+          code: 'RATE_LIMITED',
+        });
+      } finally {
+        delete process.env.FILE_LIST_RATE_LIMIT_MAX;
+        delete process.env.FILE_LIST_RATE_LIMIT_WINDOW_MS;
+      }
+    });
+
     it('returns directory entries sorted dirs-first then alphabetically', async () => {
       const dirPath = '/Users/testuser/project';
       vi.mocked(existsSync).mockReturnValue(true);
@@ -277,6 +316,46 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('GET /api/files/content (read file)', () => {
+    it('returns 429 when repeated file reads exceed the configured limit', async () => {
+      process.env.FILE_CONTENT_RATE_LIMIT_MAX = '1';
+      process.env.FILE_CONTENT_RATE_LIMIT_WINDOW_MS = '60000';
+
+      const filePath = '/Users/testuser/project/index.ts';
+      const fileContent = 'console.log("hello");';
+      const fd = 42;
+
+      await app.close();
+      app = await buildApp();
+
+      vi.mocked(openSync).mockReturnValue(fd);
+      vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: fileContent.length }));
+      vi.mocked(readSync).mockImplementation((_fd, buf: Buffer) => {
+        buf.write(fileContent);
+        return fileContent.length;
+      });
+
+      try {
+        const first = await app.inject({
+          method: 'GET',
+          url: `/api/files/content?path=${encodeURIComponent(filePath)}`,
+        });
+        const second = await app.inject({
+          method: 'GET',
+          url: `/api/files/content?path=${encodeURIComponent(filePath)}`,
+        });
+
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(429);
+        expect(second.json()).toEqual({
+          error: 'Too many file content requests. Try again later.',
+          code: 'RATE_LIMITED',
+        });
+      } finally {
+        delete process.env.FILE_CONTENT_RATE_LIMIT_MAX;
+        delete process.env.FILE_CONTENT_RATE_LIMIT_WINDOW_MS;
+      }
+    });
+
     it('returns file content with path and size', async () => {
       const filePath = '/Users/testuser/project/index.ts';
       const fileContent = 'console.log("hello");';
@@ -378,6 +457,39 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('PUT /api/files/content (write file)', () => {
+    it('returns 429 when repeated file writes exceed the configured limit', async () => {
+      process.env.FILE_WRITE_RATE_LIMIT_MAX = '1';
+      process.env.FILE_WRITE_RATE_LIMIT_WINDOW_MS = '60000';
+
+      const filePath = '/Users/testuser/project/output.txt';
+
+      await app.close();
+      app = await buildApp();
+
+      try {
+        const first = await app.inject({
+          method: 'PUT',
+          url: '/api/files/content',
+          payload: { path: filePath, content: 'first write' },
+        });
+        const second = await app.inject({
+          method: 'PUT',
+          url: '/api/files/content',
+          payload: { path: filePath, content: 'second write' },
+        });
+
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(429);
+        expect(second.json()).toEqual({
+          error: 'Too many file write requests. Try again later.',
+          code: 'RATE_LIMITED',
+        });
+      } finally {
+        delete process.env.FILE_WRITE_RATE_LIMIT_MAX;
+        delete process.env.FILE_WRITE_RATE_LIMIT_WINDOW_MS;
+      }
+    });
+
     it('writes file content and returns success', async () => {
       const filePath = '/Users/testuser/project/output.txt';
       vi.mocked(existsSync).mockReturnValue(true);
@@ -392,7 +504,7 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.success).toBe(true);
       expect(body.path).toBe(filePath);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, 'new content here', 'utf-8');
+      expect(writeFileSync).toHaveBeenCalledWith(filePath, 'new content here');
     });
 
     it('creates parent directories when they do not exist', async () => {
@@ -451,6 +563,19 @@ describe('File routes', () => {
       expect(res.json().message).toContain('.aws');
     });
 
+    it('returns 400 when the write path is outside allowed directories', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/files/content',
+        payload: { path: '/etc/passwd', content: 'root:x:0:0' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_PATH');
+      expect(res.json().message).toContain('outside allowed');
+      expect(writeFileSync).not.toHaveBeenCalled();
+    });
+
     it('allows writing empty content', async () => {
       const filePath = '/Users/testuser/project/empty.txt';
       vi.mocked(existsSync).mockReturnValue(true);
@@ -463,7 +588,7 @@ describe('File routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().success).toBe(true);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, '', 'utf-8');
+      expect(writeFileSync).toHaveBeenCalledWith(filePath, '');
     });
 
     it('accepts paths under /tmp', async () => {
