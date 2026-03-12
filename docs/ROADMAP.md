@@ -706,6 +706,8 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] MCP server picker in agent creation/edit UI (web) *(PR #82)*
 - [ ] Control plane → worker config downlink: include MCP config in job payload — future
 
+> **User feedback**: Manual MCP form is bad UX. Needs auto-detection and managed push-down. See §11.6.
+
 ### 9.3 Agent Config as Default Prompt — P1 ✅
 
 > Fixed in PR #79. Added `defaultPrompt` to `AgentConfig`, made `prompt` optional in start endpoint
@@ -740,6 +742,97 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Summary stats per time period: total runs, success rate, total cost, avg duration *(PR #81)*
 - [x] Quick filters: status, trigger type, date range *(PR #81)*
 - [x] Run timeline visualization (horizontal bar chart with recharts) *(PR #83)*
+
+---
+
+## 11. Agent Detail Page UX Fixes
+
+> Five user-reported issues on the agent detail page (`/agents/[id]`).
+
+### 11.1 Start Button Ignores defaultPrompt — P0
+
+Start button requires manual prompt entry even when agent has `config.defaultPrompt` configured. The backend (PR #79) accepts empty prompt and falls back to defaultPrompt, but the frontend blocks submission when prompt is empty.
+
+**Root cause:** `handleStart()` in `page.tsx:130` does `if (!prompt.trim()) return;` — doesn't check for defaultPrompt.
+
+**Fix:**
+- Pre-fill prompt input with `agent.config.defaultPrompt` when available
+- Allow "Go" without entering text if defaultPrompt exists
+- Show placeholder like "Using default prompt: {truncated}" when pre-filled
+
+### 11.2 Agent Header Overflow — P1
+
+Agent name and controls overflow their container when the name is long or the viewport is narrow.
+
+**Fix:** Add `truncate` / `overflow-hidden` / `text-ellipsis` to the agent name element.
+
+### 11.3 Cost Display Still $0.00 — P1
+
+Cost tracking pipeline was fixed (PR #79: sdk-runner + frontend SSE field mismatch), but the agent detail page still shows $0.00 for both Last Run Cost and Total Cost. Two likely causes:
+1. Old runs created before the fix have $0 in the database — no backfill
+2. The agent detail page reads `data.lastCostUsd` and `data.totalCostUsd` from the agent record, but the completion callback may not be updating these fields correctly
+
+**Fix:**
+- Investigate: query DB for actual cost values on recent runs
+- If DB has correct values: fix the API response mapping
+- If DB has zeros: fix the completion callback to write cost correctly
+- Consider computing cost from runs (sum of `agent_runs.cost_usd`) as fallback
+
+### 11.4 Run History Bar Too Thin — P1
+
+The `RunHistoryBar` component renders thin 20px colored blocks. With many runs it's hard to read and provides minimal information.
+
+**Fix:** Replace with a mini sparkline or small bar chart:
+- Use recharts `BarChart` (already installed) with minimal chrome
+- Height ~40px, show duration as bar height, color by status
+- Clickable bars that scroll to the corresponding run in Execution History
+- Keep the success rate badge
+
+### 11.5 Execution History ↔ Session Linkage — P1
+
+Execution History shows runs (id, status, duration, cost) and Sessions shows sessions (id, model, duration, time). There's no visible link between them — user can't tell which run corresponds to which session.
+
+**Fix:**
+- Add `sessionId` to run entries in GroupedRunHistory (clickable link to session)
+- When clicking a session in the Sessions list, highlight the corresponding run(s) in Execution History
+- Consider merging Sessions + Execution History into a single unified timeline view
+
+### 11.6 MCP Server Auto-Detection & Managed Config — P0
+
+Current MCP config is fully manual (hand-type command, args, env). This is unusable — should be automatic.
+
+**Requirements:**
+1. **Auto-detect from project**: Worker reads `.mcp.json` / `~/.claude.json` from the agent's `projectPath` and presents discovered MCP servers as toggleable checkboxes
+2. **Auto-detect from machine**: Worker reports available MCP servers in heartbeat → CP stores per-machine MCP inventory → UI shows "available on this machine" list
+3. **Managed templates**: CP maintains an MCP server template library (e.g. "filesystem", "memory", "search") with pre-configured command/args → agent form picks from templates
+4. **Runtime-aware**: Claude Code agents get `.mcp.json`, Codex agents get their own tool config — UI should only show relevant options per runtime
+5. **Push-down**: When CP dispatches a job, include the resolved MCP config in the payload so the worker writes the correct `.mcp.json` without relying on agent-local config
+
+**Implementation:**
+- Worker: new `GET /api/mcp/discover?projectPath=...` endpoint → scan `.mcp.json` + `~/.claude.json`
+- Worker: include `mcpServers` in heartbeat payload
+- CP: store machine MCP inventory in registry
+- Web: replace manual form with checkbox picker (discovered + templates)
+- Web: show "(auto-detected from project)" badge on discovered servers
+
+### 11.7 Agent Settings Redesign — P0
+
+Agent edit dialog is now a single long-scrolling form with 10+ fields. This doesn't scale.
+
+**Current fields (too many for one column):** name, machine, type, model, initialPrompt, maxTurns, permissionMode, systemPrompt, defaultPrompt, MCP servers, schedule, memory budget
+
+**Redesign:**
+- Replace dialog with a **full-page agent settings** view (like Settings page pattern)
+- **Tabbed layout** with sections:
+  - **General**: name, machine, type, schedule
+  - **Model & Prompts**: model, initialPrompt, defaultPrompt, systemPrompt, maxTurns
+  - **Permissions & Tools**: permissionMode, allowedTools, disallowedTools
+  - **MCP Servers**: auto-detected list + manual override (§11.6)
+  - **Memory**: scope, maxTokens, maxFacts
+- Each tab saves independently
+- Runtime-aware: show/hide tabs based on agent runtime (Claude Code vs Codex)
+- Responsive: works on both desktop and mobile
+- Quick-create mode stays as a simplified dialog for fast agent creation
 
 ---
 
@@ -833,6 +926,13 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Cost Tracking Display Fix~~ | 9.4 | ✅ Delivered — sdk-runner + frontend field mismatch (PR #79) |
 | **P1** | ~~Cron UX Improvements~~ | 9.5 | ✅ Delivered — visual cron builder + next runs (PR #81) |
 | **P2** | ~~Agent Execution History Improvements~~ | 9.6 | ✅ Delivered — grouped by date, filters, stats (PR #81) |
+| **P0** | Start Button Ignores defaultPrompt | 11.1 | Not started — frontend blocks empty prompt |
+| **P0** | MCP Auto-Detection & Managed Config | 11.6 | Not started — manual form is unusable |
+| **P0** | Agent Settings Redesign (Tabbed) | 11.7 | Not started — dialog too long, needs full-page tabbed view |
+| **P1** | Agent Header Overflow | 11.2 | Not started — CSS truncation |
+| **P1** | Cost Display Still $0.00 | 11.3 | Not started — investigate DB values |
+| **P1** | Run History Bar Redesign | 11.4 | Not started — replace with mini chart |
+| **P1** | Execution History ↔ Session Linkage | 11.5 | Not started — no cross-reference |
 | **P1** | Multi-Agent Collaboration Phase 1 | 10.1 | In progress — shared types + DB + routes + web UI |
 | **P2** | Multi-Agent Communication | 10.2 | Not started — Agent Bus + delegation |
 | **P2** | Task Graph + Fleet | 10.3 | Not started — DAG engine + approval gates |
