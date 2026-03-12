@@ -147,6 +147,34 @@ describe('CliSessionManager', () => {
       expect(opts.cwd).toBe('/tmp/project');
     });
 
+    it('normalizes projectPath before passing it to Claude cwd flags', () => {
+      manager.startSession(
+        defaultStartOptions({
+          projectPath: '/tmp/project/../normalized-project',
+        }),
+      );
+
+      const [, args, opts] = spawnSpy.mock.calls[0];
+      const cwdIndex = args.indexOf('--cwd');
+
+      expect(cwdIndex).toBeGreaterThanOrEqual(0);
+      expect(args[cwdIndex + 1]).toBe('/tmp/normalized-project');
+      expect(opts.cwd).toBe('/tmp/normalized-project');
+    });
+
+    it('rejects denied project paths before creating session state', () => {
+      expect(() =>
+        manager.startSession(
+          defaultStartOptions({
+            projectPath: '/tmp/worktrees/.ssh/project',
+          }),
+        ),
+      ).toThrow(/Project path contains denied segment/);
+
+      expect(manager.listSessions()).toHaveLength(0);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
     it('includes --resume flag when resumeSessionId is provided', () => {
       manager.startSession(defaultStartOptions({ resumeSessionId: 'prev-session-123' }));
 
@@ -530,6 +558,28 @@ describe('CliSessionManager', () => {
         }
       }
     });
+
+    it('bounds incomplete stdout buffers to prevent unbounded growth', async () => {
+      const errors: CliSessionEvent[] = [];
+      const session = manager.startSession(defaultStartOptions());
+      manager.on('session_error', (event: CliSessionEvent) => errors.push(event));
+
+      mockChild.pushStdout('x'.repeat(70_000));
+      await tick();
+
+      const buffered = (
+        manager as unknown as {
+          lineBuffers: Map<string, string>;
+        }
+      ).lineBuffers.get(session.id);
+
+      expect(buffered).toBeDefined();
+      expect(buffered?.length).toBeLessThanOrEqual(64 * 1024);
+      expect(errors).toHaveLength(1);
+      if (errors[0]?.type === 'session_error') {
+        expect(errors[0].error).toContain('stdout buffer exceeded');
+      }
+    });
   });
 
   // ── Session management ─────────────────────────────────────────────
@@ -645,9 +695,8 @@ describe('CliSessionManager', () => {
       );
 
       expect(writeFileSyncSpy).toHaveBeenCalledOnce();
-      const [path, content, encoding] = writeFileSyncSpy.mock.calls[0];
+      const [path, content] = writeFileSyncSpy.mock.calls[0];
       expect(path).toBe('/tmp/project/.mcp.json');
-      expect(encoding).toBe('utf-8');
 
       const parsed = JSON.parse(content as string);
       expect(parsed).toEqual({

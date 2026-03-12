@@ -35,6 +35,13 @@ type ReporterOverrides = {
   flushIntervalMs?: number;
 };
 
+type MockAuditStats = {
+  size: number;
+  mode: number;
+  isFile: () => boolean;
+  isSymbolicLink: () => boolean;
+};
+
 function makeReporter(overrides?: ReporterOverrides): AuditReporter {
   return new AuditReporter({
     controlPlaneUrl: overrides?.controlPlaneUrl ?? 'http://localhost:4000',
@@ -88,16 +95,31 @@ function makeSessionEndEntry(): AuditEntry {
  * Build a Buffer from NDJSON lines and set up the mock lstat and
  * open to return it from the given byte offset.
  */
-function setupAuditFile(entries: AuditEntry[], startOffset = 0): Buffer {
+function makeAuditStats(
+  size: number,
+  overrides?: Partial<MockAuditStats>,
+): ReturnType<typeof lstat> extends Promise<infer T> ? T : never {
+  return {
+    size,
+    mode: overrides?.mode ?? 0o600,
+    isFile: overrides?.isFile ?? (() => true),
+    isSymbolicLink: overrides?.isSymbolicLink ?? (() => false),
+  } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never;
+}
+
+function setupAuditFile(
+  entries: AuditEntry[],
+  startOffset = 0,
+  statOverrides?: Partial<MockAuditStats>,
+): Buffer {
   const ndjson = `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`;
   const buf = Buffer.from(ndjson, 'utf-8');
 
-  mockLstat.mockResolvedValue({
-    size: startOffset + buf.byteLength,
-    isSymbolicLink: () => false,
-  } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+  const stats = makeAuditStats(startOffset + buf.byteLength, statOverrides);
+  mockLstat.mockResolvedValue(stats);
 
   const mockHandle = {
+    stat: vi.fn().mockResolvedValue(stats),
     read: vi.fn().mockImplementation((target: Buffer, _tOffset: number, length: number) => {
       buf.copy(target, 0, 0, length);
       return Promise.resolve({ bytesRead: length, buffer: target });
@@ -316,12 +338,11 @@ describe('AuditReporter', () => {
       const ndjson = `${JSON.stringify(goodEntry)}\nnot-valid-json\n`;
       const buf = Buffer.from(ndjson, 'utf-8');
 
-      mockLstat.mockResolvedValue({
-        size: buf.byteLength,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      const stats = makeAuditStats(buf.byteLength);
+      mockLstat.mockResolvedValue(stats);
 
       const mockHandle = {
+        stat: vi.fn().mockResolvedValue(stats),
         read: vi.fn().mockImplementation((target: Buffer) => {
           buf.copy(target, 0, 0, buf.byteLength);
           return Promise.resolve({ bytesRead: buf.byteLength, buffer: target });
@@ -360,12 +381,11 @@ describe('AuditReporter', () => {
       const secondChunkSize = Buffer.byteLength(line2, 'utf-8');
 
       const buf1 = Buffer.from(line1, 'utf-8');
-      mockLstat.mockResolvedValueOnce({
-        size: firstChunkSize,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      const firstStats = makeAuditStats(firstChunkSize);
+      mockLstat.mockResolvedValueOnce(firstStats);
 
       const mockHandle1 = {
+        stat: vi.fn().mockResolvedValue(firstStats),
         read: vi.fn().mockImplementation((target: Buffer) => {
           buf1.copy(target, 0, 0, buf1.byteLength);
           return Promise.resolve({ bytesRead: buf1.byteLength, buffer: target });
@@ -385,12 +405,11 @@ describe('AuditReporter', () => {
       expect(body1.actions[0].actionType).toBe('pre_tool_use');
 
       const buf2 = Buffer.from(line2, 'utf-8');
-      mockLstat.mockResolvedValueOnce({
-        size: firstChunkSize + secondChunkSize,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      const secondStats = makeAuditStats(firstChunkSize + secondChunkSize);
+      mockLstat.mockResolvedValueOnce(secondStats);
 
       const mockHandle2 = {
+        stat: vi.fn().mockResolvedValue(secondStats),
         read: vi.fn().mockImplementation((target: Buffer, _tOffset: number, length: number) => {
           buf2.copy(target, 0, 0, length);
           return Promise.resolve({ bytesRead: length, buffer: target });
@@ -418,10 +437,7 @@ describe('AuditReporter', () => {
       await vi.advanceTimersByTimeAsync(1_000);
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
-      mockLstat.mockResolvedValueOnce({
-        size: fileSize,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      mockLstat.mockResolvedValueOnce(makeAuditStats(fileSize));
 
       await vi.advanceTimersByTimeAsync(1_000);
 
@@ -522,12 +538,11 @@ describe('AuditReporter', () => {
       const chunk1Size = Buffer.byteLength(line1, 'utf-8');
       const buf1 = Buffer.from(line1, 'utf-8');
 
-      mockLstat.mockResolvedValueOnce({
-        size: chunk1Size,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      const firstStats = makeAuditStats(chunk1Size);
+      mockLstat.mockResolvedValueOnce(firstStats);
 
       const mockHandle1 = {
+        stat: vi.fn().mockResolvedValue(firstStats),
         read: vi.fn().mockImplementation((target: Buffer) => {
           buf1.copy(target, 0, 0, buf1.byteLength);
           return Promise.resolve({ bytesRead: buf1.byteLength, buffer: target });
@@ -549,10 +564,7 @@ describe('AuditReporter', () => {
 
       expect(mockLogger.warn).toHaveBeenCalled();
 
-      mockLstat.mockResolvedValueOnce({
-        size: chunk1Size,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      mockLstat.mockResolvedValueOnce(firstStats);
       mockOpen.mockResolvedValueOnce(mockHandle1);
       mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
@@ -584,12 +596,11 @@ describe('AuditReporter', () => {
       const ndjson = '\n\n  \n';
       const buf = Buffer.from(ndjson, 'utf-8');
 
-      mockLstat.mockResolvedValue({
-        size: buf.byteLength,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      const stats = makeAuditStats(buf.byteLength);
+      mockLstat.mockResolvedValue(stats);
 
       const mockHandle = {
+        stat: vi.fn().mockResolvedValue(stats),
         read: vi.fn().mockImplementation((target: Buffer) => {
           buf.copy(target, 0, 0, buf.byteLength);
           return Promise.resolve({ bytesRead: buf.byteLength, buffer: target });
@@ -655,6 +666,8 @@ describe('AuditReporter', () => {
     it('rejects audit file path that is a symbolic link', async () => {
       mockLstat.mockResolvedValue({
         size: 100,
+        mode: 0o600,
+        isFile: () => true,
         isSymbolicLink: () => true,
       } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
 
@@ -670,6 +683,21 @@ describe('AuditReporter', () => {
 
       expect(mockOpen).not.toHaveBeenCalled();
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects audit files that are writable by group or others', async () => {
+      setupAuditFile([makePreToolEntry()], 0, { mode: 0o666 });
+
+      const reporter = makeReporter();
+      reporter.start();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        'Audit flush failed',
+      );
     });
   });
 
@@ -707,6 +735,38 @@ describe('AuditReporter', () => {
 
       await vi.advanceTimersByTimeAsync(100);
       expect(mockLstat).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('resource bounds', () => {
+    it('reads at most 1 MiB per flush when the audit file surges', async () => {
+      const maxBytesPerFlush = 1024 * 1024;
+      const oversizedChunk = Buffer.from('x'.repeat(maxBytesPerFlush + 128), 'utf-8');
+      const stats = makeAuditStats(oversizedChunk.byteLength);
+
+      mockLstat.mockResolvedValue(stats);
+
+      const mockHandle = {
+        stat: vi.fn().mockResolvedValue(stats),
+        read: vi.fn().mockImplementation((target: Buffer, _offset: number, length: number) => {
+          oversizedChunk.copy(target, 0, 0, length);
+          return Promise.resolve({ bytesRead: length, buffer: target });
+        }),
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as FileHandle;
+      mockOpen.mockResolvedValue(mockHandle);
+
+      const reporter = makeReporter();
+      reporter.start();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(mockHandle.read).toHaveBeenCalledWith(expect.any(Buffer), 0, maxBytesPerFlush, 0);
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ bytesSkipped: maxBytesPerFlush }),
+        'Skipping oversized audit segment without newline',
+      );
     });
   });
 });

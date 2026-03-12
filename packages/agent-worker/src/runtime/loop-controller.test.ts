@@ -490,6 +490,29 @@ describe('LoopController', () => {
     expect(controller).toBeDefined();
   });
 
+  it('throws LOOP_INVALID_DELAY when iterationDelayMs exceeds 24 hours', () => {
+    const agent = createMockAgent();
+
+    expect(
+      () =>
+        new LoopController(
+          agent,
+          { mode: 'result-feedback', maxIterations: 3, iterationDelayMs: 86_400_001 },
+          mockLogger,
+        ),
+    ).toThrow(AgentError);
+
+    try {
+      new LoopController(
+        agent,
+        { mode: 'result-feedback', maxIterations: 3, iterationDelayMs: 86_400_001 },
+        mockLogger,
+      );
+    } catch (err) {
+      expect((err as AgentError).code).toBe('LOOP_INVALID_DELAY');
+    }
+  });
+
   // ── pause/resume ───────────────────────────────────────────────
 
   it('pause() sets status to paused', async () => {
