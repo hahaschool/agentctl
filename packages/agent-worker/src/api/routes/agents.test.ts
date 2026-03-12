@@ -404,7 +404,7 @@ describe('Agent CRUD routes', () => {
       const body = response.json();
       expect(body.ok).toBe(true);
       expect(body.agentId).toBe('agent-steer');
-      expect(body.accepted).toBe(true);
+      expect(body.accepted).toBe(false);
     });
 
     it('returns 400 when message is missing', async () => {
