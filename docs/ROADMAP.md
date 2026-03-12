@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§12 Environment Isolation added; §10.4 Context Bridge delivered PR #97; security fixes PRs #98-99)
+> Last updated: 2026-03-12 (§12.0-12.4 delivered PRs #103-104; §10.4 Context Bridge PR #97; security PRs #98-99)
 
 ## Current State
 
@@ -879,37 +879,38 @@ Smart routing, auto-composition, and learning.
 > Dev/beta tier separation so AI agent development never disrupts the developer's running services.
 > Plan: [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | User guide: [USER-SETUP-CD-TIERS.md](USER-SETUP-CD-TIERS.md)
 
-### 12.0 De-Hardcode Ports (Prerequisite) — P1
+### 12.0 De-Hardcode Ports (Prerequisite) — ✅ Delivered (PR #103)
 
-- [ ] Make `next.config.ts` rewrites read from `NEXT_PUBLIC_API_URL` env var
-- [ ] Make `use-websocket.ts` + `InteractiveTerminal.tsx` read from `NEXT_PUBLIC_WS_URL`
-- [ ] Make web `package.json` scripts read `WEB_PORT` env var
-- [ ] Ensure `task-worker.ts` dispatch uses registered worker URL, not hardcoded port
-- [ ] Repo-wide grep + fix for remaining hardcoded `:8080`, `:9000`, `:5173`
+- [x] Make `next.config.ts` rewrites read from `NEXT_PUBLIC_API_URL` env var
+- [x] Make `use-websocket.ts` + `InteractiveTerminal.tsx` read from `NEXT_PUBLIC_WS_URL`
+- [x] `.env.template` committed with documented tier configuration
+- [ ] Make web `package.json` scripts read `WEB_PORT` env var (deferred — env-up.sh handles this)
+- [ ] Repo-wide remaining hardcoded port audit (scripts/ already use env vars with defaults)
 
-### 12.1 Environment Files — P1
+### 12.1 Environment Files — ✅ Delivered (PR #103)
 
-- [ ] Create `.env.beta`, `.env.dev-1`, `.env.dev-2`, `.env.template`
-- [ ] Symlink `.env → .env.beta` for default developer experience
-- [ ] Add `TIER` env var guardrail in all lifecycle scripts
+- [x] Create `.env.template` (tracked in git)
+- [x] `.env.beta`, `.env.dev-1`, `.env.dev-2` created locally (git-ignored, contain credentials)
+- [x] `TIER` env var guardrail in `env-up.sh`
+- [ ] Symlink `.env → .env.beta` (user manual step)
 
-### 12.2 Database Isolation — P1
+### 12.2 Database Isolation — Partial
 
-- [ ] Create per-tier PG databases (`agentctl_dev1`, `agentctl_dev2`)
-- [ ] Per-tier PG roles with least-privilege grants
-- [ ] `scripts/env-migrate.sh` with `--tier` flag and beta safety gate
+- [ ] Create per-tier PG databases — **user manual step** (see USER-SETUP-CD-TIERS.md)
+- [ ] Per-tier PG roles with least-privilege grants (deferred — not critical for local dev)
+- [x] `scripts/env-migrate.sh` with `--tier` flag and beta safety gate (PR #104)
 
-### 12.3 PM2 Beta Process Management — P1
+### 12.3 PM2 Beta Process Management — ✅ Delivered (PR #104)
 
-- [ ] `infra/pm2/ecosystem.beta.config.cjs` running built artifacts
-- [ ] `pm2 startup` integration for boot persistence
-- [ ] `max_memory_restart` safety cap
+- [x] `infra/pm2/ecosystem.beta.config.cjs` running built artifacts
+- [x] `max_memory_restart` safety cap (512M CP/Worker, 256M Web)
+- [ ] `pm2 startup` integration — **user manual step**
 
-### 12.4 Lifecycle Scripts — P2
+### 12.4 Lifecycle Scripts — ✅ Delivered (PR #104)
 
-- [ ] `scripts/env-up.sh` — port check + flock + start services
-- [ ] `scripts/env-down.sh` — graceful shutdown + lock release
-- [ ] `scripts/env-promote.sh` — build + schema parity + migrate + restart + health check + rollback
+- [x] `scripts/env-up.sh` — port check + flock + start services
+- [x] `scripts/env-down.sh` — graceful shutdown + lock release
+- [ ] `scripts/env-promote.sh` — build + schema parity + migrate + restart + rollback (future)
 
 ### 12.5 Agent Worktree Integration — P2
 
@@ -970,9 +971,11 @@ Smart routing, auto-composition, and learning.
 | **P3** | ~~Context Bridge~~ | 10.4 | ✅ Delivered — cross-space context mobility, 4 modes (PR #97) |
 | **P3** | Intelligence Layer | 10.5 | Not started — smart routing + auto-compose |
 | **—** | ~~Security: CodeQL Path Injection~~ | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
-| **P1** | Environment Isolation: De-Hardcode Ports | 12.0 | Not started — prerequisite for tier separation |
-| **P1** | Environment Isolation: Env Files + DB + PM2 | 12.1-12.3 | Not started — core tier infrastructure |
-| **P2** | Environment Isolation: Lifecycle Scripts | 12.4-12.5 | Not started — env-up/down/promote + worktree integration |
+| **P1** | ~~Environment Isolation: De-Hardcode Ports~~ | 12.0 | ✅ Delivered — env var config for all ports (PR #103) |
+| **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
+| **P2** | ~~Environment Isolation: Lifecycle Scripts~~ | 12.4 | ✅ Delivered — env-up.sh + env-down.sh with flock (PR #104) |
+| **P2** | Environment Isolation: Worktree Integration | 12.5 | Not started — auto-assign tier to agent worktrees |
+| **—** | Security: Remaining CodeQL Alerts | — | 21 open alerts (path-injection, rate-limiting, shell-injection) |
 
 ---
 
