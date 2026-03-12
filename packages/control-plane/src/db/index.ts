@@ -3,6 +3,7 @@ export { createDb } from './connection.js';
 export * from './schema.js';
 export * from './schema-collaboration.js';
 export * from './schema-task-graph.js';
+export * from './schema-context-bridge.js';
 
 /**
  * Extract typed rows from a raw SQL query result.

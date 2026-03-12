@@ -16,6 +16,7 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import { AgentProfileStore } from '../collaboration/agent-profile-store.js';
 import { ApprovalStore } from '../collaboration/approval-store.js';
+import { ContextBridgeStore } from '../collaboration/context-bridge-store.js';
 import { EventStore } from '../collaboration/event-store.js';
 import { SpaceStore } from '../collaboration/space-store.js';
 import { TaskGraphStore } from '../collaboration/task-graph-store.js';
@@ -85,6 +86,7 @@ import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
+import { contextBridgeRoutes } from './routes/context-bridge.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
@@ -596,6 +598,15 @@ export async function createServer({
     await app.register(approvalRoutes, {
       prefix: '/api/approvals',
       approvalStore,
+    });
+
+    // Context Bridge: cross-space context mobility (§10.4)
+    const contextBridgeStore = new ContextBridgeStore(db, logger);
+    await app.register(contextBridgeRoutes, {
+      prefix: '/api/spaces',
+      contextBridgeStore,
+      spaceStore,
+      eventStore,
     });
   }
 
