@@ -432,6 +432,12 @@ export async function createServer({
       pool: pgPool,
       logger,
     });
+
+    await app.register(memoryReportsRoutes, {
+      prefix: '/api/memory/reports',
+      pool: pgPool,
+      logger,
+    });
   }
 
   // Register memory import routes (in-memory job tracking, no DB required).

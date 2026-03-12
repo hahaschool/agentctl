@@ -694,7 +694,9 @@ export default function AgentDetailPage(): React.JSX.Element {
                           aria-expanded={expandedRunErrors.has(run.id)}
                         >
                           {expandedRunErrors.has(run.id) ? (
-                            <span className="whitespace-pre-wrap break-all">{run.errorMessage}</span>
+                            <span className="whitespace-pre-wrap break-all">
+                              {run.errorMessage}
+                            </span>
                           ) : (
                             <span className="block truncate">{run.errorMessage}</span>
                           )}
@@ -776,12 +778,18 @@ export default function AgentDetailPage(): React.JSX.Element {
                                 });
                               }}
                               aria-expanded={expandedRunErrors.has(run.id)}
-                              aria-label={expandedRunErrors.has(run.id) ? 'Collapse error' : 'Expand error'}
+                              aria-label={
+                                expandedRunErrors.has(run.id) ? 'Collapse error' : 'Expand error'
+                              }
                             >
                               {expandedRunErrors.has(run.id) ? (
-                                <span className="whitespace-pre-wrap break-all">{run.errorMessage}</span>
+                                <span className="whitespace-pre-wrap break-all">
+                                  {run.errorMessage}
+                                </span>
                               ) : (
-                                <span className="block truncate max-w-[380px]">{run.errorMessage}</span>
+                                <span className="block truncate max-w-[380px]">
+                                  {run.errorMessage}
+                                </span>
                               )}
                             </button>
                           )}
@@ -859,9 +867,7 @@ function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null
   const last20 = runs.slice(0, 20);
   if (last20.length === 0) return null;
 
-  const successCount = last20.filter(
-    (r) => r.status === 'success',
-  ).length;
+  const successCount = last20.filter((r) => r.status === 'success').length;
   const successRate = Math.round((successCount / last20.length) * 100);
 
   return (

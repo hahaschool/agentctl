@@ -211,6 +211,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
       expect(dbRegistry.completeRun).toHaveBeenCalledOnce();
       expect(dbRegistry.completeRun).toHaveBeenCalledWith('run-001', {
         status: 'success',
+        sessionId: 'sess-xyz',
         errorMessage: null,
         costUsd: '0.42',
         tokensIn: null,
@@ -293,6 +294,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
       expect(dbRegistry.completeRun).toHaveBeenCalledOnce();
       expect(dbRegistry.completeRun).toHaveBeenCalledWith('run-001', {
         status: 'failure',
+        sessionId: null,
         errorMessage: 'Agent exceeded token limit and was terminated',
         costUsd: null,
         tokensIn: null,

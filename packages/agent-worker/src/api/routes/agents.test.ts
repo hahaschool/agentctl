@@ -66,7 +66,7 @@ describe('Agent CRUD routes', () => {
       expect(['running', 'stopped']).toContain(body.status);
     });
 
-    it('should return an error when starting an agent that already exists and is running', async () => {
+    it('should force-stop a running agent and re-create on duplicate start', async () => {
       // Start the agent the first time
       const first = await app.inject({
         method: 'POST',
@@ -75,20 +75,18 @@ describe('Agent CRUD routes', () => {
       });
       expect(first.statusCode).toBe(200);
 
-      // Attempt to start the same agent again while it is still running.
-      // The route calls pool.createAgent if the agent doesn't exist, but
-      // since it does exist, it calls instance.start() which will fail
-      // because you can't transition from running → starting.
+      // Starting the same agent again while running should force-stop
+      // the existing instance and re-create it with the new prompt.
       const second = await app.inject({
         method: 'POST',
         url: '/api/agents/agent-dup/start',
         payload: { prompt: 'Second prompt' },
       });
 
-      expect(second.statusCode).toBe(409);
+      expect(second.statusCode).toBe(200);
 
       const body = second.json();
-      expect(body.code).toBe('INVALID_TRANSITION');
+      expect(body.ok).toBe(true);
     });
 
     it('should return 400 when prompt is missing', async () => {
