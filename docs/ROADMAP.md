@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (security fixes PRs #98-99; CD strategy plan PR #100; §10.4 Context Bridge PR #97 in review)
+> Last updated: 2026-03-12 (§12 Environment Isolation added; §10.4 Context Bridge delivered PR #97; security fixes PRs #98-99)
 
 ## Current State
 
@@ -874,6 +874,57 @@ Smart routing, auto-composition, and learning.
 
 ---
 
+## 12. Environment Isolation & Continuous Deployment
+
+> Dev/beta tier separation so AI agent development never disrupts the developer's running services.
+> Plan: [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | User guide: [USER-SETUP-CD-TIERS.md](USER-SETUP-CD-TIERS.md)
+
+### 12.0 De-Hardcode Ports (Prerequisite) — P1
+
+- [ ] Make `next.config.ts` rewrites read from `NEXT_PUBLIC_API_URL` env var
+- [ ] Make `use-websocket.ts` + `InteractiveTerminal.tsx` read from `NEXT_PUBLIC_WS_URL`
+- [ ] Make web `package.json` scripts read `WEB_PORT` env var
+- [ ] Ensure `task-worker.ts` dispatch uses registered worker URL, not hardcoded port
+- [ ] Repo-wide grep + fix for remaining hardcoded `:8080`, `:9000`, `:5173`
+
+### 12.1 Environment Files — P1
+
+- [ ] Create `.env.beta`, `.env.dev-1`, `.env.dev-2`, `.env.template`
+- [ ] Symlink `.env → .env.beta` for default developer experience
+- [ ] Add `TIER` env var guardrail in all lifecycle scripts
+
+### 12.2 Database Isolation — P1
+
+- [ ] Create per-tier PG databases (`agentctl_dev1`, `agentctl_dev2`)
+- [ ] Per-tier PG roles with least-privilege grants
+- [ ] `scripts/env-migrate.sh` with `--tier` flag and beta safety gate
+
+### 12.3 PM2 Beta Process Management — P1
+
+- [ ] `infra/pm2/ecosystem.beta.config.cjs` running built artifacts
+- [ ] `pm2 startup` integration for boot persistence
+- [ ] `max_memory_restart` safety cap
+
+### 12.4 Lifecycle Scripts — P2
+
+- [ ] `scripts/env-up.sh` — port check + flock + start services
+- [ ] `scripts/env-down.sh` — graceful shutdown + lock release
+- [ ] `scripts/env-promote.sh` — build + schema parity + migrate + restart + health check + rollback
+
+### 12.5 Agent Worktree Integration — P2
+
+- [ ] Tier assignment with flock-based locking
+- [ ] Auto-source `.env.dev-N` in agent worktree setup
+- [ ] Cleanup on PR completion
+
+### 12.6 GitHub Actions CD Gate — P3 (Future)
+
+- [ ] Self-hosted runner on deployment target
+- [ ] `promote-beta.yml` workflow with environment protection rules
+- [ ] Extend to prod tier on remote machines via Tailscale
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -916,10 +967,12 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Multi-Agent Collaboration Phase 1~~ | 10.1 | ✅ Delivered — schema + stores + routes + Spaces UI (PRs #91-92) |
 | **P2** | ~~Multi-Agent Communication~~ | 10.2 | ✅ Delivered — outbox + NATS + WS gateway + approvals (PR #95) |
 | **P2** | ~~Task Graph + Fleet~~ | 10.3 | ✅ Delivered — DAG engine + leases + BullMQ executor (PR #94) |
-| **P3** | Context Bridge | 10.4 | In review — PR #97 (lint fix pushed, CI running) |
+| **P3** | ~~Context Bridge~~ | 10.4 | ✅ Delivered — cross-space context mobility, 4 modes (PR #97) |
 | **P3** | Intelligence Layer | 10.5 | Not started — smart routing + auto-compose |
-| **—** | Security: CodeQL Path Injection | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
-| **—** | Dev/Beta CD Strategy | — | ✅ Plan committed — port-offset tiers + PM2 beta (PR #100) |
+| **—** | ~~Security: CodeQL Path Injection~~ | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
+| **P1** | Environment Isolation: De-Hardcode Ports | 12.0 | Not started — prerequisite for tier separation |
+| **P1** | Environment Isolation: Env Files + DB + PM2 | 12.1-12.3 | Not started — core tier infrastructure |
+| **P2** | Environment Isolation: Lifecycle Scripts | 12.4-12.5 | Not started — env-up/down/promote + worktree integration |
 
 ---
 
