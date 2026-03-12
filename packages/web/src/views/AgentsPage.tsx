@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Bot, Filter } from 'lucide-react';
+import { Bot, Filter, Settings } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
@@ -26,7 +26,6 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
-import type { Agent } from '../lib/api';
 import { downloadCsv, formatCost } from '../lib/format-utils';
 import {
   agentsQuery,
@@ -35,7 +34,6 @@ import {
   useCreateAgent,
   useStartAgent,
   useStopAgent,
-  useUpdateAgent,
 } from '../lib/queries';
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
@@ -52,12 +50,10 @@ export function AgentsPage(): React.JSX.Element {
   const recentSessions = useQuery(sessionsQuery({ limit: 100 }));
 
   const createAgent = useCreateAgent();
-  const updateAgent = useUpdateAgent();
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
 
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -85,11 +81,10 @@ export function AgentsPage(): React.JSX.Element {
         r: () => void agents.refetch(),
         Escape: () => {
           if (promptAgentId) setPromptAgentId(null);
-          else if (editingAgent) setEditingAgent(null);
           else if (showCreateDialog) setShowCreateDialog(false);
         },
       }),
-      [agents, promptAgentId, editingAgent, showCreateDialog],
+      [agents, promptAgentId, showCreateDialog],
     ),
   );
 
@@ -160,24 +155,6 @@ export function AgentsPage(): React.JSX.Element {
         toast.error(err instanceof Error ? err.message : String(err));
       },
     });
-  };
-
-  // -- Edit agent handler (delegated to AgentFormDialog) --
-  const handleEditSubmit = (data: AgentFormCreateData | AgentFormEditData): void => {
-    if (!('id' in data)) return;
-    const { id, ...body } = data;
-    updateAgent.mutate(
-      { id, ...body },
-      {
-        onSuccess: () => {
-          toast.success(`Agent "${data.name}" updated`);
-          setEditingAgent(null);
-        },
-        onError: (err) => {
-          toast.error(err instanceof Error ? err.message : String(err));
-        },
-      },
-    );
   };
 
   // -- Start agent handler --
@@ -289,18 +266,6 @@ export function AgentsPage(): React.JSX.Element {
         onClose={() => setShowCreateDialog(false)}
         onSubmit={handleCreateSubmit}
         isPending={createAgent.isPending}
-        machines={machineList}
-        recentProjectPaths={recentProjectPaths}
-      />
-
-      {/* Edit Agent Dialog */}
-      <AgentFormDialog
-        mode="edit"
-        open={editingAgent !== null}
-        onClose={() => setEditingAgent(null)}
-        onSubmit={handleEditSubmit}
-        isPending={updateAgent.isPending}
-        agent={editingAgent}
         machines={machineList}
         recentProjectPaths={recentProjectPaths}
       />
@@ -503,14 +468,14 @@ export function AgentsPage(): React.JSX.Element {
 
               {/* Actions */}
               <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
-                <button
-                  type="button"
-                  onClick={() => setEditingAgent(agent)}
-                  aria-label={`Edit agent ${agent.name}`}
-                  className="px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                <Link
+                  href={`/agents/${agent.id}/settings`}
+                  aria-label={`Settings for agent ${agent.name}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
                 >
-                  Edit
-                </button>
+                  <Settings className="h-3 w-3" />
+                  Settings
+                </Link>
                 {agent.status === 'running' ? (
                   <ConfirmButton
                     label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
