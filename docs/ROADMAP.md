@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§10.5 Intelligence Layer PRs #111-113; §10.4 Context Bridge PR #97; CodeQL security PRs #98-99, #106, #115; §12 Environment Isolation PRs #100-105)
+> Last updated: 2026-03-12 (§10.5 Intelligence Layer PRs #111-113; §10.4 Context Bridge PR #97; CodeQL security PRs #98-99, #106, #115-116; migration fix PR #119; §12 Environment Isolation PRs #100-105)
 
 ## Current State
 
@@ -973,14 +973,17 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P2** | ~~Multi-Agent Communication~~ | 10.2 | ✅ Delivered — outbox + NATS + WS gateway + approvals (PR #95) |
 | **P2** | ~~Task Graph + Fleet~~ | 10.3 | ✅ Delivered — DAG engine + leases + BullMQ executor (PR #94) |
 | **P3** | ~~Context Bridge~~ | 10.4 | ✅ Delivered — cross-space context mobility, 4 modes (PR #97) |
-| **P3** | ~~Intelligence Layer~~ | 10.5 | ✅ Delivered — smart routing, auto-decompose, outcome learning, notifications (PRs #111-113) |
+| **P3** | ~~Intelligence Layer~~ | 10.5 | ✅ Delivered — smart routing, auto-decompose, outcome learning, notifications (PRs #111-113, #112) |
 | **—** | ~~Security: CodeQL Path Injection~~ | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
+| **—** | ~~Security: CodeQL Sessions + Rate Limiting~~ | — | ✅ Delivered — safeRead/Write wrappers + @fastify/rate-limit (PR #115) |
+| **—** | ~~Security: CodeQL Remaining Alerts~~ | — | ✅ Delivered — git.ts + audit-reporter.ts + knowledge-maintenance.ts (PR #116) |
+| **—** | ~~Migration: Prerequisite Tables~~ | — | ✅ Delivered — collaboration/task-graph/approval-gates migrations for CI (PR #119) |
 | **P1** | ~~Environment Isolation: De-Hardcode Ports~~ | 12.0 | ✅ Delivered — env var config for all ports (PR #103) |
 | **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
 | **P2** | ~~Environment Isolation: Lifecycle Scripts~~ | 12.4 | ✅ Delivered — env-up.sh + env-down.sh with flock (PR #104) |
 | **P2** | Environment Isolation: Worktree Integration | 12.5 | Not started — auto-assign tier to agent worktrees |
 | **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
-| **—** | Security: CodeQL rescan pending | — | Fixes merged (PRs #98, #99, #106); awaiting CodeQL re-analysis on main |
+| **—** | Security: CodeQL rescan pending | — | Fixes merged (PRs #98, #99, #106, #115, #116); 21 alerts still shown — awaiting CodeQL to re-analyze patched main |
 
 ---
 
