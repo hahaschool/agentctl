@@ -9,6 +9,8 @@ import { gitRoutes } from './git.js';
 // ---------------------------------------------------------------------------
 
 vi.mock('node:fs', () => ({
+  lstatSync: vi.fn(),
+  realpathSync: vi.fn(),
   statSync: vi.fn(),
 }));
 
@@ -17,7 +19,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { execFile } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { lstatSync, realpathSync, statSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -57,6 +59,7 @@ function makeStat(isDir: boolean): ReturnType<typeof statSync> {
   return {
     isDirectory: () => isDir,
     isFile: () => !isDir,
+    isSymbolicLink: () => false,
   } as unknown as ReturnType<typeof statSync>;
 }
 
@@ -107,6 +110,15 @@ function mockGitFailure(failPattern: string, errorMsg: string): void {
   );
 }
 
+/**
+ * Set up the default lstatSync + statSync mocks for a valid directory.
+ * lstatSync returns a non-symlink, statSync returns a directory.
+ */
+function mockValidDirectory(): void {
+  vi.mocked(lstatSync).mockReturnValue(makeStat(true));
+  vi.mocked(statSync).mockReturnValue(makeStat(true));
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -130,7 +142,7 @@ describe('Git routes', () => {
   describe('GET /api/git/status (success)', () => {
     it('returns full git status with all fields', async () => {
       const dirPath = '/Users/testuser/project';
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockValidDirectory();
 
       mockGitCommands({
         'rev-parse --git-dir': '.git',
@@ -175,7 +187,7 @@ describe('Git routes', () => {
     });
 
     it('returns clean status when no changes', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockValidDirectory();
 
       mockGitCommands({
         'rev-parse --git-dir': '.git',
@@ -205,10 +217,8 @@ describe('Git routes', () => {
     });
 
     it('detects worktree when git-common-dir contains /worktrees/', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockValidDirectory();
 
-      // In a real linked worktree, git-common-dir returns the path through
-      // the worktrees directory inside the main .git or .bare dir.
       mockGitCommands({
         'rev-parse --git-dir': '/Users/testuser/repo/.bare/worktrees/feature-1',
         'rev-parse --abbrev-ref HEAD': 'feature-1',
@@ -218,8 +228,6 @@ describe('Git routes', () => {
         'log -1 --format=%H%n%s%n%an%n%aI': 'aaa1111222233\nwip\nDev\n2026-03-06T11:00:00Z',
         'worktree list --porcelain':
           'worktree /Users/testuser/repo\nbare\n\nworktree /Users/testuser/repo/.trees/feature-1\nbranch refs/heads/feature-1\n',
-        // The git-common-dir for a linked worktree under a bare repo includes
-        // both /.bare/ and /worktrees/ in the path
         'rev-parse --git-common-dir': '/Users/testuser/repo/.bare/worktrees/feature-1',
       });
 
@@ -233,7 +241,6 @@ describe('Git routes', () => {
       expect(body.isWorktree).toBe(true);
       expect(body.bareRepo).toBe('/Users/testuser/repo/.bare');
       expect(body.worktrees).toHaveLength(2);
-      // First is the bare repo (isMain = true)
       expect(body.worktrees[0].isMain).toBe(true);
     });
   });
@@ -250,7 +257,7 @@ describe('Git routes', () => {
       await app.close();
       app = await buildApp();
 
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockValidDirectory();
       mockGitCommands({
         'rev-parse --git-dir': '.git',
         'rev-parse --abbrev-ref HEAD': 'main',
@@ -290,12 +297,11 @@ describe('Git routes', () => {
         url: '/api/git/status',
       });
 
-      // Fastify schema validation returns 400
       expect(res.statusCode).toBe(400);
     });
 
     it('returns 404 when directory does not exist', async () => {
-      vi.mocked(statSync).mockImplementation(() => {
+      vi.mocked(lstatSync).mockImplementation(() => {
         throw new Error('ENOENT: no such file or directory');
       });
 
@@ -310,6 +316,7 @@ describe('Git routes', () => {
     });
 
     it('returns 400 when path is not a directory', async () => {
+      vi.mocked(lstatSync).mockReturnValue(makeStat(false));
       vi.mocked(statSync).mockReturnValue(makeStat(false));
 
       const res = await app.inject({
@@ -323,9 +330,8 @@ describe('Git routes', () => {
     });
 
     it('returns 400 when path is not a git repository', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockValidDirectory();
 
-      // rev-parse --git-dir fails for non-git dirs
       mockGitFailure('rev-parse --git-dir', 'fatal: not a git repository');
 
       const res = await app.inject({
@@ -338,10 +344,30 @@ describe('Git routes', () => {
       expect(body.error).toBe('NOT_A_GIT_REPO');
     });
 
-    it('returns 500 when git commands fail after initial checks', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+    it('returns 400 when symlink resolves to denied directory', async () => {
+      const symlinkStat = {
+        isDirectory: () => false,
+        isFile: () => false,
+        isSymbolicLink: () => true,
+      } as unknown as ReturnType<typeof statSync>;
+      vi.mocked(lstatSync).mockReturnValue(symlinkStat);
 
-      // First call (rev-parse --git-dir) succeeds, all subsequent fail
+      vi.mocked(realpathSync).mockReturnValue('/home/user/.ssh/keys');
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/git/status?path=/Users/testuser/safe-looking-link',
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = res.json();
+      expect(body.error).toBe('INVALID_PATH');
+      expect(body.message).toContain('denied');
+    });
+
+    it('returns 500 when git commands fail after initial checks', async () => {
+      mockValidDirectory();
+
       let _callCount = 0;
       vi.mocked(execFile).mockImplementation(
         (_cmd: string, args: unknown, _opts: unknown, cb?: unknown) => {
@@ -364,8 +390,6 @@ describe('Git routes', () => {
         url: '/api/git/status?path=/Users/testuser/project',
       });
 
-      // Promise.allSettled catches individual failures, so the route should still succeed
-      // with fallback values (HEAD, 0 counts, etc.)
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.branch).toBe('HEAD');
@@ -381,7 +405,7 @@ describe('Git routes', () => {
 
   describe('worktree list parsing', () => {
     it('marks first worktree as main when no bare entry exists', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockValidDirectory();
 
       mockGitCommands({
         'rev-parse --git-dir': '.git',
@@ -403,7 +427,6 @@ describe('Git routes', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.worktrees).toHaveLength(2);
-      // First should be marked as main (fallback)
       expect(body.worktrees[0].isMain).toBe(true);
       expect(body.worktrees[0].branch).toBe('main');
       expect(body.worktrees[1].isMain).toBe(false);
@@ -411,7 +434,7 @@ describe('Git routes', () => {
     });
 
     it('handles empty worktree list', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockValidDirectory();
 
       mockGitCommands({
         'rev-parse --git-dir': '.git',

@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, stat } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
@@ -213,13 +213,30 @@ export class AuditReporter {
   }
 
   /**
-   * Safely stat the audit file, returning null if it does not exist yet.
+   * Safely lstat the audit file, returning null if it does not exist yet.
+   *
+   * Security: uses lstat (not stat) so that symlinks are detected rather
+   * than followed. If the path is a symbolic link, the reporter refuses
+   * to read it — preventing a local attacker from redirecting audit reads
+   * to an arbitrary file (js/insecure-temporary-file).
    */
   private async getFileSize(): Promise<number | null> {
     try {
-      const info = await stat(this.auditFilePath);
+      const info = await lstat(this.auditFilePath);
+
+      if (info.isSymbolicLink()) {
+        throw new WorkerError(
+          'AUDIT_SYMLINK_REJECTED',
+          'Audit file path is a symbolic link — refusing to read for security',
+          { path: this.auditFilePath },
+        );
+      }
+
       return info.size;
     } catch (err) {
+      if (err instanceof WorkerError) {
+        throw err;
+      }
       const nodeErr = err as NodeJS.ErrnoException;
       if (nodeErr.code === 'ENOENT') {
         return null;
