@@ -221,7 +221,7 @@ export type AgentRun = {
   costUsd?: number;
   durationMs?: number;
   startedAt: string;
-  endedAt?: string;
+  finishedAt?: string | null;
   errorMessage?: string;
   resultSummary?: ExecutionSummary | string | null;
 };

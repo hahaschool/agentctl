@@ -192,6 +192,22 @@ describe('AgentMemorySection', () => {
     });
   });
 
+  it('shows not-configured notice when route returns 404', async () => {
+    mockMemoryFactsQuery.mockReturnValue({
+      queryKey: ['memory', 'facts', { agentId: 'agent-1' }],
+      queryFn: () => Promise.reject(new Error('Route GET:/api/memory/facts not found')),
+    });
+
+    renderSection();
+
+    const { waitFor } = await import('@testing-library/react');
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-memory-not-configured')).toBeDefined();
+    });
+
+    expect(screen.getByText(/LITELLM_URL/)).toBeDefined();
+  });
+
   it('passes agentId to memoryFactsQuery', () => {
     const agentId = 'agent-xyz-999';
     mockMemoryFactsQuery.mockReturnValue({

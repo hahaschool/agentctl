@@ -185,7 +185,7 @@ export function Sidebar(): React.JSX.Element {
           {mobileOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
         </button>
         <span className="text-sm font-bold text-foreground tracking-tight">AgentCTL</span>
-        <span className="text-[9px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider">
+        <span className="text-[9px] text-primary-foreground bg-primary px-1.5 py-px rounded-sm font-semibold tracking-wider">
           BETA
         </span>
         <span className="ml-auto">
@@ -221,7 +221,7 @@ export function Sidebar(): React.JSX.Element {
           <span className="text-lg font-bold text-foreground tracking-tight hidden lg:inline">
             AgentCTL
           </span>
-          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-px rounded-sm font-semibold tracking-wider hidden lg:inline">
+          <span className="text-[10px] text-primary-foreground bg-primary px-1.5 py-px rounded-sm font-semibold tracking-wider hidden lg:inline">
             BETA
           </span>
           {/* Icon-only logo for medium screens */}

@@ -93,7 +93,7 @@ export default function AgentDetailPage(): React.JSX.Element {
       const summary = toExecutionSummary(run.resultSummary ?? null, {
         status: run.status,
         startedAt: run.startedAt,
-        finishedAt: run.endedAt ?? null,
+        finishedAt: run.finishedAt ?? null,
         costUsd: run.costUsd ?? null,
       });
 
@@ -687,8 +687,8 @@ export default function AgentDetailPage(): React.JSX.Element {
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                       <span className="font-mono">{formatCost(run.costUsd ?? null)}</span>
                       <span>
-                        {run.endedAt ? (
-                          <LiveTimeAgo date={run.endedAt} />
+                        {run.finishedAt ? (
+                          <LiveTimeAgo date={run.finishedAt} />
                         ) : (
                           <LiveTimeAgo date={run.startedAt} />
                         )}
@@ -762,7 +762,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                           <LiveTimeAgo date={run.startedAt} />
                         </td>
                         <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
-                          {run.endedAt ? <LiveTimeAgo date={run.endedAt} /> : 'In progress'}
+                          {run.finishedAt ? <LiveTimeAgo date={run.finishedAt} /> : 'In progress'}
                         </td>
                       </tr>
                     ))}
@@ -809,11 +809,14 @@ function InfoField({
 }
 
 function getRunColor(status: string): { bg: string; label: string } {
-  if (status === 'completed' || status === 'ended') {
+  if (status === 'success') {
     return { bg: 'bg-green-500', label: 'success' };
   }
-  if (status === 'error' || status === 'timeout') {
+  if (status === 'failure' || status === 'error' || status === 'timeout') {
     return { bg: 'bg-red-500', label: 'error' };
+  }
+  if (status === 'cancelled') {
+    return { bg: 'bg-zinc-500', label: 'cancelled' };
   }
   return { bg: 'bg-yellow-500', label: 'other' };
 }
@@ -823,7 +826,7 @@ function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null
   if (last20.length === 0) return null;
 
   const successCount = last20.filter(
-    (r) => r.status === 'completed' || r.status === 'ended',
+    (r) => r.status === 'success',
   ).length;
   const successRate = Math.round((successCount / last20.length) * 100);
 

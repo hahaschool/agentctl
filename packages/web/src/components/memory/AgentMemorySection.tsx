@@ -50,6 +50,16 @@ export function AgentMemorySection({ agentId }: Props): React.JSX.Element {
   }
 
   if (error) {
+    // Memory routes are only registered when the backend has LITELLM_URL configured.
+    // Show a gentle notice instead of a scary error when the route is simply absent.
+    const isNotFound = error.message.includes('not found') || error.message.includes('404');
+    if (isNotFound) {
+      return (
+        <div className="text-sm text-muted-foreground py-2" data-testid="agent-memory-not-configured">
+          Memory backend not configured. Set <code className="text-xs bg-muted px-1 py-0.5 rounded">LITELLM_URL</code> on the control plane to enable memory features.
+        </div>
+      );
+    }
     return (
       <div className="text-sm text-red-600 dark:text-red-400" data-testid="agent-memory-error">
         Failed to load memory: {error.message}

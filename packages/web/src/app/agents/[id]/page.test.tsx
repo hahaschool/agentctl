@@ -288,12 +288,12 @@ function createRun(overrides?: Partial<AgentRun>): AgentRun {
   return {
     id: 'run-1',
     agentId: 'agent-1',
-    status: 'completed',
+    status: 'success',
     prompt: 'Fix the bug in auth module',
     costUsd: 0.42,
     durationMs: 120000,
     startedAt: '2026-03-05T09:58:00Z',
-    endedAt: '2026-03-05T10:00:00Z',
+    finishedAt: '2026-03-05T10:00:00Z',
     ...overrides,
   };
 }
@@ -1148,9 +1148,9 @@ describe('AgentDetailPage', () => {
     });
   });
 
-  it('shows "In progress" for runs without endedAt', async () => {
+  it('shows "In progress" for runs without finishedAt', async () => {
     mockAgentRunsQuery.mockReturnValue(
-      makeQueryResult('agent-runs', [createRun({ endedAt: undefined })]),
+      makeQueryResult('agent-runs', [createRun({ finishedAt: undefined })]),
     );
     renderPage();
     await waitFor(() => {
@@ -1175,17 +1175,17 @@ describe('AgentDetailPage', () => {
   it('renders multiple runs', async () => {
     mockAgentRunsQuery.mockReturnValue(
       makeQueryResult('agent-runs', [
-        createRun({ id: 'run-1', status: 'completed' }),
-        createRun({ id: 'run-2', status: 'failed', errorMessage: 'Timeout' }),
+        createRun({ id: 'run-1', status: 'success' }),
+        createRun({ id: 'run-2', status: 'failure', errorMessage: 'Timeout' }),
       ]),
     );
     renderPage();
     await waitFor(() => {
       // Each status appears in both mobile card and desktop table
-      const completed = screen.getAllByTestId('status-badge-completed');
-      const failed = screen.getAllByTestId('status-badge-failed');
-      expect(completed.length).toBeGreaterThanOrEqual(1);
-      expect(failed.length).toBeGreaterThanOrEqual(1);
+      const success = screen.getAllByTestId('status-badge-success');
+      const failure = screen.getAllByTestId('status-badge-failure');
+      expect(success.length).toBeGreaterThanOrEqual(1);
+      expect(failure.length).toBeGreaterThanOrEqual(1);
     });
   });
 
