@@ -8,6 +8,7 @@ import {
   Menu,
   MessageSquare,
   Moon,
+  Network,
   Plus,
   ScrollText,
   Server,
@@ -54,6 +55,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6' },
   { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
   { href: '/memory', label: 'Memory', icon: Database, shortcut: '8' },
+  { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};

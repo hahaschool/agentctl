@@ -1,6 +1,18 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
-import type { AgentConfig, MemoryReportTimeRange, MemoryReportType } from './api';
+import type {
+  AgentConfig,
+  EventSenderType,
+  EventVisibility,
+  MemoryReportTimeRange,
+  MemoryReportType,
+  SpaceEventType,
+  SpaceMemberRole,
+  SpaceMemberType,
+  SpaceType,
+  SpaceVisibility,
+  ThreadType,
+} from './api';
 import { api } from './api';
 import { STORAGE_KEYS } from './storage-keys';
 
@@ -86,6 +98,13 @@ export const queryKeys = {
       ? (['mcp', 'discover', machineId, projectPath] as const)
       : (['mcp', 'discover', machineId] as const),
   mcpTemplates: ['mcp', 'templates'] as const,
+  spaces: {
+    all: ['spaces'] as const,
+    detail: (id: string) => ['spaces', id] as const,
+    threads: (spaceId: string) => ['spaces', spaceId, 'threads'] as const,
+    events: (spaceId: string, threadId: string) =>
+      ['spaces', spaceId, 'threads', threadId, 'events'] as const,
+  },
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -973,6 +992,143 @@ export function useCancelImport() {
       void qc.invalidateQueries({ queryKey: queryKeys.memory.importStatus });
       void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
       void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Collaboration spaces queries + mutations
+// ---------------------------------------------------------------------------
+
+export function spacesQuery() {
+  return queryOptions({
+    queryKey: queryKeys.spaces.all,
+    queryFn: api.getSpaces,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function spaceQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.spaces.detail(id),
+    queryFn: () => api.getSpace(id),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function spaceThreadsQuery(spaceId: string) {
+  return queryOptions({
+    queryKey: queryKeys.spaces.threads(spaceId),
+    queryFn: () => api.getThreads(spaceId),
+    enabled: !!spaceId,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function spaceEventsQuery(
+  spaceId: string,
+  threadId: string,
+  params?: { after?: number; limit?: number },
+) {
+  return queryOptions({
+    queryKey: queryKeys.spaces.events(spaceId, threadId),
+    queryFn: () => api.getEvents(spaceId, threadId, params),
+    enabled: !!spaceId && !!threadId,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useCreateSpace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name: string;
+      description?: string;
+      type?: SpaceType;
+      visibility?: SpaceVisibility;
+    }) => api.createSpace(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.all });
+    },
+  });
+}
+
+export function useDeleteSpace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteSpace(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.all });
+    },
+  });
+}
+
+export function useAddSpaceMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      spaceId,
+      ...data
+    }: {
+      spaceId: string;
+      memberType: SpaceMemberType;
+      memberId: string;
+      role?: SpaceMemberRole;
+    }) => api.addSpaceMember(spaceId, data),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.detail(variables.spaceId) });
+    },
+  });
+}
+
+export function useRemoveSpaceMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ spaceId, memberId }: { spaceId: string; memberId: string }) =>
+      api.removeSpaceMember(spaceId, memberId),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.detail(variables.spaceId) });
+    },
+  });
+}
+
+export function useCreateThread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ spaceId, ...data }: { spaceId: string; title?: string; type?: ThreadType }) =>
+      api.createThread(spaceId, data),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.threads(variables.spaceId) });
+    },
+  });
+}
+
+export function usePostEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      spaceId,
+      threadId,
+      ...data
+    }: {
+      spaceId: string;
+      threadId: string;
+      type: SpaceEventType;
+      senderType: EventSenderType;
+      senderId: string;
+      payload: Record<string, unknown>;
+      visibility?: EventVisibility;
+      idempotencyKey?: string;
+    }) => api.postEvent(spaceId, threadId, data),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.spaces.events(variables.spaceId, variables.threadId),
+      });
     },
   });
 }
