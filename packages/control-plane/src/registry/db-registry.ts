@@ -389,13 +389,57 @@ export class DbAgentRegistry {
         resultSummary: data.resultSummary ?? null,
       })
       .where(eq(agentRuns.id, runId))
-      .returning({ id: agentRuns.id });
+      .returning({ id: agentRuns.id, agentId: agentRuns.agentId });
 
     if (result.length === 0) {
       throw new ControlPlaneError('RUN_NOT_FOUND', `Run '${runId}' does not exist`, { runId });
     }
 
+    // Update the parent agent's cost fields and lastRunAt
+    const agentId = result[0].agentId;
+    if (agentId) {
+      const costValue = data.costUsd ? data.costUsd : '0';
+      await this.db
+        .update(agents)
+        .set({
+          lastRunAt: new Date(),
+          lastCostUsd: data.costUsd ?? null,
+          totalCostUsd: sql`COALESCE(${agents.totalCostUsd}, 0) + ${costValue}`,
+        })
+        .where(eq(agents.id, agentId));
+
+      this.logger.info(
+        { runId, agentId, costUsd: data.costUsd ?? null },
+        'Agent cost fields updated from run completion',
+      );
+    }
+
     this.logger.info({ runId, status: data.status }, 'Agent run completed');
+  }
+
+  async computeAgentCostFromRuns(
+    agentId: string,
+  ): Promise<{ lastCostUsd: number | null; totalCostUsd: number }> {
+    const rows = await this.db
+      .select({
+        totalCost: sql<string>`COALESCE(SUM(${agentRuns.costUsd}), 0)`,
+      })
+      .from(agentRuns)
+      .where(eq(agentRuns.agentId, agentId));
+
+    const totalCostUsd = Number(rows[0]?.totalCost ?? 0);
+
+    // Get most recent completed run's cost
+    const lastRunRows = await this.db
+      .select({ costUsd: agentRuns.costUsd })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.agentId, agentId), eq(agentRuns.status, 'success')))
+      .orderBy(desc(agentRuns.finishedAt))
+      .limit(1);
+
+    const lastCostUsd = lastRunRows[0]?.costUsd ? Number(lastRunRows[0].costUsd) : null;
+
+    return { lastCostUsd, totalCostUsd };
   }
 
   async getRun(runId: string): Promise<AgentRun | undefined> {
