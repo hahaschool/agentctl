@@ -14,6 +14,8 @@ import type { Queue } from 'bullmq';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
+import { AgentProfileStore } from '../collaboration/agent-profile-store.js';
+import { ApprovalStore } from '../collaboration/approval-store.js';
 import { EventStore } from '../collaboration/event-store.js';
 import { SpaceStore } from '../collaboration/space-store.js';
 import { TaskGraphStore } from '../collaboration/task-graph-store.js';
@@ -46,7 +48,9 @@ import {
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
+import { agentProfileRoutes } from './routes/agent-profiles.js';
 import { agentRoutes } from './routes/agents.js';
+import { approvalRoutes } from './routes/approvals.js';
 import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
 import { claudeMemRoutes } from './routes/claude-mem.js';
@@ -579,6 +583,19 @@ export async function createServer({
       prefix: '/api/fleet/nodes',
       workerNodeStore,
       taskRunStore,
+    });
+
+    // Phase 2: Agent identity + approval gates
+    const agentProfileStore = new AgentProfileStore(db, logger);
+    await app.register(agentProfileRoutes, {
+      prefix: '/api/agent-profiles',
+      agentProfileStore,
+    });
+
+    const approvalStore = new ApprovalStore(db, logger);
+    await app.register(approvalRoutes, {
+      prefix: '/api/approvals',
+      approvalStore,
     });
   }
 

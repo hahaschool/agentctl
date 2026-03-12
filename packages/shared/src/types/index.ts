@@ -25,10 +25,55 @@ export type {
 } from './agent.js';
 export { AGENT_RUNTIMES, AGENT_STATUSES } from './agent.js';
 export type {
+  AgentInstance,
+  AgentInstanceStatus,
+  AgentProfile,
+  AgentRuntimeType,
+} from './agent-identity.js';
+export {
+  AGENT_INSTANCE_STATUSES,
+  AGENT_RUNTIME_TYPES,
+  isAgentInstanceStatus,
+  isAgentRuntimeType,
+} from './agent-identity.js';
+export type {
+  AckPayload,
+  AgentMessage,
+  AgentMessageType,
+  AgentPayload,
+  AgentPayloadKind,
+  ArtifactRef,
+  AskPayload,
+  DelegateTaskPayload,
+  DeliverPayload,
+  EscalateToHumanPayload,
+  SteerPayload,
+} from './agent-message.js';
+export {
+  AGENT_MESSAGE_TYPES,
+  AGENT_PAYLOAD_KINDS,
+  isAgentMessageType,
+} from './agent-message.js';
+export type {
   AgentRun,
   RunStatus,
   RunTrigger,
 } from './agent-run.js';
+export type {
+  ApprovalDecision,
+  ApprovalDecisionAction,
+  ApprovalGate,
+  ApprovalGateStatus,
+  ApprovalTimeoutPolicy,
+} from './approval.js';
+export {
+  APPROVAL_DECISION_ACTIONS,
+  APPROVAL_GATE_STATUSES,
+  APPROVAL_TIMEOUT_POLICIES,
+  isApprovalDecisionAction,
+  isApprovalGateStatus,
+  isApprovalTimeoutPolicy,
+} from './approval.js';
 export type {
   AutoHandoffDecisionStatus,
   AutoHandoffMode,
@@ -63,6 +108,7 @@ export type {
   SpaceMemberType,
   SpaceType,
   SpaceVisibility,
+  SubscriptionFilter,
   Thread,
   ThreadType,
 } from './collaboration.js';
@@ -188,8 +234,6 @@ export {
 } from './status-machine.js';
 export type { TaskExecutor } from './task-executor.js';
 export type {
-  AgentInstance,
-  AgentProfile,
   FleetOverview,
   TaskDefinition,
   TaskEdge,
