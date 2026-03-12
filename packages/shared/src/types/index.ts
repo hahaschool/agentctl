@@ -127,6 +127,19 @@ export {
   SPACE_VISIBILITIES,
   THREAD_TYPES,
 } from './collaboration.js';
+export type {
+  ContextRef,
+  ContextRefMode,
+  CrossSpaceQuery,
+  CrossSpaceSubscription,
+  InjectionMethod,
+} from './context-bridge.js';
+export {
+  CONTEXT_REF_MODES,
+  INJECTION_METHODS,
+  isContextRefMode,
+  isInjectionMethod,
+} from './context-bridge.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   ExecutionSummary,
