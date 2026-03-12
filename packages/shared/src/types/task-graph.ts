@@ -106,24 +106,7 @@ export type WorkerNode = {
   readonly createdAt: string;
 };
 
-export type AgentProfile = {
-  readonly id: string;
-  readonly name: string;
-  readonly capabilities: string[];
-  readonly preferredModel: string | null;
-  readonly maxConcurrentTasks: number;
-  readonly createdAt: string;
-};
-
-export type AgentInstance = {
-  readonly id: string;
-  readonly profileId: string;
-  readonly workerId: string;
-  readonly status: string;
-  readonly currentTaskRunId: string | null;
-  readonly lastHeartbeatAt: string;
-  readonly createdAt: string;
-};
+// AgentProfile and AgentInstance are defined in agent-identity.ts
 
 // ── Fleet Overview ───────────────────────────────────────────
 

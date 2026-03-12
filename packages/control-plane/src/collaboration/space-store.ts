@@ -1,4 +1,4 @@
-import type { Space, SpaceMember } from '@agentctl/shared';
+import type { Space, SpaceMember, SubscriptionFilter } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
 import { and, eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
@@ -18,6 +18,7 @@ type AddMemberInput = {
   memberType: string;
   memberId: string;
   role?: string;
+  subscriptionFilter?: SubscriptionFilter;
 };
 
 export class SpaceStore {
@@ -82,10 +83,14 @@ export class SpaceStore {
         memberType: input.memberType,
         memberId: input.memberId,
         role: input.role ?? 'member',
+        subscriptionFilter: input.subscriptionFilter ?? {},
       })
       .onConflictDoUpdate({
         target: [spaceMembers.spaceId, spaceMembers.memberType, spaceMembers.memberId],
-        set: { role: input.role ?? 'member' },
+        set: {
+          role: input.role ?? 'member',
+          subscriptionFilter: input.subscriptionFilter ?? {},
+        },
       })
       .returning();
 
@@ -126,6 +131,36 @@ export class SpaceStore {
     this.logger.info({ spaceId, memberType, memberId }, 'Member removed from space');
   }
 
+  async updateMemberFilter(
+    spaceId: string,
+    memberType: string,
+    memberId: string,
+    filter: SubscriptionFilter,
+  ): Promise<SpaceMember> {
+    const rows = await this.db
+      .update(spaceMembers)
+      .set({ subscriptionFilter: filter })
+      .where(
+        and(
+          eq(spaceMembers.spaceId, spaceId),
+          eq(spaceMembers.memberType, memberType),
+          eq(spaceMembers.memberId, memberId),
+        ),
+      )
+      .returning();
+
+    if (rows.length === 0) {
+      throw new ControlPlaneError(
+        'MEMBER_NOT_FOUND',
+        `Member '${memberId}' not found in space '${spaceId}'`,
+        { spaceId, memberType, memberId },
+      );
+    }
+
+    this.logger.info({ spaceId, memberType, memberId }, 'Member subscription filter updated');
+    return this.toMember(rows[0]);
+  }
+
   async getMembers(spaceId: string): Promise<SpaceMember[]> {
     const rows = await this.db.select().from(spaceMembers).where(eq(spaceMembers.spaceId, spaceId));
 
@@ -145,11 +180,13 @@ export class SpaceStore {
   }
 
   private toMember(row: typeof spaceMembers.$inferSelect): SpaceMember {
+    const filter = (row.subscriptionFilter ?? {}) as SubscriptionFilter;
     return {
       spaceId: row.spaceId,
       memberType: row.memberType as SpaceMember['memberType'],
       memberId: row.memberId,
       role: (row.role ?? 'member') as SpaceMember['role'],
+      subscriptionFilter: filter && Object.keys(filter).length > 0 ? filter : undefined,
     };
   }
 }

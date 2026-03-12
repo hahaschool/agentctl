@@ -10,7 +10,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { spaces, threads } from './schema-collaboration.js';
+import { agentInstances, spaces, threads } from './schema-collaboration.js';
 
 // ── Worker Nodes ─────────────────────────────────────────────
 
@@ -30,41 +30,6 @@ export const workerNodes = pgTable(
   (table) => [
     index('idx_worker_nodes_status').on(table.status),
     index('idx_worker_nodes_hostname').on(table.hostname),
-  ],
-);
-
-// ── Agent Profiles ───────────────────────────────────────────
-
-export const agentProfiles = pgTable('agent_profiles', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  capabilities: text('capabilities').array().default([]),
-  preferredModel: text('preferred_model'),
-  maxConcurrentTasks: integer('max_concurrent_tasks').default(1),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
-
-// ── Agent Instances ──────────────────────────────────────────
-
-export const agentInstances = pgTable(
-  'agent_instances',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => agentProfiles.id, { onDelete: 'cascade' }),
-    workerId: uuid('worker_id')
-      .notNull()
-      .references(() => workerNodes.id, { onDelete: 'cascade' }),
-    status: text('status').default('idle'),
-    currentTaskRunId: uuid('current_task_run_id'),
-    lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true }).defaultNow(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-  },
-  (table) => [
-    index('idx_agent_instances_profile_id').on(table.profileId),
-    index('idx_agent_instances_worker_id').on(table.workerId),
-    index('idx_agent_instances_status').on(table.status),
   ],
 );
 

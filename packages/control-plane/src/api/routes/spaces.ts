@@ -140,7 +140,12 @@ export const spaceRoutes: FastifyPluginAsync<SpaceRoutesOptions> = async (app, o
 
   app.post<{
     Params: { id: string };
-    Body: { memberType: string; memberId: string; role?: string };
+    Body: {
+      memberType: string;
+      memberId: string;
+      role?: string;
+      subscriptionFilter?: { threadTypes?: string[]; minVisibility?: string };
+    };
   }>(
     '/:id/members',
     { schema: { tags: ['collaboration'], summary: 'Add member to space' } },
@@ -184,9 +189,44 @@ export const spaceRoutes: FastifyPluginAsync<SpaceRoutesOptions> = async (app, o
         memberType,
         memberId,
         role,
+        subscriptionFilter: request.body.subscriptionFilter as
+          | import('@agentctl/shared').SubscriptionFilter
+          | undefined,
       });
 
       return reply.code(201).send(member);
+    },
+  );
+
+  app.patch<{
+    Params: { id: string; memberId: string };
+    Querystring: { memberType?: string };
+    Body: { subscriptionFilter: { threadTypes?: string[]; minVisibility?: string } };
+  }>(
+    '/:id/members/:memberId/filter',
+    { schema: { tags: ['collaboration'], summary: 'Update member subscription filter' } },
+    async (request, reply) => {
+      const memberType = request.query.memberType ?? 'human';
+
+      try {
+        const filter = (request.body.subscriptionFilter ??
+          {}) as import('@agentctl/shared').SubscriptionFilter;
+        const member = await spaceStore.updateMemberFilter(
+          request.params.id,
+          memberType,
+          request.params.memberId,
+          filter,
+        );
+        return member;
+      } catch (err) {
+        if (err instanceof ControlPlaneError && err.code === 'MEMBER_NOT_FOUND') {
+          return reply.code(404).send({
+            error: 'MEMBER_NOT_FOUND',
+            message: 'Member not found in space',
+          });
+        }
+        throw err;
+      }
     },
   );
 

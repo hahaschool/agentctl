@@ -22,11 +22,17 @@ export type Space = {
   readonly createdAt: string;
 };
 
+export type SubscriptionFilter = {
+  readonly threadTypes?: readonly ThreadType[];
+  readonly minVisibility?: 'public' | 'internal';
+};
+
 export type SpaceMember = {
   readonly spaceId: string;
   readonly memberType: SpaceMemberType;
   readonly memberId: string;
   readonly role: SpaceMemberRole;
+  readonly subscriptionFilter?: SubscriptionFilter;
 };
 
 export function isSpaceType(v: string): v is SpaceType {
