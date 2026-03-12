@@ -72,5 +72,5 @@ CREATE TABLE IF NOT EXISTS "notification_preferences" (
   "created_at"        timestamptz DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS "idx_notification_preferences_user"
-  ON "notification_preferences"("user_id");
+ALTER TABLE "notification_preferences"
+  ADD CONSTRAINT "uq_notification_pref_user_priority" UNIQUE ("user_id", "priority");

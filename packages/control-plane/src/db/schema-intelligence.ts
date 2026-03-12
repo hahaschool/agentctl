@@ -7,6 +7,7 @@ import {
   real,
   text,
   timestamp,
+  unique,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -100,5 +101,5 @@ export const notificationPreferences = pgTable(
     timezone: text('timezone'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   },
-  (table) => [index('idx_notification_preferences_user').on(table.userId)],
+  (table) => [unique('uq_notification_pref_user_priority').on(table.userId, table.priority)],
 );
