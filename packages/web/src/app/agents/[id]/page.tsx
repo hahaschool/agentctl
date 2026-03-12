@@ -3,14 +3,12 @@
 import type { ExecutionSummary } from '@agentctl/shared';
 import { toExecutionSummary } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Copy, Download } from 'lucide-react';
+import { Copy, Download, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
-import type { AgentFormEditData } from '@/components/AgentFormDialog';
-import { AgentFormDialog } from '@/components/AgentFormDialog';
 import { AgentHealthBadge } from '@/components/AgentHealthBadge';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
@@ -85,7 +83,6 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const [promptVisible, setPromptVisible] = useState(false);
   const [prompt, setPrompt] = useState('');
-  const [editOpen, setEditOpen] = useState(false);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
   const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
 
@@ -162,31 +159,6 @@ export default function AgentDetailPage(): React.JSX.Element {
       onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
     });
   };
-
-  const handleEditSubmit = useCallback(
-    (data: AgentFormEditData) => {
-      updateAgent.mutate(
-        {
-          id: agentId,
-          name: data.name,
-          machineId: data.machineId,
-          type: data.type,
-          schedule: data.schedule,
-          config: data.config,
-        },
-        {
-          onSuccess: () => {
-            toast.success('Agent updated');
-            setEditOpen(false);
-          },
-          onError: (err) => {
-            toast.error(err instanceof Error ? err.message : String(err));
-          },
-        },
-      );
-    },
-    [agentId, updateAgent, toast],
-  );
 
   // -- Export & Duplicate handlers --
 
@@ -299,9 +271,12 @@ export default function AgentDetailPage(): React.JSX.Element {
               {data.config?.model as string}
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-            Edit
-          </Button>
+          <Link href={`/agents/${agentId}/settings`}>
+            <Button variant="outline" size="sm">
+              <Settings className="h-3.5 w-3.5 mr-1.5" />
+              Settings
+            </Button>
+          </Link>
           <SimpleTooltip content="Export config as JSON">
             <Button
               variant="outline"
@@ -712,18 +687,6 @@ export default function AgentDetailPage(): React.JSX.Element {
           )}
         </CardContent>
       </Card>
-
-      {/* Edit Agent Dialog */}
-      <AgentFormDialog
-        mode="edit"
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSubmit={(data) => handleEditSubmit(data as AgentFormEditData)}
-        isPending={updateAgent.isPending}
-        agent={agent.data ?? null}
-        machines={machines}
-        recentProjectPaths={[]}
-      />
     </div>
   );
 }
