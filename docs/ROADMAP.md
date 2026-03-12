@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§12.0-12.4 delivered PRs #103-104; §10.4 Context Bridge PR #97; security PRs #98-99)
+> Last updated: 2026-03-12 (§10.4 Context Bridge PR #97; CodeQL security PRs #98-99, #106; §12 Environment Isolation PRs #100-105; git discipline rules in CLAUDE.md)
 
 ## Current State
 
@@ -854,14 +854,15 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] DB migration 0002: task_graphs, task_definitions, task_edges, task_runs, worker_leases, worker_nodes *(PR #94)*
 - [ ] Temporal.io migration for durable multi-step workflows *(deferred — evaluate when approval waits become common)*
 
-### 10.4 Phase 4: Context Bridge — P3
+### 10.4 Phase 4: Context Bridge — P3 ✅
 
-Cross-space context mobility.
+> Delivered in PR #97. Shared types, Drizzle schema, ContextBridgeStore, and REST API routes for cross-space context mobility.
 
-- [ ] Reference mode: live pointer to source
-- [ ] Copy mode: ContextPicker snapshot
-- [ ] Live-sync mode: cross_space_query MCP tool
-- [ ] Context budget management across spaces
+- [x] Reference mode: live pointer to source event/artifact in another Space *(PR #97)*
+- [x] Copy mode: snapshot of context from another Space (frozen at point-in-time) *(PR #97)*
+- [x] Subscription mode: cross-space subscriptions with filter criteria *(PR #97)*
+- [ ] Query mode: `cross_space_query` MCP tool for agent runtime *(future — requires MCP server extension)*
+- [ ] Context budget management across spaces *(future)*
 
 ### 10.5 Phase 5: Intelligence Layer — P3
 
@@ -975,7 +976,8 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
 | **P2** | ~~Environment Isolation: Lifecycle Scripts~~ | 12.4 | ✅ Delivered — env-up.sh + env-down.sh with flock (PR #104) |
 | **P2** | Environment Isolation: Worktree Integration | 12.5 | Not started — auto-assign tier to agent worktrees |
-| **—** | Security: Remaining CodeQL Alerts | — | 21 open alerts (path-injection, rate-limiting, shell-injection) |
+| **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
+| **—** | Security: CodeQL rescan pending | — | Fixes merged (PRs #98, #99, #106); awaiting CodeQL re-analysis on main |
 
 ---
 
@@ -1090,7 +1092,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [multi-agent-communication-impl-plan](plans/2026-03-12-multi-agent-communication-impl-plan.md) | Delivered | 10.2 |
 | [task-graph-fleet-impl-plan](plans/2026-03-12-task-graph-fleet-impl-plan.md) | Delivered | 10.3 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
-| [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Active | — |
+| [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.4 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
