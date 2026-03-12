@@ -198,7 +198,10 @@ function makeFact(overrides: Partial<Record<string, unknown>> = {}): Record<stri
 const tempDirs: string[] = [];
 
 function makeTempDir(prefix: string): string {
-  const dir = join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const dir = join(
+    os.tmpdir(),
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
   mkdirSync(dir, { recursive: true });
   tempDirs.push(dir);
   return dir;

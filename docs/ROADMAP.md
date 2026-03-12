@@ -866,12 +866,15 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ### 10.5 Phase 5: Intelligence Layer — P3
 
-Smart routing, auto-composition, and learning.
+> Impl plan: [plans/2026-03-12-intelligence-layer-impl-plan.md](plans/2026-03-12-intelligence-layer-impl-plan.md)
+>
+> Four capabilities: smart routing (weighted scoring with historical performance), LLM-based task
+> auto-decomposition, outcome learning (sliding-window feedback loop), and priority-based notification routing.
 
-- [ ] Smart agent selection based on task type
-- [ ] Auto-compose agent teams from task description
-- [ ] Learning from collaboration outcomes
-- [ ] Notification routing optimization
+- [ ] Smart Routing: capability match + load + cost + historical success scoring → ranked candidate selection (Phase 5a)
+- [ ] Auto-Decompose: LLM-based natural-language task → TaskGraph with DAG validation (Phase 5b)
+- [ ] Outcome Learning: sliding-window stats from task completions → refine routing scores + approval timeouts (Phase 5c)
+- [ ] Notification Routing: priority classification + per-user channel preferences + quiet hours (Phase 5d)
 
 ---
 
@@ -970,7 +973,7 @@ Smart routing, auto-composition, and learning.
 | **P2** | ~~Multi-Agent Communication~~ | 10.2 | ✅ Delivered — outbox + NATS + WS gateway + approvals (PR #95) |
 | **P2** | ~~Task Graph + Fleet~~ | 10.3 | ✅ Delivered — DAG engine + leases + BullMQ executor (PR #94) |
 | **P3** | ~~Context Bridge~~ | 10.4 | ✅ Delivered — cross-space context mobility, 4 modes (PR #97) |
-| **P3** | Intelligence Layer | 10.5 | Not started — smart routing + auto-compose |
+| **P3** | Intelligence Layer | 10.5 | In progress — 3 parallel agents implementing phases 5a-5d |
 | **—** | ~~Security: CodeQL Path Injection~~ | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
 | **P1** | ~~Environment Isolation: De-Hardcode Ports~~ | 12.0 | ✅ Delivered — env var config for all ports (PR #103) |
 | **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
@@ -1091,6 +1094,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [multi-agent-collaboration-phase1-impl-plan](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md) | Delivered | 10.1 |
 | [multi-agent-communication-impl-plan](plans/2026-03-12-multi-agent-communication-impl-plan.md) | Delivered | 10.2 |
 | [task-graph-fleet-impl-plan](plans/2026-03-12-task-graph-fleet-impl-plan.md) | Delivered | 10.3 |
+| [intelligence-layer-impl-plan](plans/2026-03-12-intelligence-layer-impl-plan.md) | Active | 10.5 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
 | [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.4 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |

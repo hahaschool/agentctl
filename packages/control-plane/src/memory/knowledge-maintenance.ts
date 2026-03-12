@@ -18,7 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { execFile as execFileCb } from 'node:child_process';
-import { access, readdir } from 'node:fs/promises';
+import { access, type Dirent, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -470,7 +470,7 @@ export class KnowledgeMaintenance {
   }
 
   private async walkDirectories(directoryPath: string, depth: number): Promise<string[]> {
-    let entries;
+    let entries: Dirent[];
     try {
       entries = await readdir(directoryPath, { withFileTypes: true });
     } catch (error: unknown) {
