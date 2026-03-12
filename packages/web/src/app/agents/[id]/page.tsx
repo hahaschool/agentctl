@@ -127,9 +127,10 @@ export default function AgentDetailPage(): React.JSX.Element {
   };
 
   const handleStart = (): void => {
-    if (!prompt.trim()) return;
+    const effectivePrompt = prompt.trim() || agent.data?.config?.defaultPrompt || '';
+    if (!effectivePrompt) return;
     startAgent.mutate(
-      { id: agentId, prompt: prompt.trim() },
+      { id: agentId, prompt: effectivePrompt },
       {
         onSuccess: () => {
           toast.success('Agent started');
@@ -270,8 +271,13 @@ export default function AgentDetailPage(): React.JSX.Element {
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-[22px] font-semibold tracking-tight">{data.name}</h1>
+        <div className="flex items-center gap-3 flex-wrap min-w-0">
+          <h1
+            className="text-[22px] font-semibold tracking-tight truncate min-w-0 max-w-[300px]"
+            title={data.name}
+          >
+            {data.name}
+          </h1>
           <StatusBadge status={data.status} />
           {(data.type === 'cron' || data.type === 'heartbeat' || data.type === 'loop') && (
             <AgentHealthBadge agentId={agentId} />
@@ -330,14 +336,16 @@ export default function AgentDetailPage(): React.JSX.Element {
                     setPrompt('');
                   }
                 }}
-                placeholder="Enter prompt..."
+                placeholder={
+                  data.config?.defaultPrompt ? 'Using default prompt...' : 'Enter prompt...'
+                }
                 aria-label="Prompt to start agent"
                 className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[200px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
               />
               <Button
                 size="sm"
                 onClick={handleStart}
-                disabled={!prompt.trim() || startAgent.isPending}
+                disabled={(!prompt.trim() && !data.config?.defaultPrompt) || startAgent.isPending}
               >
                 {startAgent.isPending ? 'Starting...' : 'Go'}
               </Button>
