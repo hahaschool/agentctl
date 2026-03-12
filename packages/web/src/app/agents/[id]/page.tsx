@@ -16,6 +16,7 @@ import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
+import { GroupedRunHistory } from '@/components/GroupedRunHistory';
 import { LastUpdated } from '@/components/LastUpdated';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
@@ -36,6 +37,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
 import type { AgentRun } from '@/lib/api';
+import { describeCron, getNextRuns, isValidCron } from '@/lib/cron-utils';
 import { formatCost, formatDate, formatDuration, formatDurationMs } from '@/lib/format-utils';
 import {
   accountsQuery,
@@ -84,7 +86,6 @@ export default function AgentDetailPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
-  const [expandedRunErrors, setExpandedRunErrors] = useState<Set<string>>(new Set());
 
   const accountList = accounts.data ?? [];
   const machines = machinesList.data ?? [];
@@ -392,6 +393,11 @@ export default function AgentDetailPage(): React.JSX.Element {
             </InfoField>
             <InfoField label="Schedule">
               <span className="font-mono text-xs">{data.schedule ?? 'None'}</span>
+              {data.schedule && isValidCron(data.schedule) && (
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {describeCron(data.schedule)}
+                </div>
+              )}
             </InfoField>
             <InfoField label="Project Path">
               <span className="font-mono text-xs break-all">{data.projectPath ?? 'Not set'}</span>
@@ -534,6 +540,9 @@ export default function AgentDetailPage(): React.JSX.Element {
         </Card>
       )}
 
+      {/* Cron Schedule — next runs */}
+      {data.schedule && isValidCron(data.schedule) && <CronScheduleCard schedule={data.schedule} />}
+
       {/* Sessions for this agent */}
       <Card className="mb-4">
         <CardHeader>
@@ -617,11 +626,11 @@ export default function AgentDetailPage(): React.JSX.Element {
       {/* Run history visualization */}
       <RunHistoryBar runs={runList} />
 
-      {/* Recent runs */}
+      {/* Execution history — grouped by date with filters */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
-            Recent Runs
+            Execution History
             {runList.length > 0 && (
               <span className="text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">
                 {runList.length}
@@ -641,176 +650,10 @@ export default function AgentDetailPage(): React.JSX.Element {
               message={`Failed to load runs: ${runs.error.message}`}
               onRetry={() => void runs.refetch()}
             />
-          ) : runList.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground text-sm">
-              No runs recorded yet. Use the Start button above to run this agent.
-            </div>
           ) : (
             <>
               {latestRunSummary && <ExecutionSummaryCard summary={latestRunSummary} />}
-
-              {/* Mobile card layout */}
-              <div className="sm:hidden space-y-2">
-                {runList.map((run) => (
-                  <div
-                    key={run.id}
-                    className="rounded-lg border border-border/50 p-3 space-y-1.5 transition-colors hover:border-border"
-                  >
-                    <div className="flex items-center justify-between">
-                      <StatusBadge status={run.status} />
-                      <span className="text-xs font-mono text-muted-foreground">
-                        {formatDurationMs(run.durationMs ?? 0)}
-                      </span>
-                    </div>
-                    <div>
-                      <span
-                        className={cn(
-                          'text-xs leading-snug',
-                          run.prompt ? 'text-foreground' : 'text-muted-foreground',
-                        )}
-                        title={run.prompt}
-                      >
-                        {run.prompt
-                          ? run.prompt.length > 80
-                            ? `${run.prompt.slice(0, 80)}...`
-                            : run.prompt
-                          : '-'}
-                      </span>
-                      {run.errorMessage && (
-                        <button
-                          type="button"
-                          className="block text-left text-[11px] text-red-600 dark:text-red-400 mt-0.5 w-full cursor-pointer hover:text-red-500 dark:hover:text-red-300"
-                          onClick={() => {
-                            setExpandedRunErrors((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(run.id)) {
-                                next.delete(run.id);
-                              } else {
-                                next.add(run.id);
-                              }
-                              return next;
-                            });
-                          }}
-                          aria-expanded={expandedRunErrors.has(run.id)}
-                        >
-                          {expandedRunErrors.has(run.id) ? (
-                            <span className="whitespace-pre-wrap break-all">
-                              {run.errorMessage}
-                            </span>
-                          ) : (
-                            <span className="block truncate">{run.errorMessage}</span>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span className="font-mono">{formatCost(run.costUsd ?? null)}</span>
-                      <span>
-                        {run.finishedAt ? (
-                          <LiveTimeAgo date={run.finishedAt} />
-                        ) : (
-                          <LiveTimeAgo date={run.startedAt} />
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop table layout */}
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm" aria-label="Recent agent runs">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                      <th scope="col" className="pb-2 pr-4 font-medium">
-                        Status
-                      </th>
-                      <th scope="col" className="pb-2 pr-4 font-medium">
-                        Prompt
-                      </th>
-                      <th scope="col" className="pb-2 pr-4 font-medium">
-                        Duration
-                      </th>
-                      <th scope="col" className="pb-2 pr-4 font-medium">
-                        Cost
-                      </th>
-                      <th scope="col" className="pb-2 pr-4 font-medium">
-                        Started
-                      </th>
-                      <th scope="col" className="pb-2 font-medium hidden md:table-cell">
-                        Ended
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {runList.map((run) => (
-                      <tr key={run.id} className="border-b border-border/50 last:border-0">
-                        <td className="py-2.5 pr-4">
-                          <StatusBadge status={run.status} />
-                        </td>
-                        <td className="py-2.5 pr-4 max-w-[400px]">
-                          <span
-                            className={cn(
-                              'text-xs',
-                              run.prompt ? 'text-foreground' : 'text-muted-foreground',
-                            )}
-                            title={run.prompt}
-                          >
-                            {run.prompt
-                              ? run.prompt.length > 80
-                                ? `${run.prompt.slice(0, 80)}...`
-                                : run.prompt
-                              : '-'}
-                          </span>
-                          {run.errorMessage && (
-                            <button
-                              type="button"
-                              className="block text-left text-[11px] text-red-600 dark:text-red-400 mt-0.5 w-full cursor-pointer hover:text-red-500 dark:hover:text-red-300"
-                              onClick={() => {
-                                setExpandedRunErrors((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(run.id)) {
-                                    next.delete(run.id);
-                                  } else {
-                                    next.add(run.id);
-                                  }
-                                  return next;
-                                });
-                              }}
-                              aria-expanded={expandedRunErrors.has(run.id)}
-                              aria-label={
-                                expandedRunErrors.has(run.id) ? 'Collapse error' : 'Expand error'
-                              }
-                            >
-                              {expandedRunErrors.has(run.id) ? (
-                                <span className="whitespace-pre-wrap break-all">
-                                  {run.errorMessage}
-                                </span>
-                              ) : (
-                                <span className="block truncate max-w-[380px]">
-                                  {run.errorMessage}
-                                </span>
-                              )}
-                            </button>
-                          )}
-                        </td>
-                        <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
-                          {formatDurationMs(run.durationMs ?? 0)}
-                        </td>
-                        <td className="py-2.5 pr-4 text-xs font-mono text-muted-foreground">
-                          {formatCost(run.costUsd ?? null)}
-                        </td>
-                        <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
-                          <LiveTimeAgo date={run.startedAt} />
-                        </td>
-                        <td className="py-2.5 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
-                          {run.finishedAt ? <LiveTimeAgo date={run.finishedAt} /> : 'In progress'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <GroupedRunHistory runs={runList} />
             </>
           )}
         </CardContent>
@@ -892,6 +735,52 @@ function RunHistoryBar({ runs }: { runs: AgentRun[] }): React.JSX.Element | null
         })}
       </div>
     </div>
+  );
+}
+
+function CronScheduleCard({ schedule }: { schedule: string }): React.JSX.Element {
+  const nextRuns = getNextRuns(schedule, 5);
+  const description = describeCron(schedule);
+
+  return (
+    <Card className="mb-4" data-testid="cron-schedule-card">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-sm">Cron Schedule</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-xs bg-muted px-2 py-1 rounded-md border border-border/50">
+              {schedule}
+            </span>
+            <span className="text-xs text-muted-foreground">{description}</span>
+          </div>
+          {nextRuns.length > 0 && (
+            <div>
+              <span className="text-[11px] font-medium text-muted-foreground block mb-1.5">
+                Next scheduled runs
+              </span>
+              <div className="space-y-0.5">
+                {nextRuns.map((date) => (
+                  <div
+                    key={date.toISOString()}
+                    className="text-[11px] font-mono text-muted-foreground"
+                  >
+                    {date.toLocaleString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

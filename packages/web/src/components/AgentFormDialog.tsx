@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CronBuilder } from '@/components/CronBuilder';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -401,20 +402,13 @@ export function AgentFormDialog({
     type === 'cron' ? (
       <div className="space-y-1.5">
         <label className="text-sm font-medium" htmlFor={`${mode}-agent-schedule`}>
-          Schedule (cron)
+          Schedule
         </label>
-        <Input
-          id={`${mode}-agent-schedule`}
-          placeholder="0 */6 * * *"
-          value={schedule}
-          onChange={(e) => setSchedule(e.target.value)}
+        <CronBuilder
+          value={schedule || '0 */6 * * *'}
+          onChange={setSchedule}
           disabled={isPending}
         />
-        <p className="text-[11px] text-muted-foreground">
-          Cron expression. Examples: <code className="text-[10px]">*/30 * * * *</code> (every 30
-          min), <code className="text-[10px]">0 9 * * 1-5</code> (weekdays 9am),{' '}
-          <code className="text-[10px]">0 */6 * * *</code> (every 6h)
-        </p>
       </div>
     ) : null;
 
