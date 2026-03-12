@@ -25,6 +25,7 @@ import type { HandoffController } from './handoff-controller.js';
 import { LiveHandoffOrchestrator } from './live-handoff-orchestrator.js';
 import { OutputBuffer } from './output-buffer.js';
 import { RateLimitTrigger } from './rate-limit-trigger.js';
+import { verifySandboxActive } from './sandbox-verifier.js';
 import { runWithSdk, type SdkRunnerHooks } from './sdk-runner.js';
 import {
   checkWorkdirSafety,
@@ -211,6 +212,7 @@ export class AgentInstance extends EventEmitter {
   private pendingSafetyDecision: PendingSafetyDecision | null = null;
   private sandboxSetup: SandboxSetup | null = null;
   private executionProjectPath: string;
+  private readonly sourceRuntime: ManagedRuntime;
   private readonly liveHandoffOrchestrator: LiveHandoffOrchestrator | null;
 
   constructor(options: AgentInstanceOptions) {
@@ -227,6 +229,7 @@ export class AgentInstance extends EventEmitter {
     this.log = options.logger.child({ agentId: this.agentId, machineId: this.machineId });
     this.outputBuffer = new OutputBuffer();
     this.executionProjectPath = this.projectPath;
+    this.sourceRuntime = options.sourceRuntime ?? 'claude-code';
 
     // Initialize audit logger and hook functions
     this.auditLogger = new AuditLogger({
@@ -715,6 +718,10 @@ export class AgentInstance extends EventEmitter {
       this.auditReporter.start();
     }
 
+    // Fire-and-forget: verify sandbox enforcement and emit result via SSE.
+    // This runs asynchronously so it doesn't block execution startup.
+    void this.verifySandbox();
+
     // Start execution timeout timer
     this.executionTimer = setTimeout(() => {
       if (this.state.status === 'running') {
@@ -771,6 +778,36 @@ export class AgentInstance extends EventEmitter {
     }
     this.log.info('SDK not available, falling back to stub simulation');
     this.simulateRun();
+  }
+
+  /**
+   * Run a best-effort sandbox canary check and emit the result as an
+   * SSE event. This is fire-and-forget — verification failure should
+   * never block or abort the agent execution.
+   */
+  private async verifySandbox(): Promise<void> {
+    try {
+      const runtime = this.sourceRuntime ?? 'claude-code';
+      const result = await verifySandboxActive({
+        pid: process.pid,
+        runtime,
+        logger: this.log,
+      });
+
+      this.emitEvent({
+        event: 'sandbox_verified',
+        data: result,
+      });
+
+      if (!result.enforced) {
+        this.log.warn(
+          { method: result.method, details: result.details },
+          'Sandbox enforcement could not be confirmed',
+        );
+      }
+    } catch (err) {
+      this.log.warn({ err }, 'Sandbox verification threw unexpectedly');
+    }
   }
 
   private handleError(err: unknown): void {

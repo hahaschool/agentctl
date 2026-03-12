@@ -50,6 +50,11 @@ export {
   type CheckpointData,
   LoopCheckpoint,
 } from './loop-checkpoint.js';
+export {
+  type EnforceNetworkPolicyOptions,
+  enforceNetworkPolicy,
+  generateDockerNetworkArgs,
+} from './network-enforcement.js';
 export { OutputBuffer } from './output-buffer.js';
 export {
   type RateLimitErrorContext,
@@ -73,6 +78,10 @@ export type {
   StartManagedSessionInput,
 } from './runtime-adapter.js';
 export { RuntimeRegistry } from './runtime-registry.js';
+export {
+  type VerifySandboxOptions,
+  verifySandboxActive,
+} from './sandbox-verifier.js';
 export {
   runWithSdk,
   type SdkRunnerHooks,

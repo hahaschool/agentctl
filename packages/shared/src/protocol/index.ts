@@ -31,6 +31,7 @@ export type {
   LoopCompleteEvent,
   LoopIterationEvent,
   RateLimitHandoffEvent,
+  SandboxVerifiedEvent,
   SteerAckEvent,
   SteerSentEvent,
 } from './events.js';

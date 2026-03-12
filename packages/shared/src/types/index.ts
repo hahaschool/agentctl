@@ -133,6 +133,13 @@ export {
   MANUAL_TAKEOVER_STATUSES,
 } from './runtime-management.js';
 export type {
+  NetworkEnforcementMode,
+  NetworkEnforcementResult,
+  SandboxMethod,
+  SandboxVerificationResult,
+} from './sandbox.js';
+export { SANDBOX_METHODS } from './sandbox.js';
+export type {
   ReplayEvent,
   ReplayFilter,
   SessionTimeline,

@@ -1,5 +1,6 @@
 import type { AgentStatus } from '../types/agent.js';
 import type { ExecutionSummary } from '../types/execution-summary.js';
+import type { SandboxVerificationResult } from '../types/sandbox.js';
 import type { SafetyDecision, WorkdirSafetyTier } from './commands.js';
 
 export type AgentOutputEvent = {
@@ -163,6 +164,16 @@ export type CostThresholdHandoffEvent = {
   };
 };
 
+/**
+ * Emitted after an agent session is spawned, reporting whether the
+ * expected sandbox mechanism (bubblewrap, Seatbelt, or Codex --sandbox)
+ * was confirmed active around the agent process.
+ */
+export type SandboxVerifiedEvent = {
+  event: 'sandbox_verified';
+  data: SandboxVerificationResult;
+};
+
 export type AgentEvent =
   | AgentOutputEvent
   | AgentRawOutputEvent
@@ -179,7 +190,8 @@ export type AgentEvent =
   | SteerAckEvent
   | RateLimitHandoffEvent
   | CostThresholdWarningEvent
-  | CostThresholdHandoffEvent;
+  | CostThresholdHandoffEvent
+  | SandboxVerifiedEvent;
 
 // ---------------------------------------------------------------------------
 // Session content messages — parsed from JSONL session files and served via
