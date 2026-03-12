@@ -51,6 +51,47 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     workerPort = DEFAULT_WORKER_PORT,
   } = opts;
 
+  async function cleanupWorkerAgentAfterPrCompletion(
+    agentId: string,
+    prUrl: string,
+  ): Promise<void> {
+    const resolved = await resolveWorkerUrl(agentId, {}, { registry, dbRegistry, workerPort });
+
+    if (!resolved.ok) {
+      app.log.warn(
+        { agentId, prUrl, error: resolved.error, message: resolved.message },
+        'Failed to resolve worker URL for post-PR agent cleanup',
+      );
+      return;
+    }
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: resolved.url,
+      path: `/api/agents/${encodeURIComponent(agentId)}`,
+      method: 'DELETE',
+      timeoutMs: 5_000,
+    });
+
+    if (!result.ok) {
+      app.log.warn(
+        {
+          agentId,
+          prUrl,
+          workerBaseUrl: resolved.url,
+          error: result.error,
+          message: result.message,
+        },
+        'Worker agent cleanup after PR completion failed',
+      );
+      return;
+    }
+
+    app.log.info(
+      { agentId, prUrl, workerBaseUrl: resolved.url },
+      'Worker agent cleaned up after PR completion',
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Machine registration & heartbeat
   // ---------------------------------------------------------------------------
@@ -823,6 +864,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           },
           'Agent run completion reported by worker',
         );
+
+        if (status === 'success' && resultSummary?.prUrl) {
+          await cleanupWorkerAgentAfterPrCompletion(request.params.id, resultSummary.prUrl);
+        }
 
         // -----------------------------------------------------------------
         // Fire-and-forget: sync run metadata into memory on success

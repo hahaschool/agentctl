@@ -958,6 +958,88 @@ describe('Agent routes — with dbRegistry', () => {
       );
     });
 
+    it('best-effort cleans up the worker agent after successful PR completion', async () => {
+      const originalFetch = saveOriginalFetch();
+
+      try {
+        vi.mocked(mockDbRegistry.getMachine).mockResolvedValue(makeMachine() as never);
+        mockFetchOk({ ok: true, agentId: 'agent-1' });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/agents/agent-1/complete',
+          payload: {
+            runId: 'run-001',
+            status: 'success',
+            resultSummary: {
+              status: 'success',
+              workCompleted: 'Opened PR for the completed task.',
+              executiveSummary: 'Opened PR for the completed task.',
+              keyFindings: [],
+              filesChanged: [],
+              commandsRun: 0,
+              toolUsageBreakdown: {},
+              followUps: [],
+              branchName: 'agent-agent-1/work',
+              prUrl: 'https://github.com/example/repo/pull/123',
+              tokensUsed: { input: 10, output: 20 },
+              costUsd: 0.01,
+              durationMs: 1_000,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          'http://100.64.0.1:9000/api/agents/agent-1',
+          expect.objectContaining({
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      } finally {
+        restoreFetch(originalFetch);
+      }
+    });
+
+    it('does not clean up the worker agent when completion has no PR URL', async () => {
+      const originalFetch = saveOriginalFetch();
+
+      try {
+        const fetchSpy = vi.fn();
+        globalThis.fetch = fetchSpy;
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/agents/agent-1/complete',
+          payload: {
+            runId: 'run-001',
+            status: 'success',
+            resultSummary: {
+              status: 'success',
+              workCompleted: 'Completed changes locally.',
+              executiveSummary: 'Completed changes locally.',
+              keyFindings: [],
+              filesChanged: [],
+              commandsRun: 0,
+              toolUsageBreakdown: {},
+              followUps: [],
+              branchName: 'agent-agent-1/work',
+              prUrl: null,
+              tokensUsed: { input: 10, output: 20 },
+              costUsd: 0.01,
+              durationMs: 1_000,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        restoreFetch(originalFetch);
+      }
+    });
+
     it('completes a run successfully', async () => {
       const response = await app.inject({
         method: 'POST',
