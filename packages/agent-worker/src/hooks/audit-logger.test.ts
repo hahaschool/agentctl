@@ -250,6 +250,18 @@ describe('AuditLogger', () => {
 
       expect(logger.getLogFilePath()).toBe(`/logs/audit-${today}.ndjson`);
     });
+
+    it('appends the configured secure token to the file name', () => {
+      const today = new Date().toISOString().slice(0, 10);
+
+      const logger = new AuditLogger({
+        logDir: '/logs',
+        logger: mockLogger,
+        fileToken: 'secure-token',
+      });
+
+      expect(logger.getLogFilePath()).toBe(`/logs/audit-${today}-secure-token.ndjson`);
+    });
   });
 
   // ── write() ───────────────────────────────────────────────────────

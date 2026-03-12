@@ -12,6 +12,7 @@ const DEFAULT_MAX_CONCURRENT = 3;
 type AgentPoolOptions = {
   maxConcurrent?: number;
   auditLogDir?: string;
+  auditFileToken?: string;
   logger: Logger;
   /** Optional WorktreeManager for creating per-agent git worktree isolation. */
   worktreeManager?: WorktreeManager;
@@ -39,6 +40,7 @@ export class AgentPool extends EventEmitter {
   private readonly agents: Map<string, AgentInstance> = new Map();
   private readonly maxConcurrent: number;
   private readonly auditLogDir: string | undefined;
+  private readonly auditFileToken: string | undefined;
   private readonly log: Logger;
   private readonly worktreeManager: WorktreeManager | undefined;
   /** Tracks which agents have an active worktree so we can clean up on removal. */
@@ -50,6 +52,7 @@ export class AgentPool extends EventEmitter {
     super();
     this.maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
     this.auditLogDir = options.auditLogDir;
+    this.auditFileToken = options.auditFileToken;
     this.log = options.logger.child({ component: 'agent-pool' });
     this.worktreeManager = options.worktreeManager;
   }
@@ -105,6 +108,7 @@ export class AgentPool extends EventEmitter {
     const instance = new AgentInstance({
       ...options,
       projectPath: effectiveProjectPath,
+      auditFileToken: options.auditFileToken ?? this.auditFileToken,
       auditLogDir: options.auditLogDir ?? this.auditLogDir,
       getActiveTaskCount: () => this.getRunningCount(),
     });
