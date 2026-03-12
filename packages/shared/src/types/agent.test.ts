@@ -157,6 +157,41 @@ describe('AgentConfig', () => {
     const config: AgentConfig = {};
     expect(config.defaultPrompt).toBeUndefined();
   });
+
+  it('accepts mcpServers configuration', () => {
+    const config: AgentConfig = {
+      model: 'sonnet',
+      mcpServers: {
+        memory: {
+          command: 'npx',
+          args: ['-y', '@anthropic/memory-server'],
+          env: { MEMORY_DB: '/tmp/mem.db' },
+        },
+        search: {
+          command: 'node',
+          args: ['search-server.js'],
+        },
+        minimal: {
+          command: '/usr/local/bin/mcp-server',
+        },
+      },
+    };
+
+    expect(config.mcpServers).toBeDefined();
+    const mcpServers = config.mcpServers ?? {};
+    expect(Object.keys(mcpServers)).toHaveLength(3);
+    expect(mcpServers.memory.command).toBe('npx');
+    expect(mcpServers.memory.args).toEqual(['-y', '@anthropic/memory-server']);
+    expect(mcpServers.memory.env).toEqual({ MEMORY_DB: '/tmp/mem.db' });
+    expect(mcpServers.search.args).toEqual(['search-server.js']);
+    expect(mcpServers.minimal.args).toBeUndefined();
+    expect(mcpServers.minimal.env).toBeUndefined();
+  });
+
+  it('accepts empty mcpServers object', () => {
+    const config: AgentConfig = { mcpServers: {} };
+    expect(config.mcpServers).toEqual({});
+  });
 });
 
 // ── Agent shape ─────────────────────────────────────────────────────

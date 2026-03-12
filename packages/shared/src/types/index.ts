@@ -15,6 +15,7 @@ export type {
   AgentRuntime,
   AgentStatus,
   AgentType,
+  McpServerConfig,
   PromptTemplateVars,
   ScheduleConfig,
   SessionMode,

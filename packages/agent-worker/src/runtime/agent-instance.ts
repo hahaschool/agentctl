@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { writeFileSync } from 'node:fs';
+import { join as pathJoin } from 'node:path';
 
 import type {
   AgentConfig,
@@ -756,6 +758,10 @@ export class AgentInstance extends EventEmitter {
       }
     }, this.maxExecutionMs);
 
+    // Write .mcp.json before agent startup if MCP servers are configured.
+    // Claude Code reads this file at startup to discover available MCP servers.
+    this.writeMcpConfig();
+
     // Try the real Claude Agent SDK first — with optional session resume
     let result = await this.attemptSdkRun(prompt, resumeSessionId);
 
@@ -778,6 +784,34 @@ export class AgentInstance extends EventEmitter {
     }
     this.log.info('SDK not available, falling back to stub simulation');
     this.simulateRun();
+  }
+
+  /**
+   * Write a `.mcp.json` file to the project directory if the agent config
+   * includes MCP server definitions. Claude Code reads this file at startup
+   * to discover and connect to MCP servers.
+   */
+  private writeMcpConfig(): void {
+    const mcpServers = this.config.mcpServers;
+    if (!mcpServers || Object.keys(mcpServers).length === 0) {
+      return;
+    }
+
+    const mcpConfigPath = pathJoin(this.executionProjectPath, '.mcp.json');
+    const mcpPayload = { mcpServers };
+
+    try {
+      writeFileSync(mcpConfigPath, JSON.stringify(mcpPayload, null, 2), 'utf-8');
+      this.log.info(
+        { mcpConfigPath, serverCount: Object.keys(mcpServers).length },
+        'Wrote .mcp.json for agent',
+      );
+    } catch (err) {
+      this.log.warn(
+        { err, mcpConfigPath },
+        'Failed to write .mcp.json — agent will start without MCP servers',
+      );
+    }
   }
 
   /**
