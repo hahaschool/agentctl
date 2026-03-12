@@ -13,6 +13,7 @@ import type {
   ConsolidationStatus,
   ContentMessage,
   CreateManagedSessionRequest,
+  DiscoveredMcpServer,
   EntityType,
   ExecutionSummary,
   FactSource,
@@ -30,6 +31,8 @@ import type {
   ManagedSessionStatus,
   ManualTakeoverResponse,
   ManualTakeoverState,
+  McpServerConfig,
+  McpServerTemplate,
   MemoryEdge,
   MemoryFact,
   MemoryObservation,
@@ -47,7 +50,15 @@ import type {
   StartManualTakeoverRequest,
 } from '@agentctl/shared';
 
-export type { AgentConfig, ImportJob, MemoryScopeRecord, MemoryScopeType };
+export type {
+  AgentConfig,
+  DiscoveredMcpServer,
+  ImportJob,
+  McpServerConfig,
+  McpServerTemplate,
+  MemoryScopeRecord,
+  MemoryScopeType,
+};
 
 export type HealthResponse = {
   status: 'ok' | 'degraded';
@@ -357,6 +368,17 @@ export type GeneratedMemoryReport = {
   timeRange: MemoryReportTimeRange;
   markdown: string;
   generatedAt: string;
+};
+
+export type McpDiscoverResponse = {
+  discovered: DiscoveredMcpServer[];
+  sources: Array<{ path: string; count: number }>;
+};
+
+export type McpTemplatesResponse = {
+  ok: boolean;
+  templates: McpServerTemplate[];
+  count: number;
 };
 
 export class ApiError extends Error {
@@ -1004,6 +1026,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // MCP discovery & templates
+  discoverMcpServers: (machineId: string, projectPath?: string) => {
+    const qs = new URLSearchParams({ machineId });
+    if (projectPath) qs.set('projectPath', projectPath);
+    return request<McpDiscoverResponse>(`/api/mcp/discover?${qs.toString()}`);
+  },
+
+  getMcpTemplates: () => request<McpTemplatesResponse>('/api/mcp/templates'),
 
   // Memory import
   startMemoryImport: (body: { source: ImportJob['source']; dbPath: string }) =>
