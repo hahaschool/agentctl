@@ -41,6 +41,7 @@ import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
 import { agentRoutes } from './routes/agents.js';
+import { registerRunReaper } from './routes/run-reaper.js';
 import { auditRoutes } from './routes/audit.js';
 import { checkpointRoutes } from './routes/checkpoint.js';
 import { claudeMemRoutes } from './routes/claude-mem.js';
@@ -325,6 +326,11 @@ export async function createServer({
     dispatchVerificationConfig,
     workerPort,
   });
+
+  // Register the run reaper to clean up stale "running" runs.
+  if (db) {
+    registerRunReaper(app, db);
+  }
   await app.register(streamRoutes, {
     prefix: '/api/agents',
     registry,
