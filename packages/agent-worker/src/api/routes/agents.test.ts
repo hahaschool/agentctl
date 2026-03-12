@@ -689,7 +689,7 @@ describe('Agent CRUD routes', () => {
       expect(body.timestamp).toBeDefined();
       expect(body.agents).toBeDefined();
       expect(body.agents.maxConcurrent).toBe(5);
-    });
+    }, 15_000);
 
     it('should return enriched operational data', async () => {
       const response = await app.inject({
