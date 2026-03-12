@@ -40,6 +40,7 @@ export type RuntimeProfileSettings = {
 
 export type WorkerRuntimeRow = {
   runtime: ManagedRuntime;
+  probed: boolean;
   installed: boolean;
   authenticated: boolean;
   drifted: boolean;
@@ -202,10 +203,12 @@ export function buildWorkerRuntimeInventory(
         (candidate) => candidate.machineId === machine.id && candidate.runtime === runtime,
       );
       const metadata = item?.metadata ?? {};
+      const probed = item !== undefined;
       return {
         runtime,
-        installed: item?.isInstalled ?? false,
-        authenticated: item?.isAuthenticated ?? false,
+        probed,
+        installed: probed ? (item?.isInstalled ?? false) : false,
+        authenticated: probed ? (item?.isAuthenticated ?? false) : false,
         drifted: item?.drifted ?? false,
         syncStatus: item?.syncStatus ?? 'unknown',
         localCredentialCount: numberOrZero(metadata.localCredentialCount),

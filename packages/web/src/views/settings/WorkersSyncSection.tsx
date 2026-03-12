@@ -14,10 +14,20 @@ import { buildWorkerRuntimeInventory, RUNTIME_LABELS } from './types';
 function statusTone(
   row: ReturnType<typeof buildWorkerRuntimeInventory>[number]['runtimeRows'][number],
 ): string {
+  if (!row.probed) return 'text-muted-foreground';
   if (row.drifted) return 'text-amber-600 dark:text-amber-300';
   if (row.authenticated) return 'text-green-600 dark:text-green-300';
   if (row.installed) return 'text-muted-foreground';
   return 'text-red-600 dark:text-red-300';
+}
+
+function statusLabel(
+  row: ReturnType<typeof buildWorkerRuntimeInventory>[number]['runtimeRows'][number],
+): string {
+  if (!row.probed) return 'Not probed yet';
+  if (row.authenticated) return 'Authenticated';
+  if (row.installed) return 'Installed, auth missing';
+  return 'Not installed';
 }
 
 export function WorkersSyncSection(): React.JSX.Element {
@@ -95,11 +105,7 @@ export function WorkersSyncSection(): React.JSX.Element {
                     <div>
                       <div className="text-sm font-medium">{RUNTIME_LABELS[row.runtime]}</div>
                       <div className={cn('mt-1 text-sm font-medium', statusTone(row))}>
-                        {row.authenticated
-                          ? 'Authenticated'
-                          : row.installed
-                            ? 'Installed, auth missing'
-                            : 'Not installed'}
+                        {statusLabel(row)}
                       </div>
                     </div>
                     {row.drifted && (
