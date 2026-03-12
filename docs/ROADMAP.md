@@ -520,7 +520,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Unified `SessionBrowser` screen filterable by session source, runtime, machine, and status
 - [x] Add time-range filtering to the unified browser *(PR #67 — DateRangePicker with presets)*
 - [x] Rich session cards across both surfaces: agent type badge, model, cost, duration, last tool call *(PR #67 — SessionCard component)*
-- [ ] Tap from the browser into live SSE stream or session replay
+- [x] Tap from the browser into live SSE stream or session replay *(PR #71 — SessionStreamScreen + SessionReplay components)*
 
 ### 5.2 Cross-Agent Run View — P3
 
@@ -660,7 +660,7 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
-| **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — time-range, rich cards, handoff timeline, expandable diff, action bar, push notifications (PR #67); only SSE replay remains |
+| **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — all items complete: time-range, rich cards, handoff timeline, action bar, push notifications (PR #67), SSE stream + replay (PR #71) |
 | **P3** | ~~Execution Environment Registry~~ | 2.9 | ✅ Delivered — DirectEnvironment + DockerEnvironment with gVisor (PR #69) |
 | **P3** | ~~Automated Experience Extraction~~ | 7.3 | ✅ Delivered — Stop hook, entity routing, Jaccard dedup, review flags (PR #64) |
 | **P3** | ~~Knowledge Maintenance / Dreaming~~ | 7.4 | ✅ Delivered — monthly lint, git cross-ref, synthesis, coverage reporting (PR #65) |
