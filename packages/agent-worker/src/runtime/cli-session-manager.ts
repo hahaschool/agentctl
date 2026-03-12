@@ -14,7 +14,8 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { normalize, resolve as resolvePath } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { normalize, join as pathJoin, resolve as resolvePath } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 
@@ -243,6 +244,22 @@ export class CliSessionManager extends EventEmitter {
           projectPath: sanitizedCwd,
         });
       }
+    }
+
+    // Write .mcp.json before spawning if MCP servers are configured.
+    // Claude Code reads this file at startup to discover available MCP servers.
+    if (options.config?.mcpServers && Object.keys(options.config.mcpServers).length > 0) {
+      const mcpConfigPath = pathJoin(sanitizedCwd, '.mcp.json');
+      const mcpPayload = { mcpServers: options.config.mcpServers };
+      writeFileSync(mcpConfigPath, JSON.stringify(mcpPayload, null, 2), 'utf-8');
+      this.logger?.debug(
+        {
+          sessionId: id,
+          mcpConfigPath,
+          serverCount: Object.keys(options.config.mcpServers).length,
+        },
+        'Wrote .mcp.json for session',
+      );
     }
 
     // Spawn the CLI process.

@@ -46,6 +46,12 @@ export const AGENT_STATUSES = [
 
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+export type McpServerConfig = {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+};
+
 export type AgentConfig = {
   allowedTools?: string[];
   disallowedTools?: string[];
@@ -56,6 +62,8 @@ export type AgentConfig = {
   initialPrompt?: string;
   /** Default prompt used when no explicit prompt is provided (e.g. cron/heartbeat triggers). */
   defaultPrompt?: string;
+  /** MCP server definitions to write to `.mcp.json` before agent startup. */
+  mcpServers?: Record<string, McpServerConfig>;
 };
 
 export type Agent = {

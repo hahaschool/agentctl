@@ -14,16 +14,18 @@ vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => spawnSpy(...args),
 }));
 
-// ── Mock node:fs for discoverLocalSessions ───────────────────────────
+// ── Mock node:fs for discoverLocalSessions + MCP config writing ──────
 
 const existsSyncSpy = vi.fn();
 const readdirSyncSpy = vi.fn();
 const readFileSyncSpy = vi.fn();
+const writeFileSyncSpy = vi.fn();
 
 vi.mock('node:fs', () => ({
   existsSync: (...args: unknown[]) => existsSyncSpy(...args),
   readdirSync: (...args: unknown[]) => readdirSyncSpy(...args),
   readFileSync: (...args: unknown[]) => readFileSyncSpy(...args),
+  writeFileSync: (...args: unknown[]) => writeFileSyncSpy(...args),
 }));
 
 // ── Mock node:os for homedir ─────────────────────────────────────────
@@ -621,6 +623,108 @@ describe('CliSessionManager', () => {
       if (events[0].type === 'session_error') {
         expect(events[0].error).toContain('spawn ENOENT');
       }
+    });
+  });
+
+  // ── MCP config writing ─────────────────────────────────────────────
+
+  describe('MCP config writing', () => {
+    it('writes .mcp.json before spawn when mcpServers are configured', () => {
+      manager.startSession(
+        defaultStartOptions({
+          config: {
+            mcpServers: {
+              memory: {
+                command: 'npx',
+                args: ['-y', '@anthropic/memory-server'],
+                env: { DB_PATH: '/tmp/mem.db' },
+              },
+            },
+          },
+        }),
+      );
+
+      expect(writeFileSyncSpy).toHaveBeenCalledOnce();
+      const [path, content, encoding] = writeFileSyncSpy.mock.calls[0];
+      expect(path).toBe('/tmp/project/.mcp.json');
+      expect(encoding).toBe('utf-8');
+
+      const parsed = JSON.parse(content as string);
+      expect(parsed).toEqual({
+        mcpServers: {
+          memory: {
+            command: 'npx',
+            args: ['-y', '@anthropic/memory-server'],
+            env: { DB_PATH: '/tmp/mem.db' },
+          },
+        },
+      });
+    });
+
+    it('writes .mcp.json with multiple servers', () => {
+      manager.startSession(
+        defaultStartOptions({
+          config: {
+            mcpServers: {
+              memory: { command: 'mem-server' },
+              search: { command: 'search-server', args: ['--port', '3000'] },
+            },
+          },
+        }),
+      );
+
+      expect(writeFileSyncSpy).toHaveBeenCalledOnce();
+      const parsed = JSON.parse(writeFileSyncSpy.mock.calls[0][1] as string);
+      expect(Object.keys(parsed.mcpServers)).toHaveLength(2);
+      expect(parsed.mcpServers.memory.command).toBe('mem-server');
+      expect(parsed.mcpServers.search.command).toBe('search-server');
+    });
+
+    it('does not write .mcp.json when mcpServers is undefined', () => {
+      manager.startSession(
+        defaultStartOptions({
+          config: { model: 'sonnet' },
+        }),
+      );
+
+      expect(writeFileSyncSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not write .mcp.json when mcpServers is empty', () => {
+      manager.startSession(
+        defaultStartOptions({
+          config: { mcpServers: {} },
+        }),
+      );
+
+      expect(writeFileSyncSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not write .mcp.json when config is undefined', () => {
+      manager.startSession(defaultStartOptions({ config: undefined }));
+
+      expect(writeFileSyncSpy).not.toHaveBeenCalled();
+    });
+
+    it('writes .mcp.json before spawn is called', () => {
+      const callOrder: string[] = [];
+      writeFileSyncSpy.mockImplementation(() => callOrder.push('writeFileSync'));
+      spawnSpy.mockImplementation((..._args: unknown[]) => {
+        callOrder.push('spawn');
+        return createMockChildProcess();
+      });
+
+      manager.startSession(
+        defaultStartOptions({
+          config: {
+            mcpServers: {
+              test: { command: 'test-server' },
+            },
+          },
+        }),
+      );
+
+      expect(callOrder).toEqual(['writeFileSync', 'spawn']);
     });
   });
 
