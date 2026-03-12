@@ -22,7 +22,7 @@
     "typecheck": "pnpm -r build",
     "clean": "pnpm -r exec rm -rf dist",
     "agentctl": "tsx scripts/agentctl.ts",
-    "tui": "tsx scripts/tui.tsx"
+    "agentctl:deploy": "npx tsx scripts/deploy.ts"
   },
   "pnpm": {
     "overrides": {
@@ -31,11 +31,5 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4"
-  },
-  "dependencies": {
-    "@types/react": "^19.2.14",
-    "ink": "^6.8.0",
-    "ink-spinner": "^5.0.0",
-    "react": "^19.2.4"
   }
 }
