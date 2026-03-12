@@ -52,6 +52,7 @@ import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
+import { mcpTemplateRoutes } from './routes/mcp-templates.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
 import { memoryDecayRoutes } from './routes/memory-decay.js';
@@ -327,6 +328,14 @@ export async function createServer({
     dbRegistry,
     memoryInjector,
     dispatchVerificationConfig,
+    workerPort,
+  });
+
+  // MCP template library + discovery proxy
+  await app.register(mcpTemplateRoutes, {
+    prefix: '/api/mcp',
+    registry,
+    dbRegistry,
     workerPort,
   });
 

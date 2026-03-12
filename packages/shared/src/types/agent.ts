@@ -52,6 +52,39 @@ export type McpServerConfig = {
   env?: Record<string, string>;
 };
 
+/** Source indicating where an MCP server config was discovered. */
+export type McpServerSource = 'project' | 'machine' | 'global' | 'template';
+
+/** An MCP server discovered via auto-detection or templates. */
+export type DiscoveredMcpServer = {
+  /** Unique key for this server (e.g. "filesystem", "memory"). */
+  name: string;
+  /** The MCP server configuration. */
+  config: McpServerConfig;
+  /** Where this server definition was found. */
+  source: McpServerSource;
+  /** Optional human-readable description of this server. */
+  description?: string;
+};
+
+/** A pre-configured MCP server template for common use cases. */
+export type McpServerTemplate = {
+  /** Unique identifier for this template. */
+  id: string;
+  /** Human-readable name. */
+  name: string;
+  /** Description of what this MCP server does. */
+  description: string;
+  /** Shell command to start the server. */
+  command: string;
+  /** Command arguments. */
+  args?: string[];
+  /** Environment variables. */
+  env?: Record<string, string>;
+  /** Which agent runtimes this template is compatible with. */
+  runtimeTypes?: AgentRuntime[];
+};
+
 export type AgentConfig = {
   allowedTools?: string[];
   disallowedTools?: string[];

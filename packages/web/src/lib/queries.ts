@@ -81,6 +81,11 @@ export const queryKeys = {
   auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
     params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
   gitStatus: (machineId: string, path: string) => ['git-status', machineId, path] as const,
+  mcpDiscover: (machineId: string, projectPath?: string) =>
+    projectPath
+      ? (['mcp', 'discover', machineId, projectPath] as const)
+      : (['mcp', 'discover', machineId] as const),
+  mcpTemplates: ['mcp', 'templates'] as const,
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -361,6 +366,23 @@ export function gitStatusQuery(machineId: string, path: string) {
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function mcpDiscoverQuery(machineId: string, projectPath?: string) {
+  return queryOptions({
+    queryKey: queryKeys.mcpDiscover(machineId, projectPath),
+    queryFn: () => api.discoverMcpServers(machineId, projectPath),
+    enabled: !!machineId,
+    staleTime: 30_000,
+  });
+}
+
+export function mcpTemplatesQuery() {
+  return queryOptions({
+    queryKey: queryKeys.mcpTemplates,
+    queryFn: api.getMcpTemplates,
+    staleTime: 5 * 60_000, // Templates rarely change
   });
 }
 

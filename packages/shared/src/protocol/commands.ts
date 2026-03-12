@@ -1,3 +1,4 @@
+import type { DiscoveredMcpServer } from '../types/agent.js';
 import type { MachineCapabilities } from '../types/machine.js';
 
 export type StartAgentRequest = {
@@ -32,6 +33,8 @@ export type HeartbeatRequest = {
   cpuPercent: number;
   memoryPercent: number;
   capabilities?: MachineCapabilities;
+  /** MCP servers discovered on this machine (global config + common paths). */
+  mcpServers?: DiscoveredMcpServer[];
 };
 
 export type SignalAgentRequest = {

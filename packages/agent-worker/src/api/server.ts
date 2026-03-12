@@ -22,6 +22,7 @@ import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
+import { mcpDiscoverRoutes } from './routes/mcp-discover.js';
 import { memoryFeedbackRoutes } from './routes/memory-feedback.js';
 import { memoryPromoteRoutes } from './routes/memory-promote.js';
 import { memoryRecallRoutes } from './routes/memory-recall.js';
@@ -248,6 +249,11 @@ export async function createWorkerServer({
       controlPlaneUrl,
     });
   }
+
+  await app.register(mcpDiscoverRoutes, {
+    prefix: '/api/mcp',
+    logger,
+  });
 
   if (controlPlaneUrl) {
     await app.register(memoryFeedbackRoutes, {
