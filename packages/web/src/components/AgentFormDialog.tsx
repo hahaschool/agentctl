@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CronBuilder } from '@/components/CronBuilder';
 import { Button } from '@/components/ui/button';
 import {
@@ -103,6 +103,62 @@ export type AgentFormDialogProps = {
 };
 
 // ---------------------------------------------------------------------------
+// MCP server form entry (local UI state)
+// ---------------------------------------------------------------------------
+
+type McpServerEntry = {
+  name: string;
+  command: string;
+  args: string;
+  envPairs: ReadonlyArray<{ key: string; value: string }>;
+};
+
+function createEmptyMcpEntry(): McpServerEntry {
+  return { name: '', command: '', args: '', envPairs: [] };
+}
+
+/** Convert form entries → AgentConfig mcpServers record */
+function mcpEntriesToRecord(
+  entries: ReadonlyArray<McpServerEntry>,
+): Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined {
+  const record: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> =
+    {};
+  for (const entry of entries) {
+    const key = entry.name.trim();
+    if (!key || !entry.command.trim()) continue;
+    const args = entry.args
+      .split(',')
+      .map((a) => a.trim())
+      .filter(Boolean);
+    const env: Record<string, string> = {};
+    for (const pair of entry.envPairs) {
+      if (pair.key.trim()) env[pair.key.trim()] = pair.value;
+    }
+    record[key] = {
+      command: entry.command.trim(),
+      ...(args.length > 0 ? { args } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
+    };
+  }
+  return Object.keys(record).length > 0 ? record : undefined;
+}
+
+/** Convert AgentConfig mcpServers record → form entries */
+function mcpRecordToEntries(
+  record:
+    | Record<string, { command: string; args?: string[]; env?: Record<string, string> }>
+    | undefined,
+): McpServerEntry[] {
+  if (!record) return [];
+  return Object.entries(record).map(([name, cfg]) => ({
+    name,
+    command: cfg.command,
+    args: cfg.args?.join(', ') ?? '',
+    envPairs: cfg.env ? Object.entries(cfg.env).map(([key, value]) => ({ key, value })) : [],
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -130,6 +186,9 @@ export function AgentFormDialog({
   const [maxTurns, setMaxTurns] = useState('');
   const [permissionMode, setPermissionMode] = useState('default');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [defaultPrompt, setDefaultPrompt] = useState('');
+  const [mcpEntries, setMcpEntries] = useState<McpServerEntry[]>([]);
+  const [mcpOpen, setMcpOpen] = useState(false);
 
   // Create-only state
   const [projectPath, setProjectPath] = useState('');
@@ -183,6 +242,9 @@ export function AgentFormDialog({
     setMaxTurns('');
     setPermissionMode('default');
     setSystemPrompt('');
+    setDefaultPrompt('');
+    setMcpEntries([]);
+    setMcpOpen(false);
     setProjectSearchQuery('');
     setShowProjectDropdown(false);
     setMemoryScopeId('');
@@ -200,6 +262,9 @@ export function AgentFormDialog({
     setMaxTurns(a.config?.maxTurns != null ? String(a.config.maxTurns) : '');
     setPermissionMode(a.config?.permissionMode ?? 'default');
     setSystemPrompt(a.config?.systemPrompt ?? '');
+    setDefaultPrompt(a.config?.defaultPrompt ?? '');
+    setMcpEntries(mcpRecordToEntries(a.config?.mcpServers));
+    setMcpOpen(Object.keys(a.config?.mcpServers ?? {}).length > 0);
   }, []);
 
   // Close project dropdown on outside click
@@ -234,6 +299,9 @@ export function AgentFormDialog({
       if (permissionMode && permissionMode !== 'default')
         config.permissionMode = permissionMode as AgentConfig['permissionMode'];
       if (systemPrompt.trim()) config.systemPrompt = systemPrompt.trim();
+      if (defaultPrompt.trim()) config.defaultPrompt = defaultPrompt.trim();
+      const mcpRecord = mcpEntriesToRecord(mcpEntries);
+      if (mcpRecord) config.mcpServers = mcpRecord;
 
       // Remember last-used machine
       if (typeof window !== 'undefined') {
@@ -295,6 +363,17 @@ export function AgentFormDialog({
         config.systemPrompt = systemPrompt.trim();
       } else {
         delete config.systemPrompt;
+      }
+      if (defaultPrompt.trim()) {
+        config.defaultPrompt = defaultPrompt.trim();
+      } else {
+        delete config.defaultPrompt;
+      }
+      const mcpRecord = mcpEntriesToRecord(mcpEntries);
+      if (mcpRecord) {
+        config.mcpServers = mcpRecord;
+      } else {
+        delete config.mcpServers;
       }
 
       onSubmit({
@@ -486,6 +565,244 @@ export function AgentFormDialog({
       <p className="text-[11px] text-muted-foreground">
         Custom system instructions appended to the base prompt.
       </p>
+    </div>
+  );
+
+  const defaultPromptTextarea = (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium" htmlFor={`${mode}-agent-defaultprompt`}>
+        Default Prompt
+      </label>
+      <textarea
+        id={`${mode}-agent-defaultprompt`}
+        rows={3}
+        placeholder="Prompt used when no explicit prompt is provided..."
+        value={defaultPrompt}
+        onChange={(e) => setDefaultPrompt(e.target.value)}
+        disabled={isPending}
+        className={cn(
+          'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+          'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+          'dark:bg-input/30',
+        )}
+      />
+      <p className="text-[11px] text-muted-foreground">
+        Used when no explicit prompt is provided (e.g. cron/heartbeat triggers).
+      </p>
+    </div>
+  );
+
+  // -----------------------------------------------------------------------
+  // MCP server helpers (immutable updates)
+  // -----------------------------------------------------------------------
+
+  const addMcpEntry = useCallback(() => {
+    setMcpEntries((prev) => [...prev, createEmptyMcpEntry()]);
+  }, []);
+
+  const removeMcpEntry = useCallback((index: number) => {
+    setMcpEntries((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const updateMcpEntry = useCallback(
+    (index: number, field: keyof McpServerEntry, value: string) => {
+      setMcpEntries((prev) =>
+        prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)),
+      );
+    },
+    [],
+  );
+
+  const addMcpEnvPair = useCallback((entryIndex: number) => {
+    setMcpEntries((prev) =>
+      prev.map((entry, i) =>
+        i === entryIndex
+          ? { ...entry, envPairs: [...entry.envPairs, { key: '', value: '' }] }
+          : entry,
+      ),
+    );
+  }, []);
+
+  const removeMcpEnvPair = useCallback((entryIndex: number, pairIndex: number) => {
+    setMcpEntries((prev) =>
+      prev.map((entry, i) =>
+        i === entryIndex
+          ? { ...entry, envPairs: entry.envPairs.filter((_, pi) => pi !== pairIndex) }
+          : entry,
+      ),
+    );
+  }, []);
+
+  const updateMcpEnvPair = useCallback(
+    (entryIndex: number, pairIndex: number, field: 'key' | 'value', val: string) => {
+      setMcpEntries((prev) =>
+        prev.map((entry, i) =>
+          i === entryIndex
+            ? {
+                ...entry,
+                envPairs: entry.envPairs.map((pair, pi) =>
+                  pi === pairIndex ? { ...pair, [field]: val } : pair,
+                ),
+              }
+            : entry,
+        ),
+      );
+    },
+    [],
+  );
+
+  const mcpServersSection = (
+    <div>
+      <button
+        type="button"
+        onClick={() => setMcpOpen(!mcpOpen)}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="text-xs">{mcpOpen ? '\u25BE' : '\u25B8'}</span>
+        MCP Servers
+        {mcpEntries.length > 0 && (
+          <span className="text-[10px] text-primary">({mcpEntries.length} configured)</span>
+        )}
+      </button>
+
+      {mcpOpen && (
+        <div className="mt-3 space-y-3 pl-4 border-l-2 border-border">
+          {mcpEntries.map((entry, idx) => (
+            <div
+              key={`mcp-${idx}`}
+              className="space-y-2 rounded-md border border-border p-3 bg-muted/30"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Server {idx + 1}</span>
+                <button
+                  type="button"
+                  onClick={() => removeMcpEntry(idx)}
+                  disabled={isPending}
+                  className="text-xs text-destructive hover:text-destructive/80 transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label
+                    className="text-[11px] text-muted-foreground"
+                    htmlFor={`${mode}-mcp-${idx}-name`}
+                  >
+                    Name (key)
+                  </label>
+                  <Input
+                    id={`${mode}-mcp-${idx}-name`}
+                    placeholder="e.g. filesystem"
+                    value={entry.name}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      updateMcpEntry(idx, 'name', e.target.value)
+                    }
+                    disabled={isPending}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label
+                    className="text-[11px] text-muted-foreground"
+                    htmlFor={`${mode}-mcp-${idx}-command`}
+                  >
+                    Command
+                  </label>
+                  <Input
+                    id={`${mode}-mcp-${idx}-command`}
+                    placeholder="e.g. npx"
+                    value={entry.command}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      updateMcpEntry(idx, 'command', e.target.value)
+                    }
+                    disabled={isPending}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  className="text-[11px] text-muted-foreground"
+                  htmlFor={`${mode}-mcp-${idx}-args`}
+                >
+                  Args (comma-separated)
+                </label>
+                <Input
+                  id={`${mode}-mcp-${idx}-args`}
+                  placeholder="e.g. -y, @modelcontextprotocol/server-filesystem, /path"
+                  value={entry.args}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    updateMcpEntry(idx, 'args', e.target.value)
+                  }
+                  disabled={isPending}
+                />
+              </div>
+
+              {/* Env vars */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">Environment Variables</span>
+                  <button
+                    type="button"
+                    onClick={() => addMcpEnvPair(idx)}
+                    disabled={isPending}
+                    className="text-[11px] text-primary hover:text-primary/80 transition-colors"
+                  >
+                    + Add Variable
+                  </button>
+                </div>
+                {entry.envPairs.map((pair, pairIdx) => (
+                  <div key={`env-${idx}-${pairIdx}`} className="flex items-center gap-1.5">
+                    <Input
+                      placeholder="KEY"
+                      value={pair.key}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                        updateMcpEnvPair(idx, pairIdx, 'key', e.target.value)
+                      }
+                      disabled={isPending}
+                      className="flex-1 font-mono text-xs"
+                    />
+                    <span className="text-muted-foreground text-xs">=</span>
+                    <Input
+                      placeholder="value"
+                      value={pair.value}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                        updateMcpEnvPair(idx, pairIdx, 'value', e.target.value)
+                      }
+                      disabled={isPending}
+                      className="flex-1 font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMcpEnvPair(idx, pairIdx)}
+                      disabled={isPending}
+                      className="text-xs text-destructive hover:text-destructive/80 transition-colors shrink-0"
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addMcpEntry}
+            disabled={isPending}
+          >
+            + Add MCP Server
+          </Button>
+
+          <p className="text-[11px] text-muted-foreground">
+            MCP server definitions written to <code className="font-mono">.mcp.json</code> before
+            agent startup.
+          </p>
+        </div>
+      )}
     </div>
   );
 
@@ -682,6 +999,7 @@ export function AgentFormDialog({
                   maxTurns.trim() ||
                   permissionMode !== 'default' ||
                   systemPrompt.trim() ||
+                  defaultPrompt.trim() ||
                   memoryScopeId.trim() ||
                   memoryMaxTokens !== String(DEFAULT_MEMORY_MAX_TOKENS) ||
                   memoryMaxFacts !== String(DEFAULT_MEMORY_MAX_FACTS)) && (
@@ -767,11 +1085,15 @@ export function AgentFormDialog({
                   {maxTurnsInput}
                   {permissionModeSelect}
                   {systemPromptTextarea}
+                  {defaultPromptTextarea}
                   {memoryScopeSelect}
                   {memoryBudgetInputs}
                 </div>
               )}
             </div>
+
+            {/* MCP Servers — collapsible section */}
+            {mcpServersSection}
           </div>
 
           <DialogFooter>
@@ -857,6 +1179,10 @@ export function AgentFormDialog({
           {maxTurnsInput}
           {permissionModeSelect}
           {systemPromptTextarea}
+          {defaultPromptTextarea}
+
+          {/* MCP Servers — collapsible section */}
+          {mcpServersSection}
         </div>
 
         <DialogFooter>
