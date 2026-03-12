@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (PR #85 merged: code quality fixes; §11 UX fixes in progress: 5 parallel agents working on §11.1-11.7; Codex GPT-5.4 design review incorporated into §10 collaboration docs)
+> Last updated: 2026-03-12 (§11 fully complete: all 7 agent detail page UX fixes delivered (PRs #86-90); §10 collaboration design reviewed by Codex GPT-5.4; PR #85 code quality fixes merged)
 
 ## Current State
 
@@ -789,42 +789,24 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] `sessionId` on run entries with clickable session link *(PR #88)*
 - [x] API returns sessionId on runs *(PR #88)*
 
-### 11.6 MCP Server Auto-Detection & Managed Config — P0
+### 11.6 MCP Server Auto-Detection & Managed Config — P0 ✅
 
-Current MCP config is fully manual (hand-type command, args, env). This is unusable — should be automatic.
+> Fixed in PR #89. Three-layer MCP discovery: project files (`.mcp.json`, `.claude/settings.json`), machine-level, and managed templates. `McpServerPicker` replaces manual form with auto-detected + template cards.
 
-**Requirements:**
-1. **Auto-detect from project**: Worker reads `.mcp.json` / `~/.claude.json` from the agent's `projectPath` and presents discovered MCP servers as toggleable checkboxes
-2. **Auto-detect from machine**: Worker reports available MCP servers in heartbeat → CP stores per-machine MCP inventory → UI shows "available on this machine" list
-3. **Managed templates**: CP maintains an MCP server template library (e.g. "filesystem", "memory", "search") with pre-configured command/args → agent form picks from templates
-4. **Runtime-aware**: Claude Code agents get `.mcp.json`, Codex agents get their own tool config — UI should only show relevant options per runtime
-5. **Push-down**: When CP dispatches a job, include the resolved MCP config in the payload so the worker writes the correct `.mcp.json` without relying on agent-local config
+- [x] Worker `GET /api/mcp/discover?projectPath=...` — scans project + global config *(PR #89)*
+- [x] CP `GET /api/mcp/templates` — common MCP server templates *(PR #89)*
+- [x] `McpServerPicker` component with source badges *(PR #89)*
+- [x] `DiscoveredMcpServer` type with source tracking *(PR #89)*
 
-**Implementation:**
-- Worker: new `GET /api/mcp/discover?projectPath=...` endpoint → scan `.mcp.json` + `~/.claude.json`
-- Worker: include `mcpServers` in heartbeat payload
-- CP: store machine MCP inventory in registry
-- Web: replace manual form with checkbox picker (discovered + templates)
-- Web: show "(auto-detected from project)" badge on discovered servers
+### 11.7 Agent Settings Redesign — P0 ✅
 
-### 11.7 Agent Settings Redesign — P0
+> Fixed in PR #90. Full-page tabbed settings at `/agents/[id]/settings` with 5 tabs. `AgentFormDialog` simplified to quick-create mode (name, machine, type, model only).
 
-Agent edit dialog is now a single long-scrolling form with 10+ fields. This doesn't scale.
-
-**Current fields (too many for one column):** name, machine, type, model, initialPrompt, maxTurns, permissionMode, systemPrompt, defaultPrompt, MCP servers, schedule, memory budget
-
-**Redesign:**
-- Replace dialog with a **full-page agent settings** view (like Settings page pattern)
-- **Tabbed layout** with sections:
-  - **General**: name, machine, type, schedule
-  - **Model & Prompts**: model, initialPrompt, defaultPrompt, systemPrompt, maxTurns
-  - **Permissions & Tools**: permissionMode, allowedTools, disallowedTools
-  - **MCP Servers**: auto-detected list + manual override (§11.6)
-  - **Memory**: scope, maxTokens, maxFacts
-- Each tab saves independently
-- Runtime-aware: show/hide tabs based on agent runtime (Claude Code vs Codex)
-- Responsive: works on both desktop and mobile
-- Quick-create mode stays as a simplified dialog for fast agent creation
+- [x] `/agents/[id]/settings/page.tsx` — full-page settings with shadcn Tabs *(PR #90)*
+- [x] `GeneralTab`, `ModelPromptsTab`, `PermissionsToolsTab`, `McpServersTab`, `MemoryTab` *(PR #90)*
+- [x] Each tab saves independently via React Query mutations *(PR #90)*
+- [x] "Settings" link on agent detail page *(PR #90)*
+- [x] `AgentFormDialog` simplified for quick-create *(PR #90)*
 
 ---
 
@@ -919,8 +901,8 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Cron UX Improvements~~ | 9.5 | ✅ Delivered — visual cron builder + next runs (PR #81) |
 | **P2** | ~~Agent Execution History Improvements~~ | 9.6 | ✅ Delivered — grouped by date, filters, stats (PR #81) |
 | **P0** | ~~Start Button Ignores defaultPrompt~~ | 11.1 | ✅ Delivered — effectivePrompt fallback + placeholder (PR #86) |
-| **P0** | MCP Auto-Detection & Managed Config | 11.6 | In progress — worker discover endpoint + templates + UI picker |
-| **P0** | Agent Settings Redesign (Tabbed) | 11.7 | In progress — full-page `/agents/[id]/settings` with tabs |
+| **P0** | ~~MCP Auto-Detection & Managed Config~~ | 11.6 | ✅ Delivered — 3-layer discovery + McpServerPicker (PR #89) |
+| **P0** | ~~Agent Settings Redesign (Tabbed)~~ | 11.7 | ✅ Delivered — full-page 5-tab settings (PR #90) |
 | **P1** | ~~Agent Header Overflow~~ | 11.2 | ✅ Delivered — CSS truncate + tooltip (PR #86) |
 | **P1** | ~~Cost Display Still $0.00~~ | 11.3 | ✅ Delivered — computed from runs (PR #87) |
 | **P1** | ~~Run History Bar Redesign~~ | 11.4 | ✅ Delivered — recharts BarChart (PR #88) |
