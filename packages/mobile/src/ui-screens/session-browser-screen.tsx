@@ -44,6 +44,17 @@ import type { SessionScreenState } from '../screens/session-presenter.js';
 import { SessionPresenter } from '../screens/session-presenter.js';
 import type { RuntimeSessionInfo } from '../services/runtime-session-api.js';
 import type { SessionMessage } from '../services/session-api.js';
+import { SessionStreamScreen } from './session-stream-screen.js';
+
+// ---------------------------------------------------------------------------
+// Stream target — describes which session to open in stream/replay view
+// ---------------------------------------------------------------------------
+
+type StreamTarget = {
+  sessionId: string;
+  isLive: boolean;
+  machineId: string | null;
+};
 
 export type SessionBrowserScreenProps = {
   initialTypeFilter?: 'all' | 'session' | 'runtime';
@@ -206,6 +217,7 @@ export function SessionBrowserScreen({
   const [showRuntimeCreateModal, setShowRuntimeCreateModal] = useState(false);
   const [showClassicDetailModal, setShowClassicDetailModal] = useState(false);
   const [showRuntimeDetailModal, setShowRuntimeDetailModal] = useState(false);
+  const [streamTarget, setStreamTarget] = useState<StreamTarget | null>(null);
 
   const [newSessionPath, setNewSessionPath] = useState('');
   const [newSessionModel, setNewSessionModel] = useState('');
@@ -342,6 +354,19 @@ export function SessionBrowserScreen({
   }, []);
 
   const handleBrowserItemPress = useCallback((item: SessionBrowserItem) => {
+    const isLive = item.status === 'active' || item.status === 'starting';
+    setStreamTarget({
+      sessionId: item.id,
+      isLive,
+      machineId: item.machineId,
+    });
+  }, []);
+
+  const handleStreamBack = useCallback(() => {
+    setStreamTarget(null);
+  }, []);
+
+  const handleBrowserItemLongPress = useCallback((item: SessionBrowserItem) => {
     if (isRuntimeItem(item)) {
       setShowRuntimeDetailModal(true);
       void runtimePresenterRef.current?.selectSession(item.original);
@@ -512,9 +537,13 @@ export function SessionBrowserScreen({
 
   const renderBrowserItem = useCallback(
     ({ item }: { item: SessionBrowserItem }) => (
-      <SessionCard item={item} onPress={handleBrowserItemPress} />
+      <SessionCard
+        item={item}
+        onPress={handleBrowserItemPress}
+        onLongPress={handleBrowserItemLongPress}
+      />
     ),
-    [handleBrowserItemPress],
+    [handleBrowserItemPress, handleBrowserItemLongPress],
   );
 
   const renderMessage = useCallback(
@@ -557,6 +586,18 @@ export function SessionBrowserScreen({
     runtimeSelectedSession?.status === 'paused' ||
     runtimeSelectedSession?.status === 'ended' ||
     runtimeSelectedSession?.status === 'error';
+
+  // When a stream target is set, render the full-screen stream/replay view
+  if (streamTarget) {
+    return (
+      <SessionStreamScreen
+        sessionId={streamTarget.sessionId}
+        isLive={streamTarget.isLive}
+        machineId={streamTarget.machineId}
+        onBack={handleStreamBack}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
