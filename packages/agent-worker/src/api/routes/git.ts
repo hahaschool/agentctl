@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { execFile } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { lstatSync, realpathSync, statSync } from 'node:fs';
 import { normalize, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -104,6 +104,36 @@ function validateGitPath(raw: unknown): string {
   }
 
   return resolved;
+}
+
+/**
+ * After initial validation, resolve symlinks and re-check for denied
+ * path segments. This prevents TOCTOU symlink attacks where a symlink
+ * passes the initial check but points to a sensitive directory.
+ *
+ * Security: addresses js/path-injection by resolving the real path
+ * of the validated directory and re-applying the deny list.
+ */
+function resolveAndRevalidate(validated: string): string {
+  let realPath: string;
+  try {
+    realPath = realpathSync(validated);
+  } catch {
+    // If realpath fails (e.g. broken symlink), fall back to the
+    // already-validated path — statSync will catch the real error.
+    return validated;
+  }
+
+  const deniedSegment = findDeniedPathSegment(realPath, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `Resolved path accesses denied "${deniedSegment}" directory`,
+      { path: realPath, deniedSegment },
+    );
+  }
+
+  return realPath;
 }
 
 async function runGit(args: string[], cwd: string): Promise<string> {
@@ -238,16 +268,26 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
         return reply.code(400).send({ error: 'INVALID_PATH', message: msg });
       }
 
-      // Validate path exists and is a directory
+      // Validate path exists and is a directory.
+      // Security: use lstatSync first to detect symlinks before following
+      // them (js/path-injection). If the path is a symlink, resolve the
+      // real path and re-validate against the denied path segments.
       try {
-        const stat = statSync(validatedDirPath);
-        if (!stat.isDirectory()) {
+        const lstatResult = lstatSync(validatedDirPath);
+        if (lstatResult.isSymbolicLink()) {
+          validatedDirPath = resolveAndRevalidate(validatedDirPath);
+        }
+        const statResult = statSync(validatedDirPath);
+        if (!statResult.isDirectory()) {
           return reply.code(400).send({
             error: 'NOT_A_DIRECTORY',
             message: `Path '${validatedDirPath}' is not a directory`,
           });
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof WorkerError) {
+          return reply.code(400).send({ error: err.code, message: err.message });
+        }
         return reply.code(404).send({
           error: 'PATH_NOT_FOUND',
           message: `Path '${validatedDirPath}' does not exist`,

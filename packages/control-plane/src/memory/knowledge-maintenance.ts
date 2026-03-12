@@ -19,8 +19,8 @@
 
 import { execFile as execFileCb } from 'node:child_process';
 import type { Dirent } from 'node:fs';
-import { access, readdir } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { access, readdir, realpath } from 'node:fs/promises';
+import { join, normalize, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
@@ -117,7 +117,10 @@ export class KnowledgeMaintenance {
     this.pool = options.pool;
     this.memoryStore = options.memoryStore;
     this.logger = options.logger;
-    this.projectRoot = options.projectRoot ?? process.cwd();
+    // Security: resolve and normalize projectRoot to prevent path traversal
+    // when it is later joined with user-supplied relative paths.
+    const rawRoot = options.projectRoot ?? process.cwd();
+    this.projectRoot = resolve(normalize(rawRoot));
   }
 
   /** Run all four maintenance passes and return a combined result. */
@@ -423,20 +426,56 @@ export class KnowledgeMaintenance {
     }));
   }
 
+  /**
+   * Check whether a file exists, with path traversal prevention.
+   *
+   * Security: validates that the joined path stays within projectRoot
+   * to prevent path traversal attacks (js/path-injection).
+   */
   private async fileExists(relativePath: string): Promise<boolean> {
+    const joined = resolve(join(this.projectRoot, relativePath));
+    const allowedPrefix = this.projectRoot.endsWith(sep)
+      ? this.projectRoot
+      : `${this.projectRoot}${sep}`;
+
+    if (joined !== this.projectRoot && !joined.startsWith(allowedPrefix)) {
+      return false;
+    }
+
     try {
-      await access(join(this.projectRoot, relativePath));
+      await access(joined);
       return true;
     } catch {
       return false;
     }
   }
 
+  /**
+   * List files deleted from the git repository in the last 90 days.
+   *
+   * Security: resolves the real path of projectRoot and verifies
+   * a .git directory exists before passing it to execFile, preventing
+   * shell-command-injection-from-environment (js/shell-command-injection-from-environment).
+   */
   private async getDeletedFiles(): Promise<string[]> {
     try {
+      // Resolve the real path to prevent symlink-based injection
+      const realRoot = await realpath(this.projectRoot);
+
+      // Verify .git directory exists to ensure we are in a real git repo
+      try {
+        await access(join(realRoot, '.git'));
+      } catch {
+        this.logger.debug(
+          { projectRoot: realRoot },
+          'No .git directory found — skipping deleted-file scan',
+        );
+        return [];
+      }
+
       const { stdout } = await execFile('git', [
         '-C',
-        this.projectRoot,
+        realRoot,
         'log',
         '--diff-filter=D',
         '--name-only',
