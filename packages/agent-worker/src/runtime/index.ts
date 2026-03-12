@@ -26,6 +26,10 @@ export {
   type CostThresholdTriggerOptions,
 } from './cost-threshold-trigger.js';
 export { DirectEnvironment } from './direct-environment.js';
+export {
+  DockerEnvironment,
+  type DockerEnvironmentOptions,
+} from './docker-environment.js';
 export type {
   ExecutionEnvironment,
   ExecutionEnvironmentPreparation,
