@@ -1,3 +1,13 @@
+import {
+  closeSync,
+  existsSync,
+  constants as fsConstants,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve, sep } from 'node:path';
 
 export const DEFAULT_DENIED_PATH_SEGMENTS = [
@@ -35,4 +45,81 @@ export function findDeniedPathSegment(
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Safe fs wrappers — sanitise + operate atomically so CodeQL sees that
+// user-controlled paths never reach raw fs sinks directly.
+// ---------------------------------------------------------------------------
+
+/**
+ * Inline path prefix assertion that CodeQL recognises as a sanitiser barrier.
+ * Throws if `resolvedPath` is not within `allowedBase`.
+ */
+function assertWithinBase(resolvedPath: string, allowedBase: string): void {
+  const base = resolve(allowedBase);
+  const prefix = base.endsWith(sep) ? base : `${base}${sep}`;
+  if (resolvedPath !== base && !resolvedPath.startsWith(prefix)) {
+    throw new Error(`Path "${resolvedPath}" escapes allowed base "${base}"`);
+  }
+}
+
+/**
+ * Safe wrapper around `existsSync`.  Sanitises `userPath` relative to
+ * `allowedBase` and returns the resolved path only if it exists.
+ */
+export function safeExistsSync(userPath: string, allowedBase: string): string | null {
+  const safe = sanitizePath(userPath, allowedBase);
+  assertWithinBase(safe, allowedBase);
+  return existsSync(safe) ? safe : null;
+}
+
+/**
+ * Safe wrapper around `readFileSync`.
+ * Sanitises + validates the path before reading.
+ */
+export function safeReadFileSync(
+  userPath: string,
+  allowedBase: string,
+  encoding: BufferEncoding = 'utf-8',
+): string {
+  const safe = sanitizePath(userPath, allowedBase);
+  assertWithinBase(safe, allowedBase);
+  return readFileSync(safe, encoding);
+}
+
+/**
+ * Safe wrapper around `writeFileSync`.
+ * Sanitises + validates the path before writing.
+ */
+export function safeWriteFileSync(userPath: string, allowedBase: string, data: string): void {
+  const safe = sanitizePath(userPath, allowedBase);
+  assertWithinBase(safe, allowedBase);
+  writeFileSync(safe, data);
+}
+
+/**
+ * Safe open + fstat + read combination (avoids TOCTOU).
+ * Returns the file content as a string, or throws on size-exceeded / not-found.
+ */
+export function safeReadFileAtomic(
+  userPath: string,
+  allowedBase: string,
+  maxSize: number,
+): { content: string; size: number } {
+  const safe = sanitizePath(userPath, allowedBase);
+  assertWithinBase(safe, allowedBase);
+
+  const fd = openSync(safe, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const stat = fstatSync(fd);
+    if (stat.size > maxSize) {
+      throw Object.assign(new Error('File too large'), { code: 'FILE_TOO_LARGE', size: stat.size });
+    }
+    const buffer = Buffer.alloc(stat.size);
+    const bytesRead = readSync(fd, buffer, 0, stat.size, 0);
+    return { content: buffer.subarray(0, bytesRead).toString('utf-8'), size: stat.size };
+  } finally {
+    closeSync(fd);
+  }
 }
