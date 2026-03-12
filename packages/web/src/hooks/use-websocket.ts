@@ -108,15 +108,17 @@ const MAX_QUEUED_MESSAGES = 50;
 function resolveWsUrl(override?: string): string {
   if (override) return override;
 
+  const wsBase = process.env.NEXT_PUBLIC_WS_URL;
+
   // In development, Next.js rewrites HTTP but not WebSocket, so connect
   // directly to the control plane backend.
   if (process.env.NODE_ENV === 'development') {
-    return 'ws://localhost:8080/api/ws';
+    return `${wsBase ?? 'ws://localhost:8080'}/api/ws`;
   }
 
   // In production, derive the WebSocket URL from the current page origin so
   // that it works behind any reverse proxy / domain.
-  if (typeof window === 'undefined') return 'ws://localhost:8080/api/ws';
+  if (typeof window === 'undefined') return `${wsBase ?? 'ws://localhost:8080'}/api/ws`;
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}/api/ws`;
 }

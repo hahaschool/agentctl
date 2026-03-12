@@ -94,8 +94,9 @@ export function InteractiveTerminal({
       // Connect WebSocket — in dev, Next.js rewrites do not cover WebSocket
       // so connect directly to the control plane backend like use-websocket.ts.
       let wsUrl: string;
+      const wsBase = process.env.NEXT_PUBLIC_WS_URL;
       if (process.env.NODE_ENV === 'development') {
-        wsUrl = `ws://localhost:8080/api/machines/${encodeURIComponent(machineId)}/terminal/${encodeURIComponent(terminalId)}/ws`;
+        wsUrl = `${wsBase ?? 'ws://localhost:8080'}/api/machines/${encodeURIComponent(machineId)}/terminal/${encodeURIComponent(terminalId)}/ws`;
       } else {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/api/machines/${encodeURIComponent(machineId)}/terminal/${encodeURIComponent(terminalId)}/ws`;
