@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§9 Agent Execution Quality: all 6 items delivered — CLAUDE.md discovery (PR #78), MCP config (PR #80), default prompt + cost tracking (PR #79), cron builder + execution history (PR #81); prior: §4.8 backend routes, §8 deploy, PRs #50-#77)
+> Last updated: 2026-03-12 (§9 fully complete: MCP picker + default prompt UI (PR #82), run timeline visualization (PR #83), cron failure alerting (PR #84); prior: §9.1-9.6 core fixes (PRs #78-#81), §4.8 backend, §8 deploy)
 
 ## Current State
 
@@ -703,7 +703,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Add `McpServerConfig` type and `mcpServers` field to `AgentConfig` *(PR #80)*
 - [x] Write `.mcp.json` to project dir before CLI spawn *(PR #80)*
 - [x] Store MCP server selection in agent config (`config.mcpServers`) *(PR #80)*
-- [ ] MCP server picker in agent creation/edit UI (web) — future UI enhancement
+- [x] MCP server picker in agent creation/edit UI (web) *(PR #82)*
 - [ ] Control plane → worker config downlink: include MCP config in job payload — future
 
 ### 9.3 Agent Config as Default Prompt — P1 ✅
@@ -713,7 +713,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 - [x] Add `defaultPrompt` field to `AgentConfig` type (shared) *(PR #79)*
 - [x] Make `prompt` optional in `StartAgentBody` — fall back to `config.defaultPrompt` *(PR #79)*
-- [ ] UI: show default prompt in agent edit form; allow override on manual start — future UI enhancement
+- [x] UI: show default prompt in agent edit form; allow override on manual start *(PR #82)*
 
 ### 9.4 Cost Tracking Display Fix — P1 ✅
 
@@ -730,7 +730,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 - [x] Cron expression builder widget: visual picker with presets and human-readable preview *(PR #81)*
 - [x] Show next 5 scheduled run times when editing cron expression *(PR #81)*
-- [ ] Alerting: notify on N consecutive cron failures — future enhancement
+- [x] Alerting: health endpoint + badge for consecutive cron failures *(PR #84)*
 
 ### 9.6 Agent Execution History Improvements — P2 ✅
 
@@ -739,7 +739,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Group runs by day with collapsible headers *(PR #81)*
 - [x] Summary stats per time period: total runs, success rate, total cost, avg duration *(PR #81)*
 - [x] Quick filters: status, trigger type, date range *(PR #81)*
-- [ ] Run timeline visualization (horizontal bar chart) — future enhancement
+- [x] Run timeline visualization (horizontal bar chart with recharts) *(PR #83)*
 
 ---
 
