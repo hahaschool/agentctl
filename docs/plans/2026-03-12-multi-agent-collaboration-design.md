@@ -43,18 +43,20 @@ The key insight from slock.ai is that **Slack's channel/thread metaphor is the r
 
 | Product / Framework | Collaboration Model | Human Role | Key Takeaway for AgentCTL |
 |--------------------|---------------------|------------|--------------------------|
+| Slack | Channels + threads + mentions | Peer participant | The mental model is already right; AgentCTL needs richer artifacts and controls, not a new chat metaphor |
 | Devin | Compound AI (Planner/Coder/Critic) | PR review, conversational UI | Multi-model specialization works |
-| Cursor | 8 parallel subagents, background agents | IDE direct control | Background agents + cloud VMs |
-| Antigravity | Multi-agent from day one, artifact-based | Multi-workflow oversight | Artifact-based reporting |
-| CrewAI | Role-based agent teams, HumanTool | Decision-maker / fallback | `human_as_tool` pattern |
-| slock.ai | Slack-like workspace (early/stealth) | Peer in channels | Chat-first collaboration |
-| OpenHands | WebSocket event-driven, browser sandbox | Chat + takeover | Event model + replay |
-| LangGraph | Checkpointed state graphs, human-in-loop nodes | Interrupt/resume at nodes | Checkpointed subflows |
-| AutoGen / AG2 | Event-driven async multi-agent conversations | Real-time oversight | Async agent conversations |
-| OpenAI Agents SDK | Handoffs + guardrails + tracing | Approval via tool calls | Handoff patterns |
-| Claude Code subagents | Parallel task agents within CLI | Permission-based | Native subagent spawning |
-| Langroid | Multi-agent chat with tools | Chat participant | Typed message routing |
-| Google A2A | Agent-to-agent protocol (JSON-RPC, Agent Cards) | External | Interoperability standard |
+| Cursor | Parallel subagents, background agents | IDE direct control | Background agents + cloud execution are a real expectation |
+| Antigravity | Multi-agent from day one, artifact-based | Multi-workflow oversight | Artifact-based reporting matters as much as chat |
+| CrewAI | Role-based agent teams, HumanTool | Decision-maker / fallback | `human_as_tool` pattern is useful but too tool-centric by itself |
+| slock.ai | Slack-like workspace (early/stealth) | Peer in channels | Chat-first collaboration validates the workspace direction |
+| OpenHands | Event-driven browser and terminal runtime | Chat + takeover | Replayable event streams and takeover matter |
+| LangGraph | Checkpointed state graphs, human interrupts | Interrupt/resume at graph nodes | Checkpointed subflows are valuable beneath the UI layer |
+| AutoGen / AG2 | Async multi-agent conversations | Real-time oversight | Conversation-first agent coordination remains common |
+| OpenAI Agents SDK | Handoffs + guardrails + tracing | Approval via tool calls | Handoffs and trace correlation are table stakes |
+| Claude Code subagents | Parallel task agents inside the coding runtime | Permission-based | Native subagent spawning is a strong local primitive, but not a fleet UI |
+| Langroid | Multi-agent chat with tools | Chat participant | Typed message routing helps avoid noisy broadcasts |
+| Azure AI Foundry Agent Service / Copilot Studio | Managed enterprise agent workflows | Review / approval / ops | Enterprise buyers expect identity, policy, and approval controls from day one |
+| Google A2A | Agent-to-agent protocol (JSON-RPC, Agent Cards) | External | Interoperability standard, not a product UX |
 
 ### Protocols: MCP and A2A
 
@@ -80,6 +82,15 @@ Three options were evaluated:
   - Simple tasks stay simple (one Space + one agent, no graph complexity visible)
   - Complex tasks scale naturally (Space maps to subgraph, threads map to nodes)
 
+### Phase 1 Constraint
+
+Phase 1 should not front-load the full realtime bus. The storage and API contract must come first:
+
+- **Phase 1**: append-only `space_events`, HTTP CRUD, polling UI, idempotent legacy-session linking
+- **Phase 2**: outbox publisher, NATS JetStream, WebSocket fanout, agent-to-agent delivery
+
+This dependency order matters. Notifications, agent bus fanout, and mobile reconnect semantics all depend on the event log being correct first.
+
 ## Architecture Overview
 
 ```
@@ -94,7 +105,8 @@ Three options were evaluated:
 ├─ Agent Layer (Agent Bus) ───────────────────────┤
 │                                                  │
 │  Agent-to-agent messaging within spaces          │
-│  Redis PubSub (same machine) / NATS (cross-machine) │
+│  Postgres outbox + NATS JetStream                │
+│  Local in-process delivery is only an optimization│
 │  Messages surface to Space Threads by default    │
 │                                                  │
 ├─ System Layer (Task Graph) ─────────────────────┤
@@ -116,9 +128,18 @@ Three options were evaluated:
 ### Identity Entities (Codex review: #4 — first-class identity)
 
 ```typescript
+type HumanIdentity = {
+  id: string
+  workspaceId: string
+  displayName: string
+  role: "admin" | "member" | "viewer"
+  createdAt: Date
+}
+
 // Agent identity with capabilities, not just a string ID
 type AgentProfile = {
   id: string
+  workspaceId: string
   name: string
   runtimeType: "claude-code" | "codex" | "openclaw" | "nanoclaw"
   modelId: string                    // e.g., "claude-opus-4-6"
@@ -144,6 +165,7 @@ type AgentInstance = {
 // Machine/worker node in the fleet
 type WorkerNode = {
   id: string
+  workspaceId: string
   hostname: string
   tailscaleIp: string
   maxConcurrentAgents: number
@@ -154,11 +176,16 @@ type WorkerNode = {
 }
 ```
 
+**Workspace boundary note**: `visibility: "team"` only makes sense if there is a stable workspace / tenant boundary. Phase 1 can still operate as a single-tenant deployment internally, but the logical model should keep `workspaceId` explicit so `team` does not become an accidental synonym for `public`.
+
+**Physical-schema note**: if Phase 1 ships as a single-tenant control plane, the first migration can omit `workspace_id` columns and treat the deployment itself as the workspace boundary. Before AgentCTL supports shared clusters or cross-team access, `workspaceId` must move from a logical assumption into physical tables.
+
 ### Primary Entities
 
 ```typescript
 type Space = {
   id: string
+  workspaceId: string
   name: string
   description: string
   icon?: string
@@ -177,7 +204,7 @@ type Space = {
 type SpaceMember = {
   spaceId: string
   memberType: "human" | "agent"
-  memberId: string                   // references AgentProfile.id or human user id
+  memberId: string                   // stable identity: AgentProfile.id or HumanIdentity.id
   role: "owner" | "member" | "observer"
   // Agent-specific: subscription filter to avoid ChatCollab cost problem
   subscriptionFilter?: {
@@ -189,7 +216,7 @@ type SpaceMember = {
 type Thread = {
   id: string
   spaceId: string
-  title: string
+  title: string | null
   type: "discussion" | "execution" | "review" | "approval"
   messages: Message[]
   artifacts: Artifact[]
@@ -197,7 +224,18 @@ type Thread = {
   controls: ThreadControls
   createdAt: Date
 }
+
+// Legacy compatibility: one durable mapping from an old session id to a Space/Thread pair
+type SessionSpaceLink = {
+  sessionKind: "rc" | "managed"
+  sessionId: string
+  spaceId: string
+  threadId: string
+  createdAt: Date
+}
 ```
+
+**Membership vs presence**: `SpaceMember` tracks stable participation. Runtime presence stays on `AgentInstance`. An agent profile can be a member of a Space even when no instance is currently connected.
 
 ### Task Graph: Definition vs Execution (Codex review: #2 — split concerns)
 
@@ -317,7 +355,7 @@ Four modes (revised from Codex feedback — default to immutable):
 
 ```
 Layer 1: Space Messaging (Human ↔ Agent)
-  Protocol: WebSocket (bidirectional)
+  Protocol: HTTP + polling in Phase 1, WebSocket in Phase 2
   Format: Rich Messages (text + artifacts + controls)
   Routing: Space → Thread → Members
 
@@ -332,6 +370,8 @@ Layer 3: Fleet Control (CP ↔ Workers)
   Format: Existing AgentEvent / HandoffEvent
   Routing: CP → Worker (task dispatch, handoff)
 ```
+
+**Design invariant**: every human-visible message or control decision must first exist in Postgres before it is eligible for fanout. Realtime transports are projections of the event log, not a second source of truth.
 
 ### Agent Bus Design (Codex review: #1 — durable event model)
 
@@ -366,6 +406,11 @@ type SpaceEvent = {
   createdAt: Date
 }
 ```
+
+**Ordering semantics**:
+- `sequenceNum` is **monotonic and unique per thread**
+- it is **not required to be gap-free**
+- retries and duplicate idempotency races may consume sequence numbers, but consumers must never observe duplicates or reordering
 
 ### Agent Bus Message Format
 
@@ -412,13 +457,18 @@ type AgentPayload =
 
 | Failure | Behavior |
 |---------|----------|
-| **CP down** | Workers continue running tasks. Agent Bus (NATS) operates independently. Events queue in outbox. On reconnect, outbox replays undelivered events. |
-| **Worker crash** | WorkerLease expires (no heartbeat). TaskRun transitions to `failed`. Retry policy kicks in: new TaskRun attempt on another worker if available. |
-| **Bus partition** | NATS JetStream retains messages. Consumers replay from last ack'd sequence on reconnect. Idempotency keys prevent double-processing. |
-| **Duplicate delivery** | Idempotency key on every SpaceEvent. Consumers check before processing. |
-| **Late completion after rejection** | TaskRun has `cancelled` status. Late completions logged but ignored. Artifacts kept for audit. |
-| **Approval timeout** | Policy-driven: auto-approve, escalate to another human, pause agent, or reject. Decision recorded with `timeout` flag. |
-| **Mobile reconnect** | WebSocket gateway replays events from last client sequence number. No data loss. |
+| **API gateway process down, Postgres still up** | Workers can keep writing state if they still have database reachability. Human clients lose live access temporarily, then resume by replaying from the event log. |
+| **Primary Postgres unavailable** | Event persistence stops. No claim is made that the outbox can queue durably without Postgres. Workers either buffer only explicitly retry-safe local telemetry or transition affected tasks to `blocked` / `degraded` until storage returns. |
+| **Outbox publisher crash** | `space_events.published = false` rows remain in Postgres. A restarted publisher resumes from the backlog. No user-visible event is lost. |
+| **Worker crash** | `WorkerLease` expires. `TaskRun` transitions to `failed` or `blocked` based on retry policy. Another worker may claim a new attempt. |
+| **Worker draining** | No new leases are granted on that worker. Existing runs either complete, checkpoint, or hand off according to task policy. |
+| **Bus partition** | NATS JetStream retains messages. Consumers replay from the last acked sequence on reconnect. Idempotency keys prevent double-processing. |
+| **Duplicate delivery** | Idempotency key on every `SpaceEvent`. Consumers must treat delivery as at-least-once and dedupe before side effects. |
+| **Sequence allocator race** | Thread-local ordering remains monotonic and unique. Consumers may observe gaps after retries or duplicate conflicts, but never duplicate or decreasing sequence numbers. |
+| **Late completion after rejection / takeover** | Mutable execution state follows the newest thread control state. Late agent completions are preserved as audit/internal events but do not overwrite the already-rejected or manually-taken-over state. |
+| **Permission revoked while a subscription is active** | Future pulls and fanout stop immediately. Existing immutable snapshots remain until explicitly tombstoned; `secret` sensitivity upgrades sever all cross-space links. |
+| **Approval timeout** | Policy-driven: auto-approve, escalate, pause, or reject. The resulting decision is recorded as a first-class event with a `viaTimeout` / timeout marker. |
+| **Mobile reconnect** | Phase 1 clients poll by `afterSequence`; Phase 2 WebSocket clients resume from the last acknowledged sequence number. No transport gets to invent state independently from Postgres. |
 
 ## Control Surfaces
 
@@ -510,8 +560,8 @@ type CrossSpaceQueryTool = {
 ```
 Space visibility:
   "private"  → only members can access
-  "team"     → all fleet users/agents can reference
-  "public"   → anyone can reference
+  "team"     → all identities in the same AgentCTL workspace can reference
+  "public"   → world-readable only if the deployment explicitly exposes public spaces
 
 Cross-space access:
   Default: same-team spaces can reference + import
@@ -519,7 +569,14 @@ Cross-space access:
   Sensitive artifacts (env vars, secrets): never cross-space
 ```
 
+**Revocation semantics**:
+- snapshot and version-pinned links remain immutable for audit unless the artifact is reclassified as `secret`
+- `secret` artifacts are never eligible for cross-space linking
+- permission checks happen on both link creation and query-time access
+
 ## Database Schema (Codex review: #8 — fixed integrity, no circular refs)
+
+**Implementation note**: Phase 1 can keep enum validation at the application boundary while still using typed tables in Postgres. The schema below shows the durable shape; the implementation plan uses text columns plus shared validators to stay aligned with the current control-plane conventions. If `workspace_id` is omitted from the first migration, that is a deliberate single-tenant optimization, not a statement that workspace scoping is unnecessary.
 
 ```sql
 -- ============================================================
@@ -624,6 +681,7 @@ CREATE TABLE threads (
   space_id UUID NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('discussion', 'execution', 'review', 'approval')),
   title TEXT,
+  last_event_sequence INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -680,6 +738,19 @@ CREATE TABLE space_events (
 
 CREATE INDEX idx_space_events_outbox ON space_events (published) WHERE published = FALSE;
 CREATE INDEX idx_space_events_thread_seq ON space_events (thread_id, sequence_num);
+
+-- ============================================================
+-- Legacy bridge (idempotent session -> space mapping)
+-- ============================================================
+
+CREATE TABLE session_space_links (
+  session_kind TEXT NOT NULL CHECK (session_kind IN ('rc', 'managed')),
+  session_id TEXT NOT NULL,
+  space_id UUID NOT NULL UNIQUE REFERENCES spaces(id) ON DELETE CASCADE,
+  thread_id UUID NOT NULL UNIQUE REFERENCES threads(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (session_kind, session_id)
+);
 
 -- ============================================================
 -- Artifacts (content-addressed, versioned, provenance-tracked)
@@ -762,28 +833,29 @@ CREATE TABLE approval_decisions (
 | AgentPool | Space members (agent subset) + fleet scheduling |
 | HandoffPolicy | TaskNode reassignment + Agent Bus "delegate" message |
 | Fork / ContextPicker | Context Bridge UI (upgraded for cross-space) |
+| Session identity | `session_space_links` for durable legacy compatibility |
 | SSE streams | Thread artifact live-update source |
 | IPC Channel | Agent Bus container-local fallback |
 | Memory (PG) | Shared cross-Space, scoped from session → space |
 | BullMQ | Fleet-layer task dispatch (unchanged) |
-| WebSocket | Space Messaging transport layer (upgraded) |
+| WebSocket | Phase 2 realtime projection of the event log |
 
 ### Migration Strategy
 
-Existing sessions become Spaces with `type: "solo"`. No breaking changes — the Space model is a superset of the current session model. Multi-agent capabilities layer on top.
+Existing sessions become Spaces with `type: "solo"`, but the mapping must be durable and idempotent. The cutover mechanism is `session_space_links`, not naming conventions or best-effort lookups. No breaking changes are required to legacy session APIs; multi-agent capabilities layer on top.
 
 ## Implementation Phases
 
 ### Phase 1: Space + Thread + Messages (MVP)
-- Wrap existing sessions as Spaces
-- Thread = existing session message stream
+- DB migration for `spaces`, `space_members`, `threads`, `space_events`, and `session_space_links`
+- Append-only event log with per-thread monotonic ordering and idempotency
+- HTTP CRUD routes plus polling UI for Spaces and Threads
 - Single agent per Space, human interacts via Thread
-- Mobile notification pipeline (basic)
-- DB migration for spaces, threads, messages tables
+- Durable legacy-session bridging into solo Spaces
 
 ### Phase 2: Multi-Agent Spaces
-- Agent Bus (Postgres outbox + NATS JetStream)
-- Append-only space_events table with sequence numbers and idempotency
+- Postgres outbox publisher + NATS JetStream
+- WebSocket fanout and replay from the event log
 - Multiple agents join one Space with subscription filters
 - Agent-to-agent messages surface in Threads
 - Basic Approval Gates with multi-decision support
@@ -824,6 +896,7 @@ Existing sessions become Spaces with `type: "solo"`. No breaking changes — the
 2. **A2A adoption**: Should AgentCTL expose Agent Cards for external discovery? Low priority unless third-party agent integration becomes a user request.
 3. **LangGraph for subflows**: Worth evaluating for agent-local checkpointed subflows (within a single task), distinct from the fleet-level task graph. Could complement rather than replace our DAG engine.
 4. **Summarizer agent**: Should thread summarization be a built-in system service or a configurable agent role? Leaning toward system service for predictability.
+5. **Workspace identity**: Phase 1 can operate as a single-tenant deployment, but when do `workspace`, `team`, and human identity become first-class persisted tables instead of logical concepts?
 
 ## Appendix: Codex Review (gpt-5.4, xhigh reasoning)
 
@@ -857,4 +930,16 @@ Competitive gaps surfaced: LangGraph, AutoGen/AG2, OpenHands, OpenAI Agents SDK,
 - [OpenAI Agents SDK Multi-Agent](https://openai.github.io/openai-agents-python/multi_agent/)
 - [AutoGen User Guide](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/index.html)
 - [LangChain Multi-Agent](https://docs.langchain.com/oss/python/langchain/multi-agent)
+- [Azure AI Foundry Agent Service](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/overview)
 - [slock.ai](https://slock.ai/)
+
+## Changelog
+
+- Added Slack and Azure AI Foundry / Copilot Studio to the competitive landscape because the previous table underrepresented the dominant chat metaphor and the major enterprise-managed-agent offering.
+- Introduced an explicit Phase 1 constraint so storage and API semantics land before realtime transports; this removes the previous contradiction where WebSocket and the agent bus appeared before the event log was actually phased in.
+- Added `HumanIdentity`, `workspaceId`, and `SessionSpaceLink` concepts to close the remaining architectural gaps around `team` visibility and legacy-session migration.
+- Corrected the architecture diagram and communication model so they consistently use Postgres outbox + NATS JetStream rather than the earlier Redis PubSub wording.
+- Clarified event ordering: per-thread sequences are monotonic and unique, not guaranteed gap-free.
+- Expanded failure semantics to cover database outages, outbox crashes, draining workers, permission revocation, and late completions after takeover or rejection.
+- Added `last_event_sequence` and `session_space_links` to the schema section so the design now matches the implementation plan's atomic sequencing and idempotent bridge requirements.
+- Updated the phase plan so Phase 1 owns append-only events and durable bridging, while Phase 2 owns realtime fanout and multi-agent bus behavior.

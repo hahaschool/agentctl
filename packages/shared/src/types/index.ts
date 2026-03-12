@@ -49,6 +49,35 @@ export {
   isAutoHandoffTaskMatcher,
   isAutoHandoffTrigger,
 } from './auto-handoff.js';
+export type {
+  EventSenderType,
+  EventVisibility,
+  Space,
+  SpaceEvent,
+  SpaceEventType,
+  SpaceMember,
+  SpaceMemberRole,
+  SpaceMemberType,
+  SpaceType,
+  SpaceVisibility,
+  Thread,
+  ThreadType,
+} from './collaboration.js';
+export {
+  EVENT_SENDER_TYPES,
+  EVENT_VISIBILITIES,
+  isEventVisibility,
+  isSpaceEventType,
+  isSpaceType,
+  isSpaceVisibility,
+  isThreadType,
+  SPACE_EVENT_TYPES,
+  SPACE_MEMBER_ROLES,
+  SPACE_MEMBER_TYPES,
+  SPACE_TYPES,
+  SPACE_VISIBILITIES,
+  THREAD_TYPES,
+} from './collaboration.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   ExecutionSummary,
@@ -161,32 +190,3 @@ export type {
   WebhookProvider,
 } from './webhook.js';
 export { WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from './webhook.js';
-export type {
-  EventSenderType,
-  EventVisibility,
-  Space,
-  SpaceEvent,
-  SpaceEventType,
-  SpaceMember,
-  SpaceMemberRole,
-  SpaceMemberType,
-  SpaceType,
-  SpaceVisibility,
-  Thread,
-  ThreadType,
-} from './collaboration.js';
-export {
-  EVENT_SENDER_TYPES,
-  EVENT_VISIBILITIES,
-  isEventVisibility,
-  isSpaceEventType,
-  isSpaceType,
-  isSpaceVisibility,
-  isThreadType,
-  SPACE_EVENT_TYPES,
-  SPACE_MEMBER_ROLES,
-  SPACE_MEMBER_TYPES,
-  SPACE_TYPES,
-  SPACE_VISIBILITIES,
-  THREAD_TYPES,
-} from './collaboration.js';
