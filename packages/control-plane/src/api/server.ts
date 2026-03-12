@@ -27,6 +27,7 @@ import { WorkerLeaseStore } from '../collaboration/worker-lease-store.js';
 import { WorkerNodeStore } from '../collaboration/worker-node-store.js';
 import type { Database } from '../db/index.js';
 import { RoutingEngine } from '../intelligence/routing-engine.js';
+import { TaskDecomposer } from '../intelligence/task-decomposer.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MemorySearch } from '../memory/memory-search.js';
@@ -59,6 +60,7 @@ import { checkpointRoutes } from './routes/checkpoint.js';
 import { claudeMemRoutes } from './routes/claude-mem.js';
 import { contextBridgeRoutes } from './routes/context-bridge.js';
 import { dashboardRoutes } from './routes/dashboard.js';
+import { decomposeRoutes } from './routes/decompose.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
 import { fileProxyRoutes } from './routes/files.js';
 import { gitProxyRoutes } from './routes/git.js';
@@ -623,6 +625,22 @@ export async function createServer({
       workerNodeStore,
       taskRunStore,
     });
+
+    // Intelligence Layer: LLM-based task decomposition (§10.5 Phase 5b)
+    if (litellmClient) {
+      const taskDecomposer = new TaskDecomposer({
+        litellmClient,
+        agentProfileStore,
+        workerNodeStore,
+        taskGraphStore,
+        logger,
+      });
+
+      await app.register(decomposeRoutes, {
+        prefix: '/api/decompose',
+        taskDecomposer,
+      });
+    }
   }
 
   // Register account management routes when db is available.

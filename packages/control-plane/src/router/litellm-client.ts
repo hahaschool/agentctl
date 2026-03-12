@@ -53,7 +53,21 @@ export type ChatCompletionResponse = {
   };
 };
 
+export type ChatCompletionMessage = {
+  readonly role: 'system' | 'user' | 'assistant';
+  readonly content: string;
+};
+
+export type ChatCompletionRequest = {
+  readonly model: string;
+  readonly messages: readonly ChatCompletionMessage[];
+  readonly max_tokens?: number;
+  readonly temperature?: number;
+  readonly response_format?: { type: 'json_object' };
+};
+
 const DEFAULT_TIMEOUT_MS = 10_000;
+const LLM_COMPLETION_TIMEOUT_MS = 120_000;
 
 export class LiteLLMClient {
   private readonly baseUrl: string;
@@ -124,6 +138,27 @@ export class LiteLLMClient {
     return response;
   }
 
+  async chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+    this.logger.info({ model: request.model }, 'Sending chat completion request');
+
+    const response = await this.request<ChatCompletionResponse>(
+      'POST',
+      '/v1/chat/completions',
+      request,
+      LLM_COMPLETION_TIMEOUT_MS,
+    );
+
+    this.logger.info(
+      {
+        model: response.model,
+        totalTokens: response.usage.totalTokens,
+      },
+      'Chat completion completed',
+    );
+
+    return response;
+  }
+
   async getSpend(): Promise<SpendLogEntry[]> {
     this.logger.debug('Fetching spend logs');
 
@@ -133,7 +168,12 @@ export class LiteLLMClient {
     return response;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
 
     const headers: Record<string, string> = {
@@ -144,7 +184,7 @@ export class LiteLLMClient {
     const init: RequestInit = {
       method,
       headers,
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     };
 
     if (body !== undefined && method !== 'GET') {
