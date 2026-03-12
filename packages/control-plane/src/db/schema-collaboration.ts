@@ -78,3 +78,11 @@ export const spaceEvents = pgTable(
     index('idx_space_events_outbox').on(table.published),
   ],
 );
+
+export const sessionSpaceLinks = pgTable('session_space_links', {
+  sessionId: text('session_id').primaryKey(),
+  spaceId: uuid('space_id')
+    .notNull()
+    .references(() => spaces.id, { onDelete: 'cascade' }),
+  linkedAt: timestamp('linked_at', { withTimezone: true }).defaultNow(),
+});
