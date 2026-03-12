@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§10.1-10.3 collaboration Phases 1-3 delivered (PRs #91-95); §11 fully complete (PRs #86-90); worker probe URL fix (PR #93))
+> Last updated: 2026-03-12 (security fixes PRs #98-99; CD strategy plan PR #100; §10.4 Context Bridge PR #97 in review)
 
 ## Current State
 
@@ -916,8 +916,10 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Multi-Agent Collaboration Phase 1~~ | 10.1 | ✅ Delivered — schema + stores + routes + Spaces UI (PRs #91-92) |
 | **P2** | ~~Multi-Agent Communication~~ | 10.2 | ✅ Delivered — outbox + NATS + WS gateway + approvals (PR #95) |
 | **P2** | ~~Task Graph + Fleet~~ | 10.3 | ✅ Delivered — DAG engine + leases + BullMQ executor (PR #94) |
-| **P3** | Context Bridge | 10.4 | Not started — cross-space context mobility |
+| **P3** | Context Bridge | 10.4 | In review — PR #97 (lint fix pushed, CI running) |
 | **P3** | Intelligence Layer | 10.5 | Not started — smart routing + auto-compose |
+| **—** | Security: CodeQL Path Injection | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
+| **—** | Dev/Beta CD Strategy | — | ✅ Plan committed — port-offset tiers + PM2 beta (PR #100) |
 
 ---
 
@@ -1032,6 +1034,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [multi-agent-communication-impl-plan](plans/2026-03-12-multi-agent-communication-impl-plan.md) | Delivered | 10.2 |
 | [task-graph-fleet-impl-plan](plans/2026-03-12-task-graph-fleet-impl-plan.md) | Delivered | 10.3 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
+| [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Active | — |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
