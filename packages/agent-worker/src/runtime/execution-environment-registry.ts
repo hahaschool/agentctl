@@ -1,12 +1,15 @@
 import type { ExecutionEnvironmentCapability, ExecutionEnvironmentId } from '@agentctl/shared';
 
 import { DirectEnvironment } from './direct-environment.js';
+import { DockerEnvironment } from './docker-environment.js';
 import type { ExecutionEnvironment } from './execution-environment.js';
 
 export class ExecutionEnvironmentRegistry {
   private readonly environments = new Map<ExecutionEnvironmentId, ExecutionEnvironment>();
 
-  constructor(environments: ExecutionEnvironment[] = [new DirectEnvironment()]) {
+  constructor(
+    environments: ExecutionEnvironment[] = [new DirectEnvironment(), new DockerEnvironment()],
+  ) {
     for (const environment of environments) {
       this.environments.set(environment.id, environment);
     }
