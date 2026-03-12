@@ -1,16 +1,26 @@
 import { execFile } from 'node:child_process';
+import { chmod, lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
 const execFileAsync = promisify(execFile);
+const TIER_LOCK_DIR = '/tmp/agentctl-tier-locks';
+const DEV_ENV_FILE_PREFIX = '.env.dev-';
+const WORKTREE_AGENTCTL_DIR = '.agentctl';
+const WORKTREE_TIER_SCRIPT = 'source-tier-env.sh';
+const WORKTREE_TIER_METADATA = 'tier-assignment.json';
+const DEFAULT_ENV_LOAD_COMMAND = `source ./${WORKTREE_AGENTCTL_DIR}/${WORKTREE_TIER_SCRIPT}`;
 
 export type WorktreeInfo = {
   path: string;
   branch: string;
   head: string;
   isLocked: boolean;
+  tier?: string;
+  envFilePath?: string;
+  envLoadCommand?: string;
 };
 
 export type CreateWorktreeOptions = {
@@ -49,6 +59,7 @@ export class WorktreeManager {
   private readonly projectPath: string;
   private readonly treesDir: string;
   private readonly logger: Logger;
+  private readonly tierAssignments: Map<string, string> = new Map();
 
   constructor(options: WorktreeManagerOptions) {
     this.projectPath = options.projectPath;
@@ -88,11 +99,19 @@ export class WorktreeManager {
       });
     }
 
+    const tierAssignment = await this.assignTierIfAvailable(agentId, worktreePath);
+    let worktreeCreated = false;
+
     try {
       await execFileAsync('git', ['worktree', 'add', worktreePath, '-b', branchName, baseBranch], {
         cwd: this.projectPath,
       });
+      worktreeCreated = true;
     } catch (err) {
+      if (tierAssignment) {
+        this.releaseTier(agentId);
+      }
+
       throw new AgentError(
         'WORKTREE_CREATE_FAILED',
         `Failed to create worktree for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
@@ -100,13 +119,39 @@ export class WorktreeManager {
       );
     }
 
+    if (tierAssignment) {
+      try {
+        await this.prepareTierBootstrap(worktreePath, tierAssignment);
+      } catch (err) {
+        this.releaseTier(agentId);
+        if (worktreeCreated) {
+          await this.cleanupWorktreePath(worktreePath);
+        }
+
+        throw new AgentError(
+          'WORKTREE_CREATE_FAILED',
+          `Failed to prepare worktree tier env for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
+          {
+            agentId,
+            tier: tierAssignment.tier,
+            path: worktreePath,
+          },
+        );
+      }
+    }
+
     this.logger.info(
-      { agentId, branch: branchName, baseBranch, path: worktreePath },
+      { agentId, branch: branchName, baseBranch, path: worktreePath, tier: tierAssignment?.tier },
       'Worktree created',
     );
 
     const info = await this.get(agentId);
     if (!info) {
+      if (tierAssignment) {
+        this.releaseTier(agentId);
+        await this.cleanupWorktreePath(worktreePath);
+      }
+
       throw new AgentError(
         'WORKTREE_CREATE_FAILED',
         `Worktree was created but could not be read back for agent '${agentId}'`,
@@ -114,7 +159,14 @@ export class WorktreeManager {
       );
     }
 
-    return info;
+    return tierAssignment
+      ? {
+          ...info,
+          tier: tierAssignment.tier,
+          envFilePath: path.join(worktreePath, tierAssignment.envFileName),
+          envLoadCommand: DEFAULT_ENV_LOAD_COMMAND,
+        }
+      : info;
   }
 
   /**
@@ -149,6 +201,7 @@ export class WorktreeManager {
       );
     }
 
+    this.releaseTier(agentId);
     this.logger.info({ agentId, path: worktreePath }, 'Worktree removed');
   }
 
@@ -278,6 +331,179 @@ export class WorktreeManager {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async assignTierIfAvailable(
+    agentId: string,
+    worktreePath: string,
+  ): Promise<
+    | {
+        tier: string;
+        envFileName: string;
+        sourceEnvPath: string;
+        worktreeEnvPath: string;
+      }
+    | null
+  > {
+    const envFileNames = await this.listDevEnvFiles();
+    if (envFileNames.length === 0) {
+      return null;
+    }
+
+    const claimedTiers = new Set(this.tierAssignments.values());
+
+    for (const envFileName of envFileNames) {
+      const tier = envFileName.slice('.env.'.length);
+      if (claimedTiers.has(tier)) {
+        continue;
+      }
+
+      const locked = await this.tryAcquireTierSelectionLock(tier);
+      if (!locked) {
+        continue;
+      }
+
+      this.tierAssignments.set(agentId, tier);
+
+      return {
+        tier,
+        envFileName,
+        sourceEnvPath: path.join(this.projectPath, envFileName),
+        worktreeEnvPath: path.join(worktreePath, envFileName),
+      };
+    }
+
+    throw new AgentError(
+      'WORKTREE_CREATE_FAILED',
+      `No available dev tier env files for agent '${agentId}'`,
+      {
+        agentId,
+        tiers: envFileNames.map((fileName) => fileName.slice('.env.'.length)),
+      },
+    );
+  }
+
+  private async listDevEnvFiles(): Promise<string[]> {
+    let entries: string[];
+
+    try {
+      entries = await readdir(this.projectPath);
+    } catch {
+      return [];
+    }
+
+    return entries
+      .filter((entry) => entry.startsWith(DEV_ENV_FILE_PREFIX))
+      .sort((left, right) => this.compareTierEnvFiles(left, right));
+  }
+
+  private compareTierEnvFiles(left: string, right: string): number {
+    const leftNumber = Number.parseInt(left.slice(DEV_ENV_FILE_PREFIX.length), 10);
+    const rightNumber = Number.parseInt(right.slice(DEV_ENV_FILE_PREFIX.length), 10);
+
+    if (Number.isNaN(leftNumber) || Number.isNaN(rightNumber)) {
+      return left.localeCompare(right);
+    }
+
+    return leftNumber - rightNumber;
+  }
+
+  private async tryAcquireTierSelectionLock(tier: string): Promise<boolean> {
+    await mkdir(TIER_LOCK_DIR, { recursive: true });
+
+    try {
+      await execFileAsync('flock', ['-n', path.join(TIER_LOCK_DIR, `${tier}.lock`), '-c', 'true']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async prepareTierBootstrap(
+    worktreePath: string,
+    assignment: {
+      tier: string;
+      envFileName: string;
+      sourceEnvPath: string;
+      worktreeEnvPath: string;
+    },
+  ): Promise<void> {
+    await mkdir(worktreePath, { recursive: true });
+
+    const agentctlDir = path.join(worktreePath, WORKTREE_AGENTCTL_DIR);
+    await mkdir(agentctlDir, { recursive: true });
+
+    await this.ensureSymlink(
+      assignment.worktreeEnvPath,
+      path.relative(worktreePath, assignment.sourceEnvPath),
+    );
+
+    const scriptPath = path.join(agentctlDir, WORKTREE_TIER_SCRIPT);
+    const bootstrapScript = [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      '',
+      'WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"',
+      '',
+      'set -a',
+      '# shellcheck source=/dev/null',
+      `source "\${WORKTREE_ROOT}/${assignment.envFileName}"`,
+      'set +a',
+      '',
+    ].join('\n');
+
+    await writeFile(scriptPath, bootstrapScript, 'utf8');
+    await chmod(scriptPath, 0o755);
+
+    const metadataPath = path.join(agentctlDir, WORKTREE_TIER_METADATA);
+    await writeFile(
+      metadataPath,
+      `${JSON.stringify(
+        {
+          tier: assignment.tier,
+          envFile: assignment.envFileName,
+          envLoadCommand: DEFAULT_ENV_LOAD_COMMAND,
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+  }
+
+  private async ensureSymlink(linkPath: string, targetPath: string): Promise<void> {
+    try {
+      const current = await lstat(linkPath);
+      if (current.isSymbolicLink()) {
+        await unlink(linkPath);
+      } else {
+        throw new AgentError(
+          'WORKTREE_CREATE_FAILED',
+          `Cannot replace existing non-symlink path '${linkPath}' while preparing tier env`,
+          { path: linkPath },
+        );
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw err;
+      }
+    }
+
+    await symlink(targetPath, linkPath);
+  }
+
+  private releaseTier(agentId: string): void {
+    this.tierAssignments.delete(agentId);
+  }
+
+  private async cleanupWorktreePath(worktreePath: string): Promise<void> {
+    try {
+      await execFileAsync('git', ['worktree', 'remove', worktreePath, '--force'], {
+        cwd: this.projectPath,
+      });
+    } catch {
+      // Best effort cleanup only; the original create failure is more important.
     }
   }
 

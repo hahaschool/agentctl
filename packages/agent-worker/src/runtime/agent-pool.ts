@@ -8,6 +8,8 @@ import type { WorktreeInfo, WorktreeManager } from '../worktree/index.js';
 import { AgentInstance, type AgentInstanceOptions } from './agent-instance.js';
 
 const DEFAULT_MAX_CONCURRENT = 3;
+const WORKTREE_TIER_PROMPT_PREFIX =
+  'Before running repo-local commands in this worktree, load the assigned tier environment with';
 
 type AgentPoolOptions = {
   maxConcurrent?: number;
@@ -79,6 +81,7 @@ export class AgentPool extends EventEmitter {
     // Attempt to create a worktree for filesystem isolation.
     // If it fails (not a git repo, disk full, etc.), fall back to the original projectPath.
     let effectiveProjectPath = options.projectPath;
+    let effectiveConfig = options.config;
 
     if (this.worktreeManager) {
       try {
@@ -88,12 +91,14 @@ export class AgentPool extends EventEmitter {
           description: 'work',
         });
         effectiveProjectPath = worktreeInfo.path;
+        effectiveConfig = addWorktreeTierPrompt(options.config, worktreeInfo);
         this.agentWorktrees.add(options.agentId);
         this.log.info(
           {
             agentId: options.agentId,
             worktreePath: worktreeInfo.path,
             branch: worktreeInfo.branch,
+            tier: worktreeInfo.tier,
           },
           'Agent worktree created',
         );
@@ -107,6 +112,7 @@ export class AgentPool extends EventEmitter {
 
     const instance = new AgentInstance({
       ...options,
+      config: effectiveConfig,
       projectPath: effectiveProjectPath,
       auditFileToken: options.auditFileToken ?? this.auditFileToken,
       auditLogDir: options.auditLogDir ?? this.auditLogDir,
@@ -443,4 +449,21 @@ export class AgentPool extends EventEmitter {
       oldestAgent,
     };
   }
+}
+
+function addWorktreeTierPrompt(config: AgentInstanceOptions['config'], worktreeInfo: WorktreeInfo) {
+  if (!worktreeInfo.tier || !worktreeInfo.envLoadCommand) {
+    return config;
+  }
+
+  const tierPrompt = [
+    `Assigned development tier: ${worktreeInfo.tier}.`,
+    `${WORKTREE_TIER_PROMPT_PREFIX} \`${worktreeInfo.envLoadCommand}\`.`,
+    'Do not rely on beta defaults or the root `.env` while working in this worktree.',
+  ].join('\n');
+
+  return {
+    ...config,
+    systemPrompt: config.systemPrompt ? `${tierPrompt}\n\n${config.systemPrompt}` : tierPrompt,
+  };
 }

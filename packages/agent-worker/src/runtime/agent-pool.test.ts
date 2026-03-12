@@ -427,6 +427,34 @@ describe('AgentPool', () => {
       expect(pool.getWorktreeCount()).toBe(1);
     });
 
+    it('createAgent injects tier bootstrap instructions when the worktree exposes an env loader', async () => {
+      const wm = makeWorktreeManager();
+      wm.create.mockResolvedValue({
+        path: '/tmp/worktrees/agent-test',
+        branch: 'agent-test/work',
+        head: 'abc123',
+        isLocked: false,
+        tier: 'dev-1',
+        envFilePath: '/tmp/worktrees/agent-test/.env.dev-1',
+        envLoadCommand: 'source ./.agentctl/source-tier-env.sh',
+      });
+
+      const pool = new AgentPool({
+        logger: mockLogger,
+        worktreeManager: wm as never,
+      });
+
+      const agent = await pool.createAgent({
+        ...makeAgentOptions('agent-1'),
+        config: { systemPrompt: 'Keep edits minimal.' },
+      });
+
+      expect(agent.projectPath).toBe('/tmp/worktrees/agent-test');
+      expect(agent.config.systemPrompt).toContain('Assigned development tier: dev-1.');
+      expect(agent.config.systemPrompt).toContain('source ./.agentctl/source-tier-env.sh');
+      expect(agent.config.systemPrompt).toContain('Keep edits minimal.');
+    });
+
     it('createAgent falls back to original projectPath when worktree creation fails', async () => {
       const wm = makeWorktreeManager();
       wm.create.mockRejectedValue(new Error('disk full'));
