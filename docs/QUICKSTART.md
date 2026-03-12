@@ -2,6 +2,8 @@
 
 Get AgentCTL running on your machine in ~15 minutes.
 
+> For production deployments (Docker Compose, multi-machine Tailscale, PM2), see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ---
 
 ## Prerequisites
