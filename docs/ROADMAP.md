@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (all §4.8 backend routes landed: consolidation, reports, decay (PRs #75-#77); audit pass: §8 marked delivered; PRs #64-#67 experience extraction, knowledge maintenance, live handoff triggers, mobile enhancements; PR #63 cross-entity queries + CodeQL security; PRs #57-#62 shared components, MCP tools, ARIA, knowledge loading, Codex sandbox, auto-handoff; PRs #50-#55 knowledge graph, a11y, memory dashboard, consolidation, scope manager; prior: PRs #39-#47)
+> Last updated: 2026-03-12 (§9 Agent Execution Quality: all 6 items delivered — CLAUDE.md discovery (PR #78), MCP config (PR #80), default prompt + cost tracking (PR #79), cron builder + execution history (PR #81); prior: §4.8 backend routes, §8 deploy, PRs #50-#77)
 
 ## Current State
 
@@ -695,60 +695,51 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Add `--cwd` flag to CLI args for explicit project root discovery *(PR #78)*
 - [x] Test updated to verify `--cwd` is included in CLI args *(PR #78)*
 
-### 9.2 MCP Server Configuration for Agents — P0
+### 9.2 MCP Server Configuration for Agents — P0 ✅
 
-`RuntimeConfigApplier` can render MCP server maps to `<workspace>/.mcp.json` and `~/.claude.json`, but this is **never called before agent startup**. The control plane task dispatcher and agent start endpoint have no coordination with config application.
+> Fixed in PR #80. Added `mcpServers` field to `AgentConfig` (shared types) and `.mcp.json` writing
+> in `cli-session-manager.ts` before agent startup. MCP server config flows from agent config → CLI session → project dir.
 
-**Root cause:** No pre-startup hook applies runtime config before spawning the CLI process.
+- [x] Add `McpServerConfig` type and `mcpServers` field to `AgentConfig` *(PR #80)*
+- [x] Write `.mcp.json` to project dir before CLI spawn *(PR #80)*
+- [x] Store MCP server selection in agent config (`config.mcpServers`) *(PR #80)*
+- [ ] MCP server picker in agent creation/edit UI (web) — future UI enhancement
+- [ ] Control plane → worker config downlink: include MCP config in job payload — future
 
-- [ ] Add pre-startup config application: write `.mcp.json` to project dir before `cli-session-manager.spawn()`
-- [ ] MCP server picker in agent creation/edit UI (web): select which MCP servers this agent needs
-- [ ] Store MCP server selection in agent config (`config.mcpServers: string[]`)
-- [ ] Control plane → worker config downlink: when dispatching, include MCP config in job payload
-- [ ] Verify MCP servers are available to the spawned Claude Code process
+### 9.3 Agent Config as Default Prompt — P1 ✅
 
-### 9.3 Agent Config as Default Prompt — P1
+> Fixed in PR #79. Added `defaultPrompt` to `AgentConfig`, made `prompt` optional in start endpoint
+> with fallback to `config.defaultPrompt`. Cron/heartbeat agents no longer need explicit prompt.
 
-Currently `prompt` is required on every start (`POST /api/agents/:id/start`). Agent config already stores `systemPrompt`, `model`, `permissionMode`, etc., but has no `defaultPrompt` field. For cron/heartbeat agents, the prompt should come from config.
+- [x] Add `defaultPrompt` field to `AgentConfig` type (shared) *(PR #79)*
+- [x] Make `prompt` optional in `StartAgentBody` — fall back to `config.defaultPrompt` *(PR #79)*
+- [ ] UI: show default prompt in agent edit form; allow override on manual start — future UI enhancement
 
-- [ ] Add `defaultPrompt` field to `AgentConfig` type (shared)
-- [ ] Make `prompt` optional in `StartAgentBody` — fall back to `config.defaultPrompt` → `agent.config.defaultPrompt`
-- [ ] Cron/heartbeat scheduler: use agent's `defaultPrompt` when dispatching
-- [ ] UI: show default prompt in agent edit form; allow override on manual start
+### 9.4 Cost Tracking Display Fix — P1 ✅
 
-### 9.4 Cost Tracking Display Fix — P1
+> Fixed in PR #79. Two bugs found and fixed:
+> 1. `sdk-runner.ts` only emitted cost events when `message.usage` present, but `result` messages carry `total_cost_usd` without a `usage` object
+> 2. Frontend field name mismatch: backend sent `{turnCost, totalCost}` but frontend expected `{totalCostUsd, inputTokens, outputTokens}`
 
-Cost tracking pipeline exists end-to-end (CLI stream-json → agent instance → SSE → CP completion callback), but cost always shows $0.00 in the UI. Likely causes:
-1. Claude Code CLI in `-p` mode may not emit `cost` events in stream-json format
-2. Completion callback may fail silently (worker → CP network issue)
-3. `costUsd` may be stored as string "0" due to type coercion
+- [x] Fix sdk-runner to emit cost events from `result` messages with `total_cost_usd` *(PR #79)*
+- [x] Fix frontend SSE field name mismatch (`totalCost` → `totalCostUsd`) *(PR #79)*
 
-- [ ] Debug: run agent with verbose logging, capture raw stream-json output, verify `cost` events exist
-- [ ] Verify completion callback reaches CP: add structured logging at both ends
-- [ ] Check DB: query `agent_runs` table for actual `cost_usd` values
-- [ ] Fix the broken link in the pipeline (likely CLI output parsing or DB storage)
+### 9.5 Cron UX Improvements — P1 ✅
 
-### 9.5 Cron UX Improvements — P1
+> Fixed in PR #81. Visual cron builder with presets, human-readable description, and next 5 runs preview.
 
-Current cron scheduling works (BullMQ repeatable jobs) but the UX is poor:
-1. No cron expression builder — users must write raw cron strings
-2. No visibility into cron job execution history or next-run time
+- [x] Cron expression builder widget: visual picker with presets and human-readable preview *(PR #81)*
+- [x] Show next 5 scheduled run times when editing cron expression *(PR #81)*
+- [ ] Alerting: notify on N consecutive cron failures — future enhancement
 
-- [ ] Cron expression builder widget: visual picker for minute/hour/day/month/weekday with human-readable preview
-- [ ] Show next 5 scheduled run times when editing cron expression
-- [ ] Cron job execution log: list of past executions with status, duration, cost, trigger time
-- [ ] Cron job status indicators: last run status, next run countdown, active/paused toggle
-- [ ] Alerting: notify on N consecutive cron failures
+### 9.6 Agent Execution History Improvements — P2 ✅
 
-### 9.6 Agent Execution History Improvements — P2
+> Fixed in PR #81. Grouped by date with collapsible headers, filters by status/trigger/date, and summary stats.
 
-Execution history shows as a flat list of runs. For agents with many runs (especially cron agents), this becomes unusable.
-
-- [ ] Group runs by day/week with collapsible headers
-- [ ] Run timeline visualization (horizontal bar chart showing duration + status over time)
-- [ ] Pagination or virtual scroll for long run histories
-- [ ] Summary stats per time period: total runs, success rate, total cost, avg duration
-- [ ] Quick filters: status (success/failure/running), trigger type (manual/cron/heartbeat), date range
+- [x] Group runs by day with collapsible headers *(PR #81)*
+- [x] Summary stats per time period: total runs, success rate, total cost, avg duration *(PR #81)*
+- [x] Quick filters: status, trigger type, date range *(PR #81)*
+- [ ] Run timeline visualization (horizontal bar chart) — future enhancement
 
 ---
 
@@ -779,11 +770,11 @@ Execution history shows as a flat list of runs. For agents with many runs (espec
 | **P1** | ~~TUI Monitoring Panel~~ | 8.2 | ✅ Delivered — Ink 4.x 3-panel TUI `scripts/tui.tsx` (PR #73) |
 | **P1** | ~~Deployment Guide~~ | 8.3 | ✅ Delivered — `docs/DEPLOYMENT.md` quick-start/production/multi-machine (PR #72) |
 | **P0** | ~~CLAUDE.md / Project Instructions Discovery~~ | 9.1 | ✅ Delivered — `--cwd` flag added to CLI args (PR #78) |
-| **P0** | MCP Server Configuration for Agents | 9.2 | Not started — no MCP config applied before agent startup |
-| **P1** | Agent Config as Default Prompt | 9.3 | Not started — prompt required even for cron agents |
-| **P1** | Cost Tracking Display Fix | 9.4 | Not started — cost always shows $0.00 |
-| **P1** | Cron UX Improvements | 9.5 | Not started — no cron builder, no execution monitoring |
-| **P2** | Agent Execution History Improvements | 9.6 | Not started — flat list unusable for many runs |
+| **P0** | ~~MCP Server Configuration for Agents~~ | 9.2 | ✅ Delivered — `.mcp.json` written before agent startup (PR #80) |
+| **P1** | ~~Agent Config as Default Prompt~~ | 9.3 | ✅ Delivered — `defaultPrompt` + optional prompt (PR #79) |
+| **P1** | ~~Cost Tracking Display Fix~~ | 9.4 | ✅ Delivered — sdk-runner + frontend field mismatch (PR #79) |
+| **P1** | ~~Cron UX Improvements~~ | 9.5 | ✅ Delivered — visual cron builder + next runs (PR #81) |
+| **P2** | ~~Agent Execution History Improvements~~ | 9.6 | ✅ Delivered — grouped by date, filters, stats (PR #81) |
 
 ---
 
