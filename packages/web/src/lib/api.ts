@@ -216,6 +216,7 @@ export type RuntimeConfigDriftResponse = {
 export type AgentRun = {
   id: string;
   agentId: string;
+  trigger?: 'schedule' | 'manual' | 'signal' | 'adhoc' | 'heartbeat';
   status: string;
   prompt?: string;
   costUsd?: number;
