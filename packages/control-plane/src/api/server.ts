@@ -14,7 +14,9 @@ import type { Queue } from 'bullmq';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
-
+import { EventStore } from '../collaboration/event-store.js';
+import { SpaceStore } from '../collaboration/space-store.js';
+import { ThreadStore } from '../collaboration/thread-store.js';
 import type { Database } from '../db/index.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
@@ -75,6 +77,7 @@ import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
+import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
 import { terminalProxyRoutes } from './routes/terminal.js';
 import { webhookRoutes } from './routes/webhooks.js';
@@ -532,6 +535,19 @@ export async function createServer({
       prefix: '/api/dashboard',
       db,
       dbRegistry,
+    });
+  }
+
+  // Register collaboration space routes when db is available.
+  if (db) {
+    const spaceStore = new SpaceStore(db, logger);
+    const threadStore = new ThreadStore(db, logger);
+    const eventStore = new EventStore(db, logger);
+    await app.register(spaceRoutes, {
+      prefix: '/api/spaces',
+      spaceStore,
+      threadStore,
+      eventStore,
     });
   }
 
