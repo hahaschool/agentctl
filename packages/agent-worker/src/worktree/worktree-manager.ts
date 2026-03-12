@@ -12,6 +12,7 @@ const WORKTREE_AGENTCTL_DIR = '.agentctl';
 const WORKTREE_TIER_SCRIPT = 'source-tier-env.sh';
 const WORKTREE_TIER_METADATA = 'tier-assignment.json';
 const DEFAULT_ENV_LOAD_COMMAND = `source ./${WORKTREE_AGENTCTL_DIR}/${WORKTREE_TIER_SCRIPT}`;
+const ENV_FILE_NAME_PATTERN = /^\.env\.dev-\d+$/;
 
 export type WorktreeInfo = {
   path: string;
@@ -337,15 +338,12 @@ export class WorktreeManager {
   private async assignTierIfAvailable(
     agentId: string,
     worktreePath: string,
-  ): Promise<
-    | {
-        tier: string;
-        envFileName: string;
-        sourceEnvPath: string;
-        worktreeEnvPath: string;
-      }
-    | null
-  > {
+  ): Promise<{
+    tier: string;
+    envFileName: string;
+    sourceEnvPath: string;
+    worktreeEnvPath: string;
+  } | null> {
     const envFileNames = await this.listDevEnvFiles();
     if (envFileNames.length === 0) {
       return null;
@@ -429,26 +427,47 @@ export class WorktreeManager {
       worktreeEnvPath: string;
     },
   ): Promise<void> {
-    await mkdir(worktreePath, { recursive: true });
+    const safeWorktreePath = this.resolvePathWithinRoot(this.treesDir, worktreePath, 'worktree');
+    const safeSourceEnvPath = this.resolvePathWithinRoot(
+      this.projectPath,
+      assignment.sourceEnvPath,
+      'tier env source',
+    );
+    const safeWorktreeEnvPath = this.resolvePathWithinRoot(
+      safeWorktreePath,
+      assignment.worktreeEnvPath,
+      'tier env link',
+    );
+    const safeEnvFileName = this.assertSafeEnvFileName(assignment.envFileName);
 
-    const agentctlDir = path.join(worktreePath, WORKTREE_AGENTCTL_DIR);
+    await mkdir(safeWorktreePath, { recursive: true });
+
+    const agentctlDir = this.resolvePathWithinRoot(
+      safeWorktreePath,
+      WORKTREE_AGENTCTL_DIR,
+      'worktree metadata directory',
+    );
     await mkdir(agentctlDir, { recursive: true });
 
     await this.ensureSymlink(
-      assignment.worktreeEnvPath,
-      path.relative(worktreePath, assignment.sourceEnvPath),
+      safeWorktreeEnvPath,
+      this.buildSafeSymlinkTarget(safeWorktreeEnvPath, safeSourceEnvPath),
     );
 
-    const scriptPath = path.join(agentctlDir, WORKTREE_TIER_SCRIPT);
+    const scriptPath = this.resolvePathWithinRoot(
+      agentctlDir,
+      WORKTREE_TIER_SCRIPT,
+      'tier bootstrap script',
+    );
     const bootstrapScript = [
       '#!/usr/bin/env bash',
       'set -euo pipefail',
       '',
-      'WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"',
+      `WORKTREE_ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"`,
       '',
       'set -a',
       '# shellcheck source=/dev/null',
-      `source "\${WORKTREE_ROOT}/${assignment.envFileName}"`,
+      `source "\${WORKTREE_ROOT}/${safeEnvFileName}"`,
       'set +a',
       '',
     ].join('\n');
@@ -456,7 +475,11 @@ export class WorktreeManager {
     await writeFile(scriptPath, bootstrapScript, 'utf8');
     await chmod(scriptPath, 0o755);
 
-    const metadataPath = path.join(agentctlDir, WORKTREE_TIER_METADATA);
+    const metadataPath = this.resolvePathWithinRoot(
+      agentctlDir,
+      WORKTREE_TIER_METADATA,
+      'tier assignment metadata',
+    );
     await writeFile(
       metadataPath,
       `${JSON.stringify(
@@ -473,15 +496,18 @@ export class WorktreeManager {
   }
 
   private async ensureSymlink(linkPath: string, targetPath: string): Promise<void> {
+    const safeLinkPath = this.resolvePathWithinRoot(this.treesDir, linkPath, 'tier env symlink');
+    const safeTargetPath = this.assertSafeSymlinkTargetForLink(safeLinkPath, targetPath);
+
     try {
-      const current = await lstat(linkPath);
+      const current = await lstat(safeLinkPath);
       if (current.isSymbolicLink()) {
-        await unlink(linkPath);
+        await unlink(safeLinkPath);
       } else {
         throw new AgentError(
           'WORKTREE_CREATE_FAILED',
-          `Cannot replace existing non-symlink path '${linkPath}' while preparing tier env`,
-          { path: linkPath },
+          `Cannot replace existing non-symlink path '${safeLinkPath}' while preparing tier env`,
+          { path: safeLinkPath },
         );
       }
     } catch (err) {
@@ -490,7 +516,7 @@ export class WorktreeManager {
       }
     }
 
-    await symlink(targetPath, linkPath);
+    await symlink(safeTargetPath, safeLinkPath);
   }
 
   private releaseTier(agentId: string): void {
@@ -569,5 +595,80 @@ export class WorktreeManager {
     }
 
     return results;
+  }
+
+  private resolvePathWithinRoot(rootPath: string, targetPath: string, label: string): string {
+    const resolvedRoot = path.resolve(rootPath);
+    const resolvedTarget = path.resolve(resolvedRoot, targetPath);
+
+    if (!this.isPathWithinRoot(resolvedRoot, resolvedTarget)) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Resolved ${label} path '${resolvedTarget}' escapes '${resolvedRoot}'`,
+        {
+          rootPath: resolvedRoot,
+          targetPath,
+          resolvedTarget,
+        },
+      );
+    }
+
+    return resolvedTarget;
+  }
+
+  private isPathWithinRoot(rootPath: string, candidatePath: string): boolean {
+    return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${path.sep}`);
+  }
+
+  private assertSafeEnvFileName(envFileName: string): string {
+    if (!ENV_FILE_NAME_PATTERN.test(envFileName)) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Invalid dev env file name '${envFileName}' for worktree tier bootstrap`,
+        { envFileName },
+      );
+    }
+
+    return envFileName;
+  }
+
+  private buildSafeSymlinkTarget(linkPath: string, targetPath: string): string {
+    const safeLinkPath = this.resolvePathWithinRoot(this.treesDir, linkPath, 'tier env symlink');
+    const safeTargetPath = this.resolvePathWithinRoot(
+      this.projectPath,
+      targetPath,
+      'tier env symlink target',
+    );
+    const relativeTarget = path.relative(path.dirname(safeLinkPath), safeTargetPath);
+    const resolvedFromLink = path.resolve(path.dirname(safeLinkPath), relativeTarget);
+
+    if (resolvedFromLink !== safeTargetPath) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Invalid tier env symlink target '${relativeTarget}' for '${safeLinkPath}'`,
+        {
+          linkPath: safeLinkPath,
+          relativeTarget,
+          resolvedFromLink,
+          safeTargetPath,
+        },
+      );
+    }
+
+    return relativeTarget;
+  }
+
+  private assertSafeSymlinkTargetForLink(linkPath: string, targetPath: string): string {
+    if (path.isAbsolute(targetPath)) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Symlink target for '${linkPath}' must remain relative`,
+        { linkPath, targetPath },
+      );
+    }
+
+    const resolvedTarget = path.resolve(path.dirname(linkPath), targetPath);
+    this.resolvePathWithinRoot(this.projectPath, resolvedTarget, 'tier env symlink target');
+    return targetPath;
   }
 }

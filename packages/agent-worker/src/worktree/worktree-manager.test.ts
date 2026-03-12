@@ -240,7 +240,7 @@ describe('WorktreeManager', () => {
           path.join(expectedPath, '.agentctl', 'source-tier-env.sh'),
           'utf8',
         );
-        expect(bootstrapScript).toContain('source "${WORKTREE_ROOT}/.env.dev-1"');
+        expect(bootstrapScript).toContain(`source "\${WORKTREE_ROOT}/.env.dev-1"`);
 
         const calls = (execFile as unknown as ReturnType<typeof vi.fn>).mock.calls;
         const flockCall = calls.find(
@@ -288,8 +288,18 @@ describe('WorktreeManager', () => {
         const calls = (execFile as unknown as ReturnType<typeof vi.fn>).mock.calls;
         const flockCalls = calls.filter((c: unknown[]) => c[0] === 'flock');
         expect(flockCalls).toHaveLength(2);
-        expect(flockCalls[0]?.[1]).toEqual(['-n', '/tmp/agentctl-tier-locks/dev-1.lock', '-c', 'true']);
-        expect(flockCalls[1]?.[1]).toEqual(['-n', '/tmp/agentctl-tier-locks/dev-2.lock', '-c', 'true']);
+        expect(flockCalls[0]?.[1]).toEqual([
+          '-n',
+          '/tmp/agentctl-tier-locks/dev-1.lock',
+          '-c',
+          'true',
+        ]);
+        expect(flockCalls[1]?.[1]).toEqual([
+          '-n',
+          '/tmp/agentctl-tier-locks/dev-2.lock',
+          '-c',
+          'true',
+        ]);
       } finally {
         await rm(projectPath, { recursive: true, force: true });
       }
