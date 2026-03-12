@@ -48,6 +48,7 @@ export type AgentInstanceOptions = {
   projectPath: string;
   logger: Logger;
   auditLogDir?: string;
+  auditFileToken?: string;
   /** Maximum execution time in milliseconds before the agent is forcefully timed out. */
   maxExecutionMs?: number;
   /** Run ID assigned by the control plane. Used to correlate audit events with their run record. */
@@ -232,10 +233,12 @@ export class AgentInstance extends EventEmitter {
     this.outputBuffer = new OutputBuffer();
     this.executionProjectPath = this.projectPath;
     this.sourceRuntime = options.sourceRuntime ?? 'claude-code';
+    const auditFileToken = options.auditFileToken ?? (this.runId ? randomUUID() : undefined);
 
     // Initialize audit logger and hook functions
     this.auditLogger = new AuditLogger({
       logDir: options.auditLogDir ?? DEFAULT_AUDIT_LOG_DIR,
+      fileToken: auditFileToken,
       logger: this.log,
     });
 

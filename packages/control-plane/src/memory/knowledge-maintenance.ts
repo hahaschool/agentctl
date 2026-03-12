@@ -17,7 +17,9 @@
 //     facts to identify gaps (modules without lessons/patterns).
 // ---------------------------------------------------------------------------
 
-import { exec as execCb } from 'node:child_process';
+import { execFile as execFileCb } from 'node:child_process';
+import { access, readdir } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
@@ -31,13 +33,15 @@ import type { Logger } from 'pino';
 
 import type { MemoryStore } from './memory-store.js';
 
-const exec = promisify(execCb);
+const execFile = promisify(execFileCb);
 
 const STALE_FILE_PATTERN =
   /(?:^|\s|["'`(])([./][\w./-]+\.\w{1,6}|(?:src|packages|lib|test|docs)\/[\w./-]+\.\w{1,6})(?:["'`)\s,]|$)/g;
 const MIN_CLUSTER_SIZE = 3;
 const MAX_BFS_DEPTH = 2;
 const MAX_DELETED_FILES = 200;
+const MAX_DIRECTORY_DEPTH = 3;
+const EXCLUDED_DIRECTORY_NAMES = new Set(['node_modules', '.git', 'dist']);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -420,10 +424,8 @@ export class KnowledgeMaintenance {
 
   private async fileExists(relativePath: string): Promise<boolean> {
     try {
-      const { stdout } = await exec(
-        `test -e "${this.projectRoot}/${relativePath}" && echo y || echo n`,
-      );
-      return stdout.trim() === 'y';
+      await access(join(this.projectRoot, relativePath));
+      return true;
     } catch {
       return false;
     }
@@ -431,13 +433,24 @@ export class KnowledgeMaintenance {
 
   private async getDeletedFiles(): Promise<string[]> {
     try {
-      const { stdout } = await exec(
-        `git -C "${this.projectRoot}" log --diff-filter=D --name-only --pretty=format: --since="90 days ago" | sort -u | head -${MAX_DELETED_FILES}`,
-      );
-      return stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
+      const { stdout } = await execFile('git', [
+        '-C',
+        this.projectRoot,
+        'log',
+        '--diff-filter=D',
+        '--name-only',
+        '--pretty=format:',
+        '--since=90 days ago',
+      ]);
+
+      return Array.from(
+        new Set(
+          stdout
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0),
+        ),
+      ).slice(0, MAX_DELETED_FILES);
     } catch (error: unknown) {
       this.logger.warn({ err: error }, 'Failed to list deleted files from git log');
       return [];
@@ -445,19 +458,43 @@ export class KnowledgeMaintenance {
   }
 
   private async listCodebaseDirectories(): Promise<string[]> {
+    const packagesRoot = join(this.projectRoot, 'packages');
+
     try {
-      const { stdout } = await exec(
-        `find "${this.projectRoot}/packages" -maxdepth 3 -type d -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" | sed "s|${this.projectRoot}/||"`,
-      );
-      return stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .sort();
+      const directories = await this.walkDirectories(packagesRoot, 0);
+      return directories.sort();
     } catch (error: unknown) {
       this.logger.warn({ err: error }, 'Failed to list codebase directories');
       return [];
     }
+  }
+
+  private async walkDirectories(directoryPath: string, depth: number): Promise<string[]> {
+    let entries;
+    try {
+      entries = await readdir(directoryPath, { withFileTypes: true });
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      throw error;
+    }
+
+    const projectRelativePath = relative(this.projectRoot, directoryPath).replaceAll('\\', '/');
+    const directories = projectRelativePath.length > 0 ? [projectRelativePath] : [];
+
+    if (depth >= MAX_DIRECTORY_DEPTH) {
+      return directories;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || EXCLUDED_DIRECTORY_NAMES.has(entry.name)) {
+        continue;
+      }
+      directories.push(...(await this.walkDirectories(join(directoryPath, entry.name), depth + 1)));
+    }
+
+    return directories;
   }
 
   private async countFactsByDirectory(scope?: string): Promise<Map<string, number>> {

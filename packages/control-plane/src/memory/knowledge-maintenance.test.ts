@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createMockLogger } from '../api/routes/test-helpers.js';
 
@@ -191,8 +195,26 @@ function makeFact(overrides: Partial<Record<string, unknown>> = {}): Record<stri
   };
 }
 
+const tempDirs: string[] = [];
+
+function makeTempDir(prefix: string): string {
+  const dir = join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  mkdirSync(dir, { recursive: true });
+  tempDirs.push(dir);
+  return dir;
+}
+
 describe('KnowledgeMaintenance', () => {
   const logger = createMockLogger();
+
+  afterEach(() => {
+    while (tempDirs.length > 0) {
+      const dir = tempDirs.pop();
+      if (dir) {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
 
   describe('lintStaleEntries', () => {
     it('returns empty array when no code_artifact facts exist', async () => {
@@ -226,6 +248,30 @@ describe('KnowledgeMaintenance', () => {
       const result = await maintenance.lintStaleEntries();
       expect(result.length).toBeGreaterThanOrEqual(1);
       expect(result[0]?.referencedPaths.length).toBeGreaterThan(0);
+    });
+
+    it('checks file existence without shell parsing when paths contain quotes', async () => {
+      const projectRoot = makeTempDir('knowledge-maintenance-root');
+      const relativePath = 'packages/app/file"name.ts';
+      const absolutePath = join(projectRoot, relativePath);
+
+      mkdirSync(join(projectRoot, 'packages/app'), { recursive: true });
+      writeFileSync(absolutePath, 'export const ok = true;\n');
+
+      const maintenance = new KnowledgeMaintenance({
+        pool: makePool() as never,
+        memoryStore: makeMockMemoryStore() as never,
+        logger,
+        projectRoot,
+      });
+
+      await expect(
+        (
+          maintenance as unknown as {
+            fileExists: (path: string) => Promise<boolean>;
+          }
+        ).fileExists(relativePath),
+      ).resolves.toBe(true);
     });
   });
 
@@ -336,6 +382,34 @@ describe('KnowledgeMaintenance', () => {
       const result = await maintenance.knowledgeCoverage();
       expect(result.totalDirectories).toBe(0);
       expect(result.gaps).toHaveLength(0);
+    });
+
+    it('lists package directories without shell parsing when the project root contains quotes', async () => {
+      const projectRoot = makeTempDir('knowledge-maintenance-"root');
+      mkdirSync(join(projectRoot, 'packages/app/src'), { recursive: true });
+      mkdirSync(join(projectRoot, 'packages/tool/lib'), { recursive: true });
+      mkdirSync(join(projectRoot, 'packages/app/node_modules/cache'), { recursive: true });
+      mkdirSync(join(projectRoot, 'packages/tool/dist/output'), { recursive: true });
+
+      const pool = makePool([[{ content: 'See packages/app/src/index.ts', cnt: 1 }]]);
+      const maintenance = new KnowledgeMaintenance({
+        pool: pool as never,
+        memoryStore: makeMockMemoryStore() as never,
+        logger,
+        projectRoot,
+      });
+
+      const result = await maintenance.knowledgeCoverage();
+
+      expect(result.totalDirectories).toBeGreaterThan(0);
+      expect(result.covered).toContainEqual({ directory: 'packages/app/src', factCount: 1 });
+      expect(result.gaps).toContainEqual({ directory: 'packages/tool/lib', factCount: 0 });
+      expect(result.gaps).not.toContainEqual(
+        expect.objectContaining({ directory: 'packages/app/node_modules' }),
+      );
+      expect(result.gaps).not.toContainEqual(
+        expect.objectContaining({ directory: 'packages/tool/dist' }),
+      );
     });
   });
 

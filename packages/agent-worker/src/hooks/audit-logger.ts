@@ -80,8 +80,18 @@ function todayDateString(): string {
 
 export type AuditLoggerOptions = {
   logDir?: string;
+  fileToken?: string;
   logger: Logger;
 };
+
+export function buildAuditLogFilePath(
+  logDir: string,
+  dateString: string,
+  fileToken?: string,
+): string {
+  const suffix = fileToken ? `-${fileToken}` : '';
+  return join(logDir, `audit-${dateString}${suffix}.ndjson`);
+}
 
 /**
  * Result of an integrity verification check.
@@ -99,7 +109,8 @@ export type IntegrityResult = {
  *
  * Each line written is a self-contained JSON object with SHA-256 hash
  * chain integrity. Files are rotated daily using the naming pattern
- * `audit-{YYYY-MM-DD}.ndjson`.
+ * `audit-{YYYY-MM-DD}.ndjson`, or `audit-{YYYY-MM-DD}-{token}.ndjson`
+ * when a secure file token is provided.
  *
  * Hash chain: each entry includes a `previousHash` field and a `hash`
  * field. The hash is `SHA-256(JSON.stringify(entry) + previousHash)`.
@@ -107,6 +118,7 @@ export type IntegrityResult = {
  */
 export class AuditLogger {
   private readonly logDir: string;
+  private readonly fileToken: string | undefined;
   private readonly log: Logger;
   private currentDate: string;
   private currentPath: string;
@@ -114,6 +126,7 @@ export class AuditLogger {
 
   constructor(options: AuditLoggerOptions) {
     this.logDir = options.logDir ?? process.env.AUDIT_LOG_DIR ?? './logs';
+    this.fileToken = options.fileToken;
     this.log = options.logger.child({ component: 'audit-logger' });
     this.currentDate = todayDateString();
     this.currentPath = this.buildPath(this.currentDate);
@@ -229,7 +242,7 @@ export class AuditLogger {
   // ── Private helpers ──────────────────────────────────────────────
 
   private buildPath(dateString: string): string {
-    return join(this.logDir, `audit-${dateString}.ndjson`);
+    return buildAuditLogFilePath(this.logDir, dateString, this.fileToken);
   }
 
   private rotateIfNeeded(): void {

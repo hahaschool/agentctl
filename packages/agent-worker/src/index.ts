@@ -1,11 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { join } from 'node:path';
 
 import type { AgentConfig, EnvVar } from '@agentctl/shared';
 import { AgentError, isNumericString, isValidLogLevel, validateEnv } from '@agentctl/shared';
 
 import { createWorkerServer } from './api/server.js';
 import { HealthReporter } from './health-reporter.js';
+import { buildAuditLogFilePath } from './hooks/audit-logger.js';
 import { AuditReporter } from './hooks/audit-reporter.js';
 import type { IpcMessage, IpcResponse } from './ipc/index.js';
 import { createIpcResponse, IpcServer } from './ipc/index.js';
@@ -89,6 +90,7 @@ const RUN_ID = env.RUN_ID || '';
 const AUDIT_FLUSH_INTERVAL_MS = Number(env.AUDIT_FLUSH_INTERVAL_MS) || 5_000;
 const PROJECT_PATH = env.PROJECT_PATH || '';
 const HEALTH_REPORTER_INTERVAL_MS = 15_000;
+const WORKER_AUDIT_FILE_TOKEN = RUN_ID ? randomUUID() : undefined;
 
 /**
  * Dispatch an incoming IPC message to the correct pool operation based
@@ -220,6 +222,7 @@ async function main(): Promise<void> {
   const pool = new AgentPool({
     maxConcurrent: MAX_CONCURRENT_AGENTS,
     auditLogDir: AUDIT_LOG_DIR,
+    auditFileToken: WORKER_AUDIT_FILE_TOKEN,
     logger,
     worktreeManager,
   });
@@ -274,9 +277,11 @@ async function main(): Promise<void> {
   // is passed per-request in the StartAgentBody and stored on each AgentInstance.
   // A future enhancement can start per-agent AuditReporters using instance.runId instead.
   const todayDate = new Date().toISOString().slice(0, 10);
-  const auditFilePath = join(AUDIT_LOG_DIR, `audit-${todayDate}.ndjson`);
+  const auditFilePath = WORKER_AUDIT_FILE_TOKEN
+    ? buildAuditLogFilePath(AUDIT_LOG_DIR, todayDate, WORKER_AUDIT_FILE_TOKEN)
+    : null;
 
-  const auditReporter = RUN_ID
+  const auditReporter = RUN_ID && auditFilePath
     ? new AuditReporter({
         controlPlaneUrl: CONTROL_PLANE_URL,
         runId: RUN_ID,
