@@ -15,6 +15,8 @@ import type {
   CreateManagedSessionRequest,
   DiscoveredMcpServer,
   EntityType,
+  EventSenderType,
+  EventVisibility,
   ExecutionSummary,
   FactSource,
   ForkManagedSessionRequest,
@@ -47,17 +49,39 @@ import type {
   RuntimeConfigSyncResponse,
   RuntimeHandoffSummaryResponse,
   ApiAccount as SharedApiAccount,
+  Space,
+  SpaceEvent,
+  SpaceEventType,
+  SpaceMember,
+  SpaceMemberRole,
+  SpaceMemberType,
+  SpaceType,
+  SpaceVisibility,
   StartManualTakeoverRequest,
+  Thread,
+  ThreadType,
 } from '@agentctl/shared';
 
 export type {
   AgentConfig,
   DiscoveredMcpServer,
+  EventSenderType,
+  EventVisibility,
   ImportJob,
   McpServerConfig,
   McpServerTemplate,
   MemoryScopeRecord,
   MemoryScopeType,
+  Space,
+  SpaceEvent,
+  SpaceEventType,
+  SpaceMember,
+  SpaceMemberRole,
+  SpaceMemberType,
+  SpaceType,
+  SpaceVisibility,
+  Thread,
+  ThreadType,
 };
 
 export type HealthResponse = {
@@ -370,6 +394,8 @@ export type GeneratedMemoryReport = {
   markdown: string;
   generatedAt: string;
 };
+
+export type SpaceWithMembers = Space & { members: SpaceMember[] };
 
 export type McpDiscoverResponse = {
   discovered: DiscoveredMcpServer[];
@@ -1050,6 +1076,82 @@ export const api = {
     request<{ ok: boolean; job: ImportJob }>(`/api/memory/import/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+
+  // ---------------------------------------------------------------------------
+  // Collaboration Spaces
+  // ---------------------------------------------------------------------------
+
+  getSpaces: () => request<Space[]>('/api/spaces'),
+
+  createSpace: (data: {
+    name: string;
+    description?: string;
+    type?: SpaceType;
+    visibility?: SpaceVisibility;
+  }) =>
+    request<Space>('/api/spaces', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getSpace: (id: string) => request<SpaceWithMembers>(`/api/spaces/${encodeURIComponent(id)}`),
+
+  deleteSpace: (id: string) =>
+    request<void>(`/api/spaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // Space members
+  addSpaceMember: (
+    spaceId: string,
+    data: { memberType: SpaceMemberType; memberId: string; role?: SpaceMemberRole },
+  ) =>
+    request<SpaceMember>(`/api/spaces/${encodeURIComponent(spaceId)}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeSpaceMember: (spaceId: string, memberId: string) =>
+    request<void>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/members/${encodeURIComponent(memberId)}`,
+      { method: 'DELETE' },
+    ),
+
+  // Threads
+  getThreads: (spaceId: string) =>
+    request<Thread[]>(`/api/spaces/${encodeURIComponent(spaceId)}/threads`),
+
+  createThread: (spaceId: string, data: { title?: string; type?: ThreadType }) =>
+    request<Thread>(`/api/spaces/${encodeURIComponent(spaceId)}/threads`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Events
+  getEvents: (spaceId: string, threadId: string, params?: { after?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.after !== undefined) qs.set('after', String(params.after));
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<SpaceEvent[]>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/threads/${encodeURIComponent(threadId)}/events${suffix}`,
+    );
+  },
+
+  postEvent: (
+    spaceId: string,
+    threadId: string,
+    data: {
+      type: SpaceEventType;
+      senderType: EventSenderType;
+      senderId: string;
+      payload: Record<string, unknown>;
+      visibility?: EventVisibility;
+      idempotencyKey?: string;
+    },
+  ) =>
+    request<SpaceEvent>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/threads/${encodeURIComponent(threadId)}/events`,
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
 };
 
 // ---------------------------------------------------------------------------
