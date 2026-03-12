@@ -18,6 +18,11 @@ import { writeFileSync } from 'node:fs';
 import { normalize, join as pathJoin, resolve as resolvePath } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
+import {
+  DEFAULT_DENIED_PATH_SEGMENTS,
+  findDeniedPathSegment,
+  sanitizePath,
+} from '../utils/path-security.js';
 
 import {
   type DiscoveredSession,
@@ -235,21 +240,22 @@ export class CliSessionManager extends EventEmitter {
     // (js/path-injection). Callers (sessionRoutes) should already validate,
     // but we apply defense-in-depth here by normalizing and rejecting paths
     // containing sensitive directory names.
-    const DENIED_CWD_SEGMENTS = ['.ssh', '.gnupg', '.aws', '.env', 'credentials'];
     const sanitizedCwd = resolvePath(normalize(options.projectPath));
-    const cwdSegments = sanitizedCwd.split('/');
-    for (const segment of cwdSegments) {
-      if (DENIED_CWD_SEGMENTS.includes(segment)) {
-        throw new AgentError('INVALID_PATH', `Project path contains denied segment "${segment}"`, {
+    const deniedSegment = findDeniedPathSegment(sanitizedCwd, DEFAULT_DENIED_PATH_SEGMENTS);
+    if (deniedSegment) {
+      throw new AgentError(
+        'INVALID_PATH',
+        `Project path contains denied segment "${deniedSegment}"`,
+        {
           projectPath: sanitizedCwd,
-        });
-      }
+        },
+      );
     }
 
     // Write .mcp.json before spawning if MCP servers are configured.
     // Claude Code reads this file at startup to discover available MCP servers.
     if (options.config?.mcpServers && Object.keys(options.config.mcpServers).length > 0) {
-      const mcpConfigPath = pathJoin(sanitizedCwd, '.mcp.json');
+      const mcpConfigPath = sanitizePath(pathJoin(sanitizedCwd, '.mcp.json'), sanitizedCwd);
       const mcpPayload = { mcpServers: options.config.mcpServers };
       writeFileSync(mcpConfigPath, JSON.stringify(mcpPayload, null, 2), 'utf-8');
       this.logger?.debug(

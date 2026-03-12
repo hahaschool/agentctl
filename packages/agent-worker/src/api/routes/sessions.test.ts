@@ -213,6 +213,46 @@ describe('Worker session routes', () => {
   // ── POST /api/sessions ─────────────────────────────────────────
 
   describe('POST /api/sessions', () => {
+    it('should rate limit session creation when configured', async () => {
+      process.env.SESSION_CREATE_RATE_LIMIT_MAX = '1';
+      process.env.SESSION_CREATE_RATE_LIMIT_WINDOW_MS = '60000';
+
+      await app.close();
+      app = await buildApp(manager);
+
+      try {
+        const first = await app.inject({
+          method: 'POST',
+          url: '/api/sessions',
+          payload: {
+            sessionId: 'cp-session-1',
+            agentId: 'agent-1',
+            projectPath: '/home/user/project',
+          },
+        });
+
+        const second = await app.inject({
+          method: 'POST',
+          url: '/api/sessions',
+          payload: {
+            sessionId: 'cp-session-2',
+            agentId: 'agent-1',
+            projectPath: '/home/user/project',
+          },
+        });
+
+        expect(first.statusCode).toBe(201);
+        expect(second.statusCode).toBe(429);
+        expect(second.json()).toEqual({
+          error: 'Too many session creation requests. Try again later.',
+          code: 'RATE_LIMITED',
+        });
+      } finally {
+        delete process.env.SESSION_CREATE_RATE_LIMIT_MAX;
+        delete process.env.SESSION_CREATE_RATE_LIMIT_WINDOW_MS;
+      }
+    });
+
     it('should start a new session and return 201', async () => {
       const res = await app.inject({
         method: 'POST',
@@ -513,6 +553,35 @@ describe('Worker session routes', () => {
           resumeSessionId: PARENT_CLAUDE_ID,
         }),
       );
+    });
+
+    it('rejects fork session IDs that would escape the JSONL directory', async () => {
+      setupTruncationMocks({
+        fileContent: JSON.stringify({
+          type: 'user',
+          message: { content: [{ type: 'text', text: 'Hello' }] },
+        }),
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          sessionId: '../escape',
+          agentId: 'agent-1',
+          projectPath: PROJECT_PATH,
+          prompt: 'Continue from message 1',
+          resumeSessionId: PARENT_CLAUDE_ID,
+          forkAtIndex: 1,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toEqual({
+        error: 'Invalid session ID',
+        code: 'INVALID_INPUT',
+      });
+      expect(writeFileSync).not.toHaveBeenCalled();
     });
   });
 
@@ -988,6 +1057,41 @@ describe('Worker session routes', () => {
       // readdirSync for the fallback recursive search — return empty to avoid scanning
       vi.mocked(readdirSync).mockReturnValue([]);
     }
+
+    it('should rate limit repeated content reads when configured', async () => {
+      process.env.SESSION_CONTENT_RATE_LIMIT_MAX = '1';
+      process.env.SESSION_CONTENT_RATE_LIMIT_WINDOW_MS = '60000';
+
+      await app.close();
+      app = await buildApp(manager);
+
+      const lines = JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'text', text: 'Fix the bug' }] },
+      });
+      setupFsMocks({ fileExists: true, fileSize: lines.length, fileContent: lines });
+
+      try {
+        const first = await app.inject({
+          method: 'GET',
+          url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+        });
+        const second = await app.inject({
+          method: 'GET',
+          url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+        });
+
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(429);
+        expect(second.json()).toEqual({
+          error: 'Too many session content requests. Try again later.',
+          code: 'RATE_LIMITED',
+        });
+      } finally {
+        delete process.env.SESSION_CONTENT_RATE_LIMIT_MAX;
+        delete process.env.SESSION_CONTENT_RATE_LIMIT_WINDOW_MS;
+      }
+    });
 
     it('should return 404 when JSONL file is not found', async () => {
       setupFsMocks({ fileExists: false });
