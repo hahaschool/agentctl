@@ -677,10 +677,14 @@ describe('AuditReporter', () => {
 
   describe('concurrency guard', () => {
     it('does not run overlapping flushes', async () => {
-      let resolveLstatPromise: ((value: { size: number; isSymbolicLink: () => boolean }) => void) | undefined;
-      const slowLstatPromise = new Promise<{ size: number; isSymbolicLink: () => boolean }>((resolve) => {
-        resolveLstatPromise = resolve;
-      });
+      let resolveLstatPromise:
+        | ((value: { size: number; isSymbolicLink: () => boolean }) => void)
+        | undefined;
+      const slowLstatPromise = new Promise<{ size: number; isSymbolicLink: () => boolean }>(
+        (resolve) => {
+          resolveLstatPromise = resolve;
+        },
+      );
 
       mockLstat.mockReturnValueOnce(slowLstatPromise as ReturnType<typeof lstat>);
 
