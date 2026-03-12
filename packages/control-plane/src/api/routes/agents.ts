@@ -238,6 +238,22 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         return reply.code(404).send({ error: 'AGENT_NOT_FOUND', message: 'Agent not found' });
       }
 
+      // Backfill: if agent has no cost data stored yet, compute from runs
+      if (agent.totalCostUsd === 0 && agent.lastCostUsd === null) {
+        try {
+          const computed = await dbRegistry.computeAgentCostFromRuns(agent.id);
+          if (computed.totalCostUsd > 0 || computed.lastCostUsd !== null) {
+            return {
+              ...agent,
+              lastCostUsd: computed.lastCostUsd,
+              totalCostUsd: computed.totalCostUsd,
+            };
+          }
+        } catch {
+          // If aggregation fails, return agent as-is
+        }
+      }
+
       return agent;
     },
   );
