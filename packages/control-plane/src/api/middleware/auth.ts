@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 import type { FastifyReply, FastifyRequest, onRequestHookHandler } from 'fastify';
 
@@ -19,17 +19,40 @@ type AuthenticatedRequest = {
 };
 
 const DEFAULT_MAX_AGE_SECONDS = 300;
+const API_KEY_SALT_BYTES = 16;
+const API_KEY_HASH_BYTES = 64;
+const API_KEY_HASH_PREFIX = 'scrypt';
 
 // ---------------------------------------------------------------------------
 // Utility helpers
 // ---------------------------------------------------------------------------
 
 /**
- * SHA-256 hash of a key, returned as a lowercase hex string.
- * Uses `node:crypto` — no external dependencies.
+ * Salted scrypt hash of an API key, encoded as `scrypt$<saltHex>$<hashHex>`.
  */
 export function hashApiKey(key: string): string {
-  return createHash('sha256').update(key).digest('hex');
+  const salt = randomBytes(API_KEY_SALT_BYTES);
+  const derivedKey = scryptSync(key, salt, API_KEY_HASH_BYTES);
+  return `${API_KEY_HASH_PREFIX}$${salt.toString('hex')}$${derivedKey.toString('hex')}`;
+}
+
+function verifyApiKey(candidate: string, storedHash: string): boolean {
+  const [algorithm, saltHex, expectedHex] = storedHash.split('$');
+  if (
+    algorithm !== API_KEY_HASH_PREFIX ||
+    !saltHex ||
+    !expectedHex ||
+    !/^[0-9a-f]+$/i.test(saltHex) ||
+    !/^[0-9a-f]+$/i.test(expectedHex)
+  ) {
+    return false;
+  }
+
+  const salt = Buffer.from(saltHex, 'hex');
+  const expected = Buffer.from(expectedHex, 'hex');
+  const derived = scryptSync(candidate, salt, expected.length);
+
+  return derived.length === expected.length && timingSafeEqual(derived, expected);
 }
 
 /**
@@ -172,13 +195,7 @@ export function createAuthHook(config: AuthConfig): onRequestHookHandler {
 
     // 3b. API key
     if (scheme.toLowerCase() === 'apikey') {
-      const hashedKey = hashApiKey(credential);
-      const isValid = config.apiKeys.some((storedHash) => {
-        if (storedHash.length !== hashedKey.length) {
-          return false;
-        }
-        return timingSafeEqual(Buffer.from(storedHash, 'hex'), Buffer.from(hashedKey, 'hex'));
-      });
+      const isValid = config.apiKeys.some((storedHash) => verifyApiKey(credential, storedHash));
 
       if (!isValid) {
         reply.status(403).send({

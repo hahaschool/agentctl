@@ -251,6 +251,42 @@ describe('proxyWorkerRequest', () => {
     );
   });
 
+  it('rejects worker URLs that point to external hosts', async () => {
+    globalThis.fetch = vi.fn();
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://example.com:9000',
+      path: '/api/test',
+      method: 'GET',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 400,
+      error: 'INVALID_WORKER_URL',
+      message: expect.stringContaining('non-internal address'),
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects worker URLs that embed credentials', async () => {
+    globalThis.fetch = vi.fn();
+
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: 'http://agent:secret@127.0.0.1:9000',
+      path: '/api/test',
+      method: 'GET',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 400,
+      error: 'INVALID_WORKER_URL',
+      message: expect.stringContaining('must not include credentials'),
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   // ---------------------------------------------------------------------------
   // Timeout configuration
   // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
+import { buildWorkerRequestUrl } from '../proxy-worker-request.js';
 import { resolveWorkerUrlOrThrow } from '../resolve-worker-url.js';
 
 export type StreamRoutesOptions = {
@@ -10,6 +11,11 @@ export type StreamRoutesOptions = {
   dbRegistry?: DbAgentRegistry | null;
   workerPort?: number;
 };
+
+const STREAM_RATE_LIMIT = {
+  max: 20,
+  timeWindow: '1 minute',
+} as const;
 
 /**
  * Fastify plugin that proxies SSE streams from agent-workers to clients.
@@ -31,7 +37,10 @@ export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app,
     Querystring: { workerUrl?: string; machineId?: string };
   }>(
     '/:id/stream',
-    { schema: { tags: ['stream'], summary: 'Proxy SSE stream from agent worker' } },
+    {
+      schema: { tags: ['stream'], summary: 'Proxy SSE stream from agent worker' },
+      config: { rateLimit: STREAM_RATE_LIMIT },
+    },
     async (request, reply) => {
       const agentId = request.params.id;
 
@@ -41,7 +50,10 @@ export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app,
         workerPort,
       });
 
-      const upstreamUrl = `${workerBaseUrl}/api/agents/${encodeURIComponent(agentId)}/stream`;
+      const upstreamUrl = buildWorkerRequestUrl(
+        workerBaseUrl,
+        `/api/agents/${encodeURIComponent(agentId)}/stream`,
+      );
 
       // Fetch the upstream SSE stream from the worker.
       let upstream: Response;

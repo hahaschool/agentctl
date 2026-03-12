@@ -43,6 +43,18 @@ const MAX_BFS_DEPTH = 2;
 const MAX_DELETED_FILES = 200;
 const MAX_DIRECTORY_DEPTH = 3;
 const EXCLUDED_DIRECTORY_NAMES = new Set(['node_modules', '.git', 'dist']);
+const BLOCKED_GIT_ENV_VARS = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_COMMON_DIR',
+  'GIT_CONFIG',
+  'GIT_CONFIG_GLOBAL',
+  'GIT_CONFIG_SYSTEM',
+  'GIT_CEILING_DIRECTORIES',
+] as const;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,6 +115,19 @@ export type KnowledgeMaintenanceOptions = {
   projectRoot?: string;
 };
 
+function isWithinRoot(candidatePath: string, rootPath: string): boolean {
+  const allowedPrefix = rootPath.endsWith(sep) ? rootPath : `${rootPath}${sep}`;
+  return candidatePath === rootPath || candidatePath.startsWith(allowedPrefix);
+}
+
+function sanitizeGitEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const sanitized = { ...env };
+  for (const key of BLOCKED_GIT_ENV_VARS) {
+    delete sanitized[key];
+  }
+  return sanitized;
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -117,10 +142,18 @@ export class KnowledgeMaintenance {
     this.pool = options.pool;
     this.memoryStore = options.memoryStore;
     this.logger = options.logger;
-    // Security: resolve and normalize projectRoot to prevent path traversal
-    // when it is later joined with user-supplied relative paths.
-    const rawRoot = options.projectRoot ?? process.cwd();
-    this.projectRoot = resolve(normalize(rawRoot));
+    const workspaceRoot = resolve(normalize(process.cwd()));
+    const requestedRoot = resolve(normalize(options.projectRoot ?? workspaceRoot));
+
+    if (isWithinRoot(requestedRoot, workspaceRoot)) {
+      this.projectRoot = requestedRoot;
+    } else {
+      this.projectRoot = workspaceRoot;
+      this.logger.warn(
+        { requestedRoot, workspaceRoot },
+        'Ignoring projectRoot outside the current working tree',
+      );
+    }
   }
 
   /** Run all four maintenance passes and return a combined result. */
@@ -459,10 +492,17 @@ export class KnowledgeMaintenance {
    */
   private async getDeletedFiles(): Promise<string[]> {
     try {
-      // Resolve the real path to prevent symlink-based injection
       const realRoot = await realpath(this.projectRoot);
+      const workspaceRoot = await realpath(resolve(normalize(process.cwd())));
 
-      // Verify .git directory exists to ensure we are in a real git repo
+      if (!isWithinRoot(realRoot, workspaceRoot)) {
+        this.logger.warn(
+          { projectRoot: realRoot, workspaceRoot },
+          'Skipping deleted-file scan for projectRoot outside the current working tree',
+        );
+        return [];
+      }
+
       try {
         await access(join(realRoot, '.git'));
       } catch {
@@ -473,15 +513,14 @@ export class KnowledgeMaintenance {
         return [];
       }
 
-      const { stdout } = await execFile('git', [
-        '-C',
-        realRoot,
-        'log',
-        '--diff-filter=D',
-        '--name-only',
-        '--pretty=format:',
-        '--since=90 days ago',
-      ]);
+      const { stdout } = await execFile(
+        'git',
+        ['log', '--diff-filter=D', '--name-only', '--pretty=format:', '--since=90 days ago'],
+        {
+          cwd: realRoot,
+          env: sanitizeGitEnv(process.env),
+        },
+      );
 
       return Array.from(
         new Set(

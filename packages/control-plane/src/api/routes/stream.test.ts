@@ -1,4 +1,5 @@
 import { ControlPlaneError } from '@agentctl/shared';
+import fastifyRateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -167,11 +168,31 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
   async function buildApp(opts: StreamRoutesOptions): Promise<FastifyInstance> {
     const app = Fastify({ logger: false });
 
+    await app.register(fastifyRateLimit, {
+      max: 1_000,
+      timeWindow: '1 minute',
+      errorResponseBuilder: () => ({ error: 'RATE_LIMITED', message: 'Too many requests' }),
+    });
+
     // Install a ControlPlaneError-aware error handler so we can assert on
     // the structured error code in the response body.
     app.setErrorHandler((err, _request, reply) => {
       if (err instanceof ControlPlaneError) {
         return reply.status(500).send({ error: err.code, message: err.message });
+      }
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'error' in err &&
+        (err as { error?: string }).error === 'RATE_LIMITED'
+      ) {
+        return reply.status(429).send(err);
+      }
+      if (typeof (err as FastifyError).statusCode === 'number') {
+        return reply.status((err as FastifyError).statusCode).send({
+          error: 'RATE_LIMITED',
+          message: 'Too many requests',
+        });
       }
       return reply.status(500).send({ error: 'INTERNAL', message: err.message });
     });
@@ -219,6 +240,29 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       // Registry getMachine was NOT called because workerUrl was provided
       expect(registry.getMachine).not.toHaveBeenCalled();
+
+      await app.close();
+    });
+
+    it('rejects worker URLs that include credentials before upstream fetch', async () => {
+      const registry: MachineRegistryLike = {
+        registerMachine: vi.fn(),
+        heartbeat: vi.fn(),
+        listMachines: vi.fn().mockReturnValue([]),
+        getMachine: vi.fn().mockReturnValue(undefined),
+      };
+
+      globalThis.fetch = vi.fn();
+
+      const app = await buildApp({ registry });
+      const response = await app.inject({
+        method: 'GET',
+        url: '/my-agent/stream?workerUrl=http://agent:secret@127.0.0.1:8080',
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json().error).toBe('INVALID_WORKER_URL');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
 
       await app.close();
     });
@@ -812,6 +856,44 @@ describe('streamRoutes — unit tests (plugin-level)', () => {
 
       const fetchUrl = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(fetchUrl).toContain('agent%20with%20spaces');
+
+      await app.close();
+    });
+  });
+
+  describe('route-local rate limiting', () => {
+    it('throttles repeated stream requests more aggressively than the global limit', async () => {
+      const registry: MachineRegistryLike = {
+        registerMachine: vi.fn(),
+        heartbeat: vi.fn(),
+        listMachines: vi.fn().mockReturnValue([]),
+        getMachine: vi.fn().mockReturnValue(undefined),
+      };
+
+      const bodyReader = {
+        read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        cancel: vi.fn().mockResolvedValue(undefined),
+      };
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => bodyReader },
+      });
+
+      const app = await buildApp({ registry });
+      const url = '/agent-rate-limited/stream?workerUrl=http://127.0.0.1:9000';
+
+      let lastResponse: Awaited<ReturnType<typeof app.inject>> | undefined;
+      for (let attempt = 0; attempt < 21; attempt += 1) {
+        lastResponse = await app.inject({ method: 'GET', url });
+      }
+
+      expect(lastResponse?.statusCode).toBe(429);
+      expect(lastResponse?.json()).toEqual({
+        error: 'RATE_LIMITED',
+        message: 'Too many requests',
+      });
+      expect(globalThis.fetch).toHaveBeenCalledTimes(20);
 
       await app.close();
     });
