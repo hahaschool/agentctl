@@ -12,7 +12,7 @@ export type SessionStreamEvent =
   | { event: 'raw_output'; data: { text: string } }
   | { event: 'user_message'; data: { text: string } }
   | { event: 'status'; data: { status: string; sessionId?: string } }
-  | { event: 'cost'; data: { totalCostUsd: number; inputTokens: number; outputTokens: number } }
+  | { event: 'cost'; data: { turnCost: number; totalCost: number } }
   | { event: 'execution_summary'; data: { summary: ExecutionSummary } }
   | { event: 'approval_needed'; data: { toolName: string; args: Record<string, unknown> } }
   | { event: 'heartbeat'; data: Record<string, never> }
@@ -48,7 +48,7 @@ type UseSessionStreamResult = {
   /** Latest status event, if any. */
   latestStatus: string | null;
   /** Latest cost data, if any. */
-  latestCost: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
+  latestCost: { turnCost: number; totalCost: number } | null;
   /** Latest structured execution summary, if any. */
   latestExecutionSummary: ExecutionSummary | null;
   /** Clear accumulated stream output (e.g. after content refetch absorbs it). */
@@ -74,9 +74,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
   const [pendingUserMessages, setPendingUserMessages] = useState<string[]>([]);
   const [latestStatus, setLatestStatus] = useState<string | null>(null);
   const [latestCost, setLatestCost] = useState<{
-    totalCostUsd: number;
-    inputTokens: number;
-    outputTokens: number;
+    turnCost: number;
+    totalCost: number;
   } | null>(null);
   const [latestExecutionSummary, setLatestExecutionSummary] = useState<ExecutionSummary | null>(
     null,
@@ -175,9 +174,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
           } else if (eventType === 'status') {
             setLatestStatus((data as { status?: string }).status ?? null);
           } else if (eventType === 'cost') {
-            setLatestCost(
-              data as { totalCostUsd: number; inputTokens: number; outputTokens: number },
-            );
+            setLatestCost(data as { turnCost: number; totalCost: number });
           } else if (eventType === 'execution_summary') {
             setLatestExecutionSummary((data as { summary?: ExecutionSummary }).summary ?? null);
           }

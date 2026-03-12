@@ -148,15 +148,22 @@ function handleSdkMessage(
     outputStream.toolResult(message.tool_name ?? 'unknown', content);
   }
 
-  // Emit cost updates whenever usage information is present
+  // Emit cost updates whenever usage or cost information is present.
+  // Some message types (e.g. 'result') carry total_cost_usd without a
+  // nested usage object, so we check for cost fields independently.
   const usage = message.usage;
-  if (usage) {
+  const hasCostFields =
+    typeof message.turn_cost_usd === 'number' || typeof message.total_cost_usd === 'number';
+
+  if (usage || hasCostFields) {
     const turnCost = getNumber(message.turn_cost_usd, 0);
     const totalCost = getNumber(message.total_cost_usd, accumulator.totalCost);
 
     accumulator.totalCost = totalCost;
-    accumulator.tokensIn = usage.input_tokens ?? accumulator.tokensIn;
-    accumulator.tokensOut = usage.output_tokens ?? accumulator.tokensOut;
+    if (usage) {
+      accumulator.tokensIn = usage.input_tokens ?? accumulator.tokensIn;
+      accumulator.tokensOut = usage.output_tokens ?? accumulator.tokensOut;
+    }
 
     outputStream.costUpdate(turnCost, totalCost);
   }

@@ -144,6 +144,19 @@ describe('AgentConfig', () => {
     expect(config.allowedTools).toEqual([]);
     expect(config.disallowedTools).toEqual([]);
   });
+
+  it('accepts defaultPrompt for scheduled agents', () => {
+    const config: AgentConfig = {
+      defaultPrompt: 'Run daily tests and report results',
+    };
+
+    expect(config.defaultPrompt).toBe('Run daily tests and report results');
+  });
+
+  it('defaultPrompt is optional', () => {
+    const config: AgentConfig = {};
+    expect(config.defaultPrompt).toBeUndefined();
+  });
 });
 
 // ── Agent shape ─────────────────────────────────────────────────────

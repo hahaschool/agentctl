@@ -134,7 +134,7 @@ function SessionMetadataBadges({
   streamCost,
 }: {
   metadata: SessionMetadata;
-  streamCost?: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
+  streamCost?: { turnCost: number; totalCost: number } | null;
 }): React.JSX.Element | null {
   const model = metadata.model ?? null;
   const costUsd = metadata.costUsd ?? null;
@@ -142,9 +142,9 @@ function SessionMetadataBadges({
   const outputTokens = metadata.outputTokens ?? null;
 
   // Use streaming cost if available, otherwise fall back to metadata
-  const displayCostUsd = streamCost?.totalCostUsd ?? costUsd;
-  const displayInputTokens = streamCost?.inputTokens ?? inputTokens;
-  const displayOutputTokens = streamCost?.outputTokens ?? outputTokens;
+  const displayCostUsd = streamCost?.totalCost ?? costUsd;
+  const displayInputTokens = inputTokens;
+  const displayOutputTokens = outputTokens;
 
   if (!model && displayCostUsd === null && displayInputTokens === null) return null;
 
@@ -157,7 +157,7 @@ function SessionMetadataBadges({
         <span
           className={cn(
             'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
-            streamCost?.totalCostUsd !== undefined
+            streamCost?.totalCost !== undefined
               ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
               : 'bg-muted text-muted-foreground border-border',
           )}
@@ -166,26 +166,12 @@ function SessionMetadataBadges({
         </span>
       )}
       {displayInputTokens !== null && (
-        <span
-          className={cn(
-            'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
-            streamCost?.inputTokens !== undefined
-              ? 'bg-blue-500/10 text-blue-600 border-blue-500/30'
-              : 'bg-muted text-muted-foreground border-border',
-          )}
-        >
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm border bg-muted text-muted-foreground border-border">
           {formatNumber(displayInputTokens)} in
         </span>
       )}
       {displayOutputTokens !== null && (
-        <span
-          className={cn(
-            'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border',
-            streamCost?.outputTokens !== undefined
-              ? 'bg-green-500/10 text-green-600 border-green-500/30'
-              : 'bg-muted text-muted-foreground border-border',
-          )}
-        >
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm border bg-muted text-muted-foreground border-border">
           {formatNumber(displayOutputTokens)} out
         </span>
       )}
@@ -205,7 +191,7 @@ export type SessionHeaderProps = {
   isFetching: boolean;
   onRefresh: () => void;
   streamConnected?: boolean;
-  streamCost?: { totalCostUsd: number; inputTokens: number; outputTokens: number } | null;
+  streamCost?: { turnCost: number; totalCost: number } | null;
   showFiles?: boolean;
   onToggleFiles?: () => void;
   escapeRef?: React.MutableRefObject<() => void>;
@@ -573,7 +559,7 @@ export function SessionHeader({
         )}
         {(streamCost || session.metadata?.costUsd) && (
           <span className="font-mono bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-sm border border-amber-500/30">
-            ${(streamCost?.totalCostUsd ?? session.metadata?.costUsd ?? 0).toFixed(4)}
+            ${(streamCost?.totalCost ?? session.metadata?.costUsd ?? 0).toFixed(4)}
           </span>
         )}
         {totalMessages !== undefined && totalMessages > 0 && (

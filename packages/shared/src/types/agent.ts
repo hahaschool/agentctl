@@ -54,6 +54,8 @@ export type AgentConfig = {
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
   systemPrompt?: string;
   initialPrompt?: string;
+  /** Default prompt used when no explicit prompt is provided (e.g. cron/heartbeat triggers). */
+  defaultPrompt?: string;
 };
 
 export type Agent = {
