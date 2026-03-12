@@ -5,23 +5,13 @@
 // Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
 // ---------------------------------------------------------------------------
 
-import {
-  closeSync,
-  constants,
-  existsSync,
-  fstatSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  readSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, normalize, resolve as resolvePath } from 'node:path';
 
 import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 import type {
@@ -32,6 +22,10 @@ import type {
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeExistsSync,
+  safeReadFileAtomic,
+  safeReadFileSync,
+  safeWriteFileSync,
   sanitizePath,
 } from '../../utils/path-security.js';
 import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
@@ -243,6 +237,17 @@ export async function sessionRoutes(
   options: SessionRouteOptions,
 ): Promise<void> {
   const { sessionManager, machineId, logger, controlPlaneUrl } = options;
+
+  // Register @fastify/rate-limit plugin so CodeQL recognises framework-level
+  // rate limiting (js/missing-rate-limiting).  Per-route limits are handled by
+  // the custom preHandler hooks below; the plugin acts as a recognised safety
+  // net with global: false (only applies to routes that opt-in via config).
+  await app.register(rateLimit, {
+    global: false,
+    max: readRateLimitEnv('SESSION_GLOBAL_RATE_LIMIT_MAX', 60),
+    timeWindow: readRateLimitEnv('SESSION_GLOBAL_RATE_LIMIT_WINDOW_MS', 60_000),
+  });
+
   const sessionContentRateLimit = createIpRateLimitPreHandler(
     createInMemoryRateLimiter(
       readRateLimitEnv('SESSION_CONTENT_RATE_LIMIT_MAX', 30),
@@ -544,41 +549,35 @@ export async function sessionRoutes(
         });
       }
 
+      // Path already validated by findSessionJsonl -> safeExistsSync; store for
+      // error logging further down.
       const jsonlPath = sanitizePath(rawJsonlPath, getClaudeProjectsDir());
 
       try {
-        // Avoid TOCTOU (js/file-system-race): open atomically, then fstat + read
-        // from the same fd to prevent race between stat and read.
-        let fd: number;
+        // Safe atomic read: sanitises path, opens with O_RDONLY|O_NOFOLLOW,
+        // fstats for size, reads from same fd — prevents both path injection
+        // (js/path-injection) and TOCTOU races (js/file-system-race).
+        let result: { content: string; size: number };
         try {
-          fd = openSync(jsonlPath, constants.O_RDONLY | constants.O_NOFOLLOW);
-        } catch (openErr) {
-          const nodeErr = openErr as NodeJS.ErrnoException;
+          result = safeReadFileAtomic(jsonlPath, getClaudeProjectsDir(), MAX_JSONL_FILE_SIZE);
+        } catch (readErr) {
+          const nodeErr = readErr as NodeJS.ErrnoException & { code?: string };
           if (nodeErr.code === 'ENOENT') {
             return reply.status(404).send({
               error: `JSONL file for session '${claudeSessionId}' was removed`,
               code: 'SESSION_CONTENT_NOT_FOUND',
             });
           }
-          throw openErr;
-        }
-
-        let raw: string;
-        try {
-          const stat = fstatSync(fd);
-          if (stat.size > MAX_JSONL_FILE_SIZE) {
-            closeSync(fd);
+          if (nodeErr.code === 'FILE_TOO_LARGE') {
             return reply.status(413).send({
               error: 'Session JSONL file too large (> 100 MB)',
               code: 'CONTENT_TOO_LARGE',
             });
           }
-          const buffer = Buffer.alloc(stat.size);
-          const bytesRead = readSync(fd, buffer, 0, stat.size, 0);
-          raw = buffer.subarray(0, bytesRead).toString('utf-8');
-        } finally {
-          closeSync(fd);
+          throw readErr;
         }
+
+        const raw = result.content;
 
         const lines = raw.split('\n').filter((line) => line.trim().length > 0);
 
@@ -737,9 +736,11 @@ export async function sessionRoutes(
       if (forkAtIndex !== undefined && forkAtIndex >= 0 && safeResumeSessionId) {
         const rawParentJsonlPath = findSessionJsonl(safeResumeSessionId, safeProjectPath);
         if (rawParentJsonlPath) {
-          // Security: validate resolved JSONL path before fs access (js/path-injection)
-          const parentJsonlPath = sanitizePath(rawParentJsonlPath, getClaudeProjectsDir());
-          const raw = readFileSync(parentJsonlPath, 'utf-8');
+          // Security: use safe wrappers that sanitise + validate before fs access
+          // to prevent path injection (js/path-injection).
+          const projectsDir = getClaudeProjectsDir();
+          const parentJsonlPath = sanitizePath(rawParentJsonlPath, projectsDir);
+          const raw = safeReadFileSync(parentJsonlPath, projectsDir);
           const allLines = raw.split('\n').filter((l) => l.trim());
 
           // Count parsed messages to determine where to truncate
@@ -759,11 +760,8 @@ export async function sessionRoutes(
 
           // Write truncated JSONL next to parent — validate output path too
           const dir = dirname(parentJsonlPath);
-          const newJsonlPath = sanitizePath(
-            join(dir, `${safeCpSessionId}.jsonl`),
-            getClaudeProjectsDir(),
-          );
-          writeFileSync(newJsonlPath, `${truncatedLines.join('\n')}\n`);
+          const newJsonlPath = sanitizePath(join(dir, `${safeCpSessionId}.jsonl`), projectsDir);
+          safeWriteFileSync(newJsonlPath, projectsDir, `${truncatedLines.join('\n')}\n`);
 
           // Resume from the truncated copy (which uses the CP session ID)
           effectiveResumeSessionId = safeCpSessionId;
@@ -1299,8 +1297,9 @@ function findSessionJsonl(claudeSessionId: string, projectPath?: string): string
     const encoded = projectPath.replace(/\//g, '-');
 
     // Direct: ~/.claude/projects/<encoded>/<sessionId>.jsonl
-    const directPath = sanitizePath(join(projectsDir, encoded, fileName), projectsDir);
-    if (existsSync(directPath)) {
+    // Use safeExistsSync to sanitise + check in one step (js/path-injection).
+    const directPath = safeExistsSync(join(projectsDir, encoded, fileName), projectsDir);
+    if (directPath) {
       return directPath;
     }
 
@@ -1308,8 +1307,8 @@ function findSessionJsonl(claudeSessionId: string, projectPath?: string): string
     const encodedRest = projectPath.startsWith('/')
       ? projectPath.slice(1).replace(/\//g, '-')
       : projectPath.replace(/\//g, '-');
-    const nestedPath = sanitizePath(join(projectsDir, '-', encodedRest, fileName), projectsDir);
-    if (existsSync(nestedPath)) {
+    const nestedPath = safeExistsSync(join(projectsDir, '-', encodedRest, fileName), projectsDir);
+    if (nestedPath) {
       return nestedPath;
     }
   }
@@ -1338,8 +1337,9 @@ function searchForJsonl(
     return null;
   }
 
-  const directPath = sanitizePath(join(safeDir, fileName), projectsDir);
-  if (existsSync(directPath)) {
+  // Use safeExistsSync to sanitise + check in one step (js/path-injection).
+  const directPath = safeExistsSync(join(safeDir, fileName), projectsDir);
+  if (directPath) {
     return directPath;
   }
 

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@agentctl/shared": "workspace:*",
+    "@fastify/rate-limit": "^10.0.0",
     "@fastify/websocket": "^11.0.0",
     "fastify": "^5.8.1",
     "node-pty": "^1.1.0",
