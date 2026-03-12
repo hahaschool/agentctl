@@ -75,14 +75,20 @@ function truncateId(id: string, length = 12): string {
 type SessionCardProps = {
   item: SessionBrowserItem;
   onPress?: (item: SessionBrowserItem) => void;
+  onLongPress?: (item: SessionBrowserItem) => void;
 };
 
-export function SessionCard({ item, onPress }: SessionCardProps): React.JSX.Element {
+export function SessionCard({ item, onPress, onLongPress }: SessionCardProps): React.JSX.Element {
   const duration = formatDuration(item.startedAt, item.lastActivityAt);
   const runtimeIcon = RUNTIME_ICONS[item.runtime] ?? '\u25CF';
 
   return (
-    <TouchableOpacity style={styles.card} onPress={() => onPress?.(item)} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => onPress?.(item)}
+      onLongPress={() => onLongPress?.(item)}
+      activeOpacity={0.7}
+    >
       <View style={styles.header}>
         <View style={styles.badgeRow}>
           <View style={styles.agentTypeBadge}>

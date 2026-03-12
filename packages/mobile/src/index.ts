@@ -21,6 +21,14 @@ export type {
 } from './screens/scheduler-presenter.js';
 export { SchedulerPresenter } from './screens/scheduler-presenter.js';
 export type {
+  ReplayMessage,
+  SessionStreamMode,
+  SessionStreamPresenterConfig,
+  SessionStreamState,
+  StreamLine,
+} from './screens/session-stream-presenter.js';
+export { SessionStreamPresenter } from './screens/session-stream-presenter.js';
+export type {
   ApiClientConfig,
   AuditAction,
   AuditQueryParams,
