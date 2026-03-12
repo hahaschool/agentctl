@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§10.4 Context Bridge PR #97; CodeQL security PRs #98-99, #106; §12 Environment Isolation PRs #100-105; git discipline rules in CLAUDE.md)
+> Last updated: 2026-03-12 (§10.5 Intelligence Layer PRs #111-113; §10.4 Context Bridge PR #97; CodeQL security PRs #98-99, #106, #115; §12 Environment Isolation PRs #100-105)
 
 ## Current State
 
@@ -871,10 +871,10 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 > Four capabilities: smart routing (weighted scoring with historical performance), LLM-based task
 > auto-decomposition, outcome learning (sliding-window feedback loop), and priority-based notification routing.
 
-- [ ] Smart Routing: capability match + load + cost + historical success scoring → ranked candidate selection (Phase 5a)
-- [ ] Auto-Decompose: LLM-based natural-language task → TaskGraph with DAG validation (Phase 5b)
-- [ ] Outcome Learning: sliding-window stats from task completions → refine routing scores + approval timeouts (Phase 5c)
-- [ ] Notification Routing: priority classification + per-user channel preferences + quiet hours (Phase 5d)
+- [x] Smart Routing: capability match + load + cost + historical success scoring → ranked candidate selection (Phase 5a) — PR #113
+- [x] Auto-Decompose: LLM-based natural-language task → TaskGraph with DAG validation (Phase 5b) — PR #111
+- [x] Outcome Learning: sliding-window stats from task completions → refine routing scores + approval timeouts (Phase 5c) — PR #113
+- [x] Notification Routing: priority classification + per-user channel preferences + quiet hours (Phase 5d) — PR #112
 
 ---
 
@@ -973,7 +973,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P2** | ~~Multi-Agent Communication~~ | 10.2 | ✅ Delivered — outbox + NATS + WS gateway + approvals (PR #95) |
 | **P2** | ~~Task Graph + Fleet~~ | 10.3 | ✅ Delivered — DAG engine + leases + BullMQ executor (PR #94) |
 | **P3** | ~~Context Bridge~~ | 10.4 | ✅ Delivered — cross-space context mobility, 4 modes (PR #97) |
-| **P3** | Intelligence Layer | 10.5 | In progress — 3 parallel agents implementing phases 5a-5d |
+| **P3** | ~~Intelligence Layer~~ | 10.5 | ✅ Delivered — smart routing, auto-decompose, outcome learning, notifications (PRs #111-113) |
 | **—** | ~~Security: CodeQL Path Injection~~ | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
 | **P1** | ~~Environment Isolation: De-Hardcode Ports~~ | 12.0 | ✅ Delivered — env var config for all ports (PR #103) |
 | **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
