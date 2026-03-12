@@ -61,6 +61,7 @@ AgentCTL is a unified control plane for remotely orchestrating AI coding agents 
 agentctl/
 ├── CLAUDE.md                    # This file
 ├── .claude/rules/               # Agent-specific rules with trigger-based loading hints
+│   ├── git-discipline.md        # always-on: worktree isolation, clean-main, PR-only merges
 │   ├── security.md              # always-on: secrets, docker, SQL injection guardrails
 │   ├── error-handling.md        # always-on: typed errors, async handling, logging
 │   └── code-style.md            # on-demand: TS style, naming, testing conventions
@@ -117,9 +118,170 @@ agentctl/
 - **Formatting**: Biome (replaces ESLint + Prettier)
 - **Testing**: Vitest for unit, Playwright for E2E
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`)
-- **Branches**: `main` (stable), `dev` (integration), `codex/<topic>` (agent-authored work)
 - **Error handling**: Always use typed errors with error codes, never bare `throw new Error()`
 - **Logging**: Structured JSON via pino, include `agentId`, `machineId`, `taskId` in every log
+
+## Multi-Agent Development Workflow (MANDATORY)
+
+All AI agents (Claude Code, Codex, or any future agent) MUST follow these rules. No exceptions.
+
+### Rule 1: Main Is Sacred
+
+**NEVER write directly to `main`.** Main must always be clean, buildable, and testable. A dirty main breaks the local dev environment for the human operator and every other running agent.
+
+- No `git commit` on main. No `git cherry-pick` onto main. No `git merge` into main from an agent session.
+- The ONLY way code reaches main is through a **Pull Request** that passes CI (build + lint + test).
+- If you find yourself on main, create a branch IMMEDIATELY before making any changes:
+  ```bash
+  git checkout -b agent/<id>/<type>/<topic>  # e.g. agent/claude-1/feat/auth-flow
+  ```
+
+### Rule 2: Worktree Isolation
+
+Every agent session that writes code MUST run in its own git worktree. This provides filesystem-level isolation — each agent has its own working directory and branch.
+
+```bash
+# Preferred: Claude Code native worktree
+claude --worktree <name>
+
+# Manual: create worktree for an agent task
+git worktree add .trees/<name> -b agent/<id>/<type>/<topic>
+
+# Subagent frontmatter (for dispatched agents):
+# isolation: worktree
+```
+
+**Read-only tasks** (code review, research, analysis) MAY run on main since they don't write.
+
+**Runtime isolation caveat:** Worktrees isolate files, NOT ports/databases/Docker. If two agents need to run dev servers simultaneously, use different ports or separate database instances.
+
+### Rule 3: Branch Naming Convention
+
+```
+agent/<agent-id>/<type>/<topic>
+
+Examples:
+  agent/claude-1/feat/collaboration-api
+  agent/codex-2/fix/event-store-race
+  agent/claude-3/refactor/session-types
+  agent/codex-1/docs/api-reference
+```
+
+- `<agent-id>`: identifies which agent session created the branch (e.g., `claude-1`, `codex-2`)
+- `<type>`: conventional commit type (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`)
+- `<topic>`: kebab-case description of the work
+- Agent branches ALWAYS branch FROM `main`. Never from another agent's branch (prevents cascading dependency chains).
+
+### Rule 4: PR-Based Merge Flow
+
+All code enters main through Pull Requests:
+
+```
+Agent works in worktree → commits → pushes branch → opens PR → CI passes → merge
+```
+
+1. **Agent creates PR** after completing work: `gh pr create --base main`
+2. **CI must pass**: build, lint, and test suite (enforced by branch protection)
+3. **Squash merge** to keep main history linear and bisectable
+4. **Delete branch** after merge: `gh pr merge --squash --delete-branch`
+
+### Rule 5: Merge Serialization (One Agent Merges at a Time)
+
+**Only ONE agent may merge PRs into main at any given time.** This prevents the classic race: PR A passes CI, PR B passes CI, but A+B together break main.
+
+**Protocol:**
+1. Before merging, the designated integrator agent checks for other in-flight merges
+2. Merge one PR, wait for main CI to pass
+3. All other agents with pending PRs must rebase onto the updated main before their merge:
+   ```bash
+   git fetch origin
+   git rebase origin/main
+   # resolve conflicts if any, then force-push the branch
+   git push --force-with-lease
+   ```
+4. Proceed to the next PR only after the previous merge's CI is green
+
+**Who is the integrator?** By default, the human operator decides merge order. If an agent is designated as integrator (e.g., via a task instruction), it must serialize merges and verify CI between each one.
+
+### Rule 6: Conflict Prevention via Task Decomposition
+
+The best way to avoid merge conflicts is to prevent them at task assignment time.
+
+| Condition | Strategy |
+|-----------|----------|
+| Tasks touch different packages | Parallel agents in separate worktrees |
+| Tasks share files | Sequential — one agent finishes first |
+| Read-only tasks (review, research) | Always safe to parallelize |
+| `packages/shared/` changes | **Do these FIRST**, merge to main, then other agents rebase |
+
+**The shared package rule:** `packages/shared/` is imported by every other package. Changes to shared types MUST be merged to main before any agent working on dependent packages starts. This prevents every downstream agent from hitting conflicts.
+
+**Before dispatching parallel agents, list ALL files each task will touch.** If two tasks share ANY file, they must run sequentially.
+
+### Rule 7: Rebase Cadence
+
+Stale branches cause painful merges. Keep branches fresh:
+
+- **Before starting work**: `git fetch origin && git rebase origin/main`
+- **Sessions > 1 hour**: rebase every 30-60 minutes
+- **Before opening a PR**: always rebase onto latest main
+- **If rebase conflicts are complex**: `git rebase --abort && git merge origin/main` (merge commit is acceptable as a fallback)
+
+### Rule 8: Clean State After Every Commit
+
+Every commit must leave the codebase in a state where another agent could pick up the work:
+
+- `pnpm build` passes (no type errors)
+- `pnpm lint` passes (no Biome errors)
+- All existing tests still pass
+- Commit message follows Conventional Commits and describes the "why"
+- Push to remote after every logical commit — the remote is the source of truth
+
+### Rule 9: Worktree Cleanup
+
+Stale worktrees waste disk and create confusion:
+
+```bash
+# After PR is merged, remove the worktree
+git worktree remove .trees/<name>
+
+# Prune any stale worktree references
+git worktree prune
+
+# List all active worktrees
+git worktree list
+```
+
+Agents MUST clean up their worktree after their PR is merged. Never leave orphaned worktrees.
+
+### Rule 10: Cross-Machine Workflow
+
+Worktrees embed absolute paths and cannot be copied between machines. The pattern for cross-machine handoff:
+
+```bash
+# Machine A (agent finishes):
+git push origin agent/claude-1/feat/auth
+
+# Machine B (pick up the work):
+git fetch origin
+git worktree add .trees/auth-review agent/claude-1/feat/auth
+```
+
+### Quick Reference: What Agents Can and Cannot Do
+
+| Action | Allowed? |
+|--------|----------|
+| Read files on main | Yes |
+| Run tests on main | Yes |
+| Commit to main | **NO — NEVER** |
+| Create a branch from main | Yes (in a worktree) |
+| Push a feature branch | Yes |
+| Open a PR | Yes |
+| Merge a PR (if designated integrator) | Yes, one at a time |
+| Force-push to a feature branch | Yes (`--force-with-lease` only) |
+| Force-push to main | **NO — NEVER** |
+| Delete a feature branch after merge | Yes |
+| Rebase a feature branch on main | Yes (recommended frequently) |
 
 ## Key Design Decisions
 
