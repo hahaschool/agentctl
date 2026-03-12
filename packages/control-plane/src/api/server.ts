@@ -16,7 +16,11 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import { EventStore } from '../collaboration/event-store.js';
 import { SpaceStore } from '../collaboration/space-store.js';
+import { TaskGraphStore } from '../collaboration/task-graph-store.js';
+import { TaskRunStore } from '../collaboration/task-run-store.js';
 import { ThreadStore } from '../collaboration/thread-store.js';
+import { WorkerLeaseStore } from '../collaboration/worker-lease-store.js';
+import { WorkerNodeStore } from '../collaboration/worker-node-store.js';
 import type { Database } from '../db/index.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
@@ -79,8 +83,11 @@ import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
+import { taskGraphRoutes } from './routes/task-graphs.js';
+import { taskRunRoutes } from './routes/task-runs.js';
 import { terminalProxyRoutes } from './routes/terminal.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { workerNodeRoutes } from './routes/worker-nodes.js';
 import { wsRoutes } from './routes/ws.js';
 
 type CreateServerOptions = {
@@ -548,6 +555,30 @@ export async function createServer({
       spaceStore,
       threadStore,
       eventStore,
+    });
+
+    // Task Graph + Fleet routes (§10.3)
+    const taskGraphStore = new TaskGraphStore(db, logger);
+    const taskRunStore = new TaskRunStore(db, logger);
+    const workerNodeStore = new WorkerNodeStore(db, logger);
+    const workerLeaseStore = new WorkerLeaseStore(db, logger);
+
+    await app.register(taskGraphRoutes, {
+      prefix: '/api/task-graphs',
+      taskGraphStore,
+      taskRunStore,
+    });
+
+    await app.register(taskRunRoutes, {
+      prefix: '/api/task-runs',
+      taskRunStore,
+      workerLeaseStore,
+    });
+
+    await app.register(workerNodeRoutes, {
+      prefix: '/api/fleet/nodes',
+      workerNodeStore,
+      taskRunStore,
     });
   }
 
