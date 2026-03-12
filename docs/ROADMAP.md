@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (§9 fully complete: MCP picker + default prompt UI (PR #82), run timeline visualization (PR #83), cron failure alerting (PR #84); prior: §9.1-9.6 core fixes (PRs #78-#81), §4.8 backend, §8 deploy)
+> Last updated: 2026-03-12 (PR #85 merged: code quality fixes; §11 UX fixes in progress: 5 parallel agents working on §11.1-11.7; Codex GPT-5.4 design review incorporated into §10 collaboration docs)
 
 ## Current State
 
@@ -926,13 +926,13 @@ Smart routing, auto-composition, and learning.
 | **P1** | ~~Cost Tracking Display Fix~~ | 9.4 | ✅ Delivered — sdk-runner + frontend field mismatch (PR #79) |
 | **P1** | ~~Cron UX Improvements~~ | 9.5 | ✅ Delivered — visual cron builder + next runs (PR #81) |
 | **P2** | ~~Agent Execution History Improvements~~ | 9.6 | ✅ Delivered — grouped by date, filters, stats (PR #81) |
-| **P0** | Start Button Ignores defaultPrompt | 11.1 | Not started — frontend blocks empty prompt |
-| **P0** | MCP Auto-Detection & Managed Config | 11.6 | Not started — manual form is unusable |
-| **P0** | Agent Settings Redesign (Tabbed) | 11.7 | Not started — dialog too long, needs full-page tabbed view |
-| **P1** | Agent Header Overflow | 11.2 | Not started — CSS truncation |
-| **P1** | Cost Display Still $0.00 | 11.3 | Not started — investigate DB values |
-| **P1** | Run History Bar Redesign | 11.4 | Not started — replace with mini chart |
-| **P1** | Execution History ↔ Session Linkage | 11.5 | Not started — no cross-reference |
+| **P0** | Start Button Ignores defaultPrompt | 11.1 | In progress — agent working in worktree |
+| **P0** | MCP Auto-Detection & Managed Config | 11.6 | In progress — agent working in worktree |
+| **P0** | Agent Settings Redesign (Tabbed) | 11.7 | In progress — agent working in worktree |
+| **P1** | Agent Header Overflow | 11.2 | In progress — agent working in worktree (with §11.1) |
+| **P1** | Cost Display Still $0.00 | 11.3 | In progress — agent investigating cost pipeline |
+| **P1** | Run History Bar Redesign | 11.4 | In progress — agent working in worktree |
+| **P1** | Execution History ↔ Session Linkage | 11.5 | In progress — agent working in worktree (with §11.4) |
 | **P1** | Multi-Agent Collaboration Phase 1 | 10.1 | In progress — shared types + DB + routes + web UI |
 | **P2** | Multi-Agent Communication | 10.2 | Not started — Agent Bus + delegation |
 | **P2** | Task Graph + Fleet | 10.3 | Not started — DAG engine + approval gates |
@@ -1047,7 +1047,11 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Delivered | 4.8 |
 | [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Delivered | 4.8 |
 
-| [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Draft | — |
+| [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Draft | 10.1-10.5 |
+| [multi-agent-collaboration-phase1-impl-plan](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md) | Draft | 10.1 |
+| [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | In Progress | 11.1-11.7 |
+| [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
+| [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
 ### Knowledge Engineering
 - [Agent 知识工程实践 (stonepage)](https://zhuanlan.zhihu.com/p/1898602837) — Knowledge types, layered loading, dreaming/synthesis, meta-cognition
