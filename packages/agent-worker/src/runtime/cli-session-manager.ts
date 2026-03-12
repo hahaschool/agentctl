@@ -524,6 +524,11 @@ export class CliSessionManager extends EventEmitter {
       '--model',
       model,
       '--verbose',
+      // Explicitly pass --cwd so the CLI discovers CLAUDE.md and
+      // .claude/ project instructions from the correct project root,
+      // even when the process-level cwd alone is insufficient.
+      '--cwd',
+      options.projectPath,
     ];
 
     // Resume previous session

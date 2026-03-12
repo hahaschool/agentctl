@@ -140,6 +140,8 @@ describe('CliSessionManager', () => {
       expect(args).toContain('--model');
       expect(args).toContain('sonnet');
       expect(args).toContain('--verbose');
+      expect(args).toContain('--cwd');
+      expect(args).toContain('/tmp/project');
       expect(opts.cwd).toBe('/tmp/project');
     });
 
