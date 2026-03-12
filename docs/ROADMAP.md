@@ -249,7 +249,7 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 - [x] PM2 ecosystem config for Codex-capable worker processes
 - [x] Azure OpenAI credential detection for Codex authentication
 - [x] Config renderer: `modelProvider`, `reasoningEffort`, and shell environment policy in Codex TOML
-- [ ] Sandbox constraints end-to-end: config rendering and network-policy helpers exist, but full bubblewrap/Seatbelt parity is not yet evidenced here
+- [x] Sandbox constraints end-to-end: post-spawn verification (bubblewrap/Seatbelt/Codex), network enforcement, SSE `sandbox_verified` event *(PR #70)*
 
 ### 3.5 Automatic Handoff Triggers — P2
 
@@ -655,7 +655,7 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
-| **P2** | Codex Operational Parity | 3.4 | Partial — sandbox constraint enforcement delivered (PR #61); full bubblewrap/Seatbelt parity evidence remains |
+| **P2** | ~~Codex Operational Parity~~ | 3.4 | ✅ Delivered — sandbox enforcement (PR #61) + verification evidence (PR #70) |
 | **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
