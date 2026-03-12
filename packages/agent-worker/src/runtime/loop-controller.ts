@@ -13,6 +13,9 @@ const MIN_ITERATION_DELAY_MS = 500;
 /** Default delay between loop iterations (milliseconds). */
 const DEFAULT_ITERATION_DELAY_MS = 1_000;
 
+/** Maximum allowed delay between loop iterations (milliseconds). */
+const MAX_ITERATION_DELAY_MS = 86_400_000;
+
 /** Number of consecutive identical results before dead-loop detection triggers. */
 const DEAD_LOOP_THRESHOLD = 3;
 
@@ -380,11 +383,19 @@ export class LoopController extends EventEmitter {
       );
     }
 
-    if (config.iterationDelayMs != null && config.iterationDelayMs < MIN_ITERATION_DELAY_MS) {
+    if (
+      config.iterationDelayMs != null &&
+      (config.iterationDelayMs < MIN_ITERATION_DELAY_MS ||
+        config.iterationDelayMs > MAX_ITERATION_DELAY_MS)
+    ) {
       throw new AgentError(
         'LOOP_INVALID_DELAY',
-        `iterationDelayMs must be >= ${MIN_ITERATION_DELAY_MS}ms, got ${config.iterationDelayMs}ms`,
-        { iterationDelayMs: config.iterationDelayMs, minimum: MIN_ITERATION_DELAY_MS },
+        `iterationDelayMs must be between ${MIN_ITERATION_DELAY_MS}ms and ${MAX_ITERATION_DELAY_MS}ms, got ${config.iterationDelayMs}ms`,
+        {
+          iterationDelayMs: config.iterationDelayMs,
+          minimum: MIN_ITERATION_DELAY_MS,
+          maximum: MAX_ITERATION_DELAY_MS,
+        },
       );
     }
 

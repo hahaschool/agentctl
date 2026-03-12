@@ -8,6 +8,8 @@ import type { AuditEntry } from './audit-logger.js';
 
 const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH_SIZE = 100;
+const MAX_AUDIT_BYTES_PER_FLUSH = 1024 * 1024;
+const INSECURE_AUDIT_PERMISSION_MASK = 0o022;
 
 type AuditActionPayload = {
   actionType: string;
@@ -137,54 +139,76 @@ export class AuditReporter {
         return;
       }
 
-      const newBytes = fileSize - this.byteOffset;
-      const buffer = Buffer.alloc(newBytes);
       // Security: use O_NOFOLLOW to prevent symlink attacks on predictable audit
       // file paths (js/insecure-temporary-file). This ensures we only read the
       // actual audit file and not a symlink planted by an attacker.
       const handle = await open(this.auditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
 
       try {
-        await handle.read(buffer, 0, newBytes, this.byteOffset);
+        const info = await handle.stat();
+        this.assertSecureAuditFile(info);
+
+        if (info.size <= this.byteOffset) {
+          return;
+        }
+
+        const unreadBytes = info.size - this.byteOffset;
+        const bytesToRead = Math.min(unreadBytes, MAX_AUDIT_BYTES_PER_FLUSH);
+        const buffer = Buffer.alloc(bytesToRead);
+        const { bytesRead } = await handle.read(buffer, 0, bytesToRead, this.byteOffset);
+
+        if (bytesRead === 0) {
+          return;
+        }
+
+        const chunk = buffer.subarray(0, bytesRead).toString('utf-8');
+        const lastNewlineIndex = chunk.lastIndexOf('\n');
+
+        if (lastNewlineIndex === -1) {
+          if (unreadBytes > MAX_AUDIT_BYTES_PER_FLUSH) {
+            this.byteOffset += bytesRead;
+            this.log.warn(
+              { bytesSkipped: bytesRead, byteOffset: this.byteOffset },
+              'Skipping oversized audit segment without newline',
+            );
+          }
+          return;
+        }
+
+        const completeChunk = chunk.slice(0, lastNewlineIndex + 1);
+        const lines = completeChunk.split('\n').filter((line) => line.trim().length > 0);
+
+        if (lines.length === 0) {
+          this.byteOffset += Buffer.byteLength(completeChunk, 'utf-8');
+          return;
+        }
+
+        const actions: AuditActionPayload[] = [];
+
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line) as AuditEntry;
+            actions.push(toActionPayload(entry));
+          } catch {
+            this.log.warn({ lineSnippet: line.slice(0, 80) }, 'Skipping malformed audit line');
+          }
+        }
+
+        // Send in batches respecting MAX_BATCH_SIZE
+        for (let i = 0; i < actions.length; i += MAX_BATCH_SIZE) {
+          const batch = actions.slice(i, i + MAX_BATCH_SIZE);
+          await this.sendBatch(batch);
+        }
+
+        this.byteOffset += Buffer.byteLength(completeChunk, 'utf-8');
+
+        this.log.debug(
+          { actionsSent: actions.length, byteOffset: this.byteOffset },
+          'Audit entries flushed',
+        );
       } finally {
         await handle.close();
       }
-
-      const chunk = buffer.toString('utf-8');
-      const lines = chunk.split('\n').filter((line) => line.trim().length > 0);
-
-      if (lines.length === 0) {
-        this.byteOffset = fileSize;
-        return;
-      }
-
-      const actions: AuditActionPayload[] = [];
-      let parsedBytes = 0;
-
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line) as AuditEntry;
-          actions.push(toActionPayload(entry));
-          // +1 for the newline character
-          parsedBytes += Buffer.byteLength(line, 'utf-8') + 1;
-        } catch {
-          this.log.warn({ lineSnippet: line.slice(0, 80) }, 'Skipping malformed audit line');
-          parsedBytes += Buffer.byteLength(line, 'utf-8') + 1;
-        }
-      }
-
-      // Send in batches respecting MAX_BATCH_SIZE
-      for (let i = 0; i < actions.length; i += MAX_BATCH_SIZE) {
-        const batch = actions.slice(i, i + MAX_BATCH_SIZE);
-        await this.sendBatch(batch);
-      }
-
-      this.byteOffset += parsedBytes;
-
-      this.log.debug(
-        { actionsSent: actions.length, byteOffset: this.byteOffset },
-        'Audit entries flushed',
-      );
     } finally {
       this.isFlushing = false;
     }
@@ -244,6 +268,24 @@ export class AuditReporter {
       throw new WorkerError('AUDIT_STAT_FAILED', `Failed to stat audit file: ${nodeErr.message}`, {
         path: this.auditFilePath,
       });
+    }
+  }
+
+  private assertSecureAuditFile(info: { mode: number; isFile: () => boolean }): void {
+    if (!info.isFile()) {
+      throw new WorkerError(
+        'AUDIT_INVALID_FILE_TYPE',
+        'Audit file path must resolve to a regular file',
+        { path: this.auditFilePath },
+      );
+    }
+
+    if ((info.mode & INSECURE_AUDIT_PERMISSION_MASK) !== 0) {
+      throw new WorkerError(
+        'AUDIT_INSECURE_PERMISSIONS',
+        'Audit file permissions allow group or other writes',
+        { path: this.auditFilePath, mode: info.mode },
+      );
     }
   }
 }

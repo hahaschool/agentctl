@@ -14,13 +14,13 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { writeFileSync } from 'node:fs';
 import { normalize, join as pathJoin, resolve as resolvePath } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeWriteFileSync,
   sanitizePath,
 } from '../utils/path-security.js';
 
@@ -148,6 +148,7 @@ const STALE_SESSION_THRESHOLD_MS = Number(process.env.STALE_SESSION_THRESHOLD_MS
 const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
 const GRACEFUL_KILL_TIMEOUT_MS = 5_000; // Wait 5s after SIGTERM before SIGKILL
 const STARTUP_WATCHDOG_MS = Number(process.env.STARTUP_WATCHDOG_MS) || 30_000; // Warn if no output within 30s of start
+const MAX_STDOUT_LINE_BUFFER_CHARS = 64 * 1024;
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -207,6 +208,18 @@ export class CliSessionManager extends EventEmitter {
     // Clean up old finished sessions to prevent memory leaks
     this.cleanupStaleSessions();
 
+    const sanitizedCwd = resolvePath(normalize(options.projectPath));
+    const deniedSegment = findDeniedPathSegment(sanitizedCwd, DEFAULT_DENIED_PATH_SEGMENTS);
+    if (deniedSegment) {
+      throw new AgentError(
+        'INVALID_PATH',
+        `Project path contains denied segment "${deniedSegment}"`,
+        {
+          projectPath: sanitizedCwd,
+        },
+      );
+    }
+
     this.sessionCounter++;
     const id = `cli-${Date.now()}-${this.sessionCounter}`;
     const model = options.model ?? DEFAULT_MODEL;
@@ -216,7 +229,7 @@ export class CliSessionManager extends EventEmitter {
       id,
       claudeSessionId: options.resumeSessionId ?? null,
       agentId: options.agentId,
-      projectPath: options.projectPath,
+      projectPath: sanitizedCwd,
       status: 'starting',
       model,
       pid: null,
@@ -231,33 +244,17 @@ export class CliSessionManager extends EventEmitter {
     this.sessions.set(id, session);
 
     // Build CLI arguments
-    const args = this.buildCliArgs(options, model);
+    const args = this.buildCliArgs(options, model, sanitizedCwd);
 
     // Build child environment with credential injection
     const childEnv = buildChildEnv(options.accountProvider, options.accountCredential);
-
-    // Security: sanitize projectPath used as cwd to prevent path injection
-    // (js/path-injection). Callers (sessionRoutes) should already validate,
-    // but we apply defense-in-depth here by normalizing and rejecting paths
-    // containing sensitive directory names.
-    const sanitizedCwd = resolvePath(normalize(options.projectPath));
-    const deniedSegment = findDeniedPathSegment(sanitizedCwd, DEFAULT_DENIED_PATH_SEGMENTS);
-    if (deniedSegment) {
-      throw new AgentError(
-        'INVALID_PATH',
-        `Project path contains denied segment "${deniedSegment}"`,
-        {
-          projectPath: sanitizedCwd,
-        },
-      );
-    }
 
     // Write .mcp.json before spawning if MCP servers are configured.
     // Claude Code reads this file at startup to discover available MCP servers.
     if (options.config?.mcpServers && Object.keys(options.config.mcpServers).length > 0) {
       const mcpConfigPath = sanitizePath(pathJoin(sanitizedCwd, '.mcp.json'), sanitizedCwd);
       const mcpPayload = { mcpServers: options.config.mcpServers };
-      writeFileSync(mcpConfigPath, JSON.stringify(mcpPayload, null, 2), 'utf-8');
+      safeWriteFileSync(mcpConfigPath, sanitizedCwd, JSON.stringify(mcpPayload, null, 2));
       this.logger?.debug(
         {
           sessionId: id,
@@ -538,7 +535,11 @@ export class CliSessionManager extends EventEmitter {
   // Private methods
   // -----------------------------------------------------------------------
 
-  private buildCliArgs(options: StartCliSessionOptions, model: string): string[] {
+  private buildCliArgs(
+    options: StartCliSessionOptions,
+    model: string,
+    sanitizedProjectPath: string,
+  ): string[] {
     const args: string[] = [
       '-p',
       options.prompt,
@@ -551,7 +552,7 @@ export class CliSessionManager extends EventEmitter {
       // .claude/ project instructions from the correct project root,
       // even when the process-level cwd alone is insufficient.
       '--cwd',
-      options.projectPath,
+      sanitizedProjectPath,
     ];
 
     // Resume previous session
@@ -621,11 +622,34 @@ export class CliSessionManager extends EventEmitter {
     });
 
     const existing = this.lineBuffers.get(sessionId) ?? '';
+
+    if (!rawText.includes('\n')) {
+      const bounded = appendBoundedLineBuffer(existing, rawText, MAX_STDOUT_LINE_BUFFER_CHARS);
+      this.lineBuffers.set(sessionId, bounded.buffer);
+      if (bounded.truncated) {
+        this.emitSessionEvent({
+          type: 'session_error',
+          sessionId,
+          error: `CLI stdout buffer exceeded ${MAX_STDOUT_LINE_BUFFER_CHARS} chars; truncated incomplete line`,
+        });
+      }
+      return;
+    }
+
     const combined = existing + rawText;
     const lines = combined.split('\n');
 
     // Keep the last incomplete line in the buffer
-    this.lineBuffers.set(sessionId, lines.pop() ?? '');
+    const incompleteLine = lines.pop() ?? '';
+    const boundedIncompleteLine = incompleteLine.slice(-MAX_STDOUT_LINE_BUFFER_CHARS);
+    this.lineBuffers.set(sessionId, boundedIncompleteLine);
+    if (boundedIncompleteLine.length !== incompleteLine.length) {
+      this.emitSessionEvent({
+        type: 'session_error',
+        sessionId,
+        error: `CLI stdout buffer exceeded ${MAX_STDOUT_LINE_BUFFER_CHARS} chars; truncated incomplete line`,
+      });
+    }
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -907,4 +931,25 @@ function extractContentText(content: unknown): string | null {
   }
 
   return null;
+}
+
+function appendBoundedLineBuffer(
+  existing: string,
+  chunk: string,
+  maxChars: number,
+): { buffer: string; truncated: boolean } {
+  if (chunk.length >= maxChars) {
+    return {
+      buffer: chunk.slice(-maxChars),
+      truncated: true,
+    };
+  }
+
+  const remainingExistingChars = Math.max(0, maxChars - chunk.length);
+  const boundedExisting = existing.slice(-remainingExistingChars);
+
+  return {
+    buffer: boundedExisting + chunk,
+    truncated: boundedExisting.length !== existing.length,
+  };
 }
