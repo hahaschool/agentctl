@@ -39,8 +39,8 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
         credentialMasked = maskCredential(
           decryptCredential(r.credential, r.credentialIv, encryptionKey),
         );
-      } catch {
-        // Credential couldn't be decrypted — show fallback
+      } catch (err) {
+        app.log.warn({ accountId: r.id, err }, 'Failed to decrypt credential for account listing');
       }
       return {
         id: r.id,
@@ -72,8 +72,11 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       credentialMasked = maskCredential(
         decryptCredential(row.credential, row.credentialIv, encryptionKey),
       );
-    } catch {
-      // Credential couldn't be decrypted — show fallback
+    } catch (err) {
+      request.log.warn(
+        { accountId: row.id, err },
+        'Failed to decrypt credential for account detail',
+      );
     }
     return reply.send({
       id: row.id,
@@ -228,8 +231,11 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       credentialMasked = maskCredential(
         decryptCredential(updated.credential, updated.credentialIv, encryptionKey),
       );
-    } catch {
-      // Credential couldn't be decrypted — show fallback
+    } catch (err) {
+      request.log.warn(
+        { accountId: updated.id, err },
+        'Failed to decrypt credential after account update',
+      );
     }
     return reply.send({
       id: updated.id,
@@ -286,7 +292,11 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     let credential: string;
     try {
       credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
-    } catch (_err) {
+    } catch (err) {
+      request.log.warn(
+        { accountId: request.params.id, err },
+        'Failed to decrypt credential for account test',
+      );
       return reply.code(500).send({
         error: 'ACCOUNT_TEST_ERROR',
         message: 'Failed to decrypt account credential',
@@ -320,6 +330,10 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
             error: await extractErrorMessage(res),
           });
         } catch (err) {
+          request.log.warn(
+            { accountId: request.params.id, provider: 'anthropic_api', err },
+            'Anthropic API connectivity test failed',
+          );
           return reply.code(500).send({
             error: 'ACCOUNT_TEST_ERROR',
             message: err instanceof Error ? err.message : String(err),
@@ -346,6 +360,10 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
             error: await extractErrorMessage(res),
           });
         } catch (err) {
+          request.log.warn(
+            { accountId: request.params.id, provider: 'openai_api', err },
+            'OpenAI API connectivity test failed',
+          );
           return reply.code(500).send({
             error: 'ACCOUNT_TEST_ERROR',
             message: err instanceof Error ? err.message : String(err),

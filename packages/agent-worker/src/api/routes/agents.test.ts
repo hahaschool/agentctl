@@ -402,9 +402,10 @@ describe('Agent CRUD routes', () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.ok).toBe(true);
+      expect(body.ok).toBe(false);
       expect(body.agentId).toBe('agent-steer');
-      expect(body.accepted).toBe(true);
+      expect(body.accepted).toBe(false);
+      expect(body.reason).toBe('steering not yet implemented for this runtime');
     });
 
     it('returns 400 when message is missing', async () => {

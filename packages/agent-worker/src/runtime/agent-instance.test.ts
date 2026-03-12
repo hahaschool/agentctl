@@ -1513,8 +1513,8 @@ describe('AgentInstance', () => {
 
       const result = await agent.steer('please focus on tests');
 
-      expect(result.accepted).toBe(true);
-      expect(result.reason).toBeUndefined();
+      expect(result.accepted).toBe(false);
+      expect(result.reason).toBe('steering not yet implemented for this runtime');
 
       const steerSent = events.filter((e) => e.event === 'steer_sent');
       expect(steerSent).toHaveLength(1);
@@ -1525,7 +1525,7 @@ describe('AgentInstance', () => {
       const steerAck = events.filter((e) => e.event === 'steer_ack');
       expect(steerAck).toHaveLength(1);
       expect(steerAck[0].data).toMatchObject({
-        accepted: true,
+        accepted: false,
       });
 
       await agent.stop(false);

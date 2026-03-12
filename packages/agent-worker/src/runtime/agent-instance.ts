@@ -545,14 +545,16 @@ export class AgentInstance extends EventEmitter {
 
     // TODO: When the real Claude Agent SDK exposes `streamInput()`, call it
     // here to forward the message into the active session. For now, the steer
-    // is acknowledged but has no effect on the stub simulation.
+    // is not actually forwarded to the runtime.
+
+    const notImplReason = 'steering not yet implemented for this runtime';
 
     this.emitEvent({
       event: 'steer_ack',
-      data: { accepted: true, timestamp },
+      data: { accepted: false, reason: notImplReason, timestamp },
     });
 
-    return { accepted: true };
+    return { accepted: false, reason: notImplReason };
   }
 
   /**

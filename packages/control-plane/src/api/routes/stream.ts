@@ -106,8 +106,8 @@ export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app,
               break;
             }
           }
-        } catch {
-          // Upstream closed or errored — nothing to do except clean up.
+        } catch (err) {
+          request.log.warn({ agentId, err }, 'Upstream SSE stream error during proxy pump');
         } finally {
           if (!raw.destroyed) {
             raw.end();
@@ -121,8 +121,11 @@ export const streamRoutes: FastifyPluginAsync<StreamRoutesOptions> = async (app,
       // When the downstream client disconnects, cancel the upstream reader.
       request.raw.on('close', () => {
         cancelled = true;
-        reader.cancel().catch(() => {
-          // Ignore cancel errors — the stream is already torn down.
+        reader.cancel().catch((err) => {
+          request.log.warn(
+            { agentId, err },
+            'Failed to cancel upstream SSE reader on client disconnect',
+          );
         });
       });
     },
