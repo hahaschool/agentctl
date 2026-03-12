@@ -117,10 +117,7 @@ export class MemoryDecay {
 
       await client.query('COMMIT');
 
-      this.logger.info(
-        { decayed, archived, skipped },
-        'Memory decay cycle complete',
-      );
+      this.logger.info({ decayed, archived, skipped }, 'Memory decay cycle complete');
 
       return { decayed, archived, skipped };
     } catch (error) {
