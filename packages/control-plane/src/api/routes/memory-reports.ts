@@ -208,8 +208,7 @@ async function generateKnowledgeHealth(
 
   // Stale facts (not accessed in 30+ days)
   const staleConditions = [...conditions, `f.accessed_at < NOW() - INTERVAL '30 days'`];
-  const staleWhere =
-    staleConditions.length > 0 ? `WHERE ${staleConditions.join(' AND ')}` : '';
+  const staleWhere = staleConditions.length > 0 ? `WHERE ${staleConditions.join(' AND ')}` : '';
 
   const staleResult = await pool.query<{ cnt: string }>(
     `SELECT COUNT(*)::text AS cnt FROM memory_facts f ${staleWhere}`,
@@ -219,8 +218,7 @@ async function generateKnowledgeHealth(
 
   // Orphan facts (no edges)
   const orphanConditions = [...conditions];
-  const orphanWhere =
-    orphanConditions.length > 0 ? `WHERE ${orphanConditions.join(' AND ')}` : '';
+  const orphanWhere = orphanConditions.length > 0 ? `WHERE ${orphanConditions.join(' AND ')}` : '';
 
   const orphanResult = await pool.query<{ cnt: string }>(
     `SELECT COUNT(*)::text AS cnt
@@ -354,8 +352,7 @@ async function generateActivityDigest(
 
   for (const row of recentResult.rows) {
     const date = row.created_at ? row.created_at.slice(0, 10) : 'unknown';
-    const truncated =
-      row.content.length > 120 ? `${row.content.slice(0, 120)}...` : row.content;
+    const truncated = row.content.length > 120 ? `${row.content.slice(0, 120)}...` : row.content;
     lines.push(`- **[${row.entity_type}]** ${truncated} _(${date}, ${row.scope})_`);
   }
 
@@ -456,10 +453,7 @@ export const memoryReportsRoutes: FastifyPluginAsync<MemoryReportsRoutesOptions>
 
       const resolvedScope = typeof scope === 'string' && scope.length > 0 ? scope : null;
 
-      logger.info(
-        { reportType, scope: resolvedScope, timeRange },
-        'generating memory report',
-      );
+      logger.info({ reportType, scope: resolvedScope, timeRange }, 'generating memory report');
 
       let markdown: string;
       try {
@@ -475,8 +469,12 @@ export const memoryReportsRoutes: FastifyPluginAsync<MemoryReportsRoutesOptions>
             break;
         }
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error during report generation';
-        logger.error({ err, reportType, scope: resolvedScope, timeRange }, 'report generation failed');
+        const message =
+          err instanceof Error ? err.message : 'Unknown error during report generation';
+        logger.error(
+          { err, reportType, scope: resolvedScope, timeRange },
+          'report generation failed',
+        );
         return reply.status(500).send({
           ok: false,
           error: 'REPORT_GENERATION_FAILED',
