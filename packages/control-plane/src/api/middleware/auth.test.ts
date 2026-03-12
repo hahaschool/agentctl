@@ -44,16 +44,15 @@ function buildApp(config: AuthConfig): FastifyInstance {
 // =========================================================================
 
 describe('hashApiKey', () => {
-  it('returns a 64-character lowercase hex string', () => {
+  it('returns a scrypt hash with algorithm, salt, and derived-key segments', () => {
     const hash = hashApiKey('some-key');
-    expect(hash).toHaveLength(64);
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).toMatch(/^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/);
   });
 
-  it('produces consistent output for the same input', () => {
+  it('produces different output for the same input because it uses a random salt', () => {
     const hash1 = hashApiKey('deterministic');
     const hash2 = hashApiKey('deterministic');
-    expect(hash1).toBe(hash2);
+    expect(hash1).not.toBe(hash2);
   });
 
   it('produces different output for different inputs', () => {
@@ -62,10 +61,10 @@ describe('hashApiKey', () => {
     expect(hash1).not.toBe(hash2);
   });
 
-  it('matches native node:crypto SHA-256 output', () => {
+  it('does not return a raw SHA-256 digest', () => {
     const key = 'verify-against-native';
-    const expected = createHash('sha256').update(key).digest('hex');
-    expect(hashApiKey(key)).toBe(expected);
+    const sha256 = createHash('sha256').update(key).digest('hex');
+    expect(hashApiKey(key)).not.toBe(sha256);
   });
 });
 

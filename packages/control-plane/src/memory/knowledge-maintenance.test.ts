@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { join } from 'node:path';
 
@@ -198,11 +198,7 @@ function makeFact(overrides: Partial<Record<string, unknown>> = {}): Record<stri
 const tempDirs: string[] = [];
 
 function makeTempDir(prefix: string): string {
-  const dir = join(
-    os.tmpdir(),
-    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  );
-  mkdirSync(dir, { recursive: true });
+  const dir = mkdtempSync(join(os.tmpdir(), `${prefix}-`));
   tempDirs.push(dir);
   return dir;
 }
@@ -254,6 +250,7 @@ describe('KnowledgeMaintenance', () => {
     });
 
     it('checks file existence without shell parsing when paths contain quotes', async () => {
+      const originalCwd = process.cwd();
       const projectRoot = makeTempDir('knowledge-maintenance-root');
       const relativePath = 'packages/app/file"name.ts';
       const absolutePath = join(projectRoot, relativePath);
@@ -261,20 +258,57 @@ describe('KnowledgeMaintenance', () => {
       mkdirSync(join(projectRoot, 'packages/app'), { recursive: true });
       writeFileSync(absolutePath, 'export const ok = true;\n');
 
-      const maintenance = new KnowledgeMaintenance({
-        pool: makePool() as never,
-        memoryStore: makeMockMemoryStore() as never,
-        logger,
-        projectRoot,
-      });
+      process.chdir(projectRoot);
 
-      await expect(
-        (
-          maintenance as unknown as {
-            fileExists: (path: string) => Promise<boolean>;
-          }
-        ).fileExists(relativePath),
-      ).resolves.toBe(true);
+      try {
+        const maintenance = new KnowledgeMaintenance({
+          pool: makePool() as never,
+          memoryStore: makeMockMemoryStore() as never,
+          logger,
+          projectRoot,
+        });
+
+        await expect(
+          (
+            maintenance as unknown as {
+              fileExists: (path: string) => Promise<boolean>;
+            }
+          ).fileExists(relativePath),
+        ).resolves.toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('refuses project roots outside the current working tree', async () => {
+      const originalCwd = process.cwd();
+      const workspaceRoot = makeTempDir('knowledge-maintenance-workspace');
+      const externalRoot = makeTempDir('knowledge-maintenance-external');
+      const relativePath = 'packages/app/outside.ts';
+
+      mkdirSync(join(externalRoot, 'packages/app'), { recursive: true });
+      writeFileSync(join(externalRoot, relativePath), 'export const outside = true;\n');
+
+      process.chdir(workspaceRoot);
+
+      try {
+        const maintenance = new KnowledgeMaintenance({
+          pool: makePool() as never,
+          memoryStore: makeMockMemoryStore() as never,
+          logger,
+          projectRoot: externalRoot,
+        });
+
+        await expect(
+          (
+            maintenance as unknown as {
+              fileExists: (path: string) => Promise<boolean>;
+            }
+          ).fileExists(relativePath),
+        ).resolves.toBe(false);
+      } finally {
+        process.chdir(originalCwd);
+      }
     });
   });
 
@@ -388,31 +422,38 @@ describe('KnowledgeMaintenance', () => {
     });
 
     it('lists package directories without shell parsing when the project root contains quotes', async () => {
+      const originalCwd = process.cwd();
       const projectRoot = makeTempDir('knowledge-maintenance-"root');
       mkdirSync(join(projectRoot, 'packages/app/src'), { recursive: true });
       mkdirSync(join(projectRoot, 'packages/tool/lib'), { recursive: true });
       mkdirSync(join(projectRoot, 'packages/app/node_modules/cache'), { recursive: true });
       mkdirSync(join(projectRoot, 'packages/tool/dist/output'), { recursive: true });
 
-      const pool = makePool([[{ content: 'See packages/app/src/index.ts', cnt: 1 }]]);
-      const maintenance = new KnowledgeMaintenance({
-        pool: pool as never,
-        memoryStore: makeMockMemoryStore() as never,
-        logger,
-        projectRoot,
-      });
+      process.chdir(projectRoot);
 
-      const result = await maintenance.knowledgeCoverage();
+      try {
+        const pool = makePool([[{ content: 'See packages/app/src/index.ts', cnt: 1 }]]);
+        const maintenance = new KnowledgeMaintenance({
+          pool: pool as never,
+          memoryStore: makeMockMemoryStore() as never,
+          logger,
+          projectRoot,
+        });
 
-      expect(result.totalDirectories).toBeGreaterThan(0);
-      expect(result.covered).toContainEqual({ directory: 'packages/app/src', factCount: 1 });
-      expect(result.gaps).toContainEqual({ directory: 'packages/tool/lib', factCount: 0 });
-      expect(result.gaps).not.toContainEqual(
-        expect.objectContaining({ directory: 'packages/app/node_modules' }),
-      );
-      expect(result.gaps).not.toContainEqual(
-        expect.objectContaining({ directory: 'packages/tool/dist' }),
-      );
+        const result = await maintenance.knowledgeCoverage();
+
+        expect(result.totalDirectories).toBeGreaterThan(0);
+        expect(result.covered).toContainEqual({ directory: 'packages/app/src', factCount: 1 });
+        expect(result.gaps).toContainEqual({ directory: 'packages/tool/lib', factCount: 0 });
+        expect(result.gaps).not.toContainEqual(
+          expect.objectContaining({ directory: 'packages/app/node_modules' }),
+        );
+        expect(result.gaps).not.toContainEqual(
+          expect.objectContaining({ directory: 'packages/tool/dist' }),
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
     });
   });
 
