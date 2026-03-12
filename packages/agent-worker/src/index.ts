@@ -281,15 +281,16 @@ async function main(): Promise<void> {
     ? buildAuditLogFilePath(AUDIT_LOG_DIR, todayDate, WORKER_AUDIT_FILE_TOKEN)
     : null;
 
-  const auditReporter = RUN_ID && auditFilePath
-    ? new AuditReporter({
-        controlPlaneUrl: CONTROL_PLANE_URL,
-        runId: RUN_ID,
-        auditFilePath,
-        logger,
-        flushIntervalMs: AUDIT_FLUSH_INTERVAL_MS,
-      })
-    : null;
+  const auditReporter =
+    RUN_ID && auditFilePath
+      ? new AuditReporter({
+          controlPlaneUrl: CONTROL_PLANE_URL,
+          runId: RUN_ID,
+          auditFilePath,
+          logger,
+          flushIntervalMs: AUDIT_FLUSH_INTERVAL_MS,
+        })
+      : null;
 
   if (auditReporter) {
     auditReporter.start();
