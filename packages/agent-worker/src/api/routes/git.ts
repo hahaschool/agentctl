@@ -11,6 +11,12 @@ import { promisify } from 'node:util';
 import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
+import { DEFAULT_DENIED_PATH_SEGMENTS, findDeniedPathSegment } from '../../utils/path-security.js';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -65,9 +71,6 @@ type GitStatusResponse = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Sensitive path segments that must never appear in a validated git path. */
-const DENIED_GIT_SEGMENTS = ['.ssh', '.gnupg', '.aws', '.env', 'credentials'];
-
 /**
  * Validate that a path string from an HTTP request is safe to use as a
  * git working directory. Rejects path traversal (`..`) and access to
@@ -91,16 +94,13 @@ function validateGitPath(raw: unknown): string {
     throw new WorkerError('INVALID_PATH', 'Path must be absolute', { path: raw });
   }
 
-  // Reject paths that contain sensitive directory names
-  const segments = resolved.split('/');
-  for (const segment of segments) {
-    if (DENIED_GIT_SEGMENTS.includes(segment)) {
-      throw new WorkerError(
-        'INVALID_PATH',
-        `Access to "${segment}" directories is denied for security reasons`,
-        { path: resolved, deniedSegment: segment },
-      );
-    }
+  const deniedSegment = findDeniedPathSegment(resolved, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `Access to "${deniedSegment}" directories is denied for security reasons`,
+      { path: resolved, deniedSegment },
+    );
   }
 
   return resolved;
@@ -206,11 +206,19 @@ function parseWorktreeList(output: string): GitWorktreeEntry[] {
 
 export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions): Promise<void> {
   const { logger } = options;
+  const gitStatusRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('GIT_STATUS_RATE_LIMIT_MAX', 60),
+      readRateLimitEnv('GIT_STATUS_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many git status requests. Try again later.',
+  );
 
   // GET /api/git/status?path=<absolute-path>
   app.get<{ Querystring: { path?: string } }>(
     '/status',
     {
+      preHandler: gitStatusRateLimit,
       schema: {
         querystring: {
           type: 'object',
@@ -222,12 +230,9 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
       },
     },
     async (request, reply) => {
-      // Security: validate and sanitize the path from the HTTP request to
-      // prevent path injection (js/path-injection). validateGitPath rejects
-      // traversal sequences and paths outside allowed directories.
-      let dirPath: string;
+      let validatedDirPath: string;
       try {
-        dirPath = validateGitPath(request.query.path);
+        validatedDirPath = validateGitPath(request.query.path);
       } catch (err) {
         const msg = err instanceof WorkerError ? err.message : 'Invalid path';
         return reply.code(400).send({ error: 'INVALID_PATH', message: msg });
@@ -235,27 +240,27 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
 
       // Validate path exists and is a directory
       try {
-        const stat = statSync(dirPath);
+        const stat = statSync(validatedDirPath);
         if (!stat.isDirectory()) {
           return reply.code(400).send({
             error: 'NOT_A_DIRECTORY',
-            message: `Path '${dirPath}' is not a directory`,
+            message: `Path '${validatedDirPath}' is not a directory`,
           });
         }
       } catch {
         return reply.code(404).send({
           error: 'PATH_NOT_FOUND',
-          message: `Path '${dirPath}' does not exist`,
+          message: `Path '${validatedDirPath}' does not exist`,
         });
       }
 
       // Check if it's a git repository
       try {
-        await runGit(['rev-parse', '--git-dir'], dirPath);
+        await runGit(['rev-parse', '--git-dir'], validatedDirPath);
       } catch {
         return reply.code(400).send({
           error: 'NOT_A_GIT_REPO',
-          message: `Path '${dirPath}' is not inside a git repository`,
+          message: `Path '${validatedDirPath}' is not inside a git repository`,
         });
       }
 
@@ -270,17 +275,18 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
           worktreeResult,
           gitCommonDirResult,
         ] = await Promise.allSettled([
-          runGit(['rev-parse', '--abbrev-ref', 'HEAD'], dirPath),
-          runGit(['rev-parse', '--show-toplevel'], dirPath),
-          runGit(['status', '--porcelain'], dirPath),
-          runGit(['status', '--branch', '--porcelain'], dirPath),
-          runGit(['log', '-1', '--format=%H%n%s%n%an%n%aI'], dirPath),
-          runGit(['worktree', 'list', '--porcelain'], dirPath),
-          runGit(['rev-parse', '--git-common-dir'], dirPath),
+          runGit(['rev-parse', '--abbrev-ref', 'HEAD'], validatedDirPath),
+          runGit(['rev-parse', '--show-toplevel'], validatedDirPath),
+          runGit(['status', '--porcelain'], validatedDirPath),
+          runGit(['status', '--branch', '--porcelain'], validatedDirPath),
+          runGit(['log', '-1', '--format=%H%n%s%n%an%n%aI'], validatedDirPath),
+          runGit(['worktree', 'list', '--porcelain'], validatedDirPath),
+          runGit(['rev-parse', '--git-common-dir'], validatedDirPath),
         ]);
 
         const branch = branchResult.status === 'fulfilled' ? branchResult.value : 'HEAD';
-        const worktreePath = toplevelResult.status === 'fulfilled' ? toplevelResult.value : dirPath;
+        const worktreePath =
+          toplevelResult.status === 'fulfilled' ? toplevelResult.value : validatedDirPath;
 
         // Parse file status
         const porcelain = statusResult.status === 'fulfilled' ? statusResult.value : '';
@@ -348,9 +354,9 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
         return response;
       } catch (err) {
         const errMessage = err instanceof Error ? err.message : String(err);
-        logger.error({ err, path: dirPath }, 'git status failed');
+        logger.error({ err, path: validatedDirPath }, 'git status failed');
         throw new WorkerError('GIT_STATUS_FAILED', `Failed to get git status: ${errMessage}`, {
-          path: dirPath,
+          path: validatedDirPath,
         });
       }
     },

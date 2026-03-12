@@ -243,6 +243,47 @@ describe('Git routes', () => {
   // =========================================================================
 
   describe('GET /api/git/status (validation & errors)', () => {
+    it('returns 429 when repeated status requests exceed the configured limit', async () => {
+      process.env.GIT_STATUS_RATE_LIMIT_MAX = '1';
+      process.env.GIT_STATUS_RATE_LIMIT_WINDOW_MS = '60000';
+
+      await app.close();
+      app = await buildApp();
+
+      vi.mocked(statSync).mockReturnValue(makeStat(true));
+      mockGitCommands({
+        'rev-parse --git-dir': '.git',
+        'rev-parse --abbrev-ref HEAD': 'main',
+        'rev-parse --show-toplevel': '/Users/testuser/project',
+        'status --porcelain': '',
+        'status --branch --porcelain': '## main',
+        'log -1 --format=%H%n%s%n%an%n%aI': 'abc1234567890\ninit\nDev\n2026-03-06T10:00:00Z',
+        'worktree list --porcelain': 'worktree /Users/testuser/project\nbranch refs/heads/main\n',
+        'rev-parse --git-common-dir': '.git',
+      });
+
+      try {
+        const first = await app.inject({
+          method: 'GET',
+          url: '/api/git/status?path=/Users/testuser/project',
+        });
+        const second = await app.inject({
+          method: 'GET',
+          url: '/api/git/status?path=/Users/testuser/project',
+        });
+
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(429);
+        expect(second.json()).toEqual({
+          error: 'Too many git status requests. Try again later.',
+          code: 'RATE_LIMITED',
+        });
+      } finally {
+        delete process.env.GIT_STATUS_RATE_LIMIT_MAX;
+        delete process.env.GIT_STATUS_RATE_LIMIT_WINDOW_MS;
+      }
+    });
+
     it('returns 400 when path query parameter is missing', async () => {
       const res = await app.inject({
         method: 'GET',

@@ -29,7 +29,17 @@ import type {
   CliSessionEvent,
   CliSessionManager,
 } from '../../runtime/cli-session-manager.js';
+import {
+  DEFAULT_DENIED_PATH_SEGMENTS,
+  findDeniedPathSegment,
+  sanitizePath,
+} from '../../utils/path-security.js';
 import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -128,9 +138,6 @@ const SSE_BUFFER_LIMIT = Number(process.env.SSE_BUFFER_LIMIT) || 100;
 // Path security helpers
 // ---------------------------------------------------------------------------
 
-/** Sensitive path segments that must never appear in a resolved project path. */
-const DENIED_PATH_SEGMENTS = ['.ssh', '.gnupg', '.aws', '.env', 'credentials'];
-
 /**
  * Validate a Claude session ID from an HTTP request.
  * Security: session IDs are used as file name components; reject any value
@@ -177,15 +184,13 @@ function validateProjectPath(raw: unknown): string {
     throw new WorkerError('INVALID_PATH', 'Project path must be absolute', { path: raw });
   }
 
-  const segments = resolved.split('/');
-  for (const segment of segments) {
-    if (DENIED_PATH_SEGMENTS.includes(segment)) {
-      throw new WorkerError(
-        'INVALID_PATH',
-        `Access to "${segment}" directories is denied for security reasons`,
-        { path: resolved, deniedSegment: segment },
-      );
-    }
+  const deniedSegment = findDeniedPathSegment(resolved, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `Access to "${deniedSegment}" directories is denied for security reasons`,
+      { path: resolved, deniedSegment },
+    );
   }
 
   return resolved;
@@ -229,44 +234,36 @@ type SessionEventBuffer = {
 // Plugin
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Simple rate limiter for session-creation endpoints (js/missing-rate-limiting)
-// ---------------------------------------------------------------------------
-
-type RateLimitBucket = { count: number; resetAt: number };
-
-function createRateLimiter(
-  maxRequests: number,
-  windowMs: number,
-): {
-  check: (key: string) => boolean;
-} {
-  const buckets = new Map<string, RateLimitBucket>();
-
-  return {
-    check(key: string): boolean {
-      const now = Date.now();
-      const bucket = buckets.get(key);
-
-      if (!bucket || now >= bucket.resetAt) {
-        buckets.set(key, { count: 1, resetAt: now + windowMs });
-        return true;
-      }
-
-      bucket.count++;
-      return bucket.count <= maxRequests;
-    },
-  };
+function getClaudeProjectsDir(): string {
+  return join(homedir(), '.claude', 'projects');
 }
-
-/** Rate limiter: 30 session-creation requests per minute per IP */
-const sessionCreateLimiter = createRateLimiter(30, 60_000);
 
 export async function sessionRoutes(
   app: FastifyInstance,
   options: SessionRouteOptions,
 ): Promise<void> {
   const { sessionManager, machineId, logger, controlPlaneUrl } = options;
+  const sessionContentRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('SESSION_CONTENT_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('SESSION_CONTENT_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many session content requests. Try again later.',
+  );
+  const sessionCreateRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('SESSION_CREATE_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('SESSION_CREATE_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many session creation requests. Try again later.',
+  );
+  const sessionCleanupRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('SESSION_CLEANUP_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('SESSION_CLEANUP_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many cleanup requests. Try again later.',
+  );
 
   // Map worker-internal session IDs to control-plane session IDs
   const cpSessionIdMap = new Map<string, string>();
@@ -497,6 +494,9 @@ export async function sessionRoutes(
 
   app.get<{ Params: ContentParams; Querystring: ContentQuerystring }>(
     '/content/:claudeSessionId',
+    {
+      preHandler: sessionContentRateLimit,
+    },
     async (request, reply) => {
       // Security: validate session ID and project path from HTTP request to
       // prevent path injection (js/path-injection, js/http-to-file-access).
@@ -535,14 +535,16 @@ export async function sessionRoutes(
         }
       }
 
-      const jsonlPath = findSessionJsonl(claudeSessionId, safeProjectPath);
+      const rawJsonlPath = findSessionJsonl(claudeSessionId, safeProjectPath);
 
-      if (!jsonlPath) {
+      if (!rawJsonlPath) {
         return reply.status(404).send({
           error: `JSONL file for session '${claudeSessionId}' not found`,
           code: 'SESSION_CONTENT_NOT_FOUND',
         });
       }
+
+      const jsonlPath = sanitizePath(rawJsonlPath, getClaudeProjectsDir());
 
       try {
         // Avoid TOCTOU (js/file-system-race): open atomically, then fstat + read
@@ -640,16 +642,7 @@ export async function sessionRoutes(
   // POST /cleanup — manually trigger stale session cleanup
   // -----------------------------------------------------------------------
 
-  app.post('/cleanup', async (request, reply) => {
-    // Rate limit cleanup requests (js/missing-rate-limiting)
-    const clientIp = request.ip ?? 'unknown';
-    if (!sessionCreateLimiter.check(clientIp)) {
-      return reply.status(429).send({
-        error: 'Too many requests. Try again later.',
-        code: 'RATE_LIMITED',
-      });
-    }
-
+  app.post('/cleanup', { preHandler: sessionCleanupRateLimit }, async () => {
     const cleaned = sessionManager.cleanupStaleSessions();
     logger.info({ cleaned, machineId }, 'Manual session cleanup executed');
     return { ok: true, cleaned };
@@ -678,217 +671,230 @@ export async function sessionRoutes(
   // POST / — start a new CLI session (dispatched from control plane)
   // -----------------------------------------------------------------------
 
-  app.post<{ Body: CreateSessionBody }>('/', async (request, reply) => {
-    // Rate limit session creation (js/missing-rate-limiting)
-    const clientIp = request.ip ?? 'unknown';
-    if (!sessionCreateLimiter.check(clientIp)) {
-      return reply.status(429).send({
-        error: 'Too many session creation requests. Try again later.',
-        code: 'RATE_LIMITED',
-      });
-    }
-
-    const {
-      sessionId: cpSessionId,
-      agentId,
-      projectPath,
-      model,
-      prompt,
-      resumeSessionId,
-      accountCredential,
-      accountProvider,
-      forkAtIndex,
-      systemPrompt: bodySystemPrompt,
-    } = request.body;
-
-    if (!agentId || typeof agentId !== 'string') {
-      return reply.status(400).send({
-        error: 'A non-empty "agentId" string is required',
-        code: 'INVALID_INPUT',
-      });
-    }
-
-    if (!projectPath || typeof projectPath !== 'string') {
-      return reply.status(400).send({
-        error: 'A non-empty "projectPath" string is required',
-        code: 'INVALID_INPUT',
-      });
-    }
-
-    // Security: validate project path and resume session ID from request body
-    // to prevent path injection (js/path-injection, js/http-to-file-access).
-    let safeProjectPath: string;
-    try {
-      safeProjectPath = validateProjectPath(projectPath);
-    } catch {
-      return reply.status(400).send({ error: 'Invalid project path', code: 'INVALID_INPUT' });
-    }
-
-    let safeResumeSessionId: string | null | undefined = resumeSessionId;
-    if (resumeSessionId) {
-      try {
-        safeResumeSessionId = validateSessionId(resumeSessionId);
-      } catch {
-        return reply
-          .status(400)
-          .send({ error: 'Invalid resume session ID', code: 'INVALID_INPUT' });
-      }
-    }
-
-    // Handle JSONL truncation fork: copy + truncate parent JSONL
-    let effectiveResumeSessionId = safeResumeSessionId;
-
-    if (forkAtIndex !== undefined && forkAtIndex >= 0 && safeResumeSessionId) {
-      const parentJsonlPath = findSessionJsonl(safeResumeSessionId, safeProjectPath);
-      if (parentJsonlPath) {
-        const raw = readFileSync(parentJsonlPath, 'utf-8');
-        const allLines = raw.split('\n').filter((l) => l.trim());
-
-        // Count parsed messages to determine where to truncate
-        let msgCount = 0;
-        const truncatedLines: string[] = [];
-        for (const line of allLines) {
-          try {
-            const parsed = JSON.parse(line);
-            const msgs = parseJsonlEntry(parsed);
-            truncatedLines.push(line);
-            msgCount += msgs.length;
-            if (msgCount > forkAtIndex) break;
-          } catch {
-            truncatedLines.push(line); // Keep unparseable lines
-          }
-        }
-
-        // Write truncated JSONL next to parent
-        const dir = dirname(parentJsonlPath);
-        const newJsonlPath = join(dir, `${cpSessionId}.jsonl`);
-        writeFileSync(newJsonlPath, `${truncatedLines.join('\n')}\n`);
-
-        // Resume from the truncated copy (which uses the CP session ID)
-        effectiveResumeSessionId = cpSessionId;
-        logger.info(
-          {
-            sessionId: cpSessionId,
-            parentJsonlPath,
-            newJsonlPath,
-            forkAtIndex,
-            linesKept: truncatedLines.length,
-          },
-          'Created truncated JSONL fork',
-        );
-      } else {
-        logger.warn(
-          { resumeSessionId: safeResumeSessionId, projectPath: safeProjectPath },
-          'Parent JSONL not found for truncation fork',
-        );
-      }
-    }
-
-    try {
-      const session = sessionManager.startSession({
+  app.post<{ Body: CreateSessionBody }>(
+    '/',
+    {
+      preHandler: sessionCreateRateLimit,
+    },
+    async (request, reply) => {
+      const {
+        sessionId: cpSessionId,
         agentId,
-        projectPath: safeProjectPath,
-        prompt: prompt ?? 'Continue working.',
-        model: model ?? undefined,
-        resumeSessionId: effectiveResumeSessionId ?? undefined,
-        accountCredential: accountCredential ?? undefined,
-        accountProvider: accountProvider ?? undefined,
-        ...(bodySystemPrompt ? { config: { systemPrompt: bodySystemPrompt } } : {}),
-      });
+        projectPath,
+        model,
+        prompt,
+        resumeSessionId,
+        accountCredential,
+        accountProvider,
+        forkAtIndex,
+        systemPrompt: bodySystemPrompt,
+      } = request.body;
 
-      // Store CP→worker session ID mapping for status callbacks
-      if (cpSessionId) {
-        cpSessionIdMap.set(session.id, cpSessionId);
+      let safeCpSessionId: string;
+      try {
+        safeCpSessionId = validateSessionId(cpSessionId);
+      } catch {
+        return reply.status(400).send({ error: 'Invalid session ID', code: 'INVALID_INPUT' });
+      }
 
-        // Immediately report active status so the control plane doesn't have
-        // to wait for the next periodic heartbeat (30s) to see this session.
-        void reportStatusToControlPlane(session.id, {
-          status: 'active',
-          pid: session.pid ?? undefined,
+      if (!agentId || typeof agentId !== 'string') {
+        return reply.status(400).send({
+          error: 'A non-empty "agentId" string is required',
+          code: 'INVALID_INPUT',
         });
       }
 
-      // Wait briefly to verify CLI process doesn't crash on startup
-      const startupOk = await new Promise<boolean>((resolve) => {
-        const s = sessionManager.getSession(session.id);
-        if (s && s.status === 'error') {
-          resolve(false);
-          return;
+      if (!projectPath || typeof projectPath !== 'string') {
+        return reply.status(400).send({
+          error: 'A non-empty "projectPath" string is required',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      // Security: validate project path and resume session ID from request body
+      // to prevent path injection (js/path-injection, js/http-to-file-access).
+      let safeProjectPath: string;
+      try {
+        safeProjectPath = validateProjectPath(projectPath);
+      } catch {
+        return reply.status(400).send({ error: 'Invalid project path', code: 'INVALID_INPUT' });
+      }
+
+      let safeResumeSessionId: string | null | undefined = resumeSessionId;
+      if (resumeSessionId) {
+        try {
+          safeResumeSessionId = validateSessionId(resumeSessionId);
+        } catch {
+          return reply
+            .status(400)
+            .send({ error: 'Invalid resume session ID', code: 'INVALID_INPUT' });
+        }
+      }
+
+      // Handle JSONL truncation fork: copy + truncate parent JSONL
+      let effectiveResumeSessionId = safeResumeSessionId;
+
+      if (forkAtIndex !== undefined && forkAtIndex >= 0 && safeResumeSessionId) {
+        const rawParentJsonlPath = findSessionJsonl(safeResumeSessionId, safeProjectPath);
+        if (rawParentJsonlPath) {
+          // Security: validate resolved JSONL path before fs access (js/path-injection)
+          const parentJsonlPath = sanitizePath(rawParentJsonlPath, getClaudeProjectsDir());
+          const raw = readFileSync(parentJsonlPath, 'utf-8');
+          const allLines = raw.split('\n').filter((l) => l.trim());
+
+          // Count parsed messages to determine where to truncate
+          let msgCount = 0;
+          const truncatedLines: string[] = [];
+          for (const line of allLines) {
+            try {
+              const parsed = JSON.parse(line);
+              const msgs = parseJsonlEntry(parsed);
+              truncatedLines.push(line);
+              msgCount += msgs.length;
+              if (msgCount > forkAtIndex) break;
+            } catch {
+              truncatedLines.push(line); // Keep unparseable lines
+            }
+          }
+
+          // Write truncated JSONL next to parent — validate output path too
+          const dir = dirname(parentJsonlPath);
+          const newJsonlPath = sanitizePath(
+            join(dir, `${safeCpSessionId}.jsonl`),
+            getClaudeProjectsDir(),
+          );
+          writeFileSync(newJsonlPath, `${truncatedLines.join('\n')}\n`);
+
+          // Resume from the truncated copy (which uses the CP session ID)
+          effectiveResumeSessionId = safeCpSessionId;
+          logger.info(
+            {
+              sessionId: safeCpSessionId,
+              parentJsonlPath,
+              newJsonlPath,
+              forkAtIndex,
+              linesKept: truncatedLines.length,
+            },
+            'Created truncated JSONL fork',
+          );
+        } else {
+          logger.warn(
+            { resumeSessionId: safeResumeSessionId, projectPath: safeProjectPath },
+            'Parent JSONL not found for truncation fork',
+          );
+        }
+      }
+
+      try {
+        const session = sessionManager.startSession({
+          agentId,
+          projectPath: safeProjectPath,
+          prompt: prompt ?? 'Continue working.',
+          model: model ?? undefined,
+          resumeSessionId: effectiveResumeSessionId ?? undefined,
+          accountCredential: accountCredential ?? undefined,
+          accountProvider: accountProvider ?? undefined,
+          ...(bodySystemPrompt ? { config: { systemPrompt: bodySystemPrompt } } : {}),
+        });
+
+        // Store CP→worker session ID mapping for status callbacks
+        if (safeCpSessionId) {
+          cpSessionIdMap.set(session.id, safeCpSessionId);
+
+          // Immediately report active status so the control plane doesn't have
+          // to wait for the next periodic heartbeat (30s) to see this session.
+          void reportStatusToControlPlane(session.id, {
+            status: 'active',
+            pid: session.pid ?? undefined,
+          });
         }
 
-        const timer = setTimeout(() => {
-          sessionManager.off('session_error', onError);
-          sessionManager.off('session_ended', onEnd);
-          resolve(true);
-        }, SESSION_STARTUP_VERIFY_MS);
-
-        const onError = (evt: { sessionId: string }): void => {
-          if (evt.sessionId === session.id) {
-            clearTimeout(timer);
-            sessionManager.off('session_error', onError);
-            sessionManager.off('session_ended', onEnd);
+        // Wait briefly to verify CLI process doesn't crash on startup
+        const startupOk = await new Promise<boolean>((resolve) => {
+          const s = sessionManager.getSession(session.id);
+          if (s && s.status === 'error') {
             resolve(false);
+            return;
           }
-        };
-        const onEnd = (evt: { sessionId: string }): void => {
-          if (evt.sessionId === session.id) {
-            clearTimeout(timer);
+
+          const timer = setTimeout(() => {
             sessionManager.off('session_error', onError);
             sessionManager.off('session_ended', onEnd);
-            const ended = sessionManager.getSession(session.id);
-            resolve(ended?.status === 'running' || ended?.status === 'starting');
+            resolve(true);
+          }, SESSION_STARTUP_VERIFY_MS);
+
+          const onError = (evt: { sessionId: string }): void => {
+            if (evt.sessionId === session.id) {
+              clearTimeout(timer);
+              sessionManager.off('session_error', onError);
+              sessionManager.off('session_ended', onEnd);
+              resolve(false);
+            }
+          };
+          const onEnd = (evt: { sessionId: string }): void => {
+            if (evt.sessionId === session.id) {
+              clearTimeout(timer);
+              sessionManager.off('session_error', onError);
+              sessionManager.off('session_ended', onEnd);
+              const ended = sessionManager.getSession(session.id);
+              resolve(ended?.status === 'running' || ended?.status === 'starting');
+            }
+          };
+          sessionManager.on('session_error', onError);
+          sessionManager.on('session_ended', onEnd);
+        });
+
+        if (!startupOk) {
+          const failedSession = sessionManager.getSession(session.id);
+          const stderr = failedSession?.lastError?.trim() ?? '';
+
+          let hint = 'Check project path and credentials.';
+          if (
+            stderr.includes('authentication') ||
+            stderr.includes('API key') ||
+            stderr.includes('Unauthorized') ||
+            stderr.includes('401')
+          ) {
+            hint =
+              'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
+          } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
+            hint = 'Project path does not exist on this machine.';
+          } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
+            hint = 'Permission denied — check file/directory permissions.';
           }
-        };
-        sessionManager.on('session_error', onError);
-        sessionManager.on('session_ended', onEnd);
-      });
 
-      if (!startupOk) {
-        const failedSession = sessionManager.getSession(session.id);
-        const stderr = failedSession?.lastError?.trim() ?? '';
-
-        let hint = 'Check project path and credentials.';
-        if (
-          stderr.includes('authentication') ||
-          stderr.includes('API key') ||
-          stderr.includes('Unauthorized') ||
-          stderr.includes('401')
-        ) {
-          hint =
-            'No valid API key or auth token. Go to Settings → Accounts to configure one, then assign it to this session.';
-        } else if (stderr.includes('ENOENT') || stderr.includes('no such file')) {
-          hint = 'Project path does not exist on this machine.';
-        } else if (stderr.includes('EACCES') || stderr.includes('permission')) {
-          hint = 'Permission denied — check file/directory permissions.';
+          logger.warn(
+            {
+              sessionId: session.id,
+              cpSessionId: safeCpSessionId,
+              stderr: stderr.slice(0, STDERR_TRUNCATE),
+            },
+            'CLI session failed to start',
+          );
+          return reply.status(502).send({
+            error: stderr
+              ? `CLI failed: ${stderr.slice(0, CLI_ERROR_TRUNCATE)}`
+              : 'CLI process exited immediately.',
+            code: 'CLI_STARTUP_FAILED',
+            hint,
+          });
         }
 
-        logger.warn(
-          { sessionId: session.id, cpSessionId, stderr: stderr.slice(0, STDERR_TRUNCATE) },
-          'CLI session failed to start',
+        logger.info(
+          { sessionId: session.id, cpSessionId: safeCpSessionId, agentId, machineId, projectPath },
+          'CLI session started',
         );
-        return reply.status(502).send({
-          error: stderr
-            ? `CLI failed: ${stderr.slice(0, CLI_ERROR_TRUNCATE)}`
-            : 'CLI process exited immediately.',
-          code: 'CLI_STARTUP_FAILED',
-          hint,
+
+        return reply.status(201).send({
+          ok: true,
+          session: sessionToJson(session),
         });
+      } catch (err) {
+        const statusCode = errorToStatusCode(err);
+        return reply.status(statusCode).send(errorToResponse(err));
       }
-
-      logger.info(
-        { sessionId: session.id, cpSessionId, agentId, machineId, projectPath },
-        'CLI session started',
-      );
-
-      return reply.status(201).send({
-        ok: true,
-        session: sessionToJson(session),
-      });
-    } catch (err) {
-      const statusCode = errorToStatusCode(err);
-      return reply.status(statusCode).send(errorToResponse(err));
-    }
-  });
+    },
+  );
 
   // -----------------------------------------------------------------------
   // POST /:sessionId/resume — resume a previously completed session
@@ -1280,7 +1286,7 @@ const PREVIEW_TYPES = new Set(['user', 'assistant', 'progress']);
  * matching `<claudeSessionId>.jsonl`, respecting a maximum depth.
  */
 function findSessionJsonl(claudeSessionId: string, projectPath?: string): string | null {
-  const projectsDir = join(homedir(), '.claude', 'projects');
+  const projectsDir = getClaudeProjectsDir();
 
   if (!existsSync(projectsDir)) {
     return null;
@@ -1293,7 +1299,7 @@ function findSessionJsonl(claudeSessionId: string, projectPath?: string): string
     const encoded = projectPath.replace(/\//g, '-');
 
     // Direct: ~/.claude/projects/<encoded>/<sessionId>.jsonl
-    const directPath = join(projectsDir, encoded, fileName);
+    const directPath = sanitizePath(join(projectsDir, encoded, fileName), projectsDir);
     if (existsSync(directPath)) {
       return directPath;
     }
@@ -1302,41 +1308,58 @@ function findSessionJsonl(claudeSessionId: string, projectPath?: string): string
     const encodedRest = projectPath.startsWith('/')
       ? projectPath.slice(1).replace(/\//g, '-')
       : projectPath.replace(/\//g, '-');
-    const nestedPath = join(projectsDir, '-', encodedRest, fileName);
+    const nestedPath = sanitizePath(join(projectsDir, '-', encodedRest, fileName), projectsDir);
     if (existsSync(nestedPath)) {
       return nestedPath;
     }
   }
 
   // Fall back to recursive search across all subdirectories
-  return searchForJsonl(projectsDir, fileName, 0);
+  return searchForJsonl(projectsDir, fileName, 0, projectsDir);
 }
 
 /**
  * Recursively search a directory tree for a file, with depth limiting.
  */
-function searchForJsonl(dir: string, fileName: string, currentDepth: number): string | null {
+function searchForJsonl(
+  dir: string,
+  fileName: string,
+  currentDepth: number,
+  projectsDir: string,
+): string | null {
   if (currentDepth > MAX_SEARCH_DEPTH) {
     return null;
   }
 
-  const directPath = join(dir, fileName);
+  let safeDir: string;
+  try {
+    safeDir = sanitizePath(dir, projectsDir);
+  } catch {
+    return null;
+  }
+
+  const directPath = sanitizePath(join(safeDir, fileName), projectsDir);
   if (existsSync(directPath)) {
     return directPath;
   }
 
   let entries: string[];
   try {
-    entries = readdirSync(dir);
+    entries = readdirSync(safeDir);
   } catch {
     return null;
   }
 
   for (const entry of entries) {
-    const entryPath = join(dir, entry);
+    let entryPath: string;
+    try {
+      entryPath = sanitizePath(join(safeDir, entry), projectsDir);
+    } catch {
+      continue;
+    }
     try {
       if (statSync(entryPath).isDirectory()) {
-        const found = searchForJsonl(entryPath, fileName, currentDepth + 1);
+        const found = searchForJsonl(entryPath, fileName, currentDepth + 1, projectsDir);
         if (found) {
           return found;
         }
