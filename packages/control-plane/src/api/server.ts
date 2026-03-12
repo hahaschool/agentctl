@@ -26,6 +26,7 @@ import { ThreadStore } from '../collaboration/thread-store.js';
 import { WorkerLeaseStore } from '../collaboration/worker-lease-store.js';
 import { WorkerNodeStore } from '../collaboration/worker-node-store.js';
 import type { Database } from '../db/index.js';
+import { NotificationRouterStore } from '../intelligence/notification-router-store.js';
 import { RoutingEngine } from '../intelligence/routing-engine.js';
 import { TaskDecomposer } from '../intelligence/task-decomposer.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
@@ -80,6 +81,7 @@ import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
+import { notificationPreferenceRoutes } from './routes/notification-preferences.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
@@ -505,6 +507,13 @@ export async function createServer({
     await app.register(webhookRoutes, {
       prefix: '/api/webhooks',
       db,
+    });
+
+    // Register notification preference management routes.
+    const notificationRouterStore = new NotificationRouterStore(db, logger);
+    await app.register(notificationPreferenceRoutes, {
+      prefix: '/api/notifications/preferences',
+      notificationRouterStore,
     });
   }
 
