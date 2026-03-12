@@ -477,9 +477,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
 
         // Fall back to the agent's configured model and tools when
         // not explicitly overridden in the start request.
-        const agentConfig = dbRegistry
-          ? (await dbRegistry.getAgent(agentId))?.config
-          : undefined;
+        const agentConfig = dbRegistry ? (await dbRegistry.getAgent(agentId))?.config : undefined;
 
         const jobData: AgentTaskJobData = {
           agentId,

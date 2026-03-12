@@ -4,13 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type {
-  EntityType,
-  FactSource,
-  MemoryEdge,
-  MemoryFact,
-  MemoryScope,
-} from '@agentctl/shared';
+import type { EntityType, FactSource, MemoryEdge, MemoryFact, MemoryScope } from '@agentctl/shared';
 import { Pool } from 'pg';
 import type {
   ClaudeMemDatabase,
@@ -89,12 +83,7 @@ export type ImportObservationOptions = {
 };
 
 export type ImportObservationResult = {
-  status:
-    | 'imported'
-    | 'dry_run'
-    | 'skipped_existing'
-    | 'skipped_duplicate'
-    | 'skipped_empty';
+  status: 'imported' | 'dry_run' | 'skipped_existing' | 'skipped_duplicate' | 'skipped_empty';
   parentScope: MemoryScope | null;
   importedChildren: number;
 };
@@ -209,7 +198,8 @@ export function parseImportArgs(argv: string[]): ImportArgs {
     project,
     machineId,
     checkpointFile:
-      checkpointFile || path.join(path.dirname(resolvedDbPath), '.claude-mem-import-checkpoint.json'),
+      checkpointFile ||
+      path.join(path.dirname(resolvedDbPath), '.claude-mem-import-checkpoint.json'),
     embeddingBaseUrl,
     embeddingModel,
   };
@@ -282,7 +272,7 @@ export async function importObservation(
   }
 
   const sessionId = observation.memory_session_id
-    ? options.sessionIdMap.get(observation.memory_session_id) ?? observation.memory_session_id
+    ? (options.sessionIdMap.get(observation.memory_session_id) ?? observation.memory_session_id)
     : null;
   const parsedFacts = parseStringArray(observation.facts);
   const parsedFiles = parseStringArray(observation.files_modified);

@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuditableClaudeMemDatabase } from './audit-claude-mem.js';
-import {
-  buildDefaultBackupPath,
-  generateAuditReport,
-  parseAuditArgs,
-} from './audit-claude-mem.js';
+import { buildDefaultBackupPath, generateAuditReport, parseAuditArgs } from './audit-claude-mem.js';
 
 function makeDb(tables: {
   observations?: Record<string, unknown>[];

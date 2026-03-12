@@ -97,10 +97,7 @@ function readRows(db: AuditableClaudeMemDatabase, table: string): Record<string,
   }
 }
 
-export function generateAuditReport(
-  db: AuditableClaudeMemDatabase,
-  dbPath: string,
-): AuditReport {
+export function generateAuditReport(db: AuditableClaudeMemDatabase, dbPath: string): AuditReport {
   const tables = listTables(db);
   const observations = readRows(db, 'observations') as ClaudeMemObservation[];
   const summaries = readRows(db, 'session_summaries');

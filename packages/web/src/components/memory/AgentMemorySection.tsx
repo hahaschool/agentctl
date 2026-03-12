@@ -55,8 +55,13 @@ export function AgentMemorySection({ agentId }: Props): React.JSX.Element {
     const isNotFound = error.message.includes('not found') || error.message.includes('404');
     if (isNotFound) {
       return (
-        <div className="text-sm text-muted-foreground py-2" data-testid="agent-memory-not-configured">
-          Memory backend not configured. Set <code className="text-xs bg-muted px-1 py-0.5 rounded">LITELLM_URL</code> on the control plane to enable memory features.
+        <div
+          className="text-sm text-muted-foreground py-2"
+          data-testid="agent-memory-not-configured"
+        >
+          Memory backend not configured. Set{' '}
+          <code className="text-xs bg-muted px-1 py-0.5 rounded">LITELLM_URL</code> on the control
+          plane to enable memory features.
         </div>
       );
     }

@@ -11,16 +11,15 @@
 //   - orphans: facts with no edges
 // ---------------------------------------------------------------------------
 
-import type { FastifyPluginAsync } from 'fastify';
-import type { Pool } from 'pg';
-import type { Logger } from 'pino';
-
 import type {
   ConsolidationItem,
   ConsolidationItemType,
   ConsolidationSeverity,
   ConsolidationStatus,
 } from '@agentctl/shared';
+import type { FastifyPluginAsync } from 'fastify';
+import type { Pool } from 'pg';
+import type { Logger } from 'pino';
 
 export type MemoryConsolidationRoutesOptions = {
   pool: Pool;
@@ -74,9 +73,7 @@ function nearDuplicateItems(
   }));
 }
 
-function staleItems(
-  rows: ReadonlyArray<Record<string, unknown>>,
-): readonly ConsolidationItem[] {
+function staleItems(rows: ReadonlyArray<Record<string, unknown>>): readonly ConsolidationItem[] {
   return rows.map((row) => ({
     id: `stale-${row.fact_id}`,
     type: 'stale' as const,
@@ -89,9 +86,7 @@ function staleItems(
   }));
 }
 
-function orphanItems(
-  rows: ReadonlyArray<Record<string, unknown>>,
-): readonly ConsolidationItem[] {
+function orphanItems(rows: ReadonlyArray<Record<string, unknown>>): readonly ConsolidationItem[] {
   return rows.map((row) => ({
     id: `orphan-${row.fact_id}`,
     type: 'orphan' as const,

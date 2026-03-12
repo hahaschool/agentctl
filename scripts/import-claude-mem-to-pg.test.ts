@@ -11,9 +11,7 @@ import {
   shouldSkipByCheckpoint,
 } from './import-claude-mem-to-pg.js';
 
-function makeObservation(
-  overrides: Partial<ClaudeMemObservation> = {},
-): ClaudeMemObservation {
+function makeObservation(overrides: Partial<ClaudeMemObservation> = {}): ClaudeMemObservation {
   return {
     id: 42,
     type: 'decision',
