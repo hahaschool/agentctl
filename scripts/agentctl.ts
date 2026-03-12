@@ -1138,6 +1138,7 @@ ${bold('COMMANDS')}
   ${cyan('loop status')} <agentId>      Check continuous loop status
   ${cyan('loop stop')} <agentId>        Stop a continuous loop
   ${cyan('pool-stats')}                 Worker pool statistics
+  ${cyan('tui')}                        Launch full-screen TUI monitoring panel
   ${cyan('help')}                       Show this help message
 
 ${bold('EXAMPLES')}
@@ -1456,6 +1457,13 @@ async function main(): Promise<void> {
     case 'pool-stats':
       await cmdPoolStats();
       break;
+
+    case 'tui': {
+      const { execSync } = await import('node:child_process');
+      const scriptDir = new URL('.', import.meta.url).pathname;
+      execSync(`npx tsx ${scriptDir}tui.tsx`, { stdio: 'inherit' });
+      break;
+    }
 
     default:
       console.error(`${red('Error: ')}Unknown command: ${command}`);
