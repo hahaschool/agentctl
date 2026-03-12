@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-12 (PRs #64-#67 experience extraction, knowledge maintenance, live handoff triggers, mobile enhancements; PR #63 cross-entity queries + CodeQL security; PRs #57-#62 shared components, MCP tools, ARIA, knowledge loading, Codex sandbox, auto-handoff; PRs #50-#55 knowledge graph, a11y, memory dashboard, consolidation, scope manager; prior: PRs #39-#47)
+> Last updated: 2026-03-12 (audit pass: §8 marked delivered, §4.8 consolidation/reports backend missing; PRs #64-#67 experience extraction, knowledge maintenance, live handoff triggers, mobile enhancements; PR #63 cross-entity queries + CodeQL security; PRs #57-#62 shared components, MCP tools, ARIA, knowledge loading, Codex sandbox, auto-handoff; PRs #50-#55 knowledge graph, a11y, memory dashboard, consolidation, scope manager; prior: PRs #39-#47)
 
 ## Current State
 
@@ -461,8 +461,8 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Edges CRUD: `GET/POST/DELETE /api/memory/edges`
 - [x] Graph data: `GET /api/memory/graph` (nodes + edges for visualization)
 - [x] Scopes: `GET/POST /api/memory/scopes`
-- [x] Consolidation: `GET /api/memory/consolidation`, `POST .../action`
-- [x] Reports: `POST /api/memory/reports`, `GET /api/memory/reports/:id`
+- [ ] Consolidation: `GET /api/memory/consolidation`, `POST .../action` — **backend route not implemented; frontend calls return 404**
+- [ ] Reports: `POST /api/memory/reports`, `GET /api/memory/reports/:id` — **backend route not implemented; frontend calls return 404**
 - [x] Import: `POST /api/memory/import`, `GET /api/memory/import/status`
 - [x] Stats: `GET /api/memory/stats` (dashboard metrics)
 - [x] Cross-entity queries: `?sessionId=X`, `?agentId=X`, `?machineId=X` *(PR #63)*
@@ -645,35 +645,40 @@ Periodic review of accumulated knowledge for staleness, contradictions, and synt
 
 > Production deployment tooling, CLI/TUI monitoring, and operational guides.
 
+<details>
+<summary>✅ All complete — Deploy CLI, TUI monitor, deployment guide (PRs #72-#73)</summary>
+
 ### 8.1 Deploy CLI — P1
 
-Interactive deployment management via `agentctl deploy` subcommands.
+Interactive deployment management via `agentctl deploy` subcommands (`scripts/deploy.ts`).
 
-- [ ] `agentctl deploy init` — interactive .env generation, dependency checks (Node 22+, pnpm, Docker, PG, Redis), auto pnpm install + build + DB migration
-- [ ] `agentctl deploy up [--prod]` — dev mode (tsx watch) or prod mode (Docker Compose); `--worker` flag for worker-only machines
-- [ ] `agentctl deploy down` — stop all services (PM2 or Docker)
-- [ ] `agentctl deploy status` — parallel health checks on all services, table output
-- [ ] `agentctl deploy logs <service>` — stream logs from CP/Worker/Web
+- [x] `agentctl deploy init` — interactive .env generation, dependency checks (Node 22+, pnpm, Docker, PG, Redis), auto pnpm install + build + DB migration
+- [x] `agentctl deploy up [--prod]` — dev mode (tsx watch) or prod mode (Docker Compose); `--worker` flag for worker-only machines
+- [x] `agentctl deploy down` — stop all services (PM2 or Docker)
+- [x] `agentctl deploy status` — parallel health checks on all services, table output
+- [x] `agentctl deploy logs <service>` — stream logs from CP/Worker/Web
 
 ### 8.2 TUI Monitoring Panel — P1
 
-Full-screen real-time monitoring via `agentctl tui` (Ink 4.x).
+Full-screen real-time monitoring via `agentctl tui` (Ink 4.x, `scripts/tui.tsx` + `scripts/tui/`).
 
-- [ ] Layout: 3-panel (Services status, Agents list, Activity feed)
-- [ ] ServicePanel: 5s polling of /health endpoints, red/green status indicators
-- [ ] AgentPanel: live agent list with status/cost/duration, keyboard selection
-- [ ] ActivityFeed: SSE real-time event stream from control plane
-- [ ] LogViewer: drill-down log viewer for selected service
-- [ ] Keyboard shortcuts: q(quit), r(restart), s(stop), l(logs), Enter(detail)
+- [x] Layout: 3-panel (Services status, Agents list, Activity feed)
+- [x] ServicePanel: 5s polling of /health endpoints, red/green status indicators
+- [x] AgentPanel: live agent list with status/cost/duration, keyboard selection
+- [x] ActivityFeed: SSE real-time event stream from control plane
+- [x] LogViewer: drill-down log viewer for selected service
+- [x] Keyboard shortcuts: q(quit), r(restart), s(stop), l(logs), Enter(detail)
 
 ### 8.3 Deployment Guide — P1
 
-Step-by-step deployment documentation.
+Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
-- [ ] Quick Start: single-machine dev setup (5 minutes)
-- [ ] Production: Docker Compose deployment with security hardening
-- [ ] Multi-Machine: Tailscale mesh + per-machine worker setup
-- [ ] Troubleshooting: common errors + solutions quick reference
+- [x] Quick Start: single-machine dev setup (5 minutes)
+- [x] Production: Docker Compose deployment with security hardening
+- [x] Multi-Machine: Tailscale mesh + per-machine worker setup
+- [x] Troubleshooting: common errors + solutions quick reference
+
+</details>
 
 ---
 
@@ -683,7 +688,7 @@ Step-by-step deployment documentation.
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
-| **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — all 8 pages, integration points, MCP tools, shared components (PRs #47,#50,#52-#59) |
+| **P1** | Unified Memory System UI | 4.8 | ⚠️ Partial — 8 pages + integration points + MCP tools delivered (PRs #47,#50,#52-#59); **backend routes missing for `/api/memory/consolidation` and `/api/memory/reports` (404)** |
 | **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all ARIA items complete (PRs #51,#54,#59) |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
@@ -700,9 +705,9 @@ Step-by-step deployment documentation.
 | **P3** | ~~Execution Environment Registry~~ | 2.9 | ✅ Delivered — DirectEnvironment + DockerEnvironment with gVisor (PR #69) |
 | **P3** | ~~Automated Experience Extraction~~ | 7.3 | ✅ Delivered — Stop hook, entity routing, Jaccard dedup, review flags (PR #64) |
 | **P3** | ~~Knowledge Maintenance / Dreaming~~ | 7.4 | ✅ Delivered — monthly lint, git cross-ref, synthesis, coverage reporting (PR #65) |
-| **P1** | Deploy CLI | 8.1 | Not started |
-| **P1** | TUI Monitoring Panel | 8.2 | Not started |
-| **P1** | Deployment Guide | 8.3 | Not started |
+| **P1** | ~~Deploy CLI~~ | 8.1 | ✅ Delivered — `scripts/deploy.ts` with init/up/down/status/logs (PR #72) |
+| **P1** | ~~TUI Monitoring Panel~~ | 8.2 | ✅ Delivered — Ink 4.x 3-panel TUI `scripts/tui.tsx` (PR #73) |
+| **P1** | ~~Deployment Guide~~ | 8.3 | ✅ Delivered — `docs/DEPLOYMENT.md` quick-start/production/multi-machine (PR #72) |
 
 ---
 
@@ -734,24 +739,24 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | Item | Depends On | Notes |
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
-| Unified Memory Layer (P1) | None | Near-complete — injector/routes/MCP/migration/context budget all landed via PRs #30-#31, #43; knowledge engineering remains |
-| Unified Memory System UI (P1) | Unified Memory Layer (§3.6) backend routes | Backend API routes build on existing MemoryStore/MemorySearch; UI pages can start with mock data while backend catches up |
-| UI Quality & Accessibility (P1) | None | Can start immediately — 2 critical, 11 high, 18 medium issues from audit |
+| ~~Unified Memory Layer (P1)~~ | None | ✅ Delivered — all knowledge engineering items complete (missing: standalone decay module) |
+| Unified Memory System UI (P1) | Unified Memory Layer (§3.6) backend routes | ⚠️ Partial — 8 pages + integration delivered; backend routes missing for consolidation + reports |
+| ~~UI Quality & Accessibility (P1)~~ | None | ✅ Delivered — all ARIA items complete |
 | ~~Execution Summary (P1)~~ | None | ✅ Delivered (PRs #32, #39) |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
 | ~~AgentOutputStream (P2)~~ | None | ✅ Delivered (PR #29) |
 | ~~Mid-Execution Steering (P2)~~ | AgentOutputStream | ✅ Delivered (PR #45) |
-| Codex Operational Parity (P2) | None | Partial on `main`; LiteLLM routing/failover is done, remaining work is runtime-level sandbox enforcement/evidence |
-| Automatic Handoff (P2) | AgentOutputStream for live signals | Policy/history/task-affinity groundwork can land before it; live trigger execution waits on unified runtime signals |
-| Remote Control Integration (P2) | None | Relay decision and narrow manual takeover are already on `main`; only relay re-evaluation remains |
-| Fork UX Extensions (P2) | Unified Memory Layer + Memory UI (§4.8) | Memory integration in fork context selection; extends existing `ContextPickerDialog`, memory panel, and prompt preview |
+| ~~Codex Operational Parity (P2)~~ | None | ✅ Delivered — sandbox enforcement + verification evidence |
+| ~~Automatic Handoff (P2)~~ | AgentOutputStream for live signals | ✅ Delivered — worker-side architecture (diverged from plan's CP-side design) |
+| Remote Control Integration (P2) | None | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
+| ~~Fork UX Extensions (P2)~~ | Unified Memory Layer + Memory UI (§4.8) | ✅ Delivered — smart selection + runtime in fork |
 | ~~Layered Knowledge Loading (P2)~~ | None | ✅ Delivered — see §7.1 |
-| Knowledge Sedimentation Rules (P2) | None | Can start immediately; meta-rules for knowledge management |
-| Mobile Session Browser (P3) | None | Web unification patterns are already on `main`; remaining work is mobile-side unification/filtering/actions |
-| Execution Environment Registry (P3) | AgentOutputStream for adapter context + Docker | Capability model, direct environment, and worker reporting can land earlier; adapter plumbing and Docker execution wait on a stable output boundary |
-| Automated Experience Extraction (P3) | Knowledge Sedimentation Rules | Needs sedimentation rules to know where to route extracted knowledge |
-| Knowledge Maintenance (P3) | Unified Memory Layer | Lint/synthesis features build on the memory layer's graph and contradiction detection |
+| ~~Knowledge Sedimentation Rules (P2)~~ | None | ✅ Delivered — see §7.2 |
+| ~~Mobile Session Browser (P3)~~ | None | ✅ Delivered — all items complete |
+| ~~Execution Environment Registry (P3)~~ | AgentOutputStream for adapter context + Docker | ✅ Delivered — Direct + Docker environments with gVisor |
+| ~~Automated Experience Extraction (P3)~~ | Knowledge Sedimentation Rules | ✅ Delivered — stop hook, entity routing, dedup, review flags |
+| ~~Knowledge Maintenance (P3)~~ | Unified Memory Layer | ✅ Delivered — monthly lint, git cross-ref, synthesis, coverage reporting |
 
 ## References
 
@@ -789,8 +794,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [advanced-fork-impl-plan](plans/2026-03-08-advanced-fork-impl-plan.md) | Archived | 4.3 |
 | [codex-claude-runtime-unification-design](plans/2026-03-09-codex-claude-runtime-unification-design.md) | Delivered | 3.1, 3.2 |
 | [codex-claude-runtime-unification-impl-plan](plans/2026-03-09-codex-claude-runtime-unification-impl-plan.md) | Delivered | 3.1, 3.2 |
-| [fork-ux-overhaul](plans/2026-03-09-fork-ux-overhaul.md) | Active | 4.9 |
-| [astro-agent-patterns-design](plans/2026-03-10-astro-agent-patterns-design.md) | Active | 2.5-2.9, 3.3 |
+| [fork-ux-overhaul](plans/2026-03-09-fork-ux-overhaul.md) | Delivered | 4.9 |
+| [astro-agent-patterns-design](plans/2026-03-10-astro-agent-patterns-design.md) | Delivered | 2.5-2.9, 3.3 |
 | [runtime-centric-settings-redesign-design](plans/2026-03-10-runtime-centric-settings-redesign-design.md) | Delivered | 4.5 |
 | [runtime-centric-settings-redesign-impl-plan](plans/2026-03-10-runtime-centric-settings-redesign-impl-plan.md) | Delivered | 4.5 |
 | [runtime-settings-config-consistency-design](plans/2026-03-10-runtime-settings-config-consistency-design.md) | Subsumed | 4.5 |
@@ -798,19 +803,19 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [unified-sessions-ui-design](plans/2026-03-10-unified-sessions-ui-design.md) | Delivered | 4.6 |
 | [unified-sessions-ui-impl-plan](plans/2026-03-10-unified-sessions-ui-impl-plan.md) | Delivered | 4.6 |
 | [remote-control-relay-decision](plans/2026-03-10-remote-control-relay-decision.md) | Delivered | 2.4 |
-| [unified-memory-layer-design](plans/2026-03-10-unified-memory-layer-design.md) | Active | 3.6 |
-| [unified-memory-layer-impl-plan](plans/2026-03-10-unified-memory-layer-impl-plan.md) | Active | 3.6 |
-| [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md) | Planned | — |
-| [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md) | Planned | — |
-| [automatic-handoff-triggers-design](plans/2026-03-11-automatic-handoff-triggers-design.md) | Planned | 3.5 |
-| [automatic-handoff-triggers-impl-plan](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md) | Planned | 3.5 |
-| [execution-environment-registry-design](plans/2026-03-11-execution-environment-registry-design.md) | Planned | 2.9 |
-| [execution-environment-registry-impl-plan](plans/2026-03-11-execution-environment-registry-impl-plan.md) | Planned | 2.9 |
+| [unified-memory-layer-design](plans/2026-03-10-unified-memory-layer-design.md) | Delivered | 3.6 |
+| [unified-memory-layer-impl-plan](plans/2026-03-10-unified-memory-layer-impl-plan.md) | Delivered (missing: standalone memory-decay module) | 3.6 |
+| [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md) | Delivered | — |
+| [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md) | Delivered | — |
+| [automatic-handoff-triggers-design](plans/2026-03-11-automatic-handoff-triggers-design.md) | Delivered | 3.5 |
+| [automatic-handoff-triggers-impl-plan](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md) | Delivered | 3.5 |
+| [execution-environment-registry-design](plans/2026-03-11-execution-environment-registry-design.md) | Delivered | 2.9 |
+| [execution-environment-registry-impl-plan](plans/2026-03-11-execution-environment-registry-impl-plan.md) | Delivered | 2.9 |
 | [manual-remote-takeover-design](plans/2026-03-11-manual-remote-takeover-design.md) | Delivered | 2.4 |
 | [manual-remote-takeover-impl-plan](plans/2026-03-11-manual-remote-takeover-impl-plan.md) | Delivered | 2.4 |
-| [claude-mem-migration-plan](plans/2026-03-11-claude-mem-migration-plan.md) | Active | 3.6 |
-| [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Approved | 4.8 |
-| [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Planned | 4.8 |
+| [claude-mem-migration-plan](plans/2026-03-11-claude-mem-migration-plan.md) | Delivered | 3.6 |
+| [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Delivered | 4.8 |
+| [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Partial (missing: consolidation + reports backend routes) | 4.8 |
 
 ### Knowledge Engineering
 - [Agent 知识工程实践 (stonepage)](https://zhuanlan.zhihu.com/p/1898602837) — Knowledge types, layered loading, dreaming/synthesis, meta-cognition
