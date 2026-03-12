@@ -186,6 +186,32 @@ export {
   VALID_TRANSITIONS,
   validateTransition,
 } from './status-machine.js';
+export type { TaskExecutor } from './task-executor.js';
+export type {
+  AgentInstance,
+  AgentProfile,
+  FleetOverview,
+  TaskDefinition,
+  TaskEdge,
+  TaskEdgeType,
+  TaskGraph,
+  TaskNodeType,
+  TaskRun,
+  TaskRunStatus,
+  WorkerLease,
+  WorkerNode,
+  WorkerNodeStatus,
+} from './task-graph.js';
+export {
+  isTaskEdgeType,
+  isTaskNodeType,
+  isTaskRunStatus,
+  isWorkerNodeStatus,
+  TASK_EDGE_TYPES,
+  TASK_NODE_TYPES,
+  TASK_RUN_STATUSES,
+  WORKER_NODE_STATUSES,
+} from './task-graph.js';
 export type {
   WebhookConfig,
   WebhookEventType,

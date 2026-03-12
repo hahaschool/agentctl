@@ -18,6 +18,10 @@ export {
   type RepeatableJobManager,
 } from './repeatable-jobs.js';
 export {
+  BullMQTaskExecutor,
+  type TaskGraphJobData,
+} from './task-graph-executor.js';
+export {
   AGENT_TASKS_QUEUE,
   type AgentTaskJobData,
   type AgentTaskJobName,
