@@ -155,6 +155,19 @@ export {
   toExecutionSummary,
 } from './execution-summary.js';
 export type {
+  DecomposedEdge,
+  DecomposedTask,
+  DecompositionConstraints,
+  DecompositionRequest,
+  DecompositionResponse,
+  DecompositionResult,
+  RoutingCandidate,
+  RoutingDecision,
+  RoutingOutcome,
+  RoutingRequest,
+  RoutingScoreBreakdown,
+} from './intelligence.js';
+export type {
   LoopConfig,
   LoopMode,
   LoopState,
