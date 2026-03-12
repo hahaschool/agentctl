@@ -57,6 +57,7 @@ import { memoryRoutes } from './routes/memory.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
 import { memoryImportRoutes } from './routes/memory-import.js';
+import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
@@ -421,6 +422,12 @@ export async function createServer({
   if (pgPool) {
     await app.register(memorySynthesisRoutes, {
       prefix: '/api/memory/synthesis',
+      pool: pgPool,
+      logger,
+    });
+
+    await app.register(memoryReportsRoutes, {
+      prefix: '/api/memory/reports',
       pool: pgPool,
       logger,
     });
