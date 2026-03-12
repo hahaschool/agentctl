@@ -61,6 +61,7 @@ import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
+import { memoryDecayRoutes } from './routes/memory-decay.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { oauthRoutes } from './routes/oauth.js';
@@ -435,6 +436,12 @@ export async function createServer({
 
     await app.register(memoryReportsRoutes, {
       prefix: '/api/memory/reports',
+      pool: pgPool,
+      logger,
+    });
+
+    await app.register(memoryDecayRoutes, {
+      prefix: '/api/memory/decay',
       pool: pgPool,
       logger,
     });
