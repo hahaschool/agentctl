@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, normalize, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
@@ -34,6 +34,15 @@ const MAX_FILE_SIZE_BYTES = 1_048_576;
 
 /** Path segments that are never allowed to appear in a requested path. */
 const DENIED_SEGMENTS = ['.ssh', '.gnupg', '.aws', '.env', 'credentials'];
+
+/** Base directories that file operations may access. */
+const ALLOWED_BASE_DIRECTORIES: readonly string[] = [
+  resolve(homedir()),
+  '/tmp',
+  '/var',
+  '/opt',
+  '/usr',
+];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,24 +64,51 @@ type FileEntry = {
 // ---------------------------------------------------------------------------
 
 /**
- * Validate that a path is absolute and does not traverse into denied
- * directories. Throws a WorkerError if the path is invalid.
+ * Validate and resolve a user-provided path for safe use in fs operations.
+ *
+ * CodeQL's `js/path-injection` query requires that the SAME variable produced
+ * by `path.resolve()` is checked via `startsWith()` against an allowlist before
+ * reaching any fs API.  This function centralises that flow so every call site
+ * receives a resolved, validated string that CodeQL can trace.
+ *
+ * Steps:
+ *  1. Reject non-string / empty / relative input.
+ *  2. Reject raw input containing `..` segments (belt-and-suspenders).
+ *  3. `path.resolve()` normalises the value (collapses `.`, `//`, etc.).
+ *  4. Verify the resolved path falls under an allowed base directory.
+ *  5. Reject paths that traverse into denied directories (.ssh, .gnupg, …).
+ *  6. Return the resolved path — this is the only value callers should use.
  */
-function validatePath(raw: unknown): string {
-  if (!raw || typeof raw !== 'string') {
+function validateAndResolvePath(raw: unknown): string {
+  if (typeof raw !== 'string' || raw.trim() === '') {
     throw new WorkerError('INVALID_PATH', 'A non-empty "path" parameter is required');
   }
 
-  const resolved = resolve(normalize(raw));
-
-  // Must be absolute (resolve guarantees this, but be explicit)
-  if (!resolved.startsWith('/')) {
+  if (!raw.startsWith('/')) {
     throw new WorkerError('INVALID_PATH', 'Path must be absolute', { path: raw });
   }
 
-  // Check for denied path segments
-  const segments = resolved.split('/');
-  for (const segment of segments) {
+  if (raw.split('/').includes('..')) {
+    throw new WorkerError('INVALID_PATH', 'Path traversal is not allowed', { path: raw });
+  }
+
+  // Normalise — the resolved value is what we validate AND what callers use.
+  const resolved = resolve(raw);
+
+  // Allowlist check: the resolved path must be exactly, or nested under, one
+  // of the allowed base directories.
+  const matchedBase = ALLOWED_BASE_DIRECTORIES.find(
+    (base) => resolved === base || resolved.startsWith(`${base}/`),
+  );
+
+  if (!matchedBase) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: resolved,
+    });
+  }
+
+  // Denied-segment check on the fully resolved path.
+  for (const segment of resolved.split('/')) {
     if (DENIED_SEGMENTS.includes(segment)) {
       throw new WorkerError(
         'INVALID_PATH',
@@ -80,20 +116,6 @@ function validatePath(raw: unknown): string {
         { path: resolved, deniedSegment: segment },
       );
     }
-  }
-
-  // Must be under the home directory or a common project path
-  const home = homedir();
-  if (
-    !resolved.startsWith(home) &&
-    !resolved.startsWith('/tmp') &&
-    !resolved.startsWith('/var') &&
-    !resolved.startsWith('/opt') &&
-    !resolved.startsWith('/usr')
-  ) {
-    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-      path: resolved,
-    });
   }
 
   return resolved;
@@ -111,7 +133,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   // -------------------------------------------------------------------------
 
   app.get<{ Querystring: { path?: string } }>('/', async (request) => {
-    const dirPath = validatePath(request.query.path);
+    const dirPath = validateAndResolvePath(request.query.path);
 
     // Avoid TOCTOU: attempt the operation directly and handle errors
     let dirents: Dirent[];
@@ -173,7 +195,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   // -------------------------------------------------------------------------
 
   app.get<{ Querystring: { path?: string } }>('/content', async (request) => {
-    const filePath = validatePath(request.query.path);
+    const filePath = validateAndResolvePath(request.query.path);
 
     // Avoid TOCTOU (js/file-system-race): open the file atomically instead of
     // checking existence first, then reading. O_NOFOLLOW prevents symlink attacks.
@@ -233,24 +255,23 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
 
   app.put<{ Body: { path?: string; content?: string } }>('/content', async (request) => {
     const body = request.body ?? {};
-    const filePath = validatePath(body.path);
+    const filePath = validateAndResolvePath(body.path);
 
     if (typeof body.content !== 'string') {
       throw new WorkerError('INVALID_PATH', 'Request body must include a "content" string field');
     }
 
     // Also validate the parent directory path to prevent js/http-to-file-access
-    const dir = dirname(filePath);
-    validatePath(dir);
+    const dirPath = validateAndResolvePath(dirname(filePath));
 
     // Create parent directories if they don't exist (use recursive which is idempotent,
     // avoiding TOCTOU from existsSync check)
     try {
-      mkdirSync(dir, { recursive: true });
+      mkdirSync(dirPath, { recursive: true });
     } catch (err) {
       const nodeErr = err as NodeJS.ErrnoException;
       throw new WorkerError('FS_ERROR', `Failed to create directory: ${nodeErr.message}`, {
-        path: dir,
+        path: dirPath,
       });
     }
 
