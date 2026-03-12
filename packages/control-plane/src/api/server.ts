@@ -18,6 +18,7 @@ import { AgentProfileStore } from '../collaboration/agent-profile-store.js';
 import { ApprovalStore } from '../collaboration/approval-store.js';
 import { ContextBridgeStore } from '../collaboration/context-bridge-store.js';
 import { EventStore } from '../collaboration/event-store.js';
+import { RoutingStore } from '../collaboration/routing-store.js';
 import { SpaceStore } from '../collaboration/space-store.js';
 import { TaskGraphStore } from '../collaboration/task-graph-store.js';
 import { TaskRunStore } from '../collaboration/task-run-store.js';
@@ -25,6 +26,7 @@ import { ThreadStore } from '../collaboration/thread-store.js';
 import { WorkerLeaseStore } from '../collaboration/worker-lease-store.js';
 import { WorkerNodeStore } from '../collaboration/worker-node-store.js';
 import type { Database } from '../db/index.js';
+import { RoutingEngine } from '../intelligence/routing-engine.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MemorySearch } from '../memory/memory-search.js';
@@ -79,6 +81,7 @@ import { createRequestTracker, metricsRoutes, recordRequest } from './routes/met
 import { oauthRoutes } from './routes/oauth.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
+import { routingRoutes } from './routes/routing.js';
 import { runHandoffRoutes } from './routes/run-handoffs.js';
 import { registerRunReaper } from './routes/run-reaper.js';
 import { runSummaryRoutes } from './routes/run-summary.js';
@@ -607,6 +610,18 @@ export async function createServer({
       contextBridgeStore,
       spaceStore,
       eventStore,
+    });
+
+    // Phase 5a: Smart Routing + Outcome Learning (§10.5)
+    const routingStore = new RoutingStore(db, logger);
+    const routingEngine = new RoutingEngine();
+    await app.register(routingRoutes, {
+      prefix: '/api/routing',
+      routingEngine,
+      routingStore,
+      agentProfileStore,
+      workerNodeStore,
+      taskRunStore,
     });
   }
 
