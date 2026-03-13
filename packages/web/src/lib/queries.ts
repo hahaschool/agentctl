@@ -105,6 +105,8 @@ export const queryKeys = {
     events: (spaceId: string, threadId: string) =>
       ['spaces', spaceId, 'threads', threadId, 'events'] as const,
   },
+  deploymentTiers: ['deployment-tiers'] as const,
+  promotionHistory: ['promotion-history'] as const,
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -385,6 +387,23 @@ export function gitStatusQuery(machineId: string, path: string) {
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function deploymentTiersQuery() {
+  return queryOptions({
+    queryKey: queryKeys.deploymentTiers,
+    queryFn: api.getDeploymentTiers,
+    refetchInterval: 10_000,
+    staleTime: 8_000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function promotionHistoryQuery() {
+  return queryOptions({
+    queryKey: queryKeys.promotionHistory,
+    queryFn: () => api.getPromotionHistory(),
   });
 }
 
