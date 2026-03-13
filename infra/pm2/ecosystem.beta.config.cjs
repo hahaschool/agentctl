@@ -18,7 +18,7 @@ module.exports = {
     {
       // ── Control Plane ────────────────────────────────────────────
       name: 'agentctl-cp-beta',
-      script: 'dist/server.js',
+      script: 'dist/index.js',
       cwd: path.join(REPO_ROOT, 'packages/control-plane'),
       env: {
         NODE_ENV: 'production',
@@ -27,6 +27,7 @@ module.exports = {
         LOG_LEVEL: 'info',
         REDIS_URL: 'redis://localhost:6379/0',
         DATABASE_URL: 'postgresql://hahaschool@127.0.0.1:5433/agentctl',
+        CREDENTIAL_ENCRYPTION_KEY: process.env.CREDENTIAL_ENCRYPTION_KEY || '',
         TIER_LABEL: 'beta',
       },
       instances: 1,
@@ -45,7 +46,7 @@ module.exports = {
     {
       // ── Agent Worker ─────────────────────────────────────────────
       name: 'agentctl-worker-beta',
-      script: 'dist/server.js',
+      script: 'dist/index.js',
       cwd: path.join(REPO_ROOT, 'packages/agent-worker'),
       env: {
         NODE_ENV: 'production',
