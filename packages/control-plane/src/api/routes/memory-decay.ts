@@ -11,6 +11,12 @@ import { MemoryDecay } from '../../memory/memory-decay.js';
 
 export type MemoryDecayRoutesOptions = Pick<MemoryDecayOptions, 'pool' | 'logger'>;
 
+// Per-route rate limit config for memory decay operations
+const MEMORY_DECAY_RATE_LIMIT = {
+  max: 30,
+  timeWindow: '1 minute',
+} as const;
+
 export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = async (
   app,
   opts,
@@ -24,6 +30,7 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Run Ebbinghaus memory decay cycle',
       },
+      config: { rateLimit: MEMORY_DECAY_RATE_LIMIT },
     },
     async () => {
       const result = await decay.runDecay();
@@ -38,6 +45,7 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Get memory strength distribution statistics',
       },
+      config: { rateLimit: MEMORY_DECAY_RATE_LIMIT },
     },
     async () => {
       const stats = await decay.getDecayStats();
