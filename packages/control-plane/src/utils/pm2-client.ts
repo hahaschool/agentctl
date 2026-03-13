@@ -36,7 +36,7 @@ function enqueue<T>(fn: () => Promise<T>): Promise<T> {
 
 function connectPm2(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    pm2.connect((err) => {
+    pm2.connect((err: Error | null) => {
       if (err) {
         reject(err);
       } else {
@@ -66,8 +66,14 @@ export function pm2List(logger?: Pm2Logger): Promise<readonly Pm2ProcessInfo[]> 
   return enqueue(async () => {
     try {
       await connectPm2();
-      const list = await new Promise<pm2.ProcessDescription[]>((resolve, reject) => {
-        pm2.list((err, procs) => {
+      type Pm2Proc = {
+        name?: string;
+        pid?: number;
+        monit?: { memory?: number };
+        pm2_env?: { status?: string; pm_uptime?: number; restart_time?: number };
+      };
+      const list = await new Promise<Pm2Proc[]>((resolve, reject) => {
+        pm2.list((err: Error | null, procs: Pm2Proc[]) => {
           if (err) {
             reject(err);
           } else {
@@ -108,7 +114,7 @@ export function pm2Restart(name: string, logger?: Pm2Logger): Promise<void> {
     try {
       await connectPm2();
       await new Promise<void>((resolve, reject) => {
-        pm2.restart(name, (err) => {
+        pm2.restart(name, (err: Error | null) => {
           if (err) {
             reject(err);
           } else {
