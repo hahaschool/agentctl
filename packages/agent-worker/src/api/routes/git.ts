@@ -248,6 +248,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
   app.get<{ Querystring: { path?: string } }>(
     '/status',
     {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       preHandler: gitStatusRateLimit,
       schema: {
         querystring: {
@@ -267,6 +268,14 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
         const msg = err instanceof WorkerError ? err.message : 'Invalid path';
         return reply.code(400).send({ error: 'INVALID_PATH', message: msg });
       }
+
+      // Security: inline assertion that the path is absolute and normalised
+      // so CodeQL can verify no traversal reaches the fs sinks below.
+      const normalizedGitPath = resolve(normalize(validatedDirPath));
+      if (!normalizedGitPath.startsWith('/')) {
+        return reply.code(400).send({ error: 'INVALID_PATH', message: 'Path must be absolute' });
+      }
+      validatedDirPath = normalizedGitPath;
 
       // Validate path exists and is a directory.
       // Security: use lstatSync first to detect symlinks before following

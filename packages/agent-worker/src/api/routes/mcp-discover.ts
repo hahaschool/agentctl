@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 import type { DiscoveredMcpServer, McpServerConfig, McpServerSource } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
@@ -27,10 +27,20 @@ type DiscoverResult = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Safely read and parse a JSON file. Returns null on any error. */
-async function readJsonFile(filePath: string): Promise<unknown | null> {
+/**
+ * Safely read and parse a JSON file. Returns null on any error.
+ * Security: validates that the resolved path stays under the given base
+ * directory to prevent path traversal (js/path-injection).
+ */
+async function readJsonFile(filePath: string, allowedBase: string): Promise<unknown | null> {
+  const resolvedBase = resolve(allowedBase);
+  const resolvedPath = resolve(filePath);
+  const prefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(prefix)) {
+    return null; // Path escapes base — treat as missing
+  }
   try {
-    const raw = await readFile(filePath, 'utf-8');
+    const raw = await readFile(resolvedPath, 'utf-8');
     return JSON.parse(raw) as unknown;
   } catch {
     return null;
@@ -123,7 +133,7 @@ export async function discoverGlobalMcpServers(): Promise<DiscoveredMcpServer[]>
   const results: DiscoveredMcpServer[] = [];
 
   for (const filePath of globalPaths) {
-    const data = await readJsonFile(filePath);
+    const data = await readJsonFile(filePath, home);
     if (data) {
       results.push(...extractMcpServers(data, 'global', filePath));
     }
@@ -139,15 +149,16 @@ export async function discoverGlobalMcpServers(): Promise<DiscoveredMcpServer[]>
 export async function discoverProjectMcpServers(
   projectPath: string,
 ): Promise<DiscoveredMcpServer[]> {
+  const resolvedProject = resolve(projectPath);
   const projectPaths = [
-    join(projectPath, '.mcp.json'),
-    join(projectPath, '.claude', 'settings.json'),
+    join(resolvedProject, '.mcp.json'),
+    join(resolvedProject, '.claude', 'settings.json'),
   ];
 
   const results: DiscoveredMcpServer[] = [];
 
   for (const filePath of projectPaths) {
-    const data = await readJsonFile(filePath);
+    const data = await readJsonFile(filePath, resolvedProject);
     if (data) {
       results.push(...extractMcpServers(data, 'project', filePath));
     }

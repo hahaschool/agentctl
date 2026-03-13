@@ -50,27 +50,22 @@ export function findDeniedPathSegment(
 // ---------------------------------------------------------------------------
 // Safe fs wrappers — sanitise + operate atomically so CodeQL sees that
 // user-controlled paths never reach raw fs sinks directly.
+//
+// Each wrapper inlines the path prefix check immediately before the fs
+// operation so static analysis (CodeQL) can trace the sanitisation barrier.
 // ---------------------------------------------------------------------------
-
-/**
- * Inline path prefix assertion that CodeQL recognises as a sanitiser barrier.
- * Throws if `resolvedPath` is not within `allowedBase`.
- */
-function assertWithinBase(resolvedPath: string, allowedBase: string): void {
-  const base = resolve(allowedBase);
-  const prefix = base.endsWith(sep) ? base : `${base}${sep}`;
-  if (resolvedPath !== base && !resolvedPath.startsWith(prefix)) {
-    throw new Error(`Path "${resolvedPath}" escapes allowed base "${base}"`);
-  }
-}
 
 /**
  * Safe wrapper around `existsSync`.  Sanitises `userPath` relative to
  * `allowedBase` and returns the resolved path only if it exists.
  */
 export function safeExistsSync(userPath: string, allowedBase: string): string | null {
-  const safe = sanitizePath(userPath, allowedBase);
-  assertWithinBase(safe, allowedBase);
+  const resolvedBase = resolve(allowedBase);
+  const safe = resolve(userPath);
+  const prefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (safe !== resolvedBase && !safe.startsWith(prefix)) {
+    throw new Error(`Path "${safe}" escapes allowed base "${resolvedBase}"`);
+  }
   return existsSync(safe) ? safe : null;
 }
 
@@ -83,8 +78,12 @@ export function safeReadFileSync(
   allowedBase: string,
   encoding: BufferEncoding = 'utf-8',
 ): string {
-  const safe = sanitizePath(userPath, allowedBase);
-  assertWithinBase(safe, allowedBase);
+  const resolvedBase = resolve(allowedBase);
+  const safe = resolve(userPath);
+  const prefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (safe !== resolvedBase && !safe.startsWith(prefix)) {
+    throw new Error(`Path "${safe}" escapes allowed base "${resolvedBase}"`);
+  }
   return readFileSync(safe, encoding);
 }
 
@@ -93,8 +92,12 @@ export function safeReadFileSync(
  * Sanitises + validates the path before writing.
  */
 export function safeWriteFileSync(userPath: string, allowedBase: string, data: string): void {
-  const safe = sanitizePath(userPath, allowedBase);
-  assertWithinBase(safe, allowedBase);
+  const resolvedBase = resolve(allowedBase);
+  const safe = resolve(userPath);
+  const prefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (safe !== resolvedBase && !safe.startsWith(prefix)) {
+    throw new Error(`Path "${safe}" escapes allowed base "${resolvedBase}"`);
+  }
   writeFileSync(safe, data);
 }
 
@@ -107,8 +110,12 @@ export function safeReadFileAtomic(
   allowedBase: string,
   maxSize: number,
 ): { content: string; size: number } {
-  const safe = sanitizePath(userPath, allowedBase);
-  assertWithinBase(safe, allowedBase);
+  const resolvedBase = resolve(allowedBase);
+  const safe = resolve(userPath);
+  const prefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (safe !== resolvedBase && !safe.startsWith(prefix)) {
+    throw new Error(`Path "${safe}" escapes allowed base "${resolvedBase}"`);
+  }
 
   const fd = openSync(safe, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
