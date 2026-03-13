@@ -1,8 +1,10 @@
 import {
+  chmodSync,
   closeSync,
   existsSync,
   constants as fsConstants,
   fstatSync,
+  mkdirSync,
   openSync,
   readFileSync,
   readSync,
@@ -96,6 +98,35 @@ export function safeWriteFileSync(userPath: string, allowedBase: string, data: s
   const safe = sanitizePath(userPath, allowedBase);
   assertWithinBase(safe, allowedBase);
   writeFileSync(safe, data);
+}
+
+/**
+ * Safe wrapper around `mkdirSync`.
+ * Sanitises + validates the path before creating directories.
+ */
+export function safeMkdirSync(
+  userPath: string,
+  allowedBase: string,
+  options?: Parameters<typeof mkdirSync>[1],
+): string {
+  const safe = sanitizePath(userPath, allowedBase);
+  assertWithinBase(safe, allowedBase);
+  mkdirSync(safe, options);
+  return safe;
+}
+
+/**
+ * Safe wrapper around `chmodSync`.
+ * Sanitises + validates the path before changing permissions.
+ */
+export function safeChmodSync(
+  userPath: string,
+  allowedBase: string,
+  mode: Parameters<typeof chmodSync>[1],
+): void {
+  const safe = sanitizePath(userPath, allowedBase);
+  assertWithinBase(safe, allowedBase);
+  chmodSync(safe, mode);
 }
 
 /**
