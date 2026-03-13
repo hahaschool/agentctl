@@ -450,8 +450,8 @@ export class WorktreeManager {
     const safeAgentctlDir = sanitizePath(agentctlDir, safeWorktreePath);
     const safeScriptPath = sanitizePath(scriptPath, safeAgentctlDir);
 
-    mkdirSync(sanitizePath(safeWorktreePath, this.treesDir), { recursive: true });
-    mkdirSync(sanitizePath(safeAgentctlDir, safeWorktreePath), { recursive: true });
+    mkdirSync(safeWorktreePath, { recursive: true });
+    mkdirSync(safeAgentctlDir, { recursive: true });
     safeWriteFileSync(
       worktreeEnvPath,
       safeWorktreePath,
@@ -472,7 +472,7 @@ export class WorktreeManager {
     ].join('\n');
 
     safeWriteFileSync(scriptPath, safeAgentctlDir, bootstrapScript);
-    chmodSync(sanitizePath(safeScriptPath, safeAgentctlDir), 0o755);
+    chmodSync(safeScriptPath, 0o755);
     safeWriteFileSync(
       metadataPath,
       safeAgentctlDir,
