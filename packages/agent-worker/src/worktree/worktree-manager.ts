@@ -429,9 +429,26 @@ export class WorktreeManager {
       envFileName: string;
     },
   ): Promise<void> {
-    assertSafeAgentId(agentId);
-    const safeEnvFileName = this.assertSafeEnvFileName(assignment.envFileName);
-    const worktreePath = this.getWorktreePath(agentId);
+    if (!SAFE_AGENT_ID.test(agentId)) {
+      throw new AgentError(
+        'INVALID_AGENT_ID',
+        `Agent ID '${agentId}' contains invalid characters`,
+        {
+          agentId,
+          pattern: SAFE_AGENT_ID.source,
+        },
+      );
+    }
+    const safeAgentId = agentId;
+    if (!ENV_FILE_NAME_PATTERN.test(assignment.envFileName)) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Invalid dev env file name '${assignment.envFileName}' for worktree tier bootstrap`,
+        { envFileName: assignment.envFileName },
+      );
+    }
+    const safeEnvFileName = assignment.envFileName;
+    const worktreePath = path.join(this.treesDir, `agent-${safeAgentId}`);
     const sourceEnvPath = path.join(this.projectPath, safeEnvFileName);
     const worktreeEnvPath = path.join(worktreePath, safeEnvFileName);
     const agentctlDir = path.join(worktreePath, WORKTREE_AGENTCTL_DIR);
@@ -588,17 +605,5 @@ export class WorktreeManager {
     }
 
     return results;
-  }
-
-  private assertSafeEnvFileName(envFileName: string): string {
-    if (!ENV_FILE_NAME_PATTERN.test(envFileName)) {
-      throw new AgentError(
-        'WORKTREE_CREATE_FAILED',
-        `Invalid dev env file name '${envFileName}' for worktree tier bootstrap`,
-        { envFileName },
-      );
-    }
-
-    return envFileName;
   }
 }
