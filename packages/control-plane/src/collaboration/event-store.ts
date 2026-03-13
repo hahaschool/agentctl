@@ -1,10 +1,10 @@
-import type { SpaceEvent } from '@agentctl/shared';
+import type { CrossSpaceQueryResultEvent, SpaceEvent } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
-import { extractRows, spaceEvents } from '../db/index.js';
+import { extractRows, spaceEvents, spaces } from '../db/index.js';
 
 type AppendEventInput = {
   spaceId: string;
@@ -21,6 +21,14 @@ type AppendEventInput = {
 type GetEventsOptions = {
   after?: number;
   limit?: number;
+};
+
+type CrossSpaceQueryOptions = {
+  readonly spaceIds: readonly string[];
+  readonly eventTypes?: readonly string[];
+  readonly timeRange?: { readonly start?: string; readonly end?: string };
+  readonly textQuery?: string;
+  readonly limit?: number;
 };
 
 export class EventStore {
@@ -131,6 +139,87 @@ export class EventStore {
     }
 
     return this.toEvent(rows[0]);
+  }
+
+  /**
+   * Query events across multiple spaces with filtering by event type,
+   * time range, and text content.  Returns events in chronological order
+   * enriched with the originating space name.
+   */
+  async queryAcrossSpaces(
+    options: CrossSpaceQueryOptions,
+  ): Promise<{ events: CrossSpaceQueryResultEvent[]; totalMatched: number }> {
+    const MAX_LIMIT = 200;
+    const DEFAULT_LIMIT = 50;
+    const limit = Math.min(Math.max(options.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+
+    // Build dynamic WHERE conditions
+    const conditions = [inArray(spaceEvents.spaceId, [...options.spaceIds])];
+
+    // Only non-silent events are visible to cross-space queries
+    conditions.push(sql`${spaceEvents.visibility} != 'silent'`);
+
+    if (options.eventTypes && options.eventTypes.length > 0) {
+      conditions.push(inArray(spaceEvents.type, [...options.eventTypes]));
+    }
+
+    if (options.timeRange?.start) {
+      conditions.push(gte(spaceEvents.createdAt, new Date(options.timeRange.start)));
+    }
+
+    if (options.timeRange?.end) {
+      conditions.push(lte(spaceEvents.createdAt, new Date(options.timeRange.end)));
+    }
+
+    if (options.textQuery && options.textQuery.trim().length > 0) {
+      // Search in the JSONB payload for text content
+      conditions.push(sql`${spaceEvents.payload}::text ILIKE ${`%${options.textQuery.trim()}%`}`);
+    }
+
+    // Count total matches before applying LIMIT
+    const countResult = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(spaceEvents)
+      .where(and(...conditions));
+
+    const totalMatched = countResult[0]?.count ?? 0;
+
+    // Fetch the actual events joined with space names, ordered chronologically
+    const rows = await this.db
+      .select({
+        id: spaceEvents.id,
+        spaceId: spaceEvents.spaceId,
+        spaceName: spaces.name,
+        threadId: spaceEvents.threadId,
+        sequenceNum: spaceEvents.sequenceNum,
+        type: spaceEvents.type,
+        senderType: spaceEvents.senderType,
+        senderId: spaceEvents.senderId,
+        payload: spaceEvents.payload,
+        visibility: spaceEvents.visibility,
+        createdAt: spaceEvents.createdAt,
+      })
+      .from(spaceEvents)
+      .innerJoin(spaces, eq(spaceEvents.spaceId, spaces.id))
+      .where(and(...conditions))
+      .orderBy(spaceEvents.createdAt)
+      .limit(limit);
+
+    const events: CrossSpaceQueryResultEvent[] = rows.map((row) => ({
+      id: row.id,
+      spaceId: row.spaceId,
+      spaceName: row.spaceName,
+      threadId: row.threadId,
+      sequenceNum: Number(row.sequenceNum),
+      type: row.type,
+      senderType: row.senderType,
+      senderId: row.senderId,
+      payload: (row.payload ?? {}) as Record<string, unknown>,
+      visibility: (row.visibility ?? 'public') as string,
+      createdAt: (row.createdAt ?? new Date()).toISOString(),
+    }));
+
+    return { events, totalMatched };
   }
 
   private toEvent(row: typeof spaceEvents.$inferSelect): SpaceEvent {

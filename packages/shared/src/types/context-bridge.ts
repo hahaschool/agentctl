@@ -39,6 +39,41 @@ export type CrossSpaceQuery = {
   readonly limit: number;
 };
 
+// ── MCP Tool: cross_space_query request/response ─────────────
+
+export type CrossSpaceQueryTimeRange = {
+  readonly start?: string;
+  readonly end?: string;
+};
+
+export type CrossSpaceQueryRequest = {
+  readonly spaceIds: readonly string[];
+  readonly eventTypes?: readonly string[];
+  readonly timeRange?: CrossSpaceQueryTimeRange;
+  readonly textQuery?: string;
+  readonly limit?: number;
+};
+
+export type CrossSpaceQueryResultEvent = {
+  readonly id: string;
+  readonly spaceId: string;
+  readonly spaceName: string;
+  readonly threadId: string;
+  readonly sequenceNum: number;
+  readonly type: string;
+  readonly senderType: string;
+  readonly senderId: string;
+  readonly payload: Record<string, unknown>;
+  readonly visibility: string;
+  readonly createdAt: string;
+};
+
+export type CrossSpaceQueryResponse = {
+  readonly events: readonly CrossSpaceQueryResultEvent[];
+  readonly totalMatched: number;
+  readonly truncated: boolean;
+};
+
 // ── Cross-Space Subscription ─────────────────────────────────
 export type CrossSpaceSubscription = {
   readonly id: string;

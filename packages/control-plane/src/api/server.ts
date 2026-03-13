@@ -70,6 +70,7 @@ import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { mcpTemplateRoutes } from './routes/mcp-templates.js';
+import { mcpToolsRoutes } from './routes/mcp-tools.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
 import { memoryDecayRoutes } from './routes/memory-decay.js';
@@ -621,6 +622,13 @@ export async function createServer({
       contextBridgeStore,
       spaceStore,
       eventStore,
+    });
+
+    // MCP Tools: cross-space query tool for agent runtime (§10.4)
+    await app.register(mcpToolsRoutes, {
+      prefix: '/api/mcp-tools',
+      eventStore,
+      spaceStore,
     });
 
     // Phase 5a: Smart Routing + Outcome Learning (§10.5)
