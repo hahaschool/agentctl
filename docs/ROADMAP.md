@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-13 (§12.5 worktree tier bootstrap PR #127; worker route security PR #124; control-plane security PR #123; cleanup on PR completion PR #125)
+> Last updated: 2026-03-13 (§12.4 env-promote PR #130; §10.4 cross_space_query PR #131 + context budget PR #133; §9.2 MCP config downlink PR #132; §12.5 PR #127; worker route security PR #124)
 
 ## Current State
 
@@ -709,7 +709,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Write `.mcp.json` to project dir before CLI spawn *(PR #80)*
 - [x] Store MCP server selection in agent config (`config.mcpServers`) *(PR #80)*
 - [x] MCP server picker in agent creation/edit UI (web) *(PR #82)*
-- [ ] Control plane → worker config downlink: include MCP config in job payload — future
+- [x] Control plane → worker config downlink: include MCP config in job payload *(PR #132)*
 
 > **User feedback**: Manual MCP form is bad UX. Needs auto-detection and managed push-down. See §11.6.
 
@@ -861,15 +861,15 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ### 10.4 Phase 4: Context Bridge — P3 ✅
 
-> Delivered in PR #97. Shared types, Drizzle schema, ContextBridgeStore, and REST API routes for cross-space context mobility.
+> Delivered in PRs #97, #131, #133. Shared types, Drizzle schema, ContextBridgeStore, REST API routes, cross_space_query MCP tool, and context budget management.
 
 - [x] Reference mode: live pointer to source event/artifact in another Space *(PR #97)*
 - [x] Copy mode: snapshot of context from another Space (frozen at point-in-time) *(PR #97)*
 - [x] Subscription mode: cross-space subscriptions with filter criteria *(PR #97)*
-- [ ] Query mode: `cross_space_query` MCP tool for agent runtime *(future — requires MCP server extension)*
-- [ ] Context budget management across spaces *(future)*
+- [x] Query mode: `cross_space_query` MCP tool for agent runtime *(PR #131)*
+- [x] Context budget management across spaces *(PR #133)*
 
-### 10.5 Phase 5: Intelligence Layer — P3
+### 10.5 Phase 5: Intelligence Layer — P3 ✅
 
 > Impl plan: [plans/2026-03-12-intelligence-layer-impl-plan.md](plans/2026-03-12-intelligence-layer-impl-plan.md)
 >
@@ -919,7 +919,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 - [x] `scripts/env-up.sh` — port check + flock + start services
 - [x] `scripts/env-down.sh` — graceful shutdown + lock release
-- [ ] `scripts/env-promote.sh` — build + schema parity + migrate + restart + rollback (future)
+- [x] `scripts/env-promote.sh` — build + schema parity + migrate + restart + rollback *(PR #130)*
 
 ### 12.5 Agent Worktree Integration — ✅ Delivered
 
@@ -962,7 +962,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P1** | ~~TUI Monitoring Panel~~ | 8.2 | ✅ Delivered — Ink 4.x 3-panel TUI `scripts/tui.tsx` (PR #73) |
 | **P1** | ~~Deployment Guide~~ | 8.3 | ✅ Delivered — `docs/DEPLOYMENT.md` quick-start/production/multi-machine (PR #72) |
 | **P0** | ~~CLAUDE.md / Project Instructions Discovery~~ | 9.1 | ✅ Delivered — `--cwd` flag added to CLI args (PR #78) |
-| **P0** | ~~MCP Server Configuration for Agents~~ | 9.2 | ✅ Delivered — `.mcp.json` written before agent startup (PR #80) |
+| **P0** | ~~MCP Server Configuration for Agents~~ | 9.2 | ✅ Delivered — `.mcp.json` + config downlink in dispatch payload (PRs #80, #132) |
 | **P1** | ~~Agent Config as Default Prompt~~ | 9.3 | ✅ Delivered — `defaultPrompt` + optional prompt (PR #79) |
 | **P1** | ~~Cost Tracking Display Fix~~ | 9.4 | ✅ Delivered — sdk-runner + frontend field mismatch (PR #79) |
 | **P1** | ~~Cron UX Improvements~~ | 9.5 | ✅ Delivered — visual cron builder + next runs (PR #81) |
@@ -977,7 +977,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P1** | ~~Multi-Agent Collaboration Phase 1~~ | 10.1 | ✅ Delivered — schema + stores + routes + Spaces UI (PRs #91-92) |
 | **P2** | ~~Multi-Agent Communication~~ | 10.2 | ✅ Delivered — outbox + NATS + WS gateway + approvals (PR #95) |
 | **P2** | ~~Task Graph + Fleet~~ | 10.3 | ✅ Delivered — DAG engine + leases + BullMQ executor (PR #94) |
-| **P3** | ~~Context Bridge~~ | 10.4 | ✅ Delivered — cross-space context mobility, 4 modes (PR #97) |
+| **P3** | ~~Context Bridge~~ | 10.4 | ✅ Delivered — cross-space context mobility, 4 modes + MCP tool + budget (PRs #97, #131, #133) |
 | **P3** | ~~Intelligence Layer~~ | 10.5 | ✅ Delivered — smart routing, auto-decompose, outcome learning, notifications (PRs #111-113, #112) |
 | **—** | ~~Security: CodeQL Path Injection~~ | — | ✅ Delivered — files.ts (PR #98) + sessions/git/cli-session-manager (PR #99) |
 | **—** | ~~Security: CodeQL Sessions + Rate Limiting~~ | — | ✅ Delivered — safeRead/Write wrappers + @fastify/rate-limit (PR #115) |
@@ -985,7 +985,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **—** | ~~Migration: Prerequisite Tables~~ | — | ✅ Delivered — collaboration/task-graph/approval-gates migrations for CI (PR #119) |
 | **P1** | ~~Environment Isolation: De-Hardcode Ports~~ | 12.0 | ✅ Delivered — env var config for all ports (PR #103) |
 | **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
-| **P2** | ~~Environment Isolation: Lifecycle Scripts~~ | 12.4 | ✅ Delivered — env-up.sh + env-down.sh with flock (PR #104) |
+| **P2** | ~~Environment Isolation: Lifecycle Scripts~~ | 12.4 | ✅ Delivered — env-up.sh + env-down.sh + env-promote.sh (PRs #104, #130) |
 | **P2** | ~~Environment Isolation: Worktree Integration~~ | 12.5 | ✅ Delivered — tier assignment + auto-source (PR #127), cleanup on PR completion (PR #125) |
 | **—** | ~~Security: Worker Route Hardening~~ | — | ✅ Delivered — rate-limit assertions + path guard tightening (PR #124) |
 | **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
