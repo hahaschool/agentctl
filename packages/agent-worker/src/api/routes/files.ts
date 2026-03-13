@@ -3,24 +3,12 @@
 // the web UI) to list directories, read file contents, and write file contents
 // on the machine where this worker is running.
 //
-// Security: every route handler validates file paths inline using the shared
-// `sanitizePath` + `findDeniedPathSegment` utilities from path-security.ts.
-// The sanitisation is intentionally performed at each call site (rather than
-// in a shared wrapper) so that CodeQL's interprocedural taint analysis can
-// trace the resolve() → startsWith() → fs-sink flow within the same scope.
+// Security: route handlers validate user-controlled paths up front, then hand
+// the resolved safe paths to local helpers for filesystem access.
 // ---------------------------------------------------------------------------
 
 import type { Dirent } from 'node:fs';
-import {
-  closeSync,
-  constants,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  readSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
@@ -31,8 +19,15 @@ import type { Logger } from 'pino';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeReadFileAtomic,
+  safeWriteFileSync,
   sanitizePath,
 } from '../../utils/path-security.js';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -66,13 +61,9 @@ type FileEntry = {
 };
 
 // ---------------------------------------------------------------------------
-// Shared validation helpers (not path resolution — just pre-checks)
+// Shared validation helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Reject obviously invalid raw input before attempting sanitisation.
- * Throws WorkerError for non-string, empty, relative, or `..`-containing paths.
- */
 function rejectMalformedInput(raw: unknown): asserts raw is string {
   if (typeof raw !== 'string' || raw.trim() === '') {
     throw new WorkerError('INVALID_PATH', 'A non-empty "path" parameter is required');
@@ -87,15 +78,6 @@ function rejectMalformedInput(raw: unknown): asserts raw is string {
   }
 }
 
-/**
- * Run the shared `sanitizePath` against every allowed base directory and
- * then check for denied segments. Returns the resolved, validated path.
- *
- * This function is deliberately kept small and returns the same value that
- * `sanitizePath` produces (which is `path.resolve()` output verified via
- * `startsWith()`). Each route handler calls this AND uses the return value
- * directly in fs calls so CodeQL can trace the taint barrier.
- */
 function toSafePath(raw: string): string {
   let safePath: string | undefined;
   for (const base of ALLOWED_BASE_DIRECTORIES) {
@@ -103,7 +85,7 @@ function toSafePath(raw: string): string {
       safePath = sanitizePath(raw, base);
       break;
     } catch {
-      // Path not under this base — try the next one
+      // Path not under this base — try the next one.
     }
   }
 
@@ -125,6 +107,59 @@ function toSafePath(raw: string): string {
   return safePath;
 }
 
+function listSafeDirectory(safeDirPath: string): Dirent[] {
+  const stat = statSync(safeDirPath);
+  if (!stat.isDirectory()) {
+    throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: safeDirPath });
+  }
+
+  return readdirSync(safeDirPath, { withFileTypes: true }) as Dirent[];
+}
+
+function readSafeChildMetadata(
+  safeDirPath: string,
+  childName: string,
+): Pick<FileEntry, 'size' | 'modified'> {
+  const childPath = sanitizePath(resolve(safeDirPath, childName), safeDirPath);
+  const deniedSegment = findDeniedPathSegment(childPath, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment !== null) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `Access to "${deniedSegment}" directories is denied for security reasons`,
+      { path: childPath, deniedSegment },
+    );
+  }
+
+  const childStat = statSync(childPath);
+  return {
+    size: childStat.size,
+    modified: childStat.mtime.toISOString(),
+  };
+}
+
+function readSafeFileContent(safeFilePath: string): { content: string; size: number } {
+  const stat = statSync(safeFilePath);
+  if (stat.isDirectory()) {
+    throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
+      path: safeFilePath,
+    });
+  }
+
+  if (stat.size > MAX_FILE_SIZE_BYTES) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
+      { path: safeFilePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
+    );
+  }
+
+  return safeReadFileAtomic(safeFilePath, dirname(safeFilePath), MAX_FILE_SIZE_BYTES);
+}
+
+function ensureSafeDirectory(safeDirPath: string): void {
+  mkdirSync(safeDirPath, { recursive: true });
+}
+
 // ---------------------------------------------------------------------------
 // Route plugin
 // ---------------------------------------------------------------------------
@@ -132,176 +167,162 @@ function toSafePath(raw: string): string {
 export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): Promise<void> {
   const { logger } = opts;
 
-  // -------------------------------------------------------------------------
-  // GET /api/files — list directory contents
-  // -------------------------------------------------------------------------
+  const fileListRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('FILE_LIST_RATE_LIMIT_MAX', 60),
+      readRateLimitEnv('FILE_LIST_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many directory listing requests. Try again later.',
+  );
 
-  app.get<{ Querystring: { path?: string } }>('/', async (request) => {
-    // -- Validate path inline so CodeQL traces the taint barrier -------------
-    const rawPath = request.query.path;
-    rejectMalformedInput(rawPath);
-    const dirPath = toSafePath(rawPath);
+  const fileContentRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_MAX', 60),
+      readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many file content requests. Try again later.',
+  );
 
-    // Avoid TOCTOU: attempt the operation directly and handle errors
-    let dirents: Dirent[];
-    try {
-      const stat = statSync(dirPath);
-      if (!stat.isDirectory()) {
-        throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: dirPath });
-      }
-      dirents = readdirSync(dirPath, { withFileTypes: true }) as Dirent[];
-    } catch (err) {
-      if (err instanceof WorkerError) throw err;
-      const nodeErr = err as NodeJS.ErrnoException;
-      if (nodeErr.code === 'ENOENT') {
-        throw new WorkerError('PATH_NOT_FOUND', `Directory does not exist: ${dirPath}`, {
+  const fileWriteRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('FILE_WRITE_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('FILE_WRITE_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many file write requests. Try again later.',
+  );
+
+  app.get<{ Querystring: { path?: string } }>(
+    '/',
+    {
+      preHandler: fileListRateLimit,
+    },
+    async (request) => {
+      const rawPath = request.query.path;
+      rejectMalformedInput(rawPath);
+      const dirPath = toSafePath(rawPath);
+
+      let dirents: Dirent[];
+      try {
+        dirents = listSafeDirectory(dirPath);
+      } catch (err) {
+        if (err instanceof WorkerError) throw err;
+        const nodeErr = err as NodeJS.ErrnoException;
+        if (nodeErr.code === 'ENOENT') {
+          throw new WorkerError('PATH_NOT_FOUND', `Directory does not exist: ${dirPath}`, {
+            path: dirPath,
+          });
+        }
+        throw new WorkerError('FS_ERROR', `Failed to read directory: ${nodeErr.message}`, {
           path: dirPath,
         });
       }
-      throw new WorkerError('FS_ERROR', `Failed to read directory: ${nodeErr.message}`, {
-        path: dirPath,
+
+      logger.debug({ path: dirPath }, 'listing directory');
+
+      const entries: FileEntry[] = [];
+
+      for (const dirent of dirents) {
+        if ((DEFAULT_DENIED_PATH_SEGMENTS as readonly string[]).includes(dirent.name)) continue;
+
+        const entry: FileEntry = {
+          name: dirent.name,
+          type: dirent.isDirectory() ? 'directory' : 'file',
+        };
+
+        try {
+          Object.assign(entry, readSafeChildMetadata(dirPath, dirent.name));
+        } catch {
+          // If we can't stat a child (or it fails validation), skip size/modified.
+        }
+
+        entries.push(entry);
+      }
+
+      entries.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+        return a.name.localeCompare(b.name);
       });
-    }
 
-    logger.debug({ path: dirPath }, 'listing directory');
+      return { entries, path: dirPath };
+    },
+  );
 
-    const entries: FileEntry[] = [];
+  app.get<{ Querystring: { path?: string } }>(
+    '/content',
+    {
+      preHandler: fileContentRateLimit,
+    },
+    async (request) => {
+      const rawPath = request.query.path;
+      rejectMalformedInput(rawPath);
+      const filePath = toSafePath(rawPath);
 
-    for (const dirent of dirents) {
-      // Skip denied segments in child entries too
-      if ((DEFAULT_DENIED_PATH_SEGMENTS as readonly string[]).includes(dirent.name)) continue;
-
-      const entry: FileEntry = {
-        name: dirent.name,
-        type: dirent.isDirectory() ? 'directory' : 'file',
-      };
-
-      // Validate child paths through sanitizePath before passing to statSync
-      // to satisfy CodeQL's js/path-injection check on child entries.
       try {
-        const childPath = sanitizePath(resolve(dirPath, dirent.name), dirPath);
-        const childStat = statSync(childPath);
-        entry.size = childStat.size;
-        entry.modified = childStat.mtime.toISOString();
-      } catch {
-        // If we can't stat a child (or it fails validation), skip size/modified
-      }
+        const result = readSafeFileContent(filePath);
+        logger.debug({ path: filePath, size: result.size }, 'reading file content');
 
-      entries.push(entry);
-    }
-
-    // Sort: directories first, then alphabetically
-    entries.sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-
-    return { entries, path: dirPath };
-  });
-
-  // -------------------------------------------------------------------------
-  // GET /api/files/content — read file content
-  // -------------------------------------------------------------------------
-
-  app.get<{ Querystring: { path?: string } }>('/content', async (request) => {
-    // -- Validate path inline so CodeQL traces the taint barrier -------------
-    const rawPath = request.query.path;
-    rejectMalformedInput(rawPath);
-    const filePath = toSafePath(rawPath);
-
-    // Avoid TOCTOU (js/file-system-race): open the file atomically instead of
-    // checking existence first, then reading. O_NOFOLLOW prevents symlink attacks.
-    let fd: number;
-    try {
-      fd = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    } catch (err) {
-      const nodeErr = err as NodeJS.ErrnoException;
-      if (nodeErr.code === 'ENOENT') {
-        throw new WorkerError('PATH_NOT_FOUND', `File does not exist: ${filePath}`, {
+        return {
+          content: result.content,
+          path: filePath,
+          size: result.size,
+        };
+      } catch (err) {
+        if (err instanceof WorkerError) throw err;
+        const nodeErr = err as NodeJS.ErrnoException & { size?: number };
+        if (nodeErr.code === 'ENOENT') {
+          throw new WorkerError('PATH_NOT_FOUND', `File does not exist: ${filePath}`, {
+            path: filePath,
+          });
+        }
+        if (nodeErr.code === 'ELOOP') {
+          throw new WorkerError('INVALID_PATH', 'Symlinks are not allowed', { path: filePath });
+        }
+        if (nodeErr.code === 'FILE_TOO_LARGE') {
+          throw new WorkerError(
+            'INVALID_PATH',
+            `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${nodeErr.size ?? 'unknown'})`,
+            { path: filePath, size: nodeErr.size, maxSize: MAX_FILE_SIZE_BYTES },
+          );
+        }
+        throw new WorkerError('FS_ERROR', `Failed to read file: ${nodeErr.message}`, {
           path: filePath,
         });
       }
-      if (nodeErr.code === 'ELOOP') {
-        throw new WorkerError('INVALID_PATH', 'Symlinks are not allowed', { path: filePath });
-      }
-      throw new WorkerError('FS_ERROR', `Failed to open file: ${nodeErr.message}`, {
-        path: filePath,
-      });
-    }
+    },
+  );
 
-    try {
-      const stat = statSync(filePath);
-      if (stat.isDirectory()) {
-        throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
-          path: filePath,
+  app.put<{ Body: { path?: string; content?: string } }>(
+    '/content',
+    {
+      preHandler: fileWriteRateLimit,
+    },
+    async (request) => {
+      const body = request.body ?? {};
+      rejectMalformedInput(body.path);
+      const filePath = toSafePath(body.path);
+
+      if (typeof body.content !== 'string') {
+        throw new WorkerError('INVALID_PATH', 'Request body must include a "content" string field');
+      }
+
+      const parentDir = toSafePath(dirname(filePath));
+
+      try {
+        ensureSafeDirectory(parentDir);
+      } catch (err) {
+        const nodeErr = err as NodeJS.ErrnoException;
+        throw new WorkerError('FS_ERROR', `Failed to create directory: ${nodeErr.message}`, {
+          path: parentDir,
         });
       }
 
-      if (stat.size > MAX_FILE_SIZE_BYTES) {
-        throw new WorkerError(
-          'INVALID_PATH',
-          `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
-          { path: filePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
-        );
-      }
-
-      logger.debug({ path: filePath, size: stat.size }, 'reading file content');
-
-      const buffer = Buffer.alloc(stat.size);
-      readSync(fd, buffer, 0, stat.size, 0);
-      const content = buffer.toString('utf-8');
+      logger.info({ path: filePath, contentLength: body.content.length }, 'writing file content');
+      safeWriteFileSync(filePath, parentDir, body.content);
 
       return {
-        content,
+        success: true,
         path: filePath,
-        size: stat.size,
       };
-    } finally {
-      closeSync(fd);
-    }
-  });
-
-  // -------------------------------------------------------------------------
-  // PUT /api/files/content — write file content
-  // -------------------------------------------------------------------------
-
-  app.put<{ Body: { path?: string; content?: string } }>('/content', async (request) => {
-    const body = request.body ?? {};
-
-    // -- Validate path inline so CodeQL traces the taint barrier -------------
-    rejectMalformedInput(body.path);
-    const filePath = toSafePath(body.path);
-
-    if (typeof body.content !== 'string') {
-      throw new WorkerError('INVALID_PATH', 'Request body must include a "content" string field');
-    }
-
-    // Validate the parent directory path to prevent js/http-to-file-access.
-    // We use sanitizePath on dirname(filePath) so that both the file path and
-    // its parent are proven safe before any fs write operation.
-    const parentDir = dirname(filePath);
-    const safeDirPath = toSafePath(parentDir);
-
-    // Create parent directories if they don't exist (use recursive which is
-    // idempotent, avoiding TOCTOU from existsSync check)
-    try {
-      mkdirSync(safeDirPath, { recursive: true });
-    } catch (err) {
-      const nodeErr = err as NodeJS.ErrnoException;
-      throw new WorkerError('FS_ERROR', `Failed to create directory: ${nodeErr.message}`, {
-        path: safeDirPath,
-      });
-    }
-
-    logger.info({ path: filePath, contentLength: body.content.length }, 'writing file content');
-
-    // Write using the sanitized filePath — CodeQL traces this from the
-    // sanitizePath call above through to the writeFileSync sink.
-    writeFileSync(filePath, body.content, 'utf-8');
-
-    return {
-      success: true,
-      path: filePath,
-    };
-  });
+    },
+  );
 }
