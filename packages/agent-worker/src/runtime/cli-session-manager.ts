@@ -209,6 +209,13 @@ export class CliSessionManager extends EventEmitter {
     this.cleanupStaleSessions();
 
     const sanitizedCwd = resolvePath(normalize(options.projectPath));
+    // Security: ensure the resolved path is absolute and doesn't contain
+    // traversal components after normalization (js/path-injection).
+    if (!sanitizedCwd.startsWith('/')) {
+      throw new AgentError('INVALID_PATH', 'Project path must resolve to an absolute path', {
+        projectPath: sanitizedCwd,
+      });
+    }
     const deniedSegment = findDeniedPathSegment(sanitizedCwd, DEFAULT_DENIED_PATH_SEGMENTS);
     if (deniedSegment) {
       throw new AgentError(

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { writeFileSync } from 'node:fs';
-import { join as pathJoin } from 'node:path';
+import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
 
 import type {
   AgentConfig,
@@ -802,7 +802,14 @@ export class AgentInstance extends EventEmitter {
       return;
     }
 
-    const mcpConfigPath = pathJoin(this.executionProjectPath, '.mcp.json');
+    // Security: validate the config path stays within the project directory
+    // to prevent path injection (js/path-injection, js/insecure-temporary-file).
+    const projectBase = pathResolve(this.executionProjectPath);
+    const mcpConfigPath = pathResolve(pathJoin(projectBase, '.mcp.json'));
+    if (!mcpConfigPath.startsWith(projectBase + pathSep) && mcpConfigPath !== projectBase) {
+      this.log.warn({ mcpConfigPath, projectBase }, 'MCP config path escapes project — skipping');
+      return;
+    }
     const mcpPayload = { mcpServers };
 
     try {

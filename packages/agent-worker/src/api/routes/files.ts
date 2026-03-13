@@ -194,6 +194,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>(
     '/',
     {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       preHandler: fileListRateLimit,
     },
     async (request) => {
@@ -250,6 +251,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>(
     '/content',
     {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       preHandler: fileContentRateLimit,
     },
     async (request) => {
@@ -294,6 +296,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.put<{ Body: { path?: string; content?: string } }>(
     '/content',
     {
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
       preHandler: fileWriteRateLimit,
     },
     async (request) => {

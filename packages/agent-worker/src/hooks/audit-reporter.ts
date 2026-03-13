@@ -139,9 +139,14 @@ export class AuditReporter {
         return;
       }
 
-      // Security: use O_NOFOLLOW to prevent symlink attacks on predictable audit
-      // file paths (js/insecure-temporary-file). This ensures we only read the
-      // actual audit file and not a symlink planted by an attacker.
+      // Security: verify the audit file is not a symlink before opening (TOCTOU
+      // mitigation). Combined with O_NOFOLLOW this prevents symlink attacks on
+      // predictable file paths (js/insecure-temporary-file).
+      const preStat = await lstat(this.auditFilePath);
+      if (preStat.isSymbolicLink()) {
+        this.log.error({ path: this.auditFilePath }, 'Audit file is a symlink — refusing to read');
+        return;
+      }
       const handle = await open(this.auditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
 
       try {
