@@ -78,7 +78,7 @@ function parseTierEnv(repoRoot: string, def: (typeof TIER_DEFS)[number]): TierCo
 
   const env = filterSecrets(parse(raw));
 
-  const cpPort = Number.parseInt(env.CP_PORT ?? env.CONTROL_PLANE_PORT ?? '', 10);
+  const cpPort = Number.parseInt(env.PORT ?? env.CP_PORT ?? '', 10);
   const workerPort = Number.parseInt(env.WORKER_PORT ?? '', 10);
   const webPort = Number.parseInt(env.WEB_PORT ?? '', 10);
 
