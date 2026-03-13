@@ -84,10 +84,22 @@ const ENV_EXAMPLE = path.join(ROOT_DIR, '.env.example');
 const COMPOSE_FILE = path.join(ROOT_DIR, 'infra/docker/docker-compose.prod.yml');
 
 const SERVICES = {
-  'control-plane': { port: 8080, healthPath: '/health', label: 'Control Plane' },
-  worker: { port: 9000, healthPath: '/health', label: 'Agent Worker' },
-  web: { port: 5173, healthPath: '/', label: 'Web UI' },
-} as const;
+  'control-plane': {
+    port: Number(process.env.PORT ?? process.env.CONTROL_PLANE_PORT ?? 8080),
+    healthPath: '/health',
+    label: 'Control Plane',
+  },
+  worker: {
+    port: Number(process.env.WORKER_PORT ?? process.env.AGENT_WORKER_PORT ?? 9000),
+    healthPath: '/health',
+    label: 'Agent Worker',
+  },
+  web: {
+    port: Number(process.env.WEB_PORT ?? 5173),
+    healthPath: '/',
+    label: 'Web UI',
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Utility: execute a command and return stdout
@@ -229,8 +241,9 @@ async function detectPostgresPort(): Promise<number | null> {
 // ---------------------------------------------------------------------------
 
 async function detectRedisPort(): Promise<number | null> {
-  const { exitCode } = await exec('redis-cli', ['-p', '6379', 'ping']);
-  if (exitCode === 0) return 6379;
+  const defaultRedisPort = process.env.REDIS_PORT ?? '6379';
+  const { exitCode } = await exec('redis-cli', ['-p', defaultRedisPort, 'ping']);
+  if (exitCode === 0) return Number(defaultRedisPort);
   return null;
 }
 
@@ -501,19 +514,24 @@ async function cmdUp(isProd: boolean, isWorkerOnly: boolean, controlUrl?: string
 
     // Wait for health checks
     console.log(bold('\nWaiting for services to become healthy...'));
-    const cpOk = await waitForHealthy(8080, '/health', 'Control Plane', 45_000);
-    const workerOk = await waitForHealthy(9000, '/health', 'Agent Worker', 45_000);
+    const cpOk = await waitForHealthy(
+      SERVICES['control-plane'].port,
+      '/health',
+      'Control Plane',
+      45_000,
+    );
+    const workerOk = await waitForHealthy(SERVICES.worker.port, '/health', 'Agent Worker', 45_000);
 
     console.log();
     printServiceTable([
       {
         name: 'Control Plane',
-        url: 'http://localhost:8080',
+        url: `http://localhost:${String(SERVICES['control-plane'].port)}`,
         status: cpOk ? 'OK' : 'STARTING',
       },
       {
         name: 'Agent Worker',
-        url: 'http://localhost:9000',
+        url: `http://localhost:${String(SERVICES.worker.port)}`,
         status: workerOk ? 'OK' : 'STARTING',
       },
     ]);
@@ -557,8 +575,10 @@ async function cmdUp(isProd: boolean, isWorkerOnly: boolean, controlUrl?: string
 
     devProcesses.push(workerChild);
 
-    await waitForHealthy(9000, '/health', 'Agent Worker');
-    console.log(`\n${green('Agent Worker ready')} at ${cyan('http://localhost:9000')}\n`);
+    await waitForHealthy(SERVICES.worker.port, '/health', 'Agent Worker');
+    console.log(
+      `\n${green('Agent Worker ready')} at ${cyan(`http://localhost:${String(SERVICES.worker.port)}`)}\n`,
+    );
 
     // Keep process alive
     await new Promise(() => {});
@@ -578,26 +598,26 @@ async function cmdUp(isProd: boolean, isWorkerOnly: boolean, controlUrl?: string
   console.log(bold('Waiting for services to become healthy...\n'));
 
   const [cpOk, workerOk, webOk] = await Promise.all([
-    waitForHealthy(8080, '/health', 'Control Plane'),
-    waitForHealthy(9000, '/health', 'Agent Worker'),
-    waitForHealthy(5173, '/', 'Web UI'),
+    waitForHealthy(SERVICES['control-plane'].port, '/health', 'Control Plane'),
+    waitForHealthy(SERVICES.worker.port, '/health', 'Agent Worker'),
+    waitForHealthy(SERVICES.web.port, '/', 'Web UI'),
   ]);
 
   console.log();
   printServiceTable([
     {
       name: 'Control Plane',
-      url: 'http://localhost:8080',
+      url: `http://localhost:${String(SERVICES['control-plane'].port)}`,
       status: cpOk ? 'OK' : 'STARTING',
     },
     {
       name: 'Agent Worker',
-      url: 'http://localhost:9000',
+      url: `http://localhost:${String(SERVICES.worker.port)}`,
       status: workerOk ? 'OK' : 'STARTING',
     },
     {
       name: 'Web UI',
-      url: 'http://localhost:5173',
+      url: `http://localhost:${String(SERVICES.web.port)}`,
       status: webOk ? 'OK' : 'STARTING',
     },
   ]);
@@ -738,21 +758,21 @@ async function cmdStatus(): Promise<void> {
   const rows: ServiceRow[] = [
     {
       name: 'Control Plane',
-      url: 'http://localhost:8080',
+      url: `http://localhost:${String(SERVICES['control-plane'].port)}`,
       status: cpHealth.ok ? 'OK' : 'DOWN',
       uptime: cpUptime,
       memory: cpMemory,
     },
     {
       name: 'Agent Worker',
-      url: 'http://localhost:9000',
+      url: `http://localhost:${String(SERVICES.worker.port)}`,
       status: workerHealth.ok ? 'OK' : 'DOWN',
       uptime: workerUptime,
       memory: workerMemory,
     },
     {
       name: 'Web UI',
-      url: 'http://localhost:5173',
+      url: `http://localhost:${String(SERVICES.web.port)}`,
       status: webHealth.ok ? 'OK' : 'DOWN',
     },
   ];
