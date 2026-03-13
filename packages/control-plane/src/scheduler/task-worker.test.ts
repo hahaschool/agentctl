@@ -505,6 +505,105 @@ describe('createTaskWorker()', () => {
     });
   });
 
+  describe('processor — MCP config downlink', () => {
+    it('includes mcpServers from agent config in the dispatch payload', async () => {
+      const mcpServers = {
+        memory: { command: 'npx', args: ['-y', '@anthropic/memory-server'] },
+        filesystem: { command: 'npx', args: ['-y', '@anthropic/fs-server'], env: { ROOT: '/tmp' } },
+      };
+
+      const registry = createMockRegistry({
+        getAgent: vi
+          .fn()
+          .mockResolvedValue(
+            makeAgent({ config: { model: 'claude-sonnet-4-20250514', mcpServers } }),
+          ),
+      });
+      mockFetchSuccess();
+
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+        registry,
+      });
+
+      const processor = getProcessor();
+      const job = makeJob();
+
+      await processor(job);
+
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1]?.body as string) as {
+        config: { mcpServers: Record<string, unknown> };
+      };
+
+      expect(requestBody.config.mcpServers).toEqual(mcpServers);
+    });
+
+    it('sends null mcpServers when agent config has no MCP servers', async () => {
+      const registry = createMockRegistry({
+        getAgent: vi
+          .fn()
+          .mockResolvedValue(makeAgent({ config: { model: 'claude-sonnet-4-20250514' } })),
+      });
+      mockFetchSuccess();
+
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+        registry,
+      });
+
+      const processor = getProcessor();
+      const job = makeJob();
+
+      await processor(job);
+
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1]?.body as string) as {
+        config: { mcpServers: unknown };
+      };
+
+      expect(requestBody.config.mcpServers).toBeNull();
+    });
+
+    it('prefers job-level mcpServers over agent config mcpServers', async () => {
+      const agentMcpServers = {
+        memory: { command: 'npx', args: ['-y', '@anthropic/memory-server'] },
+      };
+      const jobMcpServers = {
+        custom: { command: '/usr/local/bin/custom-mcp', args: ['--port', '3001'] },
+      };
+
+      const registry = createMockRegistry({
+        getAgent: vi.fn().mockResolvedValue(
+          makeAgent({
+            config: { model: 'claude-sonnet-4-20250514', mcpServers: agentMcpServers },
+          }),
+        ),
+      });
+      mockFetchSuccess();
+
+      createTaskWorker({
+        connection: { host: 'localhost', port: 6379 },
+        logger,
+        registry,
+      });
+
+      const processor = getProcessor();
+      const job = makeJob({ mcpServers: jobMcpServers });
+
+      await processor(job);
+
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1]?.body as string) as {
+        config: { mcpServers: Record<string, unknown> };
+      };
+
+      expect(requestBody.config.mcpServers).toEqual(jobMcpServers);
+    });
+  });
+
   describe('processor — signal jobs', () => {
     it('logs signalMetadata for agent:signal jobs', async () => {
       const registry = createMockRegistry();
