@@ -30,6 +30,7 @@ vi.mock('node:os', () => ({
 import {
   closeSync,
   existsSync,
+  fstatSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -117,6 +118,20 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('GET /api/files (list directory)', () => {
+    it('includes Fastify rate-limit headers on the directory listing route', async () => {
+      const dirPath = '/Users/testuser/project';
+      vi.mocked(statSync).mockReturnValue(makeStat({ isDirectory: true }));
+      vi.mocked(readdirSync).mockReturnValue([] as unknown as ReturnType<typeof readdirSync>);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/files?path=${encodeURIComponent(dirPath)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['x-ratelimit-limit']).toBe('60');
+    });
+
     it('returns directory entries sorted dirs-first then alphabetically', async () => {
       const dirPath = '/Users/testuser/project';
       vi.mocked(existsSync).mockReturnValue(true);
@@ -277,12 +292,41 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('GET /api/files/content (read file)', () => {
+    it('includes Fastify rate-limit headers on the file content route', async () => {
+      const filePath = '/Users/testuser/project/index.ts';
+      const fileContent = 'console.log("hello");';
+      vi.mocked(openSync).mockReturnValue(42);
+      vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: fileContent.length }));
+      vi.mocked(fstatSync).mockReturnValue(
+        makeStat({ isFile: true, size: fileContent.length }) as unknown as ReturnType<
+          typeof fstatSync
+        >,
+      );
+      vi.mocked(readSync).mockImplementation((_fd, buf: Buffer) => {
+        buf.write(fileContent);
+        return fileContent.length;
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/files/content?path=${encodeURIComponent(filePath)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['x-ratelimit-limit']).toBe('60');
+    });
+
     it('returns file content with path and size', async () => {
       const filePath = '/Users/testuser/project/index.ts';
       const fileContent = 'console.log("hello");';
       const fd = 42;
       vi.mocked(openSync).mockReturnValue(fd);
       vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: fileContent.length }));
+      vi.mocked(fstatSync).mockReturnValue(
+        makeStat({ isFile: true, size: fileContent.length }) as unknown as ReturnType<
+          typeof fstatSync
+        >,
+      );
       vi.mocked(readSync).mockImplementation((_fd, buf: Buffer) => {
         buf.write(fileContent);
         return fileContent.length;
@@ -314,7 +358,7 @@ describe('File routes', () => {
     it('returns 404 when file does not exist', async () => {
       const err = new Error('ENOENT') as NodeJS.ErrnoException;
       err.code = 'ENOENT';
-      vi.mocked(openSync).mockImplementation(() => {
+      vi.mocked(statSync).mockImplementation(() => {
         throw err;
       });
 
@@ -328,8 +372,6 @@ describe('File routes', () => {
     });
 
     it('returns 400 when path is a directory', async () => {
-      const fd = 10;
-      vi.mocked(openSync).mockReturnValue(fd);
       vi.mocked(statSync).mockReturnValue(makeStat({ isDirectory: true }));
 
       const res = await app.inject({
@@ -341,12 +383,9 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.error).toBe('INVALID_PATH');
       expect(body.message).toContain('directory');
-      expect(closeSync).toHaveBeenCalledWith(fd);
     });
 
     it('returns 400 when file exceeds maximum size', async () => {
-      const fd = 11;
-      vi.mocked(openSync).mockReturnValue(fd);
       vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: 2_000_000 }));
 
       const res = await app.inject({
@@ -358,7 +397,6 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.error).toBe('INVALID_PATH');
       expect(body.message).toContain('maximum size');
-      expect(closeSync).toHaveBeenCalledWith(fd);
     });
 
     it('returns 400 for denied path segments', async () => {
@@ -378,6 +416,19 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('PUT /api/files/content (write file)', () => {
+    it('includes Fastify rate-limit headers on the file write route', async () => {
+      const filePath = '/Users/testuser/project/output.txt';
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/files/content',
+        payload: { path: filePath, content: 'new content here' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['x-ratelimit-limit']).toBe('30');
+    });
+
     it('writes file content and returns success', async () => {
       const filePath = '/Users/testuser/project/output.txt';
       vi.mocked(existsSync).mockReturnValue(true);
@@ -392,7 +443,7 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.success).toBe(true);
       expect(body.path).toBe(filePath);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, 'new content here', 'utf-8');
+      expect(writeFileSync).toHaveBeenCalledWith(filePath, 'new content here');
     });
 
     it('creates parent directories when they do not exist', async () => {
@@ -463,7 +514,7 @@ describe('File routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().success).toBe(true);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, '', 'utf-8');
+      expect(writeFileSync).toHaveBeenCalledWith(filePath, '');
     });
 
     it('accepts paths under /tmp', async () => {
