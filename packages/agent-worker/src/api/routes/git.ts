@@ -9,15 +9,14 @@ import { normalize, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { WorkerError } from '@agentctl/shared';
-import rateLimit from '@fastify/rate-limit';
-import type { FastifyInstance, FastifyPluginOptions, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
+import { DEFAULT_DENIED_PATH_SEGMENTS, findDeniedPathSegment } from '../../utils/path-security.js';
 import {
-  DEFAULT_DENIED_PATH_SEGMENTS,
-  findDeniedPathSegment,
-  sanitizePath,
-} from '../../utils/path-security.js';
-import { readRateLimitEnv } from '../rate-limit.js';
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -27,26 +26,6 @@ const execFileAsync = promisify(execFile);
 
 const GIT_COMMAND_TIMEOUT_MS = 5_000;
 const GIT_MAX_BUFFER = 1024 * 1024; // 1 MB
-const ALLOWED_GIT_BASE_DIRECTORIES = Array.from(
-  new Set(
-    [
-      '/Users',
-      '/home',
-      '/tmp',
-      '/private/tmp',
-      '/var',
-      '/workspace',
-      '/workspaces',
-      '/repo',
-      '/mnt',
-      '/Volumes',
-      '/opt',
-      '/srv',
-      process.cwd(),
-      process.env.PROJECT_PATH,
-    ].filter((base): base is string => typeof base === 'string' && base.startsWith('/')),
-  ),
-);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,43 +67,43 @@ type GitStatusResponse = {
   worktrees: GitWorktreeEntry[];
 };
 
-type RateLimitError = Error & {
-  statusCode: number;
-  code: 'RATE_LIMITED';
-};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function findAllowedGitBase(raw: unknown): string {
+/**
+ * Validate that a path string from an HTTP request is safe to use as a
+ * git working directory. Rejects path traversal (`..`) and access to
+ * sensitive directories.
+ *
+ * Security: prevents js/path-injection by (a) normalising the path via
+ * resolve/normalize to eliminate `..` traversal, (b) requiring an absolute
+ * path, and (c) rejecting any path that contains sensitive directory names
+ * such as .ssh or .aws.
+ */
+function validateGitPath(raw: unknown): string {
   if (!raw || typeof raw !== 'string') {
     throw new WorkerError('INVALID_PATH', 'A non-empty "path" query parameter is required');
   }
 
-  for (const base of ALLOWED_GIT_BASE_DIRECTORIES) {
-    try {
-      sanitizePath(raw, base);
-      return base;
-    } catch {
-      // Path is outside this base — try the next one.
-    }
+  // resolve + normalize collapses `..` components, eliminating traversal
+  const resolved = resolve(normalize(raw));
+
+  // Must be absolute after normalisation
+  if (!resolved.startsWith('/')) {
+    throw new WorkerError('INVALID_PATH', 'Path must be absolute', { path: raw });
   }
 
-  throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-    path: resolve(normalize(raw)),
-  });
-}
-
-function assertGitPathIsAllowed(safePath: string): void {
-  const deniedSegment = findDeniedPathSegment(safePath, DEFAULT_DENIED_PATH_SEGMENTS);
+  const deniedSegment = findDeniedPathSegment(resolved, DEFAULT_DENIED_PATH_SEGMENTS);
   if (deniedSegment) {
     throw new WorkerError(
       'INVALID_PATH',
       `Access to "${deniedSegment}" directories is denied for security reasons`,
-      { path: safePath, deniedSegment },
+      { path: resolved, deniedSegment },
     );
   }
+
+  return resolved;
 }
 
 /**
@@ -135,28 +114,26 @@ function assertGitPathIsAllowed(safePath: string): void {
  * Security: addresses js/path-injection by resolving the real path
  * of the validated directory and re-applying the deny list.
  */
-function buildRateLimitError(message: string): RateLimitError {
-  return Object.assign(new Error(message), {
-    statusCode: 429,
-    code: 'RATE_LIMITED' as const,
-  });
-}
-
 function resolveAndRevalidate(validated: string): string {
   let realPath: string;
   try {
     realPath = realpathSync(validated);
-  } catch (err) {
-    const nodeErr = err as NodeJS.ErrnoException;
-    if (nodeErr.code === 'ENOENT') {
-      throw err;
-    }
+  } catch {
+    // If realpath fails (e.g. broken symlink), fall back to the
+    // already-validated path — statSync will catch the real error.
     return validated;
   }
 
-  const safeRealPath = sanitizePath(realPath, findAllowedGitBase(realPath));
-  assertGitPathIsAllowed(safeRealPath);
-  return safeRealPath;
+  const deniedSegment = findDeniedPathSegment(realPath, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `Resolved path accesses denied "${deniedSegment}" directory`,
+      { path: realPath, deniedSegment },
+    );
+  }
+
+  return realPath;
 }
 
 async function runGit(args: string[], cwd: string): Promise<string> {
@@ -259,41 +236,19 @@ function parseWorktreeList(output: string): GitWorktreeEntry[] {
 
 export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions): Promise<void> {
   const { logger } = options;
-  await app.register(rateLimit, {
-    global: false,
-    hook: 'preHandler',
-    keyGenerator: (request: FastifyRequest) =>
-      request.ip ??
-      (typeof request.headers['x-forwarded-for'] === 'string'
-        ? request.headers['x-forwarded-for']
-        : 'unknown'),
-  });
-
-  app.setErrorHandler((err, _request, reply) => {
-    const rateLimitErr = err as Partial<RateLimitError>;
-    if (rateLimitErr.statusCode === 429 && rateLimitErr.code === 'RATE_LIMITED') {
-      const message = err instanceof Error ? err.message : 'Too many requests';
-      return reply.status(429).send({
-        error: message,
-        code: 'RATE_LIMITED',
-      });
-    }
-
-    throw err;
-  });
+  const gitStatusRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('GIT_STATUS_RATE_LIMIT_MAX', 60),
+      readRateLimitEnv('GIT_STATUS_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many git status requests. Try again later.',
+  );
 
   // GET /api/git/status?path=<absolute-path>
   app.get<{ Querystring: { path?: string } }>(
     '/status',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('GIT_STATUS_RATE_LIMIT_MAX', 60),
-          timeWindow: readRateLimitEnv('GIT_STATUS_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: () =>
-            buildRateLimitError('Too many git status requests. Try again later.'),
-        },
-      },
+      preHandler: gitStatusRateLimit,
       schema: {
         querystring: {
           type: 'object',
@@ -305,20 +260,9 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
       },
     },
     async (request, reply) => {
-      const rawPath = request.query.path;
-      if (typeof rawPath !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_PATH',
-          message: 'A non-empty "path" query parameter is required',
-        });
-      }
-
       let validatedDirPath: string;
-      let allowedBase: string;
       try {
-        allowedBase = findAllowedGitBase(rawPath);
-        validatedDirPath = sanitizePath(rawPath, allowedBase);
-        assertGitPathIsAllowed(validatedDirPath);
+        validatedDirPath = validateGitPath(request.query.path);
       } catch (err) {
         const msg = err instanceof WorkerError ? err.message : 'Invalid path';
         return reply.code(400).send({ error: 'INVALID_PATH', message: msg });

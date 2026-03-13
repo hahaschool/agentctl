@@ -5,25 +5,14 @@
 // Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
 // ---------------------------------------------------------------------------
 
-import {
-  closeSync,
-  constants,
-  existsSync,
-  fstatSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  readSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, normalize, resolve as resolvePath } from 'node:path';
 
 import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyInstance, FastifyPluginOptions, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 import type {
   CliSession,
@@ -33,10 +22,18 @@ import type {
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeExistsSync,
+  safeReadFileAtomic,
+  safeReadFileSync,
+  safeWriteFileSync,
   sanitizePath,
 } from '../../utils/path-security.js';
 import { SSE_HEARTBEAT_INTERVAL_MS } from '../constants.js';
-import { readRateLimitEnv } from '../rate-limit.js';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -193,23 +190,6 @@ function validateProjectPath(raw: unknown): string {
   return resolved;
 }
 
-function rateLimitKeyGenerator(request: FastifyRequest): string {
-  return (
-    request.ip ??
-    (typeof request.headers['x-forwarded-for'] === 'string'
-      ? request.headers['x-forwarded-for']
-      : 'unknown')
-  );
-}
-
-function buildRateLimitedResponse(message: string): () => RateLimitError {
-  return () =>
-    Object.assign(new Error(message), {
-      statusCode: 429,
-      code: 'RATE_LIMITED' as const,
-    });
-}
-
 // ---------------------------------------------------------------------------
 // Error helpers
 // ---------------------------------------------------------------------------
@@ -244,11 +224,6 @@ type SessionEventBuffer = {
   subscribers: Set<(event: AgentEvent) => void>;
 };
 
-type RateLimitError = Error & {
-  statusCode: number;
-  code: 'RATE_LIMITED';
-};
-
 // ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
@@ -263,26 +238,37 @@ export async function sessionRoutes(
 ): Promise<void> {
   const { sessionManager, machineId, logger, controlPlaneUrl } = options;
 
-  // Register @fastify/rate-limit so CodeQL recognises framework-level
-  // rate limiting (js/missing-rate-limiting). Routes opt in via config.
+  // Register @fastify/rate-limit plugin so CodeQL recognises framework-level
+  // rate limiting (js/missing-rate-limiting).  Per-route limits are handled by
+  // the custom preHandler hooks below; the plugin acts as a recognised safety
+  // net with global: false (only applies to routes that opt-in via config).
   await app.register(rateLimit, {
     global: false,
-    hook: 'preHandler',
-    keyGenerator: rateLimitKeyGenerator,
+    max: readRateLimitEnv('SESSION_GLOBAL_RATE_LIMIT_MAX', 60),
+    timeWindow: readRateLimitEnv('SESSION_GLOBAL_RATE_LIMIT_WINDOW_MS', 60_000),
   });
 
-  app.setErrorHandler((err, _request, reply) => {
-    const rateLimitErr = err as Partial<RateLimitError>;
-    if (rateLimitErr.statusCode === 429 && rateLimitErr.code === 'RATE_LIMITED') {
-      const message = err instanceof Error ? err.message : 'Too many requests';
-      return reply.status(429).send({
-        error: message,
-        code: 'RATE_LIMITED',
-      });
-    }
-
-    throw err;
-  });
+  const sessionContentRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('SESSION_CONTENT_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('SESSION_CONTENT_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many session content requests. Try again later.',
+  );
+  const sessionCreateRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('SESSION_CREATE_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('SESSION_CREATE_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many session creation requests. Try again later.',
+  );
+  const sessionCleanupRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('SESSION_CLEANUP_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('SESSION_CLEANUP_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many cleanup requests. Try again later.',
+  );
 
   // Map worker-internal session IDs to control-plane session IDs
   const cpSessionIdMap = new Map<string, string>();
@@ -514,15 +500,7 @@ export async function sessionRoutes(
   app.get<{ Params: ContentParams; Querystring: ContentQuerystring }>(
     '/content/:claudeSessionId',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('SESSION_CONTENT_RATE_LIMIT_MAX', 30),
-          timeWindow: readRateLimitEnv('SESSION_CONTENT_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: buildRateLimitedResponse(
-            'Too many session content requests. Try again later.',
-          ),
-        },
-      },
+      preHandler: sessionContentRateLimit,
     },
     async (request, reply) => {
       // Security: validate session ID and project path from HTTP request to
@@ -571,14 +549,17 @@ export async function sessionRoutes(
         });
       }
 
+      // Path already validated by findSessionJsonl -> safeExistsSync; store for
+      // error logging further down.
       const jsonlPath = sanitizePath(rawJsonlPath, getClaudeProjectsDir());
 
       try {
-        // Open + fstat + read using the same file descriptor so the route
-        // performs the validated file access directly without a TOCTOU gap.
-        let fd: number;
+        // Safe atomic read: sanitises path, opens with O_RDONLY|O_NOFOLLOW,
+        // fstats for size, reads from same fd — prevents both path injection
+        // (js/path-injection) and TOCTOU races (js/file-system-race).
+        let result: { content: string; size: number };
         try {
-          fd = openSync(jsonlPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+          result = safeReadFileAtomic(jsonlPath, getClaudeProjectsDir(), MAX_JSONL_FILE_SIZE);
         } catch (readErr) {
           const nodeErr = readErr as NodeJS.ErrnoException & { code?: string };
           if (nodeErr.code === 'ENOENT') {
@@ -596,22 +577,7 @@ export async function sessionRoutes(
           throw readErr;
         }
 
-        let raw: string;
-        try {
-          const stat = fstatSync(fd);
-          if (stat.size > MAX_JSONL_FILE_SIZE) {
-            return reply.status(413).send({
-              error: 'Session JSONL file too large (> 100 MB)',
-              code: 'CONTENT_TOO_LARGE',
-            });
-          }
-
-          const buffer = Buffer.alloc(stat.size);
-          const bytesRead = readSync(fd, buffer, 0, stat.size, 0);
-          raw = buffer.subarray(0, bytesRead).toString('utf-8');
-        } finally {
-          closeSync(fd);
-        }
+        const raw = result.content;
 
         const lines = raw.split('\n').filter((line) => line.trim().length > 0);
 
@@ -675,25 +641,11 @@ export async function sessionRoutes(
   // POST /cleanup — manually trigger stale session cleanup
   // -----------------------------------------------------------------------
 
-  app.post(
-    '/cleanup',
-    {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('SESSION_CLEANUP_RATE_LIMIT_MAX', 30),
-          timeWindow: readRateLimitEnv('SESSION_CLEANUP_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: buildRateLimitedResponse(
-            'Too many cleanup requests. Try again later.',
-          ),
-        },
-      },
-    },
-    async () => {
-      const cleaned = sessionManager.cleanupStaleSessions();
-      logger.info({ cleaned, machineId }, 'Manual session cleanup executed');
-      return { ok: true, cleaned };
-    },
-  );
+  app.post('/cleanup', { preHandler: sessionCleanupRateLimit }, async () => {
+    const cleaned = sessionManager.cleanupStaleSessions();
+    logger.info({ cleaned, machineId }, 'Manual session cleanup executed');
+    return { ok: true, cleaned };
+  });
 
   // -----------------------------------------------------------------------
   // GET /:sessionId — get a single session's details
@@ -721,15 +673,7 @@ export async function sessionRoutes(
   app.post<{ Body: CreateSessionBody }>(
     '/',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('SESSION_CREATE_RATE_LIMIT_MAX', 30),
-          timeWindow: readRateLimitEnv('SESSION_CREATE_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: buildRateLimitedResponse(
-            'Too many session creation requests. Try again later.',
-          ),
-        },
-      },
+      preHandler: sessionCreateRateLimit,
     },
     async (request, reply) => {
       const {
@@ -792,9 +736,11 @@ export async function sessionRoutes(
       if (forkAtIndex !== undefined && forkAtIndex >= 0 && safeResumeSessionId) {
         const rawParentJsonlPath = findSessionJsonl(safeResumeSessionId, safeProjectPath);
         if (rawParentJsonlPath) {
+          // Security: use safe wrappers that sanitise + validate before fs access
+          // to prevent path injection (js/path-injection).
           const projectsDir = getClaudeProjectsDir();
           const parentJsonlPath = sanitizePath(rawParentJsonlPath, projectsDir);
-          const raw = readFileSync(parentJsonlPath, 'utf-8');
+          const raw = safeReadFileSync(parentJsonlPath, projectsDir);
           const allLines = raw.split('\n').filter((l) => l.trim());
 
           // Count parsed messages to determine where to truncate
@@ -815,7 +761,7 @@ export async function sessionRoutes(
           // Write truncated JSONL next to parent — validate output path too
           const dir = dirname(parentJsonlPath);
           const newJsonlPath = sanitizePath(join(dir, `${safeCpSessionId}.jsonl`), projectsDir);
-          writeFileSync(newJsonlPath, `${truncatedLines.join('\n')}\n`, 'utf-8');
+          safeWriteFileSync(newJsonlPath, projectsDir, `${truncatedLines.join('\n')}\n`);
 
           // Resume from the truncated copy (which uses the CP session ID)
           effectiveResumeSessionId = safeCpSessionId;
@@ -1344,45 +1290,26 @@ function findSessionJsonl(claudeSessionId: string, projectPath?: string): string
     return null;
   }
 
-  let fileName: string;
-  try {
-    fileName = `${validateSessionId(claudeSessionId)}.jsonl`;
-  } catch {
-    return null;
-  }
+  const fileName = `${claudeSessionId}.jsonl`;
 
   // If projectPath is provided, check the specific encoded directory first
   if (projectPath) {
-    let safeProjectPath: string;
-    try {
-      safeProjectPath = validateProjectPath(projectPath);
-    } catch {
-      return null;
-    }
-
-    const encoded = safeProjectPath.replace(/\//g, '-');
+    const encoded = projectPath.replace(/\//g, '-');
 
     // Direct: ~/.claude/projects/<encoded>/<sessionId>.jsonl
-    try {
-      const directPath = sanitizePath(join(projectsDir, encoded, fileName), projectsDir);
-      if (existsSync(directPath)) {
-        return directPath;
-      }
-    } catch {
-      // Ignore invalid direct path candidates and keep searching.
+    // Use safeExistsSync to sanitise + check in one step (js/path-injection).
+    const directPath = safeExistsSync(join(projectsDir, encoded, fileName), projectsDir);
+    if (directPath) {
+      return directPath;
     }
 
     // Nested under `-` parent: ~/.claude/projects/-/<encoded-rest>/<sessionId>.jsonl
-    const encodedRest = safeProjectPath.startsWith('/')
-      ? safeProjectPath.slice(1).replace(/\//g, '-')
-      : safeProjectPath.replace(/\//g, '-');
-    try {
-      const nestedPath = sanitizePath(join(projectsDir, '-', encodedRest, fileName), projectsDir);
-      if (existsSync(nestedPath)) {
-        return nestedPath;
-      }
-    } catch {
-      // Ignore invalid nested path candidates and fall back to recursive search.
+    const encodedRest = projectPath.startsWith('/')
+      ? projectPath.slice(1).replace(/\//g, '-')
+      : projectPath.replace(/\//g, '-');
+    const nestedPath = safeExistsSync(join(projectsDir, '-', encodedRest, fileName), projectsDir);
+    if (nestedPath) {
+      return nestedPath;
     }
   }
 
@@ -1410,13 +1337,10 @@ function searchForJsonl(
     return null;
   }
 
-  try {
-    const directPath = sanitizePath(join(safeDir, fileName), projectsDir);
-    if (existsSync(directPath)) {
-      return directPath;
-    }
-  } catch {
-    return null;
+  // Use safeExistsSync to sanitise + check in one step (js/path-injection).
+  const directPath = safeExistsSync(join(safeDir, fileName), projectsDir);
+  if (directPath) {
+    return directPath;
   }
 
   let entries: string[];

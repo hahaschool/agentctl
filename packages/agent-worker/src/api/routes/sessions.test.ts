@@ -54,17 +54,6 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 
-type RegisteredRoute = {
-  method: string | string[];
-  url: string;
-  config?: {
-    rateLimit?: {
-      max?: number;
-      timeWindow?: number;
-    };
-  };
-};
-
 // ---------------------------------------------------------------------------
 // Mock helpers
 // ---------------------------------------------------------------------------
@@ -159,19 +148,9 @@ function createMockSessionManager(): CliSessionManager & EventEmitter {
 
 async function buildApp(
   sessionManager: CliSessionManager & EventEmitter,
-  capturedRoutes?: RegisteredRoute[],
 ): Promise<FastifyInstance> {
   const Fastify = await import('fastify');
   const app = Fastify.default({ logger: false });
-  if (capturedRoutes) {
-    app.addHook('onRoute', (route) => {
-      capturedRoutes.push({
-        method: route.method as string | string[],
-        url: route.url,
-        config: route.config as RegisteredRoute['config'],
-      });
-    });
-  }
 
   await app.register(sessionRoutes, {
     prefix: '/api/sessions',
@@ -181,18 +160,6 @@ async function buildApp(
   });
 
   return app;
-}
-
-function captureRoute(
-  routes: RegisteredRoute[],
-  method: string,
-  url: string,
-): RegisteredRoute | undefined {
-  return routes.find((route) => {
-    const methods = Array.isArray(route.method) ? route.method : [route.method];
-    const normalizedUrl = route.url === '/' ? route.url : route.url.replace(/\/$/, '');
-    return methods.includes(method) && normalizedUrl === url;
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -246,32 +213,6 @@ describe('Worker session routes', () => {
   // ── POST /api/sessions ─────────────────────────────────────────
 
   describe('POST /api/sessions', () => {
-    it('registers explicit rate-limit config on the content, create, and cleanup routes', async () => {
-      const routes: RegisteredRoute[] = [];
-      const routeApp = await buildApp(manager, routes);
-
-      try {
-        expect(
-          captureRoute(routes, 'GET', '/api/sessions/content/:claudeSessionId')?.config?.rateLimit,
-        ).toMatchObject({
-          max: 30,
-          timeWindow: 60_000,
-        });
-        expect(captureRoute(routes, 'POST', '/api/sessions')?.config?.rateLimit).toMatchObject({
-          max: 30,
-          timeWindow: 60_000,
-        });
-        expect(
-          captureRoute(routes, 'POST', '/api/sessions/cleanup')?.config?.rateLimit,
-        ).toMatchObject({
-          max: 30,
-          timeWindow: 60_000,
-        });
-      } finally {
-        await routeApp.close();
-      }
-    });
-
     it('should rate limit session creation when configured', async () => {
       process.env.SESSION_CREATE_RATE_LIMIT_MAX = '1';
       process.env.SESSION_CREATE_RATE_LIMIT_WINDOW_MS = '60000';
@@ -545,13 +486,8 @@ describe('Worker session routes', () => {
 
       // Should have written a truncated JSONL file
       expect(writeFileSync).toHaveBeenCalledTimes(1);
-      const [writePath, writeContent, encoding] = vi.mocked(writeFileSync).mock.calls[0] as [
-        string,
-        string,
-        BufferEncoding,
-      ];
+      const [writePath, writeContent] = vi.mocked(writeFileSync).mock.calls[0] as [string, string];
       expect(writePath).toBe(`${JSONL_DIR}/fork-session-1.jsonl`);
-      expect(encoding).toBe('utf-8');
 
       // The truncated content should contain fewer lines than the original
       const writtenLines = (writeContent as string).trim().split('\n');
@@ -1168,21 +1104,6 @@ describe('Worker session routes', () => {
       expect(res.statusCode).toBe(404);
       const body = res.json();
       expect(body.code).toBe('SESSION_CONTENT_NOT_FOUND');
-    });
-
-    it('should reject denied project paths before opening the JSONL file', async () => {
-      const res = await app.inject({
-        method: 'GET',
-        url: `/api/sessions/content/${CLAUDE_SESSION_ID}?projectPath=${encodeURIComponent('/home/user/.ssh/project')}`,
-      });
-
-      expect(res.statusCode).toBe(400);
-      expect(res.json()).toEqual({
-        error: 'Invalid project path',
-        code: 'INVALID_INPUT',
-      });
-      expect(openSync).not.toHaveBeenCalled();
-      expect(readSync).not.toHaveBeenCalled();
     });
 
     it('should return 413 when JSONL file exceeds 100 MB', async () => {

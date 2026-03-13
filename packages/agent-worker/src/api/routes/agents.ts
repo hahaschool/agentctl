@@ -5,12 +5,10 @@ import type {
   SafetyDecisionRequest,
 } from '@agentctl/shared';
 import { AgentError, SAFETY_DECISIONS, verifyDispatchPayloadSignature } from '@agentctl/shared';
-import rateLimit from '@fastify/rate-limit';
-import type { FastifyInstance, FastifyPluginOptions, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from '../../runtime/agent-pool.js';
-import { readRateLimitEnv } from '../rate-limit.js';
 
 type AgentRouteOptions = FastifyPluginOptions & {
   pool: AgentPool;
@@ -51,11 +49,6 @@ type AgentIdParams = {
   id: string;
 };
 
-type RateLimitError = Error & {
-  statusCode: number;
-  code: 'RATE_LIMITED';
-};
-
 const ERROR_STATUS_MAP: Record<string, number> = {
   AGENT_NOT_FOUND: 404,
   AGENT_EXISTS: 409,
@@ -94,29 +87,6 @@ function errorToResponse(err: unknown): {
 export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptions): Promise<void> {
   const { pool, machineId, logger, getDispatchVerificationConfig } = options;
 
-  await app.register(rateLimit, {
-    global: false,
-    hook: 'preHandler',
-    keyGenerator: (request: FastifyRequest) =>
-      request.ip ??
-      (typeof request.headers['x-forwarded-for'] === 'string'
-        ? request.headers['x-forwarded-for']
-        : 'unknown'),
-  });
-
-  app.setErrorHandler((err, _request, reply) => {
-    const rateLimitErr = err as Partial<RateLimitError>;
-    if (rateLimitErr.statusCode === 429 && rateLimitErr.code === 'RATE_LIMITED') {
-      const message = err instanceof Error ? err.message : 'Too many requests';
-      return reply.status(429).send({
-        error: message,
-        code: 'RATE_LIMITED',
-      });
-    }
-
-    throw err;
-  });
-
   // GET /api/agents — list all agents in the pool
   app.get('/', async (_request, reply) => {
     const agents = pool.listAgents();
@@ -151,19 +121,6 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
   // POST /api/agents/:id/start — create agent in pool (if needed) and start it
   app.post<{ Params: AgentIdParams; Body: StartAgentBody }>(
     '/:id/start',
-    {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('AGENT_START_RATE_LIMIT_MAX', 30),
-          timeWindow: readRateLimitEnv('AGENT_START_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: () =>
-            Object.assign(new Error('Too many agent start requests. Try again later.'), {
-              statusCode: 429,
-              code: 'RATE_LIMITED' as const,
-            }),
-        },
-      },
-    },
     async (request, reply) => {
       const { id } = request.params;
       const unsignedDispatchPayload = { ...request.body };
