@@ -1,10 +1,12 @@
 # Phase 9.2 — Automated Security Pipeline
 # Runs CodeQL, Semgrep, dependency audit, secret scanning, and container scanning
-# on every PR to main/dev and nightly at 03:00 UTC.
+# on every push/PR to main/dev and nightly at 03:00 UTC.
 
 name: Security Audit
 
 on:
+  push:
+    branches: [main, dev]
   pull_request:
     branches: [main, dev]
   schedule:
