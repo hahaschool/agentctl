@@ -4,6 +4,7 @@ import {
   type DispatchSignature,
   type DispatchSigningKeyPair,
   generateDispatchSigningKeyPair,
+  type McpServerConfig,
   signDispatchPayload,
 } from '@agentctl/shared';
 import { type ConnectionOptions, type Job, Worker } from 'bullmq';
@@ -44,6 +45,8 @@ type DispatchPayload = {
   config: {
     model: string | null;
     allowedTools: string[] | null;
+    /** MCP server definitions for the worker to write as `.mcp.json` before agent startup. */
+    mcpServers?: Record<string, McpServerConfig> | null;
   };
   resumeSession: string | null;
   projectPath: string | null;
@@ -139,6 +142,7 @@ export function createTaskWorker({
         resumeSession,
         sessionMode,
         iteration,
+        mcpServers: jobMcpServers,
       } = job.data;
 
       const jobLogger = logger.child({
@@ -376,12 +380,18 @@ export function createTaskWorker({
         const address = machine.tailscaleIp ?? machine.hostname;
         const dispatchUrl = `http://${address}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
 
+        // Include MCP server config in the dispatch payload.
+        // Job-level mcpServers (if provided) take priority over the agent's
+        // stored configuration, enabling callers to override per-dispatch.
+        const mcpServers = jobMcpServers ?? agent.config?.mcpServers ?? null;
+
         const unsignedPayload = {
           runId,
           prompt: enrichedPrompt,
           config: {
             model,
             allowedTools,
+            mcpServers,
           },
           resumeSession: effectiveResumeSession,
           projectPath: agent.projectPath,

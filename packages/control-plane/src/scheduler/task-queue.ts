@@ -1,4 +1,4 @@
-import type { RunTrigger, SessionMode } from '@agentctl/shared';
+import type { McpServerConfig, RunTrigger, SessionMode } from '@agentctl/shared';
 import type { ConnectionOptions } from 'bullmq';
 import { Queue, type QueueOptions } from 'bullmq';
 
@@ -18,6 +18,8 @@ export type AgentTaskJobData = {
   sessionMode?: SessionMode;
   /** Zero-based iteration counter for scheduled/repeating runs. */
   iteration?: number;
+  /** MCP server definitions to include in the dispatch payload for the worker. */
+  mcpServers?: Record<string, McpServerConfig> | null;
 };
 
 export type AgentTaskJobName = 'agent:start' | 'agent:heartbeat' | 'agent:cron' | 'agent:signal';
