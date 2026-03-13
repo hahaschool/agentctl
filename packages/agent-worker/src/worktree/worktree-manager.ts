@@ -1,15 +1,11 @@
 import { execFile } from 'node:child_process';
+import { chmodSync, mkdirSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
-import {
-  safeChmodSync,
-  safeMkdirSync,
-  safeReadFileSync,
-  safeWriteFileSync,
-} from '../utils/path-security.js';
+import { safeReadFileSync, safeWriteFileSync } from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
 const TIER_LOCK_DIR = '/tmp/agentctl-tier-locks';
@@ -416,7 +412,7 @@ export class WorktreeManager {
         allowedBase: tmpRoot,
       });
     }
-    safeMkdirSync(safeTierLockDir, safeTierLockDir, { recursive: true });
+    mkdirSync(safeTierLockDir, { recursive: true });
 
     try {
       await execFileAsync('flock', ['-n', path.join(TIER_LOCK_DIR, `${tier}.lock`), '-c', 'true']);
@@ -495,8 +491,8 @@ export class WorktreeManager {
       });
     }
 
-    safeMkdirSync(safeWorktreePath, treesRoot, { recursive: true });
-    safeMkdirSync(safeAgentctlDir, safeWorktreePath, { recursive: true });
+    mkdirSync(safeWorktreePath, { recursive: true });
+    mkdirSync(safeAgentctlDir, { recursive: true });
     safeWriteFileSync(
       worktreeEnvPath,
       safeWorktreePath,
@@ -517,7 +513,7 @@ export class WorktreeManager {
     ].join('\n');
 
     safeWriteFileSync(scriptPath, safeAgentctlDir, bootstrapScript);
-    safeChmodSync(safeScriptPath, safeAgentctlDir, 0o755);
+    chmodSync(safeScriptPath, 0o755);
     safeWriteFileSync(
       metadataPath,
       safeAgentctlDir,
