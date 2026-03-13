@@ -7,7 +7,7 @@
 // `sanitizePath` + `findDeniedPathSegment` utilities from path-security.ts.
 // The sanitisation is intentionally performed at each call site (rather than
 // in a shared wrapper) so that CodeQL's interprocedural taint analysis can
-// trace the resolve() → startsWith() → fs-sink flow within the same scope.
+// trace the resolve() -> startsWith() -> fs-sink flow within the same scope.
 // ---------------------------------------------------------------------------
 
 import type { Dirent } from 'node:fs';
@@ -22,11 +22,10 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, resolve, sep } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { WorkerError } from '@agentctl/shared';
-import rateLimit from '@fastify/rate-limit';
-import type { FastifyInstance, FastifyPluginOptions, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
 import {
@@ -34,7 +33,11 @@ import {
   findDeniedPathSegment,
   sanitizePath,
 } from '../../utils/path-security.js';
-import { readRateLimitEnv } from '../rate-limit.js';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -67,13 +70,8 @@ type FileEntry = {
   modified?: string;
 };
 
-type RateLimitError = Error & {
-  statusCode: number;
-  code: 'RATE_LIMITED';
-};
-
 // ---------------------------------------------------------------------------
-// Shared validation helpers
+// Shared validation helpers (not path resolution — just pre-checks)
 // ---------------------------------------------------------------------------
 
 /**
@@ -95,27 +93,31 @@ function rejectMalformedInput(raw: unknown): asserts raw is string {
 }
 
 /**
- * Find the allowed base directory that contains `raw`.
+ * Run the shared `sanitizePath` against every allowed base directory and
+ * then check for denied segments. Returns the resolved, validated path.
  *
- * Route handlers call `sanitizePath(raw, allowedBase)` inline so CodeQL can
- * see the taint barrier immediately before each fs sink.
+ * This function is deliberately kept small and returns the same value that
+ * `sanitizePath` produces (which is `path.resolve()` output verified via
+ * `startsWith()`). Each route handler calls this AND uses the return value
+ * directly in fs calls so CodeQL can trace the taint barrier.
  */
-function findAllowedBaseDirectory(raw: string): string {
+function toSafePath(raw: string): string {
+  let safePath: string | undefined;
   for (const base of ALLOWED_BASE_DIRECTORIES) {
     try {
-      sanitizePath(raw, base);
-      return base;
+      safePath = sanitizePath(raw, base);
+      break;
     } catch {
       // Path not under this base — try the next one
     }
   }
 
-  throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-    path: resolve(raw),
-  });
-}
+  if (safePath === undefined) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: resolve(raw),
+    });
+  }
 
-function assertPathIsAllowed(safePath: string): void {
   const deniedSegment = findDeniedPathSegment(safePath, DEFAULT_DENIED_PATH_SEGMENTS);
   if (deniedSegment !== null) {
     throw new WorkerError(
@@ -124,26 +126,8 @@ function assertPathIsAllowed(safePath: string): void {
       { path: safePath, deniedSegment },
     );
   }
-}
 
-function rateLimitKeyGenerator(request: FastifyRequest): string {
-  return (
-    request.ip ??
-    (typeof request.headers['x-forwarded-for'] === 'string'
-      ? request.headers['x-forwarded-for']
-      : 'unknown')
-  );
-}
-
-function buildRateLimitError(message: string): RateLimitError {
-  return Object.assign(new Error(message), {
-    statusCode: 429,
-    code: 'RATE_LIMITED' as const,
-  });
-}
-
-function buildRateLimitedResponse(message: string): () => RateLimitError {
-  return () => buildRateLimitError(message);
+  return safePath;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,28 +137,30 @@ function buildRateLimitedResponse(message: string): () => RateLimitError {
 export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): Promise<void> {
   const { logger } = opts;
 
-  // Register the Fastify plugin with explicit defaults so CodeQL recognises
-  // framework-level route throttling when handlers opt in via config.rateLimit.
-  await app.register(rateLimit, {
-    global: false,
-    hook: 'preHandler',
-    max: readRateLimitEnv('FILE_ROUTE_GLOBAL_RATE_LIMIT_MAX', 60),
-    timeWindow: readRateLimitEnv('FILE_ROUTE_GLOBAL_RATE_LIMIT_WINDOW_MS', 60_000),
-    keyGenerator: rateLimitKeyGenerator,
-  });
+  const fileListRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('FILE_LIST_RATE_LIMIT_MAX', 60),
+      readRateLimitEnv('FILE_LIST_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many directory listing requests. Try again later.',
+  );
 
-  app.setErrorHandler((err, _request, reply) => {
-    const rateLimitErr = err as Partial<RateLimitError>;
-    if (rateLimitErr.statusCode === 429 && rateLimitErr.code === 'RATE_LIMITED') {
-      const message = err instanceof Error ? err.message : 'Too many requests';
-      return reply.status(429).send({
-        error: message,
-        code: 'RATE_LIMITED',
-      });
-    }
+  const fileContentRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_MAX', 60),
+      readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many file content requests. Try again later.',
+  );
 
-    throw err;
-  });
+  const fileWriteRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('FILE_WRITE_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('FILE_WRITE_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many file write requests. Try again later.',
+  );
+
   // -------------------------------------------------------------------------
   // GET /api/files — list directory contents
   // -------------------------------------------------------------------------
@@ -182,45 +168,22 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>(
     '/',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('FILE_LIST_RATE_LIMIT_MAX', 60),
-          timeWindow: readRateLimitEnv('FILE_LIST_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: buildRateLimitedResponse(
-            'Too many directory listing requests. Try again later.',
-          ),
-        },
-      },
+      preHandler: fileListRateLimit,
     },
     async (request) => {
       // -- Validate path inline so CodeQL traces the taint barrier -------------
       const rawPath = request.query.path;
       rejectMalformedInput(rawPath);
-      const allowedBase = findAllowedBaseDirectory(rawPath);
-      const resolvedAllowedBase = resolve(allowedBase);
-      const allowedBasePrefix = resolvedAllowedBase.endsWith(sep)
-        ? resolvedAllowedBase
-        : `${resolvedAllowedBase}${sep}`;
+      const dirPath = toSafePath(rawPath);
 
       // Avoid TOCTOU: attempt the operation directly and handle errors
       let dirents: Dirent[];
-      let dirPath = rawPath;
       try {
-        dirPath = sanitizePath(rawPath, resolvedAllowedBase);
-        assertPathIsAllowed(dirPath);
-        const safeDirPath = resolve(dirPath);
-        if (safeDirPath !== resolvedAllowedBase && !safeDirPath.startsWith(allowedBasePrefix)) {
-          throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-            path: safeDirPath,
-            allowedBase: resolvedAllowedBase,
-          });
-        }
-        const stat = statSync(safeDirPath);
+        const stat = statSync(dirPath);
         if (!stat.isDirectory()) {
-          throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: safeDirPath });
+          throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: dirPath });
         }
-        dirents = readdirSync(safeDirPath, { withFileTypes: true }) as Dirent[];
-        dirPath = safeDirPath;
+        dirents = readdirSync(dirPath, { withFileTypes: true }) as Dirent[];
       } catch (err) {
         if (err instanceof WorkerError) throw err;
         const nodeErr = err as NodeJS.ErrnoException;
@@ -250,18 +213,8 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
         // Validate child paths through sanitizePath before passing to statSync
         // to satisfy CodeQL's js/path-injection check on child entries.
         try {
-          const childPath = sanitizePath(resolve(dirPath, dirent.name), resolvedAllowedBase);
-          const safeChildPath = resolve(childPath);
-          if (
-            safeChildPath !== resolvedAllowedBase &&
-            !safeChildPath.startsWith(allowedBasePrefix)
-          ) {
-            throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-              path: safeChildPath,
-              allowedBase: resolvedAllowedBase,
-            });
-          }
-          const childStat = statSync(safeChildPath);
+          const childPath = sanitizePath(resolve(dirPath, dirent.name), dirPath);
+          const childStat = statSync(childPath);
           entry.size = childStat.size;
           entry.modified = childStat.mtime.toISOString();
         } catch {
@@ -288,46 +241,20 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>(
     '/content',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_MAX', 60),
-          timeWindow: readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: buildRateLimitedResponse(
-            'Too many file content requests. Try again later.',
-          ),
-        },
-      },
+      preHandler: fileContentRateLimit,
     },
     async (request) => {
       // -- Validate path inline so CodeQL traces the taint barrier -------------
       const rawPath = request.query.path;
       rejectMalformedInput(rawPath);
-      const allowedBase = findAllowedBaseDirectory(rawPath);
-      const resolvedAllowedBase = resolve(allowedBase);
-      const allowedBasePrefix = resolvedAllowedBase.endsWith(sep)
-        ? resolvedAllowedBase
-        : `${resolvedAllowedBase}${sep}`;
+      const filePath = toSafePath(rawPath);
 
       // Avoid TOCTOU (js/file-system-race): open the file atomically instead of
       // checking existence first, then reading. O_NOFOLLOW prevents symlink attacks.
       let fd: number;
-      let filePath = rawPath;
       try {
-        filePath = sanitizePath(rawPath, resolvedAllowedBase);
-        assertPathIsAllowed(filePath);
-        const safeFilePath = resolve(filePath);
-        if (safeFilePath !== resolvedAllowedBase && !safeFilePath.startsWith(allowedBasePrefix)) {
-          throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-            path: safeFilePath,
-            allowedBase: resolvedAllowedBase,
-          });
-        }
-        fd = openSync(safeFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-        filePath = safeFilePath;
+        fd = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
       } catch (err) {
-        if (err instanceof WorkerError) {
-          throw err;
-        }
         const nodeErr = err as NodeJS.ErrnoException;
         if (nodeErr.code === 'ENOENT') {
           throw new WorkerError('PATH_NOT_FOUND', `File does not exist: ${filePath}`, {
@@ -343,17 +270,10 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
       }
 
       try {
-        const statPath = resolve(filePath);
-        if (statPath !== resolvedAllowedBase && !statPath.startsWith(allowedBasePrefix)) {
-          throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-            path: statPath,
-            allowedBase: resolvedAllowedBase,
-          });
-        }
-        const stat = statSync(statPath);
+        const stat = statSync(filePath);
         if (stat.isDirectory()) {
           throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
-            path: statPath,
+            path: filePath,
           });
         }
 
@@ -361,11 +281,11 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
           throw new WorkerError(
             'INVALID_PATH',
             `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
-            { path: statPath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
+            { path: filePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
           );
         }
 
-        logger.debug({ path: statPath, size: stat.size }, 'reading file content');
+        logger.debug({ path: filePath, size: stat.size }, 'reading file content');
 
         const buffer = Buffer.alloc(stat.size);
         readSync(fd, buffer, 0, stat.size, 0);
@@ -373,7 +293,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
 
         return {
           content,
-          path: statPath,
+          path: filePath,
           size: stat.size,
         };
       } finally {
@@ -389,35 +309,14 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.put<{ Body: { path?: string; content?: string } }>(
     '/content',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('FILE_WRITE_RATE_LIMIT_MAX', 30),
-          timeWindow: readRateLimitEnv('FILE_WRITE_RATE_LIMIT_WINDOW_MS', 60_000),
-          errorResponseBuilder: buildRateLimitedResponse(
-            'Too many file write requests. Try again later.',
-          ),
-        },
-      },
+      preHandler: fileWriteRateLimit,
     },
     async (request) => {
       const body = request.body ?? {};
 
       // -- Validate path inline so CodeQL traces the taint barrier -------------
       rejectMalformedInput(body.path);
-      const allowedBase = findAllowedBaseDirectory(body.path);
-      const resolvedAllowedBase = resolve(allowedBase);
-      const allowedBasePrefix = resolvedAllowedBase.endsWith(sep)
-        ? resolvedAllowedBase
-        : `${resolvedAllowedBase}${sep}`;
-      let filePath = sanitizePath(body.path, resolvedAllowedBase);
-      assertPathIsAllowed(filePath);
-      filePath = resolve(filePath);
-      if (filePath !== resolvedAllowedBase && !filePath.startsWith(allowedBasePrefix)) {
-        throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-          path: filePath,
-          allowedBase: resolvedAllowedBase,
-        });
-      }
+      const filePath = toSafePath(body.path);
 
       if (typeof body.content !== 'string') {
         throw new WorkerError('INVALID_PATH', 'Request body must include a "content" string field');
@@ -426,29 +325,14 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
       // Validate the parent directory path to prevent js/http-to-file-access.
       // We use sanitizePath on dirname(filePath) so that both the file path and
       // its parent are proven safe before any fs write operation.
-      let safeDirPath = dirname(filePath);
+      const parentDir = dirname(filePath);
+      const safeDirPath = toSafePath(parentDir);
 
       // Create parent directories if they don't exist (use recursive which is
       // idempotent, avoiding TOCTOU from existsSync check)
       try {
-        safeDirPath = sanitizePath(dirname(filePath), resolvedAllowedBase);
-        assertPathIsAllowed(safeDirPath);
-        const resolvedDirPath = resolve(safeDirPath);
-        if (
-          resolvedDirPath !== resolvedAllowedBase &&
-          !resolvedDirPath.startsWith(allowedBasePrefix)
-        ) {
-          throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-            path: resolvedDirPath,
-            allowedBase: resolvedAllowedBase,
-          });
-        }
-        mkdirSync(resolvedDirPath, { recursive: true });
-        safeDirPath = resolvedDirPath;
+        mkdirSync(safeDirPath, { recursive: true });
       } catch (err) {
-        if (err instanceof WorkerError) {
-          throw err;
-        }
         const nodeErr = err as NodeJS.ErrnoException;
         throw new WorkerError('FS_ERROR', `Failed to create directory: ${nodeErr.message}`, {
           path: safeDirPath,
@@ -459,18 +343,11 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
 
       // Write using the sanitized filePath — CodeQL traces this from the
       // sanitizePath call above through to the writeFileSync sink.
-      const safeWritePath = resolve(filePath);
-      if (safeWritePath !== resolvedAllowedBase && !safeWritePath.startsWith(allowedBasePrefix)) {
-        throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-          path: safeWritePath,
-          allowedBase: resolvedAllowedBase,
-        });
-      }
-      writeFileSync(safeWritePath, body.content, 'utf-8');
+      writeFileSync(filePath, body.content, 'utf-8');
 
       return {
         success: true,
-        path: safeWritePath,
+        path: filePath,
       };
     },
   );
