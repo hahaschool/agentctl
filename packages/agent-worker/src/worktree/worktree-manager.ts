@@ -5,7 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
-import { safeReadFileSync, safeWriteFileSync, sanitizePath } from '../utils/path-security.js';
+import { safeReadFileSync, safeWriteFileSync } from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
 const TIER_LOCK_DIR = '/tmp/agentctl-tier-locks';
@@ -403,7 +403,15 @@ export class WorktreeManager {
   }
 
   private async tryAcquireTierSelectionLock(tier: string): Promise<boolean> {
-    const safeTierLockDir = sanitizePath(TIER_LOCK_DIR, '/tmp');
+    const safeTierLockDir = path.resolve(TIER_LOCK_DIR);
+    const tmpRoot = path.resolve('/tmp');
+    const tmpPrefix = tmpRoot.endsWith(path.sep) ? tmpRoot : `${tmpRoot}${path.sep}`;
+    if (safeTierLockDir !== tmpRoot && !safeTierLockDir.startsWith(tmpPrefix)) {
+      throw new AgentError('WORKTREE_CREATE_FAILED', 'Tier lock directory escapes /tmp', {
+        path: safeTierLockDir,
+        allowedBase: tmpRoot,
+      });
+    }
     mkdirSync(safeTierLockDir, { recursive: true });
 
     try {
@@ -429,9 +437,42 @@ export class WorktreeManager {
     const agentctlDir = path.join(worktreePath, WORKTREE_AGENTCTL_DIR);
     const scriptPath = path.join(agentctlDir, WORKTREE_TIER_SCRIPT);
     const metadataPath = path.join(agentctlDir, WORKTREE_TIER_METADATA);
-    const safeWorktreePath = sanitizePath(worktreePath, this.treesDir);
-    const safeAgentctlDir = sanitizePath(agentctlDir, safeWorktreePath);
-    const safeScriptPath = sanitizePath(scriptPath, safeAgentctlDir);
+    const safeWorktreePath = path.resolve(worktreePath);
+    const treesRoot = path.resolve(this.treesDir);
+    const treesPrefix = treesRoot.endsWith(path.sep) ? treesRoot : `${treesRoot}${path.sep}`;
+    if (safeWorktreePath !== treesRoot && !safeWorktreePath.startsWith(treesPrefix)) {
+      throw new AgentError('WORKTREE_CREATE_FAILED', 'Worktree path escapes treesDir', {
+        agentId,
+        path: safeWorktreePath,
+        allowedBase: treesRoot,
+      });
+    }
+    const safeAgentctlDir = path.resolve(agentctlDir);
+    const worktreePrefix = safeWorktreePath.endsWith(path.sep)
+      ? safeWorktreePath
+      : `${safeWorktreePath}${path.sep}`;
+    if (safeAgentctlDir !== safeWorktreePath && !safeAgentctlDir.startsWith(worktreePrefix)) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        'Agentctl worktree path escapes worktree root',
+        {
+          agentId,
+          path: safeAgentctlDir,
+          allowedBase: safeWorktreePath,
+        },
+      );
+    }
+    const safeScriptPath = path.resolve(scriptPath);
+    const agentctlPrefix = safeAgentctlDir.endsWith(path.sep)
+      ? safeAgentctlDir
+      : `${safeAgentctlDir}${path.sep}`;
+    if (safeScriptPath !== safeAgentctlDir && !safeScriptPath.startsWith(agentctlPrefix)) {
+      throw new AgentError('WORKTREE_CREATE_FAILED', 'Bootstrap script path escapes .agentctl', {
+        agentId,
+        path: safeScriptPath,
+        allowedBase: safeAgentctlDir,
+      });
+    }
 
     mkdirSync(safeWorktreePath, { recursive: true });
     mkdirSync(safeAgentctlDir, { recursive: true });
