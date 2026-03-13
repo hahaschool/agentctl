@@ -131,6 +131,10 @@ export type {
   ContextRef,
   ContextRefMode,
   CrossSpaceQuery,
+  CrossSpaceQueryRequest,
+  CrossSpaceQueryResponse,
+  CrossSpaceQueryResultEvent,
+  CrossSpaceQueryTimeRange,
   CrossSpaceSubscription,
   InjectionMethod,
 } from './context-bridge.js';
