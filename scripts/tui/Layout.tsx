@@ -22,6 +22,15 @@ import { useServices } from './use-services.js';
 const CONTROL_URL = (process.env.CONTROL_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 const WORKER_URL = (process.env.WORKER_URL ?? 'http://localhost:9000').replace(/\/$/, '');
 
+function portFromUrl(url: string, fallback: number): number {
+  try {
+    return Number(new URL(url).port) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+const CP_PORT = portFromUrl(CONTROL_URL, 8080);
+
 export function Layout(): React.ReactElement {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -109,7 +118,7 @@ export function Layout(): React.ReactElement {
       if (key.return) {
         if (activePanel === 'agents' && agents[agentIndex]) {
           const agent = agents[agentIndex];
-          setLogTarget({ name: agent.name, port: 8080 });
+          setLogTarget({ name: agent.name, port: CP_PORT });
           setViewMode('logs');
         }
         return;

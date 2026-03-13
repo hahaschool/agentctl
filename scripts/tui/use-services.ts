@@ -12,6 +12,21 @@ const CONTROL_URL = (process.env.CONTROL_URL ?? 'http://localhost:8080').replace
 const WORKER_URL = (process.env.WORKER_URL ?? 'http://localhost:9000').replace(/\/$/, '');
 const WEB_URL = (process.env.WEB_URL ?? 'http://localhost:5173').replace(/\/$/, '');
 
+function portFromUrl(url: string, fallback: number): number {
+  try {
+    const parsed = new URL(url);
+    return parsed.port ? Number(parsed.port) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+const CP_PORT = portFromUrl(CONTROL_URL, 8080);
+const WORKER_PORT = portFromUrl(WORKER_URL, 9000);
+const WEB_PORT = portFromUrl(WEB_URL, 5173);
+const REDIS_PORT = Number(process.env.REDIS_PORT ?? 6379);
+const PG_PORT = Number(process.env.PG_PORT ?? 5433);
+
 type HealthResponse = {
   readonly status?: string;
   readonly uptime?: number;
@@ -72,11 +87,11 @@ async function fetchSimpleHealth(url: string): Promise<ServiceStatus> {
 
 function buildInitialServices(): readonly ServiceInfo[] {
   return [
-    { name: 'Control Plane', port: 8080, status: 'loading', uptime: null, memory: null },
-    { name: 'Agent Worker', port: 9000, status: 'loading', uptime: null, memory: null },
-    { name: 'Web App', port: 5173, status: 'loading', uptime: null, memory: null },
-    { name: 'Redis', port: 6379, status: 'loading', uptime: null, memory: null },
-    { name: 'PostgreSQL', port: 5433, status: 'loading', uptime: null, memory: null },
+    { name: 'Control Plane', port: CP_PORT, status: 'loading', uptime: null, memory: null },
+    { name: 'Agent Worker', port: WORKER_PORT, status: 'loading', uptime: null, memory: null },
+    { name: 'Web App', port: WEB_PORT, status: 'loading', uptime: null, memory: null },
+    { name: 'Redis', port: REDIS_PORT, status: 'loading', uptime: null, memory: null },
+    { name: 'PostgreSQL', port: PG_PORT, status: 'loading', uptime: null, memory: null },
   ];
 }
 
@@ -118,27 +133,27 @@ export function useServices(): readonly ServiceInfo[] {
       setServices([
         {
           name: 'Control Plane',
-          port: 8080,
+          port: CP_PORT,
           status: cp.status,
           uptime: cp.uptime,
           memory: cp.memory,
         },
         {
           name: 'Agent Worker',
-          port: 9000,
+          port: WORKER_PORT,
           status: worker.status,
           uptime: worker.uptime,
           memory: worker.memory,
         },
         {
           name: 'Web App',
-          port: 5173,
+          port: WEB_PORT,
           status: typeof web === 'string' ? web : 'error',
           uptime: null,
           memory: null,
         },
-        { name: 'Redis', port: 6379, status: redisStatus, uptime: null, memory: null },
-        { name: 'PostgreSQL', port: 5433, status: pgStatus, uptime: null, memory: null },
+        { name: 'Redis', port: REDIS_PORT, status: redisStatus, uptime: null, memory: null },
+        { name: 'PostgreSQL', port: PG_PORT, status: pgStatus, uptime: null, memory: null },
       ]);
     };
 

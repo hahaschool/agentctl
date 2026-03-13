@@ -632,7 +632,10 @@ export async function healthCheck(
   timeoutMs: number,
   defaultUser?: string,
 ): Promise<SshExecResult> {
-  const port = machine.role === 'control-plane' ? 8080 : 9000;
+  const port =
+    machine.role === 'control-plane'
+      ? (process.env.PORT ?? '8080')
+      : (process.env.WORKER_PORT ?? '9000');
   const command = `curl -sf -o /dev/null -w '%{http_code}' http://localhost:${port}/health`;
   return execSsh(machine, command, timeoutMs, defaultUser);
 }

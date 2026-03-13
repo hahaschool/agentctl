@@ -16,9 +16,24 @@ type Props = {
 const CONTROL_URL = (process.env.CONTROL_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 const WORKER_URL = (process.env.WORKER_URL ?? 'http://localhost:9000').replace(/\/$/, '');
 
+function cpPort(): number {
+  try {
+    return Number(new URL(CONTROL_URL).port) || 8080;
+  } catch {
+    return 8080;
+  }
+}
+function workerPort(): number {
+  try {
+    return Number(new URL(WORKER_URL).port) || 9000;
+  } catch {
+    return 9000;
+  }
+}
+
 function getLogUrl(port: number): string | null {
-  if (port === 8080) return `${CONTROL_URL}/api/health`;
-  if (port === 9000) return `${WORKER_URL}/api/health`;
+  if (port === cpPort()) return `${CONTROL_URL}/api/health`;
+  if (port === workerPort()) return `${WORKER_URL}/api/health`;
   return null;
 }
 
