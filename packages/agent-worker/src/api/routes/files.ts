@@ -3,26 +3,30 @@
 // the web UI) to list directories, read file contents, and write file contents
 // on the machine where this worker is running.
 //
-// Security: route handlers validate user-controlled paths up front, then hand
-// the resolved safe paths to local helpers for filesystem access.
+// Security: route handlers validate user-controlled paths up front, then pass
+// resolved paths plus their allowed base into local filesystem helpers.
 // ---------------------------------------------------------------------------
 
 import type { Dirent } from 'node:fs';
-import { mkdirSync, readdirSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 
 import { WorkerError } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
-import {
-  DEFAULT_DENIED_PATH_SEGMENTS,
-  findDeniedPathSegment,
-  safeReadFileAtomic,
-  safeWriteFileSync,
-  sanitizePath,
-} from '../../utils/path-security.js';
+import { DEFAULT_DENIED_PATH_SEGMENTS, findDeniedPathSegment } from '../../utils/path-security.js';
 import {
   createInMemoryRateLimiter,
   createIpRateLimitPreHandler,
@@ -78,49 +82,77 @@ function rejectMalformedInput(raw: unknown): asserts raw is string {
   }
 }
 
-function toSafePath(raw: string): string {
-  let safePath: string | undefined;
+function resolveAllowedPath(raw: string): { path: string; base: string } {
+  const resolvedRawPath = resolve(raw);
+  let matchedBase: string | undefined;
+
   for (const base of ALLOWED_BASE_DIRECTORIES) {
-    try {
-      safePath = sanitizePath(raw, base);
+    const resolvedBase = resolve(base);
+    const allowedPrefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+    if (resolvedRawPath === resolvedBase || resolvedRawPath.startsWith(allowedPrefix)) {
+      matchedBase = resolvedBase;
       break;
-    } catch {
-      // Path not under this base — try the next one.
     }
   }
 
-  if (safePath === undefined) {
+  if (matchedBase === undefined) {
     throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-      path: resolve(raw),
+      path: resolvedRawPath,
     });
   }
 
-  const deniedSegment = findDeniedPathSegment(safePath, DEFAULT_DENIED_PATH_SEGMENTS);
+  const deniedSegment = findDeniedPathSegment(resolvedRawPath, DEFAULT_DENIED_PATH_SEGMENTS);
   if (deniedSegment !== null) {
     throw new WorkerError(
       'INVALID_PATH',
       `Access to "${deniedSegment}" directories is denied for security reasons`,
-      { path: safePath, deniedSegment },
+      { path: resolvedRawPath, deniedSegment },
     );
   }
 
-  return safePath;
+  return { path: resolvedRawPath, base: matchedBase };
 }
 
-function listSafeDirectory(safeDirPath: string): Dirent[] {
-  const stat = statSync(safeDirPath);
-  if (!stat.isDirectory()) {
-    throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: safeDirPath });
+function listSafeDirectory(dirPath: string, allowedBase: string): Dirent[] {
+  const resolvedDirPath = resolve(dirPath);
+  const resolvedBase = resolve(allowedBase);
+  const allowedPrefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (resolvedDirPath !== resolvedBase && !resolvedDirPath.startsWith(allowedPrefix)) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: resolvedDirPath,
+    });
   }
 
-  return readdirSync(safeDirPath, { withFileTypes: true }) as Dirent[];
+  const stat = statSync(resolvedDirPath);
+  if (!stat.isDirectory()) {
+    throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: resolvedDirPath });
+  }
+
+  return readdirSync(resolvedDirPath, { withFileTypes: true }) as Dirent[];
 }
 
 function readSafeChildMetadata(
-  safeDirPath: string,
+  dirPath: string,
+  allowedBase: string,
   childName: string,
 ): Pick<FileEntry, 'size' | 'modified'> {
-  const childPath = sanitizePath(resolve(safeDirPath, childName), safeDirPath);
+  const resolvedDirPath = resolve(dirPath);
+  const dirPrefix = resolvedDirPath.endsWith(sep) ? resolvedDirPath : `${resolvedDirPath}${sep}`;
+  const resolvedBase = resolve(allowedBase);
+  const allowedPrefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  const childPath = resolve(resolvedDirPath, childName);
+
+  if (childPath !== resolvedDirPath && !childPath.startsWith(dirPrefix)) {
+    throw new WorkerError('INVALID_PATH', 'Path traversal is not allowed', {
+      path: childPath,
+    });
+  }
+  if (childPath !== resolvedBase && !childPath.startsWith(allowedPrefix)) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: childPath,
+    });
+  }
+
   const deniedSegment = findDeniedPathSegment(childPath, DEFAULT_DENIED_PATH_SEGMENTS);
   if (deniedSegment !== null) {
     throw new WorkerError(
@@ -137,27 +169,88 @@ function readSafeChildMetadata(
   };
 }
 
-function readSafeFileContent(safeFilePath: string): { content: string; size: number } {
-  const stat = statSync(safeFilePath);
-  if (stat.isDirectory()) {
-    throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
-      path: safeFilePath,
+function readSafeFileContent(
+  filePath: string,
+  allowedBase: string,
+): { content: string; size: number } {
+  const resolvedFilePath = resolve(filePath);
+  const resolvedBase = resolve(allowedBase);
+  const allowedPrefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (resolvedFilePath !== resolvedBase && !resolvedFilePath.startsWith(allowedPrefix)) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: resolvedFilePath,
     });
   }
 
-  if (stat.size > MAX_FILE_SIZE_BYTES) {
-    throw new WorkerError(
-      'INVALID_PATH',
-      `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
-      { path: safeFilePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
-    );
+  let fd: number;
+  try {
+    fd = openSync(resolvedFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (err) {
+    const nodeErr = err as NodeJS.ErrnoException;
+    if (nodeErr.code === 'ENOENT') {
+      throw new WorkerError('PATH_NOT_FOUND', `File does not exist: ${resolvedFilePath}`, {
+        path: resolvedFilePath,
+      });
+    }
+    if (nodeErr.code === 'ELOOP') {
+      throw new WorkerError('INVALID_PATH', 'Symlinks are not allowed', { path: resolvedFilePath });
+    }
+    throw new WorkerError('FS_ERROR', `Failed to open file: ${nodeErr.message}`, {
+      path: resolvedFilePath,
+    });
   }
 
-  return safeReadFileAtomic(safeFilePath, dirname(safeFilePath), MAX_FILE_SIZE_BYTES);
+  try {
+    const stat = fstatSync(fd);
+    if (stat.isDirectory()) {
+      throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
+        path: resolvedFilePath,
+      });
+    }
+
+    if (stat.size > MAX_FILE_SIZE_BYTES) {
+      throw new WorkerError(
+        'INVALID_PATH',
+        `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
+        { path: resolvedFilePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
+      );
+    }
+
+    const buffer = Buffer.alloc(stat.size);
+    const bytesRead = readSync(fd, buffer, 0, stat.size, 0);
+    return {
+      content: buffer.subarray(0, bytesRead).toString('utf-8'),
+      size: stat.size,
+    };
+  } finally {
+    closeSync(fd);
+  }
 }
 
-function ensureSafeDirectory(safeDirPath: string): void {
-  mkdirSync(safeDirPath, { recursive: true });
+function ensureSafeDirectory(dirPath: string, allowedBase: string): void {
+  const resolvedDirPath = resolve(dirPath);
+  const resolvedBase = resolve(allowedBase);
+  const allowedPrefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (resolvedDirPath !== resolvedBase && !resolvedDirPath.startsWith(allowedPrefix)) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: resolvedDirPath,
+    });
+  }
+
+  mkdirSync(resolvedDirPath, { recursive: true });
+}
+
+function writeSafeFileContent(filePath: string, allowedBase: string, content: string): void {
+  const resolvedFilePath = resolve(filePath);
+  const resolvedBase = resolve(allowedBase);
+  const allowedPrefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
+  if (resolvedFilePath !== resolvedBase && !resolvedFilePath.startsWith(allowedPrefix)) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: resolvedFilePath,
+    });
+  }
+
+  writeFileSync(resolvedFilePath, content);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,11 +292,11 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
     async (request) => {
       const rawPath = request.query.path;
       rejectMalformedInput(rawPath);
-      const dirPath = toSafePath(rawPath);
+      const { path: dirPath, base: matchedBase } = resolveAllowedPath(rawPath);
 
       let dirents: Dirent[];
       try {
-        dirents = listSafeDirectory(dirPath);
+        dirents = listSafeDirectory(dirPath, matchedBase);
       } catch (err) {
         if (err instanceof WorkerError) throw err;
         const nodeErr = err as NodeJS.ErrnoException;
@@ -230,7 +323,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
         };
 
         try {
-          Object.assign(entry, readSafeChildMetadata(dirPath, dirent.name));
+          Object.assign(entry, readSafeChildMetadata(dirPath, matchedBase, dirent.name));
         } catch {
           // If we can't stat a child (or it fails validation), skip size/modified.
         }
@@ -255,39 +348,15 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
     async (request) => {
       const rawPath = request.query.path;
       rejectMalformedInput(rawPath);
-      const filePath = toSafePath(rawPath);
+      const { path: filePath, base: matchedBase } = resolveAllowedPath(rawPath);
+      const result = readSafeFileContent(filePath, matchedBase);
+      logger.debug({ path: filePath, size: result.size }, 'reading file content');
 
-      try {
-        const result = readSafeFileContent(filePath);
-        logger.debug({ path: filePath, size: result.size }, 'reading file content');
-
-        return {
-          content: result.content,
-          path: filePath,
-          size: result.size,
-        };
-      } catch (err) {
-        if (err instanceof WorkerError) throw err;
-        const nodeErr = err as NodeJS.ErrnoException & { size?: number };
-        if (nodeErr.code === 'ENOENT') {
-          throw new WorkerError('PATH_NOT_FOUND', `File does not exist: ${filePath}`, {
-            path: filePath,
-          });
-        }
-        if (nodeErr.code === 'ELOOP') {
-          throw new WorkerError('INVALID_PATH', 'Symlinks are not allowed', { path: filePath });
-        }
-        if (nodeErr.code === 'FILE_TOO_LARGE') {
-          throw new WorkerError(
-            'INVALID_PATH',
-            `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${nodeErr.size ?? 'unknown'})`,
-            { path: filePath, size: nodeErr.size, maxSize: MAX_FILE_SIZE_BYTES },
-          );
-        }
-        throw new WorkerError('FS_ERROR', `Failed to read file: ${nodeErr.message}`, {
-          path: filePath,
-        });
-      }
+      return {
+        content: result.content,
+        path: filePath,
+        size: result.size,
+      };
     },
   );
 
@@ -299,17 +368,18 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
     async (request) => {
       const body = request.body ?? {};
       rejectMalformedInput(body.path);
-      const filePath = toSafePath(body.path);
+      const { path: filePath, base: matchedBase } = resolveAllowedPath(body.path);
 
       if (typeof body.content !== 'string') {
         throw new WorkerError('INVALID_PATH', 'Request body must include a "content" string field');
       }
 
-      const parentDir = toSafePath(dirname(filePath));
+      const parentDir = dirname(filePath);
 
       try {
-        ensureSafeDirectory(parentDir);
+        ensureSafeDirectory(parentDir, matchedBase);
       } catch (err) {
+        if (err instanceof WorkerError) throw err;
         const nodeErr = err as NodeJS.ErrnoException;
         throw new WorkerError('FS_ERROR', `Failed to create directory: ${nodeErr.message}`, {
           path: parentDir,
@@ -317,7 +387,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
       }
 
       logger.info({ path: filePath, contentLength: body.content.length }, 'writing file content');
-      safeWriteFileSync(filePath, parentDir, body.content);
+      writeSafeFileContent(filePath, matchedBase, body.content);
 
       return {
         success: true,

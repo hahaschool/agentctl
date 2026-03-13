@@ -283,7 +283,6 @@ describe('File routes', () => {
       const fileContent = 'console.log("hello");';
       const fd = 42;
       vi.mocked(openSync).mockReturnValue(fd);
-      vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: fileContent.length }));
       vi.mocked(fstatSync).mockReturnValue(
         makeStat({ isFile: true, size: fileContent.length }) as unknown as ReturnType<
           typeof fstatSync
@@ -320,7 +319,7 @@ describe('File routes', () => {
     it('returns 404 when file does not exist', async () => {
       const err = new Error('ENOENT') as NodeJS.ErrnoException;
       err.code = 'ENOENT';
-      vi.mocked(statSync).mockImplementation(() => {
+      vi.mocked(openSync).mockImplementation(() => {
         throw err;
       });
 
@@ -334,7 +333,11 @@ describe('File routes', () => {
     });
 
     it('returns 400 when path is a directory', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat({ isDirectory: true }));
+      const fd = 10;
+      vi.mocked(openSync).mockReturnValue(fd);
+      vi.mocked(fstatSync).mockReturnValue(
+        makeStat({ isDirectory: true }) as unknown as ReturnType<typeof fstatSync>,
+      );
 
       const res = await app.inject({
         method: 'GET',
@@ -345,10 +348,15 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.error).toBe('INVALID_PATH');
       expect(body.message).toContain('directory');
+      expect(closeSync).toHaveBeenCalledWith(fd);
     });
 
     it('returns 400 when file exceeds maximum size', async () => {
-      vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: 2_000_000 }));
+      const fd = 11;
+      vi.mocked(openSync).mockReturnValue(fd);
+      vi.mocked(fstatSync).mockReturnValue(
+        makeStat({ isFile: true, size: 2_000_000 }) as unknown as ReturnType<typeof fstatSync>,
+      );
 
       const res = await app.inject({
         method: 'GET',
@@ -359,6 +367,7 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.error).toBe('INVALID_PATH');
       expect(body.message).toContain('maximum size');
+      expect(closeSync).toHaveBeenCalledWith(fd);
     });
 
     it('returns 400 for denied path segments', async () => {
