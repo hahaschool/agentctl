@@ -20,6 +20,7 @@ module.exports = {
       name: 'agentctl-cp-beta',
       script: 'dist/index.js',
       cwd: path.join(REPO_ROOT, 'packages/control-plane'),
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: '8080',
@@ -28,6 +29,7 @@ module.exports = {
         REDIS_URL: 'redis://localhost:6379/0',
         DATABASE_URL: 'postgresql://hahaschool@127.0.0.1:5433/agentctl',
         CREDENTIAL_ENCRYPTION_KEY: process.env.CREDENTIAL_ENCRYPTION_KEY || '',
+        SKIP_MIGRATIONS: 'true',
         TIER_LABEL: 'beta',
       },
       instances: 1,
@@ -48,6 +50,7 @@ module.exports = {
       name: 'agentctl-worker-beta',
       script: 'dist/index.js',
       cwd: path.join(REPO_ROOT, 'packages/agent-worker'),
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         WORKER_PORT: '9000',
@@ -70,9 +73,10 @@ module.exports = {
     {
       // ── Web App (Next.js) ────────────────────────────────────────
       name: 'agentctl-web-beta',
-      script: 'node_modules/.bin/next',
+      script: 'node_modules/next/dist/bin/next',
       args: 'start --port 5173',
       cwd: path.join(REPO_ROOT, 'packages/web'),
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         NEXT_PUBLIC_API_URL: 'http://localhost:8080',
