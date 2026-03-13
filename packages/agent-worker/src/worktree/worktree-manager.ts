@@ -1,15 +1,11 @@
 import { execFile } from 'node:child_process';
+import { chmodSync, mkdirSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
-import {
-  safeChmodSync,
-  safeMkdirSync,
-  safeReadFileSync,
-  safeWriteFileSync,
-} from '../utils/path-security.js';
+import { safeReadFileSync, safeWriteFileSync, sanitizePath } from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
 const TIER_LOCK_DIR = '/tmp/agentctl-tier-locks';
@@ -407,7 +403,8 @@ export class WorktreeManager {
   }
 
   private async tryAcquireTierSelectionLock(tier: string): Promise<boolean> {
-    safeMkdirSync(TIER_LOCK_DIR, '/tmp', { recursive: true });
+    const safeTierLockDir = sanitizePath(TIER_LOCK_DIR, '/tmp');
+    mkdirSync(safeTierLockDir, { recursive: true });
 
     try {
       await execFileAsync('flock', ['-n', path.join(TIER_LOCK_DIR, `${tier}.lock`), '-c', 'true']);
@@ -432,12 +429,15 @@ export class WorktreeManager {
     const agentctlDir = path.join(worktreePath, WORKTREE_AGENTCTL_DIR);
     const scriptPath = path.join(agentctlDir, WORKTREE_TIER_SCRIPT);
     const metadataPath = path.join(agentctlDir, WORKTREE_TIER_METADATA);
+    const safeWorktreePath = sanitizePath(worktreePath, this.treesDir);
+    const safeAgentctlDir = sanitizePath(agentctlDir, safeWorktreePath);
+    const safeScriptPath = sanitizePath(scriptPath, safeAgentctlDir);
 
-    safeMkdirSync(worktreePath, this.treesDir, { recursive: true });
-    safeMkdirSync(agentctlDir, worktreePath, { recursive: true });
+    mkdirSync(safeWorktreePath, { recursive: true });
+    mkdirSync(safeAgentctlDir, { recursive: true });
     safeWriteFileSync(
       worktreeEnvPath,
-      worktreePath,
+      safeWorktreePath,
       safeReadFileSync(sourceEnvPath, this.projectPath),
     );
 
@@ -454,11 +454,11 @@ export class WorktreeManager {
       '',
     ].join('\n');
 
-    safeWriteFileSync(scriptPath, agentctlDir, bootstrapScript);
-    safeChmodSync(scriptPath, agentctlDir, 0o755);
+    safeWriteFileSync(scriptPath, safeAgentctlDir, bootstrapScript);
+    chmodSync(safeScriptPath, 0o755);
     safeWriteFileSync(
       metadataPath,
-      agentctlDir,
+      safeAgentctlDir,
       `${JSON.stringify(
         {
           tier: assignment.tier,
