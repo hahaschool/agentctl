@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -232,8 +232,8 @@ describe('WorktreeManager', () => {
         expect(result.envFilePath).toBe(path.join(expectedPath, '.env.dev-1'));
         expect(result.envLoadCommand).toBe('source ./.agentctl/source-tier-env.sh');
 
-        expect(await readlink(path.join(expectedPath, '.env.dev-1'))).toBe(
-          path.relative(expectedPath, sourceEnvPath),
+        expect(await readFile(path.join(expectedPath, '.env.dev-1'), 'utf8')).toBe(
+          await readFile(sourceEnvPath, 'utf8'),
         );
 
         const bootstrapScript = await readFile(

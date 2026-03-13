@@ -1,9 +1,15 @@
 import { execFile } from 'node:child_process';
-import { chmod, lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
+import {
+  safeChmodSync,
+  safeMkdirSync,
+  safeReadFileSync,
+  safeWriteFileSync,
+} from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
 const TIER_LOCK_DIR = '/tmp/agentctl-tier-locks';
@@ -100,7 +106,7 @@ export class WorktreeManager {
       });
     }
 
-    const tierAssignment = await this.assignTierIfAvailable(agentId, worktreePath);
+    const tierAssignment = await this.assignTierIfAvailable(agentId);
     let worktreeCreated = false;
 
     try {
@@ -122,7 +128,7 @@ export class WorktreeManager {
 
     if (tierAssignment) {
       try {
-        await this.prepareTierBootstrap(worktreePath, tierAssignment);
+        await this.prepareTierBootstrap(agentId, tierAssignment);
       } catch (err) {
         this.releaseTier(agentId);
         if (worktreeCreated) {
@@ -335,14 +341,9 @@ export class WorktreeManager {
     }
   }
 
-  private async assignTierIfAvailable(
-    agentId: string,
-    worktreePath: string,
-  ): Promise<{
+  private async assignTierIfAvailable(agentId: string): Promise<{
     tier: string;
     envFileName: string;
-    sourceEnvPath: string;
-    worktreeEnvPath: string;
   } | null> {
     const envFileNames = await this.listDevEnvFiles();
     if (envFileNames.length === 0) {
@@ -367,8 +368,6 @@ export class WorktreeManager {
       return {
         tier,
         envFileName,
-        sourceEnvPath: path.join(this.projectPath, envFileName),
-        worktreeEnvPath: path.join(worktreePath, envFileName),
       };
     }
 
@@ -408,7 +407,7 @@ export class WorktreeManager {
   }
 
   private async tryAcquireTierSelectionLock(tier: string): Promise<boolean> {
-    await mkdir(TIER_LOCK_DIR, { recursive: true });
+    safeMkdirSync(TIER_LOCK_DIR, '/tmp', { recursive: true });
 
     try {
       await execFileAsync('flock', ['-n', path.join(TIER_LOCK_DIR, `${tier}.lock`), '-c', 'true']);
@@ -419,46 +418,29 @@ export class WorktreeManager {
   }
 
   private async prepareTierBootstrap(
-    worktreePath: string,
+    agentId: string,
     assignment: {
       tier: string;
       envFileName: string;
-      sourceEnvPath: string;
-      worktreeEnvPath: string;
     },
   ): Promise<void> {
-    const safeWorktreePath = this.resolvePathWithinRoot(this.treesDir, worktreePath, 'worktree');
-    const safeSourceEnvPath = this.resolvePathWithinRoot(
-      this.projectPath,
-      assignment.sourceEnvPath,
-      'tier env source',
-    );
-    const safeWorktreeEnvPath = this.resolvePathWithinRoot(
-      safeWorktreePath,
-      assignment.worktreeEnvPath,
-      'tier env link',
-    );
+    assertSafeAgentId(agentId);
     const safeEnvFileName = this.assertSafeEnvFileName(assignment.envFileName);
+    const worktreePath = this.getWorktreePath(agentId);
+    const sourceEnvPath = path.join(this.projectPath, safeEnvFileName);
+    const worktreeEnvPath = path.join(worktreePath, safeEnvFileName);
+    const agentctlDir = path.join(worktreePath, WORKTREE_AGENTCTL_DIR);
+    const scriptPath = path.join(agentctlDir, WORKTREE_TIER_SCRIPT);
+    const metadataPath = path.join(agentctlDir, WORKTREE_TIER_METADATA);
 
-    await mkdir(safeWorktreePath, { recursive: true });
-
-    const agentctlDir = this.resolvePathWithinRoot(
-      safeWorktreePath,
-      WORKTREE_AGENTCTL_DIR,
-      'worktree metadata directory',
+    safeMkdirSync(worktreePath, this.treesDir, { recursive: true });
+    safeMkdirSync(agentctlDir, worktreePath, { recursive: true });
+    safeWriteFileSync(
+      worktreeEnvPath,
+      worktreePath,
+      safeReadFileSync(sourceEnvPath, this.projectPath),
     );
-    await mkdir(agentctlDir, { recursive: true });
 
-    await this.ensureSymlink(
-      safeWorktreeEnvPath,
-      this.buildSafeSymlinkTarget(safeWorktreeEnvPath, safeSourceEnvPath),
-    );
-
-    const scriptPath = this.resolvePathWithinRoot(
-      agentctlDir,
-      WORKTREE_TIER_SCRIPT,
-      'tier bootstrap script',
-    );
     const bootstrapScript = [
       '#!/usr/bin/env bash',
       'set -euo pipefail',
@@ -472,16 +454,11 @@ export class WorktreeManager {
       '',
     ].join('\n');
 
-    await writeFile(scriptPath, bootstrapScript, 'utf8');
-    await chmod(scriptPath, 0o755);
-
-    const metadataPath = this.resolvePathWithinRoot(
-      agentctlDir,
-      WORKTREE_TIER_METADATA,
-      'tier assignment metadata',
-    );
-    await writeFile(
+    safeWriteFileSync(scriptPath, agentctlDir, bootstrapScript);
+    safeChmodSync(scriptPath, agentctlDir, 0o755);
+    safeWriteFileSync(
       metadataPath,
+      agentctlDir,
       `${JSON.stringify(
         {
           tier: assignment.tier,
@@ -491,32 +468,7 @@ export class WorktreeManager {
         null,
         2,
       )}\n`,
-      'utf8',
     );
-  }
-
-  private async ensureSymlink(linkPath: string, targetPath: string): Promise<void> {
-    const safeLinkPath = this.resolvePathWithinRoot(this.treesDir, linkPath, 'tier env symlink');
-    const safeTargetPath = this.assertSafeSymlinkTargetForLink(safeLinkPath, targetPath);
-
-    try {
-      const current = await lstat(safeLinkPath);
-      if (current.isSymbolicLink()) {
-        await unlink(safeLinkPath);
-      } else {
-        throw new AgentError(
-          'WORKTREE_CREATE_FAILED',
-          `Cannot replace existing non-symlink path '${safeLinkPath}' while preparing tier env`,
-          { path: safeLinkPath },
-        );
-      }
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw err;
-      }
-    }
-
-    await symlink(safeTargetPath, safeLinkPath);
   }
 
   private releaseTier(agentId: string): void {
@@ -597,29 +549,6 @@ export class WorktreeManager {
     return results;
   }
 
-  private resolvePathWithinRoot(rootPath: string, targetPath: string, label: string): string {
-    const resolvedRoot = path.resolve(rootPath);
-    const resolvedTarget = path.resolve(resolvedRoot, targetPath);
-
-    if (!this.isPathWithinRoot(resolvedRoot, resolvedTarget)) {
-      throw new AgentError(
-        'WORKTREE_CREATE_FAILED',
-        `Resolved ${label} path '${resolvedTarget}' escapes '${resolvedRoot}'`,
-        {
-          rootPath: resolvedRoot,
-          targetPath,
-          resolvedTarget,
-        },
-      );
-    }
-
-    return resolvedTarget;
-  }
-
-  private isPathWithinRoot(rootPath: string, candidatePath: string): boolean {
-    return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${path.sep}`);
-  }
-
   private assertSafeEnvFileName(envFileName: string): string {
     if (!ENV_FILE_NAME_PATTERN.test(envFileName)) {
       throw new AgentError(
@@ -630,45 +559,5 @@ export class WorktreeManager {
     }
 
     return envFileName;
-  }
-
-  private buildSafeSymlinkTarget(linkPath: string, targetPath: string): string {
-    const safeLinkPath = this.resolvePathWithinRoot(this.treesDir, linkPath, 'tier env symlink');
-    const safeTargetPath = this.resolvePathWithinRoot(
-      this.projectPath,
-      targetPath,
-      'tier env symlink target',
-    );
-    const relativeTarget = path.relative(path.dirname(safeLinkPath), safeTargetPath);
-    const resolvedFromLink = path.resolve(path.dirname(safeLinkPath), relativeTarget);
-
-    if (resolvedFromLink !== safeTargetPath) {
-      throw new AgentError(
-        'WORKTREE_CREATE_FAILED',
-        `Invalid tier env symlink target '${relativeTarget}' for '${safeLinkPath}'`,
-        {
-          linkPath: safeLinkPath,
-          relativeTarget,
-          resolvedFromLink,
-          safeTargetPath,
-        },
-      );
-    }
-
-    return relativeTarget;
-  }
-
-  private assertSafeSymlinkTargetForLink(linkPath: string, targetPath: string): string {
-    if (path.isAbsolute(targetPath)) {
-      throw new AgentError(
-        'WORKTREE_CREATE_FAILED',
-        `Symlink target for '${linkPath}' must remain relative`,
-        { linkPath, targetPath },
-      );
-    }
-
-    const resolvedTarget = path.resolve(path.dirname(linkPath), targetPath);
-    this.resolvePathWithinRoot(this.projectPath, resolvedTarget, 'tier env symlink target');
-    return targetPath;
   }
 }
