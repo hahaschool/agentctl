@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-13 (§12.6 promote-beta.yml PR #136; §12.0 port audit PR #137; CodeQL worker fixes PR #138; CP rate-limit PR #135; §12.4 PR #130; §10.4 PRs #131,#133; §9.2 PR #132)
+> Last updated: 2026-03-13 (§13 Open Source section added; CI push trigger PR #140; §12.6 PR #136; §12.0 PR #137; CodeQL PR #138; CP rate-limit PR #135)
 
 ## Current State
 
@@ -935,6 +935,52 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ---
 
+## 13. Open Source & Community
+
+> Repository hygiene, license, contribution guidelines, security policy, GitHub templates.
+
+> Design doc: [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md)
+> Impl plan: [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md)
+
+<details>
+<summary>✅ All complete — BSL 1.1 license, contribution guidelines, security policy, GitHub templates</summary>
+
+### 13.1 License & Legal
+
+- [x] `LICENSE` — BSL 1.1 (source-available, converts to Apache 2.0 after 4 years)
+- [x] Additional Use Grant: self-host permitted, competitive SaaS restricted
+- [x] AGPL dependency note: `claude-mem` used as external service, not embedded
+
+### 13.2 Contribution Guidelines
+
+- [x] `CONTRIBUTING.md` — fork → branch → PR workflow, code style, DCO sign-off
+- [x] `CODE_OF_CONDUCT.md` — Contributor Covenant v2.1
+
+### 13.3 Security Policy
+
+- [x] `SECURITY.md` — GitHub Private Vulnerability Reporting, 48h ack SLA, 90-day fix target
+- [x] Supported versions, scope definition, responsible disclosure credit
+
+### 13.4 GitHub Templates
+
+- [x] `.github/ISSUE_TEMPLATE/bug_report.yml` — YAML-based form (description, repro, environment)
+- [x] `.github/ISSUE_TEMPLATE/feature_request.yml` — YAML-based form (problem, solution, alternatives)
+- [x] `.github/PULL_REQUEST_TEMPLATE.md` — what/why, related issue, test checklist
+
+### 13.5 README
+
+- [x] License badge (BSL 1.1)
+- [x] Contributing and Security sections with links
+- [x] Removed "Private repository. All rights reserved." language
+
+### 13.6 Cleanup
+
+- [x] Deleted `AGENTS.md` (broken copy of CLAUDE.md with inaccurate info)
+
+</details>
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -993,7 +1039,9 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **—** | ~~Security: CP Rate Limiting~~ | — | ✅ Delivered — memory-decay routes (PR #135) |
 | **P3** | ~~Environment: promote-beta.yml~~ | 12.6 | ✅ Delivered — workflow_dispatch + environment protection + rollback (PR #136) |
 | **—** | ~~Hardcoded Port Audit~~ | 12.0 | ✅ Delivered — scripts, TUI, Playwright config (PR #137) |
-| **—** | Security: CodeQL rescan pending | — | Additional fixes merged (PR #138); GitHub code scanning needs to re-analyze |
+| **—** | ~~Open Source & Community~~ | 13 | ✅ Delivered — BSL 1.1, CONTRIBUTING, SECURITY, GitHub templates |
+| **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
+| **—** | Security: CodeQL rescan pending | — | Push trigger added (PR #140); rescan in progress |
 
 ---
 
@@ -1091,8 +1139,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [remote-control-relay-decision](plans/2026-03-10-remote-control-relay-decision.md) | Delivered | 2.4 |
 | [unified-memory-layer-design](plans/2026-03-10-unified-memory-layer-design.md) | Delivered | 3.6 |
 | [unified-memory-layer-impl-plan](plans/2026-03-10-unified-memory-layer-impl-plan.md) | Delivered | 3.6 |
-| [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md) | Delivered | — |
-| [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md) | Delivered | — |
+| [public-repo-prep-design](plans/2026-03-10-public-repo-prep-design.md) | Delivered | 13.1-13.6 |
+| [public-repo-prep-impl-plan](plans/2026-03-10-public-repo-prep-impl-plan.md) | Delivered | 13.1-13.6 |
 | [automatic-handoff-triggers-design](plans/2026-03-11-automatic-handoff-triggers-design.md) | Delivered | 3.5 |
 | [automatic-handoff-triggers-impl-plan](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md) | Delivered | 3.5 |
 | [execution-environment-registry-design](plans/2026-03-11-execution-environment-registry-design.md) | Delivered | 2.9 |
