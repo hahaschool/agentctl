@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-13 (scoped control-plane security hardening PR #123; §12.5 cleanup on PR completion PR #125; native-import CI stabilization PR #126)
+> Last updated: 2026-03-13 (§12.5 worktree tier bootstrap PR #127; worker route security PR #124; control-plane security PR #123; cleanup on PR completion PR #125)
 
 ## Current State
 
@@ -921,10 +921,10 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] `scripts/env-down.sh` — graceful shutdown + lock release
 - [ ] `scripts/env-promote.sh` — build + schema parity + migrate + restart + rollback (future)
 
-### 12.5 Agent Worktree Integration — Partial
+### 12.5 Agent Worktree Integration — ✅ Delivered
 
-- [ ] Tier assignment with flock-based locking
-- [ ] Auto-source `.env.dev-N` in agent worktree setup
+- [x] Tier assignment with flock-based locking *(PR #127)*
+- [x] Auto-source `.env.dev-N` in agent worktree setup *(PR #127)*
 - [x] Cleanup on PR completion *(PR #125)*
 
 ### 12.6 GitHub Actions CD Gate — P3 (Future)
@@ -986,7 +986,8 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P1** | ~~Environment Isolation: De-Hardcode Ports~~ | 12.0 | ✅ Delivered — env var config for all ports (PR #103) |
 | **P1** | ~~Environment Isolation: Env Files + DB + PM2~~ | 12.1-12.3 | ✅ Delivered — .env.template + env-migrate.sh + PM2 config (PRs #103-104) |
 | **P2** | ~~Environment Isolation: Lifecycle Scripts~~ | 12.4 | ✅ Delivered — env-up.sh + env-down.sh with flock (PR #104) |
-| **P2** | Environment Isolation: Worktree Integration | 12.5 | Partial — cleanup on PR completion shipped (PR #125); tier assignment + auto-source remain |
+| **P2** | ~~Environment Isolation: Worktree Integration~~ | 12.5 | ✅ Delivered — tier assignment + auto-source (PR #127), cleanup on PR completion (PR #125) |
+| **—** | ~~Security: Worker Route Hardening~~ | — | ✅ Delivered — rate-limit assertions + path guard tightening (PR #124) |
 | **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
 | **—** | Security: CodeQL rescan pending | — | Fixes merged (PRs #98, #99, #106, #115, #116, #123); GitHub code scanning still needs to re-analyze patched `main` |
 
@@ -1098,13 +1099,13 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Delivered | 4.8 |
 | [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Delivered | 4.8 |
 
-| [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Active | 10.1-10.5 |
+| [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Delivered | 10.1-10.5 |
 | [multi-agent-collaboration-phase1-impl-plan](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md) | Delivered | 10.1 |
 | [multi-agent-communication-impl-plan](plans/2026-03-12-multi-agent-communication-impl-plan.md) | Delivered | 10.2 |
 | [task-graph-fleet-impl-plan](plans/2026-03-12-task-graph-fleet-impl-plan.md) | Delivered | 10.3 |
-| [intelligence-layer-impl-plan](plans/2026-03-12-intelligence-layer-impl-plan.md) | Active | 10.5 |
+| [intelligence-layer-impl-plan](plans/2026-03-12-intelligence-layer-impl-plan.md) | Delivered | 10.5 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
-| [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.4 |
+| [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.5 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
