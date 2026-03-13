@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-13 (§12.4 env-promote PR #130; §10.4 cross_space_query PR #131 + context budget PR #133; §9.2 MCP config downlink PR #132; §12.5 PR #127; worker route security PR #124)
+> Last updated: 2026-03-13 (§12.6 promote-beta.yml PR #136; §12.0 port audit PR #137; CodeQL worker fixes PR #138; CP rate-limit PR #135; §12.4 PR #130; §10.4 PRs #131,#133; §9.2 PR #132)
 
 ## Current State
 
@@ -894,7 +894,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Make `use-websocket.ts` + `InteractiveTerminal.tsx` read from `NEXT_PUBLIC_WS_URL`
 - [x] `.env.template` committed with documented tier configuration
 - [ ] Make web `package.json` scripts read `WEB_PORT` env var (deferred — env-up.sh handles this)
-- [ ] Repo-wide remaining hardcoded port audit (scripts/ already use env vars with defaults)
+- [x] Repo-wide remaining hardcoded port audit *(PR #137)*
 
 ### 12.1 Environment Files — ✅ Delivered (PR #103)
 
@@ -927,10 +927,10 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Auto-source `.env.dev-N` in agent worktree setup *(PR #127)*
 - [x] Cleanup on PR completion *(PR #125)*
 
-### 12.6 GitHub Actions CD Gate — P3 (Future)
+### 12.6 GitHub Actions CD Gate — P3
 
 - [ ] Self-hosted runner on deployment target
-- [ ] `promote-beta.yml` workflow with environment protection rules
+- [x] `promote-beta.yml` workflow with environment protection rules *(PR #136)*
 - [ ] Extend to prod tier on remote machines via Tailscale
 
 ---
@@ -989,7 +989,11 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **P2** | ~~Environment Isolation: Worktree Integration~~ | 12.5 | ✅ Delivered — tier assignment + auto-source (PR #127), cleanup on PR completion (PR #125) |
 | **—** | ~~Security: Worker Route Hardening~~ | — | ✅ Delivered — rate-limit assertions + path guard tightening (PR #124) |
 | **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
-| **—** | Security: CodeQL rescan pending | — | Fixes merged (PRs #98, #99, #106, #115, #116, #123); GitHub code scanning still needs to re-analyze patched `main` |
+| **—** | ~~Security: CodeQL Worker Alerts~~ | — | ✅ Delivered — inline path checks, rate-limit config, symlink guards (PR #138) |
+| **—** | ~~Security: CP Rate Limiting~~ | — | ✅ Delivered — memory-decay routes (PR #135) |
+| **P3** | ~~Environment: promote-beta.yml~~ | 12.6 | ✅ Delivered — workflow_dispatch + environment protection + rollback (PR #136) |
+| **—** | ~~Hardcoded Port Audit~~ | 12.0 | ✅ Delivered — scripts, TUI, Playwright config (PR #137) |
+| **—** | Security: CodeQL rescan pending | — | Additional fixes merged (PR #138); GitHub code scanning needs to re-analyze |
 
 ---
 
