@@ -15,6 +15,13 @@
       "when": 1740873600000,
       "tag": "0001_add_schedule_config",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1741910400000,
+      "tag": "0017_add_promotion_history",
+      "breakpoints": true
     }
   ]
 }

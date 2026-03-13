@@ -10,6 +10,7 @@ import {
   Moon,
   Network,
   Plus,
+  Rocket,
   ScrollText,
   Server,
   Settings,
@@ -56,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
   { href: '/memory', label: 'Memory', icon: Database, shortcut: '8' },
   { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9' },
+  { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};

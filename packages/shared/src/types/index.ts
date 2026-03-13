@@ -151,6 +151,22 @@ export {
   isOverflowStrategy,
   OVERFLOW_STRATEGIES,
 } from './context-bridge.js';
+export type {
+  PreflightCheckName,
+  PreflightCheckResult,
+  PreflightCheckStatus,
+  PromotionEvent,
+  PromotionRecord,
+  PromotionStatus,
+  ServiceHealth,
+  TierConfig,
+  TierStatus,
+} from './deployment.js';
+export {
+  PREFLIGHT_CHECK_NAMES,
+  PREFLIGHT_CHECK_STATUSES,
+  PROMOTION_STATUSES,
+} from './deployment.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   ExecutionSummary,

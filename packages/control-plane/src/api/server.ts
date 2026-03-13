@@ -62,6 +62,7 @@ import { claudeMemRoutes } from './routes/claude-mem.js';
 import { contextBridgeRoutes } from './routes/context-bridge.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { decomposeRoutes } from './routes/decompose.js';
+import { deploymentRoutes } from './routes/deployment.js';
 import { emergencyStopProxyRoutes } from './routes/emergency-stop.js';
 import { fileProxyRoutes } from './routes/files.js';
 import { gitProxyRoutes } from './routes/git.js';
@@ -515,6 +516,13 @@ export async function createServer({
     await app.register(notificationPreferenceRoutes, {
       prefix: '/api/notifications/preferences',
       notificationRouterStore,
+    });
+
+    // Register deployment tier management + promotion routes.
+    await app.register(deploymentRoutes, {
+      prefix: '/api/deployment',
+      db,
+      logger,
     });
   }
 
