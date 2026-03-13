@@ -1,16 +1,29 @@
 import { execFile } from 'node:child_process';
+import { chmodSync, mkdirSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
+import { safeReadFileSync, safeWriteFileSync, sanitizePath } from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
+const TIER_LOCK_DIR = '/tmp/agentctl-tier-locks';
+const DEV_ENV_FILE_PREFIX = '.env.dev-';
+const WORKTREE_AGENTCTL_DIR = '.agentctl';
+const WORKTREE_TIER_SCRIPT = 'source-tier-env.sh';
+const WORKTREE_TIER_METADATA = 'tier-assignment.json';
+const DEFAULT_ENV_LOAD_COMMAND = `source ./${WORKTREE_AGENTCTL_DIR}/${WORKTREE_TIER_SCRIPT}`;
+const ENV_FILE_NAME_PATTERN = /^\.env\.dev-\d+$/;
 
 export type WorktreeInfo = {
   path: string;
   branch: string;
   head: string;
   isLocked: boolean;
+  tier?: string;
+  envFilePath?: string;
+  envLoadCommand?: string;
 };
 
 export type CreateWorktreeOptions = {
@@ -49,6 +62,7 @@ export class WorktreeManager {
   private readonly projectPath: string;
   private readonly treesDir: string;
   private readonly logger: Logger;
+  private readonly tierAssignments: Map<string, string> = new Map();
 
   constructor(options: WorktreeManagerOptions) {
     this.projectPath = options.projectPath;
@@ -88,11 +102,19 @@ export class WorktreeManager {
       });
     }
 
+    const tierAssignment = await this.assignTierIfAvailable(agentId);
+    let worktreeCreated = false;
+
     try {
       await execFileAsync('git', ['worktree', 'add', worktreePath, '-b', branchName, baseBranch], {
         cwd: this.projectPath,
       });
+      worktreeCreated = true;
     } catch (err) {
+      if (tierAssignment) {
+        this.releaseTier(agentId);
+      }
+
       throw new AgentError(
         'WORKTREE_CREATE_FAILED',
         `Failed to create worktree for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
@@ -100,13 +122,39 @@ export class WorktreeManager {
       );
     }
 
+    if (tierAssignment) {
+      try {
+        await this.prepareTierBootstrap(agentId, tierAssignment);
+      } catch (err) {
+        this.releaseTier(agentId);
+        if (worktreeCreated) {
+          await this.cleanupWorktreePath(worktreePath);
+        }
+
+        throw new AgentError(
+          'WORKTREE_CREATE_FAILED',
+          `Failed to prepare worktree tier env for agent '${agentId}': ${err instanceof Error ? err.message : String(err)}`,
+          {
+            agentId,
+            tier: tierAssignment.tier,
+            path: worktreePath,
+          },
+        );
+      }
+    }
+
     this.logger.info(
-      { agentId, branch: branchName, baseBranch, path: worktreePath },
+      { agentId, branch: branchName, baseBranch, path: worktreePath, tier: tierAssignment?.tier },
       'Worktree created',
     );
 
     const info = await this.get(agentId);
     if (!info) {
+      if (tierAssignment) {
+        this.releaseTier(agentId);
+        await this.cleanupWorktreePath(worktreePath);
+      }
+
       throw new AgentError(
         'WORKTREE_CREATE_FAILED',
         `Worktree was created but could not be read back for agent '${agentId}'`,
@@ -114,7 +162,14 @@ export class WorktreeManager {
       );
     }
 
-    return info;
+    return tierAssignment
+      ? {
+          ...info,
+          tier: tierAssignment.tier,
+          envFilePath: path.join(worktreePath, tierAssignment.envFileName),
+          envLoadCommand: DEFAULT_ENV_LOAD_COMMAND,
+        }
+      : info;
   }
 
   /**
@@ -149,6 +204,7 @@ export class WorktreeManager {
       );
     }
 
+    this.releaseTier(agentId);
     this.logger.info({ agentId, path: worktreePath }, 'Worktree removed');
   }
 
@@ -278,6 +334,171 @@ export class WorktreeManager {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async assignTierIfAvailable(agentId: string): Promise<{
+    tier: string;
+    envFileName: string;
+  } | null> {
+    const envFileNames = await this.listDevEnvFiles();
+    if (envFileNames.length === 0) {
+      return null;
+    }
+
+    const claimedTiers = new Set(this.tierAssignments.values());
+
+    for (const envFileName of envFileNames) {
+      const tier = envFileName.slice('.env.'.length);
+      if (claimedTiers.has(tier)) {
+        continue;
+      }
+
+      const locked = await this.tryAcquireTierSelectionLock(tier);
+      if (!locked) {
+        continue;
+      }
+
+      this.tierAssignments.set(agentId, tier);
+
+      return {
+        tier,
+        envFileName,
+      };
+    }
+
+    throw new AgentError(
+      'WORKTREE_CREATE_FAILED',
+      `No available dev tier env files for agent '${agentId}'`,
+      {
+        agentId,
+        tiers: envFileNames.map((fileName) => fileName.slice('.env.'.length)),
+      },
+    );
+  }
+
+  private async listDevEnvFiles(): Promise<string[]> {
+    let entries: string[];
+
+    try {
+      entries = await readdir(this.projectPath);
+    } catch {
+      return [];
+    }
+
+    return entries
+      .filter((entry) => entry.startsWith(DEV_ENV_FILE_PREFIX))
+      .sort((left, right) => this.compareTierEnvFiles(left, right));
+  }
+
+  private compareTierEnvFiles(left: string, right: string): number {
+    const leftNumber = Number.parseInt(left.slice(DEV_ENV_FILE_PREFIX.length), 10);
+    const rightNumber = Number.parseInt(right.slice(DEV_ENV_FILE_PREFIX.length), 10);
+
+    if (Number.isNaN(leftNumber) || Number.isNaN(rightNumber)) {
+      return left.localeCompare(right);
+    }
+
+    return leftNumber - rightNumber;
+  }
+
+  private async tryAcquireTierSelectionLock(tier: string): Promise<boolean> {
+    const safeTierLockDir = sanitizePath(TIER_LOCK_DIR, '/tmp');
+    mkdirSync(sanitizePath(safeTierLockDir, '/tmp'), { recursive: true });
+
+    try {
+      await execFileAsync('flock', ['-n', path.join(TIER_LOCK_DIR, `${tier}.lock`), '-c', 'true']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async prepareTierBootstrap(
+    agentId: string,
+    assignment: {
+      tier: string;
+      envFileName: string;
+    },
+  ): Promise<void> {
+    if (!SAFE_AGENT_ID.test(agentId)) {
+      throw new AgentError(
+        'INVALID_AGENT_ID',
+        `Agent ID '${agentId}' contains invalid characters`,
+        {
+          agentId,
+          pattern: SAFE_AGENT_ID.source,
+        },
+      );
+    }
+    const safeAgentId = agentId;
+    if (!ENV_FILE_NAME_PATTERN.test(assignment.envFileName)) {
+      throw new AgentError(
+        'WORKTREE_CREATE_FAILED',
+        `Invalid dev env file name '${assignment.envFileName}' for worktree tier bootstrap`,
+        { envFileName: assignment.envFileName },
+      );
+    }
+    const safeEnvFileName = assignment.envFileName;
+    const worktreePath = path.join(this.treesDir, `agent-${safeAgentId}`);
+    const sourceEnvPath = path.join(this.projectPath, safeEnvFileName);
+    const worktreeEnvPath = path.join(worktreePath, safeEnvFileName);
+    const agentctlDir = path.join(worktreePath, WORKTREE_AGENTCTL_DIR);
+    const scriptPath = path.join(agentctlDir, WORKTREE_TIER_SCRIPT);
+    const metadataPath = path.join(agentctlDir, WORKTREE_TIER_METADATA);
+    const safeWorktreePath = sanitizePath(worktreePath, this.treesDir);
+    const safeAgentctlDir = sanitizePath(agentctlDir, safeWorktreePath);
+    const safeScriptPath = sanitizePath(scriptPath, safeAgentctlDir);
+
+    mkdirSync(safeWorktreePath, { recursive: true });
+    mkdirSync(safeAgentctlDir, { recursive: true });
+    safeWriteFileSync(
+      worktreeEnvPath,
+      safeWorktreePath,
+      safeReadFileSync(sourceEnvPath, this.projectPath),
+    );
+
+    const bootstrapScript = [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      '',
+      `WORKTREE_ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"`,
+      '',
+      'set -a',
+      '# shellcheck source=/dev/null',
+      `source "\${WORKTREE_ROOT}/${safeEnvFileName}"`,
+      'set +a',
+      '',
+    ].join('\n');
+
+    safeWriteFileSync(scriptPath, safeAgentctlDir, bootstrapScript);
+    chmodSync(safeScriptPath, 0o755);
+    safeWriteFileSync(
+      metadataPath,
+      safeAgentctlDir,
+      `${JSON.stringify(
+        {
+          tier: assignment.tier,
+          envFile: assignment.envFileName,
+          envLoadCommand: DEFAULT_ENV_LOAD_COMMAND,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
+
+  private releaseTier(agentId: string): void {
+    this.tierAssignments.delete(agentId);
+  }
+
+  private async cleanupWorktreePath(worktreePath: string): Promise<void> {
+    try {
+      await execFileAsync('git', ['worktree', 'remove', worktreePath, '--force'], {
+        cwd: this.projectPath,
+      });
+    } catch {
+      // Best effort cleanup only; the original create failure is more important.
     }
   }
 

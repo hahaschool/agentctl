@@ -1,3 +1,5 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { AgentError } from '@agentctl/shared';
@@ -197,6 +199,112 @@ describe('WorktreeManager', () => {
   // ── create ───────────────────────────────────────────────────────────
 
   describe('create', () => {
+    it('assigns the first available dev tier and bootstraps env sourcing in the worktree', async () => {
+      const projectPath = await mkdtemp(path.join(tmpdir(), 'worktree-manager-'));
+      const expectedPath = path.join(projectPath, '.trees', 'agent-tiered');
+      const sourceEnvPath = path.join(projectPath, '.env.dev-1');
+
+      try {
+        await writeFile(sourceEnvPath, 'TIER=dev-1\nPORT=8180\n');
+
+        const manager = new WorktreeManager(makeOptions({ projectPath }));
+
+        mockExecFileSequence([
+          { stdout: '.git\n' }, // assertGitRepo
+          { stdout: '.git\n' }, // assertGitRepo (inside list for exists)
+          { stdout: '' }, // list (empty)
+          { error: 'not a valid ref' }, // branchExists
+          { stdout: '' }, // flock dev-1
+          { stdout: '' }, // git worktree add
+          { stdout: '.git\n' }, // assertGitRepo (inside list for get)
+          {
+            stdout: porcelainBlock({
+              path: expectedPath,
+              branch: 'agent-tiered/work',
+              head: 'deadbeef',
+            }),
+          }, // list (for get)
+        ]);
+
+        const result = await manager.create({ agentId: 'tiered', projectPath });
+
+        expect(result.tier).toBe('dev-1');
+        expect(result.envFilePath).toBe(path.join(expectedPath, '.env.dev-1'));
+        expect(result.envLoadCommand).toBe('source ./.agentctl/source-tier-env.sh');
+
+        expect(await readFile(path.join(expectedPath, '.env.dev-1'), 'utf8')).toBe(
+          await readFile(sourceEnvPath, 'utf8'),
+        );
+
+        const bootstrapScript = await readFile(
+          path.join(expectedPath, '.agentctl', 'source-tier-env.sh'),
+          'utf8',
+        );
+        expect(bootstrapScript).toContain(`source "\${WORKTREE_ROOT}/.env.dev-1"`);
+
+        const calls = (execFile as unknown as ReturnType<typeof vi.fn>).mock.calls;
+        const flockCall = calls.find(
+          (c: unknown[]) => c[0] === 'flock' && Array.isArray(c[1]) && c[1][2] === '-c',
+        );
+        expect(flockCall?.[1]).toEqual(['-n', '/tmp/agentctl-tier-locks/dev-1.lock', '-c', 'true']);
+      } finally {
+        await rm(projectPath, { recursive: true, force: true });
+      }
+    });
+
+    it('skips locked dev tiers and assigns the next available tier', async () => {
+      const projectPath = await mkdtemp(path.join(tmpdir(), 'worktree-manager-'));
+      const expectedPath = path.join(projectPath, '.trees', 'agent-tiered-2');
+
+      try {
+        await writeFile(path.join(projectPath, '.env.dev-1'), 'TIER=dev-1\nPORT=8180\n');
+        await writeFile(path.join(projectPath, '.env.dev-2'), 'TIER=dev-2\nPORT=8280\n');
+
+        const manager = new WorktreeManager(makeOptions({ projectPath }));
+
+        mockExecFileSequence([
+          { stdout: '.git\n' }, // assertGitRepo
+          { stdout: '.git\n' }, // assertGitRepo (inside list for exists)
+          { stdout: '' }, // list (empty)
+          { error: 'not a valid ref' }, // branchExists
+          { error: 'lock held' }, // flock dev-1
+          { stdout: '' }, // flock dev-2
+          { stdout: '' }, // git worktree add
+          { stdout: '.git\n' }, // assertGitRepo (inside list for get)
+          {
+            stdout: porcelainBlock({
+              path: expectedPath,
+              branch: 'agent-tiered-2/work',
+              head: 'deadbeef',
+            }),
+          }, // list (for get)
+        ]);
+
+        const result = await manager.create({ agentId: 'tiered-2', projectPath });
+
+        expect(result.tier).toBe('dev-2');
+        expect(result.envFilePath).toBe(path.join(expectedPath, '.env.dev-2'));
+
+        const calls = (execFile as unknown as ReturnType<typeof vi.fn>).mock.calls;
+        const flockCalls = calls.filter((c: unknown[]) => c[0] === 'flock');
+        expect(flockCalls).toHaveLength(2);
+        expect(flockCalls[0]?.[1]).toEqual([
+          '-n',
+          '/tmp/agentctl-tier-locks/dev-1.lock',
+          '-c',
+          'true',
+        ]);
+        expect(flockCalls[1]?.[1]).toEqual([
+          '-n',
+          '/tmp/agentctl-tier-locks/dev-2.lock',
+          '-c',
+          'true',
+        ]);
+      } finally {
+        await rm(projectPath, { recursive: true, force: true });
+      }
+    });
+
     it('calls git worktree add with correct arguments', async () => {
       const manager = new WorktreeManager(makeOptions());
       const expectedPath = path.join(DEFAULT_TREES_DIR, 'agent-a1');
