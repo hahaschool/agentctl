@@ -84,3 +84,38 @@ export type CrossSpaceSubscription = {
   readonly createdBy: string;
   readonly createdAt: string;
 };
+
+// ── Context Budget Management (§10.4) ───────────────────────
+
+export const OVERFLOW_STRATEGIES = ['truncate', 'prioritize', 'reject'] as const;
+export type OverflowStrategy = (typeof OVERFLOW_STRATEGIES)[number];
+
+export function isOverflowStrategy(v: string): v is OverflowStrategy {
+  return (OVERFLOW_STRATEGIES as readonly string[]).includes(v);
+}
+
+/** Token usage snapshot for a single space or the total across spaces. */
+export type ContextBudget = {
+  readonly maxTokens: number;
+  readonly usedTokens: number;
+  readonly remaining: number;
+};
+
+/** Policy governing how token budgets are enforced across spaces. */
+export type ContextBudgetPolicy = {
+  readonly perSpaceLimit: number;
+  readonly totalLimit: number;
+  readonly overflowStrategy: OverflowStrategy;
+};
+
+/** Per-space budget breakdown returned by the budget manager. */
+export type ContextBudgetSummary = {
+  readonly perSpace: Readonly<Record<string, ContextBudget>>;
+  readonly total: ContextBudget;
+};
+
+export const DEFAULT_CONTEXT_BUDGET_POLICY: ContextBudgetPolicy = {
+  perSpaceLimit: 4000,
+  totalLimit: 16000,
+  overflowStrategy: 'truncate',
+};

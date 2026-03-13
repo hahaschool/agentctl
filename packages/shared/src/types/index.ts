@@ -128,6 +128,9 @@ export {
   THREAD_TYPES,
 } from './collaboration.js';
 export type {
+  ContextBudget,
+  ContextBudgetPolicy,
+  ContextBudgetSummary,
   ContextRef,
   ContextRefMode,
   CrossSpaceQuery,
@@ -137,12 +140,16 @@ export type {
   CrossSpaceQueryTimeRange,
   CrossSpaceSubscription,
   InjectionMethod,
+  OverflowStrategy,
 } from './context-bridge.js';
 export {
   CONTEXT_REF_MODES,
+  DEFAULT_CONTEXT_BUDGET_POLICY,
   INJECTION_METHODS,
   isContextRefMode,
   isInjectionMethod,
+  isOverflowStrategy,
+  OVERFLOW_STRATEGIES,
 } from './context-bridge.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {

@@ -1,7 +1,14 @@
-import { CONTEXT_REF_MODES, ControlPlaneError, isContextRefMode } from '@agentctl/shared';
+import type { ContextBudgetPolicy, OverflowStrategy } from '@agentctl/shared';
+import {
+  CONTEXT_REF_MODES,
+  ControlPlaneError,
+  isContextRefMode,
+  isOverflowStrategy,
+} from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
-
+import type { Logger } from 'pino';
 import type { ContextBridgeStore } from '../../collaboration/context-bridge-store.js';
+import { ContextBudgetManager } from '../../collaboration/context-budget-manager.js';
 import type { EventStore } from '../../collaboration/event-store.js';
 import type { SpaceStore } from '../../collaboration/space-store.js';
 
@@ -109,6 +116,77 @@ export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions>
       }
 
       return await contextBridgeStore.listRefsByTargetSpace(request.params.spaceId);
+    },
+  );
+
+  app.get<{
+    Params: { spaceId: string };
+    Querystring: {
+      perSpaceLimit?: string;
+      totalLimit?: string;
+      overflowStrategy?: string;
+    };
+  }>(
+    '/:spaceId/context-refs/budgeted',
+    {
+      schema: {
+        tags: ['context-bridge'],
+        summary: 'List context refs with budget constraints applied',
+      },
+    },
+    async (request, reply) => {
+      const space = await spaceStore.getSpace(request.params.spaceId);
+      if (!space) {
+        return reply.code(404).send({
+          error: 'SPACE_NOT_FOUND',
+          message: 'Space not found',
+        });
+      }
+
+      const { perSpaceLimit, totalLimit, overflowStrategy } = request.query;
+
+      if (overflowStrategy !== undefined && !isOverflowStrategy(overflowStrategy)) {
+        return reply.code(400).send({
+          error: 'INVALID_OVERFLOW_STRATEGY',
+          message: 'overflowStrategy must be one of: truncate, prioritize, reject',
+        });
+      }
+
+      const parsedPerSpace = perSpaceLimit !== undefined ? Number(perSpaceLimit) : undefined;
+      const parsedTotal = totalLimit !== undefined ? Number(totalLimit) : undefined;
+
+      if (parsedPerSpace !== undefined && (Number.isNaN(parsedPerSpace) || parsedPerSpace < 0)) {
+        return reply.code(400).send({
+          error: 'INVALID_PER_SPACE_LIMIT',
+          message: 'perSpaceLimit must be a non-negative number',
+        });
+      }
+
+      if (parsedTotal !== undefined && (Number.isNaN(parsedTotal) || parsedTotal < 0)) {
+        return reply.code(400).send({
+          error: 'INVALID_TOTAL_LIMIT',
+          message: 'totalLimit must be a non-negative number',
+        });
+      }
+
+      const policy: ContextBudgetPolicy = {
+        perSpaceLimit: parsedPerSpace ?? 4000,
+        totalLimit: parsedTotal ?? 16000,
+        overflowStrategy: (overflowStrategy as OverflowStrategy) ?? 'truncate',
+      };
+
+      const refs = await contextBridgeStore.listRefsByTargetSpace(request.params.spaceId);
+      const budgetManager = new ContextBudgetManager({
+        policy,
+        logger: request.log as unknown as Logger,
+      });
+      const result = budgetManager.applyBudget(refs);
+
+      return {
+        refs: result.refs,
+        excluded: result.excluded,
+        budget: result.summary,
+      };
     },
   );
 
