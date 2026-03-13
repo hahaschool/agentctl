@@ -1,0 +1,292 @@
+# Promote to Beta (Section 12.6)
+#
+# Runs scripts/env-promote.sh to promote a dev tier build to beta.
+# The script handles: build, schema parity check, DB migration, PM2 restart,
+# and automatic rollback on failure.
+#
+# Triggers:
+#   - workflow_dispatch: manual promote with optional tier selection and dry run
+#
+# NOTE: The "beta" GitHub Environment MUST be configured with required
+# reviewers to gate beta promotions. Go to:
+#   Settings > Environments > beta > Required reviewers
+#
+# Required secrets:
+#   TS_OAUTH_CLIENT_ID  — Tailscale OAuth client ID (ephemeral)
+#   TS_OAUTH_SECRET     — Tailscale OAuth client secret
+#   BETA_TAILSCALE_IP   — Tailscale IP of beta machine (100.x.x.x)
+#   DEPLOY_SSH_KEY      — SSH private key for the deploy user on beta machine
+#
+# Required repository variables (non-secret):
+#   DEPLOY_USER         — SSH user on the target machine (default: deploy)
+
+name: Promote to Beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Source tier to promote from"
+        required: true
+        type: choice
+        options:
+          - beta
+          - dev-1
+          - dev-2
+        default: beta
+      dry_run:
+        description: "Show promotion plan without executing"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: promote-beta
+  cancel-in-progress: false
+
+env:
+  PNPM_VERSION: "8.15.4"
+  PRIMARY_NODE: "22"
+  DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+
+permissions:
+  contents: read
+  id-token: write  # Required for Tailscale OIDC
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Promote — build, validate schema parity, migrate, and restart beta
+  # ---------------------------------------------------------------------------
+  promote:
+    name: Promote ${{ inputs.tier }} to beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # NOTE: "beta" environment requires manual approval via GitHub
+    # Environment protection rules. Configure at:
+    #   Settings > Environments > beta > Required reviewers
+    environment: beta
+
+    outputs:
+      result: ${{ steps.promote.outcome }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Setup Node.js + pnpm ───────────────────────────────────────────
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.PRIMARY_NODE }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Connect to Tailscale mesh ──────────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Set up SSH key for deployment ──────────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host beta-target
+            HostName ${{ secrets.BETA_TAILSCALE_IP }}
+            User ${{ env.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      # ── Verify SSH connectivity ────────────────────────────────────────
+      - name: Verify SSH connectivity
+        run: ssh beta-target "echo 'SSH connection established'"
+
+      # ── Run env-promote.sh ─────────────────────────────────────────────
+      - name: Run promotion script
+        id: promote
+        run: |
+          set -euo pipefail
+
+          DRY_RUN_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+
+          echo "Promoting from tier: ${{ inputs.tier }}"
+          echo "Dry run: ${{ inputs.dry_run }}"
+          echo ""
+
+          chmod +x scripts/env-promote.sh
+          ./scripts/env-promote.sh --from "${{ inputs.tier }}" $DRY_RUN_FLAG
+
+      # ── Post-promote health check ──────────────────────────────────────
+      - name: Health check (beta)
+        if: inputs.dry_run == false
+        id: health
+        run: |
+          ATTEMPT=0
+          MAX_ATTEMPTS=5
+          INTERVAL=10
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            STATUS=$(ssh beta-target \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              echo "healthy=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "healthy=false" >> "$GITHUB_OUTPUT"
+          echo "::error::Health check failed after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      # ── Write job summary ──────────────────────────────────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Promote to Beta" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Source tier | \`${{ inputs.tier }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry run | \`${{ inputs.dry_run }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Triggered by | \`${{ github.actor }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Report promotion failure ───────────────────────────────────────
+      - name: Report promotion failure
+        if: failure()
+        run: |
+          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ inputs.tier }}' to beta failed. The env-promote.sh script includes automatic rollback. Check logs for details."
+
+      # ── Cleanup SSH key ────────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key
+
+  # ---------------------------------------------------------------------------
+  # Rollback — triggered automatically when the promote job fails
+  # ---------------------------------------------------------------------------
+  rollback:
+    name: Rollback beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: promote
+    if: failure() && needs.promote.result == 'failure'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Connect to Tailscale mesh ──────────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # ── Set up SSH key for deployment ──────────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host beta-target
+            HostName ${{ secrets.BETA_TAILSCALE_IP }}
+            User ${{ env.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      # ── Verify SSH connectivity ────────────────────────────────────────
+      - name: Verify SSH connectivity
+        run: ssh beta-target "echo 'SSH connection established'"
+
+      # ── Restart beta services with previous build ──────────────────────
+      - name: Restart beta services (previous build)
+        run: |
+          echo "::warning::Promote job failed. Attempting to restart beta services with previous build..."
+
+          ssh beta-target << 'REMOTE_SCRIPT'
+            set -euo pipefail
+
+            if ! command -v pm2 &>/dev/null; then
+              echo "::error::pm2 not found on beta machine. Manual intervention required."
+              exit 1
+            fi
+
+            echo "Restarting beta services via PM2..."
+            pm2 restart agentctl-cp-beta agentctl-worker-beta agentctl-web-beta 2>/dev/null || {
+              echo "::warning::Some services could not be restarted. Attempting full start..."
+              pm2 start /opt/agentctl/infra/pm2/ecosystem.beta.config.cjs 2>/dev/null || {
+                echo "::error::Could not restart beta services. Manual intervention required."
+                exit 1
+              }
+            }
+
+            echo "Beta services restarted"
+            pm2 list
+          REMOTE_SCRIPT
+
+      # ── Post-rollback health check ─────────────────────────────────────
+      - name: Health check (post-rollback)
+        run: |
+          ATTEMPT=0
+          MAX_ATTEMPTS=5
+          INTERVAL=10
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Rollback health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            STATUS=$(ssh beta-target \
+              "curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/health" \
+              2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Rollback health check passed (HTTP $STATUS)"
+              echo "Beta is running the previous build."
+              exit 0
+            fi
+
+            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "::error title=Rollback Health Check Failed::Beta rollback completed but health check failed after $MAX_ATTEMPTS attempts. Manual intervention required."
+          exit 1
+
+      # ── Report rollback result ─────────────────────────────────────────
+      - name: Report rollback failure
+        if: failure()
+        run: |
+          echo "::error title=Beta Rollback Failed::Both promotion and rollback failed. Manual intervention required. SSH: ${{ env.DEPLOY_USER }}@${{ secrets.BETA_TAILSCALE_IP }}"
+
+      # ── Cleanup SSH key ────────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -rf ~/.ssh/deploy_key
