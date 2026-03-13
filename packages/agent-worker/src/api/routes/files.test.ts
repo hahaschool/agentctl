@@ -118,20 +118,6 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('GET /api/files (list directory)', () => {
-    it('includes Fastify rate-limit headers on the directory listing route', async () => {
-      const dirPath = '/Users/testuser/project';
-      vi.mocked(statSync).mockReturnValue(makeStat({ isDirectory: true }));
-      vi.mocked(readdirSync).mockReturnValue([] as unknown as ReturnType<typeof readdirSync>);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: `/api/files?path=${encodeURIComponent(dirPath)}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      expect(res.headers['x-ratelimit-limit']).toBe('60');
-    });
-
     it('returns directory entries sorted dirs-first then alphabetically', async () => {
       const dirPath = '/Users/testuser/project';
       vi.mocked(existsSync).mockReturnValue(true);
@@ -292,30 +278,6 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('GET /api/files/content (read file)', () => {
-    it('includes Fastify rate-limit headers on the file content route', async () => {
-      const filePath = '/Users/testuser/project/index.ts';
-      const fileContent = 'console.log("hello");';
-      vi.mocked(openSync).mockReturnValue(42);
-      vi.mocked(statSync).mockReturnValue(makeStat({ isFile: true, size: fileContent.length }));
-      vi.mocked(fstatSync).mockReturnValue(
-        makeStat({ isFile: true, size: fileContent.length }) as unknown as ReturnType<
-          typeof fstatSync
-        >,
-      );
-      vi.mocked(readSync).mockImplementation((_fd, buf: Buffer) => {
-        buf.write(fileContent);
-        return fileContent.length;
-      });
-
-      const res = await app.inject({
-        method: 'GET',
-        url: `/api/files/content?path=${encodeURIComponent(filePath)}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      expect(res.headers['x-ratelimit-limit']).toBe('60');
-    });
-
     it('returns file content with path and size', async () => {
       const filePath = '/Users/testuser/project/index.ts';
       const fileContent = 'console.log("hello");';
@@ -416,19 +378,6 @@ describe('File routes', () => {
   // =========================================================================
 
   describe('PUT /api/files/content (write file)', () => {
-    it('includes Fastify rate-limit headers on the file write route', async () => {
-      const filePath = '/Users/testuser/project/output.txt';
-
-      const res = await app.inject({
-        method: 'PUT',
-        url: '/api/files/content',
-        payload: { path: filePath, content: 'new content here' },
-      });
-
-      expect(res.statusCode).toBe(200);
-      expect(res.headers['x-ratelimit-limit']).toBe('30');
-    });
-
     it('writes file content and returns success', async () => {
       const filePath = '/Users/testuser/project/output.txt';
       vi.mocked(existsSync).mockReturnValue(true);

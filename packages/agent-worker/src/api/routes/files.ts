@@ -3,8 +3,8 @@
 // the web UI) to list directories, read file contents, and write file contents
 // on the machine where this worker is running.
 //
-// Security: path validation stays in the same scope as each fs sink so CodeQL
-// can trace resolve() + prefix checks directly into stat/open/readdir/write.
+// Security: route handlers validate user-controlled paths up front, then hand
+// the resolved safe paths to local helpers for filesystem access.
 // ---------------------------------------------------------------------------
 
 import type { Dirent } from 'node:fs';
@@ -13,7 +13,6 @@ import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
 import { WorkerError } from '@agentctl/shared';
-import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
@@ -79,19 +78,86 @@ function rejectMalformedInput(raw: unknown): asserts raw is string {
   }
 }
 
-function resolveAllowedBase(rawPath: string): string {
+function toSafePath(raw: string): string {
+  let safePath: string | undefined;
   for (const base of ALLOWED_BASE_DIRECTORIES) {
     try {
-      sanitizePath(rawPath, base);
-      return resolve(base);
+      safePath = sanitizePath(raw, base);
+      break;
     } catch {
       // Path not under this base — try the next one.
     }
   }
 
-  throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
-    path: resolve(rawPath),
-  });
+  if (safePath === undefined) {
+    throw new WorkerError('INVALID_PATH', 'Path is outside allowed directories', {
+      path: resolve(raw),
+    });
+  }
+
+  const deniedSegment = findDeniedPathSegment(safePath, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment !== null) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `Access to "${deniedSegment}" directories is denied for security reasons`,
+      { path: safePath, deniedSegment },
+    );
+  }
+
+  return safePath;
+}
+
+function listSafeDirectory(safeDirPath: string): Dirent[] {
+  const stat = statSync(safeDirPath);
+  if (!stat.isDirectory()) {
+    throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: safeDirPath });
+  }
+
+  return readdirSync(safeDirPath, { withFileTypes: true }) as Dirent[];
+}
+
+function readSafeChildMetadata(
+  safeDirPath: string,
+  childName: string,
+): Pick<FileEntry, 'size' | 'modified'> {
+  const childPath = sanitizePath(resolve(safeDirPath, childName), safeDirPath);
+  const deniedSegment = findDeniedPathSegment(childPath, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment !== null) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `Access to "${deniedSegment}" directories is denied for security reasons`,
+      { path: childPath, deniedSegment },
+    );
+  }
+
+  const childStat = statSync(childPath);
+  return {
+    size: childStat.size,
+    modified: childStat.mtime.toISOString(),
+  };
+}
+
+function readSafeFileContent(safeFilePath: string): { content: string; size: number } {
+  const stat = statSync(safeFilePath);
+  if (stat.isDirectory()) {
+    throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
+      path: safeFilePath,
+    });
+  }
+
+  if (stat.size > MAX_FILE_SIZE_BYTES) {
+    throw new WorkerError(
+      'INVALID_PATH',
+      `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
+      { path: safeFilePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
+    );
+  }
+
+  return safeReadFileAtomic(safeFilePath, dirname(safeFilePath), MAX_FILE_SIZE_BYTES);
+}
+
+function ensureSafeDirectory(safeDirPath: string): void {
+  mkdirSync(safeDirPath, { recursive: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -100,14 +166,6 @@ function resolveAllowedBase(rawPath: string): string {
 
 export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): Promise<void> {
   const { logger } = opts;
-
-  // Register @fastify/rate-limit so CodeQL recognises framework-level
-  // throttling. Per-route limits are still enforced by the custom preHandlers.
-  await app.register(rateLimit, {
-    global: false,
-    max: readRateLimitEnv('FILE_ROUTE_GLOBAL_RATE_LIMIT_MAX', 60),
-    timeWindow: readRateLimitEnv('FILE_ROUTE_GLOBAL_RATE_LIMIT_WINDOW_MS', 60_000),
-  });
 
   const fileListRateLimit = createIpRateLimitPreHandler(
     createInMemoryRateLimiter(
@@ -136,38 +194,16 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>(
     '/',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('FILE_LIST_RATE_LIMIT_MAX', 60),
-          timeWindow: readRateLimitEnv('FILE_LIST_RATE_LIMIT_WINDOW_MS', 60_000),
-        },
-      },
       preHandler: fileListRateLimit,
     },
     async (request) => {
       const rawPath = request.query.path;
       rejectMalformedInput(rawPath);
-      const allowedBase = resolveAllowedBase(rawPath);
-      const dirPath = sanitizePath(rawPath, allowedBase);
-
-      const deniedSegment = findDeniedPathSegment(dirPath, DEFAULT_DENIED_PATH_SEGMENTS);
-      if (deniedSegment !== null) {
-        throw new WorkerError(
-          'INVALID_PATH',
-          `Access to "${deniedSegment}" directories is denied for security reasons`,
-          { path: dirPath, deniedSegment },
-        );
-      }
+      const dirPath = toSafePath(rawPath);
 
       let dirents: Dirent[];
       try {
-        const stat = statSync(sanitizePath(dirPath, allowedBase));
-        if (!stat.isDirectory()) {
-          throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: dirPath });
-        }
-        dirents = readdirSync(sanitizePath(dirPath, allowedBase), {
-          withFileTypes: true,
-        }) as Dirent[];
+        dirents = listSafeDirectory(dirPath);
       } catch (err) {
         if (err instanceof WorkerError) throw err;
         const nodeErr = err as NodeJS.ErrnoException;
@@ -194,19 +230,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
         };
 
         try {
-          const childPath = sanitizePath(resolve(dirPath, dirent.name), allowedBase);
-          const childDeniedSegment = findDeniedPathSegment(childPath, DEFAULT_DENIED_PATH_SEGMENTS);
-          if (childDeniedSegment !== null) {
-            throw new WorkerError(
-              'INVALID_PATH',
-              `Access to "${childDeniedSegment}" directories is denied for security reasons`,
-              { path: childPath, deniedSegment: childDeniedSegment },
-            );
-          }
-
-          const childStat = statSync(sanitizePath(childPath, allowedBase));
-          entry.size = childStat.size;
-          entry.modified = childStat.mtime.toISOString();
+          Object.assign(entry, readSafeChildMetadata(dirPath, dirent.name));
         } catch {
           // If we can't stat a child (or it fails validation), skip size/modified.
         }
@@ -226,46 +250,15 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.get<{ Querystring: { path?: string } }>(
     '/content',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_MAX', 60),
-          timeWindow: readRateLimitEnv('FILE_CONTENT_RATE_LIMIT_WINDOW_MS', 60_000),
-        },
-      },
       preHandler: fileContentRateLimit,
     },
     async (request) => {
       const rawPath = request.query.path;
       rejectMalformedInput(rawPath);
-      const allowedBase = resolveAllowedBase(rawPath);
-      const filePath = sanitizePath(rawPath, allowedBase);
-
-      const deniedSegment = findDeniedPathSegment(filePath, DEFAULT_DENIED_PATH_SEGMENTS);
-      if (deniedSegment !== null) {
-        throw new WorkerError(
-          'INVALID_PATH',
-          `Access to "${deniedSegment}" directories is denied for security reasons`,
-          { path: filePath, deniedSegment },
-        );
-      }
+      const filePath = toSafePath(rawPath);
 
       try {
-        const stat = statSync(sanitizePath(filePath, allowedBase));
-        if (stat.isDirectory()) {
-          throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
-            path: filePath,
-          });
-        }
-
-        if (stat.size > MAX_FILE_SIZE_BYTES) {
-          throw new WorkerError(
-            'INVALID_PATH',
-            `File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes (actual: ${stat.size})`,
-            { path: filePath, size: stat.size, maxSize: MAX_FILE_SIZE_BYTES },
-          );
-        }
-
-        const result = safeReadFileAtomic(filePath, allowedBase, MAX_FILE_SIZE_BYTES);
+        const result = readSafeFileContent(filePath);
         logger.debug({ path: filePath, size: result.size }, 'reading file content');
 
         return {
@@ -301,45 +294,21 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
   app.put<{ Body: { path?: string; content?: string } }>(
     '/content',
     {
-      config: {
-        rateLimit: {
-          max: readRateLimitEnv('FILE_WRITE_RATE_LIMIT_MAX', 30),
-          timeWindow: readRateLimitEnv('FILE_WRITE_RATE_LIMIT_WINDOW_MS', 60_000),
-        },
-      },
       preHandler: fileWriteRateLimit,
     },
     async (request) => {
       const body = request.body ?? {};
       rejectMalformedInput(body.path);
-      const allowedBase = resolveAllowedBase(body.path);
-      const filePath = sanitizePath(body.path, allowedBase);
-
-      const deniedSegment = findDeniedPathSegment(filePath, DEFAULT_DENIED_PATH_SEGMENTS);
-      if (deniedSegment !== null) {
-        throw new WorkerError(
-          'INVALID_PATH',
-          `Access to "${deniedSegment}" directories is denied for security reasons`,
-          { path: filePath, deniedSegment },
-        );
-      }
+      const filePath = toSafePath(body.path);
 
       if (typeof body.content !== 'string') {
         throw new WorkerError('INVALID_PATH', 'Request body must include a "content" string field');
       }
 
-      const parentDir = sanitizePath(dirname(filePath), allowedBase);
-      const parentDeniedSegment = findDeniedPathSegment(parentDir, DEFAULT_DENIED_PATH_SEGMENTS);
-      if (parentDeniedSegment !== null) {
-        throw new WorkerError(
-          'INVALID_PATH',
-          `Access to "${parentDeniedSegment}" directories is denied for security reasons`,
-          { path: parentDir, deniedSegment: parentDeniedSegment },
-        );
-      }
+      const parentDir = toSafePath(dirname(filePath));
 
       try {
-        mkdirSync(sanitizePath(parentDir, allowedBase), { recursive: true });
+        ensureSafeDirectory(parentDir);
       } catch (err) {
         const nodeErr = err as NodeJS.ErrnoException;
         throw new WorkerError('FS_ERROR', `Failed to create directory: ${nodeErr.message}`, {
@@ -348,7 +317,7 @@ export async function fileRoutes(app: FastifyInstance, opts: FileRouteOptions): 
       }
 
       logger.info({ path: filePath, contentLength: body.content.length }, 'writing file content');
-      safeWriteFileSync(filePath, allowedBase, body.content);
+      safeWriteFileSync(filePath, parentDir, body.content);
 
       return {
         success: true,
