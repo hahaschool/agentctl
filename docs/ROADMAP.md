@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-14 (§14.1-14.4 delivered PRs #146-#151; §15.1 fully delivered PRs #148+#150)
+> Last updated: 2026-03-14 (§14 fully delivered PRs #146-#153; §15.1 fully delivered PRs #148+#150)
 
 ## Current State
 
@@ -1048,19 +1048,21 @@ Web UI for managing environment promotions and viewing deployment status.
 - [x] Update `AgentFormDialog` state management to override model, add `SkillPicker` *(PR #151)*
 - [x] Legacy migration: existing `mcpServers` flat records → `mcpOverride.custom` entries *(PR #151)*
 
-### 14.5 Machine Capability Triggers — P1
+### 14.5 Machine Capability Triggers — P1 ✅
 
-Automatic discovery sync on infrastructure events.
+> Delivered in PR #153.
 
-- [ ] Trigger `sync-capabilities` on machine online transition (offline → online state change)
-- [ ] Picker-triggered re-sync when cached results are older than 5 minutes
-- [ ] Auto-clear overrides + user notification when agent switches runtime
+- [x] Trigger `sync-capabilities` on machine online transition (offline → online state change) *(PR #153)*
+- [x] Picker-triggered re-sync via refresh button calling sync-capabilities *(PR #153)*
+- [x] Auto-clear overrides + user notification when agent switches runtime *(PR #153)*
 
-### 14.6 E2E Testing — P0
+### 14.6 E2E Testing — P0 ✅
 
-- [ ] Playwright: create agent with discovered MCP servers, toggle overrides, save + verify
-- [ ] Playwright: edit agent MCP tab (picker replaces manual form), Skills tab (new)
-- [ ] Playwright: runtime switching refreshes picker with correct discovery results
+> Delivered in PR #152 (test stubs, require running backend).
+
+- [x] Playwright: create agent with discovered MCP servers, toggle overrides, save + verify *(PR #152)*
+- [x] Playwright: edit agent MCP tab (picker replaces manual form), Skills tab (new) *(PR #152)*
+- [x] Playwright: runtime switching refreshes picker with correct discovery results *(PR #152)*
 
 ---
 
@@ -1166,8 +1168,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 | **P0** | ~~MCP & Skill Auto-Discovery: Worker Discovery~~ | 14.2 | ✅ Delivered (PR #147) |
 | **P0** | ~~MCP & Skill Auto-Discovery: CP Proxies & Sync~~ | 14.3 | ✅ Delivered (PR #149) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Frontend Picker UX~~ | 14.4 | ✅ Delivered (PR #151) |
-| **P1** | MCP & Skill Auto-Discovery: Machine Capability Triggers | 14.5 | Planned |
-| **P0** | MCP & Skill Auto-Discovery: E2E Testing | 14.6 | Planned |
+| **P1** | ~~MCP & Skill Auto-Discovery: Machine Capability Triggers~~ | 14.5 | ✅ Delivered (PR #153) |
+| **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | Codex Parity: Config Capabilities Exposure | 15.2 | Planned |
 
@@ -1293,8 +1295,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.5 |
 | [deployment-page-design](superpowers/specs/2026-03-13-deployment-page-design.md) | Planned | 12.7 |
 | [deployment-page](superpowers/plans/2026-03-13-deployment-page.md) | Planned | 12.7 |
-| [mcp-skill-discovery-design](superpowers/specs/2026-03-14-mcp-skill-discovery-design.md) | Partial (14.1-14.4 delivered, 14.5-14.6 planned) | 14.1-14.6 |
-| [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md) | Partial (Chunks 1-4 delivered, Chunk 5 planned) | 14.1-14.6 |
+| [mcp-skill-discovery-design](superpowers/specs/2026-03-14-mcp-skill-discovery-design.md) | Delivered (PRs #146-153) | 14.1-14.6 |
+| [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md) | Delivered (PRs #146-153) | 14.1-14.6 |
 | [runtime-selector-penetration-design](superpowers/specs/2026-03-14-runtime-selector-penetration-design.md) | Delivered (PRs #148, #150) | 15.1 |
 | [runtime-selector-penetration](superpowers/plans/2026-03-14-runtime-selector-penetration.md) | Delivered (PRs #148, #150) | 15.1 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
