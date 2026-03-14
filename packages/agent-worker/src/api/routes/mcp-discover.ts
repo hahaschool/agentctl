@@ -3,8 +3,13 @@ import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 
 import type { DiscoveredMcpServer, McpServerConfig, McpServerSource } from '@agentctl/shared';
+import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
+
+import type { DiscoveredMcpServerWithProvenance } from '../../runtime/discovery/_type-stubs.js';
+import { discoverCodexMcpServers } from '../../runtime/discovery/codex-mcp-discovery.js';
+import { DiscoveryCache } from '../../runtime/discovery/discovery-cache.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,12 +21,24 @@ type McpDiscoverRouteOptions = FastifyPluginOptions & {
 
 type DiscoverQuerystring = {
   projectPath?: string;
+  runtime?: string;
 };
 
 type DiscoverResult = {
-  discovered: DiscoveredMcpServer[];
+  discovered: (DiscoveredMcpServer | DiscoveredMcpServerWithProvenance)[];
   sources: Array<{ path: string; count: number }>;
+  cached: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// Cache (exported so sync-capabilities can call invalidateAll())
+// ---------------------------------------------------------------------------
+
+const CACHE_TTL_MS = 60_000;
+
+export const mcpDiscoverCache = new DiscoveryCache<
+  (DiscoveredMcpServer | DiscoveredMcpServerWithProvenance)[]
+>(CACHE_TTL_MS);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,7 +136,7 @@ function objectToDiscoveredServers(
 }
 
 // ---------------------------------------------------------------------------
-// Core discovery function (exported for use in heartbeat)
+// Core discovery functions (exported for use in heartbeat)
 // ---------------------------------------------------------------------------
 
 /**
@@ -199,6 +216,44 @@ export async function discoverAllMcpServers(projectPath?: string): Promise<Disco
 }
 
 // ---------------------------------------------------------------------------
+// Codex discovery aggregator
+// ---------------------------------------------------------------------------
+
+/**
+ * Discover MCP servers for the Codex runtime.
+ * Scans global (~/) and project-scoped .codex/config.toml files.
+ */
+async function discoverAllCodexMcpServers(
+  projectPath?: string,
+): Promise<DiscoveredMcpServerWithProvenance[]> {
+  const home = homedir();
+  const [globalServers, projectServers] = await Promise.all([
+    discoverCodexMcpServers(home, 'global'),
+    projectPath ? discoverCodexMcpServers(projectPath, 'project') : Promise.resolve([]),
+  ]);
+
+  // Deduplicate: project-level entries win over global
+  const seen = new Set<string>();
+  const results: DiscoveredMcpServerWithProvenance[] = [];
+
+  for (const server of projectServers) {
+    if (!seen.has(server.name)) {
+      seen.add(server.name);
+      results.push(server);
+    }
+  }
+
+  for (const server of globalServers) {
+    if (!seen.has(server.name)) {
+      seen.add(server.name);
+      results.push(server);
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Route
 // ---------------------------------------------------------------------------
 
@@ -208,12 +263,44 @@ export async function mcpDiscoverRoutes(
 ): Promise<void> {
   const { logger } = options;
 
-  // GET /api/mcp/discover?projectPath=...
+  // GET /api/mcp/discover?projectPath=...&runtime=...
   app.get<{ Querystring: DiscoverQuerystring }>('/discover', async (request, reply) => {
     const { projectPath } = request.query;
+    const runtime = request.query.runtime ?? 'claude-code';
+
+    // Validate runtime
+    if (!isManagedRuntime(runtime)) {
+      return reply.status(400).send({
+        error: 'INVALID_RUNTIME',
+        message: `Invalid runtime: ${runtime}. Must be one of: ${MANAGED_RUNTIMES.join(', ')}`,
+      });
+    }
+
+    const cacheKey = `mcp:${runtime}:${projectPath ?? 'global'}`;
+
+    // Check cache
+    const cached = mcpDiscoverCache.get(cacheKey);
+    if (cached) {
+      const sourceMap = new Map<string, number>();
+      for (const server of cached) {
+        const key = server.description ?? server.source;
+        sourceMap.set(key, (sourceMap.get(key) ?? 0) + 1);
+      }
+      const sources = Array.from(sourceMap.entries()).map(([path, count]) => ({
+        path,
+        count,
+      }));
+      return reply.send({ discovered: cached, sources, cached: true } satisfies DiscoverResult);
+    }
 
     try {
-      const discovered = await discoverAllMcpServers(projectPath);
+      const discovered =
+        runtime === 'codex'
+          ? await discoverAllCodexMcpServers(projectPath)
+          : await discoverAllMcpServers(projectPath);
+
+      // Store in cache
+      mcpDiscoverCache.set(cacheKey, discovered);
 
       // Build source summary
       const sourceMap = new Map<string, number>();
@@ -227,17 +314,17 @@ export async function mcpDiscoverRoutes(
         count,
       }));
 
-      const result: DiscoverResult = { discovered, sources };
+      const result: DiscoverResult = { discovered, sources, cached: false };
 
       logger.info(
-        { projectPath, discoveredCount: discovered.length },
+        { projectPath, runtime, discoveredCount: discovered.length },
         'MCP server discovery completed',
       );
 
       return reply.send(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err, projectPath }, 'MCP discovery failed');
+      logger.error({ err, projectPath, runtime }, 'MCP discovery failed');
       return reply.status(500).send({
         error: 'MCP_DISCOVER_FAILED',
         message: `Failed to discover MCP servers: ${message}`,
