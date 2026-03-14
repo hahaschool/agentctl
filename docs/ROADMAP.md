@@ -937,18 +937,18 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] `promote-beta.yml` workflow with environment protection rules *(PR #136)*
 - [ ] Extend to prod tier on remote machines via Tailscale
 
-### 12.7 Deployment Page UI — P1
+### 12.7 Deployment Page UI — P1 ✅
 
 > Design spec: [deployment-page-design](superpowers/specs/2026-03-13-deployment-page-design.md)
 > Impl plan: [deployment-page](superpowers/plans/2026-03-13-deployment-page.md)
+>
+> Delivered in PR #144. Full deployment page with tier status, gated promotion, and history.
 
-Web UI for managing environment promotions and viewing deployment status.
-
-- [ ] Tier status cards (dev-1, dev-2, beta, production) with health indicators
-- [ ] Gated promotion UI with preflight checks
-- [ ] Promotion history panel
-- [ ] SSE-powered progress streaming during promotions
-- [ ] Rollback controls
+- [x] Tier status cards (dev-1, dev-2, beta, production) with health indicators *(PR #144)*
+- [x] Gated promotion UI with preflight checks *(PR #144)*
+- [x] Promotion history panel *(PR #144)*
+- [x] SSE-powered progress streaming during promotions *(PR #144)*
+- [x] Rollback controls *(PR #144)*
 
 ---
 
@@ -1293,8 +1293,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [intelligence-layer-impl-plan](plans/2026-03-12-intelligence-layer-impl-plan.md) | Delivered | 10.5 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
 | [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.5 |
-| [deployment-page-design](superpowers/specs/2026-03-13-deployment-page-design.md) | Planned | 12.7 |
-| [deployment-page](superpowers/plans/2026-03-13-deployment-page.md) | Planned | 12.7 |
+| [deployment-page-design](superpowers/specs/2026-03-13-deployment-page-design.md) | Delivered (PR #144) | 12.7 |
+| [deployment-page](superpowers/plans/2026-03-13-deployment-page.md) | Delivered (PR #144) | 12.7 |
 | [mcp-skill-discovery-design](superpowers/specs/2026-03-14-mcp-skill-discovery-design.md) | Delivered (PRs #146-153) | 14.1-14.6 |
 | [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md) | Delivered (PRs #146-153) | 14.1-14.6 |
 | [runtime-selector-penetration-design](superpowers/specs/2026-03-14-runtime-selector-penetration-design.md) | Delivered (PRs #148, #150) | 15.1 |
