@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-14 (§14.1 PR #146; §14.2 PR #147; §15.1 Chunks 1-2 PR #148)
+> Last updated: 2026-03-14 (§14.1-14.4 delivered PRs #146-#151; §15.1 fully delivered PRs #148+#150)
 
 ## Current State
 
@@ -1015,25 +1015,25 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] New `GET /api/skills/discover?runtime=...` endpoint *(PR #147)*
 - [x] Replace `description: "From <path>"` pattern with structured `configFile` field *(PR #147)*
 
-### 14.3 Control Plane Proxies & Sync — P0
+### 14.3 Control Plane Proxies & Sync — P0 ✅
 
-CP-side proxies and machine capability syncing.
+> Delivered in PR #149.
 
-- [ ] Extend MCP discover proxy (`mcp-templates.ts`) to forward `runtime` param
-- [ ] New skill discover proxy (`skill-discover.ts`)
-- [ ] `POST /api/machines/:machineId/sync-capabilities` — calls both discovery endpoints, updates machine record with provenance
+- [x] Extend MCP discover proxy (`mcp-templates.ts`) to forward `runtime` param *(PR #149)*
+- [x] New skill discover proxy (`skill-discover.ts`) *(PR #149)*
+- [x] `POST /api/machines/:machineId/sync-capabilities` — calls both discovery endpoints, updates machine record with provenance *(PR #149)*
 
-### 14.4 Frontend Picker UX — P0
+### 14.4 Frontend Picker UX — P0 ✅
 
-Unified picker experience for both create and edit flows.
+> Delivered in PR #151.
 
-- [ ] Refactor `McpServerPicker` from flat `Record<string, McpServerConfig>` to override model (`AgentMcpOverride`)
-- [ ] Three visual states per item: inherited (machine default), excluded (user opted out), custom (manually added)
-- [ ] New `SkillPicker` component — mirrors McpServerPicker pattern with SKILL.md metadata display
-- [ ] Replace `McpServersTab` manual JSON form with `McpServerPicker` + `isManagedRuntime` guard
-- [ ] New `SkillsTab` in agent settings
-- [ ] Update `AgentFormDialog` state management to override model, add `SkillPicker`
-- [ ] Legacy migration: existing `mcpServers` flat records → `mcpOverride.custom` entries
+- [x] Refactor `McpServerPicker` from flat `Record<string, McpServerConfig>` to override model (`AgentMcpOverride`) *(PR #151)*
+- [x] Three visual states per item: inherited (machine default), excluded (user opted out), custom (manually added) *(PR #151)*
+- [x] New `SkillPicker` component — mirrors McpServerPicker pattern with SKILL.md metadata display *(PR #151)*
+- [x] Replace `McpServersTab` manual JSON form with `McpServerPicker` + `isManagedRuntime` guard *(PR #151)*
+- [x] New `SkillsTab` in agent settings *(PR #151)*
+- [x] Update `AgentFormDialog` state management to override model, add `SkillPicker` *(PR #151)*
+- [x] Legacy migration: existing `mcpServers` flat records → `mcpOverride.custom` entries *(PR #151)*
 
 ### 14.5 Machine Capability Triggers — P1
 
@@ -1068,11 +1068,11 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] `RuntimeSelector` component (radio + dropdown variants) *(PR #148)*
 - [x] `RuntimeAwareModelSelect` component (auto-switches model list, auto-resets invalid model) *(PR #148)*
 - [x] `RuntimeAwareMachineSelect` component (filters by runtime installation via drift API) *(PR #148)*
-- [ ] Integrate into `AgentFormDialog`, `CreateSessionForm`, `DiscoverNewSessionForm`
-- [ ] Integrate into Agent Settings `GeneralTab` (with confirmation dialog on runtime change)
-- [ ] `DiscoverPage`: runtime badges + runtime filter
-- [ ] `SessionsPage`: runtime badge in session rows
-- [ ] `MachineDetailView`: "Available Runtimes" section
+- [x] Integrate into `AgentFormDialog`, `CreateSessionForm`, `DiscoverNewSessionForm` *(PR #150)*
+- [x] Integrate into Agent Settings `GeneralTab` (with confirmation dialog on runtime change) *(PR #150)*
+- [x] `DiscoverPage`: runtime badges + runtime filter *(PR #150)*
+- [x] `SessionsPage`: runtime badge in session rows *(PR #150)*
+- [x] `MachineDetailView`: "Available Runtimes" section *(PR #150)*
 
 ### 15.2 Codex Config Capabilities Exposure — P1 (Sub-project B)
 
@@ -1151,11 +1151,11 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 | **—** | Security: CodeQL rescan pending | — | Push trigger added (PR #140); rescan in progress |
 | **P0** | ~~MCP & Skill Auto-Discovery: Types + Override Resolution~~ | 14.1 | ✅ Delivered (PR #146) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Worker Discovery~~ | 14.2 | ✅ Delivered (PR #147) |
-| **P0** | MCP & Skill Auto-Discovery: CP Proxies & Sync | 14.3 | Planned |
-| **P0** | MCP & Skill Auto-Discovery: Frontend Picker UX | 14.4 | Planned |
+| **P0** | ~~MCP & Skill Auto-Discovery: CP Proxies & Sync~~ | 14.3 | ✅ Delivered (PR #149) |
+| **P0** | ~~MCP & Skill Auto-Discovery: Frontend Picker UX~~ | 14.4 | ✅ Delivered (PR #151) |
 | **P1** | MCP & Skill Auto-Discovery: Machine Capability Triggers | 14.5 | Planned |
 | **P0** | MCP & Skill Auto-Discovery: E2E Testing | 14.6 | Planned |
-| **P0** | Codex Parity: Runtime Selector Penetration | 15.1 | Partial — Chunks 1-2 delivered (PR #148), Chunks 3-4 planned |
+| **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | Codex Parity: Config Capabilities Exposure | 15.2 | Planned |
 
 ---
