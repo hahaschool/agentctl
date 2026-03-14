@@ -1,6 +1,11 @@
 'use client';
 
-import { isManagedRuntime, type ManagedRuntime } from '@agentctl/shared';
+import {
+  type AgentMcpOverride,
+  type AgentSkillOverride,
+  isManagedRuntime,
+  type ManagedRuntime,
+} from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,7 +28,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
-import type { Agent, AgentConfig, Machine, McpServerConfig } from '../lib/api';
+import type { Agent, AgentConfig, Machine } from '../lib/api';
 import { shortenPath } from '../lib/format-utils';
 import { AGENT_TYPES, DEFAULT_MODEL } from '../lib/model-options';
 import { memoryScopesQuery } from '../lib/queries';
@@ -141,7 +146,11 @@ export function AgentFormDialog({
   const [permissionMode, setPermissionMode] = useState('default');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [defaultPrompt, setDefaultPrompt] = useState('');
-  const [mcpServers, setMcpServers] = useState<Record<string, McpServerConfig>>({});
+  const [mcpOverride, setMcpOverride] = useState<AgentMcpOverride>({ excluded: [], custom: [] });
+  const [skillOverride, setSkillOverride] = useState<AgentSkillOverride>({
+    excluded: [],
+    custom: [],
+  });
   const [runtime, setRuntime] = useState<ManagedRuntime>('claude-code');
 
   // Create-only state
@@ -197,7 +206,8 @@ export function AgentFormDialog({
     setPermissionMode('default');
     setSystemPrompt('');
     setDefaultPrompt('');
-    setMcpServers({});
+    setMcpOverride({ excluded: [], custom: [] });
+    setSkillOverride({ excluded: [], custom: [] });
     setRuntime('claude-code');
     setProjectSearchQuery('');
     setShowProjectDropdown(false);
@@ -217,7 +227,8 @@ export function AgentFormDialog({
     setPermissionMode(a.config?.permissionMode ?? 'default');
     setSystemPrompt(a.config?.systemPrompt ?? '');
     setDefaultPrompt(a.config?.defaultPrompt ?? '');
-    setMcpServers(a.config?.mcpServers ?? {});
+    setMcpOverride(a.config?.mcpOverride ?? { excluded: [], custom: [] });
+    setSkillOverride(a.config?.skillOverride ?? { excluded: [], custom: [] });
     setRuntime(a.runtime && isManagedRuntime(a.runtime) ? a.runtime : 'claude-code');
   }, []);
 
@@ -254,7 +265,10 @@ export function AgentFormDialog({
         config.permissionMode = permissionMode as AgentConfig['permissionMode'];
       if (systemPrompt.trim()) config.systemPrompt = systemPrompt.trim();
       if (defaultPrompt.trim()) config.defaultPrompt = defaultPrompt.trim();
-      if (Object.keys(mcpServers).length > 0) config.mcpServers = mcpServers;
+      if (mcpOverride.excluded.length > 0 || mcpOverride.custom.length > 0)
+        config.mcpOverride = mcpOverride;
+      if (skillOverride.excluded.length > 0 || skillOverride.custom.length > 0)
+        config.skillOverride = skillOverride;
 
       // Remember last-used machine
       if (typeof window !== 'undefined') {
@@ -323,10 +337,11 @@ export function AgentFormDialog({
       } else {
         delete config.defaultPrompt;
       }
-      if (Object.keys(mcpServers).length > 0) {
-        config.mcpServers = mcpServers;
-      } else {
-        delete config.mcpServers;
+      if (mcpOverride.excluded.length > 0 || mcpOverride.custom.length > 0) {
+        config.mcpOverride = mcpOverride;
+      }
+      if (skillOverride.excluded.length > 0 || skillOverride.custom.length > 0) {
+        config.skillOverride = skillOverride;
       }
 
       onSubmit({
@@ -535,9 +550,10 @@ export function AgentFormDialog({
   const mcpServersSection = (
     <McpServerPicker
       machineId={machineId}
+      runtime={runtime}
       projectPath={projectPath || agent?.projectPath || undefined}
-      value={mcpServers}
-      onChange={setMcpServers}
+      currentOverrides={mcpOverride}
+      onChange={setMcpOverride}
       disabled={isPending}
     />
   );
