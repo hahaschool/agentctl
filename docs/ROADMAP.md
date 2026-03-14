@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-13 (§13 Open Source section added; CI push trigger PR #140; §12.6 PR #136; §12.0 PR #137; CodeQL PR #138; CP rate-limit PR #135)
+> Last updated: 2026-03-14 (§14 MCP & Skill Auto-Discovery added)
 
 ## Current State
 
@@ -255,6 +255,8 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 - [x] Azure OpenAI credential detection for Codex authentication
 - [x] Config renderer: `modelProvider`, `reasoningEffort`, and shell environment policy in Codex TOML
 - [x] Sandbox constraints end-to-end: post-spawn verification (bubblewrap/Seatbelt/Codex), network enforcement, SSE `sandbox_verified` event *(PR #70)*
+
+> **Gap**: Codex TOML MCP config (`[mcp_servers.*]`) not auto-discovered. Addressed in §14 — runtime-aware MCP discovery reads `.codex/config.toml` alongside Claude Code JSON configs.
 
 ### 3.5 Automatic Handoff Triggers — P2
 
@@ -711,7 +713,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] MCP server picker in agent creation/edit UI (web) *(PR #82)*
 - [x] Control plane → worker config downlink: include MCP config in job payload *(PR #132)*
 
-> **User feedback**: Manual MCP form is bad UX. Needs auto-detection and managed push-down. See §11.6.
+> **User feedback**: Manual MCP form is bad UX. Needs auto-detection and managed push-down. See §11.6 (delivered) and §14 (next evolution: runtime-aware + skill discovery + machine defaults).
 
 ### 9.3 Agent Config as Default Prompt — P1 ✅
 
@@ -797,6 +799,8 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 ### 11.6 MCP Server Auto-Detection & Managed Config — P0 ✅
 
 > Fixed in PR #89. Three-layer MCP discovery: project files (`.mcp.json`, `.claude/settings.json`), machine-level, and managed templates. `McpServerPicker` replaces manual form with auto-detected + template cards.
+>
+> **Next evolution**: §14 extends this with runtime-aware discovery (Codex TOML support), skill auto-discovery, machine-level defaults with per-agent opt-out overrides, and unified picker in both create and edit flows.
 
 - [x] Worker `GET /api/mcp/discover?projectPath=...` — scans project + global config *(PR #89)*
 - [x] CP `GET /api/mcp/templates` — common MCP server templates *(PR #89)*
@@ -981,6 +985,72 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ---
 
+## 14. MCP & Skill Auto-Discovery
+
+> Runtime-aware auto-discovery of MCP servers and skills from machine configs, with machine-level defaults and per-agent opt-out overrides.
+
+> Design spec: [mcp-skill-discovery-design](superpowers/specs/2026-03-14-mcp-skill-discovery-design.md)
+> Impl plan: [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md)
+
+**Problem:** Creating or editing agents requires manually entering MCP server and skill configs every time. In a multi-agent, multi-machine environment this is O(n) repetitive work. Each machine already has MCP servers configured in Claude Code's `~/.claude.json` and Codex's `.codex/config.toml`, plus skills in `~/.claude/skills/` and `~/.agents/skills/`, but the platform doesn't auto-discover them.
+
+### 14.1 Shared Types & Override Resolution — P0
+
+Foundation types used by all layers. Must be merged first per shared package rule.
+
+- [ ] Extend `MachineCapabilities` with discovery provenance fields (`mcpServerSources`, `skillSources`, `lastDiscoveredAt`)
+- [ ] Extend `ManagedSkill` with display metadata (`name`, `description`, `source`)
+- [ ] Add `DiscoveredSkill` type and `configFile` field on `DiscoveredMcpServer`
+- [ ] Add `CustomMcpServer`, `AgentMcpOverride`, `AgentSkillOverride` types on `AgentConfig`
+- [ ] Pure-function override resolution: `resolveEffectiveMcpServers()`, `resolveEffectiveSkills()` — opt-out model (defaults - excluded + custom)
+
+### 14.2 Worker Discovery — P0
+
+Runtime-aware discovery scanning machine-local config files.
+
+- [ ] Codex TOML MCP parser (`smol-toml`) — scans `~/.codex/config.toml` and `<project>/.codex/config.toml`
+- [ ] Skill discovery for both runtimes — scans `~/.claude/skills/*/SKILL.md` (Claude Code) and `~/.agents/skills/*/SKILL.md` (Codex), parses YAML frontmatter
+- [ ] In-memory discovery cache (60s TTL) — avoids redundant filesystem scans
+- [ ] Extend existing `GET /api/mcp/discover` with `runtime` query param (claude-code | codex)
+- [ ] New `GET /api/skills/discover?runtime=...` endpoint
+- [ ] Replace `description: "From <path>"` pattern with structured `configFile` field
+
+### 14.3 Control Plane Proxies & Sync — P0
+
+CP-side proxies and machine capability syncing.
+
+- [ ] Extend MCP discover proxy (`mcp-templates.ts`) to forward `runtime` param
+- [ ] New skill discover proxy (`skill-discover.ts`)
+- [ ] `POST /api/machines/:machineId/sync-capabilities` — calls both discovery endpoints, updates machine record with provenance
+
+### 14.4 Frontend Picker UX — P0
+
+Unified picker experience for both create and edit flows.
+
+- [ ] Refactor `McpServerPicker` from flat `Record<string, McpServerConfig>` to override model (`AgentMcpOverride`)
+- [ ] Three visual states per item: inherited (machine default), excluded (user opted out), custom (manually added)
+- [ ] New `SkillPicker` component — mirrors McpServerPicker pattern with SKILL.md metadata display
+- [ ] Replace `McpServersTab` manual JSON form with `McpServerPicker` + `isManagedRuntime` guard
+- [ ] New `SkillsTab` in agent settings
+- [ ] Update `AgentFormDialog` state management to override model, add `SkillPicker`
+- [ ] Legacy migration: existing `mcpServers` flat records → `mcpOverride.custom` entries
+
+### 14.5 Machine Capability Triggers — P1
+
+Automatic discovery sync on infrastructure events.
+
+- [ ] Trigger `sync-capabilities` on machine online transition (offline → online state change)
+- [ ] Picker-triggered re-sync when cached results are older than 5 minutes
+- [ ] Auto-clear overrides + user notification when agent switches runtime
+
+### 14.6 E2E Testing — P0
+
+- [ ] Playwright: create agent with discovered MCP servers, toggle overrides, save + verify
+- [ ] Playwright: edit agent MCP tab (picker replaces manual form), Skills tab (new)
+- [ ] Playwright: runtime switching refreshes picker with correct discovery results
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -1042,6 +1112,12 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 | **—** | ~~Open Source & Community~~ | 13 | ✅ Delivered — BSL 1.1, CONTRIBUTING, SECURITY, GitHub templates |
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
 | **—** | Security: CodeQL rescan pending | — | Push trigger added (PR #140); rescan in progress |
+| **P0** | MCP & Skill Auto-Discovery: Types + Override Resolution | 14.1 | Planned |
+| **P0** | MCP & Skill Auto-Discovery: Worker Discovery | 14.2 | Planned |
+| **P0** | MCP & Skill Auto-Discovery: CP Proxies & Sync | 14.3 | Planned |
+| **P0** | MCP & Skill Auto-Discovery: Frontend Picker UX | 14.4 | Planned |
+| **P1** | MCP & Skill Auto-Discovery: Machine Capability Triggers | 14.5 | Planned |
+| **P0** | MCP & Skill Auto-Discovery: E2E Testing | 14.6 | Planned |
 
 ---
 
@@ -1061,6 +1137,7 @@ task complete:   execution summary (session resume) → JSONB → summary card
 steer:           chat input → control plane proxy → worker → SDK streamInput → ack
 safety check:    workdir classify (4 tiers) → SSE event → approve/reject/sandbox → execute
 runtime mgmt:    config sync → managed sessions → native import preflight → snapshot fallback
+mcp/skill:       machine config scan → discover MCP servers (JSON/TOML) + skills (SKILL.md) → machine defaults → per-agent opt-out overrides → picker UX
 memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → 3-tier injection
 memory UI:       /memory (8 pages) → browser/graph/dashboard/consolidation/reports/import/editor/scopes
 memory integ:    session/agent/machine/dashboard/context-picker/cmd-palette → contextual memory data
@@ -1091,6 +1168,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | ~~Execution Environment Registry (P3)~~ | AgentOutputStream for adapter context + Docker | ✅ Delivered — Direct + Docker environments with gVisor |
 | ~~Automated Experience Extraction (P3)~~ | Knowledge Sedimentation Rules | ✅ Delivered — stop hook, entity routing, dedup, review flags |
 | ~~Knowledge Maintenance (P3)~~ | Unified Memory Layer | ✅ Delivered — monthly lint, git cross-ref, synthesis, coverage reporting |
+| MCP & Skill Auto-Discovery (P0) | Codex Integration (§3.1), MCP Auto-Detection (§11.6) | Extends existing MCP discovery with runtime-awareness + new skill discovery |
 
 ## References
 
@@ -1158,6 +1236,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [intelligence-layer-impl-plan](plans/2026-03-12-intelligence-layer-impl-plan.md) | Delivered | 10.5 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
 | [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.5 |
+| [mcp-skill-discovery-design](superpowers/specs/2026-03-14-mcp-skill-discovery-design.md) | Planned | 14.1-14.6 |
+| [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md) | Planned | 14.1-14.6 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
