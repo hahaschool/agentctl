@@ -128,6 +128,14 @@ export type AgentSkillOverride = {
   custom: ManagedSkill[];
 };
 
+/** Per-agent runtime config overrides (sandbox, approval, Codex-specific settings). */
+export type AgentRuntimeConfigOverrides = {
+  sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  approvalPolicy?: 'untrusted' | 'on-failure' | 'on-request' | 'never';
+  codexReasoningEffort?: 'low' | 'medium' | 'high';
+  codexModelProvider?: 'openai' | 'azure';
+};
+
 export type AgentConfig = {
   allowedTools?: string[];
   disallowedTools?: string[];
@@ -144,6 +152,8 @@ export type AgentConfig = {
   mcpOverride?: AgentMcpOverride;
   /** Per-agent skill overrides (exclude defaults, add custom). */
   skillOverride?: AgentSkillOverride;
+  /** Per-agent runtime config overrides (sandbox, approval policy, Codex settings). */
+  runtimeConfigOverrides?: AgentRuntimeConfigOverrides;
 };
 
 export type Agent = {
