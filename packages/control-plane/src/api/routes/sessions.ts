@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_WORKER_PORT, type DiscoveredSession as DiscoveredSessionFromWorker } from '@agentctl/shared';
 import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -32,15 +32,6 @@ type RcSessionStatus = (typeof RC_SESSION_STATUSES)[number];
 function machineAddress(machine: { tailscaleIp?: string | null; hostname: string }): string {
   return machine.tailscaleIp ?? machine.hostname;
 }
-
-type DiscoveredSessionFromWorker = {
-  sessionId: string;
-  projectPath: string;
-  summary: string;
-  messageCount: number;
-  lastActivity: string;
-  branch: string | null;
-};
 
 type WorkerDiscoverResponse = {
   sessions: DiscoveredSessionFromWorker[];

@@ -14,6 +14,7 @@ import type {
   ContentMessage,
   CreateManagedSessionRequest,
   DiscoveredMcpServer,
+  DiscoveredSession as BaseDiscoveredSession,
   EntityType,
   EventSenderType,
   EventVisibility,
@@ -154,13 +155,8 @@ export type Session = {
   model: string | null;
 };
 
-export type DiscoveredSession = {
-  sessionId: string;
-  projectPath: string;
-  summary: string;
-  messageCount: number;
-  lastActivity: string;
-  branch: string | null;
+// Web extends base DiscoveredSession with machine context added by CP aggregation
+export type DiscoveredSession = BaseDiscoveredSession & {
   machineId: string;
   hostname: string;
 };

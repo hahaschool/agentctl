@@ -17,24 +17,9 @@ import {
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type { DiscoveredSession } from '@agentctl/shared';
 
-export type DiscoveredSession = {
-  /** Session ID from Claude Code's sessions-index.json. */
-  sessionId: string;
-  /** Project path this session was used in. */
-  projectPath: string;
-  /** Summary/title of the session (if available). */
-  summary: string;
-  /** Number of messages. */
-  messageCount: number;
-  /** Last activity timestamp. */
-  lastActivity: string;
-  /** Git branch (if available). */
-  branch: string | null;
-};
+export type { DiscoveredSession };
 
 type DiscoveryLogger = {
   debug: (obj: Record<string, unknown>, msg: string) => void;
