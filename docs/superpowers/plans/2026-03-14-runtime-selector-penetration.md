@@ -731,9 +731,23 @@ git commit -m "feat: add RuntimeAwareMachineSelect with runtime availability fil
 **Files:**
 - Modify: `packages/web/src/components/AgentFormDialog.tsx`
 
-- [ ] **Step 1: Add runtime state**
+- [ ] **Step 1: Update types + add runtime state**
 
-Add after existing state variables (~line 137):
+First, update `AgentFormCreateData` (~line 75) and `AgentFormEditData` (~line 85) to include `runtime`:
+
+```typescript
+type AgentFormCreateData = {
+  // ... existing fields
+  runtime?: ManagedRuntime;
+};
+
+type AgentFormEditData = {
+  // ... existing fields
+  runtime?: ManagedRuntime;
+};
+```
+
+Add runtime state after existing state variables (~line 137):
 
 ```typescript
 const [runtime, setRuntime] = useState<ManagedRuntime>('claude-code');
@@ -741,13 +755,16 @@ const [runtime, setRuntime] = useState<ManagedRuntime>('claude-code');
 
 Import `ManagedRuntime`, `isManagedRuntime` from `@agentctl/shared`.
 
-In edit mode initialization, populate from agent:
+In `populateEditForm` (~line 200), add runtime initialization:
 
 ```typescript
-// In useEffect or initialization block
-if (agent?.runtime && isManagedRuntime(agent.runtime)) {
-  setRuntime(agent.runtime);
-}
+setRuntime(a.runtime && isManagedRuntime(a.runtime) ? a.runtime : 'claude-code');
+```
+
+In `resetCreateForm` (~line 176), add runtime reset:
+
+```typescript
+setRuntime('claude-code');
 ```
 
 - [ ] **Step 2: Add RuntimeSelector to Advanced section**
@@ -773,9 +790,9 @@ For edit mode with unmanaged runtime: show read-only badge instead of selector:
 )}
 ```
 
-- [ ] **Step 3: Replace model dropdown with RuntimeAwareModelSelect**
+- [ ] **Step 3: Replace model selectors with RuntimeAwareModelSelect**
 
-Replace the existing model selector (lines 778-822) with:
+**Create mode**: Replace the model selector in Advanced section (lines 778-822) with:
 
 ```tsx
 <div className="space-y-2">
@@ -783,6 +800,8 @@ Replace the existing model selector (lines 778-822) with:
   <RuntimeAwareModelSelect runtime={runtime} value={model} onChange={setModel} disabled={isPending} />
 </div>
 ```
+
+**Edit mode**: Also replace the model `<Input>` at lines 886-896 with the same `RuntimeAwareModelSelect` component. Both modes should use the same runtime-aware model selector.
 
 Remove import of `ALL_MODELS` / `MODEL_OPTIONS`.
 
@@ -828,7 +847,7 @@ git commit -m "feat: add runtime selector to AgentFormDialog"
 **Files:**
 - Modify: `packages/web/src/components/agent-settings/GeneralTab.tsx`
 
-- [ ] **Step 1: Add runtime state**
+- [ ] **Step 1: Add runtime state + update isDirty**
 
 Add to existing state variables (~line 41):
 
@@ -838,9 +857,19 @@ const [runtime, setRuntime] = useState<ManagedRuntime>(
 );
 ```
 
-- [ ] **Step 2: Add RuntimeSelector with confirmation dialog**
+Update the `isDirty` calculation (~line 46) to include runtime:
 
-Add after the type selector (~line 130):
+```typescript
+const isDirty = name !== agent.name
+  || machineId !== agent.machineId
+  || type !== agent.type
+  || runtime !== (agent.runtime ?? 'claude-code')
+  || (type === 'cron' && schedule !== (agent.schedule ?? ''));
+```
+
+- [ ] **Step 2: Add RuntimeSelector with styled confirmation dialog**
+
+Add after the type selector (~line 130). Use a proper AlertDialog from shadcn/ui (not bare `window.confirm()`), matching the project's dark-first design system:
 
 ```tsx
 {isManagedRuntime(agent.runtime ?? 'claude-code') && (
@@ -850,9 +879,9 @@ Add after the type selector (~line 130):
       value={runtime}
       onChange={(newRuntime) => {
         if (newRuntime !== runtime) {
-          if (confirm('Changing runtime will reset MCP servers and model. Continue?')) {
-            setRuntime(newRuntime);
-          }
+          // Use AlertDialog or toast confirmation
+          // On confirm: setRuntime(newRuntime)
+          // On cancel: no-op (selector reverts automatically since state unchanged)
         }
       }}
       variant="dropdown"
@@ -861,27 +890,29 @@ Add after the type selector (~line 130):
 )}
 ```
 
+NOTE: The implementer should use an existing AlertDialog pattern from the codebase. If none exists, a simple `toast` + undo pattern is acceptable.
+
 - [ ] **Step 3: Include runtime in save handler**
 
-In the save handler (~line 52), add `runtime` to the mutation:
+In the save handler (~line 52), build the mutation payload immutably:
 
 ```typescript
+const runtimeChanged = runtime !== (agent.runtime ?? 'claude-code');
+
 updateAgent.mutate({
   id: agent.id,
   name: name.trim(),
   machineId,
   type,
-  runtime,  // NEW
+  runtime,  // NEW — added to updateAgent body type in Task 3
   schedule: type === 'cron' && schedule.trim() ? schedule.trim() : null,
+  ...(runtimeChanged ? {
+    config: {
+      ...agent.config,
+      mcpServers: undefined,  // Clear MCP servers on runtime change
+    },
+  } : {}),
 });
-```
-
-If runtime changed, also clear `config.mcpServers`:
-
-```typescript
-...(runtime !== (agent.runtime ?? 'claude-code') && {
-  config: { ...agent.config, mcpServers: {} },
-}),
 ```
 
 - [ ] **Step 4: Commit**
@@ -941,9 +972,9 @@ Replace machine `<select>` (~lines 127-147) with:
 />
 ```
 
-- [ ] **Step 5: Include runtime in submission**
+- [ ] **Step 5: Include runtime in submission + update resetForm**
 
-In `handleSubmit` (~line 70), add `runtime` to `api.createSession()`:
+In `handleSubmit` (~line 70), add `runtime` to `api.createSession()`. Also add `runtime` to the `handleSubmit` useCallback dependency array (~line 113):
 
 ```typescript
 const result = await api.createSession({
@@ -956,6 +987,14 @@ const result = await api.createSession({
   runtime,  // NEW
 });
 ```
+
+In `resetForm` (~line 58), add runtime reset:
+
+```typescript
+setRuntime('claude-code');
+```
+
+NOTE: `CreateSessionForm` uses native HTML `<select>`/`<input>` elements. The new `RuntimeAwareModelSelect` and `RuntimeAwareMachineSelect` use shadcn `<Select>`. This creates a style inconsistency within the form. The implementer should either convert the remaining native elements to shadcn, or note this as a known visual inconsistency to fix later.
 
 - [ ] **Step 6: Commit**
 
@@ -1145,9 +1184,9 @@ git commit -m "feat: add runtime filter and badge to DiscoverPage"
 In the RuntimeSessionListItem (~line 129), add runtime badge alongside the existing model display:
 
 ```tsx
-{row.session?.runtime && (
+{row.runtime && (
   <span className="text-xs text-neutral-500">
-    {row.session.runtime === 'codex' ? 'Codex' : 'Claude'}
+    {row.runtime === 'codex' ? 'Codex' : 'Claude'}
   </span>
 )}
 ```
@@ -1192,7 +1231,7 @@ Add after the Capabilities card (~line 261):
   </CardHeader>
   <CardContent className="space-y-2">
     {driftQuery.isLoading && <span className="text-sm text-neutral-500">Loading...</span>}
-    {driftQuery.data?.map((entry: any) => (
+    {driftQuery.data?.items?.map((entry: any) => (
       <div key={entry.runtime} className="flex items-center justify-between">
         <span className="text-sm">
           {entry.runtime === 'claude-code' ? 'Claude Code' : 'Codex'}
