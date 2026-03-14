@@ -1091,15 +1091,16 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 15.2 Codex Config Capabilities Exposure — P1 (Sub-project B)
 
-> Expose backend Codex-specific configuration to the UI. Design spec: TBD.
+> Design spec: [codex-config-capabilities-design](superpowers/specs/2026-03-14-codex-config-capabilities-design.md)
+> Impl plan: [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md)
 
+- [ ] `AgentRuntimeConfigOverrides` type + per-agent override merge in config renderers
 - [ ] Sandbox level selector (`read-only` / `workspace-write` / `danger-full-access`)
 - [ ] Approval policy selector (`untrusted` / `on-failure` / `on-request` / `never`)
 - [ ] Reasoning effort selector (`low` / `medium` / `high`) — Codex-specific
-- [ ] Model provider selector (`openai` / `azure`)
-- [ ] Execution environment selector (`direct` / `docker`)
-- [ ] Handoff strategy override (native-import vs snapshot)
-- [ ] Config preview UI (rendered `.codex/config.toml`)
+- [ ] Model provider selector (`openai` / `azure`) — Codex-specific
+- [ ] New "Runtime Config" tab in agent settings
+- [ ] Config preview UI (rendered `.claude.json` or `.codex/config.toml`)
 
 ---
 
@@ -1299,6 +1300,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md) | Delivered (PRs #146-153) | 14.1-14.6 |
 | [runtime-selector-penetration-design](superpowers/specs/2026-03-14-runtime-selector-penetration-design.md) | Delivered (PRs #148, #150) | 15.1 |
 | [runtime-selector-penetration](superpowers/plans/2026-03-14-runtime-selector-penetration.md) | Delivered (PRs #148, #150) | 15.1 |
+| [codex-config-capabilities-design](superpowers/specs/2026-03-14-codex-config-capabilities-design.md) | In Progress | 15.2 |
+| [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | In Progress | 15.2 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
