@@ -153,6 +153,35 @@ export const deploymentRoutes: FastifyPluginAsync<DeploymentRoutesOptions> = asy
     }
   });
 
+  // ── GET /preflight/:tier ────────────────────────────────────────
+
+  app.get<{ Params: { tier: string } }>('/preflight/:tier', async (request, reply) => {
+    const { tier } = request.params;
+
+    const tierConfigs = loadTierConfigs(repoRoot);
+
+    if (!isValidSourceTier(tier, tierConfigs)) {
+      return reply.status(400).send({
+        error: 'INVALID_SOURCE',
+        message: `"${tier}" is not a valid source tier`,
+      });
+    }
+
+    try {
+      const result = await runner.runPreflight(tier, tierConfigs);
+      return reply.send({ ready: result.passed, checks: result.checks });
+    } catch (err) {
+      logger.error(
+        { error: err instanceof Error ? err.message : String(err), tier },
+        'Preflight check failed unexpectedly',
+      );
+      return reply.status(500).send({
+        error: 'PREFLIGHT_FAILED',
+        message: 'Preflight check failed unexpectedly',
+      });
+    }
+  });
+
   // ── POST /promote/preflight ─────────────────────────────────────
 
   app.post<{ Body: { source: string } }>('/promote/preflight', async (request, reply) => {
