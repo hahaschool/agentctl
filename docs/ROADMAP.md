@@ -937,6 +937,19 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] `promote-beta.yml` workflow with environment protection rules *(PR #136)*
 - [ ] Extend to prod tier on remote machines via Tailscale
 
+### 12.7 Deployment Page UI — P1
+
+> Design spec: [deployment-page-design](superpowers/specs/2026-03-13-deployment-page-design.md)
+> Impl plan: [deployment-page](superpowers/plans/2026-03-13-deployment-page.md)
+
+Web UI for managing environment promotions and viewing deployment status.
+
+- [ ] Tier status cards (dev-1, dev-2, beta, production) with health indicators
+- [ ] Gated promotion UI with preflight checks
+- [ ] Promotion history panel
+- [ ] SSE-powered progress streaming during promotions
+- [ ] Rollback controls
+
 ---
 
 ## 13. Open Source & Community
@@ -1278,10 +1291,12 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [intelligence-layer-impl-plan](plans/2026-03-12-intelligence-layer-impl-plan.md) | Delivered | 10.5 |
 | [agent-detail-ux-redesign](plans/2026-03-12-agent-detail-ux-redesign.md) | Delivered | 11.1-11.7 |
 | [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | Delivered | 12.0-12.5 |
-| [mcp-skill-discovery-design](superpowers/specs/2026-03-14-mcp-skill-discovery-design.md) | Partial (14.1-14.2 delivered) | 14.1-14.6 |
-| [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md) | Partial (Chunks 1-2 delivered) | 14.1-14.6 |
-| [runtime-selector-penetration-design](superpowers/specs/2026-03-14-runtime-selector-penetration-design.md) | Partial (Chunks 1-2 delivered) | 15.1 |
-| [runtime-selector-penetration](superpowers/plans/2026-03-14-runtime-selector-penetration.md) | Partial (Chunks 1-2 delivered) | 15.1 |
+| [deployment-page-design](superpowers/specs/2026-03-13-deployment-page-design.md) | Planned | 12.7 |
+| [deployment-page](superpowers/plans/2026-03-13-deployment-page.md) | Planned | 12.7 |
+| [mcp-skill-discovery-design](superpowers/specs/2026-03-14-mcp-skill-discovery-design.md) | Partial (14.1-14.4 delivered, 14.5-14.6 planned) | 14.1-14.6 |
+| [mcp-skill-discovery](superpowers/plans/2026-03-14-mcp-skill-discovery.md) | Partial (Chunks 1-4 delivered, Chunk 5 planned) | 14.1-14.6 |
+| [runtime-selector-penetration-design](superpowers/specs/2026-03-14-runtime-selector-penetration-design.md) | Delivered (PRs #148, #150) | 15.1 |
+| [runtime-selector-penetration](superpowers/plans/2026-03-14-runtime-selector-penetration.md) | Delivered (PRs #148, #150) | 15.1 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
