@@ -446,12 +446,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       prompt?: string;
       resumeSessionId?: string;
       accountId?: string;
+      runtime?: string;
     };
   }>(
     '/',
     { schema: { tags: ['sessions'], summary: 'Create a new session' } },
     async (request, reply) => {
-      const { agentId, machineId, projectPath, model, prompt, resumeSessionId, accountId } =
+      const { agentId, machineId, projectPath, model, prompt, resumeSessionId, accountId, runtime } =
         request.body;
 
       if (!agentId || typeof agentId !== 'string') {
@@ -581,6 +582,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             resumeSessionId: resumeSessionId ?? null,
             accountCredential,
             accountProvider,
+            ...(runtime ? { runtime } : {}),
           }),
           signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });

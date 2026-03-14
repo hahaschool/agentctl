@@ -538,6 +538,7 @@ export const api = {
       type?: string;
       schedule?: string | null;
       config?: AgentConfig;
+      runtime?: string;
     },
   ) =>
     request<Agent>(`/api/agents/${id}`, {
@@ -661,6 +662,7 @@ export const api = {
     model?: string;
     resumeSessionId?: string;
     accountId?: string;
+    runtime?: string;
   }) =>
     request<{ ok: boolean; sessionId: string; session: Session }>('/api/sessions', {
       method: 'POST',

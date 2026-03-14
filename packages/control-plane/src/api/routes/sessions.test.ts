@@ -491,6 +491,54 @@ describe('Session routes — /api/sessions', () => {
       const body = response.json();
       expect(body.ok).toBe(true);
     });
+
+    it('forwards runtime parameter to worker', async () => {
+      const inserted = makeSession({ status: 'starting' });
+      mockDb.setRows([inserted]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+          runtime: 'codex',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+
+      // Verify the body forwarded to worker includes runtime
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      expect(fetchCalls.length).toBeGreaterThanOrEqual(1);
+      const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+      expect(workerCallBody.runtime).toBe('codex');
+    });
+
+    it('defaults runtime to undefined when not provided', async () => {
+      const inserted = makeSession({ status: 'starting' });
+      mockDb.setRows([inserted]);
+      mockFetchOk();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: {
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          projectPath: '/home/user/project',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+
+      // Verify backward compat — existing callers without runtime still work
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      const workerCallBody = JSON.parse(fetchCalls[0][1]?.body as string);
+      expect(workerCallBody.runtime).toBeUndefined();
+    });
   });
 
   // ---------------------------------------------------------------------------
