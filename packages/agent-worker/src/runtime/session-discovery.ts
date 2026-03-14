@@ -17,9 +17,28 @@ import {
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import type { DiscoveredSession } from '@agentctl/shared';
+import type { DiscoveredSession, ManagedRuntime } from '@agentctl/shared';
 
 export type { DiscoveredSession };
+
+// ---------------------------------------------------------------------------
+// Runtime detection — checks project directory for runtime markers
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect the runtime type of a session by checking for directory markers.
+ * Checks .codex first (more specific), then .claude, returns undefined if
+ * neither is found.
+ */
+export function detectSessionRuntime(projectPath: string): ManagedRuntime | undefined {
+  if (existsSync(join(projectPath, '.codex'))) {
+    return 'codex';
+  }
+  if (existsSync(join(projectPath, '.claude'))) {
+    return 'claude-code';
+  }
+  return undefined;
+}
 
 type DiscoveryLogger = {
   debug: (obj: Record<string, unknown>, msg: string) => void;
@@ -255,6 +274,8 @@ function parseSessionIndex(
         return;
       }
 
+      const v1Runtime = detectSessionRuntime(projectPath);
+
       for (const rawEntry of parsed.entries) {
         if (!isSessionIndexEntryV1(rawEntry)) {
           continue;
@@ -266,6 +287,7 @@ function parseSessionIndex(
           messageCount: rawEntry.messageCount ?? 0,
           lastActivity: rawEntry.modified ?? rawEntry.created ?? '',
           branch: rawEntry.gitBranch ?? null,
+          runtime: v1Runtime,
         });
       }
       return;
@@ -276,6 +298,8 @@ function parseSessionIndex(
     if (projectPathFilter && !decodedPath.includes(projectPathFilter)) {
       return;
     }
+
+    const legacyRuntime = detectSessionRuntime(decodedPath);
 
     for (const [sessionId, entry] of Object.entries(parsed)) {
       if (!isNonNullObject(entry)) {
@@ -305,6 +329,7 @@ function parseSessionIndex(
         messageCount: e.messageCount ?? 0,
         lastActivity: e.lastActiveAt ?? e.updatedAt ?? '',
         branch: e.gitBranch ?? null,
+        runtime: legacyRuntime,
       });
     }
   } catch (err) {
@@ -333,6 +358,8 @@ function discoverFromJsonlFiles(
     return;
   }
 
+  const jsonlRuntime = detectSessionRuntime(decodedPath);
+
   try {
     const files = readdirSync(dirPath, { withFileTypes: true });
     for (const file of files) {
@@ -356,6 +383,7 @@ function discoverFromJsonlFiles(
         messageCount: metadata.messageCount,
         lastActivity: metadata.lastActivity,
         branch: metadata.branch,
+        runtime: jsonlRuntime,
       });
     }
   } catch (err) {

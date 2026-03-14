@@ -10,7 +10,7 @@ import {
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { decodeProjectPath, discoverLocalSessions } from './session-discovery.js';
+import { decodeProjectPath, detectSessionRuntime, discoverLocalSessions } from './session-discovery.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -43,6 +43,32 @@ beforeEach(() => {
   mockCloseSync.mockImplementation(() => undefined);
   mockOpenSync.mockReturnValue(42);
   mockReadSync.mockImplementation(() => 0);
+});
+
+// ---------------------------------------------------------------------------
+// detectSessionRuntime
+// ---------------------------------------------------------------------------
+
+describe('detectSessionRuntime', () => {
+  it('returns codex when .codex dir exists', () => {
+    mockExistsSync.mockImplementation((p) => String(p).endsWith('.codex'));
+    expect(detectSessionRuntime('/project')).toBe('codex');
+  });
+
+  it('returns claude-code when .claude dir exists but .codex does not', () => {
+    mockExistsSync.mockImplementation((p) => String(p).endsWith('.claude'));
+    expect(detectSessionRuntime('/project')).toBe('claude-code');
+  });
+
+  it('returns undefined when neither marker exists', () => {
+    mockExistsSync.mockReturnValue(false);
+    expect(detectSessionRuntime('/project')).toBeUndefined();
+  });
+
+  it('prefers codex when both markers exist', () => {
+    mockExistsSync.mockReturnValue(true);
+    expect(detectSessionRuntime('/project')).toBe('codex');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -418,6 +444,95 @@ describe('discoverLocalSessions', () => {
 
     const sessions = discoverLocalSessions();
     expect(sessions.map((s) => s.sessionId)).toEqual(['new', 'mid', 'old']);
+  });
+
+  it('detects claude-code runtime from .claude directory marker', () => {
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (String(p).endsWith('sessions-index.json')) return true;
+      // .claude exists, .codex does not
+      if (String(p).endsWith('.codex')) return false;
+      if (String(p).endsWith('.claude')) return true;
+      return false;
+    });
+
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) {
+        return [{ name: '-Users-testuser-proj', isDirectory: () => true, isFile: () => false }];
+      }
+      return [];
+    }) as typeof readdirSync);
+
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        version: 1,
+        originalPath: '/Users/testuser/proj',
+        entries: [{ sessionId: 'rt-1', summary: 'Claude session' }],
+      }),
+    );
+
+    const sessions = discoverLocalSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].runtime).toBe('claude-code');
+  });
+
+  it('detects codex runtime from .codex directory marker', () => {
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (String(p).endsWith('sessions-index.json')) return true;
+      // .codex exists
+      if (String(p).endsWith('.codex')) return true;
+      return false;
+    });
+
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) {
+        return [{ name: '-Users-testuser-proj', isDirectory: () => true, isFile: () => false }];
+      }
+      return [];
+    }) as typeof readdirSync);
+
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        version: 1,
+        originalPath: '/Users/testuser/proj',
+        entries: [{ sessionId: 'rt-2', summary: 'Codex session' }],
+      }),
+    );
+
+    const sessions = discoverLocalSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].runtime).toBe('codex');
+  });
+
+  it('returns undefined runtime when no markers exist', () => {
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (String(p).endsWith('sessions-index.json')) return true;
+      // Neither .codex nor .claude exist
+      if (String(p).endsWith('.codex')) return false;
+      if (String(p).endsWith('.claude')) return false;
+      return false;
+    });
+
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) {
+        return [{ name: '-Users-testuser-proj', isDirectory: () => true, isFile: () => false }];
+      }
+      return [];
+    }) as typeof readdirSync);
+
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        version: 1,
+        originalPath: '/Users/testuser/proj',
+        entries: [{ sessionId: 'rt-3', summary: 'Unknown session' }],
+      }),
+    );
+
+    const sessions = discoverLocalSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].runtime).toBeUndefined();
   });
 
   it('skips entries with missing sessionId in v1 format', () => {
