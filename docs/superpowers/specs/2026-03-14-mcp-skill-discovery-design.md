@@ -65,9 +65,12 @@ type ManagedSkill = {
 New fields on `AgentConfig` in `packages/shared/src/types/agent.ts`. Uses an **opt-out model**: all machine defaults are included unless explicitly excluded.
 
 ```typescript
+// Custom servers require a name for display and override matching
+type CustomMcpServer = McpServerConfig & { name: string }
+
 type AgentMcpOverride = {
   excluded: string[]          // server names explicitly excluded from machine defaults
-  custom: McpServerConfig[]   // manually added, not from discovery
+  custom: CustomMcpServer[]   // manually added, not from discovery
 }
 
 type AgentSkillOverride = {
