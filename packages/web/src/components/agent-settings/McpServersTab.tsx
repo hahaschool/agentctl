@@ -1,72 +1,33 @@
 'use client';
 
+import type { AgentMcpOverride, McpServerConfig } from '@agentctl/shared';
+import { isManagedRuntime } from '@agentctl/shared';
 import type React from 'react';
-import { type ChangeEvent, useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import type { Agent, AgentConfig } from '@/lib/api';
 import { useUpdateAgent } from '@/lib/queries';
 
+import { McpServerPicker } from '../McpServerPicker';
 import { useToast } from '../Toast';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type McpServerEntry = {
-  name: string;
-  command: string;
-  args: string;
-  envPairs: ReadonlyArray<{ key: string; value: string }>;
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createEmptyMcpEntry(): McpServerEntry {
-  return { name: '', command: '', args: '', envPairs: [] };
+/** Convert legacy flat mcpServers record to the new override model. */
+function migrateToOverride(legacy: Record<string, McpServerConfig> | undefined): AgentMcpOverride {
+  if (!legacy || Object.keys(legacy).length === 0) return { excluded: [], custom: [] };
+  return {
+    excluded: [],
+    custom: Object.entries(legacy).map(([name, config]) => ({ name, ...config })),
+  };
 }
 
-function mcpEntriesToRecord(
-  entries: ReadonlyArray<McpServerEntry>,
-): Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined {
-  const record: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> =
-    {};
-  for (const entry of entries) {
-    const key = entry.name.trim();
-    if (!key || !entry.command.trim()) continue;
-    const args = entry.args
-      .split(',')
-      .map((a) => a.trim())
-      .filter(Boolean);
-    const env: Record<string, string> = {};
-    for (const pair of entry.envPairs) {
-      if (pair.key.trim()) env[pair.key.trim()] = pair.value;
-    }
-    record[key] = {
-      command: entry.command.trim(),
-      ...(args.length > 0 ? { args } : {}),
-      ...(Object.keys(env).length > 0 ? { env } : {}),
-    };
-  }
-  return Object.keys(record).length > 0 ? record : undefined;
-}
-
-function mcpRecordToEntries(
-  record:
-    | Record<string, { command: string; args?: string[]; env?: Record<string, string> }>
-    | undefined,
-): McpServerEntry[] {
-  if (!record) return [];
-  return Object.entries(record).map(([name, cfg]) => ({
-    name,
-    command: cfg.command,
-    args: cfg.args?.join(', ') ?? '',
-    envPairs: cfg.env ? Object.entries(cfg.env).map(([key, value]) => ({ key, value })) : [],
-  }));
+function getInitialOverride(agent: Agent): AgentMcpOverride {
+  if (agent.config?.mcpOverride) return agent.config.mcpOverride;
+  return migrateToOverride(agent.config?.mcpServers);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,86 +46,50 @@ export function McpServersTab({ agent }: McpServersTabProps): React.JSX.Element 
   const updateAgent = useUpdateAgent();
   const toast = useToast();
 
-  const [mcpEntries, setMcpEntries] = useState<McpServerEntry[]>(
-    mcpRecordToEntries(agent.config?.mcpServers),
-  );
+  // Guard: only show picker for managed runtimes
+  if (!agent.runtime || !isManagedRuntime(agent.runtime)) {
+    return (
+      <div className="space-y-6 max-w-xl">
+        <p className="text-sm text-muted-foreground">
+          MCP discovery is only available for managed runtimes (claude-code, codex).
+        </p>
+      </div>
+    );
+  }
 
-  // Track initial serialization for dirty check
-  const initialSerialized = JSON.stringify(mcpRecordToEntries(agent.config?.mcpServers));
-  const currentSerialized = JSON.stringify(mcpEntries);
+  return (
+    <McpServersTabInner
+      agent={agent}
+      runtime={agent.runtime}
+      updateAgent={updateAgent}
+      toast={toast}
+    />
+  );
+}
+
+// Inner component to avoid hooks after early return
+function McpServersTabInner({
+  agent,
+  runtime,
+  updateAgent,
+  toast,
+}: {
+  agent: Agent;
+  runtime: 'claude-code' | 'codex';
+  updateAgent: ReturnType<typeof useUpdateAgent>;
+  toast: ReturnType<typeof useToast>;
+}): React.JSX.Element {
+  const [mcpOverride, setMcpOverride] = useState<AgentMcpOverride>(() => getInitialOverride(agent));
+
+  const initialSerialized = JSON.stringify(getInitialOverride(agent));
+  const currentSerialized = JSON.stringify(mcpOverride);
   const isDirty = currentSerialized !== initialSerialized;
-
-  // -------------------------------------------------------------------
-  // MCP entry CRUD (immutable updates)
-  // -------------------------------------------------------------------
-
-  const addMcpEntry = useCallback(() => {
-    setMcpEntries((prev) => [...prev, createEmptyMcpEntry()]);
-  }, []);
-
-  const removeMcpEntry = useCallback((index: number) => {
-    setMcpEntries((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const updateMcpEntry = useCallback(
-    (index: number, field: keyof McpServerEntry, value: string) => {
-      setMcpEntries((prev) =>
-        prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)),
-      );
-    },
-    [],
-  );
-
-  const addMcpEnvPair = useCallback((entryIndex: number) => {
-    setMcpEntries((prev) =>
-      prev.map((entry, i) =>
-        i === entryIndex
-          ? { ...entry, envPairs: [...entry.envPairs, { key: '', value: '' }] }
-          : entry,
-      ),
-    );
-  }, []);
-
-  const removeMcpEnvPair = useCallback((entryIndex: number, pairIndex: number) => {
-    setMcpEntries((prev) =>
-      prev.map((entry, i) =>
-        i === entryIndex
-          ? { ...entry, envPairs: entry.envPairs.filter((_, pi) => pi !== pairIndex) }
-          : entry,
-      ),
-    );
-  }, []);
-
-  const updateMcpEnvPair = useCallback(
-    (entryIndex: number, pairIndex: number, field: 'key' | 'value', val: string) => {
-      setMcpEntries((prev) =>
-        prev.map((entry, i) =>
-          i === entryIndex
-            ? {
-                ...entry,
-                envPairs: entry.envPairs.map((pair, pi) =>
-                  pi === pairIndex ? { ...pair, [field]: val } : pair,
-                ),
-              }
-            : entry,
-        ),
-      );
-    },
-    [],
-  );
-
-  // -------------------------------------------------------------------
-  // Save
-  // -------------------------------------------------------------------
 
   const handleSave = useCallback(() => {
     const config: AgentConfig = { ...agent.config };
-    const mcpRecord = mcpEntriesToRecord(mcpEntries);
-    if (mcpRecord) {
-      config.mcpServers = mcpRecord;
-    } else {
-      delete config.mcpServers;
-    }
+    config.mcpOverride = mcpOverride;
+    // Remove legacy field if present
+    delete config.mcpServers;
 
     updateAgent.mutate(
       { id: agent.id, config },
@@ -173,141 +98,23 @@ export function McpServersTab({ agent }: McpServersTabProps): React.JSX.Element 
         onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
       },
     );
-  }, [agent.id, agent.config, mcpEntries, updateAgent, toast]);
+  }, [agent.id, agent.config, mcpOverride, updateAgent, toast]);
 
   return (
     <div className="space-y-6 max-w-xl">
       <div>
         <p className="text-sm text-muted-foreground mb-4">
-          MCP server definitions written to <code className="font-mono text-xs">.mcp.json</code>{' '}
-          before agent startup.
+          MCP servers discovered from machine config. Uncheck to exclude, or add custom servers.
         </p>
 
-        <div className="space-y-4">
-          {mcpEntries.map((entry, idx) => (
-            <div
-              key={`mcp-${idx}`}
-              className="space-y-3 rounded-md border border-border p-4 bg-muted/30"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Server {idx + 1}</span>
-                <button
-                  type="button"
-                  onClick={() => removeMcpEntry(idx)}
-                  disabled={updateAgent.isPending}
-                  className="text-xs text-destructive hover:text-destructive/80 transition-colors"
-                >
-                  Remove
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor={`mcp-${idx}-name`} className="text-[11px] text-muted-foreground">
-                    Name (key)
-                  </Label>
-                  <Input
-                    id={`mcp-${idx}-name`}
-                    placeholder="e.g. filesystem"
-                    value={entry.name}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                      updateMcpEntry(idx, 'name', e.target.value)
-                    }
-                    disabled={updateAgent.isPending}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label
-                    htmlFor={`mcp-${idx}-command`}
-                    className="text-[11px] text-muted-foreground"
-                  >
-                    Command
-                  </Label>
-                  <Input
-                    id={`mcp-${idx}-command`}
-                    placeholder="e.g. npx"
-                    value={entry.command}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                      updateMcpEntry(idx, 'command', e.target.value)
-                    }
-                    disabled={updateAgent.isPending}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor={`mcp-${idx}-args`} className="text-[11px] text-muted-foreground">
-                  Args (comma-separated)
-                </Label>
-                <Input
-                  id={`mcp-${idx}-args`}
-                  placeholder="e.g. -y, @modelcontextprotocol/server-filesystem, /path"
-                  value={entry.args}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    updateMcpEntry(idx, 'args', e.target.value)
-                  }
-                  disabled={updateAgent.isPending}
-                />
-              </div>
-
-              {/* Env vars */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">Environment Variables</span>
-                  <button
-                    type="button"
-                    onClick={() => addMcpEnvPair(idx)}
-                    disabled={updateAgent.isPending}
-                    className="text-[11px] text-primary hover:text-primary/80 transition-colors"
-                  >
-                    + Add Variable
-                  </button>
-                </div>
-                {entry.envPairs.map((pair, pairIdx) => (
-                  <div key={`env-${idx}-${pairIdx}`} className="flex items-center gap-1.5">
-                    <Input
-                      placeholder="KEY"
-                      value={pair.key}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                        updateMcpEnvPair(idx, pairIdx, 'key', e.target.value)
-                      }
-                      disabled={updateAgent.isPending}
-                      className="flex-1 font-mono text-xs"
-                    />
-                    <span className="text-muted-foreground text-xs">=</span>
-                    <Input
-                      placeholder="value"
-                      value={pair.value}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                        updateMcpEnvPair(idx, pairIdx, 'value', e.target.value)
-                      }
-                      disabled={updateAgent.isPending}
-                      className="flex-1 font-mono text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeMcpEnvPair(idx, pairIdx)}
-                      disabled={updateAgent.isPending}
-                      className="text-xs text-destructive hover:text-destructive/80 transition-colors shrink-0"
-                    >
-                      x
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addMcpEntry}
-            disabled={updateAgent.isPending}
-          >
-            + Add MCP Server
-          </Button>
-        </div>
+        <McpServerPicker
+          machineId={agent.machineId}
+          runtime={runtime}
+          projectPath={agent.projectPath ?? undefined}
+          currentOverrides={mcpOverride}
+          onChange={setMcpOverride}
+          disabled={updateAgent.isPending}
+        />
       </div>
 
       {/* Save */}
