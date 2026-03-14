@@ -14,7 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Agent, AgentConfig } from '@/lib/api';
-import { ALL_MODELS as MODEL_OPTIONS } from '@/lib/model-options';
+import { isManagedRuntime } from '@agentctl/shared';
+import { RUNTIME_MODEL_OPTIONS, ALL_MODELS } from '@/lib/model-options';
 import { useUpdateAgent } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +48,8 @@ export function ModelPromptsTab({ agent }: ModelPromptsTabProps): React.JSX.Elem
   const toast = useToast();
 
   const cfg = agent.config ?? {};
+  const effectiveRuntime = agent.runtime && isManagedRuntime(agent.runtime) ? agent.runtime : 'claude-code';
+  const MODEL_OPTIONS = RUNTIME_MODEL_OPTIONS[effectiveRuntime] ?? ALL_MODELS;
   const [model, setModel] = useState(cfg.model ?? '');
   const [initialPrompt, setInitialPrompt] = useState(cfg.initialPrompt ?? '');
   const [defaultPrompt, setDefaultPrompt] = useState(cfg.defaultPrompt ?? '');
