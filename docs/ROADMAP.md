@@ -1177,6 +1177,7 @@ steer:           chat input → control plane proxy → worker → SDK streamInp
 safety check:    workdir classify (4 tiers) → SSE event → approve/reject/sandbox → execute
 runtime mgmt:    config sync → managed sessions → native import preflight → snapshot fallback
 mcp/skill:       machine config scan → discover MCP servers (JSON/TOML) + skills (SKILL.md) → machine defaults → per-agent opt-out overrides → picker UX
+codex parity:    RuntimeSelector (radio/dropdown) → RuntimeAwareModelSelect → RuntimeAwareMachineSelect → unified create/edit/filter flows for claude-code + codex
 memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → 3-tier injection
 memory UI:       /memory (8 pages) → browser/graph/dashboard/consolidation/reports/import/editor/scopes
 memory integ:    session/agent/machine/dashboard/context-picker/cmd-palette → contextual memory data
