@@ -1,5 +1,6 @@
 'use client';
 
+import { isManagedRuntime } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Settings } from 'lucide-react';
 import Link from 'next/link';
@@ -7,11 +8,13 @@ import { useParams } from 'next/navigation';
 import type React from 'react';
 import { useState } from 'react';
 
+import { ConfigPreview } from '@/components/agent-settings/ConfigPreview';
 import { GeneralTab } from '@/components/agent-settings/GeneralTab';
 import { McpServersTab } from '@/components/agent-settings/McpServersTab';
 import { MemoryTab } from '@/components/agent-settings/MemoryTab';
 import { ModelPromptsTab } from '@/components/agent-settings/ModelPromptsTab';
 import { PermissionsToolsTab } from '@/components/agent-settings/PermissionsToolsTab';
+import { RuntimeConfigTab } from '@/components/agent-settings/RuntimeConfigTab';
 import { SkillsTab } from '@/components/agent-settings/SkillsTab';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ErrorBanner } from '@/components/ErrorBanner';
@@ -30,6 +33,7 @@ const TABS = [
   { value: 'mcp', label: 'MCP Servers' },
   { value: 'skills', label: 'Skills' },
   { value: 'memory', label: 'Memory' },
+  { value: 'runtime-config', label: 'Runtime Config' },
 ] as const;
 
 type TabValue = (typeof TABS)[number]['value'];
@@ -149,6 +153,15 @@ export default function AgentSettingsPage(): React.JSX.Element {
 
         <TabsContent value="memory">
           <MemoryTab agent={data} />
+        </TabsContent>
+
+        <TabsContent value="runtime-config">
+          <div className="space-y-6">
+            <RuntimeConfigTab agent={data} />
+            {data.runtime && isManagedRuntime(data.runtime) && (
+              <ConfigPreview agentId={data.id} runtime={data.runtime} />
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

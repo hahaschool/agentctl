@@ -102,6 +102,7 @@ export const queryKeys = {
     projectPath
       ? (['skills', 'discover', machineId, runtime, projectPath] as const)
       : (['skills', 'discover', machineId, runtime] as const),
+  agentConfigPreview: (agentId: string) => ['agents', agentId, 'config-preview'] as const,
   spaces: {
     all: ['spaces'] as const,
     detail: (id: string) => ['spaces', id] as const,
@@ -408,6 +409,15 @@ export function promotionHistoryQuery() {
   return queryOptions({
     queryKey: queryKeys.promotionHistory,
     queryFn: () => api.getPromotionHistory(),
+  });
+}
+
+export function agentConfigPreviewQuery(agentId: string) {
+  return queryOptions({
+    queryKey: queryKeys.agentConfigPreview(agentId),
+    queryFn: () => api.getAgentConfigPreview(agentId),
+    enabled: !!agentId,
+    staleTime: 10_000,
   });
 }
 

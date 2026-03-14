@@ -17,6 +17,7 @@ import { RuntimeRegistry } from '../runtime/runtime-registry.js';
 import { TerminalManager } from '../runtime/terminal-manager.js';
 import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
 import { agentRoutes } from './routes/agents.js';
+import { configPreviewRoutes } from './routes/config-preview.js';
 import { emergencyStopRoutes } from './routes/emergency-stop.js';
 import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
@@ -208,6 +209,11 @@ export async function createWorkerServer({
     prefix: '/api/runtime-config',
     machineId,
     runtimeConfigApplier,
+    logger,
+  });
+
+  await app.register(configPreviewRoutes, {
+    prefix: '/api/config',
     logger,
   });
 

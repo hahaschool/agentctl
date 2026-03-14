@@ -1119,6 +1119,17 @@ export const api = {
     return request<SkillDiscoverResponse>(`/api/skills/discover?${qs.toString()}`);
   },
 
+  // Agent config preview (dry-run rendering of managed runtime config)
+  getAgentConfigPreview: (agentId: string) =>
+    request<{
+      ok: boolean;
+      runtime: string;
+      rendered: {
+        runtime: string;
+        files: Array<{ scope: string; path: string; content: string }>;
+      };
+    }>(`/api/agents/${encodeURIComponent(agentId)}/config-preview`),
+
   // Machine capability sync (triggers fresh MCP + skill discovery on the worker)
   syncCapabilities: (machineId: string, runtime?: string, projectPath?: string) =>
     request<{

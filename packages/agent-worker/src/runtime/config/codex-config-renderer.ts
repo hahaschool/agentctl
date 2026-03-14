@@ -1,4 +1,4 @@
-import type { ManagedRuntimeConfig } from '@agentctl/shared';
+import type { AgentRuntimeConfigOverrides, ManagedRuntimeConfig } from '@agentctl/shared';
 
 import {
   type RenderedRuntimeConfig,
@@ -7,7 +7,11 @@ import {
 } from './shared-rendering.js';
 
 export class CodexConfigRenderer {
-  render(config: ManagedRuntimeConfig): RenderedRuntimeConfig {
+  render(
+    baseConfig: ManagedRuntimeConfig,
+    overrides?: AgentRuntimeConfigOverrides,
+  ): RenderedRuntimeConfig {
+    const config = applyCodexOverrides(baseConfig, overrides);
     const configToml = renderConfigToml(config);
 
     return {
@@ -101,4 +105,35 @@ function renderShellEnvironmentPolicy(lines: string[], config: ManagedRuntimeCon
 
 function quoteToml(value: string): string {
   return JSON.stringify(value);
+}
+
+function applyCodexOverrides(
+  config: ManagedRuntimeConfig,
+  overrides?: AgentRuntimeConfigOverrides,
+): ManagedRuntimeConfig {
+  if (!overrides) return config;
+
+  let result = {
+    ...config,
+    ...(overrides.sandbox ? { sandbox: overrides.sandbox } : {}),
+    ...(overrides.approvalPolicy ? { approvalPolicy: overrides.approvalPolicy } : {}),
+  };
+
+  if (overrides.codexReasoningEffort || overrides.codexModelProvider) {
+    result = {
+      ...result,
+      runtimeOverrides: {
+        ...result.runtimeOverrides,
+        codex: {
+          ...result.runtimeOverrides.codex,
+          ...(overrides.codexReasoningEffort
+            ? { reasoningEffort: overrides.codexReasoningEffort }
+            : {}),
+          ...(overrides.codexModelProvider ? { modelProvider: overrides.codexModelProvider } : {}),
+        },
+      },
+    };
+  }
+
+  return result;
 }

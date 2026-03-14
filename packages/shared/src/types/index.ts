@@ -14,6 +14,7 @@ export type {
   AgentConfig,
   AgentMcpOverride,
   AgentRuntime,
+  AgentRuntimeConfigOverrides,
   AgentSkillOverride,
   AgentStatus,
   AgentType,
