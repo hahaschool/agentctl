@@ -70,6 +70,7 @@ import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
+import { machineCapabilitiesRoutes } from './routes/machine-capabilities.js';
 import { mcpTemplateRoutes } from './routes/mcp-templates.js';
 import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { mcpToolsRoutes } from './routes/mcp-tools.js';
@@ -368,6 +369,13 @@ export async function createServer({
   // Skill discovery proxy
   await app.register(skillDiscoverRoutes, {
     prefix: '/api/skills',
+    dbRegistry,
+    workerPort,
+  });
+
+  // Machine capabilities sync (MCP + skill discovery)
+  await app.register(machineCapabilitiesRoutes, {
+    prefix: '/api/machines',
     dbRegistry,
     workerPort,
   });
