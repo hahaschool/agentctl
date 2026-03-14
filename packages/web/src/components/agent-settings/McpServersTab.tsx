@@ -47,20 +47,14 @@ export function McpServersTab({ agent }: McpServersTabProps): React.JSX.Element 
   const toast = useToast();
 
   // Guard: only show picker for managed runtimes
-  if (!agent.runtime || !isManagedRuntime(agent.runtime)) {
-    return (
-      <div className="space-y-6 max-w-xl">
-        <p className="text-sm text-muted-foreground">
-          MCP discovery is only available for managed runtimes (claude-code, codex).
-        </p>
-      </div>
-    );
-  }
+  // Default to 'claude-code' for agents created before runtime selection was added
+  const effectiveRuntime =
+    agent.runtime && isManagedRuntime(agent.runtime) ? agent.runtime : 'claude-code';
 
   return (
     <McpServersTabInner
       agent={agent}
-      runtime={agent.runtime}
+      runtime={effectiveRuntime}
       updateAgent={updateAgent}
       toast={toast}
     />

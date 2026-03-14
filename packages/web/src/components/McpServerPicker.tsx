@@ -127,8 +127,15 @@ export function McpServerPicker({
   const [customForm, setCustomForm] = useState<CustomServerFormState>(createEmptyCustomForm);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Query both runtimes to show all available MCP servers
   const discoverQuery = useQuery({
     ...mcpDiscoverQuery(machineId, runtime, projectPath),
+    enabled: !!machineId && isExpanded,
+  });
+
+  const otherRuntime = runtime === 'claude-code' ? 'codex' : 'claude-code';
+  const discoverOtherQuery = useQuery({
+    ...mcpDiscoverQuery(machineId, otherRuntime, projectPath),
     enabled: !!machineId && isExpanded,
   });
 
@@ -137,7 +144,14 @@ export function McpServerPicker({
     enabled: isExpanded,
   });
 
-  const discovered = discoverQuery.data?.discovered ?? [];
+  // Merge both runtimes' discovered servers, primary runtime first
+  const discovered = useMemo(() => {
+    const primary = discoverQuery.data?.discovered ?? [];
+    const other = (discoverOtherQuery.data?.discovered ?? []).filter(
+      (s) => !primary.some((p) => p.name === s.name),
+    );
+    return [...primary, ...other];
+  }, [discoverQuery.data?.discovered, discoverOtherQuery.data?.discovered]);
 
   const serverRows = useMemo(
     () => buildServerRows(discovered, currentOverrides),

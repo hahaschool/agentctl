@@ -36,19 +36,17 @@ export function SkillsTab({ agent }: SkillsTabProps): React.JSX.Element {
   const updateAgent = useUpdateAgent();
   const toast = useToast();
 
-  // Guard: only show picker for managed runtimes
-  if (!agent.runtime || !isManagedRuntime(agent.runtime)) {
-    return (
-      <div className="space-y-6 max-w-xl">
-        <p className="text-sm text-muted-foreground">
-          Skill discovery is only available for managed runtimes (claude-code, codex).
-        </p>
-      </div>
-    );
-  }
+  // Default to 'claude-code' for agents created before runtime selection was added
+  const effectiveRuntime =
+    agent.runtime && isManagedRuntime(agent.runtime) ? agent.runtime : 'claude-code';
 
   return (
-    <SkillsTabInner agent={agent} runtime={agent.runtime} updateAgent={updateAgent} toast={toast} />
+    <SkillsTabInner
+      agent={agent}
+      runtime={effectiveRuntime}
+      updateAgent={updateAgent}
+      toast={toast}
+    />
   );
 }
 
