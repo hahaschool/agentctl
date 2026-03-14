@@ -45,6 +45,76 @@ vi.mock('lucide-react', () => ({
   ),
 }));
 
+// Mock runtime-aware components so tests don't require QueryClientProvider
+vi.mock('./RuntimeSelector', () => ({
+  RuntimeSelector: ({
+    value,
+    onChange,
+    disabled,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    disabled?: boolean;
+  }) => (
+    <select
+      data-testid="runtime-selector"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+    >
+      <option value="claude-code">Claude Code</option>
+      <option value="codex">Codex</option>
+    </select>
+  ),
+}));
+
+vi.mock('./RuntimeAwareMachineSelect', () => ({
+  RuntimeAwareMachineSelect: ({
+    value,
+    onChange,
+    machines,
+    disabled,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    machines: Array<{ id: string; hostname: string; status?: string }>;
+    disabled?: boolean;
+  }) => (
+    <select
+      aria-label="Machine"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+    >
+      {disabled && machines.length === 0 && <option value="">Loading machines...</option>}
+      {!disabled && machines.length === 0 && <option value="">No machines available</option>}
+      {machines.map((m) => (
+        <option key={m.id} value={m.id} disabled={m.status === 'offline'}>
+          {m.hostname}
+          {m.status === 'offline' ? ' (offline)' : m.status === 'degraded' ? ' (degraded)' : ''}
+        </option>
+      ))}
+    </select>
+  ),
+}));
+
+vi.mock('./RuntimeAwareModelSelect', () => ({
+  RuntimeAwareModelSelect: ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+  }) => (
+    <select aria-label="Model (optional)" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Default</option>
+      <option value="claude-opus-4-6">Claude Opus 4.6</option>
+      <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+      <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
+    </select>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Component import (AFTER mocks)
 // ---------------------------------------------------------------------------
@@ -465,6 +535,7 @@ describe('CreateSessionForm', () => {
           prompt: 'Fix the bug',
           model: undefined,
           accountId: undefined,
+          runtime: 'claude-code',
         });
       });
     });
