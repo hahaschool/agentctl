@@ -1,4 +1,4 @@
-import type { McpServerTemplate } from '@agentctl/shared';
+import { isManagedRuntime, MANAGED_RUNTIMES, type McpServerTemplate } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
@@ -137,7 +137,7 @@ export const mcpTemplateRoutes: FastifyPluginAsync<McpTemplateRoutesOptions> = a
 
   // GET /api/mcp/discover — proxy discovery request to a worker
   app.get<{
-    Querystring: { machineId: string; projectPath?: string };
+    Querystring: { machineId: string; projectPath?: string; runtime?: string };
   }>(
     '/discover',
     {
@@ -150,11 +150,19 @@ export const mcpTemplateRoutes: FastifyPluginAsync<McpTemplateRoutesOptions> = a
     },
     async (request, reply) => {
       const { machineId, projectPath } = request.query;
+      const runtime = request.query.runtime ?? 'claude-code';
 
       if (!machineId) {
         return reply.code(400).send({
           error: 'INVALID_INPUT',
           message: 'machineId query parameter is required',
+        });
+      }
+
+      if (!isManagedRuntime(runtime)) {
+        return reply.code(400).send({
+          error: 'INVALID_RUNTIME',
+          message: `Invalid runtime: ${runtime}. Must be one of: ${MANAGED_RUNTIMES.join(', ')}`,
         });
       }
 
@@ -178,9 +186,9 @@ export const mcpTemplateRoutes: FastifyPluginAsync<McpTemplateRoutesOptions> = a
 
       // Proxy the request to the worker
       const qs = new URLSearchParams();
+      qs.set('runtime', runtime);
       if (projectPath) qs.set('projectPath', projectPath);
-      const suffix = qs.toString() ? `?${qs.toString()}` : '';
-      const workerUrl = `${workerResult.url}/api/mcp/discover${suffix}`;
+      const workerUrl = `${workerResult.url}/api/mcp/discover?${qs.toString()}`;
 
       try {
         const response = await fetch(workerUrl, {

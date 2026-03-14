@@ -69,6 +69,7 @@ import { gitProxyRoutes } from './routes/git.js';
 import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
+import { machineCapabilitiesRoutes } from './routes/machine-capabilities.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { mcpTemplateRoutes } from './routes/mcp-templates.js';
 import { mcpToolsRoutes } from './routes/mcp-tools.js';
@@ -96,6 +97,7 @@ import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
+import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
@@ -360,6 +362,20 @@ export async function createServer({
   await app.register(mcpTemplateRoutes, {
     prefix: '/api/mcp',
     registry,
+    dbRegistry,
+    workerPort,
+  });
+
+  // Skill discovery proxy
+  await app.register(skillDiscoverRoutes, {
+    prefix: '/api/skills',
+    dbRegistry,
+    workerPort,
+  });
+
+  // Machine capabilities sync (MCP + skill discovery)
+  await app.register(machineCapabilitiesRoutes, {
+    prefix: '/api/machines',
     dbRegistry,
     workerPort,
   });
