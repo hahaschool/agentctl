@@ -53,6 +53,7 @@ import {
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
 import { accountRoutes } from './routes/accounts.js';
+import { agentConfigPreviewRoutes } from './routes/agent-config-preview.js';
 import { agentProfileRoutes } from './routes/agent-profiles.js';
 import { agentRoutes } from './routes/agents.js';
 import { approvalRoutes } from './routes/approvals.js';
@@ -355,6 +356,13 @@ export async function createServer({
     dbRegistry,
     memoryInjector,
     dispatchVerificationConfig,
+    workerPort,
+  });
+
+  // Agent config preview proxy (renders managed config without writing to disk)
+  await app.register(agentConfigPreviewRoutes, {
+    prefix: '/api/agents',
+    dbRegistry,
     workerPort,
   });
 
