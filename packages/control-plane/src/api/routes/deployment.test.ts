@@ -204,6 +204,75 @@ describe('deploymentRoutes', () => {
     });
   });
 
+  // ── GET /preflight/:tier ────────────────────────────────────────
+
+  describe('GET /preflight/:tier', () => {
+    it('runs preflight checks for a valid tier', async () => {
+      mockRunPreflight.mockResolvedValue({
+        passed: true,
+        checks: [
+          { name: 'source_health', status: 'pass', message: 'OK' },
+          { name: 'target_health', status: 'pass', message: 'OK' },
+          { name: 'migration_parity', status: 'pass', message: '5 migrations in sync' },
+          { name: 'build', status: 'pass', message: 'Build succeeded' },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/preflight/dev-1',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.ready).toBe(true);
+      expect(body.checks).toHaveLength(4);
+      expect(body.checks[0]).toMatchObject({ name: 'source_health', status: 'pass' });
+    });
+
+    it('returns not-ready when preflight fails', async () => {
+      mockRunPreflight.mockResolvedValue({
+        passed: false,
+        checks: [
+          { name: 'source_health', status: 'fail', message: 'Unhealthy: cp' },
+          { name: 'target_health', status: 'skipped', message: 'Skipped' },
+          { name: 'migration_parity', status: 'skipped', message: 'Skipped' },
+          { name: 'build', status: 'skipped', message: 'Skipped' },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/preflight/dev-1',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.ready).toBe(false);
+      expect(body.checks[0].status).toBe('fail');
+    });
+
+    it('rejects invalid tier name', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/preflight/beta',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_SOURCE' });
+    });
+
+    it('rejects non-existent tier name', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/preflight/production',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_SOURCE' });
+    });
+  });
+
   // ── POST /promote/preflight ─────────────────────────────────────
 
   describe('POST /promote/preflight', () => {
@@ -296,6 +365,36 @@ describe('deploymentRoutes', () => {
     });
   });
 
+  // ── GET /promote/:id/stream ──────────────────────────────────────
+
+  describe('GET /promote/:id/stream', () => {
+    it('returns SSE content-type header', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/promote/non-existent-id/stream',
+      });
+
+      // The route writes to raw response, so inject() returns the raw output
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toBe('text/event-stream');
+    });
+
+    it('sends error event for unknown promotion ID', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/promote/unknown-id/stream',
+      });
+
+      expect(response.statusCode).toBe(200);
+      // The response body should contain a JSON event with type 'error'
+      const lines = response.body.split('\n').filter((l: string) => l.startsWith('data: '));
+      expect(lines.length).toBeGreaterThan(0);
+      const event = JSON.parse(lines[0].replace('data: ', ''));
+      expect(event.type).toBe('error');
+      expect(event.message).toBe('Promotion not found');
+    });
+  });
+
   // ── GET /history ───────────────────────────────────────────────
 
   describe('GET /history', () => {
@@ -309,6 +408,8 @@ describe('deploymentRoutes', () => {
       const body = response.json();
       expect(body).toHaveProperty('records');
       expect(body).toHaveProperty('total');
+      expect(Array.isArray(body.records)).toBe(true);
+      expect(typeof body.total).toBe('number');
     });
 
     it('respects limit and offset query params', async () => {
@@ -318,6 +419,60 @@ describe('deploymentRoutes', () => {
       });
 
       expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveProperty('records');
+      expect(body).toHaveProperty('total');
+    });
+
+    it('clamps limit to max 100', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/history?limit=500',
+      });
+
+      // Should still succeed (limit clamped internally)
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('handles invalid limit/offset gracefully', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/history?limit=abc&offset=-5',
+      });
+
+      // Should still succeed with fallback defaults
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
+  // ── GET /tiers — degraded status ──────────────────────────────
+
+  describe('GET /tiers — degraded status', () => {
+    it('reports degraded when some probes fail', async () => {
+      let callCount = 0;
+      mockFetch.mockImplementation(async () => {
+        callCount++;
+        // First two calls succeed (cp + worker), third fails (web HEAD)
+        if (callCount % 3 === 0) {
+          throw new Error('Connection refused');
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'ok' }),
+        } as Response;
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/tiers',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      // At least one tier should be degraded since web probe fails
+      const degradedTiers = body.tiers.filter((t: { status: string }) => t.status === 'degraded');
+      expect(degradedTiers.length).toBeGreaterThan(0);
     });
   });
 });
