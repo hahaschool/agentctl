@@ -1,3 +1,5 @@
+import type { ManagedSkill } from './runtime-management.js';
+
 export type AgentType = 'heartbeat' | 'cron' | 'manual' | 'adhoc' | 'loop';
 
 export type AgentRuntime = 'claude-code' | 'codex' | 'nanoclaw' | 'openclaw';
@@ -65,6 +67,28 @@ export type DiscoveredMcpServer = {
   source: McpServerSource;
   /** Optional human-readable description of this server. */
   description?: string;
+  /** Absolute path of the config file where this server was discovered. */
+  configFile?: string;
+};
+
+/** A skill discovered from SKILL.md files on the machine. */
+export type DiscoveredSkill = {
+  /** Unique identifier derived from the skill directory name. */
+  id: string;
+  /** Human-readable name from SKILL.md frontmatter. */
+  name: string;
+  /** Description of when/how to use the skill. */
+  description: string;
+  /** Absolute path to the SKILL.md file. */
+  path: string;
+  /** Where this skill was discovered: global or project scope. */
+  source: 'global' | 'project';
+  /** Which runtime this skill targets. */
+  runtime: 'claude-code' | 'codex';
+  /** Whether the user can invoke this skill directly via slash command. */
+  userInvokable?: boolean;
+  /** Description of arguments the skill accepts. */
+  args?: string;
 };
 
 /** A pre-configured MCP server template for common use cases. */
@@ -85,6 +109,25 @@ export type McpServerTemplate = {
   runtimeTypes?: AgentRuntime[];
 };
 
+/** A custom MCP server config with a required display name for matching. */
+export type CustomMcpServer = McpServerConfig & { name: string };
+
+/** Per-agent override to exclude machine-default MCP servers or add custom ones. */
+export type AgentMcpOverride = {
+  /** Server names to exclude from machine defaults. */
+  excluded: string[];
+  /** Custom servers to add for this agent only. */
+  custom: CustomMcpServer[];
+};
+
+/** Per-agent override to exclude machine-default skills or add custom ones. */
+export type AgentSkillOverride = {
+  /** Skill ids to exclude from machine defaults. */
+  excluded: string[];
+  /** Custom skills to add for this agent only. */
+  custom: ManagedSkill[];
+};
+
 export type AgentConfig = {
   allowedTools?: string[];
   disallowedTools?: string[];
@@ -97,6 +140,10 @@ export type AgentConfig = {
   defaultPrompt?: string;
   /** MCP server definitions to write to `.mcp.json` before agent startup. */
   mcpServers?: Record<string, McpServerConfig>;
+  /** Per-agent MCP server overrides (exclude defaults, add custom). */
+  mcpOverride?: AgentMcpOverride;
+  /** Per-agent skill overrides (exclude defaults, add custom). */
+  skillOverride?: AgentSkillOverride;
 };
 
 export type Agent = {

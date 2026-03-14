@@ -8,6 +8,7 @@ import type {
   ManagedRuntime,
   ManagedRuntimeConfig,
   ManagedSession,
+  ManagedSkill,
   ManualTakeoverState,
 } from './runtime-management.js';
 import {
@@ -180,5 +181,34 @@ describe('runtime-management types', () => {
     expect(isManualTakeoverPermissionMode('danger-full-access')).toBe(false);
     expect(manualTakeover.permissionMode).toBe('default');
     expect(manualTakeover.sessionUrl).toContain('claude.ai/code');
+  });
+});
+
+describe('ManagedSkill', () => {
+  it('supports display metadata fields', () => {
+    const skill: ManagedSkill = {
+      id: 'systematic-debugging',
+      path: '/skills/systematic-debugging/SKILL.md',
+      enabled: true,
+      name: 'Systematic Debugging',
+      description: 'Use when encountering any bug or test failure',
+      source: 'global',
+    };
+
+    expect(skill.name).toBe('Systematic Debugging');
+    expect(skill.description).toContain('bug');
+    expect(skill.source).toBe('global');
+  });
+
+  it('is backward compatible without display metadata', () => {
+    const skill: ManagedSkill = {
+      id: 'tdd',
+      path: '/skills/tdd/SKILL.md',
+      enabled: true,
+    };
+
+    expect(skill.name).toBeUndefined();
+    expect(skill.description).toBeUndefined();
+    expect(skill.source).toBeUndefined();
   });
 });

@@ -7,6 +7,7 @@ export {
   topologicalSort,
   validateTaskGraph,
 } from './dag-validation.js';
+export * from './discovery/index.js';
 export * from './health/index.js';
 export * from './metrics/index.js';
 export type { NativeImportAttempt, NativeImportAttemptReason } from './protocol/handoff.js';

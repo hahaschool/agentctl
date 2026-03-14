@@ -74,6 +74,12 @@ export type ManagedSkill = {
   id: string;
   path: string;
   enabled: boolean;
+  /** Human-readable display name extracted from SKILL.md frontmatter. */
+  name?: string;
+  /** Description of when/how to use this skill. */
+  description?: string;
+  /** Where this skill was discovered: global (~/.claude/skills) or project (.claude/skills). */
+  source?: 'global' | 'project';
 };
 
 export type ManagedEnvironmentPolicy = {

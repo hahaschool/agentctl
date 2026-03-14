@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Machine } from './machine.js';
+import type { Machine, MachineCapabilities } from './machine.js';
 
 describe('machine types', () => {
   it('supports execution environment capability snapshots', () => {
@@ -42,5 +42,39 @@ describe('machine types', () => {
     expect(machine.capabilities.executionEnvironments?.[0]?.id).toBe('direct');
     expect(machine.capabilities.defaultExecutionEnvironment).toBe('direct');
     expect(machine.capabilities.executionEnvironments?.[1]?.reasonUnavailable).toContain('Docker');
+  });
+});
+
+describe('MachineCapabilities - discovery provenance', () => {
+  it('supports discovery provenance fields', () => {
+    const caps: MachineCapabilities = {
+      gpu: false,
+      docker: true,
+      maxConcurrentAgents: 4,
+      mcpServerSources: {
+        filesystem: 'discovered',
+        'custom-server': 'manual',
+      },
+      skillSources: {
+        'systematic-debugging': 'discovered',
+      },
+      lastDiscoveredAt: '2026-03-14T12:00:00Z',
+    };
+
+    expect(caps.mcpServerSources?.filesystem).toBe('discovered');
+    expect(caps.skillSources?.['systematic-debugging']).toBe('discovered');
+    expect(caps.lastDiscoveredAt).toBe('2026-03-14T12:00:00Z');
+  });
+
+  it('is backward compatible when provenance fields are absent', () => {
+    const caps: MachineCapabilities = {
+      gpu: false,
+      docker: false,
+      maxConcurrentAgents: 2,
+    };
+
+    expect(caps.mcpServerSources).toBeUndefined();
+    expect(caps.skillSources).toBeUndefined();
+    expect(caps.lastDiscoveredAt).toBeUndefined();
   });
 });

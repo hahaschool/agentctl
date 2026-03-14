@@ -11,6 +11,12 @@ export type MachineCapabilities = {
   maxConcurrentAgents: number;
   executionEnvironments?: ExecutionEnvironmentCapability[];
   defaultExecutionEnvironment?: ExecutionEnvironmentId | null;
+  /** Provenance of each discovered/manual MCP server, keyed by server name. */
+  mcpServerSources?: Record<string, 'discovered' | 'manual'>;
+  /** Provenance of each discovered/manual skill, keyed by skill id. */
+  skillSources?: Record<string, 'discovered' | 'manual'>;
+  /** ISO timestamp of the last successful discovery scan. */
+  lastDiscoveredAt?: string;
 };
 
 export type Machine = {
