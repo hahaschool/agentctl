@@ -1119,6 +1119,22 @@ export const api = {
     return request<SkillDiscoverResponse>(`/api/skills/discover?${qs.toString()}`);
   },
 
+  // Machine capability sync (triggers fresh MCP + skill discovery on the worker)
+  syncCapabilities: (machineId: string, runtime?: string, projectPath?: string) =>
+    request<{
+      machineId: string;
+      runtime: string;
+      mcpDiscovered: number;
+      skillsDiscovered: number;
+      warnings: string[];
+    }>(`/api/machines/${encodeURIComponent(machineId)}/sync-capabilities`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(runtime ? { runtime } : {}),
+        ...(projectPath ? { projectPath } : {}),
+      }),
+    }),
+
   // Memory import
   startMemoryImport: (body: { source: ImportJob['source']; dbPath: string }) =>
     request<{ ok: boolean; job: ImportJob }>('/api/memory/import', {
