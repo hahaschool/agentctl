@@ -12,9 +12,12 @@ export { ACCOUNT_PROVIDERS } from './account.js';
 export type {
   Agent,
   AgentConfig,
+  AgentMcpOverride,
   AgentRuntime,
+  AgentSkillOverride,
   AgentStatus,
   AgentType,
+  CustomMcpServer,
   DiscoveredMcpServer,
   DiscoveredSkill,
   McpServerConfig,

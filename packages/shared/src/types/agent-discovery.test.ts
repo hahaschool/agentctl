@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DiscoveredMcpServer, DiscoveredSkill } from './agent.js';
+import type {
+  AgentMcpOverride,
+  AgentSkillOverride,
+  DiscoveredMcpServer,
+  DiscoveredSkill,
+} from './agent.js';
 
 describe('DiscoveredMcpServer', () => {
   it('supports configFile field for provenance', () => {
@@ -55,5 +60,43 @@ describe('DiscoveredSkill', () => {
 
     expect(skill.userInvokable).toBeUndefined();
     expect(skill.args).toBeUndefined();
+  });
+});
+
+describe('AgentMcpOverride', () => {
+  it('represents opt-out override model', () => {
+    const override: AgentMcpOverride = {
+      excluded: ['filesystem', 'memory'],
+      custom: [
+        { name: 'my-server', command: 'npx', args: ['-y', 'my-server'] },
+      ],
+    };
+
+    expect(override.excluded).toHaveLength(2);
+    expect(override.custom).toHaveLength(1);
+  });
+
+  it('works with empty lists', () => {
+    const override: AgentMcpOverride = {
+      excluded: [],
+      custom: [],
+    };
+
+    expect(override.excluded).toHaveLength(0);
+    expect(override.custom).toHaveLength(0);
+  });
+});
+
+describe('AgentSkillOverride', () => {
+  it('represents opt-out override model for skills', () => {
+    const override: AgentSkillOverride = {
+      excluded: ['systematic-debugging'],
+      custom: [
+        { id: 'my-skill', path: '/path/SKILL.md', enabled: true },
+      ],
+    };
+
+    expect(override.excluded).toEqual(['systematic-debugging']);
+    expect(override.custom[0].id).toBe('my-skill');
   });
 });
