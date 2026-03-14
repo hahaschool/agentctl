@@ -65,6 +65,28 @@ export type DiscoveredMcpServer = {
   source: McpServerSource;
   /** Optional human-readable description of this server. */
   description?: string;
+  /** Absolute path of the config file where this server was discovered. */
+  configFile?: string;
+};
+
+/** A skill discovered from SKILL.md files on the machine. */
+export type DiscoveredSkill = {
+  /** Unique identifier derived from the skill directory name. */
+  id: string;
+  /** Human-readable name from SKILL.md frontmatter. */
+  name: string;
+  /** Description of when/how to use the skill. */
+  description: string;
+  /** Absolute path to the SKILL.md file. */
+  path: string;
+  /** Where this skill was discovered: global or project scope. */
+  source: 'global' | 'project';
+  /** Which runtime this skill targets. */
+  runtime: 'claude-code' | 'codex';
+  /** Whether the user can invoke this skill directly via slash command. */
+  userInvokable?: boolean;
+  /** Description of arguments the skill accepts. */
+  args?: string;
 };
 
 /** A pre-configured MCP server template for common use cases. */

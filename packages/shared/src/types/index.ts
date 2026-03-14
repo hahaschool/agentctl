@@ -16,6 +16,7 @@ export type {
   AgentStatus,
   AgentType,
   DiscoveredMcpServer,
+  DiscoveredSkill,
   McpServerConfig,
   McpServerSource,
   McpServerTemplate,
