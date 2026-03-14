@@ -1,6 +1,7 @@
 export * from './alerts/index.js';
 export * from './config/index.js';
 export * from './crypto/index.js';
+export * from './discovery/index.js';
 export {
   type DagValidationResult,
   detectCycles,
