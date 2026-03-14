@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import { PromoteGate } from '@/components/deployment/PromoteGate';
 import { PromotionHistory } from '@/components/deployment/PromotionHistory';

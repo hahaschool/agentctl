@@ -103,16 +103,20 @@ jobs:
           pnpm licenses list --json > licenses.json
 
           # Scan for GPL or AGPL licenses (excluding LGPL which is permissive)
+          # PM2 (AGPL-3.0) is excluded: used as external process manager, not embedded/linked
           VIOLATIONS=$(cat licenses.json | \
             node -e "
               const data = require('fs').readFileSync('/dev/stdin', 'utf8');
               const parsed = JSON.parse(data);
+              const EXCLUDED = ['pm2', '@pm2/agent', '@pm2/io', '@pm2/js-api', '@pm2/pm2-version-check'];
               const violations = [];
               for (const [license, packages] of Object.entries(parsed)) {
                 const upper = license.toUpperCase();
                 if ((upper.includes('GPL') || upper.includes('AGPL')) && !upper.includes('LGPL')) {
                   for (const pkg of packages) {
-                    violations.push(pkg.name + '@' + pkg.version + ' (' + license + ')');
+                    if (!EXCLUDED.includes(pkg.name)) {
+                      violations.push(pkg.name + '@' + pkg.version + ' (' + license + ')');
+                    }
                   }
                 }
               }

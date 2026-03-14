@@ -1200,8 +1200,7 @@ export const api = {
   // Deployment
   // ---------------------------------------------------------------------------
 
-  getDeploymentTiers: () =>
-    request<{ tiers: DeploymentTierStatus[] }>('/api/deployment/tiers'),
+  getDeploymentTiers: () => request<{ tiers: DeploymentTierStatus[] }>('/api/deployment/tiers'),
 
   runPreflight: (source: string) =>
     request<{ ready: boolean; checks: DeploymentPreflightCheck[] }>(

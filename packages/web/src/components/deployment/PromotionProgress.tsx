@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle, Loader2, X, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -41,7 +41,8 @@ export function PromotionProgress({
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Auto-scroll logs to bottom
+  // Auto-scroll logs to bottom when new log entries arrive
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logs triggers scroll on new entries
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
@@ -119,11 +120,7 @@ export function PromotionProgress({
             {completed && success && <CheckCircle size={14} className="text-green-400" />}
             {completed && !success && <XCircle size={14} className="text-red-400" />}
             <h3 className="text-sm font-semibold">
-              {completed
-                ? success
-                  ? 'Promotion Complete'
-                  : 'Promotion Failed'
-                : 'Promoting...'}
+              {completed ? (success ? 'Promotion Complete' : 'Promotion Failed') : 'Promoting...'}
             </h3>
           </div>
           {completed && (

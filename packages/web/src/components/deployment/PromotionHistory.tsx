@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { CheckCircle, ChevronDown, ChevronRight, Minus, XCircle } from 'lucide-react';
+import { useState } from 'react';
 
 import type { DeploymentPromotionRecord } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -91,7 +91,9 @@ function RecordRow({ record }: { readonly record: DeploymentPromotionRecord }): 
             <div key={check.name} className="flex items-center gap-1.5 text-[11px]">
               {check.status === 'pass' && <CheckCircle size={11} className="text-green-400" />}
               {check.status === 'fail' && <XCircle size={11} className="text-red-400" />}
-              {check.status === 'skipped' && <Minus size={11} className="text-muted-foreground/50" />}
+              {check.status === 'skipped' && (
+                <Minus size={11} className="text-muted-foreground/50" />
+              )}
               <span className="text-muted-foreground">{check.name}</span>
               {check.message && (
                 <span className="text-muted-foreground/60 truncate">{check.message}</span>

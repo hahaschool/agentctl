@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { CheckCircle, Loader2, Minus, XCircle } from 'lucide-react';
+import { useState } from 'react';
 
 import type { DeploymentPreflightCheck, DeploymentTierStatus } from '@/lib/api';
 import { api } from '@/lib/api';
@@ -12,7 +12,11 @@ import { cn } from '@/lib/utils';
 // Check indicator
 // ---------------------------------------------------------------------------
 
-function CheckIndicator({ check }: { readonly check: DeploymentPreflightCheck }): React.JSX.Element {
+function CheckIndicator({
+  check,
+}: {
+  readonly check: DeploymentPreflightCheck;
+}): React.JSX.Element {
   const icons = {
     pass: <CheckCircle size={14} className="text-green-400" />,
     fail: <XCircle size={14} className="text-red-400" />,
