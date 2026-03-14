@@ -752,73 +752,6 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ---
 
-## 11. Agent Detail Page UX Fixes
-
-> Five user-reported issues on the agent detail page (`/agents/[id]`).
-
-### 11.1 Start Button Ignores defaultPrompt — P0 ✅
-
-> Fixed in PR #86. `handleStart()` now computes `effectivePrompt = prompt.trim() || agent.config.defaultPrompt || ''` and only blocks when empty. Placeholder shows "Using default prompt..." when defaultPrompt exists.
-
-- [x] Pre-fill prompt input with defaultPrompt *(PR #86)*
-- [x] Allow "Go" without text if defaultPrompt exists *(PR #86)*
-
-**Fix:**
-- Pre-fill prompt input with `agent.config.defaultPrompt` when available
-- Allow "Go" without entering text if defaultPrompt exists
-- Show placeholder like "Using default prompt: {truncated}" when pre-filled
-
-### 11.2 Agent Header Overflow — P1 ✅
-
-> Fixed in PR #86. Added `truncate min-w-0 max-w-[300px]` + `title` tooltip to agent name `h1` element. Header flex container uses `min-w-0`.
-
-- [x] CSS truncation with tooltip on hover *(PR #86)*
-
-### 11.3 Cost Display Still $0.00 — P1 ✅
-
-> Fixed in PR #87. Root cause: agent GET endpoint returned static 0 values. Fix: CP now computes `lastCostUsd` from most recent run and `totalCostUsd` as sum of all runs via DB registry methods.
-
-- [x] `getLastRunCost(agentId)` — fetches most recent run's cost_usd *(PR #87)*
-- [x] `getTotalCost(agentId)` — sums all runs' cost_usd *(PR #87)*
-- [x] Agent GET route returns computed costs *(PR #87)*
-
-### 11.4 Run History Bar Too Thin — P1 ✅
-
-> Fixed in PR #88. Replaced thin `RunHistoryBar` with recharts `BarChart` component (`RunHistoryChart.tsx`). Shows duration as bar height, colored by status, with hover tooltips showing date/duration/status/cost.
-
-- [x] `RunHistoryChart` component with recharts BarChart *(PR #88)*
-- [x] Status-based coloring + tooltips *(PR #88)*
-
-### 11.5 Execution History ↔ Session Linkage — P1 ✅
-
-> Fixed in PR #88. `GroupedRunHistory` now shows "View Session" link for runs with sessionId. Run type includes `sessionId` field. API response maps session associations.
-
-- [x] `sessionId` on run entries with clickable session link *(PR #88)*
-- [x] API returns sessionId on runs *(PR #88)*
-
-### 11.6 MCP Server Auto-Detection & Managed Config — P0 ✅
-
-> Fixed in PR #89. Three-layer MCP discovery: project files (`.mcp.json`, `.claude/settings.json`), machine-level, and managed templates. `McpServerPicker` replaces manual form with auto-detected + template cards.
->
-> **Next evolution**: §14 extends this with runtime-aware discovery (Codex TOML support), skill auto-discovery, machine-level defaults with per-agent opt-out overrides, and unified picker in both create and edit flows.
-
-- [x] Worker `GET /api/mcp/discover?projectPath=...` — scans project + global config *(PR #89)*
-- [x] CP `GET /api/mcp/templates` — common MCP server templates *(PR #89)*
-- [x] `McpServerPicker` component with source badges *(PR #89)*
-- [x] `DiscoveredMcpServer` type with source tracking *(PR #89)*
-
-### 11.7 Agent Settings Redesign — P0 ✅
-
-> Fixed in PR #90. Full-page tabbed settings at `/agents/[id]/settings` with 5 tabs. `AgentFormDialog` simplified to quick-create mode (name, machine, type, model only).
-
-- [x] `/agents/[id]/settings/page.tsx` — full-page settings with shadcn Tabs *(PR #90)*
-- [x] `GeneralTab`, `ModelPromptsTab`, `PermissionsToolsTab`, `McpServersTab`, `MemoryTab` *(PR #90)*
-- [x] Each tab saves independently via React Query mutations *(PR #90)*
-- [x] "Settings" link on agent detail page *(PR #90)*
-- [x] `AgentFormDialog` simplified for quick-create *(PR #90)*
-
----
-
 ## 10. Multi-Agent Collaboration
 
 > Design doc: [plans/2026-03-12-multi-agent-collaboration-design.md](plans/2026-03-12-multi-agent-collaboration-design.md)
@@ -884,6 +817,73 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Auto-Decompose: LLM-based natural-language task → TaskGraph with DAG validation (Phase 5b) — PR #111
 - [x] Outcome Learning: sliding-window stats from task completions → refine routing scores + approval timeouts (Phase 5c) — PR #113
 - [x] Notification Routing: priority classification + per-user channel preferences + quiet hours (Phase 5d) — PR #112
+
+---
+
+## 11. Agent Detail Page UX Fixes
+
+> Five user-reported issues on the agent detail page (`/agents/[id]`).
+
+### 11.1 Start Button Ignores defaultPrompt — P0 ✅
+
+> Fixed in PR #86. `handleStart()` now computes `effectivePrompt = prompt.trim() || agent.config.defaultPrompt || ''` and only blocks when empty. Placeholder shows "Using default prompt..." when defaultPrompt exists.
+
+- [x] Pre-fill prompt input with defaultPrompt *(PR #86)*
+- [x] Allow "Go" without text if defaultPrompt exists *(PR #86)*
+
+**Fix:**
+- Pre-fill prompt input with `agent.config.defaultPrompt` when available
+- Allow "Go" without entering text if defaultPrompt exists
+- Show placeholder like "Using default prompt: {truncated}" when pre-filled
+
+### 11.2 Agent Header Overflow — P1 ✅
+
+> Fixed in PR #86. Added `truncate min-w-0 max-w-[300px]` + `title` tooltip to agent name `h1` element. Header flex container uses `min-w-0`.
+
+- [x] CSS truncation with tooltip on hover *(PR #86)*
+
+### 11.3 Cost Display Still $0.00 — P1 ✅
+
+> Fixed in PR #87. Root cause: agent GET endpoint returned static 0 values. Fix: CP now computes `lastCostUsd` from most recent run and `totalCostUsd` as sum of all runs via DB registry methods.
+
+- [x] `getLastRunCost(agentId)` — fetches most recent run's cost_usd *(PR #87)*
+- [x] `getTotalCost(agentId)` — sums all runs' cost_usd *(PR #87)*
+- [x] Agent GET route returns computed costs *(PR #87)*
+
+### 11.4 Run History Bar Too Thin — P1 ✅
+
+> Fixed in PR #88. Replaced thin `RunHistoryBar` with recharts `BarChart` component (`RunHistoryChart.tsx`). Shows duration as bar height, colored by status, with hover tooltips showing date/duration/status/cost.
+
+- [x] `RunHistoryChart` component with recharts BarChart *(PR #88)*
+- [x] Status-based coloring + tooltips *(PR #88)*
+
+### 11.5 Execution History ↔ Session Linkage — P1 ✅
+
+> Fixed in PR #88. `GroupedRunHistory` now shows "View Session" link for runs with sessionId. Run type includes `sessionId` field. API response maps session associations.
+
+- [x] `sessionId` on run entries with clickable session link *(PR #88)*
+- [x] API returns sessionId on runs *(PR #88)*
+
+### 11.6 MCP Server Auto-Detection & Managed Config — P0 ✅
+
+> Fixed in PR #89. Three-layer MCP discovery: project files (`.mcp.json`, `.claude/settings.json`), machine-level, and managed templates. `McpServerPicker` replaces manual form with auto-detected + template cards.
+>
+> **Next evolution**: §14 extends this with runtime-aware discovery (Codex TOML support), skill auto-discovery, machine-level defaults with per-agent opt-out overrides, and unified picker in both create and edit flows.
+
+- [x] Worker `GET /api/mcp/discover?projectPath=...` — scans project + global config *(PR #89)*
+- [x] CP `GET /api/mcp/templates` — common MCP server templates *(PR #89)*
+- [x] `McpServerPicker` component with source badges *(PR #89)*
+- [x] `DiscoveredMcpServer` type with source tracking *(PR #89)*
+
+### 11.7 Agent Settings Redesign — P0 ✅
+
+> Fixed in PR #90. Full-page tabbed settings at `/agents/[id]/settings` with 5 tabs. `AgentFormDialog` simplified to quick-create mode (name, machine, type, model only).
+
+- [x] `/agents/[id]/settings/page.tsx` — full-page settings with shadcn Tabs *(PR #90)*
+- [x] `GeneralTab`, `ModelPromptsTab`, `PermissionsToolsTab`, `McpServersTab`, `MemoryTab` *(PR #90)*
+- [x] Each tab saves independently via React Query mutations *(PR #90)*
+- [x] "Settings" link on agent detail page *(PR #90)*
+- [x] `AgentFormDialog` simplified for quick-create *(PR #90)*
 
 ---
 
