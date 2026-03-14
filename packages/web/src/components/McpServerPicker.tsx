@@ -135,7 +135,7 @@ export function McpServerPicker({
   const [customForm, setCustomForm] = useState<CustomServerFormState>(createEmptyCustomForm);
 
   const discoverQuery = useQuery({
-    ...mcpDiscoverQuery(machineId, projectPath),
+    ...mcpDiscoverQuery(machineId, 'claude-code', projectPath),
     enabled: !!machineId && isExpanded,
   });
 

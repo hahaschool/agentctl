@@ -93,11 +93,15 @@ export const queryKeys = {
   auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
     params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
   gitStatus: (machineId: string, path: string) => ['git-status', machineId, path] as const,
-  mcpDiscover: (machineId: string, projectPath?: string) =>
+  mcpDiscover: (machineId: string, runtime: string, projectPath?: string) =>
     projectPath
-      ? (['mcp', 'discover', machineId, projectPath] as const)
-      : (['mcp', 'discover', machineId] as const),
+      ? (['mcp', 'discover', machineId, runtime, projectPath] as const)
+      : (['mcp', 'discover', machineId, runtime] as const),
   mcpTemplates: ['mcp', 'templates'] as const,
+  skillDiscover: (machineId: string, runtime: string, projectPath?: string) =>
+    projectPath
+      ? (['skills', 'discover', machineId, runtime, projectPath] as const)
+      : (['skills', 'discover', machineId, runtime] as const),
   spaces: {
     all: ['spaces'] as const,
     detail: (id: string) => ['spaces', id] as const,
@@ -407,10 +411,19 @@ export function promotionHistoryQuery() {
   });
 }
 
-export function mcpDiscoverQuery(machineId: string, projectPath?: string) {
+export function mcpDiscoverQuery(machineId: string, runtime: string, projectPath?: string) {
   return queryOptions({
-    queryKey: queryKeys.mcpDiscover(machineId, projectPath),
-    queryFn: () => api.discoverMcpServers(machineId, projectPath),
+    queryKey: queryKeys.mcpDiscover(machineId, runtime, projectPath),
+    queryFn: () => api.discoverMcpServers(machineId, runtime, projectPath),
+    enabled: !!machineId,
+    staleTime: 30_000,
+  });
+}
+
+export function skillDiscoverQuery(machineId: string, runtime: string, projectPath?: string) {
+  return queryOptions({
+    queryKey: queryKeys.skillDiscover(machineId, runtime, projectPath),
+    queryFn: () => api.discoverSkills(machineId, runtime, projectPath),
     enabled: !!machineId,
     staleTime: 30_000,
   });
