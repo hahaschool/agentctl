@@ -110,6 +110,24 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
           </SimpleTooltip>
         </button>
 
+        {/* Runtime badge */}
+        {s.runtime ? (
+          <span
+            className={cn(
+              'text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap',
+              s.runtime === 'codex'
+                ? 'bg-green-500/10 text-green-400'
+                : 'bg-blue-500/10 text-blue-400',
+            )}
+          >
+            {s.runtime === 'claude-code' ? 'Claude' : 'Codex'}
+          </span>
+        ) : (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 shrink-0 whitespace-nowrap">
+            Unknown
+          </span>
+        )}
+
         {/* Message count */}
         <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
           {formatNumber(s.messageCount)} msgs

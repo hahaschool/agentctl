@@ -93,6 +93,7 @@ export function DiscoverPage(): React.JSX.Element {
   const [machineFilter, setMachineFilter] = useState<string>('all');
   const [sort, setSort] = useState<SortOption>('recent');
   const [groupMode, setGroupMode] = useState<GroupMode>('project');
+  const [runtimeFilter, setRuntimeFilter] = useState<string>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -138,13 +139,20 @@ export function DiscoverPage(): React.JSX.Element {
     return allSessions.filter((s) => {
       if (s.messageCount < minMessages) return false;
       if (machineFilter !== 'all' && s.hostname !== machineFilter) return false;
+      if (runtimeFilter !== 'all') {
+        if (runtimeFilter === 'unknown') {
+          if (s.runtime !== undefined) return false;
+        } else {
+          if (s.runtime !== runtimeFilter) return false;
+        }
+      }
       if (lowerSearch) {
         const haystack = `${s.summary} ${s.projectPath} ${s.sessionId} ${s.hostname}`.toLowerCase();
         if (!haystack.includes(lowerSearch)) return false;
       }
       return true;
     });
-  }, [allSessions, minMessages, machineFilter, search]);
+  }, [allSessions, minMessages, machineFilter, runtimeFilter, search]);
 
   // Grouped + sorted
   const groups = useMemo((): SessionGroup[] => {
@@ -261,7 +269,7 @@ export function DiscoverPage(): React.JSX.Element {
   // biome-ignore lint/correctness/useExhaustiveDependencies: effect intentionally tracks filter values
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [search, minMessages, machineFilter]);
+  }, [search, minMessages, machineFilter, runtimeFilter]);
 
   const toggleSelect = useCallback((sessionId: string) => {
     setSelectedIds((prev) => {
@@ -450,6 +458,21 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Error banner */}
       {error && <ErrorBanner message={error.message} onRetry={() => void query.refetch()} />}
+
+      {/* Runtime filter */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-sm text-muted-foreground">Runtime:</span>
+        <select
+          value={runtimeFilter}
+          onChange={(e) => setRuntimeFilter(e.target.value)}
+          className="bg-muted border border-border rounded px-2 py-1 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+        >
+          <option value="all">All</option>
+          <option value="claude-code">Claude Code</option>
+          <option value="codex">Codex</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </div>
 
       {/* Filter bar */}
       <DiscoverFilterBar
