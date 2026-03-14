@@ -1,9 +1,11 @@
 'use client';
 
+import { isManagedRuntime, type ManagedRuntime } from '@agentctl/shared';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
 import { CronBuilder } from '@/components/CronBuilder';
+import { RuntimeSelector } from '@/components/RuntimeSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,15 +44,21 @@ export function GeneralTab({ agent, machines }: GeneralTabProps): React.JSX.Elem
   const [machineId, setMachineId] = useState(agent.machineId);
   const [type, setType] = useState<string>(agent.type);
   const [schedule, setSchedule] = useState(agent.schedule ?? '');
+  const [runtime, setRuntime] = useState<ManagedRuntime>(
+    agent.runtime && isManagedRuntime(agent.runtime) ? agent.runtime : 'claude-code',
+  );
 
   const isDirty =
     name !== agent.name ||
     machineId !== agent.machineId ||
     type !== agent.type ||
+    runtime !== (agent.runtime ?? 'claude-code') ||
     schedule !== (agent.schedule ?? '');
 
   const handleSave = useCallback(() => {
     if (!name.trim() || !machineId) return;
+
+    const runtimeChanged = runtime !== (agent.runtime ?? 'claude-code');
 
     updateAgent.mutate(
       {
@@ -58,14 +66,40 @@ export function GeneralTab({ agent, machines }: GeneralTabProps): React.JSX.Elem
         name: name.trim(),
         machineId,
         type,
+        runtime,
         schedule: type === 'cron' && schedule.trim() ? schedule.trim() : null,
+        ...(runtimeChanged
+          ? {
+              config: {
+                ...agent.config,
+                mcpServers: undefined,
+              },
+            }
+          : {}),
       },
       {
-        onSuccess: () => toast.success('General settings saved'),
+        onSuccess: () => {
+          if (runtimeChanged) {
+            toast.success('General settings saved. MCP servers cleared due to runtime change.');
+          } else {
+            toast.success('General settings saved');
+          }
+        },
         onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
       },
     );
-  }, [agent.id, name, machineId, type, schedule, updateAgent, toast]);
+  }, [
+    agent.id,
+    agent.runtime,
+    agent.config,
+    name,
+    machineId,
+    type,
+    runtime,
+    schedule,
+    updateAgent,
+    toast,
+  ]);
 
   return (
     <div className="space-y-6 max-w-xl">
@@ -128,6 +162,19 @@ export function GeneralTab({ agent, machines }: GeneralTabProps): React.JSX.Elem
           </SelectContent>
         </Select>
       </div>
+
+      {/* Runtime */}
+      {isManagedRuntime(agent.runtime ?? 'claude-code') && (
+        <div className="space-y-1.5">
+          <Label htmlFor="agent-runtime">Runtime</Label>
+          <RuntimeSelector
+            value={runtime}
+            onChange={setRuntime}
+            variant="dropdown"
+            disabled={updateAgent.isPending}
+          />
+        </div>
+      )}
 
       {/* Schedule (cron only) */}
       {type === 'cron' && (

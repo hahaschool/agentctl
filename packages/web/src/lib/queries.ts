@@ -534,6 +534,7 @@ export function useUpdateAgent() {
       type?: string;
       schedule?: string | null;
       config?: AgentConfig;
+      runtime?: string;
     }) => api.updateAgent(id, body),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
