@@ -29,6 +29,7 @@ import type { AgentTaskJobData, AgentTaskJobName } from '../../scheduler/task-qu
 import { clampLimit, PAGINATION } from '../constants.js';
 import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
+import { syncMachineCapabilities } from './machine-capabilities.js';
 
 export type AgentRoutesOptions = {
   taskQueue?: Queue<AgentTaskJobData, void, AgentTaskJobName>;
@@ -134,10 +135,39 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     '/:id/heartbeat',
     { schema: { tags: ['machines'], summary: 'Machine heartbeat' } },
     async (request) => {
+      const machineId = request.params.id;
+
       if (dbRegistry) {
-        await dbRegistry.heartbeat(request.params.id, request.body.capabilities);
+        // Check previous status to detect offline → online transition
+        let wasOffline = false;
+        try {
+          const machine = await dbRegistry.getMachine(machineId);
+          wasOffline = machine != null && machine.status !== 'online';
+        } catch {
+          // getMachine failure is non-fatal for the heartbeat path
+        }
+
+        await dbRegistry.heartbeat(machineId, request.body.capabilities);
+
+        // Fire-and-forget capability sync on offline → online transition
+        if (wasOffline) {
+          // Re-fetch the machine (now online) for sync
+          const updatedMachine = await dbRegistry.getMachine(machineId);
+          if (updatedMachine) {
+            syncMachineCapabilities({
+              machine: updatedMachine,
+              dbRegistry,
+              workerPort,
+            }).catch((err) => {
+              app.log.warn(
+                { machineId, error: err instanceof Error ? err.message : String(err) },
+                'Background capability sync after online transition failed',
+              );
+            });
+          }
+        }
       } else {
-        await registry.heartbeat(request.params.id);
+        await registry.heartbeat(machineId);
       }
 
       return {

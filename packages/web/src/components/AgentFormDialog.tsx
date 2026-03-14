@@ -37,6 +37,7 @@ import { McpServerPicker } from './McpServerPicker';
 import { RuntimeAwareMachineSelect } from './RuntimeAwareMachineSelect';
 import { RuntimeAwareModelSelect } from './RuntimeAwareModelSelect';
 import { RuntimeSelector } from './RuntimeSelector';
+import { SkillPicker } from './SkillPicker';
 
 // ---------------------------------------------------------------------------
 // Memory budget defaults
@@ -165,6 +166,7 @@ export function AgentFormDialog({
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const projectDropdownRef = useRef<HTMLDivElement>(null);
+  const prevRuntimeRef = useRef<ManagedRuntime>(runtime);
 
   // Memory scopes for the scope selector (create mode only)
   const scopesQuery = useQuery({ ...memoryScopesQuery(), enabled: isCreate && open });
@@ -388,6 +390,15 @@ export function AgentFormDialog({
     }
   }, [open, isCreate, autoSelectMachine]);
 
+  // Clear MCP/skill overrides when runtime changes (not on initial mount)
+  useEffect(() => {
+    if (prevRuntimeRef.current !== runtime) {
+      prevRuntimeRef.current = runtime;
+      setMcpOverride({ excluded: [], custom: [] });
+      setSkillOverride({ excluded: [], custom: [] });
+    }
+  }, [runtime]);
+
   // -----------------------------------------------------------------------
   // Shared sub-components for form fields
   // -----------------------------------------------------------------------
@@ -554,6 +565,17 @@ export function AgentFormDialog({
       projectPath={projectPath || agent?.projectPath || undefined}
       currentOverrides={mcpOverride}
       onChange={setMcpOverride}
+      disabled={isPending}
+    />
+  );
+
+  const skillsSection = (
+    <SkillPicker
+      machineId={machineId}
+      runtime={runtime}
+      projectPath={projectPath || agent?.projectPath || undefined}
+      currentOverrides={skillOverride}
+      onChange={setSkillOverride}
       disabled={isPending}
     />
   );
@@ -818,6 +840,9 @@ export function AgentFormDialog({
 
             {/* MCP Servers — collapsible section */}
             {mcpServersSection}
+
+            {/* Skills — collapsible section */}
+            {skillsSection}
           </div>
 
           <DialogFooter>
@@ -920,6 +945,9 @@ export function AgentFormDialog({
 
           {/* MCP Servers — collapsible section */}
           {mcpServersSection}
+
+          {/* Skills — collapsible section */}
+          {skillsSection}
         </div>
 
         <DialogFooter>

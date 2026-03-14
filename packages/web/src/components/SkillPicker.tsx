@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { type ChangeEvent, useCallback, useMemo, useState } from 'react';
 
-import type { DiscoveredSkill } from '../lib/api';
+import { api, type DiscoveredSkill } from '../lib/api';
 import { skillDiscoverQuery } from '../lib/queries';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -116,6 +116,7 @@ export function SkillPicker({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customForm, setCustomForm] = useState<CustomSkillFormState>(createEmptyCustomSkillForm);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const discoverQuery = useQuery({
     ...skillDiscoverQuery(machineId, runtime, projectPath),
@@ -389,11 +390,16 @@ export function SkillPicker({
               variant="ghost"
               size="sm"
               onClick={() => {
-                void discoverQuery.refetch();
+                setIsSyncing(true);
+                api
+                  .syncCapabilities(machineId, runtime, projectPath)
+                  .then(() => discoverQuery.refetch())
+                  .catch(() => discoverQuery.refetch())
+                  .finally(() => setIsSyncing(false));
               }}
-              disabled={disabled || discoverQuery.isLoading}
+              disabled={disabled || discoverQuery.isLoading || isSyncing}
             >
-              Refresh
+              {isSyncing ? 'Syncing...' : 'Refresh'}
             </Button>
           </div>
 

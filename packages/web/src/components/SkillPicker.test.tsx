@@ -8,6 +8,20 @@ import { describe, expect, it, vi } from 'vitest';
 // Mocks
 // ---------------------------------------------------------------------------
 
+const { mockSyncCapabilities } = vi.hoisted(() => ({
+  mockSyncCapabilities: vi.fn().mockResolvedValue({
+    machineId: 'machine-1',
+    runtime: 'claude-code',
+    mcpDiscovered: 0,
+    skillsDiscovered: 0,
+    warnings: [],
+  }),
+}));
+
+vi.mock('../lib/api', () => ({
+  api: { syncCapabilities: (...args: unknown[]) => mockSyncCapabilities(...args) },
+}));
+
 const mockDiscoveredSkills = [
   {
     id: 'systematic-debugging',
@@ -260,6 +274,31 @@ describe('SkillPicker', () => {
     expect(onChange).toHaveBeenCalledWith({
       excluded: [],
       custom: [],
+    });
+  });
+
+  it('Refresh button triggers sync-capabilities then refetches discovery', async () => {
+    mockSyncCapabilities.mockClear();
+    const { container } = renderPicker();
+
+    // Expand the picker
+    fireEvent.click(screen.getByText('Skills'));
+
+    // Wait for discovery data to load
+    await vi.waitFor(() => {
+      const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+      expect(checkboxes.length).toBeGreaterThanOrEqual(2);
+    });
+
+    // Find and click the Refresh button
+    const allButtons = screen.getAllByRole('button');
+    const refreshBtn = allButtons.find((b) => b.textContent === 'Refresh');
+    expect(refreshBtn).toBeDefined();
+    if (refreshBtn) fireEvent.click(refreshBtn);
+
+    // Wait for sync to be called
+    await vi.waitFor(() => {
+      expect(mockSyncCapabilities).toHaveBeenCalledWith('machine-1', 'claude-code', undefined);
     });
   });
 });

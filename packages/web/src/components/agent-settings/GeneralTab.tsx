@@ -73,6 +73,8 @@ export function GeneralTab({ agent, machines }: GeneralTabProps): React.JSX.Elem
               config: {
                 ...agent.config,
                 mcpServers: undefined,
+                mcpOverride: undefined,
+                skillOverride: undefined,
               },
             }
           : {}),
@@ -80,7 +82,9 @@ export function GeneralTab({ agent, machines }: GeneralTabProps): React.JSX.Elem
       {
         onSuccess: () => {
           if (runtimeChanged) {
-            toast.success('General settings saved. MCP servers cleared due to runtime change.');
+            toast.success(
+              'General settings saved. MCP/skill overrides cleared due to runtime change.',
+            );
           } else {
             toast.success('General settings saved');
           }

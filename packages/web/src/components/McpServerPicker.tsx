@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { type ChangeEvent, useCallback, useMemo, useState } from 'react';
 
-import type { DiscoveredMcpServer } from '../lib/api';
+import { api, type DiscoveredMcpServer } from '../lib/api';
 import { mcpDiscoverQuery, mcpTemplatesQuery } from '../lib/queries';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -125,6 +125,7 @@ export function McpServerPicker({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customForm, setCustomForm] = useState<CustomServerFormState>(createEmptyCustomForm);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const discoverQuery = useQuery({
     ...mcpDiscoverQuery(machineId, runtime, projectPath),
@@ -398,11 +399,16 @@ export function McpServerPicker({
               variant="ghost"
               size="sm"
               onClick={() => {
-                void discoverQuery.refetch();
+                setIsSyncing(true);
+                api
+                  .syncCapabilities(machineId, runtime, projectPath)
+                  .then(() => discoverQuery.refetch())
+                  .catch(() => discoverQuery.refetch())
+                  .finally(() => setIsSyncing(false));
               }}
-              disabled={disabled || discoverQuery.isLoading}
+              disabled={disabled || discoverQuery.isLoading || isSyncing}
             >
-              Refresh
+              {isSyncing ? 'Syncing...' : 'Refresh'}
             </Button>
           </div>
 
