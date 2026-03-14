@@ -1,7 +1,11 @@
 'use client';
 
+import type { ManagedRuntime } from '@agentctl/shared';
 import type React from 'react';
+
 import { cn } from '@/lib/utils';
+
+import { RuntimeSelector } from './RuntimeSelector';
 
 type Machine = {
   id: string;
@@ -18,6 +22,8 @@ type DiscoverNewSessionFormProps = {
   onPromptChange: (value: string) => void;
   creating: boolean;
   onSubmit: () => void;
+  runtime: ManagedRuntime;
+  onRuntimeChange: (runtime: ManagedRuntime) => void;
 };
 
 export function DiscoverNewSessionForm({
@@ -30,6 +36,8 @@ export function DiscoverNewSessionForm({
   onPromptChange,
   creating,
   onSubmit,
+  runtime,
+  onRuntimeChange,
 }: DiscoverNewSessionFormProps): React.JSX.Element {
   return (
     <div className="p-4 bg-card border border-border/50 rounded-lg mb-4 flex gap-3 items-end flex-wrap">
@@ -93,6 +101,16 @@ export function DiscoverNewSessionForm({
           disabled={creating}
           placeholder="What should Claude work on?"
           className="w-full px-2.5 py-1.5 bg-background text-foreground border border-border rounded-md text-xs outline-none box-border focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+        />
+      </div>
+      <div className="min-w-[120px]">
+        {/* biome-ignore lint/a11y/noLabelWithoutControl: RuntimeSelector uses a radiogroup */}
+        <label className="text-[11px] text-muted-foreground mb-1 block">Runtime</label>
+        <RuntimeSelector
+          value={runtime}
+          onChange={onRuntimeChange}
+          variant="radio"
+          disabled={creating}
         />
       </div>
       <button

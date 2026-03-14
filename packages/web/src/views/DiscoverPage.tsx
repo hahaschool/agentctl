@@ -1,5 +1,6 @@
 'use client';
 
+import type { ManagedRuntime } from '@agentctl/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Compass, Filter } from 'lucide-react';
 import type React from 'react';
@@ -41,6 +42,7 @@ export function DiscoverPage(): React.JSX.Element {
   const [newPrompt, setNewPrompt] = useState('');
   const [newMachineId, setNewMachineId] = useState('');
   const [newSessionCreating, setNewSessionCreating] = useState(false);
+  const [newSessionRuntime, setNewSessionRuntime] = useState<ManagedRuntime>('claude-code');
 
   // Existing sessions query — used to mark already-imported sessions
   const existingSessionsQuery = useQuery(sessionsQuery({ limit: 1000 }));
@@ -336,6 +338,7 @@ export function DiscoverPage(): React.JSX.Element {
         machineId,
         projectPath: newProjectPath.trim(),
         prompt: newPrompt.trim(),
+        runtime: newSessionRuntime,
       });
       toast.success('Session created successfully');
       setNewProjectPath('');
@@ -348,7 +351,7 @@ export function DiscoverPage(): React.JSX.Element {
     } finally {
       setNewSessionCreating(false);
     }
-  }, [newProjectPath, newPrompt, newMachineId, machines, queryClient, toast]);
+  }, [newProjectPath, newPrompt, newMachineId, newSessionRuntime, machines, queryClient, toast]);
 
   const handleResume = useCallback(
     async (session: DiscoveredSession) => {
@@ -440,6 +443,8 @@ export function DiscoverPage(): React.JSX.Element {
           onPromptChange={setNewPrompt}
           creating={newSessionCreating}
           onSubmit={() => void handleNewSession()}
+          runtime={newSessionRuntime}
+          onRuntimeChange={setNewSessionRuntime}
         />
       )}
 
