@@ -749,6 +749,73 @@ describe('Agent routes — with dbRegistry', () => {
         }),
       );
     });
+
+    it('triggers sync-capabilities when machine transitions from offline to online', async () => {
+      const originalFetch = globalThis.fetch;
+
+      // First getMachine call returns offline machine, second (after heartbeat) returns online
+      vi.mocked(mockDbRegistry.getMachine)
+        .mockResolvedValueOnce(
+          makeMachine({ id: 'machine-1', status: 'offline' }) as never,
+        )
+        .mockResolvedValueOnce(
+          makeMachine({ id: 'machine-1', status: 'online', tailscaleIp: '100.64.0.1' }) as never,
+        );
+
+      // Mock fetch for the discovery calls that sync-capabilities will make
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ discovered: [] }),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/machine-1/heartbeat',
+        payload: { machineId: 'machine-1', runningAgents: [], cpuPercent: 0, memoryPercent: 0 },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait briefly for the fire-and-forget sync to complete
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+
+      // Verify discovery fetch calls were made (sync was triggered)
+      const fetchMock = vi.mocked(globalThis.fetch);
+      expect(fetchMock).toHaveBeenCalled();
+
+      const urls = fetchMock.mock.calls.map((c) => c[0] as string);
+      expect(urls.some((u) => u.includes('/api/mcp/discover'))).toBe(true);
+      expect(urls.some((u) => u.includes('/api/skills/discover'))).toBe(true);
+
+      globalThis.fetch = originalFetch;
+    });
+
+    it('does NOT trigger sync-capabilities when machine was already online', async () => {
+      const originalFetch = globalThis.fetch;
+
+      // getMachine returns online machine (no transition)
+      vi.mocked(mockDbRegistry.getMachine).mockResolvedValueOnce(
+        makeMachine({ id: 'machine-1', status: 'online' }) as never,
+      );
+
+      globalThis.fetch = vi.fn();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/machine-1/heartbeat',
+        payload: { machineId: 'machine-1', runningAgents: [], cpuPercent: 0, memoryPercent: 0 },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      // No discovery calls should have been made
+      expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
+
+      globalThis.fetch = originalFetch;
+    });
   });
 
   // -------------------------------------------------------------------------
