@@ -2,13 +2,7 @@
 
 import { MANAGED_RUNTIMES, type ManagedRuntime } from '@agentctl/shared';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 type RuntimeSelectorProps = {
   value: ManagedRuntime;
@@ -53,6 +47,7 @@ export function RuntimeSelector({
   return (
     <div className="flex gap-3" role="radiogroup" aria-label="Runtime">
       {MANAGED_RUNTIMES.map((rt) => (
+        // biome-ignore lint/a11y/useSemanticElements: custom styled radio button
         <button
           key={rt}
           type="button"

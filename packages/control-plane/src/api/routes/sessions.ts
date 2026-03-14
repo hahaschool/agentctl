@@ -1,6 +1,10 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError, DEFAULT_WORKER_PORT, type DiscoveredSession as DiscoveredSessionFromWorker } from '@agentctl/shared';
+import {
+  ControlPlaneError,
+  DEFAULT_WORKER_PORT,
+  type DiscoveredSession as DiscoveredSessionFromWorker,
+} from '@agentctl/shared';
 import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -452,8 +456,16 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
     '/',
     { schema: { tags: ['sessions'], summary: 'Create a new session' } },
     async (request, reply) => {
-      const { agentId, machineId, projectPath, model, prompt, resumeSessionId, accountId, runtime } =
-        request.body;
+      const {
+        agentId,
+        machineId,
+        projectPath,
+        model,
+        prompt,
+        resumeSessionId,
+        accountId,
+        runtime,
+      } = request.body;
 
       if (!agentId || typeof agentId !== 'string') {
         return reply.code(400).send({

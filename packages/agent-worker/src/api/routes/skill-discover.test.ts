@@ -61,11 +61,7 @@ describe('GET /api/skills/discover', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockDiscoverSkills).toHaveBeenCalledWith(
-      'claude-code',
-      expect.any(String),
-      undefined,
-    );
+    expect(mockDiscoverSkills).toHaveBeenCalledWith('claude-code', expect.any(String), undefined);
   });
 
   it('returns 400 for invalid runtime', async () => {
@@ -98,11 +94,7 @@ describe('GET /api/skills/discover', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockDiscoverSkills).toHaveBeenCalledWith(
-      'claude-code',
-      expect.any(String),
-      '/project',
-    );
+    expect(mockDiscoverSkills).toHaveBeenCalledWith('claude-code', expect.any(String), '/project');
   });
 
   it('uses cached results on second call within TTL', async () => {

@@ -1,9 +1,7 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-
-import { parse } from 'smol-toml';
-
 import type { McpServerSource } from '@agentctl/shared';
+import { parse } from 'smol-toml';
 
 import type { DiscoveredMcpServerWithProvenance } from './_type-stubs.js';
 

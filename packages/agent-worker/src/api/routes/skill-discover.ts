@@ -62,18 +62,11 @@ export async function skillDiscoverRoutes(
     }
 
     try {
-      const discovered = await discoverSkills(
-        runtime as ManagedRuntime,
-        homedir(),
-        projectPath,
-      );
+      const discovered = await discoverSkills(runtime as ManagedRuntime, homedir(), projectPath);
 
       skillDiscoverCache.set(cacheKey, discovered);
 
-      logger.info(
-        { runtime, projectPath, count: discovered.length },
-        'Skills discovered',
-      );
+      logger.info({ runtime, projectPath, count: discovered.length }, 'Skills discovered');
 
       return reply.send({ ok: true, discovered, cached: false });
     } catch (err) {

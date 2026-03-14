@@ -8,7 +8,7 @@ vi.mock('node:fs/promises', () => ({
   access: vi.fn(),
 }));
 
-import { access, readFile, readdir } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 
 const mockReaddir = vi.mocked(readdir);
 const mockReadFile = vi.mocked(readFile);
@@ -60,9 +60,7 @@ TDD content`;
 
   it('discovers codex skills from ~/.agents/skills/', async () => {
     mockAccess.mockResolvedValue(undefined);
-    mockReaddir.mockResolvedValue([
-      { name: 'code-review', isDirectory: () => true },
-    ] as any);
+    mockReaddir.mockResolvedValue([{ name: 'code-review', isDirectory: () => true }] as any);
     mockReadFile.mockResolvedValue(`---
 name: Code Review
 description: Automated code review
@@ -106,9 +104,7 @@ Content`;
 
   it('skips skills with missing frontmatter', async () => {
     mockAccess.mockResolvedValue(undefined);
-    mockReaddir.mockResolvedValue([
-      { name: 'no-frontmatter', isDirectory: () => true },
-    ] as any);
+    mockReaddir.mockResolvedValue([{ name: 'no-frontmatter', isDirectory: () => true }] as any);
     mockReadFile.mockResolvedValue('Just content, no frontmatter');
 
     const result = await discoverSkills('claude-code', '/home/user');
@@ -139,9 +135,7 @@ Content`);
         throw new Error('ENOENT');
       }
     });
-    mockReaddir.mockResolvedValue([
-      { name: 'project-skill', isDirectory: () => true },
-    ] as any);
+    mockReaddir.mockResolvedValue([{ name: 'project-skill', isDirectory: () => true }] as any);
     mockReadFile.mockResolvedValue(`---
 name: Project Skill
 description: A project skill

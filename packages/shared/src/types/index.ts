@@ -155,7 +155,6 @@ export {
   isOverflowStrategy,
   OVERFLOW_STRATEGIES,
 } from './context-bridge.js';
-export type { DiscoveredSession } from './discovered-session.js';
 export type {
   PreflightCheckName,
   PreflightCheckResult,
@@ -172,6 +171,7 @@ export {
   PREFLIGHT_CHECK_STATUSES,
   PROMOTION_STATUSES,
 } from './deployment.js';
+export type { DiscoveredSession } from './discovered-session.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   ExecutionSummary,

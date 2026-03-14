@@ -1,18 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-
 import type { ManagedRuntime } from '@agentctl/shared';
+import { useEffect, useRef } from 'react';
 
 import { DEFAULT_RUNTIME_MODELS, RUNTIME_MODEL_OPTIONS } from '../lib/model-options';
 import { toast } from './Toast';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const DEFAULT_SENTINEL = '__default__';
 
@@ -36,8 +29,7 @@ export function RuntimeAwareModelSelect({
       prevRuntimeRef.current = runtime;
 
       const models = RUNTIME_MODEL_OPTIONS[runtime];
-      const isValid =
-        !value || value === DEFAULT_SENTINEL || models.some((m) => m.value === value);
+      const isValid = !value || value === DEFAULT_SENTINEL || models.some((m) => m.value === value);
       if (!isValid) {
         const newDefault = DEFAULT_RUNTIME_MODELS[runtime];
         onChange(newDefault);

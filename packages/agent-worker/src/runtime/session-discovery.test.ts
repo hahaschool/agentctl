@@ -10,7 +10,11 @@ import {
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { decodeProjectPath, detectSessionRuntime, discoverLocalSessions } from './session-discovery.js';
+import {
+  decodeProjectPath,
+  detectSessionRuntime,
+  discoverLocalSessions,
+} from './session-discovery.js';
 
 // ---------------------------------------------------------------------------
 // Mocks

@@ -23,7 +23,6 @@ import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { mcpDiscoverRoutes } from './routes/mcp-discover.js';
-import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { memoryFeedbackRoutes } from './routes/memory-feedback.js';
 import { memoryPromoteRoutes } from './routes/memory-promote.js';
 import { memoryRecallRoutes } from './routes/memory-recall.js';
@@ -34,6 +33,7 @@ import { workerMetricsRoutes } from './routes/metrics.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
 import { sessionRoutes } from './routes/sessions.js';
+import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { streamRoutes } from './routes/stream.js';
 import { terminalRoutes } from './routes/terminal.js';
 

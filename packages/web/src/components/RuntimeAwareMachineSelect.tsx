@@ -1,19 +1,12 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-
 import type { ManagedRuntime } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 
 import { api, type Machine } from '../lib/api';
 import { toast } from './Toast';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 type RuntimeAwareMachineSelectProps = {
   runtime: ManagedRuntime;
@@ -43,12 +36,11 @@ export function RuntimeAwareMachineSelect({
   // Check if a machine supports the target runtime
   const checkSupport = (machineId: string, rt: ManagedRuntime): boolean => {
     if (!driftItems) return true; // assume supported while loading
-    const entry = driftItems.find(
-      (d) => d.machineId === machineId && d.runtime === rt,
-    );
+    const entry = driftItems.find((d) => d.machineId === machineId && d.runtime === rt);
     return entry?.isInstalled ?? true;
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: checkSupport captures driftItems which is in deps
   useEffect(() => {
     if (prevRuntimeRef.current !== runtime) {
       prevRuntimeRef.current = runtime;
@@ -57,13 +49,10 @@ export function RuntimeAwareMachineSelect({
         const firstAvailable = machines.find((m) => checkSupport(m.id, runtime));
         if (firstAvailable) {
           onChange(firstAvailable.id);
-          toast.info(
-            `Machine reset -- ${value} does not have ${runtime} installed`,
-          );
+          toast.info(`Machine reset -- ${value} does not have ${runtime} installed`);
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtime, value, machines, onChange, driftItems]);
 
   return (

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { RuntimeAwareModelSelect } from './RuntimeAwareModelSelect';
 
@@ -12,9 +12,7 @@ vi.mock('@/components/Toast', () => ({
 describe('RuntimeAwareModelSelect', () => {
   it('shows Claude models when runtime is claude-code', () => {
     const onChange = vi.fn();
-    render(
-      <RuntimeAwareModelSelect runtime="claude-code" value="" onChange={onChange} />,
-    );
+    render(<RuntimeAwareModelSelect runtime="claude-code" value="" onChange={onChange} />);
 
     // The trigger should show "Default" for empty value
     expect(screen.getByText('Default')).toBeDefined();
@@ -22,9 +20,7 @@ describe('RuntimeAwareModelSelect', () => {
 
   it('shows Codex models when runtime is codex', () => {
     const onChange = vi.fn();
-    render(
-      <RuntimeAwareModelSelect runtime="codex" value="gpt-5-codex" onChange={onChange} />,
-    );
+    render(<RuntimeAwareModelSelect runtime="codex" value="gpt-5-codex" onChange={onChange} />);
 
     // Should render without error — the value is valid for codex
     expect(screen.getByText('GPT-5 Codex')).toBeDefined();
@@ -42,11 +38,7 @@ describe('RuntimeAwareModelSelect', () => {
 
     // Rerender with codex runtime — current model is invalid for codex
     rerender(
-      <RuntimeAwareModelSelect
-        runtime="codex"
-        value="claude-sonnet-4-6"
-        onChange={onChange}
-      />,
+      <RuntimeAwareModelSelect runtime="codex" value="claude-sonnet-4-6" onChange={onChange} />,
     );
 
     // Should have called onChange with codex default model
@@ -60,9 +52,7 @@ describe('RuntimeAwareModelSelect', () => {
     );
 
     // Same runtime, same value — no reset needed
-    rerender(
-      <RuntimeAwareModelSelect runtime="codex" value="gpt-5-codex" onChange={onChange} />,
-    );
+    rerender(<RuntimeAwareModelSelect runtime="codex" value="gpt-5-codex" onChange={onChange} />);
 
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -74,9 +64,7 @@ describe('RuntimeAwareModelSelect', () => {
     );
 
     // Switch runtime with empty value — should not trigger reset
-    rerender(
-      <RuntimeAwareModelSelect runtime="codex" value="" onChange={onChange} />,
-    );
+    rerender(<RuntimeAwareModelSelect runtime="codex" value="" onChange={onChange} />);
 
     expect(onChange).not.toHaveBeenCalled();
   });
