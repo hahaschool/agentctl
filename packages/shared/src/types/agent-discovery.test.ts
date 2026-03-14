@@ -67,9 +67,7 @@ describe('AgentMcpOverride', () => {
   it('represents opt-out override model', () => {
     const override: AgentMcpOverride = {
       excluded: ['filesystem', 'memory'],
-      custom: [
-        { name: 'my-server', command: 'npx', args: ['-y', 'my-server'] },
-      ],
+      custom: [{ name: 'my-server', command: 'npx', args: ['-y', 'my-server'] }],
     };
 
     expect(override.excluded).toHaveLength(2);
@@ -91,9 +89,7 @@ describe('AgentSkillOverride', () => {
   it('represents opt-out override model for skills', () => {
     const override: AgentSkillOverride = {
       excluded: ['systematic-debugging'],
-      custom: [
-        { id: 'my-skill', path: '/path/SKILL.md', enabled: true },
-      ],
+      custom: [{ id: 'my-skill', path: '/path/SKILL.md', enabled: true }],
     };
 
     expect(override.excluded).toEqual(['systematic-debugging']);

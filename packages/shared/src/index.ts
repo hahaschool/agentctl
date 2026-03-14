@@ -1,13 +1,13 @@
 export * from './alerts/index.js';
 export * from './config/index.js';
 export * from './crypto/index.js';
-export * from './discovery/index.js';
 export {
   type DagValidationResult,
   detectCycles,
   topologicalSort,
   validateTaskGraph,
 } from './dag-validation.js';
+export * from './discovery/index.js';
 export * from './health/index.js';
 export * from './metrics/index.js';
 export type { NativeImportAttempt, NativeImportAttemptReason } from './protocol/handoff.js';

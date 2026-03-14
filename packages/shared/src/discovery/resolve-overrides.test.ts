@@ -15,14 +15,14 @@ describe('resolveEffectiveMcpServers', () => {
   it('returns all defaults when override is undefined', () => {
     const result = resolveEffectiveMcpServers(defaults, undefined);
     expect(result).toHaveLength(3);
-    expect(result.map(s => s.name)).toEqual(['filesystem', 'memory', 'github']);
+    expect(result.map((s) => s.name)).toEqual(['filesystem', 'memory', 'github']);
   });
 
   it('excludes servers in excluded list', () => {
     const override: AgentMcpOverride = { excluded: ['memory'], custom: [] };
     const result = resolveEffectiveMcpServers(defaults, override);
     expect(result).toHaveLength(2);
-    expect(result.map(s => s.name)).toEqual(['filesystem', 'github']);
+    expect(result.map((s) => s.name)).toEqual(['filesystem', 'github']);
   });
 
   it('appends custom servers after defaults', () => {
