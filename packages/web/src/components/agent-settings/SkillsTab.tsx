@@ -1,6 +1,6 @@
 'use client';
 
-import type { AgentMcpOverride, McpServerConfig } from '@agentctl/shared';
+import type { AgentSkillOverride } from '@agentctl/shared';
 import { isManagedRuntime } from '@agentctl/shared';
 import type React from 'react';
 import { useCallback, useState } from 'react';
@@ -9,32 +9,22 @@ import { Button } from '@/components/ui/button';
 import type { Agent, AgentConfig } from '@/lib/api';
 import { useUpdateAgent } from '@/lib/queries';
 
-import { McpServerPicker } from '../McpServerPicker';
+import { SkillPicker } from '../SkillPicker';
 import { useToast } from '../Toast';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert legacy flat mcpServers record to the new override model. */
-function migrateToOverride(legacy: Record<string, McpServerConfig> | undefined): AgentMcpOverride {
-  if (!legacy || Object.keys(legacy).length === 0) return { excluded: [], custom: [] };
-  return {
-    excluded: [],
-    custom: Object.entries(legacy).map(([name, config]) => ({ name, ...config })),
-  };
-}
-
-function getInitialOverride(agent: Agent): AgentMcpOverride {
-  if (agent.config?.mcpOverride) return agent.config.mcpOverride;
-  return migrateToOverride(agent.config?.mcpServers);
+function getInitialOverride(agent: Agent): AgentSkillOverride {
+  return agent.config?.skillOverride ?? { excluded: [], custom: [] };
 }
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
-type McpServersTabProps = {
+type SkillsTabProps = {
   agent: Agent;
 };
 
@@ -42,7 +32,7 @@ type McpServersTabProps = {
 // Component
 // ---------------------------------------------------------------------------
 
-export function McpServersTab({ agent }: McpServersTabProps): React.JSX.Element {
+export function SkillsTab({ agent }: SkillsTabProps): React.JSX.Element {
   const updateAgent = useUpdateAgent();
   const toast = useToast();
 
@@ -51,24 +41,19 @@ export function McpServersTab({ agent }: McpServersTabProps): React.JSX.Element 
     return (
       <div className="space-y-6 max-w-xl">
         <p className="text-sm text-muted-foreground">
-          MCP discovery is only available for managed runtimes (claude-code, codex).
+          Skill discovery is only available for managed runtimes (claude-code, codex).
         </p>
       </div>
     );
   }
 
   return (
-    <McpServersTabInner
-      agent={agent}
-      runtime={agent.runtime}
-      updateAgent={updateAgent}
-      toast={toast}
-    />
+    <SkillsTabInner agent={agent} runtime={agent.runtime} updateAgent={updateAgent} toast={toast} />
   );
 }
 
 // Inner component to avoid hooks after early return
-function McpServersTabInner({
+function SkillsTabInner({
   agent,
   runtime,
   updateAgent,
@@ -79,40 +64,40 @@ function McpServersTabInner({
   updateAgent: ReturnType<typeof useUpdateAgent>;
   toast: ReturnType<typeof useToast>;
 }): React.JSX.Element {
-  const [mcpOverride, setMcpOverride] = useState<AgentMcpOverride>(() => getInitialOverride(agent));
+  const [skillOverride, setSkillOverride] = useState<AgentSkillOverride>(() =>
+    getInitialOverride(agent),
+  );
 
   const initialSerialized = JSON.stringify(getInitialOverride(agent));
-  const currentSerialized = JSON.stringify(mcpOverride);
+  const currentSerialized = JSON.stringify(skillOverride);
   const isDirty = currentSerialized !== initialSerialized;
 
   const handleSave = useCallback(() => {
     const config: AgentConfig = { ...agent.config };
-    config.mcpOverride = mcpOverride;
-    // Remove legacy field if present
-    delete config.mcpServers;
+    config.skillOverride = skillOverride;
 
     updateAgent.mutate(
       { id: agent.id, config },
       {
-        onSuccess: () => toast.success('MCP servers saved'),
+        onSuccess: () => toast.success('Skills saved'),
         onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
       },
     );
-  }, [agent.id, agent.config, mcpOverride, updateAgent, toast]);
+  }, [agent.id, agent.config, skillOverride, updateAgent, toast]);
 
   return (
     <div className="space-y-6 max-w-xl">
       <div>
         <p className="text-sm text-muted-foreground mb-4">
-          MCP servers discovered from machine config. Uncheck to exclude, or add custom servers.
+          Skills discovered from machine config. Uncheck to exclude, or add custom skills.
         </p>
 
-        <McpServerPicker
+        <SkillPicker
           machineId={agent.machineId}
           runtime={runtime}
           projectPath={agent.projectPath ?? undefined}
-          currentOverrides={mcpOverride}
-          onChange={setMcpOverride}
+          currentOverrides={skillOverride}
+          onChange={setSkillOverride}
           disabled={updateAgent.isPending}
         />
       </div>

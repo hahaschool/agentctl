@@ -12,6 +12,7 @@ import { McpServersTab } from '@/components/agent-settings/McpServersTab';
 import { MemoryTab } from '@/components/agent-settings/MemoryTab';
 import { ModelPromptsTab } from '@/components/agent-settings/ModelPromptsTab';
 import { PermissionsToolsTab } from '@/components/agent-settings/PermissionsToolsTab';
+import { SkillsTab } from '@/components/agent-settings/SkillsTab';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,6 +28,7 @@ const TABS = [
   { value: 'model-prompts', label: 'Model & Prompts' },
   { value: 'permissions', label: 'Permissions & Tools' },
   { value: 'mcp', label: 'MCP Servers' },
+  { value: 'skills', label: 'Skills' },
   { value: 'memory', label: 'Memory' },
 ] as const;
 
@@ -139,6 +141,10 @@ export default function AgentSettingsPage(): React.JSX.Element {
 
         <TabsContent value="mcp">
           <McpServersTab agent={data} />
+        </TabsContent>
+
+        <TabsContent value="skills">
+          <SkillsTab agent={data} />
         </TabsContent>
 
         <TabsContent value="memory">

@@ -15,6 +15,7 @@ import type {
   ContentMessage,
   CreateManagedSessionRequest,
   DiscoveredMcpServer,
+  DiscoveredSkill,
   EntityType,
   EventSenderType,
   EventVisibility,
@@ -66,6 +67,7 @@ import type {
 export type {
   AgentConfig,
   DiscoveredMcpServer,
+  DiscoveredSkill,
   EventSenderType,
   EventVisibility,
   ImportJob,
@@ -396,6 +398,12 @@ export type SpaceWithMembers = Space & { members: SpaceMember[] };
 export type McpDiscoverResponse = {
   discovered: DiscoveredMcpServer[];
   sources: Array<{ path: string; count: number }>;
+};
+
+export type SkillDiscoverResponse = {
+  ok: boolean;
+  discovered: DiscoveredSkill[];
+  cached: boolean;
 };
 
 export type McpTemplatesResponse = {
@@ -1096,13 +1104,20 @@ export const api = {
     }),
 
   // MCP discovery & templates
-  discoverMcpServers: (machineId: string, projectPath?: string) => {
-    const qs = new URLSearchParams({ machineId });
+  discoverMcpServers: (machineId: string, runtime: string, projectPath?: string) => {
+    const qs = new URLSearchParams({ machineId, runtime });
     if (projectPath) qs.set('projectPath', projectPath);
     return request<McpDiscoverResponse>(`/api/mcp/discover?${qs.toString()}`);
   },
 
   getMcpTemplates: () => request<McpTemplatesResponse>('/api/mcp/templates'),
+
+  // Skill discovery
+  discoverSkills: (machineId: string, runtime: string, projectPath?: string) => {
+    const qs = new URLSearchParams({ machineId, runtime });
+    if (projectPath) qs.set('projectPath', projectPath);
+    return request<SkillDiscoverResponse>(`/api/skills/discover?${qs.toString()}`);
+  },
 
   // Memory import
   startMemoryImport: (body: { source: ImportJob['source']; dbPath: string }) =>
