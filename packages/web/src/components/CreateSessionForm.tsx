@@ -1,14 +1,17 @@
 'use client';
 
+import type { ManagedRuntime } from '@agentctl/shared';
 import { useCallback, useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import type { ApiAccount, Machine } from '../lib/api';
 import { api } from '../lib/api';
-import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '../lib/model-options';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { ErrorBanner } from './ErrorBanner';
+import { RuntimeAwareMachineSelect } from './RuntimeAwareMachineSelect';
+import { RuntimeAwareModelSelect } from './RuntimeAwareModelSelect';
+import { RuntimeSelector } from './RuntimeSelector';
 import { useToast } from './Toast';
 
 type CreateSessionFormProps = {
@@ -30,6 +33,7 @@ export function CreateSessionForm({
     (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DEFAULT_MODEL) : null) ?? '',
   );
   const [accountId, setAccountId] = useState('');
+  const [runtime, setRuntime] = useState<ManagedRuntime>('claude-code');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +68,7 @@ export function CreateSessionForm({
         '',
     );
     setAccountId('');
+    setRuntime('claude-code');
     setError(null);
   }, []);
 
@@ -101,6 +106,7 @@ export function CreateSessionForm({
         prompt: prompt.trim(),
         model: model || undefined,
         accountId: accountId || undefined,
+        runtime,
       });
       toast.success(`Session created: ${result.sessionId.slice(0, 16)}...`);
       resetForm();
@@ -110,7 +116,18 @@ export function CreateSessionForm({
     } finally {
       setSubmitting(false);
     }
-  }, [machineId, projectPath, prompt, model, accountId, machines, resetForm, onCreated, toast]);
+  }, [
+    machineId,
+    projectPath,
+    prompt,
+    model,
+    accountId,
+    runtime,
+    machines,
+    resetForm,
+    onCreated,
+    toast,
+  ]);
 
   const isDisabled = submitting || !machineId || !projectPath.trim() || !prompt.trim();
 
@@ -118,33 +135,27 @@ export function CreateSessionForm({
     <div className="px-4 py-4 border-b border-border bg-card/50">
       <div className="text-[13px] font-semibold mb-3 tracking-tight">Create New Session</div>
 
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: RuntimeSelector uses a radiogroup */}
+      <label className="block text-[11px] text-muted-foreground mb-1">Runtime</label>
+      <div className="mb-2.5">
+        <RuntimeSelector value={runtime} onChange={setRuntime} variant="radio" />
+      </div>
+
       <label
         htmlFor="create-session-machine"
         className="block text-[11px] text-muted-foreground mb-1"
       >
         Machine
       </label>
-      <select
-        id="create-session-machine"
-        value={machineId}
-        onChange={(e) => setMachineId(e.target.value)}
-        disabled={machinesLoading}
-        className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-      >
-        {machinesLoading && <option value="">Loading machines...</option>}
-        {!machinesLoading && machines.length === 0 && (
-          <option value="">No machines available</option>
-        )}
-        {machines.map((m) => {
-          const isOffline = m.status === 'offline';
-          return (
-            <option key={m.id} value={m.id} disabled={isOffline}>
-              {m.hostname}
-              {isOffline ? ' (offline)' : m.status === 'degraded' ? ' (degraded)' : ''}
-            </option>
-          );
-        })}
-      </select>
+      <div className="mb-2.5">
+        <RuntimeAwareMachineSelect
+          runtime={runtime}
+          value={machineId}
+          onChange={setMachineId}
+          machines={machines}
+          disabled={machinesLoading}
+        />
+      </div>
 
       <label
         htmlFor="create-session-project"
@@ -182,18 +193,9 @@ export function CreateSessionForm({
       >
         Model (optional)
       </label>
-      <select
-        id="create-session-model"
-        value={model}
-        onChange={(e) => setModel(e.target.value)}
-        className="w-full px-2.5 py-2 bg-muted text-foreground border border-border rounded-md text-xs mb-2.5 outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-      >
-        {MODEL_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <div className="mb-2.5">
+        <RuntimeAwareModelSelect runtime={runtime} value={model} onChange={setModel} />
+      </div>
 
       <label
         htmlFor="create-session-account"

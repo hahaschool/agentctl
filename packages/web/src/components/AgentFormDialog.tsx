@@ -1,5 +1,6 @@
 'use client';
 
+import { isManagedRuntime, type ManagedRuntime } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -21,12 +22,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+
 import type { Agent, AgentConfig, Machine, McpServerConfig } from '../lib/api';
 import { shortenPath } from '../lib/format-utils';
-import { AGENT_TYPES, DEFAULT_MODEL, ALL_MODELS as MODEL_OPTIONS } from '../lib/model-options';
+import { AGENT_TYPES, DEFAULT_MODEL } from '../lib/model-options';
 import { memoryScopesQuery } from '../lib/queries';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { McpServerPicker } from './McpServerPicker';
+import { RuntimeAwareMachineSelect } from './RuntimeAwareMachineSelect';
+import { RuntimeAwareModelSelect } from './RuntimeAwareModelSelect';
+import { RuntimeSelector } from './RuntimeSelector';
 
 // ---------------------------------------------------------------------------
 // Memory budget defaults
@@ -80,6 +85,7 @@ export type AgentFormCreateData = {
   projectPath?: string;
   config?: AgentConfig;
   memoryBudget?: MemoryBudget;
+  runtime?: ManagedRuntime;
 };
 
 export type AgentFormEditData = {
@@ -89,6 +95,7 @@ export type AgentFormEditData = {
   type: string;
   schedule: string | null;
   config?: AgentConfig;
+  runtime?: ManagedRuntime;
 };
 
 export type AgentFormDialogProps = {
@@ -135,6 +142,7 @@ export function AgentFormDialog({
   const [systemPrompt, setSystemPrompt] = useState('');
   const [defaultPrompt, setDefaultPrompt] = useState('');
   const [mcpServers, setMcpServers] = useState<Record<string, McpServerConfig>>({});
+  const [runtime, setRuntime] = useState<ManagedRuntime>('claude-code');
 
   // Create-only state
   const [projectPath, setProjectPath] = useState('');
@@ -190,6 +198,7 @@ export function AgentFormDialog({
     setSystemPrompt('');
     setDefaultPrompt('');
     setMcpServers({});
+    setRuntime('claude-code');
     setProjectSearchQuery('');
     setShowProjectDropdown(false);
     setMemoryScopeId('');
@@ -209,6 +218,7 @@ export function AgentFormDialog({
     setSystemPrompt(a.config?.systemPrompt ?? '');
     setDefaultPrompt(a.config?.defaultPrompt ?? '');
     setMcpServers(a.config?.mcpServers ?? {});
+    setRuntime(a.runtime && isManagedRuntime(a.runtime) ? a.runtime : 'claude-code');
   }, []);
 
   // Close project dropdown on outside click
@@ -273,6 +283,7 @@ export function AgentFormDialog({
         name: agentName,
         machineId,
         type,
+        runtime,
         ...(type === 'cron' && schedule.trim() ? { schedule: schedule.trim() } : {}),
         ...(projectPath.trim() ? { projectPath: projectPath.trim() } : {}),
         ...(Object.keys(config).length > 0 ? { config } : {}),
@@ -323,6 +334,7 @@ export function AgentFormDialog({
         name: name.trim(),
         machineId,
         type,
+        runtime,
         schedule: type === 'cron' && schedule.trim() ? schedule.trim() : null,
         ...(Object.keys(config).length > 0 ? { config } : {}),
       } satisfies AgentFormEditData);
@@ -370,31 +382,13 @@ export function AgentFormDialog({
       <label className="text-sm font-medium" htmlFor={`${mode}-agent-machine`}>
         Machine {!isCreate && <span className="text-destructive">*</span>}
       </label>
-      <Select value={machineId} onValueChange={setMachineId} disabled={isPending}>
-        <SelectTrigger className="w-full" id={`${mode}-agent-machine`}>
-          <SelectValue placeholder="Select a machine" />
-        </SelectTrigger>
-        <SelectContent position="popper" sideOffset={4}>
-          {machines.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {isCreate ? (
-                <span className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      'inline-block w-2 h-2 rounded-full',
-                      m.status === 'online' ? 'bg-green-500' : 'bg-gray-400',
-                    )}
-                  />
-                  {m.hostname}
-                  <span className="text-muted-foreground text-[11px]">({m.id})</span>
-                </span>
-              ) : (
-                `${m.hostname} (${m.id})`
-              )}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <RuntimeAwareMachineSelect
+        runtime={runtime}
+        value={machineId}
+        onChange={setMachineId}
+        machines={machines}
+        disabled={isPending}
+      />
     </div>
   );
 
@@ -772,54 +766,26 @@ export function AgentFormDialog({
                   </div>
 
                   <div className="space-y-1.5">
+                    {/* biome-ignore lint/a11y/noLabelWithoutControl: RuntimeSelector uses a radiogroup, not a single input */}
+                    <label className="text-sm font-medium">Runtime</label>
+                    <RuntimeSelector
+                      value={runtime}
+                      onChange={setRuntime}
+                      variant="radio"
+                      disabled={isPending}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium" htmlFor="create-agent-model">
                       Model
                     </label>
-                    <Select
-                      value={MODEL_OPTIONS.some((m) => m.value === model) ? model : '__custom__'}
-                      onValueChange={(v) => {
-                        if (v !== '__custom__') setModel(v);
-                      }}
+                    <RuntimeAwareModelSelect
+                      runtime={runtime}
+                      value={model}
+                      onChange={setModel}
                       disabled={isPending}
-                    >
-                      <SelectTrigger className="w-full" id="create-agent-model">
-                        <SelectValue>
-                          {MODEL_OPTIONS.find((m) => m.value === model)?.label ?? model}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent position="popper" sideOffset={4}>
-                        {MODEL_OPTIONS.map((m) => (
-                          <SelectItem key={m.value} value={m.value}>
-                            <span className="font-medium">{m.label}</span>
-                            <span
-                              className={cn(
-                                'ml-2 text-[10px]',
-                                m.tier === 'flagship'
-                                  ? 'text-amber-600 dark:text-amber-400'
-                                  : m.tier === 'fast'
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-blue-600 dark:text-blue-400',
-                              )}
-                            >
-                              {m.tier}
-                            </span>
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="__custom__">
-                          <span className="text-muted-foreground">Custom model ID...</span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {!MODEL_OPTIONS.some((m) => m.value === model) && (
-                      <Input
-                        aria-label="Custom model ID"
-                        placeholder="Enter custom model ID"
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                        disabled={isPending}
-                        className="mt-1.5"
-                      />
-                    )}
+                    />
                   </div>
 
                   {typeSelect}
@@ -880,19 +846,32 @@ export function AgentFormDialog({
           {typeSelect}
 
           <div className="space-y-1.5">
+            {/* biome-ignore lint/a11y/noLabelWithoutControl: RuntimeSelector uses a radiogroup, not a single input */}
+            <label className="text-sm font-medium">Runtime</label>
+            {agent?.runtime && !isManagedRuntime(agent.runtime) ? (
+              <div className="text-sm text-neutral-500">
+                Runtime: {agent.runtime} (unmanaged -- not editable)
+              </div>
+            ) : (
+              <RuntimeSelector
+                value={runtime}
+                onChange={setRuntime}
+                variant="radio"
+                disabled={isPending}
+              />
+            )}
+          </div>
+
+          <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="edit-agent-model">
               Model
             </label>
-            <Input
-              id="edit-agent-model"
-              placeholder="claude-sonnet-4-6"
+            <RuntimeAwareModelSelect
+              runtime={runtime}
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={setModel}
               disabled={isPending}
             />
-            <p className="text-[11px] text-muted-foreground">
-              The Claude model to use for this agent.
-            </p>
           </div>
 
           <div className="space-y-1.5">

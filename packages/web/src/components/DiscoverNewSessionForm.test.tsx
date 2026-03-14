@@ -27,6 +27,8 @@ function defaultProps(overrides: Partial<Parameters<typeof DiscoverNewSessionFor
     onPromptChange: vi.fn(),
     creating: false,
     onSubmit: vi.fn(),
+    runtime: 'claude-code' as const,
+    onRuntimeChange: vi.fn(),
     ...overrides,
   };
 }

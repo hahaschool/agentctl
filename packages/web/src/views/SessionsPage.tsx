@@ -168,6 +168,14 @@ const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
           <span className="font-medium text-foreground/70">{row.machineId}</span>
           <span className="text-muted-foreground/50">|</span>
           <span>{model}</span>
+          {row.runtime && (
+            <>
+              <span className="text-muted-foreground/50">|</span>
+              <span className="text-xs text-muted-foreground">
+                {row.runtime === 'codex' ? 'Codex' : 'Claude'}
+              </span>
+            </>
+          )}
           {row.secondaryLabel && (
             <>
               <span className="text-muted-foreground/50">|</span>
