@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_WORKER_PORT, type DiscoveredSession as DiscoveredSessionFromWorker } from '@agentctl/shared';
 import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -32,15 +32,6 @@ type RcSessionStatus = (typeof RC_SESSION_STATUSES)[number];
 function machineAddress(machine: { tailscaleIp?: string | null; hostname: string }): string {
   return machine.tailscaleIp ?? machine.hostname;
 }
-
-type DiscoveredSessionFromWorker = {
-  sessionId: string;
-  projectPath: string;
-  summary: string;
-  messageCount: number;
-  lastActivity: string;
-  branch: string | null;
-};
 
 type WorkerDiscoverResponse = {
   sessions: DiscoveredSessionFromWorker[];
@@ -455,12 +446,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       prompt?: string;
       resumeSessionId?: string;
       accountId?: string;
+      runtime?: string;
     };
   }>(
     '/',
     { schema: { tags: ['sessions'], summary: 'Create a new session' } },
     async (request, reply) => {
-      const { agentId, machineId, projectPath, model, prompt, resumeSessionId, accountId } =
+      const { agentId, machineId, projectPath, model, prompt, resumeSessionId, accountId, runtime } =
         request.body;
 
       if (!agentId || typeof agentId !== 'string') {
@@ -590,6 +582,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             resumeSessionId: resumeSessionId ?? null,
             accountCredential,
             accountProvider,
+            ...(runtime ? { runtime } : {}),
           }),
           signal: AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
         });

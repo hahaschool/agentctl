@@ -155,6 +155,7 @@ export {
   isOverflowStrategy,
   OVERFLOW_STRATEGIES,
 } from './context-bridge.js';
+export type { DiscoveredSession } from './discovered-session.js';
 export type {
   PreflightCheckName,
   PreflightCheckResult,
