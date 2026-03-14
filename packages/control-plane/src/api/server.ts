@@ -71,6 +71,7 @@ import { healthRoutes } from './routes/health.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { mcpTemplateRoutes } from './routes/mcp-templates.js';
+import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { mcpToolsRoutes } from './routes/mcp-tools.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
@@ -360,6 +361,13 @@ export async function createServer({
   await app.register(mcpTemplateRoutes, {
     prefix: '/api/mcp',
     registry,
+    dbRegistry,
+    workerPort,
+  });
+
+  // Skill discovery proxy
+  await app.register(skillDiscoverRoutes, {
+    prefix: '/api/skills',
     dbRegistry,
     workerPort,
   });
