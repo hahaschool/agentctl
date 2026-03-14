@@ -1,4 +1,4 @@
-import { MANAGED_RUNTIMES, isManagedRuntime } from '@agentctl/shared';
+import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';

@@ -1,4 +1,4 @@
-import { type McpServerTemplate, MANAGED_RUNTIMES, isManagedRuntime } from '@agentctl/shared';
+import { isManagedRuntime, MANAGED_RUNTIMES, type McpServerTemplate } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
