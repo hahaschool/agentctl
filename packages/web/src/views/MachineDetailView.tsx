@@ -18,6 +18,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
+import { api } from '@/lib/api';
 import { formatDate, formatNumber, isStaleHeartbeat } from '@/lib/format-utils';
 import { agentsQuery, machineMemoryFactsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,12 @@ export function MachineDetailView(): React.JSX.Element {
   const agents = useQuery(agentsQuery());
   const sessions = useQuery(sessionsQuery({ machineId }));
   const machineMemory = useQuery(machineMemoryFactsQuery(machineId ?? ''));
+  const driftQuery = useQuery({
+    queryKey: ['runtime-config', 'drift', machineId],
+    queryFn: () => api.getRuntimeConfigDrift(machineId),
+    staleTime: 30_000,
+    enabled: !!machineId,
+  });
 
   useHotkeys(
     useMemo(
@@ -43,9 +50,10 @@ export function MachineDetailView(): React.JSX.Element {
           void agents.refetch();
           void sessions.refetch();
           void machineMemory.refetch();
+          void driftQuery.refetch();
         },
       }),
-      [machines, agents, sessions, machineMemory],
+      [machines, agents, sessions, machineMemory, driftQuery],
     ),
   );
 
@@ -121,7 +129,11 @@ export function MachineDetailView(): React.JSX.Element {
   }
 
   const anyFetching =
-    machines.isFetching || agents.isFetching || sessions.isFetching || machineMemory.isFetching;
+    machines.isFetching ||
+    agents.isFetching ||
+    sessions.isFetching ||
+    machineMemory.isFetching ||
+    driftQuery.isFetching;
   const heartbeatStale = machine.lastHeartbeat ? isStaleHeartbeat(machine.lastHeartbeat) : false;
 
   return (
@@ -190,6 +202,7 @@ export function MachineDetailView(): React.JSX.Element {
               void machines.refetch();
               void agents.refetch();
               void sessions.refetch();
+              void driftQuery.refetch();
             }}
             isFetching={anyFetching && !machines.isLoading}
           />
@@ -259,6 +272,50 @@ export function MachineDetailView(): React.JSX.Element {
           </CardContent>
         </Card>
       )}
+
+      {/* Available Runtimes */}
+      <Card className="mb-4">
+        <CardHeader className="pb-0">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span>Available Runtimes</span>
+            {driftQuery.isLoading && (
+              <span className="text-[10px] font-normal text-muted-foreground animate-pulse">
+                Loading...
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {driftQuery.error ? (
+            <p className="text-xs text-muted-foreground">Failed to load runtime info.</p>
+          ) : driftQuery.data?.items && driftQuery.data.items.length > 0 ? (
+            <div className="space-y-2">
+              {driftQuery.data.items.map((entry) => (
+                <div key={entry.runtime} className="flex items-center justify-between">
+                  <span className="text-sm">
+                    {entry.runtime === 'claude-code' ? 'Claude Code' : 'Codex'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {entry.isInstalled ? (
+                      <span className="text-xs text-green-400">Installed</span>
+                    ) : (
+                      <span className="text-xs text-red-400">Not installed</span>
+                    )}
+                    {entry.isInstalled &&
+                      (entry.isAuthenticated ? (
+                        <span className="text-xs text-green-400">Authenticated</span>
+                      ) : (
+                        <span className="text-xs text-yellow-400">Not authenticated</span>
+                      ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No runtime data available.</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Memory stats card */}
       <Card className="mb-4">
