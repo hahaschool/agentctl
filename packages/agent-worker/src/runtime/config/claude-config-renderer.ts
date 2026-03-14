@@ -1,4 +1,4 @@
-import type { ManagedRuntimeConfig } from '@agentctl/shared';
+import type { AgentRuntimeConfigOverrides, ManagedRuntimeConfig } from '@agentctl/shared';
 
 import {
   type RenderedRuntimeConfig,
@@ -8,7 +8,11 @@ import {
 } from './shared-rendering.js';
 
 export class ClaudeConfigRenderer {
-  render(config: ManagedRuntimeConfig): RenderedRuntimeConfig {
+  render(
+    baseConfig: ManagedRuntimeConfig,
+    overrides?: AgentRuntimeConfigOverrides,
+  ): RenderedRuntimeConfig {
+    const config = applyClaudeOverrides(baseConfig, overrides);
     const settings = {
       managedBy: 'agentctl',
       configVersion: config.version,
@@ -54,4 +58,16 @@ export class ClaudeConfigRenderer {
       ],
     };
   }
+}
+
+function applyClaudeOverrides(
+  config: ManagedRuntimeConfig,
+  overrides?: AgentRuntimeConfigOverrides,
+): ManagedRuntimeConfig {
+  if (!overrides) return config;
+  return {
+    ...config,
+    ...(overrides.sandbox ? { sandbox: overrides.sandbox } : {}),
+    ...(overrides.approvalPolicy ? { approvalPolicy: overrides.approvalPolicy } : {}),
+  };
 }
