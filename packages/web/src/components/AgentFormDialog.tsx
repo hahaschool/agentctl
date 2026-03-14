@@ -34,10 +34,10 @@ import { AGENT_TYPES, DEFAULT_MODEL } from '../lib/model-options';
 import { memoryScopesQuery } from '../lib/queries';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { McpServerPicker } from './McpServerPicker';
-import { SkillPicker } from './SkillPicker';
 import { RuntimeAwareMachineSelect } from './RuntimeAwareMachineSelect';
 import { RuntimeAwareModelSelect } from './RuntimeAwareModelSelect';
 import { RuntimeSelector } from './RuntimeSelector';
+import { SkillPicker } from './SkillPicker';
 
 // ---------------------------------------------------------------------------
 // Memory budget defaults

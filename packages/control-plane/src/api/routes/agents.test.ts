@@ -755,9 +755,7 @@ describe('Agent routes — with dbRegistry', () => {
 
       // First getMachine call returns offline machine, second (after heartbeat) returns online
       vi.mocked(mockDbRegistry.getMachine)
-        .mockResolvedValueOnce(
-          makeMachine({ id: 'machine-1', status: 'offline' }) as never,
-        )
+        .mockResolvedValueOnce(makeMachine({ id: 'machine-1', status: 'offline' }) as never)
         .mockResolvedValueOnce(
           makeMachine({ id: 'machine-1', status: 'online', tailscaleIp: '100.64.0.1' }) as never,
         );
@@ -778,7 +776,9 @@ describe('Agent routes — with dbRegistry', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait briefly for the fire-and-forget sync to complete
-      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
 
       // Verify discovery fetch calls were made (sync was triggered)
       const fetchMock = vi.mocked(globalThis.fetch);
@@ -809,7 +809,9 @@ describe('Agent routes — with dbRegistry', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
 
       // No discovery calls should have been made
       expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();

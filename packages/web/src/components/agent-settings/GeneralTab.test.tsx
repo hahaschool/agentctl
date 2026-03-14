@@ -81,9 +81,7 @@ vi.mock('@/components/ui/input', () => ({
 }));
 
 vi.mock('@/components/ui/label', () => ({
-  Label: ({ children, ...props }: { children: React.ReactNode; htmlFor?: string }) => (
-    <label {...props}>{children}</label>
-  ),
+  Label: ({ children }: { children: React.ReactNode; htmlFor?: string }) => <span>{children}</span>,
 }));
 
 vi.mock('@/components/ui/select', () => ({
@@ -91,9 +89,7 @@ vi.mock('@/components/ui/select', () => ({
   SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectValue: () => <span />,
   SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children }: { children: React.ReactNode; value: string }) => (
-    <div>{children}</div>
-  ),
+  SelectItem: ({ children }: { children: React.ReactNode; value: string }) => <div>{children}</div>,
 }));
 
 // ---------------------------------------------------------------------------
@@ -193,7 +189,7 @@ describe('GeneralTab', () => {
     mockMutate.mockClear();
 
     const agent = makeAgent({ name: 'original' });
-    const { rerender } = render(<GeneralTab agent={agent} machines={MACHINES} />);
+    render(<GeneralTab agent={agent} machines={MACHINES} />);
 
     // Change name to trigger dirty state without changing runtime
     const nameInput = screen.getByDisplayValue('original');

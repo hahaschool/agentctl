@@ -294,7 +294,7 @@ describe('SkillPicker', () => {
     const allButtons = screen.getAllByRole('button');
     const refreshBtn = allButtons.find((b) => b.textContent === 'Refresh');
     expect(refreshBtn).toBeDefined();
-    fireEvent.click(refreshBtn!);
+    if (refreshBtn) fireEvent.click(refreshBtn);
 
     // Wait for sync to be called
     await vi.waitFor(() => {
