@@ -300,17 +300,56 @@ git worktree add .trees/auth-review agent/claude-1/feat/auth
 - **Audit**: All agent actions logged as structured NDJSON with SHA-256 hashes
 - **Secrets**: Never in code/config files. Use Tailscale env vars + machine-local `.env`
 
+## Development Flow (CRITICAL — Read Before Any Work)
+
+**See `.claude/rules/development-flow.md` for full rules.** Summary:
+
+```
+Agent worktree → PR → merge to main → build in dev tier → verify → version bump → promote to beta
+```
+
+**Beta is sacred.** Never rebuild beta directly from main. Always verify in dev-1 or dev-2 first.
+
+```bash
+# 1. After PRs merge to main — test in dev tier
+source .env.dev-1
+./scripts/env-up.sh dev-1
+pnpm build
+# Verify: open http://localhost:${DEV_WEB_PORT}, test features
+
+# 2. Only after dev verification — bump version + promote
+./scripts/version-bump.sh minor "Description of changes"
+git push origin main --tags
+./scripts/env-promote.sh --from dev-1
+
+# 3. Verify beta
+pm2 list && curl http://localhost:8080/health
+```
+
+### Version Bumping
+
+Every beta promotion requires a version bump:
+
+```bash
+./scripts/version-bump.sh patch "Bug fixes"      # 0.2.1 → 0.2.2
+./scripts/version-bump.sh minor "New features"    # 0.2.2 → 0.3.0
+./scripts/version-bump.sh major "Breaking change" # 0.3.0 → 1.0.0
+```
+
 ## Common Tasks
 
 ```bash
 # Bootstrap a new machine into the fleet
 ./scripts/setup-machine.sh
 
-# Start the control plane (dev)
-cd packages/control-plane && pnpm dev
+# Start the control plane (dev tier)
+source .env.dev-1 && cd packages/control-plane && pnpm dev
 
-# Start an agent worker (dev)
-cd packages/agent-worker && pnpm dev
+# Start an agent worker (dev tier)
+source .env.dev-1 && cd packages/agent-worker && pnpm dev
+
+# Start web frontend (dev tier)
+source .env.dev-1 && cd packages/web && pnpm dev
 
 # Import existing claude-mem data
 pnpm tsx scripts/import-claude-mem.ts ~/.claude-mem/claude-mem.db
