@@ -16,6 +16,9 @@ const DEFAULT_ITERATION_DELAY_MS = 1_000;
 /** Maximum allowed delay between loop iterations (milliseconds). */
 const MAX_ITERATION_DELAY_MS = 86_400_000;
 
+/** Maximum allowed loop iterations in a single run. */
+const MAX_LOOP_ITERATIONS = 10_000;
+
 /** Number of consecutive identical results before dead-loop detection triggers. */
 const DEAD_LOOP_THRESHOLD = 3;
 
@@ -32,6 +35,7 @@ const COST_WARNING_THRESHOLD = 0.8;
  *
  * Safety mechanisms:
  * - At least one limit required (maxIterations, costLimitUsd, maxDurationMs).
+ * - Hard cap: maxIterations cannot exceed 10,000.
  * - Minimum iteration delay of 500ms.
  * - Dead-loop detection: stops after 3 consecutive identical results.
  * - Cost tracking with warning at 80% of limit.
@@ -380,6 +384,23 @@ export class LoopController extends EventEmitter {
         'LOOP_NO_LIMITS',
         'At least one limit is required: maxIterations, costLimitUsd, or maxDurationMs',
         { config },
+      );
+    }
+
+    if (
+      config.maxIterations != null &&
+      (!Number.isInteger(config.maxIterations) ||
+        config.maxIterations < 1 ||
+        config.maxIterations > MAX_LOOP_ITERATIONS)
+    ) {
+      throw new AgentError(
+        'INVALID_INPUT',
+        `maxIterations must be an integer between 1 and ${MAX_LOOP_ITERATIONS}`,
+        {
+          maxIterations: config.maxIterations,
+          minimum: 1,
+          maximum: MAX_LOOP_ITERATIONS,
+        },
       );
     }
 
