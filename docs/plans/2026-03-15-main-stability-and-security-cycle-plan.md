@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, #175, #176, #177, #179, and #180 fixed the reproduced control-plane regressions, strengthened Discover sanitization, hardened the worker file/discovery/worktree surfaces, added an explicit framework limiter on `agents.ts`, and moved MCP discover file reads behind shared safe-path helpers. The remaining backlog is the older `path-security.ts` / `git.ts` findings, legacy missing-rate-limit alerts, loop-controller resource exhaustion, dependency/base-image triage, and the final roadmap sync.
+> Status note (2026-03-15): the current stabilization/security wave is already on `main` through PR #185. Earlier fixes (#167, #169-#181) restored the reproduced control-plane regressions, Discover sanitization, and discovery/worktree hardening; the follow-up batch then landed `path-security.ts` wrappers (#182), `git.ts` hardening (#183), control-plane memory-route limiters (#184), and the loop-controller hard cap (#185). The remaining backlog is residual `path-security.ts` cleanup, discovery / cli-session-manager findings, and dependency/base-image triage. GitHub's default-branch alert list may briefly lag those landed fixes until the next `main` security scan refreshes the baseline.
 
 ---
 
@@ -137,12 +137,14 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
 
-Current grouping after PR #180:
+Current grouping after PR #185:
 - Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are delivered on `main` via PR #176.
 - Worktree-manager path alerts are delivered on `main` via PR #177.
 - Agent-start rate limiting is delivered on `main` via PR #179.
 - MCP discover file-read hardening is delivered on `main` via PR #180.
-- Older `path-security.ts` / `git.ts` findings, legacy missing-rate-limit alerts, loop-controller resource exhaustion, BusyBox CVEs, and the `pm2` advisory remain after this PR batch.
+- The follow-up hardening batch is delivered on `main` via PRs #182-#185 (`path-security.ts`, `git.ts`, control-plane memory routes, and `loop-controller.ts`).
+- The expected remaining backlog is residual `path-security.ts` wrapper cleanup, the still-open `skill-discovery.ts` / `cli-session-manager.ts` path findings, BusyBox CVEs, and the `pm2` advisory.
+- GitHub's open-alert listing may temporarily still show already-landed `git.ts`, memory-route, or loop-controller findings until the next default-branch security scan finishes.
 
 **Step 2: Update roadmap status to match this cycle**
 

@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-15 (stability/security cycle PRs #167-#180 landed on `main`; remaining alert backlog is legacy path/rate-limit plus dependency/base-image triage)
+> Last updated: 2026-03-15 (stability/security cycle through PR #185 is on `main`; remaining alert triage is residual path-security/discovery/cli-session-manager work plus dependency/base-image advisories)
 
 ## Current State
 
@@ -1113,7 +1113,7 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 ### 16.1 Agent Run Quality — P0
 
 - Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(in progress)*
-- Status note: `main` was re-stabilized through PRs #167-#180. Discovery/worktree hardening plus the `agents.ts` framework limiter and `mcp-discover.ts` safe file reads are now on `main`; the remaining backlog is the older `path-security.ts` / `git.ts` path findings, legacy missing-rate-limit findings, loop-controller resource exhaustion, and dependency/base-image triage.
+- Status note: `main` was re-stabilized through PRs #167-#181. The active follow-up batch is PRs #182-#185: `path-security.ts` wrappers, `git.ts` route hardening, control-plane memory-route framework limiting, and the loop-controller fallback hard cap. After that batch, the remaining backlog should be the older discovery / cli-session-manager path findings plus dependency/base-image triage.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1132,6 +1132,10 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Worktree manager path writes now go through guarded mkdir/chmod helpers *(PR #177)*
 - [x] Agent start route now enforces an explicit Fastify framework limiter in addition to the custom guard *(PR #179)*
 - [x] MCP discover config reads now go through shared safe file-read guards *(PR #180)*
+- [ ] Tighten `path-security.ts` wrappers for the remaining CodeQL path/file alerts *(PR #182)*
+- [ ] Harden the worker git status route path handling + framework rate limiting *(PR #183)*
+- [ ] Add explicit Fastify limiters to control-plane memory routes while preserving custom 429 behavior *(PR #184)*
+- [ ] Enforce the loop-controller fallback 10k iteration hard cap even without an explicit `maxIterations` limit *(PR #185)*
 
 ### 16.2 Dev Environment Infrastructure — P0
 
@@ -1298,6 +1302,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
 | **—** | ~~Security: Discovery + Worktree Path Hardening~~ | — | ✅ Delivered — discovery path reads (PR #176) + worktree-manager path writes (PR #177) |
 | **—** | ~~Security: Agent Start + MCP Discover Hardening~~ | — | ✅ Delivered — explicit agent-start framework rate limiting (PR #179) + safe MCP discover file reads (PR #180) |
+| **—** | ~~Security: Path + Git + Memory + Loop Hardening~~ | — | ✅ Delivered — `path-security.ts` wrappers (PR #182), `git.ts` hardening (PR #183), control-plane memory-route limiters (PR #184), and `loop-controller.ts` hard cap (PR #185) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Types + Override Resolution~~ | 14.1 | ✅ Delivered (PR #146) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Worker Discovery~~ | 14.2 | ✅ Delivered (PR #147) |
 | **P0** | ~~MCP & Skill Auto-Discovery: CP Proxies & Sync~~ | 14.3 | ✅ Delivered (PR #149) |
@@ -1306,7 +1311,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | In progress: stability/security fixes through PR #180 are on `main`; remaining alert work is legacy path/rate-limit findings plus dependency/base-image sweep |
+| **P0** | Agent Run Quality | 16.1 | In progress: the current stability/security batch is on `main` through PR #185; remaining alert triage is residual `path-security.ts` cleanup, discovery/cli-session-manager findings, and dependency/base-image refreshes |
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
 | **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -1441,7 +1446,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
 | [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Delivered (PR #163) | 16.4 |
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#180 landed; remaining alert triage continues here | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#185 are on `main`; remaining alert triage continues here | 16.1-16.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
