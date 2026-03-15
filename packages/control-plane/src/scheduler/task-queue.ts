@@ -20,6 +20,8 @@ export type AgentTaskJobData = {
   iteration?: number;
   /** MCP server definitions to include in the dispatch payload for the worker. */
   mcpServers?: Record<string, McpServerConfig> | null;
+  /** Run ID from the first attempt. Set by the task worker on the initial attempt so retries can link back. */
+  __firstRunId?: string | null;
 };
 
 export type AgentTaskJobName = 'agent:start' | 'agent:heartbeat' | 'agent:cron' | 'agent:signal';

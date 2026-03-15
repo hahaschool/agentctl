@@ -84,6 +84,8 @@ describe('ExecutionSummary', () => {
       provider: null,
       sessionId: null,
       errorMessage: null,
+      retryOf: null,
+      retryIndex: null,
       resultSummary: {
         status: 'success',
         workCompleted: 'Did the thing',

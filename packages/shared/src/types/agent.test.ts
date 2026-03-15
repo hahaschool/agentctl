@@ -354,6 +354,8 @@ describe('AgentRun', () => {
       sessionId: 'sess-abc',
       errorMessage: null,
       resultSummary: null,
+      retryOf: null,
+      retryIndex: null,
     };
 
     expect(run.id).toBe('run-001');
@@ -383,6 +385,8 @@ describe('AgentRun', () => {
       sessionId: 'sess-def',
       errorMessage: null,
       resultSummary: 'All tests passed',
+      retryOf: null,
+      retryIndex: null,
     };
 
     expect(run.finishedAt).toBeInstanceOf(Date);
@@ -408,6 +412,8 @@ describe('AgentRun', () => {
       sessionId: null,
       errorMessage: 'Agent crashed: out of memory',
       resultSummary: null,
+      retryOf: null,
+      retryIndex: null,
     };
 
     expect(run.status).toBe('failure');

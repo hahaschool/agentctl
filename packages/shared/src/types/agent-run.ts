@@ -2,7 +2,7 @@ import type { ExecutionSummary } from './execution-summary.js';
 
 export type RunTrigger = 'schedule' | 'manual' | 'signal' | 'adhoc' | 'heartbeat';
 
-export type RunStatus = 'running' | 'success' | 'failure' | 'timeout' | 'cancelled';
+export type RunStatus = 'running' | 'success' | 'failure' | 'timeout' | 'cancelled' | 'empty';
 
 export type AgentRun = {
   id: string;
@@ -19,4 +19,8 @@ export type AgentRun = {
   sessionId: string | null;
   errorMessage: string | null;
   resultSummary: ExecutionSummary | string | null;
+  /** ID of the original run this is a retry of (null/undefined for first attempts). */
+  retryOf?: string | null;
+  /** 1-based retry attempt number (null/undefined for first attempts). */
+  retryIndex?: number | null;
 };

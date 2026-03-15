@@ -75,6 +75,10 @@ export const agentRuns = pgTable(
     loopIteration: integer('loop_iteration'),
     /** Links sub-runs to their parent loop run (null for top-level runs). */
     parentRunId: text('parent_run_id'),
+    /** ID of the original run this is a retry of (null for first attempts). */
+    retryOf: uuid('retry_of'),
+    /** 1-based retry attempt number (null for first attempts). */
+    retryIndex: integer('retry_index'),
   },
   (table) => [
     index('idx_agent_runs_agent_id_status').on(table.agentId, table.status),

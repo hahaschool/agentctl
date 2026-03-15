@@ -145,6 +145,11 @@ export function createTaskWorker({
         mcpServers: jobMcpServers,
       } = job.data;
 
+      // Track retry state across BullMQ attempts.
+      // attemptsMade is 0 on the first attempt and increments on each retry.
+      const isRetry = job.attemptsMade > 0;
+      const firstRunId: string | null = job.data.__firstRunId ?? null;
+
       const jobLogger = logger.child({
         jobId: job.id,
         jobName: job.name,
@@ -153,9 +158,14 @@ export function createTaskWorker({
         trigger,
         sessionMode: sessionMode ?? null,
         iteration: iteration ?? null,
+        attemptsMade: job.attemptsMade,
       });
 
-      jobLogger.info('Processing agent task job');
+      jobLogger.info(
+        isRetry
+          ? `Processing agent task job (retry attempt ${job.attemptsMade})`
+          : 'Processing agent task job',
+      );
 
       if (job.name === 'agent:signal') {
         jobLogger.info(
@@ -339,9 +349,26 @@ export function createTaskWorker({
           model,
           provider: null,
           sessionId: effectiveResumeSession,
+          retryOf: isRetry ? firstRunId : null,
+          retryIndex: isRetry ? job.attemptsMade : null,
         });
 
-        jobLogger.info({ runId }, 'Agent run record created');
+        // Store the first run ID so subsequent retries can reference it.
+        if (!isRetry) {
+          await job.updateData({
+            ...job.data,
+            __firstRunId: runId,
+          });
+        }
+
+        jobLogger.info(
+          {
+            runId,
+            retryOf: isRetry ? firstRunId : null,
+            retryIndex: isRetry ? job.attemptsMade : null,
+          },
+          'Agent run record created',
+        );
 
         // -------------------------------------------------------------------
         // 3. Resolve effective prompt: explicit prompt > agent config defaultPrompt

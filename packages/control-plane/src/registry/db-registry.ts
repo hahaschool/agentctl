@@ -29,6 +29,10 @@ type CreateRunData = {
   model?: string | null;
   provider?: string | null;
   sessionId?: string | null;
+  /** ID of the original run this is a retry of (null for first attempts). */
+  retryOf?: string | null;
+  /** 1-based retry attempt number (null for first attempts). */
+  retryIndex?: number | null;
 };
 
 type CompleteRunData = {
@@ -363,6 +367,8 @@ export class DbAgentRegistry {
         model: data.model ?? null,
         provider: data.provider ?? null,
         sessionId: data.sessionId ?? null,
+        retryOf: data.retryOf ?? null,
+        retryIndex: data.retryIndex ?? null,
       })
       .returning({ id: agentRuns.id });
 
@@ -891,6 +897,8 @@ export class DbAgentRegistry {
       sessionId: row.sessionId,
       errorMessage: row.errorMessage,
       resultSummary: row.resultSummary ?? null,
+      retryOf: row.retryOf ?? null,
+      retryIndex: row.retryIndex ?? null,
     };
   }
 }
