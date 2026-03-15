@@ -118,6 +118,27 @@ describe('DiscoverSessionRow', () => {
     expect(summaryTooltip).toBeDefined();
   });
 
+  it('removes hostile nested tag payload content from rendered summary and tooltip', () => {
+    render(
+      <DiscoverSessionRow
+        {...defaultProps({
+          session: makeSession({
+            summary: 'Deploy <div><script>xsspayload</script><span>pipeline</span></div>',
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Deploy pipeline')).toBeDefined();
+    expect(screen.queryByText(/xsspayload/)).toBeNull();
+
+    const tooltips = screen.getAllByTestId('simple-tooltip');
+    const summaryTooltip = tooltips.find(
+      (t) => t.getAttribute('data-tooltip-content') === 'Deploy pipeline',
+    );
+    expect(summaryTooltip).toBeDefined();
+  });
+
   it('renders message count', () => {
     render(<DiscoverSessionRow {...defaultProps()} />);
     expect(screen.getByText('42 msgs')).toBeDefined();
