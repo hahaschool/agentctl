@@ -4,6 +4,11 @@ import { join } from 'node:path';
 
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 const CLAUDE_MEM_DB_PATH = join(homedir(), '.claude-mem', 'claude-mem.db');
 
@@ -19,6 +24,14 @@ function openDb(): Database.Database | null {
 }
 
 export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
+  const enforceClaudeMemRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('CLAUDE_MEM_RATE_LIMIT_MAX', CLAUDE_MEM_RATE_LIMIT.max),
+      readRateLimitEnv('CLAUDE_MEM_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many requests',
+  );
+
   // ---------------------------------------------------------------------------
   // Search observations by text query
   // ---------------------------------------------------------------------------
@@ -29,7 +42,7 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/search',
     {
       schema: { tags: ['memory'], summary: 'Search claude-mem observations' },
-      config: { rateLimit: CLAUDE_MEM_RATE_LIMIT },
+      preHandler: enforceClaudeMemRateLimit,
     },
     async (request, reply) => {
       const { q, project, type, limit } = request.query;
@@ -86,7 +99,7 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/observations/:id',
     {
       schema: { tags: ['memory'], summary: 'Get observation by ID' },
-      config: { rateLimit: CLAUDE_MEM_RATE_LIMIT },
+      preHandler: enforceClaudeMemRateLimit,
     },
     async (request, reply) => {
       const { id } = request.params;
@@ -119,7 +132,7 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/timeline',
     {
       schema: { tags: ['memory'], summary: 'Get observation timeline for a session' },
-      config: { rateLimit: CLAUDE_MEM_RATE_LIMIT },
+      preHandler: enforceClaudeMemRateLimit,
     },
     async (request, reply) => {
       const { sessionId, limit } = request.query;

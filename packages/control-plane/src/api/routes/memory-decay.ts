@@ -8,6 +8,11 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { MemoryDecayOptions } from '../../memory/memory-decay.js';
 import { MemoryDecay } from '../../memory/memory-decay.js';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 export type MemoryDecayRoutesOptions = Pick<MemoryDecayOptions, 'pool' | 'logger'>;
 
@@ -22,6 +27,13 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
   opts,
 ) => {
   const decay = new MemoryDecay({ pool: opts.pool, logger: opts.logger });
+  const enforceMemoryDecayRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('MEMORY_DECAY_RATE_LIMIT_MAX', MEMORY_DECAY_RATE_LIMIT.max),
+      readRateLimitEnv('MEMORY_DECAY_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many requests',
+  );
 
   app.post(
     '/run',
@@ -30,7 +42,7 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Run Ebbinghaus memory decay cycle',
       },
-      config: { rateLimit: MEMORY_DECAY_RATE_LIMIT },
+      preHandler: enforceMemoryDecayRateLimit,
     },
     async () => {
       const result = await decay.runDecay();
@@ -45,7 +57,7 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Get memory strength distribution statistics',
       },
-      config: { rateLimit: MEMORY_DECAY_RATE_LIMIT },
+      preHandler: enforceMemoryDecayRateLimit,
     },
     async () => {
       const stats = await decay.getDecayStats();
