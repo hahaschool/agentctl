@@ -11,7 +11,7 @@ import {
   readFileSync,
   readSync,
   statSync,
-  writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
@@ -130,7 +130,23 @@ export function safeWriteFileSync(userPath: string, allowedBase: string, data: s
   if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
-  writeFileSync(safe, data);
+
+  // Open the final path without following symlinks so a validated path cannot
+  // be redirected outside the allowed base between the check and the write.
+  const fd = openSync(
+    safe,
+    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
+    0o600,
+  );
+  try {
+    const buffer = Buffer.from(data, 'utf-8');
+    let offset = 0;
+    while (offset < buffer.length) {
+      offset += writeSync(fd, buffer, offset, buffer.length - offset);
+    }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
