@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import fastifyRateLimit from '@fastify/rate-limit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -301,5 +303,20 @@ describe('claude-mem routes — /api/claude-mem', () => {
       });
       expect(mockClose).toHaveBeenCalled();
     });
+  });
+});
+
+describe('claudeMemRoutes source shape', () => {
+  it('declares route-local rateLimit config on all endpoints', () => {
+    const source = readFileSync(new URL('./claude-mem.ts', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/const claudeMemRouteRateLimit = \{/);
+    expect(source).toMatch(/'\/search'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemRouteRateLimit/);
+    expect(source).toMatch(
+      /'\/observations\/:id'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemRouteRateLimit/,
+    );
+    expect(source).toMatch(
+      /'\/timeline'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemRouteRateLimit/,
+    );
   });
 });
