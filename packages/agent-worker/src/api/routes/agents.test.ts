@@ -104,6 +104,11 @@ describe('Agent CRUD routes', () => {
         });
 
         expect(limited.statusCode).toBe(429);
+        expect(limited.json()).toMatchObject({
+          statusCode: 429,
+          error: 'Too Many Requests',
+        });
+        expect(limited.body).toContain('Rate limit exceeded');
         expect(limited.body).not.toContain('Too many agent start requests. Try again later.');
       } finally {
         delete process.env.AGENT_START_RATE_LIMIT_MAX;
