@@ -58,6 +58,14 @@ for pkg in "${PACKAGES[@]}"; do
   fi
 done
 
+# Also keep web sidebar version label in sync.
+SIDEBAR_VERSION_FILE="${REPO_ROOT}/packages/web/src/components/Sidebar.tsx"
+if [[ -f "$SIDEBAR_VERSION_FILE" ]]; then
+  sed -E -i.bak "s/v[0-9]+\\.[0-9]+\\.[0-9]+/v${NEW_VERSION}/g" "$SIDEBAR_VERSION_FILE"
+  rm -f "${SIDEBAR_VERSION_FILE}.bak"
+  echo "  Updated: web/src/components/Sidebar.tsx → v${NEW_VERSION}"
+fi
+
 # ── Update CHANGELOG.md ──────────────────────────────────────────────
 CHANGELOG="${REPO_ROOT}/CHANGELOG.md"
 DATE=$(date +%Y-%m-%d)
@@ -104,7 +112,7 @@ echo "  Updated: CHANGELOG.md"
 
 # ── Git commit + tag ─────────────────────────────────────────────────
 cd "$REPO_ROOT"
-git add packages/*/package.json CHANGELOG.md
+git add packages/*/package.json packages/web/src/components/Sidebar.tsx CHANGELOG.md
 git commit -m "chore: bump version to ${NEW_VERSION}
 
 ${DESCRIPTION}"
