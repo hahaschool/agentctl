@@ -44,6 +44,7 @@ describe('agent-coord', () => {
     context = makeContext(tempDir);
     await mkdir(context.coordinationDir, { recursive: true });
     await mkdir(path.join(tempDir, '.trees', 'active-worktree'), { recursive: true });
+    const activeWorktreeRealPath = realpathSync(path.join(tempDir, '.trees', 'active-worktree'));
     gitCalls.length = 0;
     now = new Date('2026-03-15T14:00:00.000Z');
     execFile = vi.fn(async (file, args, options) => {
@@ -55,6 +56,9 @@ describe('agent-coord', () => {
         return { stdout: '.git-common\n', stderr: '' };
       }
       if (args[0] === 'branch' && args[1] === '--show-current') {
+        if (options?.cwd === activeWorktreeRealPath) {
+          return { stdout: 'agent/codex-65/fix/codeql-modeled-rate-limits\n', stderr: '' };
+        }
         return { stdout: 'agent/claude-21/feat/coordination-board\n', stderr: '' };
       }
       if (args[0] === 'worktree' && (args[1] === 'lock' || args[1] === 'unlock')) {
@@ -85,6 +89,7 @@ describe('agent-coord', () => {
 
   it('claims a worktree, stores branch metadata, and locks the worktree', async () => {
     const worktreePath = path.join(tempDir, '.trees', 'active-worktree');
+    const leasePath = path.join(worktreePath, '.agentcoord.json');
 
     const claim = await claimResource(
       {
@@ -97,7 +102,7 @@ describe('agent-coord', () => {
     );
 
     expect(claim.resourceId).toBe(`worktree:${realpathSync(worktreePath)}`);
-    expect(claim.metadata.branch).toBe('agent/claude-21/feat/coordination-board');
+    expect(claim.metadata.branch).toBe('agent/codex-65/fix/codeql-modeled-rate-limits');
     expect(gitCalls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'lock')).toBe(
       true,
     );
@@ -105,6 +110,15 @@ describe('agent-coord', () => {
     const claims = await loadClaims(context);
     expect(claims).toHaveLength(1);
     expect(claims[0]?.purpose).toBe('finish residual security branch');
+
+    const lease = JSON.parse(await readFile(leasePath, 'utf8')) as {
+      branch: string;
+      owner: string;
+      resourceId: string;
+    };
+    expect(lease.branch).toBe('agent/codex-65/fix/codeql-modeled-rate-limits');
+    expect(lease.owner).toBe('test-agent');
+    expect(lease.resourceId).toBe(`worktree:${realpathSync(worktreePath)}`);
   });
 
   it('updates heartbeat timestamps for existing claims', async () => {
@@ -131,8 +145,37 @@ describe('agent-coord', () => {
     expect(claim.heartbeatAt).toBe('2026-03-15T15:30:00.000Z');
   });
 
+  it('updates the visible lease file when heartbeating a worktree claim', async () => {
+    const worktreePath = path.join(tempDir, '.trees', 'active-worktree');
+    const leasePath = path.join(worktreePath, '.agentcoord.json');
+
+    await claimResource(
+      {
+        resourceType: 'worktree',
+        purpose: 'keepalive',
+        path: worktreePath,
+      },
+      context,
+      deps,
+    );
+
+    now = new Date('2026-03-15T15:30:00.000Z');
+    await heartbeatClaim(
+      {
+        resourceType: 'worktree',
+        path: worktreePath,
+      },
+      context,
+      deps,
+    );
+
+    const lease = JSON.parse(await readFile(leasePath, 'utf8')) as { heartbeatAt: string };
+    expect(lease.heartbeatAt).toBe('2026-03-15T15:30:00.000Z');
+  });
+
   it('releases worktree claims and unlocks the worktree', async () => {
     const worktreePath = path.join(tempDir, '.trees', 'active-worktree');
+    const leasePath = path.join(worktreePath, '.agentcoord.json');
     await claimResource(
       {
         resourceType: 'worktree',
@@ -158,6 +201,7 @@ describe('agent-coord', () => {
     expect(gitCalls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'unlock')).toBe(
       true,
     );
+    await expect(readFile(leasePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('refuses to release a claim owned by another agent unless forced', async () => {

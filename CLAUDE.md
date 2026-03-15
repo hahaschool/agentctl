@@ -151,6 +151,9 @@ git worktree add .trees/<name> -b agent/<id>/<type>/<topic>
 pnpm coord status
 pnpm coord claim --type worktree --purpose "<task>"
 
+# A claimed worktree should now contain .agentcoord.json at its root.
+# Cleanup tooling and other agents must treat that file as an active lease marker.
+
 # Subagent frontmatter (for dispatched agents):
 # isolation: worktree
 ```
@@ -249,6 +252,9 @@ Stale worktrees waste disk and create confusion:
 # Before cleanup, check and release the shared claim
 pnpm coord status
 pnpm coord release --type worktree
+
+# Confirm the local lease file is gone before deleting the directory
+test ! -f .agentcoord.json
 
 # After PR is merged, remove the worktree explicitly
 git worktree remove .trees/<name>

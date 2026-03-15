@@ -12,6 +12,7 @@ const COORDINATION_SUBDIR = path.join('agentctl', 'coordination');
 const CLAIMS_FILE = 'claims.json';
 const BOARD_FILE = 'board.ndjson';
 const LOCK_DIR = '.lock';
+const WORKTREE_LEASE_FILE = '.agentcoord.json';
 const LOCK_RETRY_DELAY_MS = 50;
 const LOCK_RETRY_ATTEMPTS = 40;
 const DEFAULT_BOARD_LIMIT = 10;
@@ -74,6 +75,17 @@ export type CoordinationDeps = {
 export type CoordinationStatus = {
   claims: ResourceClaim[];
   board: BoardEntry[];
+};
+
+type WorktreeLease = {
+  leaseVersion: 1;
+  resourceId: string;
+  owner: string;
+  purpose: string;
+  branch: string;
+  claimedAt: string;
+  heartbeatAt: string;
+  boardPath: string;
 };
 
 export type ClaimInput = {
@@ -305,12 +317,9 @@ export async function loadBoardEntries(
   }
 }
 
-async function resolveBranch(
-  context: CoordinationContext,
-  deps: CoordinationDeps,
-): Promise<string> {
+async function resolveBranch(branchCwd: string, deps: CoordinationDeps): Promise<string> {
   const result = await deps.execFile('git', ['branch', '--show-current'], {
-    cwd: context.repoRoot,
+    cwd: branchCwd,
   });
   return result.stdout.trim() || 'detached';
 }
@@ -318,6 +327,10 @@ async function resolveBranch(
 function resolveWorktreePath(context: CoordinationContext, pathArg?: string): string {
   const rawPath = pathArg ? path.resolve(context.cwd, pathArg) : context.repoRoot;
   return existsSync(rawPath) ? realpathSync(rawPath) : rawPath;
+}
+
+function resolveWorktreeLeasePath(worktreePath: string): string {
+  return path.join(worktreePath, WORKTREE_LEASE_FILE);
 }
 
 function buildResourceId(
@@ -372,6 +385,36 @@ async function unlockWorktree(
   }
 }
 
+async function writeWorktreeLease(
+  claim: ResourceClaim,
+  worktreePath: string,
+  context: CoordinationContext,
+): Promise<void> {
+  if (!existsSync(worktreePath)) {
+    return;
+  }
+
+  const lease: WorktreeLease = {
+    leaseVersion: 1,
+    resourceId: claim.resourceId,
+    owner: claim.owner,
+    purpose: claim.purpose,
+    branch: claim.metadata.branch ?? 'detached',
+    claimedAt: claim.claimedAt,
+    heartbeatAt: claim.heartbeatAt,
+    boardPath: context.boardPath,
+  };
+  await writeFile(
+    resolveWorktreeLeasePath(worktreePath),
+    `${JSON.stringify(lease, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+async function removeWorktreeLease(worktreePath: string): Promise<void> {
+  await rm(resolveWorktreeLeasePath(worktreePath), { force: true });
+}
+
 export async function claimResource(
   input: ClaimInput,
   context: CoordinationContext,
@@ -397,7 +440,9 @@ export async function claimResource(
     const metadata = {
       ...existing?.metadata,
       ...input.metadata,
-      ...(worktreePath ? { path: worktreePath, branch: await resolveBranch(context, deps) } : {}),
+      ...(worktreePath
+        ? { path: worktreePath, branch: await resolveBranch(worktreePath, deps) }
+        : {}),
     };
 
     if (worktreePath) {
@@ -417,7 +462,23 @@ export async function claimResource(
     };
     const nextClaims = claims.filter((existing) => existing.resourceId !== resourceId);
     nextClaims.push(claim);
-    await saveClaims(context, nextClaims);
+    if (worktreePath) {
+      try {
+        await writeWorktreeLease(claim, worktreePath, context);
+      } catch (error) {
+        await unlockWorktree(context, worktreePath, deps);
+        throw error;
+      }
+    }
+    try {
+      await saveClaims(context, nextClaims);
+    } catch (error) {
+      if (worktreePath) {
+        await removeWorktreeLease(worktreePath);
+        await unlockWorktree(context, worktreePath, deps);
+      }
+      throw error;
+    }
     return claim;
   });
 }
@@ -445,6 +506,9 @@ export async function heartbeatClaim(
     const nextClaims = claims.filter((claim) => claim.resourceId !== resourceId);
     nextClaims.push(nextClaim);
     await saveClaims(context, nextClaims);
+    if (nextClaim.resourceType === 'worktree' && nextClaim.metadata.path) {
+      await writeWorktreeLease(nextClaim, nextClaim.metadata.path, context);
+    }
     return nextClaim;
   });
 }
@@ -486,6 +550,9 @@ export async function releaseClaim(
     const nextClaims = claims.filter((claim) => claim.resourceId !== resourceId);
     nextClaims.push(nextClaim);
     await saveClaims(context, nextClaims);
+    if (worktreePath) {
+      await removeWorktreeLease(worktreePath);
+    }
     return nextClaim;
   });
 }
@@ -530,6 +597,9 @@ export async function pruneClaims(
         claim.resourceType === 'worktree' && claimPath != null && !existsSync(claimPath);
 
       if (claim.status === 'released' || missingWorktree) {
+        if (claim.resourceType === 'worktree' && claimPath && existsSync(claimPath)) {
+          await removeWorktreeLease(claimPath);
+        }
         removed.push(claim.resourceId);
         continue;
       }
