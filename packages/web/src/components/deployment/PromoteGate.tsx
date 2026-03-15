@@ -51,18 +51,21 @@ const EMPTY_CHECKS: DeploymentPreflightCheck[] = [
 export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): React.JSX.Element {
   // Only show dev tiers (exclude "beta" from source options)
   const devTiers = tiers.filter((t) => t.name !== 'beta');
-  const [source, setSource] = useState(devTiers[0]?.name ?? '');
+  const [source, setSource] = useState('');
   const [checks, setChecks] = useState<DeploymentPreflightCheck[]>(EMPTY_CHECKS);
+  const selectedSource = devTiers.some((tier) => tier.name === source)
+    ? source
+    : (devTiers[0]?.name ?? '');
 
   const preflightMutation = useMutation({
-    mutationFn: () => api.runPreflight(source),
+    mutationFn: (sourceTier: string) => api.runPreflight(sourceTier),
     onSuccess: (data) => {
       setChecks(data.checks);
     },
   });
 
   const promoteMutation = useMutation({
-    mutationFn: () => api.triggerPromotion(source),
+    mutationFn: (sourceTier: string) => api.triggerPromotion(sourceTier),
     onSuccess: (data) => {
       onPromoteStarted(data.id);
     },
@@ -72,17 +75,25 @@ export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): Reac
   const anyRunning = checks.some((c) => c.status === 'running') || preflightMutation.isPending;
 
   const handlePreflight = (): void => {
+    if (!selectedSource) {
+      return;
+    }
+
     // Reset checks to running state before firing
     setChecks(checks.map((c) => ({ ...c, status: 'running' as const })));
-    preflightMutation.mutate();
+    preflightMutation.mutate(selectedSource);
   };
 
   const handlePromote = (): void => {
+    if (!selectedSource) {
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Promote ${source} to beta? This will deploy the current ${source} build to the beta tier.`,
+      `Promote ${selectedSource} to beta? This will deploy the current ${selectedSource} build to the beta tier.`,
     );
     if (confirmed) {
-      promoteMutation.mutate();
+      promoteMutation.mutate(selectedSource);
     }
   };
 
@@ -96,7 +107,7 @@ export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): Reac
         </label>
         <select
           id="source-tier-select"
-          value={source}
+          value={selectedSource}
           onChange={(e) => {
             setSource(e.target.value);
             setChecks(EMPTY_CHECKS);
@@ -135,7 +146,7 @@ export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): Reac
         <button
           type="button"
           onClick={handlePreflight}
-          disabled={anyRunning || !source}
+          disabled={anyRunning || !selectedSource}
           className={cn(
             'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
             'bg-muted hover:bg-muted/80 text-foreground',
