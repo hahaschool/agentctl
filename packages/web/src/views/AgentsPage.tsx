@@ -6,6 +6,16 @@ import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
@@ -14,7 +24,6 @@ import {
   type AgentFormEditData,
 } from '../components/AgentFormDialog';
 import { ConfirmButton } from '../components/ConfirmButton';
-import { CopyableText } from '../components/CopyableText';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -38,6 +47,7 @@ import {
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
+type StartDialogAgent = { id: string; name: string };
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -54,9 +64,8 @@ export function AgentsPage(): React.JSX.Element {
   const stopAgent = useStopAgent();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-
-  const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState('');
+  const [startDialogAgent, setStartDialogAgent] = useState<StartDialogAgent | null>(null);
+  const [startPrompt, setStartPrompt] = useState('');
 
   // Extract unique project paths from recent sessions
   const recentProjectPaths = useMemo(() => {
@@ -80,11 +89,13 @@ export function AgentsPage(): React.JSX.Element {
       () => ({
         r: () => void agents.refetch(),
         Escape: () => {
-          if (promptAgentId) setPromptAgentId(null);
-          else if (showCreateDialog) setShowCreateDialog(false);
+          if (startDialogAgent) {
+            setStartDialogAgent(null);
+            setStartPrompt('');
+          } else if (showCreateDialog) setShowCreateDialog(false);
         },
       }),
-      [agents, promptAgentId, showCreateDialog],
+      [agents, showCreateDialog, startDialogAgent],
     ),
   );
 
@@ -158,33 +169,21 @@ export function AgentsPage(): React.JSX.Element {
   };
 
   // -- Start agent handler --
-  const handleStart = (agentId: string): void => {
-    if (!prompt.trim()) return;
+  const handleStart = (): void => {
+    if (!startDialogAgent || !startPrompt.trim()) return;
     startAgent.mutate(
-      { id: agentId, prompt: prompt.trim() },
+      { id: startDialogAgent.id, prompt: startPrompt.trim() },
       {
         onSuccess: () => {
           toast.success('Agent started');
-          setPrompt('');
-          setPromptAgentId(null);
+          setStartPrompt('');
+          setStartDialogAgent(null);
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : String(err));
         },
       },
     );
-  };
-
-  // -- Stop agent handler --
-  const handleStop = (agentId: string): void => {
-    stopAgent.mutate(agentId, {
-      onSuccess: () => {
-        toast.success('Agent stopped');
-      },
-      onError: (err) => {
-        toast.error(err instanceof Error ? err.message : String(err));
-      },
-    });
   };
 
   // -- Stop all running agents --
@@ -269,6 +268,65 @@ export function AgentsPage(): React.JSX.Element {
         machines={machineList}
         recentProjectPaths={recentProjectPaths}
       />
+      <Dialog
+        open={!!startDialogAgent}
+        onOpenChange={(open) => {
+          if (!open) {
+            setStartDialogAgent(null);
+            setStartPrompt('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Start Agent</DialogTitle>
+            <DialogDescription>
+              {startDialogAgent
+                ? `Start "${startDialogAgent.name}" with a one-off prompt.`
+                : 'Start an agent with a one-off prompt.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="start-agent-prompt">
+              Prompt
+            </label>
+            <Input
+              id="start-agent-prompt"
+              value={startPrompt}
+              onChange={(e) => setStartPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleStart();
+                }
+              }}
+              placeholder="Enter prompt..."
+              disabled={startAgent.isPending}
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setStartDialogAgent(null);
+                setStartPrompt('');
+              }}
+              disabled={startAgent.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleStart}
+              disabled={!startPrompt.trim() || startAgent.isPending}
+            >
+              {startAgent.isPending ? 'Starting...' : 'Start'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Filter / Sort controls */}
       <div className="flex gap-2.5 items-center mb-4 flex-wrap">
@@ -306,8 +364,10 @@ export function AgentsPage(): React.JSX.Element {
         <SimpleTooltip
           content={filteredAgents.length === 0 ? 'No agents to export' : 'Download agents as CSV'}
         >
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               const agents = filteredAgents;
               if (agents.length === 0) return;
@@ -336,10 +396,9 @@ export function AgentsPage(): React.JSX.Element {
               );
             }}
             disabled={filteredAgents.length === 0}
-            className="px-2.5 py-1.5 text-[12px] font-medium bg-muted text-muted-foreground border border-border rounded-md hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             Export CSV
-          </button>
+          </Button>
         </SimpleTooltip>
         {runningAgents.length > 0 && (
           <ConfirmButton
@@ -422,138 +481,91 @@ export function AgentsPage(): React.JSX.Element {
           )}
         >
           {filteredAgents.map((agent) => (
-            <div
+            <Card
               key={agent.id}
               className={cn(
-                'group p-4 bg-card border border-border/50 rounded-lg transition-all duration-200 hover:border-border/80 hover:shadow-sm',
+                'group gap-0 py-0 rounded-lg border-border/50 transition-all duration-200 hover:border-border/80 hover:shadow-sm',
                 agent.status === 'running' && 'border-l-2 border-l-green-500',
                 (agent.status === 'starting' || agent.status === 'stopping') && 'animate-pulse',
               )}
             >
-              {/* Card header: name + status */}
-              <div className="flex justify-between items-center mb-3">
-                <Link
-                  href={`/agents/${agent.id}`}
-                  className="font-semibold text-[15px] hover:text-primary transition-colors no-underline text-foreground"
-                >
-                  {agent.name}
-                </Link>
-                <StatusBadge status={agent.status} />
-              </div>
-
-              {/* Card details */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <Info label="ID" value={agent.id} mono copyable />
-                <Info label="Machine" value={agent.machineId} mono copyable />
-                <Info label="Type" value={agent.type} />
-                {agent.projectPath && <Info label="Project" value={agent.projectPath} mono />}
-                {agent.worktreeBranch && <Info label="Branch" value={agent.worktreeBranch} mono />}
-                {agent.schedule && <Info label="Schedule" value={agent.schedule} mono />}
-              </div>
-
-              {/* Cost + Last run */}
-              <div className="mt-2.5 pt-2.5 border-t border-border flex justify-between items-center text-xs">
-                <div className="flex gap-4">
-                  <span className="text-muted-foreground">
-                    Last: {formatCost(agent.lastCostUsd)}
-                  </span>
-                  <span className="text-muted-foreground">
-                    Total: {formatCost(agent.totalCostUsd)}
-                  </span>
+              <CardContent className="space-y-3 px-4 py-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/agents/${agent.id}`}
+                    className="min-w-0 text-[15px] font-semibold text-foreground no-underline transition-colors hover:text-primary"
+                  >
+                    <span className="block truncate">{agent.name}</span>
+                  </Link>
+                  <StatusBadge status={agent.status} />
                 </div>
-                <span className="text-muted-foreground text-[11px]">
-                  {agent.lastRunAt ? <LiveTimeAgo date={agent.lastRunAt} /> : 'never run'}
-                </span>
-              </div>
-
-              {/* Actions */}
-              <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
-                <Link
-                  href={`/agents/${agent.id}/settings`}
-                  aria-label={`Settings for agent ${agent.name}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-                >
-                  <Settings className="h-3 w-3" />
-                  Settings
-                </Link>
-                {agent.status === 'running' ? (
-                  <ConfirmButton
-                    label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
-                    confirmLabel="Stop Agent?"
-                    onConfirm={() => handleStop(agent.id)}
-                    disabled={stopAgent.isPending}
-                    className={cn(
-                      'px-3.5 py-1.5 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md text-xs font-medium',
-                      stopAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-                    )}
-                    confirmClassName="px-3.5 py-1.5 bg-red-700 text-white border border-red-600 rounded-md text-xs font-medium cursor-pointer animate-pulse"
+                <div className="space-y-2 text-xs">
+                  <CardInfoRow
+                    label="Machine"
+                    value={<span className="font-mono text-[11px]">{agent.machineId}</span>}
                   />
-                ) : promptAgentId === agent.id ? (
-                  <>
-                    <input
-                      id={`prompt-${agent.id}`}
-                      type="text"
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleStart(agent.id);
-                        if (e.key === 'Escape') {
-                          setPromptAgentId(null);
-                          setPrompt('');
-                        }
-                      }}
-                      placeholder="Enter prompt..."
-                      disabled={startAgent.isPending}
-                      className="flex-1 px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleStart(agent.id)}
-                      disabled={!prompt.trim() || startAgent.isPending}
-                      aria-label="Start agent with entered prompt"
-                      className={cn(
-                        'px-3 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium focus:ring-2 focus:ring-primary/20',
-                        !prompt.trim() || startAgent.isPending
-                          ? 'cursor-not-allowed opacity-50'
-                          : 'cursor-pointer opacity-100',
-                      )}
-                    >
-                      {startAgent.isPending ? 'Starting...' : 'Go'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPromptAgentId(null);
-                        setPrompt('');
-                      }}
-                      disabled={startAgent.isPending}
-                      aria-label="Cancel agent start"
-                      className={cn(
-                        'px-2.5 py-1.5 bg-muted text-muted-foreground border border-border rounded-md text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
-                        startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-                      )}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <button
+                  <CardInfoRow
+                    label="Project"
+                    value={
+                      agent.projectPath ? (
+                        <SimpleTooltip content={agent.projectPath}>
+                          <span className="block max-w-[190px] truncate font-mono text-[11px]">
+                            {agent.projectPath}
+                          </span>
+                        </SimpleTooltip>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )
+                    }
+                  />
+                  <CardInfoRow
+                    label="Last run"
+                    value={
+                      agent.lastRunAt ? (
+                        <span className="text-muted-foreground text-[11px]">
+                          <LiveTimeAgo date={agent.lastRunAt} />
+                        </span>
+                      ) : (
+                        'never run'
+                      )
+                    }
+                  />
+                  <CardInfoRow
+                    label="Cost"
+                    value={<span className="font-medium">{formatCost(agent.totalCostUsd)}</span>}
+                  />
+                </div>
+              </CardContent>
+              <div className="mt-0 border-t border-border px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Button
                     type="button"
+                    size="sm"
+                    variant="outline"
                     onClick={() => {
-                      setPromptAgentId(agent.id);
-                      setPrompt('');
+                      setStartDialogAgent({ id: agent.id, name: agent.name });
+                      setStartPrompt('');
                     }}
-                    disabled={startAgent.isPending}
-                    className={cn(
-                      'px-3.5 py-1.5 bg-primary text-white border-none rounded-md text-xs font-medium focus:ring-2 focus:ring-primary/20',
-                      startAgent.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-                    )}
+                    disabled={
+                      startAgent.isPending ||
+                      agent.status === 'running' ||
+                      agent.status === 'starting'
+                    }
                   >
                     Start
-                  </button>
-                )}
+                  </Button>
+                  <Button asChild size="sm" variant="ghost">
+                    <Link
+                      href={`/agents/${agent.id}/settings`}
+                      aria-label={`Settings for agent ${agent.name}`}
+                    >
+                      <Settings className="h-3 w-3" />
+                      Settings
+                    </Link>
+                  </Button>
+                </div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -565,23 +577,17 @@ export function AgentsPage(): React.JSX.Element {
 // Subcomponents
 // ---------------------------------------------------------------------------
 
-function Info({
+function CardInfoRow({
   label,
   value,
-  mono,
-  copyable,
 }: {
   label: string;
-  value: string;
-  mono?: boolean;
-  copyable?: boolean;
+  value: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div>
-      <span className="text-[10px] text-muted-foreground">{label}</span>
-      <div className={cn('mt-px text-xs break-all', mono && 'font-mono')}>
-        {copyable ? <CopyableText value={value} maxDisplay={12} /> : value}
-      </div>
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="min-w-0 text-right text-xs text-foreground">{value}</div>
     </div>
   );
 }
