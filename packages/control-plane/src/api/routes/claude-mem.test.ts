@@ -308,12 +308,18 @@ describe('claude-mem routes — /api/claude-mem', () => {
 });
 
 describe('claudeMemRoutes source shape', () => {
-  it('declares direct Fastify rate-limit preHandlers on all endpoints', () => {
+  it('declares direct Fastify rate-limit preHandlers and route config markers on all endpoints', () => {
     const source = readFileSync(new URL('./claude-mem.ts', import.meta.url), 'utf8');
 
     expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
-    expect(source).toMatch(/'\/search'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
-    expect(source).toMatch(/'\/observations\/:id'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
-    expect(source).toMatch(/'\/timeline'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
+    expect(source).toMatch(
+      /'\/search'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(claudeMemFastifyRateLimit\)/,
+    );
+    expect(source).toMatch(
+      /'\/observations\/:id'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(claudeMemFastifyRateLimit\)/,
+    );
+    expect(source).toMatch(
+      /'\/timeline'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(claudeMemFastifyRateLimit\)/,
+    );
   });
 });

@@ -32,6 +32,19 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
     'MEMORY_DECAY_RATE_LIMIT_WINDOW_MS',
     60_000,
   );
+  const memoryDecayRouteRateLimit = {
+    max: memoryDecayRateLimitMax,
+    timeWindow: memoryDecayRateLimitWindowMs,
+  } as const;
+  const memoryDecayRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many requests',
+  });
+  const memoryDecayFastifyRateLimit = {
+    ...memoryDecayRouteRateLimit,
+    errorResponseBuilder: memoryDecayRateLimitError,
+  } as const;
 
   await app.register(rateLimit, {
     global: false,
@@ -40,24 +53,18 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
       (typeof request.headers['x-forwarded-for'] === 'string'
         ? request.headers['x-forwarded-for']
         : 'unknown'),
+    errorResponseBuilder: memoryDecayRateLimitError,
   });
 
   app.post(
     '/run',
     {
+      config: { rateLimit: memoryDecayFastifyRateLimit },
       schema: {
         tags: ['memory'],
         summary: 'Run Ebbinghaus memory decay cycle',
       },
-      preHandler: app.rateLimit({
-        max: memoryDecayRateLimitMax,
-        timeWindow: memoryDecayRateLimitWindowMs,
-        errorResponseBuilder: () => ({
-          statusCode: 429,
-          error: 'RATE_LIMITED',
-          message: 'Too many requests',
-        }),
-      }),
+      preHandler: app.rateLimit(memoryDecayFastifyRateLimit),
     },
     async () => {
       const result = await decay.runDecay();
@@ -68,19 +75,12 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
   app.get(
     '/stats',
     {
+      config: { rateLimit: memoryDecayFastifyRateLimit },
       schema: {
         tags: ['memory'],
         summary: 'Get memory strength distribution statistics',
       },
-      preHandler: app.rateLimit({
-        max: memoryDecayRateLimitMax,
-        timeWindow: memoryDecayRateLimitWindowMs,
-        errorResponseBuilder: () => ({
-          statusCode: 429,
-          error: 'RATE_LIMITED',
-          message: 'Too many requests',
-        }),
-      }),
+      preHandler: app.rateLimit(memoryDecayFastifyRateLimit),
     },
     async () => {
       const stats = await decay.getDecayStats();
