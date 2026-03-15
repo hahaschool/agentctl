@@ -91,8 +91,9 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
   const agentStartRateLimitMax = Math.min(readRateLimitEnv('AGENT_START_RATE_LIMIT_MAX', 30), 30);
   const agentStartRateLimitWindowMs = readRateLimitEnv('AGENT_START_RATE_LIMIT_WINDOW_MS', 60_000);
 
-  // Register @fastify/rate-limit so the start route can use the framework's
-  // own preHandler directly, which CodeQL models more reliably than wrappers.
+  // Register @fastify/rate-limit so the start route can declare framework-
+  // native route config, which matches the CodeQL-recognized pattern used in
+  // the other expensive worker routes.
   await app.register(rateLimit, {
     global: false,
     keyGenerator: (request) =>
@@ -141,10 +142,12 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
   app.post<{ Params: AgentIdParams; Body: StartAgentBody }>(
     '/:id/start',
     {
-      preHandler: app.rateLimit({
-        max: agentStartRateLimitMax,
-        timeWindow: agentStartRateLimitWindowMs,
-      }),
+      config: {
+        rateLimit: {
+          max: agentStartRateLimitMax,
+          timeWindow: agentStartRateLimitWindowMs,
+        },
+      },
     },
     async (request, reply) => {
       const { id } = request.params;
