@@ -918,13 +918,13 @@ describe('Agent CRUD routes', () => {
 });
 
 describe('agentRoutes source shape', () => {
-  it('declares the start route with a direct Fastify rate-limit preHandler', () => {
+  it('declares the start route with Fastify route-level config.rateLimit', () => {
     const source = readFileSync(new URL('./agents.ts', import.meta.url), 'utf8');
 
     expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
     expect(source).toMatch(
-      /'\/:id\/start'[\s\S]*?preHandler:\s*app\.rateLimit\(\{\s*max:\s*agentStartRateLimitMax,\s*timeWindow:\s*agentStartRateLimitWindowMs,/,
+      /'\/:id\/start'[\s\S]*?config:\s*\{\s*rateLimit:\s*\{\s*max:\s*agentStartRateLimitMax,\s*timeWindow:\s*agentStartRateLimitWindowMs,/,
     );
-    expect(source).not.toMatch(/config:\s*\{\s*rateLimit:/);
+    expect(source).not.toMatch(/preHandler:\s*app\.rateLimit\(/);
   });
 });
