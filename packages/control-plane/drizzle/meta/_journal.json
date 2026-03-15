@@ -5,21 +5,140 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1709078400000,
+      "when": 1709337600000,
       "tag": "0000_initial_schema",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1740873600000,
+      "when": 1709424000000,
       "tag": "0001_add_schedule_config",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1741910400000,
+      "when": 1709510400000,
+      "tag": "0002_add_loop_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1709596800000,
+      "tag": "0003_add_webhook_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1709683200000,
+      "tag": "0004_add_rc_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1709769600000,
+      "tag": "0005_relax_rc_sessions_agent_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1709856000000,
+      "tag": "0006_add_rc_sessions_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1709942400000,
+      "tag": "0007_add_api_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1710028800000,
+      "tag": "0008_add_agents_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1710115200000,
+      "tag": "0009_add_runtime_management",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1710201600000,
+      "tag": "0010_add_memory_layer",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1710288000000,
+      "tag": "0011_add_execution_environment_to_managed_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1710374400000,
+      "tag": "0011_add_run_handoff_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1710460800000,
+      "tag": "0011_agent_runs_result_summary_jsonb",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1710547200000,
+      "tag": "0012_add_memory_knowledge_engineering",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1710633600000,
+      "tag": "0013_add_collaboration_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1710720000000,
+      "tag": "0014_add_task_graph_fleet",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1710806400000,
+      "tag": "0015_add_agent_bus_approval_gates",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1710892800000,
+      "tag": "0016_add_intelligence_layer",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1710979200000,
       "tag": "0017_add_promotion_history",
       "breakpoints": true
     }
