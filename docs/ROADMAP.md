@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-15 (stability/security cycle PRs #167-#181 landed on `main`; PRs #182-#185 are the active security batch in flight)
+> Last updated: 2026-03-15 (stability/security cycle through PR #185 is on `main`; remaining alert triage is residual path-security/discovery/cli-session-manager work plus dependency/base-image advisories)
 
 ## Current State
 
@@ -1302,7 +1302,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
 | **—** | ~~Security: Discovery + Worktree Path Hardening~~ | — | ✅ Delivered — discovery path reads (PR #176) + worktree-manager path writes (PR #177) |
 | **—** | ~~Security: Agent Start + MCP Discover Hardening~~ | — | ✅ Delivered — explicit agent-start framework rate limiting (PR #179) + safe MCP discover file reads (PR #180) |
-| **—** | Security: Path + Git + Memory + Loop Hardening | — | In progress: PR #182 (`path-security.ts`), PR #183 (`git.ts`), PR #184 (control-plane memory routes), PR #185 (`loop-controller.ts`) |
+| **—** | ~~Security: Path + Git + Memory + Loop Hardening~~ | — | ✅ Delivered — `path-security.ts` wrappers (PR #182), `git.ts` hardening (PR #183), control-plane memory-route limiters (PR #184), and `loop-controller.ts` hard cap (PR #185) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Types + Override Resolution~~ | 14.1 | ✅ Delivered (PR #146) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Worker Discovery~~ | 14.2 | ✅ Delivered (PR #147) |
 | **P0** | ~~MCP & Skill Auto-Discovery: CP Proxies & Sync~~ | 14.3 | ✅ Delivered (PR #149) |
@@ -1311,7 +1311,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | In progress: stability/security fixes through PR #181 are on `main`; PRs #182-#185 are the next alert batch before the remaining discovery/cli-session/dependency sweep |
+| **P0** | Agent Run Quality | 16.1 | In progress: the current stability/security batch is on `main` through PR #185; remaining alert triage is residual `path-security.ts` cleanup, discovery/cli-session-manager findings, and dependency/base-image refreshes |
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
 | **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -1446,7 +1446,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
 | [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Delivered (PR #163) | 16.4 |
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#181 landed; PRs #182-#185 plus remaining alert triage continue here | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#185 are on `main`; remaining alert triage continues here | 16.1-16.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
