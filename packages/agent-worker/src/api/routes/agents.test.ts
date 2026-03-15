@@ -80,6 +80,37 @@ describe('Agent CRUD routes', () => {
       }
     });
 
+    it('should enforce Fastify route-level rate limiting on start requests', async () => {
+      process.env.AGENT_START_RATE_LIMIT_MAX = '1000';
+      process.env.AGENT_START_RATE_LIMIT_WINDOW_MS = '60000';
+
+      await app.close();
+      app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
+
+      try {
+        for (let i = 0; i < 30; i++) {
+          const response = await app.inject({
+            method: 'POST',
+            url: '/api/agents/agent-fastify-rate/start',
+            payload: { prompt: `Start request ${i}` },
+          });
+          expect(response.statusCode).toBe(200);
+        }
+
+        const limited = await app.inject({
+          method: 'POST',
+          url: '/api/agents/agent-fastify-rate/start',
+          payload: { prompt: 'Route-level limiter request' },
+        });
+
+        expect(limited.statusCode).toBe(429);
+        expect(limited.body).not.toContain('Too many agent start requests. Try again later.');
+      } finally {
+        delete process.env.AGENT_START_RATE_LIMIT_MAX;
+        delete process.env.AGENT_START_RATE_LIMIT_WINDOW_MS;
+      }
+    });
+
     it('should start a new agent and return 200 with agentId and status', async () => {
       const response = await app.inject({
         method: 'POST',
