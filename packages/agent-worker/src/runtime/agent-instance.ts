@@ -896,13 +896,37 @@ export class AgentInstance extends EventEmitter {
     }
   }
 
+  /**
+   * Determine the appropriate completion status. When a run finishes with zero
+   * cost, zero tokens, and no meaningful output, it is classified as "empty"
+   * rather than "success" — these runs typically indicate an immediate failure
+   * (MCP load timeout, dispatch signature error, etc.) that the SDK did not
+   * surface as an explicit error.
+   */
+  private resolveCompletionStatus(): 'success' | 'empty' {
+    const hasZeroCost = this.state.costUsd === 0;
+    const hasZeroTokens = this.state.tokensIn === 0 && this.state.tokensOut === 0;
+    const hasNoResult = !this.state.resultText?.trim();
+
+    if (hasZeroCost && hasZeroTokens && hasNoResult) {
+      this.log.warn(
+        { agentId: this.agentId, sessionId: this.state.sessionId },
+        'Run completed with zero cost/tokens and no output — marking as empty',
+      );
+      return 'empty';
+    }
+
+    return 'success';
+  }
+
   private finishStop(reason: string): void {
-    this.stopWithReason(reason, 'success');
+    const completionStatus = this.resolveCompletionStatus();
+    this.stopWithReason(reason, completionStatus);
   }
 
   private stopWithReason(
     reason: string,
-    completionStatus: 'success' | 'failure',
+    completionStatus: 'success' | 'failure' | 'empty',
     errorMessage?: string,
   ): void {
     this.state.status = 'stopped';
@@ -1008,7 +1032,7 @@ export class AgentInstance extends EventEmitter {
    * cleanup.
    */
   private async notifyRunCompletion(
-    status: 'success' | 'failure',
+    status: 'success' | 'failure' | 'empty',
     errorMessage?: string,
   ): Promise<void> {
     const resultSummary = this.buildExecutionSummary(status, errorMessage);
@@ -1154,7 +1178,7 @@ export class AgentInstance extends EventEmitter {
   }
 
   private buildExecutionSummary(
-    status: 'success' | 'failure',
+    status: 'success' | 'failure' | 'empty',
     errorMessage?: string,
   ): ExecutionSummary {
     const events = this.outputBuffer.getRecent(this.outputBuffer.size);
@@ -1167,9 +1191,13 @@ export class AgentInstance extends EventEmitter {
     const executiveSummary =
       status === 'success'
         ? truncateSummaryText(latestText || 'Completed the requested run.')
-        : truncateSummaryText(
-            errorMessage || latestText || 'Run failed before completing the requested work.',
-          );
+        : status === 'empty'
+          ? truncateSummaryText(
+              'Run completed with zero cost and no output — likely an immediate startup failure.',
+            )
+          : truncateSummaryText(
+              errorMessage || latestText || 'Run failed before completing the requested work.',
+            );
 
     const keyFindings: string[] = [];
     if (commandsRun > 0) {
@@ -1192,7 +1220,7 @@ export class AgentInstance extends EventEmitter {
         : [];
 
     return {
-      status: status === 'success' ? 'success' : 'failure',
+      status: status === 'success' ? 'success' : status === 'empty' ? 'empty' : 'failure',
       workCompleted: executiveSummary,
       executiveSummary,
       keyFindings,

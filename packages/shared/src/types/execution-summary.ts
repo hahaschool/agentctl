@@ -1,4 +1,4 @@
-export const EXECUTION_SUMMARY_STATUSES = ['success', 'partial', 'failure'] as const;
+export const EXECUTION_SUMMARY_STATUSES = ['success', 'partial', 'failure', 'empty'] as const;
 
 export type ExecutionSummaryStatus = (typeof EXECUTION_SUMMARY_STATUSES)[number];
 
@@ -113,6 +113,8 @@ function mapStatus(status: string | null | undefined): ExecutionSummaryStatus {
   switch (status) {
     case 'success':
       return 'success';
+    case 'empty':
+      return 'empty';
     case 'failure':
     case 'timeout':
     case 'cancelled':

@@ -24,6 +24,8 @@ function makeRun(overrides: Partial<AgentRun> = {}): AgentRun {
     sessionId: 'sess-1',
     errorMessage: null,
     resultSummary: null,
+    retryOf: null,
+    retryIndex: null,
     ...overrides,
   };
 }

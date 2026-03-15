@@ -751,11 +751,13 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Run completion callback — called by the agent worker when a run finishes
   // ---------------------------------------------------------------------------
 
+  const VALID_COMPLETION_STATUSES = new Set(['success', 'failure', 'empty']);
+
   app.post<{
     Params: { id: string };
     Body: {
       runId: string;
-      status: 'success' | 'failure';
+      status: 'success' | 'failure' | 'empty';
       errorMessage?: string;
       costUsd?: number;
       tokensIn?: number;
@@ -794,10 +796,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
-      if (!status || (status !== 'success' && status !== 'failure')) {
+      if (!status || !VALID_COMPLETION_STATUSES.has(status)) {
         return reply.code(400).send({
           error: 'INVALID_STATUS',
-          message: 'Status must be "success" or "failure"',
+          message: 'Status must be "success", "failure", or "empty"',
         });
       }
 
