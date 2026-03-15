@@ -605,7 +605,18 @@ function discoverCodexSessions(
         const payload = firstLine.payload;
         if (!payload?.id || !payload?.cwd) continue;
 
-        const projectPath = payload.cwd;
+        // Normalize worktree paths to the real project path
+        // Codex worktrees: ~/.codex/worktrees/<hash>/<project> → ~/<project>
+        // Also handles Claude Code worktrees: .trees/<name> or .claude/worktrees/<name>
+        let projectPath = payload.cwd;
+        const worktreeMatch = projectPath.match(/[/.](?:codex|claude)\/worktrees\/[^/]+\/(.+)$/);
+        if (worktreeMatch) {
+          projectPath = join(homedir(), worktreeMatch[1]);
+        }
+        const treesMatch = projectPath.match(/\/\.trees\/[^/]+$/);
+        if (treesMatch) {
+          projectPath = projectPath.replace(/\/\.trees\/[^/]+$/, '');
+        }
 
         // Apply project path filter if provided
         if (projectPathFilter && !projectPath.startsWith(projectPathFilter)) {
