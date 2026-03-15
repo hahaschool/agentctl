@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-15 (stability/security cycle through PR #188 is on `main`; remaining alert triage is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, agents/control-plane/loop findings, plus dependency/base-image advisories)
+> Last updated: 2026-03-15 (stability/security cycle through PR #193 is on `main`; PRs #190-#192 landed but the agents/control-plane/loop CodeQL findings remain open, so the current backlog is `path-security.ts` file-write findings, `cli-session-manager.ts`, modeled rate-limit follow-ups, the loop timer finding, plus dependency/base-image advisories)
 
 ## Current State
 
@@ -1113,7 +1113,7 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 ### 16.1 Agent Run Quality — P0
 
 - Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(in progress)*
-- Status note: `main` was re-stabilized through PRs #167-#181. The follow-up hardening batch landed via PRs #182-#185, and the residual path/session cleanup landed via PRs #187-#188. `skill-discovery.ts` is now out of the open-alert list, but the `cli-session-manager.ts` path finding still needs follow-up. The remaining backlog is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, agent-start / control-plane rate-limit findings, loop-controller timer finding, and dependency/base-image triage.
+- Status note: `main` was re-stabilized through PRs #167-#181. The follow-up hardening batch landed via PRs #182-#185, the residual path/session cleanup landed via PRs #187-#188, the first residual agents/control-plane/loop follow-up landed via PRs #190-#192, and the shared local coordination board landed via PR #193. `skill-discovery.ts` is out of the open-alert list, but the `cli-session-manager.ts` path finding still needs follow-up, and GitHub still reports the agents/control-plane rate-limit findings plus the loop-controller timer finding after PRs #190-#192. The remaining backlog is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, modeled rate-limit follow-ups, loop-controller timer finding, and dependency/base-image triage.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1133,11 +1133,15 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Agent start route now enforces an explicit Fastify framework limiter in addition to the custom guard *(PR #179)*
 - [x] MCP discover config reads now go through shared safe file-read guards *(PR #180)*
 - [x] Tighten `path-security.ts` wrappers for the remaining CodeQL path/file alerts *(PRs #182, #187)*
-- [ ] Harden the worker git status route path handling + framework rate limiting *(PR #183)*
-- [ ] Add explicit Fastify limiters to control-plane memory routes while preserving custom 429 behavior *(PR #184)*
-- [ ] Enforce the loop-controller fallback 10k iteration hard cap even without an explicit `maxIterations` limit *(PR #185)*
+- [x] Harden the worker git status route path handling + framework rate limiting *(PR #183)*
+- [x] Add explicit Fastify limiters to control-plane memory routes while preserving custom 429 behavior *(PR #184; GitHub still reports modeled rate-limit follow-up alerts after PR #191)*
+- [x] Enforce the loop-controller fallback 10k iteration hard cap even without an explicit `maxIterations` limit *(PR #185; separate timer-specific alert remains after PR #192)*
 - [x] Skill discovery now uses shared safe async file-read guards for SKILL.md enumeration *(PR #187)*
 - [x] CLI session cwd is sanitized through shared path guards before reaching `spawn()` *(PR #188)*
+- [x] Agent-start route residual follow-up landed, but GitHub still reports the route as unmodeled by CodeQL *(PR #190)*
+- [x] Control-plane memory-route residual follow-up landed, but GitHub still reports the routes as unmodeled by CodeQL *(PR #191)*
+- [x] Loop delay validation/clamping residual follow-up landed, but GitHub still reports the timer duration alert *(PR #192)*
+- [x] Shared local agent coordination board for worktree claims + handoffs *(PR #193)*
 
 ### 16.2 Dev Environment Infrastructure — P0
 
@@ -1326,7 +1330,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
 | **—** | ~~Security: Discovery + Worktree Path Hardening~~ | — | ✅ Delivered — discovery path reads (PR #176) + worktree-manager path writes (PR #177) |
 | **—** | ~~Security: Agent Start + MCP Discover Hardening~~ | — | ✅ Delivered — explicit agent-start framework rate limiting (PR #179) + safe MCP discover file reads (PR #180) |
-| **—** | ~~Security: Path + Git + Memory + Loop Hardening~~ | — | ✅ Delivered — `path-security.ts` wrappers (PR #182), `git.ts` hardening (PR #183), control-plane memory-route limiters (PR #184), `loop-controller.ts` hard cap (PR #185), and residual path-session cleanup (PRs #187-#188) |
+| **—** | ~~Security: Path + Git + Memory + Loop Hardening~~ | — | ✅ Delivered — `path-security.ts` wrappers (PR #182), `git.ts` hardening (PR #183), control-plane memory-route limiters (PR #184), `loop-controller.ts` hard cap (PR #185), residual path-session cleanup (PRs #187-#188), and first residual agents/control-plane/loop follow-up batch (PRs #190-#192) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Types + Override Resolution~~ | 14.1 | ✅ Delivered (PR #146) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Worker Discovery~~ | 14.2 | ✅ Delivered (PR #147) |
 | **P0** | ~~MCP & Skill Auto-Discovery: CP Proxies & Sync~~ | 14.3 | ✅ Delivered (PR #149) |
@@ -1335,7 +1339,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | In progress: the current stability/security batch is on `main` through PR #188; remaining alert triage is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, agents/control-plane/loop findings, plus dependency/base-image refreshes |
+| **P0** | Agent Run Quality | 16.1 | In progress: the current stability/security batch is on `main` through PR #193; remaining alert triage is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, modeled agents/control-plane rate-limit follow-ups, the loop timer finding, plus dependency/base-image refreshes |
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
 | **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
