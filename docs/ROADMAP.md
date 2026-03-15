@@ -1130,31 +1130,42 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.3 Frontend UI Polish — P0
 
-Visual bugs and layout issues across multiple pages. Root cause: features were stacked without holistic design review.
+Systematic design critique (2026-03-15) identified these issues. Root cause: features stacked without holistic design review, violating CLAUDE.md design principles (Cyber · Geeky · Futuristic).
 
-**Dashboard:**
-- [ ] "New Session" button text invisible (white on blue, or missing text)
-- [ ] "Discover Sessions" / "Refresh All" links feel disconnected from the health card
+**P1 — Dashboard visual hierarchy:**
+- [ ] Reduce 8 metric cards to 3 prominent ones (Health, Active Runs, Active Sessions) + inline secondary stats
+- [ ] Remove "Native Import" and "Total Cost" cards (always 0, no value)
+- [ ] Fix "New Session" button text visibility
+- [ ] Fix "Memory Health: Could not load memory stats" — either fix or hide
+- [ ] Sanitize session summaries (raw XML tags like `<local-command-caveat>` showing)
+- [ ] Filter out "Untitled session / 0 msgs" from discovered sessions list
 
-**Agent Detail Page (`/agents/[id]`):**
-- [ ] Icon buttons (download + copy) below agent name have no labels/tooltips — unclear purpose
-- [ ] Prompt input + Go/Cancel + Updated/Refresh all crammed into one row — needs layout restructuring
-- [ ] Go button color (bright blue) clashes with dark theme — use primary token consistently
+**P2 — Agent Detail page restructure:**
+- [ ] Separate metadata (name/status/model) from actions (start/settings/refresh) into distinct rows
+- [ ] Move prompt input from inline to a Start dialog (triggered by Start button)
+- [ ] Remove or label icon buttons (download/copy) below agent name — add tooltips or remove
+- [ ] Go button color: use `primary` token consistently, not raw blue
 
-**Agents List (Agent Cards):**
-- [ ] Prompt input + Go button embedded in agent card — cards should show info, not be action forms
-- [ ] Project path text overflows/wraps awkwardly in card layout
-- [ ] Start flow should be a dedicated dialog or panel, not inline in the card
+**P3 — Run History redesign:**
+- [ ] Merge Run History strip + Run Timeline chart into single timeline view (same data shown twice)
+- [ ] Replace raw red/green with muted semantic colors (`emerald-500/20`, `red-500/20`, `neutral-500/20` for empty)
+- [ ] Add hover tooltips with run details (time, cost, duration, trigger, session link)
+- [ ] Style as terminal-native timeline, not generic recharts BarChart
 
-**Run History (Agent Detail):**
-- [ ] Run History strip (red/green blocks) + Run Timeline bar chart show same data twice — merge into one
-- [ ] Raw red/green colors violate dark-first aesthetic — use muted semantic colors (emerald-500/10, red-500/10)
-- [ ] recharts BarChart feels generic enterprise, not "cyber/terminal" — redesign as timeline or heatmap
-- [ ] No information on hover — needs tooltip with run details (cost, duration, trigger, session link)
+**P4 — Agent Cards (list page):**
+- [ ] Remove prompt input + Go from card body — cards show info only
+- [ ] Card actions: "Start" button (opens dialog) + "Settings" link only
+- [ ] Truncate project path with tooltip instead of wrapping
+- [ ] Display: name, status badge, machine, project (truncated), last run, cost
+
+**P5 — Button consistency:**
+- [ ] Establish button hierarchy: primary (filled), secondary (outline), ghost (text only)
+- [ ] Each page has exactly one primary action button
+- [ ] Normalize all pages to use shadcn Button variants (remove raw styled links)
 
 **General:**
-- [ ] Inconsistent button styles across pages (some use shadcn Button, some use raw styled links)
-- [ ] Version display in sidebar should auto-update from package.json (currently hardcoded)
+- [ ] Version in sidebar: auto-update from package.json (version-bump.sh should update Sidebar.tsx)
+- [ ] Beta version display still shows v0.1.0 (needs rebuild)
 
 ### 16.4 Agent Settings Config Preview Sidebar — P1
 
