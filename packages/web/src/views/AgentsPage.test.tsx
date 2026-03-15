@@ -36,8 +36,15 @@ vi.mock('@/hooks/use-hotkeys', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href} data-testid={`link-${href}`}>
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    children: React.ReactNode;
+    href: string;
+  }) => (
+    <a href={href} data-testid={`link-${href}`} {...props}>
       {children}
     </a>
   ),
@@ -57,6 +64,7 @@ vi.mock('@/components/ui/dialog', () => ({
   ),
   DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
   DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
@@ -401,36 +409,12 @@ describe('AgentsPage', () => {
     });
   });
 
-  it('renders agent type', async () => {
+  it('renders agent machine, project, and cost info', async () => {
     renderAgentsPage();
     await waitFor(() => {
-      expect(screen.getByText('manual')).toBeDefined();
-    });
-  });
-
-  it('renders agent ID as copyable text', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      const copyables = screen.getAllByTestId('copyable-text');
-      const idCopyable = copyables.find((el) => el.textContent === 'agent-1');
-      expect(idCopyable).toBeDefined();
-    });
-  });
-
-  it('renders agent machine ID as copyable text', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      const copyables = screen.getAllByTestId('copyable-text');
-      const machineCopyable = copyables.find((el) => el.textContent === 'machine-1');
-      expect(machineCopyable).toBeDefined();
-    });
-  });
-
-  it('renders agent cost info', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByText(/Last: \$0\.01/)).toBeDefined();
-      expect(screen.getByText(/Total: \$1\.50/)).toBeDefined();
+      expect(screen.getByText('machine-1')).toBeDefined();
+      expect(screen.getByText('/tmp/project')).toBeDefined();
+      expect(screen.getByText('$1.50')).toBeDefined();
     });
   });
 
@@ -457,24 +441,6 @@ describe('AgentsPage', () => {
     renderAgentsPage();
     await waitFor(() => {
       expect(screen.getByText('/tmp/project')).toBeDefined();
-    });
-  });
-
-  it('renders worktree branch when present', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByText('main')).toBeDefined();
-    });
-  });
-
-  it('renders schedule when present', async () => {
-    mockAgentsQuery.mockReturnValue({
-      queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([createAgent({ schedule: '*/30 * * * *' })]),
-    });
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByText('*/30 * * * *')).toBeDefined();
     });
   });
 
@@ -554,53 +520,14 @@ describe('AgentsPage', () => {
   });
 
   // =========================================================================
-  // 5. Edit agent functionality
+  // 5. Card actions
   // =========================================================================
 
-  it('opens edit dialog when Edit button is clicked', async () => {
+  it('renders Settings link in each card', async () => {
     renderAgentsPage();
     await waitFor(() => {
-      expect(screen.getByLabelText('Edit agent test-agent')).toBeDefined();
-    });
-    fireEvent.click(screen.getByLabelText('Edit agent test-agent'));
-    await waitFor(() => {
-      expect(screen.getByText('Edit Agent')).toBeDefined();
-    });
-  });
-
-  it('populates edit dialog with agent data', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByLabelText('Edit agent test-agent')).toBeDefined();
-    });
-    fireEvent.click(screen.getByLabelText('Edit agent test-agent'));
-    await waitFor(() => {
-      const nameInput = screen.getByDisplayValue('test-agent') as HTMLInputElement;
-      expect(nameInput).toBeDefined();
-    });
-  });
-
-  it('shows Save Changes button in edit dialog', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByLabelText('Edit agent test-agent')).toBeDefined();
-    });
-    fireEvent.click(screen.getByLabelText('Edit agent test-agent'));
-    await waitFor(() => {
-      expect(screen.getByText('Save Changes')).toBeDefined();
-    });
-  });
-
-  it('shows Cancel button in edit dialog', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByLabelText('Edit agent test-agent')).toBeDefined();
-    });
-    fireEvent.click(screen.getByLabelText('Edit agent test-agent'));
-    await waitFor(() => {
-      // There will be a Cancel in the edit dialog
-      const cancelButtons = screen.getAllByText('Cancel');
-      expect(cancelButtons.length).toBeGreaterThan(0);
+      expect(screen.getByLabelText('Settings for agent test-agent')).toBeDefined();
+      expect(screen.getByTestId('link-/agents/agent-1/settings')).toBeDefined();
     });
   });
 
@@ -668,7 +595,7 @@ describe('AgentsPage', () => {
   });
 
   // =========================================================================
-  // 7. Agent actions (start, stop)
+  // 7. Agent actions (start)
   // =========================================================================
 
   it('shows Start button for non-running agents', async () => {
@@ -678,20 +605,43 @@ describe('AgentsPage', () => {
     });
   });
 
-  it('shows Stop button for running agents', async () => {
+  it('disables Start button for running agents', async () => {
     mockAgentsQuery.mockReturnValue({
       queryKey: ['agents'],
       queryFn: vi.fn().mockResolvedValue([createAgent({ status: 'running' })]),
     });
     renderAgentsPage();
     await waitFor(() => {
-      const confirmButtons = screen.getAllByTestId('confirm-button');
-      expect(confirmButtons.length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText('Stop')).toBeDefined();
+      expect((screen.getByText('Start') as HTMLButtonElement).disabled).toBe(true);
     });
   });
 
-  it('shows prompt input when Start is clicked', async () => {
+  it('opens start dialog when Start is clicked', async () => {
+    renderAgentsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Start')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Start'));
+    await waitFor(() => {
+      expect(screen.getByText('Start Agent', { selector: 'h2' })).toBeDefined();
+      expect(screen.getByPlaceholderText('Enter prompt...')).toBeDefined();
+    });
+  });
+
+  it('shows Start and Cancel buttons in start dialog', async () => {
+    renderAgentsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Start')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Start'));
+    await waitFor(() => {
+      const startButtons = screen.getAllByText('Start');
+      expect(startButtons.length).toBeGreaterThan(1);
+      expect(screen.getByText('Cancel')).toBeDefined();
+    });
+  });
+
+  it('hides start dialog when Cancel is clicked', async () => {
     renderAgentsPage();
     await waitFor(() => {
       expect(screen.getByText('Start')).toBeDefined();
@@ -700,49 +650,34 @@ describe('AgentsPage', () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Enter prompt...')).toBeDefined();
     });
-  });
-
-  it('shows Go and Cancel buttons when prompt input is visible', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByText('Start')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Start'));
-    await waitFor(() => {
-      expect(screen.getByText('Go')).toBeDefined();
-      expect(screen.getByLabelText('Cancel agent start')).toBeDefined();
-    });
-  });
-
-  it('hides prompt input when Cancel is clicked', async () => {
-    renderAgentsPage();
-    await waitFor(() => {
-      expect(screen.getByText('Start')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Start'));
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Enter prompt...')).toBeDefined();
-    });
-    fireEvent.click(screen.getByLabelText('Cancel agent start'));
+    fireEvent.click(screen.getByText('Cancel'));
     await waitFor(() => {
       expect(screen.queryByPlaceholderText('Enter prompt...')).toBeNull();
     });
   });
 
-  it('calls stopAgent.mutate when Stop is confirmed', async () => {
-    const mutateFn = vi.fn();
-    mockStopAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    mockAgentsQuery.mockReturnValue({
-      queryKey: ['agents'],
-      queryFn: vi.fn().mockResolvedValue([createAgent({ status: 'running' })]),
+  it('calls startAgent.mutate when start is submitted from dialog', async () => {
+    const mutateFn = vi.fn((_vars, options) => {
+      options?.onSuccess?.();
     });
+    mockStartAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
     renderAgentsPage();
     await waitFor(() => {
-      // Card-level Stop button (text "Stop") — distinct from bulk "Stop All (N)"
-      expect(screen.getByText('Stop')).toBeDefined();
+      expect(screen.getByText('Start')).toBeDefined();
     });
-    fireEvent.click(screen.getByText('Stop'));
-    expect(mutateFn).toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Start'));
+    const promptInput = await screen.findByPlaceholderText('Enter prompt...');
+    fireEvent.change(promptInput, { target: { value: 'Run health checks' } });
+    const startButtons = screen.getAllByText('Start');
+    fireEvent.click(startButtons[startButtons.length - 1]);
+
+    expect(mutateFn).toHaveBeenCalledWith(
+      { id: 'agent-1', prompt: 'Run health checks' },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
   });
 
   // =========================================================================
