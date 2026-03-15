@@ -144,6 +144,26 @@ describe('safe file wrappers', () => {
     expect(safeReadFileSync(filePath, baseDir)).toBe('hello world');
   });
 
+  it('overwrites existing files within the allowed base', () => {
+    const baseDir = makeTempRoot();
+    const filePath = join(baseDir, 'overwrite.txt');
+    writeFileSync(filePath, 'before');
+
+    safeWriteFileSync(filePath, baseDir, 'after');
+
+    expect(safeReadFileSync(filePath, baseDir)).toBe('after');
+  });
+
+  it('rejects invalid write content payloads', () => {
+    const baseDir = makeTempRoot();
+    const filePath = join(baseDir, 'invalid.txt');
+
+    expect(() => safeWriteFileSync(filePath, baseDir, 'bad\u0000payload')).toThrow(/null bytes/i);
+    expect(() => safeWriteFileSync(filePath, baseDir, 42 as unknown as string)).toThrow(
+      /must be a string/i,
+    );
+  });
+
   it('reads file content asynchronously within the allowed base', async () => {
     const baseDir = makeTempRoot();
     const filePath = join(baseDir, 'content-async.txt');
