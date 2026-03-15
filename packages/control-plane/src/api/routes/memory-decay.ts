@@ -43,10 +43,12 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
     timeWindow: memoryDecayRateLimitWindowMs,
   });
 
-  const frameworkMemoryDecayRateLimit = app.rateLimit({
+  // Keep the CodeQL-recognized framework limit slightly looser so the custom
+  // preHandler still produces the existing 429 response body at the threshold.
+  const memoryDecayRouteRateLimit = {
     max: memoryDecayRateLimitMax + 1,
-    timeWindow: '1 minute',
-  });
+    timeWindow: memoryDecayRateLimitWindowMs,
+  } as const;
 
   const enforceMemoryDecayRateLimit = createIpRateLimitPreHandler(
     createInMemoryRateLimiter(memoryDecayRateLimitMax, memoryDecayRateLimitWindowMs),
@@ -60,7 +62,8 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Run Ebbinghaus memory decay cycle',
       },
-      preHandler: [frameworkMemoryDecayRateLimit, enforceMemoryDecayRateLimit],
+      config: { rateLimit: memoryDecayRouteRateLimit },
+      preHandler: enforceMemoryDecayRateLimit,
     },
     async () => {
       const result = await decay.runDecay();
@@ -75,7 +78,8 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Get memory strength distribution statistics',
       },
-      preHandler: [frameworkMemoryDecayRateLimit, enforceMemoryDecayRateLimit],
+      config: { rateLimit: memoryDecayRouteRateLimit },
+      preHandler: enforceMemoryDecayRateLimit,
     },
     async () => {
       const stats = await decay.getDecayStats();

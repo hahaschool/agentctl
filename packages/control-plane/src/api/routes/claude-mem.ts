@@ -37,10 +37,12 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     timeWindow: claudeMemRateLimitWindowMs,
   });
 
-  const frameworkClaudeMemRateLimit = app.rateLimit({
+  // Keep the CodeQL-recognized framework limit slightly looser so the custom
+  // preHandler still produces the existing 429 response body at the threshold.
+  const claudeMemRouteRateLimit = {
     max: claudeMemRateLimitMax + 1,
-    timeWindow: '1 minute',
-  });
+    timeWindow: claudeMemRateLimitWindowMs,
+  } as const;
 
   const enforceClaudeMemRateLimit = createIpRateLimitPreHandler(
     createInMemoryRateLimiter(claudeMemRateLimitMax, claudeMemRateLimitWindowMs),
@@ -57,7 +59,8 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/search',
     {
       schema: { tags: ['memory'], summary: 'Search claude-mem observations' },
-      preHandler: [frameworkClaudeMemRateLimit, enforceClaudeMemRateLimit],
+      config: { rateLimit: claudeMemRouteRateLimit },
+      preHandler: enforceClaudeMemRateLimit,
     },
     async (request, reply) => {
       const { q, project, type, limit } = request.query;
@@ -114,7 +117,8 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/observations/:id',
     {
       schema: { tags: ['memory'], summary: 'Get observation by ID' },
-      preHandler: [frameworkClaudeMemRateLimit, enforceClaudeMemRateLimit],
+      config: { rateLimit: claudeMemRouteRateLimit },
+      preHandler: enforceClaudeMemRateLimit,
     },
     async (request, reply) => {
       const { id } = request.params;
@@ -147,7 +151,8 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/timeline',
     {
       schema: { tags: ['memory'], summary: 'Get observation timeline for a session' },
-      preHandler: [frameworkClaudeMemRateLimit, enforceClaudeMemRateLimit],
+      config: { rateLimit: claudeMemRouteRateLimit },
+      preHandler: enforceClaudeMemRateLimit,
     },
     async (request, reply) => {
       const { sessionId, limit } = request.query;
