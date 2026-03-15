@@ -1,10 +1,15 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { safeMkdirSync, safeReaddirSync, safeStatSync, sanitizePath } from './path-security.js';
+import {
+  safeChmodSync,
+  safeMkdirSync,
+  safeReaddirSync,
+  safeStatSync,
+  sanitizePath,
+} from './path-security.js';
 
 const tempRoots: string[] = [];
 
@@ -75,5 +80,39 @@ describe('sanitizePath', () => {
     expect(() => safeMkdirSync('/tmp/outside-base', root)).toThrow(
       /outside the allowed base path/i,
     );
+  });
+});
+
+describe('safeMkdirSync', () => {
+  it('creates directories inside the allowed base and returns the resolved path', () => {
+    const baseDir = makeTempRoot();
+    const nestedDir = join(baseDir, 'a', 'b');
+
+    const safePath = safeMkdirSync(nestedDir, baseDir, { recursive: true });
+    expect(safePath).toBe(resolve(nestedDir));
+    expect(safeStatSync(safePath, baseDir).isDirectory()).toBe(true);
+  });
+
+  it('throws when the target path escapes the allowed base', () => {
+    expect(() => safeMkdirSync('/tmp/path-security/../../etc', '/tmp/path-security')).toThrow(
+      /outside the allowed base path/i,
+    );
+  });
+});
+
+describe('safeChmodSync', () => {
+  it('updates mode bits for files inside the allowed base', () => {
+    const baseDir = makeTempRoot();
+    const filePath = join(baseDir, 'mode-test.txt');
+
+    writeFileSync(filePath, 'ok');
+    safeChmodSync(filePath, baseDir, 0o600);
+    expect(safeStatSync(filePath, baseDir).mode & 0o777).toBe(0o600);
+  });
+
+  it('throws when chmod target escapes the allowed base', () => {
+    expect(() =>
+      safeChmodSync('/tmp/path-security/../../etc/passwd', '/tmp/path-security', 0o600),
+    ).toThrow(/outside the allowed base path/i);
   });
 });

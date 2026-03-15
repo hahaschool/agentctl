@@ -1,5 +1,6 @@
 import type { Dirent, Stats } from 'node:fs';
 import {
+  chmodSync,
   closeSync,
   existsSync,
   constants as fsConstants,
@@ -111,6 +112,44 @@ export function safeWriteFileSync(userPath: string, allowedBase: string, data: s
 }
 
 /**
+ * Safe wrapper around `mkdirSync`.
+ * Sanitises + validates the path before creating directories.
+ */
+export function safeMkdirSync(
+  userPath: string,
+  allowedBase: string,
+  options?: Parameters<typeof mkdirSync>[1],
+): string {
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
+  mkdirSync(safe, options ?? { recursive: true });
+  return safe;
+}
+
+/**
+ * Safe wrapper around `chmodSync`.
+ * Sanitises + validates the path before changing mode bits.
+ */
+export function safeChmodSync(
+  userPath: string,
+  allowedBase: string,
+  mode: Parameters<typeof chmodSync>[1],
+): string {
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
+  chmodSync(safe, mode);
+  return safe;
+}
+
+/**
  * Safe open + fstat + read combination (avoids TOCTOU).
  * Returns the file content as a string, or throws on size-exceeded / not-found.
  */
@@ -167,14 +206,4 @@ export async function safeReaddir(userPath: string, allowedBase: string): Promis
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return readdir(safe, { withFileTypes: true });
-}
-
-export function safeMkdirSync(userPath: string, allowedBase: string): string | undefined {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  const relativePath = relative(resolvedBase, safe);
-  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
-  return mkdirSync(safe, { recursive: true });
 }
