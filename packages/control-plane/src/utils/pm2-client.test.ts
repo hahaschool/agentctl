@@ -1,22 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// ── Mock pm2 module ──────────────────────────────────────────────
+// ── Mock child_process.execFile ──────────────────────────────────
 // vi.hoisted() ensures these are initialized before the hoisted vi.mock call.
 
-const { mockConnect, mockDisconnect, mockList, mockRestart } = vi.hoisted(() => ({
-  mockConnect: vi.fn(),
-  mockDisconnect: vi.fn(),
-  mockList: vi.fn(),
-  mockRestart: vi.fn(),
+const { mockExecFile } = vi.hoisted(() => ({
+  mockExecFile: vi.fn(),
 }));
 
-vi.mock('pm2', () => ({
-  default: {
-    connect: mockConnect,
-    disconnect: mockDisconnect,
-    list: mockList,
-    restart: mockRestart,
-  },
+vi.mock('node:child_process', () => ({
+  execFile: mockExecFile,
 }));
 
 // Import AFTER mock is wired
@@ -48,18 +40,32 @@ const MOCK_STOPPED_PROCESS = {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-function setupSuccessfulConnect(): void {
-  mockConnect.mockImplementation((cb: (err: Error | null) => void) => cb(null));
-}
-
 function setupSuccessfulList(procs: unknown[]): void {
-  mockList.mockImplementation((cb: (err: Error | null, list: unknown[]) => void) =>
-    cb(null, procs),
+  mockExecFile.mockImplementation(
+    (
+      _file: string,
+      args: readonly string[],
+      _options: Record<string, unknown>,
+      cb: (error: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      if (args[0] === 'jlist') {
+        cb(null, JSON.stringify(procs), '');
+        return;
+      }
+      cb(null, '', '');
+    },
   );
 }
 
 function setupSuccessfulRestart(): void {
-  mockRestart.mockImplementation((_name: string, cb: (err: Error | null) => void) => cb(null));
+  mockExecFile.mockImplementation(
+    (
+      _file: string,
+      _args: readonly string[],
+      _options: Record<string, unknown>,
+      cb: (error: Error | null, stdout: string, stderr: string) => void,
+    ) => cb(null, '', ''),
+  );
 }
 
 const silentLogger = {
@@ -72,7 +78,6 @@ const silentLogger = {
 describe('pm2-client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDisconnect.mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -81,7 +86,6 @@ describe('pm2-client', () => {
 
   describe('pm2List', () => {
     it('returns process info for running processes', async () => {
-      setupSuccessfulConnect();
       setupSuccessfulList(MOCK_PROCESSES);
 
       const result = await pm2List();
@@ -95,7 +99,6 @@ describe('pm2-client', () => {
     });
 
     it('handles processes with missing optional fields', async () => {
-      setupSuccessfulConnect();
       setupSuccessfulList([MOCK_STOPPED_PROCESS]);
 
       const result = await pm2List();
@@ -109,7 +112,6 @@ describe('pm2-client', () => {
     });
 
     it('handles process with no name', async () => {
-      setupSuccessfulConnect();
       setupSuccessfulList([{ monit: {}, pm2_env: {} }]);
 
       const result = await pm2List();
@@ -118,8 +120,13 @@ describe('pm2-client', () => {
     });
 
     it('returns empty array when pm2 connect fails', async () => {
-      mockConnect.mockImplementation((cb: (err: Error | null) => void) =>
-        cb(new Error('PM2 daemon not found')),
+      mockExecFile.mockImplementation(
+        (
+          _file: string,
+          _args: readonly string[],
+          _options: Record<string, unknown>,
+          cb: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => cb(new Error('spawn pm2 ENOENT'), '', 'PM2 daemon not found'),
       );
 
       const result = await pm2List(silentLogger);
@@ -129,9 +136,13 @@ describe('pm2-client', () => {
     });
 
     it('returns empty array when pm2 list fails', async () => {
-      setupSuccessfulConnect();
-      mockList.mockImplementation((cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(new Error('list failed'), []),
+      mockExecFile.mockImplementation(
+        (
+          _file: string,
+          _args: readonly string[],
+          _options: Record<string, unknown>,
+          cb: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => cb(new Error('list failed'), '', 'list failed'),
       );
 
       const result = await pm2List(silentLogger);
@@ -139,30 +150,25 @@ describe('pm2-client', () => {
       expect(result).toEqual([]);
     });
 
-    it('always disconnects after listing', async () => {
-      setupSuccessfulConnect();
-      setupSuccessfulList(MOCK_PROCESSES);
-
-      await pm2List();
-
-      expect(mockDisconnect).toHaveBeenCalled();
-    });
-
-    it('disconnects even after an error', async () => {
-      setupSuccessfulConnect();
-      mockList.mockImplementation((cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(new Error('list failed'), []),
+    it('returns empty array when pm2 output is not valid JSON', async () => {
+      mockExecFile.mockImplementation(
+        (
+          _file: string,
+          _args: readonly string[],
+          _options: Record<string, unknown>,
+          cb: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => cb(null, 'not-json', ''),
       );
 
-      await pm2List(silentLogger);
+      const result = await pm2List(silentLogger);
 
-      expect(mockDisconnect).toHaveBeenCalled();
+      expect(result).toEqual([]);
+      expect(silentLogger.warn).toHaveBeenCalled();
     });
 
     it('calculates uptime from pm_uptime', async () => {
       const now = Date.now();
       const uptimeMs = 300_000; // 5 minutes
-      setupSuccessfulConnect();
       setupSuccessfulList([
         {
           name: 'test',
@@ -182,27 +188,26 @@ describe('pm2-client', () => {
 
   describe('pm2Restart', () => {
     it('restarts a named process', async () => {
-      setupSuccessfulConnect();
       setupSuccessfulRestart();
 
       await pm2Restart('agentctl-beta-cp');
 
-      expect(mockRestart).toHaveBeenCalledWith('agentctl-beta-cp', expect.any(Function));
-    });
-
-    it('disconnects after restart', async () => {
-      setupSuccessfulConnect();
-      setupSuccessfulRestart();
-
-      await pm2Restart('agentctl-beta-cp');
-
-      expect(mockDisconnect).toHaveBeenCalled();
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'pm2',
+        ['restart', 'agentctl-beta-cp'],
+        expect.objectContaining({ timeout: 5_000 }),
+        expect.any(Function),
+      );
     });
 
     it('logs error but does not throw when restart fails', async () => {
-      setupSuccessfulConnect();
-      mockRestart.mockImplementation((_name: string, cb: (err: Error | null) => void) =>
-        cb(new Error('process not found')),
+      mockExecFile.mockImplementation(
+        (
+          _file: string,
+          _args: readonly string[],
+          _options: Record<string, unknown>,
+          cb: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => cb(new Error('process not found'), '', 'process not found'),
       );
 
       // Should not throw
@@ -212,8 +217,13 @@ describe('pm2-client', () => {
     });
 
     it('logs error when connect fails during restart', async () => {
-      mockConnect.mockImplementation((cb: (err: Error | null) => void) =>
-        cb(new Error('connect failed')),
+      mockExecFile.mockImplementation(
+        (
+          _file: string,
+          _args: readonly string[],
+          _options: Record<string, unknown>,
+          cb: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => cb(new Error('connect failed'), '', 'connect failed'),
       );
 
       await pm2Restart('agentctl-beta-cp', silentLogger);
@@ -224,27 +234,23 @@ describe('pm2-client', () => {
     it('serializes concurrent pm2 operations', async () => {
       const callOrder: string[] = [];
 
-      mockConnect.mockImplementation((cb: (err: Error | null) => void) => {
-        callOrder.push('connect');
-        cb(null);
-      });
-
-      mockList.mockImplementation((cb: (err: Error | null, list: unknown[]) => void) => {
-        callOrder.push('list');
-        cb(null, []);
-      });
-
-      mockRestart.mockImplementation((_name: string, cb: (err: Error | null) => void) => {
-        callOrder.push('restart');
-        cb(null);
-      });
+      mockExecFile.mockImplementation(
+        (
+          _file: string,
+          args: readonly string[],
+          _options: Record<string, unknown>,
+          cb: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => {
+          callOrder.push(args[0]);
+          cb(null, args[0] === 'jlist' ? '[]' : '', '');
+        },
+      );
 
       // Fire both concurrently
       const [listResult] = await Promise.all([pm2List(), pm2Restart('test')]);
 
       expect(listResult).toEqual([]);
-      // Operations should be serialized: connect+list+disconnect, then connect+restart+disconnect
-      expect(callOrder.filter((c) => c === 'connect')).toHaveLength(2);
+      expect(callOrder).toEqual(['jlist', 'restart']);
     });
   });
 });
