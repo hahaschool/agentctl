@@ -174,7 +174,7 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
         command: custom.command,
         args: custom.args ?? [],
         env: custom.env ?? {},
-        source: 'custom',
+        source: 'machine',
       });
     }
 
