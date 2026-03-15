@@ -1,15 +1,19 @@
 import { constants } from 'node:fs';
-import { lstat, open } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
-import type { AuditEntry } from './audit-logger.js';
+import { sanitizePath } from '../utils/path-security.js';
+import { type AuditEntry, buildAuditLogFilePath } from './audit-logger.js';
 
 const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH_SIZE = 100;
 const MAX_AUDIT_BYTES_PER_FLUSH = 1024 * 1024;
 const INSECURE_AUDIT_PERMISSION_MASK = 0o022;
+const TEMP_AUDIT_DIR_ERROR = 'Audit reporter cannot read audit logs from the OS temp directory';
 
 type AuditActionPayload = {
   actionType: string;
@@ -23,7 +27,9 @@ type AuditActionPayload = {
 type AuditReporterOptions = {
   controlPlaneUrl: string;
   runId: string;
-  auditFilePath: string;
+  auditLogDir: string;
+  auditFileToken?: string;
+  auditFilePath?: string;
   logger: Logger;
   flushIntervalMs?: number;
 };
@@ -69,6 +75,7 @@ export class AuditReporter {
   private isFlushing = false;
   private readonly controlPlaneUrl: string;
   private readonly runId: string;
+  private readonly auditLogDir: string;
   private readonly auditFilePath: string;
   private readonly log: Logger;
   private readonly flushIntervalMs: number;
@@ -76,7 +83,16 @@ export class AuditReporter {
   constructor(options: AuditReporterOptions) {
     this.controlPlaneUrl = options.controlPlaneUrl;
     this.runId = options.runId;
-    this.auditFilePath = options.auditFilePath;
+    this.auditLogDir = assertNonTemporaryAuditLogDir(options.auditLogDir);
+    this.auditFilePath = sanitizePath(
+      options.auditFilePath ??
+        buildAuditLogFilePath(
+          this.auditLogDir,
+          new Date().toISOString().slice(0, 10),
+          options.auditFileToken,
+        ),
+      this.auditLogDir,
+    );
     this.log = options.logger.child({ component: 'audit-reporter', runId: options.runId });
     this.flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   }
@@ -133,21 +149,10 @@ export class AuditReporter {
     this.isFlushing = true;
 
     try {
-      const fileSize = await this.getFileSize();
-
-      if (fileSize === null || fileSize <= this.byteOffset) {
+      const handle = await this.openAuditFileSecurely();
+      if (!handle) {
         return;
       }
-
-      // Security: verify the audit file is not a symlink before opening (TOCTOU
-      // mitigation). Combined with O_NOFOLLOW this prevents symlink attacks on
-      // predictable file paths (js/insecure-temporary-file).
-      const preStat = await lstat(this.auditFilePath);
-      if (preStat.isSymbolicLink()) {
-        this.log.error({ path: this.auditFilePath }, 'Audit file is a symlink — refusing to read');
-        return;
-      }
-      const handle = await open(this.auditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
 
       try {
         const info = await handle.stat();
@@ -242,36 +247,32 @@ export class AuditReporter {
   }
 
   /**
-   * Safely lstat the audit file, returning null if it does not exist yet.
+   * Open the audit file using O_NOFOLLOW so the final path component cannot
+   * be a symlink. Returns null when the file is not created yet.
    *
-   * Security: uses lstat (not stat) so that symlinks are detected rather
-   * than followed. If the path is a symbolic link, the reporter refuses
-   * to read it — preventing a local attacker from redirecting audit reads
-   * to an arbitrary file (js/insecure-temporary-file).
+   * Security: this open + fstat flow avoids TOCTOU races between a path
+   * check and read (js/file-system-race) and rejects symlink targets on
+   * predictable temporary paths (js/insecure-temporary-file).
    */
-  private async getFileSize(): Promise<number | null> {
+  private async openAuditFileSecurely(): Promise<Awaited<ReturnType<typeof open>> | null> {
     try {
-      const info = await lstat(this.auditFilePath);
-
-      if (info.isSymbolicLink()) {
-        throw new WorkerError(
-          'AUDIT_SYMLINK_REJECTED',
-          'Audit file path is a symbolic link — refusing to read for security',
-          { path: this.auditFilePath },
-        );
-      }
-
-      return info.size;
+      const safeAuditFilePath = sanitizePath(this.auditFilePath, this.auditLogDir);
+      return await open(safeAuditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
     } catch (err) {
-      if (err instanceof WorkerError) {
-        throw err;
-      }
       const nodeErr = err as NodeJS.ErrnoException;
       if (nodeErr.code === 'ENOENT') {
         return null;
       }
-      throw new WorkerError('AUDIT_STAT_FAILED', `Failed to stat audit file: ${nodeErr.message}`, {
+      if (nodeErr.code === 'ELOOP') {
+        throw new WorkerError(
+          'AUDIT_SYMLINK_REJECTED',
+          'Audit file path is a symbolic link — refusing to read for security',
+          { path: this.auditFilePath, auditLogDir: this.auditLogDir },
+        );
+      }
+      throw new WorkerError('AUDIT_OPEN_FAILED', `Failed to open audit file: ${nodeErr.message}`, {
         path: this.auditFilePath,
+        auditLogDir: this.auditLogDir,
       });
     }
   }
@@ -281,7 +282,7 @@ export class AuditReporter {
       throw new WorkerError(
         'AUDIT_INVALID_FILE_TYPE',
         'Audit file path must resolve to a regular file',
-        { path: this.auditFilePath },
+        { path: this.auditFilePath, auditLogDir: this.auditLogDir },
       );
     }
 
@@ -289,8 +290,22 @@ export class AuditReporter {
       throw new WorkerError(
         'AUDIT_INSECURE_PERMISSIONS',
         'Audit file permissions allow group or other writes',
-        { path: this.auditFilePath, mode: info.mode },
+        { path: this.auditFilePath, mode: info.mode, auditLogDir: this.auditLogDir },
       );
     }
   }
+}
+
+function assertNonTemporaryAuditLogDir(auditLogDir: string): string {
+  const resolvedAuditLogDir = resolve(auditLogDir);
+  const resolvedTempDir = resolve(tmpdir());
+  const rel = relative(resolvedTempDir, resolvedAuditLogDir);
+  if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) {
+    throw new WorkerError('AUDIT_INSECURE_LOG_DIR', TEMP_AUDIT_DIR_ERROR, {
+      auditLogDir: resolvedAuditLogDir,
+      tempDir: resolvedTempDir,
+    });
+  }
+
+  return resolvedAuditLogDir;
 }

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -52,11 +52,7 @@ function writeEnv(filename: string, content: string): void {
 
 describe('tier-config', () => {
   beforeEach(() => {
-    testDir = join(
-      tmpdir(),
-      `tier-config-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    );
-    mkdirSync(testDir, { recursive: true });
+    testDir = mkdtempSync(join(tmpdir(), 'tier-config-test-'));
     clearTierConfigCache();
   });
 
