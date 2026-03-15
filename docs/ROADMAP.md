@@ -1268,6 +1268,21 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 - [x] CLI session cwd sanitization *(PR #188)*
 - [x] Discovery path security *(PR #176)*
 - [x] Worktree manager path writes hardened *(PR #177)*
+- [x] Safe file write hardening *(PR #204)*
+- [x] PM2 package dropped, images moved off alpine *(PR #205)*
+- [x] Loop timer CodeQL alert resolved *(PR #198)*
+
+## 17. Ongoing Quality & Testing
+
+### 17.1 Remaining CodeQL Alerts — P0
+
+- [ ] `js/http-to-file-access` in `path-security.ts:133` — HTTP-sourced data written to files
+- [ ] `js/insecure-temporary-file` in `path-security.ts:133` — insecure temp file creation
+
+### 17.2 E2E Test Coverage — P1
+
+- [ ] Enable 17 skipped E2E tests across mcp-skill-discovery, runtime-selector, critical-flows, smoke specs
+- [ ] Write real Playwright implementations for stub tests (currently just comments)
 
 ---
 
