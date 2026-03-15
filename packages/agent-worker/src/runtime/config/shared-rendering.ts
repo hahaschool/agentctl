@@ -38,6 +38,13 @@ export function renderManagedInstructions(
   ].join('\n');
 }
 
+export function hasManagedInstructions(config: ManagedRuntimeConfig): boolean {
+  return (
+    config.instructions.userGlobal.trim().length > 0 ||
+    config.instructions.projectTemplate.trim().length > 0
+  );
+}
+
 export function renderSkillsManifest(config: ManagedRuntimeConfig): string {
   return JSON.stringify(
     {
@@ -59,8 +66,19 @@ export function renderSkillsManifest(config: ManagedRuntimeConfig): string {
 export function renderMcpServerMap(
   config: ManagedRuntimeConfig,
 ): Record<string, { command: string; args: string[]; env: Record<string, string> }> {
+  return renderMcpServerMapFromServers(config.mcpServers);
+}
+
+export function renderMcpServerMapFromServers(
+  servers: ReadonlyArray<{
+    name: string;
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+  }>,
+): Record<string, { command: string; args: string[]; env: Record<string, string> }> {
   return Object.fromEntries(
-    config.mcpServers.map((server) => [
+    servers.map((server) => [
       server.name,
       {
         command: server.command,

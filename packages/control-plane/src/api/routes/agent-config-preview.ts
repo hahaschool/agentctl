@@ -1,4 +1,9 @@
-import { type DiscoveredMcpServer, isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
+import {
+  type DiscoveredMcpServer,
+  type DiscoveredSkill,
+  isManagedRuntime,
+  MANAGED_RUNTIMES,
+} from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -17,6 +22,10 @@ type DiscoverMcpResponse = {
   discovered?: DiscoveredMcpServer[];
 };
 
+type DiscoverSkillResponse = {
+  discovered?: DiscoveredSkill[];
+};
+
 const fetchDiscoveredMcp = async (
   workerUrl: string,
   runtime: 'claude-code' | 'codex',
@@ -30,6 +39,22 @@ const fetchDiscoveredMcp = async (
   }
 
   const data = (await response.json()) as DiscoverMcpResponse;
+  return data.discovered ?? [];
+};
+
+const fetchDiscoveredSkills = async (
+  workerUrl: string,
+  runtime: 'claude-code' | 'codex',
+): Promise<DiscoveredSkill[]> => {
+  const response = await fetch(`${workerUrl}/api/skills/discover?runtime=${runtime}`, {
+    signal: AbortSignal.timeout(5_000),
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const data = (await response.json()) as DiscoverSkillResponse;
   return data.discovered ?? [];
 };
 
@@ -111,6 +136,23 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
       // Discovery failed — preview will show empty MCP (acceptable degradation)
     }
 
+    // Fetch discovered skills from worker — query BOTH runtimes and merge
+    let discoveredSkills: DiscoveredSkill[] = [];
+    try {
+      const [primary, secondaryCandidates] = await Promise.all([
+        fetchDiscoveredSkills(workerResult.url, 'claude-code'),
+        fetchDiscoveredSkills(workerResult.url, 'codex'),
+      ]);
+
+      const secondary = secondaryCandidates.filter(
+        (skill) => !primary.some((existing) => existing.id === skill.id),
+      );
+
+      discoveredSkills = [...primary, ...secondary];
+    } catch {
+      // Discovery failed — preview will show empty skills (acceptable degradation)
+    }
+
     // Resolve effective MCP: discovery defaults - excluded + custom
     const mcpOverride = agent.config?.mcpOverride;
     const excludedSet = new Set(mcpOverride?.excluded ?? []);
@@ -122,6 +164,7 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
         command: server.config.command,
         args: server.config.args ?? [],
         env: server.config.env ?? {},
+        source: server.source,
       }));
 
     for (const custom of mcpOverride?.custom ?? []) {
@@ -131,6 +174,28 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
         command: custom.command,
         args: custom.args ?? [],
         env: custom.env ?? {},
+        source: 'custom',
+      });
+    }
+
+    // Resolve effective skills: discovery defaults - excluded + custom
+    const skillOverride = agent.config?.skillOverride;
+    const excludedSkillSet = new Set(skillOverride?.excluded ?? []);
+    const effectiveSkills = discoveredSkills
+      .filter((skill) => !excludedSkillSet.has(skill.id))
+      .map((skill) => ({
+        id: skill.id,
+        path: skill.path,
+        enabled: true,
+        ...(skill.name ? { name: skill.name } : {}),
+        ...(skill.description ? { description: skill.description } : {}),
+        ...(skill.source ? { source: skill.source } : {}),
+      }));
+
+    for (const custom of skillOverride?.custom ?? []) {
+      effectiveSkills.push({
+        ...custom,
+        enabled: custom.enabled ?? true,
       });
     }
 
@@ -138,7 +203,7 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
     // We pass it as a partial config that gets merged with defaults on the worker side
     const previewConfig: Record<string, unknown> = {
       mcpServers: effectiveMcpServers,
-      skills: [],
+      skills: effectiveSkills,
       instructions: { userGlobal: '', projectTemplate: '' },
       sandbox: 'workspace-write',
       approvalPolicy: 'on-failure',
