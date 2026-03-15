@@ -6,7 +6,6 @@ import { AgentError, isNumericString, isValidLogLevel, validateEnv } from '@agen
 
 import { createWorkerServer } from './api/server.js';
 import { HealthReporter } from './health-reporter.js';
-import { buildAuditLogFilePath } from './hooks/audit-logger.js';
 import { AuditReporter } from './hooks/audit-reporter.js';
 import type { IpcMessage, IpcResponse } from './ipc/index.js';
 import { createIpcResponse, IpcServer } from './ipc/index.js';
@@ -276,17 +275,13 @@ async function main(): Promise<void> {
   // For per-agent run IDs (dispatched by the control plane via task-worker), the runId
   // is passed per-request in the StartAgentBody and stored on each AgentInstance.
   // A future enhancement can start per-agent AuditReporters using instance.runId instead.
-  const todayDate = new Date().toISOString().slice(0, 10);
-  const auditFilePath = WORKER_AUDIT_FILE_TOKEN
-    ? buildAuditLogFilePath(AUDIT_LOG_DIR, todayDate, WORKER_AUDIT_FILE_TOKEN)
-    : null;
-
   const auditReporter =
-    RUN_ID && auditFilePath
+    RUN_ID && WORKER_AUDIT_FILE_TOKEN
       ? new AuditReporter({
           controlPlaneUrl: CONTROL_PLANE_URL,
           runId: RUN_ID,
-          auditFilePath,
+          auditLogDir: AUDIT_LOG_DIR,
+          auditFileToken: WORKER_AUDIT_FILE_TOKEN,
           logger,
           flushIntervalMs: AUDIT_FLUSH_INTERVAL_MS,
         })

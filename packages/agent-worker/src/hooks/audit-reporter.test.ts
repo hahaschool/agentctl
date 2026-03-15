@@ -1,4 +1,5 @@
 import type { FileHandle } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,7 +30,9 @@ vi.stubGlobal('fetch', mockFetch);
 type ReporterOverrides = {
   controlPlaneUrl?: string;
   runId?: string;
+  auditLogDir?: string;
   auditFilePath?: string;
+  auditFileToken?: string;
   flushIntervalMs?: number;
 };
 
@@ -44,7 +47,9 @@ function makeReporter(overrides?: ReporterOverrides): AuditReporter {
   return new AuditReporter({
     controlPlaneUrl: overrides?.controlPlaneUrl ?? 'http://localhost:4000',
     runId: overrides?.runId ?? 'run-123',
+    auditLogDir: overrides?.auditLogDir ?? dirname(overrides?.auditFilePath ?? '/tmp/audit.ndjson'),
     auditFilePath: overrides?.auditFilePath ?? '/tmp/audit.ndjson',
+    auditFileToken: overrides?.auditFileToken,
     logger: mockLogger,
     flushIntervalMs: overrides?.flushIntervalMs ?? 1_000,
   });
@@ -157,11 +162,25 @@ describe('AuditReporter', () => {
       const reporter = new AuditReporter({
         controlPlaneUrl: 'http://localhost:4000',
         runId: 'run-1',
+        auditLogDir: '/tmp',
         auditFilePath: '/tmp/audit.ndjson',
         logger: mockLogger,
       });
 
       expect(reporter).toBeInstanceOf(AuditReporter);
+    });
+
+    it('rejects audit files outside the configured audit log directory', () => {
+      expect(
+        () =>
+          new AuditReporter({
+            controlPlaneUrl: 'http://localhost:4000',
+            runId: 'run-1',
+            auditLogDir: '/var/agentctl/audit',
+            auditFilePath: '/tmp/audit.ndjson',
+            logger: mockLogger,
+          }),
+      ).toThrow(/outside the allowed base path/i);
     });
   });
 
@@ -177,6 +196,7 @@ describe('AuditReporter', () => {
       await vi.advanceTimersByTimeAsync(1_000);
 
       expect(mockOpen).toHaveBeenCalledTimes(1);
+      expect(mockOpen).toHaveBeenCalledWith('/tmp/audit.ndjson', expect.any(Number));
     });
 
     it('is idempotent when called multiple times', async () => {

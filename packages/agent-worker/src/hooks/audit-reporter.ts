@@ -1,10 +1,12 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
-import type { AuditEntry } from './audit-logger.js';
+import { sanitizePath } from '../utils/path-security.js';
+import { type AuditEntry, buildAuditLogFilePath } from './audit-logger.js';
 
 const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH_SIZE = 100;
@@ -23,7 +25,9 @@ type AuditActionPayload = {
 type AuditReporterOptions = {
   controlPlaneUrl: string;
   runId: string;
-  auditFilePath: string;
+  auditLogDir: string;
+  auditFileToken?: string;
+  auditFilePath?: string;
   logger: Logger;
   flushIntervalMs?: number;
 };
@@ -69,6 +73,7 @@ export class AuditReporter {
   private isFlushing = false;
   private readonly controlPlaneUrl: string;
   private readonly runId: string;
+  private readonly auditLogDir: string;
   private readonly auditFilePath: string;
   private readonly log: Logger;
   private readonly flushIntervalMs: number;
@@ -76,7 +81,16 @@ export class AuditReporter {
   constructor(options: AuditReporterOptions) {
     this.controlPlaneUrl = options.controlPlaneUrl;
     this.runId = options.runId;
-    this.auditFilePath = options.auditFilePath;
+    this.auditLogDir = resolve(options.auditLogDir);
+    this.auditFilePath = sanitizePath(
+      options.auditFilePath ??
+        buildAuditLogFilePath(
+          this.auditLogDir,
+          new Date().toISOString().slice(0, 10),
+          options.auditFileToken,
+        ),
+      this.auditLogDir,
+    );
     this.log = options.logger.child({ component: 'audit-reporter', runId: options.runId });
     this.flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   }
@@ -240,7 +254,8 @@ export class AuditReporter {
    */
   private async openAuditFileSecurely(): Promise<Awaited<ReturnType<typeof open>> | null> {
     try {
-      return await open(this.auditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const safeAuditFilePath = sanitizePath(this.auditFilePath, this.auditLogDir);
+      return await open(safeAuditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
     } catch (err) {
       const nodeErr = err as NodeJS.ErrnoException;
       if (nodeErr.code === 'ENOENT') {
@@ -250,11 +265,12 @@ export class AuditReporter {
         throw new WorkerError(
           'AUDIT_SYMLINK_REJECTED',
           'Audit file path is a symbolic link — refusing to read for security',
-          { path: this.auditFilePath },
+          { path: this.auditFilePath, auditLogDir: this.auditLogDir },
         );
       }
       throw new WorkerError('AUDIT_OPEN_FAILED', `Failed to open audit file: ${nodeErr.message}`, {
         path: this.auditFilePath,
+        auditLogDir: this.auditLogDir,
       });
     }
   }
@@ -264,7 +280,7 @@ export class AuditReporter {
       throw new WorkerError(
         'AUDIT_INVALID_FILE_TYPE',
         'Audit file path must resolve to a regular file',
-        { path: this.auditFilePath },
+        { path: this.auditFilePath, auditLogDir: this.auditLogDir },
       );
     }
 
@@ -272,7 +288,7 @@ export class AuditReporter {
       throw new WorkerError(
         'AUDIT_INSECURE_PERMISSIONS',
         'Audit file permissions allow group or other writes',
-        { path: this.auditFilePath, mode: info.mode },
+        { path: this.auditFilePath, mode: info.mode, auditLogDir: this.auditLogDir },
       );
     }
   }

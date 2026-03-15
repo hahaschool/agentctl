@@ -215,6 +215,7 @@ export class AgentInstance extends EventEmitter {
   private pendingSafetyDecision: PendingSafetyDecision | null = null;
   private sandboxSetup: SandboxSetup | null = null;
   private executionProjectPath: string;
+  private readonly auditLogDir: string;
   private readonly sourceRuntime: ManagedRuntime;
   private readonly liveHandoffOrchestrator: LiveHandoffOrchestrator | null;
 
@@ -232,12 +233,13 @@ export class AgentInstance extends EventEmitter {
     this.log = options.logger.child({ agentId: this.agentId, machineId: this.machineId });
     this.outputBuffer = new OutputBuffer();
     this.executionProjectPath = this.projectPath;
+    this.auditLogDir = options.auditLogDir ?? DEFAULT_AUDIT_LOG_DIR;
     this.sourceRuntime = options.sourceRuntime ?? 'claude-code';
     const auditFileToken = options.auditFileToken ?? (this.runId ? randomUUID() : undefined);
 
     // Initialize audit logger and hook functions
     this.auditLogger = new AuditLogger({
-      logDir: options.auditLogDir ?? DEFAULT_AUDIT_LOG_DIR,
+      logDir: this.auditLogDir,
       fileToken: auditFileToken,
       logger: this.log,
     });
@@ -719,6 +721,7 @@ export class AgentInstance extends EventEmitter {
       this.auditReporter = new AuditReporter({
         controlPlaneUrl: this.controlPlaneUrl,
         runId: this.runId,
+        auditLogDir: this.auditLogDir,
         auditFilePath: this.auditLogger.getLogFilePath(),
         logger: this.log,
       });
