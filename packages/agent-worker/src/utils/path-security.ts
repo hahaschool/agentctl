@@ -12,7 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
 
 export const DEFAULT_DENIED_PATH_SEGMENTS = [
   '.ssh',
@@ -73,8 +73,7 @@ function resolveWithinBase(candidatePath: string, allowedBase: string): string {
 export function safeExistsSync(userPath: string, allowedBase: string): string | null {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  const rel = relative(resolvedBase, safe);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return existsSync(safe) ? safe : null;
@@ -91,8 +90,7 @@ export function safeReadFileSync(
 ): string {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  const rel = relative(resolvedBase, safe);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return readFileSync(safe, encoding);
@@ -105,8 +103,7 @@ export function safeReadFileSync(
 export function safeWriteFileSync(userPath: string, allowedBase: string, data: string): void {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  const rel = relative(resolvedBase, safe);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   writeFileSync(safe, data);
@@ -123,8 +120,7 @@ export function safeReadFileAtomic(
 ): { content: string; size: number } {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  const rel = relative(resolvedBase, safe);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
 
@@ -145,8 +141,7 @@ export function safeReadFileAtomic(
 export function safeStatSync(userPath: string, allowedBase: string): Stats {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  const rel = relative(resolvedBase, safe);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return statSync(safe);
@@ -155,8 +150,7 @@ export function safeStatSync(userPath: string, allowedBase: string): Stats {
 export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[] {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  const rel = relative(resolvedBase, safe);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return readdirSync(safe, { withFileTypes: true }) as Dirent[];
@@ -165,8 +159,7 @@ export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[]
 export function safeMkdirSync(userPath: string, allowedBase: string): string | undefined {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  const rel = relative(resolvedBase, safe);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return mkdirSync(safe, { recursive: true });
