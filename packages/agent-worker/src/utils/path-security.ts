@@ -1,11 +1,15 @@
+import type { Dirent, Stats } from 'node:fs';
 import {
   closeSync,
   existsSync,
   constants as fsConstants,
   fstatSync,
+  mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   readSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
@@ -116,4 +120,19 @@ export function safeReadFileAtomic(
   } finally {
     closeSync(fd);
   }
+}
+
+export function safeStatSync(userPath: string, allowedBase: string): Stats {
+  const safe = resolveWithinBase(userPath, allowedBase);
+  return statSync(safe);
+}
+
+export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[] {
+  const safe = resolveWithinBase(userPath, allowedBase);
+  return readdirSync(safe, { withFileTypes: true }) as Dirent[];
+}
+
+export function safeMkdirSync(userPath: string, allowedBase: string): string | undefined {
+  const safe = resolveWithinBase(userPath, allowedBase);
+  return mkdirSync(safe, { recursive: true });
 }

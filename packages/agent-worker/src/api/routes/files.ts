@@ -8,7 +8,6 @@
 // ---------------------------------------------------------------------------
 
 import type { Dirent } from 'node:fs';
-import { mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
@@ -19,7 +18,10 @@ import type { Logger } from 'pino';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeMkdirSync,
+  safeReaddirSync,
   safeReadFileAtomic,
+  safeStatSync,
   safeWriteFileSync,
   sanitizePath,
 } from '../../utils/path-security.js';
@@ -111,12 +113,12 @@ function toSafePath(raw: string): SafePath {
 
 function listSafeDirectory(safeDirPath: string, allowedBase: string): Dirent[] {
   const normalizedDirPath = sanitizePath(safeDirPath, allowedBase);
-  const stat = statSync(normalizedDirPath);
+  const stat = safeStatSync(normalizedDirPath, allowedBase);
   if (!stat.isDirectory()) {
     throw new WorkerError('INVALID_PATH', 'Path is not a directory', { path: normalizedDirPath });
   }
 
-  return readdirSync(normalizedDirPath, { withFileTypes: true }) as Dirent[];
+  return safeReaddirSync(normalizedDirPath, allowedBase);
 }
 
 function readSafeChildMetadata(
@@ -134,7 +136,7 @@ function readSafeChildMetadata(
     );
   }
 
-  const childStat = statSync(childPath);
+  const childStat = safeStatSync(childPath, allowedBase);
   return {
     size: childStat.size,
     modified: childStat.mtime.toISOString(),
@@ -146,7 +148,7 @@ function readSafeFileContent(
   allowedBase: string,
 ): { content: string; size: number } {
   const normalizedFilePath = sanitizePath(safeFilePath, allowedBase);
-  const stat = statSync(normalizedFilePath);
+  const stat = safeStatSync(normalizedFilePath, allowedBase);
   if (stat.isDirectory()) {
     throw new WorkerError('INVALID_PATH', 'Path is a directory, not a file', {
       path: normalizedFilePath,
@@ -166,7 +168,7 @@ function readSafeFileContent(
 
 function ensureSafeDirectory(safeDirPath: string, allowedBase: string): void {
   const normalizedDirPath = sanitizePath(safeDirPath, allowedBase);
-  mkdirSync(normalizedDirPath, { recursive: true });
+  safeMkdirSync(normalizedDirPath, allowedBase);
 }
 
 // ---------------------------------------------------------------------------
