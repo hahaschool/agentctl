@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -187,6 +187,19 @@ describe('safe file wrappers', () => {
     await expect(safeReadFile(escapedPath, baseDir)).rejects.toThrow(
       /outside the allowed base path/i,
     );
+  });
+
+  it('rejects symlink write targets that escape the allowed base', () => {
+    const baseDir = makeTempRoot();
+    const outsideDir = makeTempRoot();
+    const outsideFile = join(outsideDir, 'outside.txt');
+    const linkPath = join(baseDir, 'linked.txt');
+
+    writeFileSync(outsideFile, 'secret');
+    symlinkSync(outsideFile, linkPath);
+
+    expect(() => safeWriteFileSync(linkPath, baseDir, 'nope')).toThrow();
+    expect(readFileSync(outsideFile, 'utf-8')).toBe('secret');
   });
 
   it('rejects path traversal for async readdir wrapper', async () => {
