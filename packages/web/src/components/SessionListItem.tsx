@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { Session } from '../lib/api';
 import { formatCost, formatDuration } from '../lib/format-utils';
@@ -44,14 +45,42 @@ function LiveDuration({
   }, [isActive]);
 
   const formatted = formatDuration(startedAt, endedAt);
+  const isInstant = formatted === '0s';
+  const text = isActive
+    ? isInstant
+      ? 'Running now'
+      : `Running for ${formatted}`
+    : isInstant
+      ? 'Duration: instant'
+      : `Duration: ${formatted}`;
 
   return (
     <span
       className="text-[11px] text-muted-foreground"
-      title={isActive ? 'Running' : 'Total duration'}
+      title={isActive ? 'Running' : isInstant ? 'Instant session' : 'Total duration'}
     >
-      {isActive ? `Running for ${formatted}` : `Duration: ${formatted}`}
+      {text}
     </span>
+  );
+}
+
+function getSessionDurationMs(session: Session): number {
+  const end = session.endedAt ?? session.lastHeartbeat ?? session.startedAt;
+  return Math.max(0, new Date(end).getTime() - new Date(session.startedAt).getTime());
+}
+
+function isEmptySession(session: Session): boolean {
+  if (session.status === 'active' || session.status === 'starting') {
+    return false;
+  }
+  const costUsd = typeof session.metadata?.costUsd === 'number' ? session.metadata.costUsd : 0;
+  const messageCount =
+    typeof session.metadata?.messageCount === 'number' ? session.metadata.messageCount : 0;
+  return (
+    !session.claudeSessionId &&
+    getSessionDurationMs(session) === 0 &&
+    costUsd <= 0 &&
+    messageCount <= 0
   );
 }
 
@@ -108,6 +137,8 @@ function SessionListItemBase({
   const errorMsg = meta?.errorMessage;
   const costUsd = meta?.costUsd;
   const messageCount = meta?.messageCount;
+  const primaryLabel = (s.agentName ?? s.agentId).trim() || 'Session';
+  const emptySession = isEmptySession(s);
 
   const handleToggle = useCallback(() => onToggleCheck(s.id), [onToggleCheck, s.id]);
   const longPress = useLongPress(handleToggle);
@@ -151,13 +182,16 @@ function SessionListItemBase({
             : isChecked
               ? 'bg-primary/5'
               : 'bg-transparent hover:bg-accent/8',
-        s.status === 'error'
-          ? 'border-l-[3px] border-l-red-500'
-          : s.status === 'starting'
-            ? 'border-l-[3px] border-l-yellow-500'
-            : s.status === 'active'
-              ? 'border-l-[3px] border-l-green-500'
-              : 'border-l-[3px] border-l-transparent',
+        emptySession
+          ? 'border-l-[3px] border-l-muted-foreground/35'
+          : s.status === 'error'
+            ? 'border-l-[3px] border-l-red-500'
+            : s.status === 'starting'
+              ? 'border-l-[3px] border-l-yellow-500'
+              : s.status === 'active'
+                ? 'border-l-[3px] border-l-green-500'
+                : 'border-l-[3px] border-l-transparent',
+        emptySession && !isSelected && !isFocused && 'opacity-70',
       )}
       {...longPress}
     >
@@ -187,13 +221,17 @@ function SessionListItemBase({
         }}
         className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
       >
-        <div className="flex justify-between items-center mb-1.5">
-          <CopyableText
-            value={s.id}
-            maxDisplay={16}
-            className="font-mono text-xs font-medium text-foreground/90"
-          />
+        <div className="flex justify-between items-center mb-1.5 gap-2">
+          <span className="font-medium text-xs text-foreground/90 truncate">{primaryLabel}</span>
           <span className="flex items-center gap-2">
+            {emptySession && (
+              <Badge
+                variant="outline"
+                className="h-4 px-1.5 rounded-sm text-[10px] uppercase tracking-wide border-muted-foreground/40 bg-muted/20 text-muted-foreground"
+              >
+                empty
+              </Badge>
+            )}
             {s.status === 'active' && (
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -215,10 +253,12 @@ function SessionListItemBase({
             {errorMsg}
           </div>
         )}
-        <div className="text-xs text-muted-foreground flex gap-2 items-center">
-          <span className="font-medium text-foreground/70">
-            {s.agentName ? s.agentName : s.agentId.slice(0, 8)}
-          </span>
+        <div className="text-xs text-muted-foreground flex gap-2 items-center flex-wrap">
+          <CopyableText
+            value={s.id}
+            maxDisplay={16}
+            className="font-mono text-[11px] text-muted-foreground/80"
+          />
           <span className="text-muted-foreground/50">|</span>
           <span>{s.machineId}</span>
           <span className="text-purple-600/70 dark:text-purple-400/70 text-[11px]">
