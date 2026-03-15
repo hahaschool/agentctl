@@ -75,4 +75,68 @@ describe('ClaudeConfigRenderer', () => {
     expect(parsed.approvalPolicy).toBe('on-request');
     expect(parsed.model).toBe('sonnet');
   });
+
+  it('omits CLAUDE.md when managed instructions are empty', () => {
+    const renderer = new ClaudeConfigRenderer();
+    const rendered = renderer.render(
+      makeConfig({
+        instructions: {
+          userGlobal: '',
+          projectTemplate: '',
+        },
+      }),
+    );
+
+    const claudeMd = rendered.files.find((file) => file.path === 'CLAUDE.md');
+    expect(claudeMd).toBeUndefined();
+  });
+
+  it('splits MCP payload by source between .claude.json and .mcp.json', () => {
+    const renderer = new ClaudeConfigRenderer();
+    const rendered = renderer.render(
+      makeConfig({
+        mcpServers: [
+          {
+            id: 'global-filesystem',
+            name: 'global-filesystem',
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-filesystem'],
+            env: { ROOT: '/home/user' },
+            source: 'global',
+          },
+          {
+            id: 'project-filesystem',
+            name: 'project-filesystem',
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-filesystem'],
+            env: { ROOT: '/workspace' },
+            source: 'project',
+          },
+          {
+            id: 'custom-memory',
+            name: 'custom-memory',
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-memory'],
+            env: {},
+            source: 'custom',
+          },
+        ] as unknown as ManagedRuntimeConfig['mcpServers'],
+      }),
+    );
+
+    const homeMcp = rendered.files.find((file) => file.path === '.claude.json');
+    const workspaceMcp = rendered.files.find((file) => file.path === '.mcp.json');
+
+    const homePayload = JSON.parse(homeMcp?.content ?? '{}') as {
+      mcpServers: Record<string, unknown>;
+    };
+    const workspacePayload = JSON.parse(workspaceMcp?.content ?? '{}') as {
+      mcpServers: Record<string, unknown>;
+    };
+
+    expect(Object.keys(homePayload.mcpServers)).toEqual(['global-filesystem']);
+    expect(Object.keys(workspacePayload.mcpServers)).toContain('project-filesystem');
+    expect(Object.keys(workspacePayload.mcpServers)).toContain('custom-memory');
+    expect(Object.keys(workspacePayload.mcpServers)).not.toContain('global-filesystem');
+  });
 });
