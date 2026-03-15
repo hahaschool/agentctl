@@ -1240,6 +1240,28 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 - [x] Remove old `ConfigPreview.tsx` *(PR #163)* from RuntimeConfigTab
 - [x] Mobile fallback: *(PR #163)* collapsible bottom panel
 
+### 16.5 Config Preview Data Accuracy — P0
+
+Config preview sidebar shows layout correctly but data is inaccurate:
+
+- [ ] Skills not included in preview — CP proxy doesn't pass discovered skills to worker (same bug as MCP was)
+- [ ] CLAUDE.md shows empty managed template when agent has no instructions — should show "Not managed" or omit
+- [ ] `.claude.json` and `.mcp.json` show identical content — renderer should split global (home) vs project (workspace) MCP servers correctly
+- [ ] Runtime Config options (sandbox, approval policy) need descriptive tooltips explaining each option and which runtime they apply to
+- [ ] Deployment: "Run Preflight" button unclickable on initial page load — state initialization bug in PromoteGate
+
+### 16.6 Security Hardening (Codex batch) — P0
+
+> Delivered via PRs #167-#188 by Codex security agents.
+
+- [x] Path security wrappers hardened across agent-worker *(PRs #167-#177, #182, #187)*
+- [x] Rate limiting on CP memory-decay + agents routes *(PRs #184)*
+- [x] Loop iteration cap to prevent unbounded resource usage *(PR #185)*
+- [x] Git route hardening *(PR #183)*
+- [x] CLI session cwd sanitization *(PR #188)*
+- [x] Discovery path security *(PR #176)*
+- [x] Worktree manager path writes hardened *(PR #177)*
+
 ---
 
 ## Active Priorities
@@ -1317,6 +1339,8 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
 | **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
+| **P0** | Config Preview Data Accuracy | 16.5 | Planned — skills missing, CLAUDE.md empty template, MCP scope split, tooltips, preflight button |
+| **P0** | ~~Security Hardening (Codex batch)~~ | 16.6 | ✅ Delivered (PRs #167-#188) |
 
 ---
 
