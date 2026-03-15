@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { execFile } from 'node:child_process';
-import { lstatSync, realpathSync, statSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { promisify } from 'node:util';
 
 import { WorkerError } from '@agentctl/shared';
@@ -14,6 +14,8 @@ import type { Logger } from 'pino';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeLstatSync,
+  safeStatSync,
   sanitizePath,
 } from '../../utils/path-security.js';
 import {
@@ -255,16 +257,12 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
     ),
     'Too many git status requests. Try again later.',
   );
-  const frameworkGitStatusRateLimit = app.rateLimit({
-    max: 60,
-    timeWindow: '1 minute',
-  });
-
   // GET /api/git/status?path=<absolute-path>
   app.get<{ Querystring: { path?: string } }>(
     '/status',
     {
-      preHandler: [frameworkGitStatusRateLimit, gitStatusRateLimit],
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      preHandler: gitStatusRateLimit,
       schema: {
         querystring: {
           type: 'object',
@@ -292,13 +290,13 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
       // real path and re-validate against the denied path segments.
       try {
         const fsPath = sanitizePath(validatedDirPath, ROOT_PATH);
-        const lstatResult = lstatSync(fsPath);
+        const lstatResult = safeLstatSync(fsPath, ROOT_PATH);
         if (lstatResult.isSymbolicLink()) {
           validatedDirPath = resolveAndRevalidate(fsPath);
         } else {
           validatedDirPath = fsPath;
         }
-        const statResult = statSync(validatedDirPath);
+        const statResult = safeStatSync(validatedDirPath, ROOT_PATH);
         if (!statResult.isDirectory()) {
           return reply.code(400).send({
             error: 'NOT_A_DIRECTORY',

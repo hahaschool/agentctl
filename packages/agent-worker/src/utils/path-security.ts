@@ -5,6 +5,7 @@ import {
   existsSync,
   constants as fsConstants,
   fstatSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -156,6 +157,11 @@ export function safeReadFileAtomic(
 export function safeStatSync(userPath: string, allowedBase: string): Stats {
   const safe = sanitizePath(userPath, allowedBase);
   return statSync(safe);
+}
+
+export function safeLstatSync(userPath: string, allowedBase: string): Stats {
+  const safe = sanitizePath(userPath, allowedBase);
+  return lstatSync(safe);
 }
 
 export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[] {

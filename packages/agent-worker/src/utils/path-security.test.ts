@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   safeChmodSync,
   safeExistsSync,
+  safeLstatSync,
   safeMkdirSync,
   safeReaddirSync,
   safeReadFileAtomic,
@@ -163,5 +164,18 @@ describe('safe file wrappers', () => {
     expect(() => safeReadFileAtomic(escapedPath, baseDir, 128)).toThrow(
       /outside the allowed base path/i,
     );
+  });
+});
+
+describe('safeLstatSync', () => {
+  it('preserves symlink metadata inside the allowed base', () => {
+    const baseDir = makeTempRoot();
+    const targetPath = join(baseDir, 'target.txt');
+    const linkPath = join(baseDir, 'target-link.txt');
+
+    writeFileSync(targetPath, 'ok');
+    symlinkSync(targetPath, linkPath);
+
+    expect(safeLstatSync(linkPath, baseDir).isSymbolicLink()).toBe(true);
   });
 });
