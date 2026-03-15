@@ -147,4 +147,33 @@ Content`);
     expect(result).toHaveLength(1);
     expect(result[0].source).toBe('project');
   });
+
+  it('normalizes homePath before scanning global skill directories', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockReaddir.mockResolvedValue([]);
+
+    await discoverSkills('claude-code', '/home/user/../user');
+
+    expect(mockAccess).toHaveBeenCalledWith('/home/user/.claude/skills');
+  });
+
+  it('skips project skill scanning for denied project paths', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockReaddir.mockResolvedValue([]);
+
+    await discoverSkills('claude-code', '/home/user', '/tmp/.aws/project');
+
+    expect(mockAccess).toHaveBeenCalledTimes(1);
+    expect(mockAccess).toHaveBeenCalledWith('/home/user/.claude/skills');
+  });
+
+  it('skips entries whose SKILL.md path escapes the skills directory', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockReaddir.mockResolvedValue([{ name: '../escape', isDirectory: () => true }] as any);
+
+    const result = await discoverSkills('claude-code', '/home/user');
+
+    expect(result).toEqual([]);
+    expect(mockReadFile).not.toHaveBeenCalled();
+  });
 });

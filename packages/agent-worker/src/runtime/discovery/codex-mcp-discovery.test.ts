@@ -89,4 +89,26 @@ args = ["-y", "pg-server"]
     expect(result[0].source).toBe('project');
     expect(result[0].configFile).toContain('.codex/config.toml');
   });
+
+  it('normalizes the base path before reading config.toml', async () => {
+    const toml = `
+[mcp_servers.fs]
+command = "npx"
+`;
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(toml);
+
+    await discoverCodexMcpServers('/home/user/work/../project');
+
+    expect(mockAccess).toHaveBeenCalledWith('/home/user/project/.codex/config.toml');
+    expect(mockReadFile).toHaveBeenCalledWith('/home/user/project/.codex/config.toml', 'utf-8');
+  });
+
+  it('returns empty and avoids fs access for denied base paths', async () => {
+    const result = await discoverCodexMcpServers('/home/user/.ssh/project');
+
+    expect(result).toEqual([]);
+    expect(mockAccess).not.toHaveBeenCalled();
+    expect(mockReadFile).not.toHaveBeenCalled();
+  });
 });

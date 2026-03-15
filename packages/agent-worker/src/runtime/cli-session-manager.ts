@@ -14,13 +14,13 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync } from 'node:fs';
 import { normalize, join as pathJoin, resolve as resolvePath } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeExistsSync,
   safeWriteFileSync,
   sanitizePath,
 } from '../utils/path-security.js';
@@ -260,8 +260,8 @@ export class CliSessionManager extends EventEmitter {
     // Write .mcp.json before spawning if MCP servers are configured via AgentCTL.
     // Claude Code reads this file at startup to discover available MCP servers.
     const mcpConfigPath = pathJoin(sanitizedCwd, '.mcp.json');
+    const safeMcpPath = sanitizePath(mcpConfigPath, sanitizedCwd);
     if (options.config?.mcpServers && Object.keys(options.config.mcpServers).length > 0) {
-      const safeMcpPath = sanitizePath(mcpConfigPath, sanitizedCwd);
       const mcpPayload = { mcpServers: options.config.mcpServers };
       safeWriteFileSync(safeMcpPath, sanitizedCwd, JSON.stringify(mcpPayload, null, 2));
       this.logger?.debug(
@@ -277,10 +277,10 @@ export class CliSessionManager extends EventEmitter {
     // Explicitly pass --mcp-config if .mcp.json exists in project dir.
     // Claude CLI in -p mode may not auto-discover project .mcp.json;
     // passing it explicitly ensures MCP servers are loaded.
-    if (existsSync(mcpConfigPath)) {
-      args.push('--mcp-config', mcpConfigPath);
+    if (safeExistsSync(safeMcpPath, sanitizedCwd)) {
+      args.push('--mcp-config', safeMcpPath);
       this.logger?.debug(
-        { sessionId: id, mcpConfigPath },
+        { sessionId: id, mcpConfigPath: safeMcpPath },
         'Passing --mcp-config to CLI for project MCP servers',
       );
     }
