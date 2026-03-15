@@ -13,8 +13,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { readdir } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { readdir, readFile } from 'node:fs/promises';
+import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
 
 export const DEFAULT_DENIED_PATH_SEGMENTS = [
   '.ssh',
@@ -64,9 +64,9 @@ function resolveWithinBase(candidatePath: string, allowedBase: string): string {
 // Safe fs wrappers — sanitise + operate atomically so CodeQL sees that
 // user-controlled paths never reach raw fs sinks directly.
 //
-// Each wrapper resolves the final sink path via sanitizePath() immediately
-// before the fs operation so static analysis can trace a single sanitisation
-// boundary.
+// Keep an explicit relative-path boundary check adjacent to each sink call;
+// this matches CodeQL's recognised path-sanitiser shape while preserving
+// sanitizePath() as the canonical resolver.
 // ---------------------------------------------------------------------------
 
 /**
@@ -75,6 +75,11 @@ function resolveWithinBase(candidatePath: string, allowedBase: string): string {
  */
 export function safeExistsSync(userPath: string, allowedBase: string): string | null {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return existsSync(safe) ? safe : null;
 }
 
@@ -88,7 +93,30 @@ export function safeReadFileSync(
   encoding: BufferEncoding = 'utf-8',
 ): string {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return readFileSync(safe, encoding);
+}
+
+/**
+ * Safe wrapper around async `readFile`.
+ * Sanitises + validates the path before reading.
+ */
+export async function safeReadFile(
+  userPath: string,
+  allowedBase: string,
+  encoding: BufferEncoding = 'utf-8',
+): Promise<string> {
+  const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
+  return readFile(safe, encoding);
 }
 
 /**
@@ -97,6 +125,11 @@ export function safeReadFileSync(
  */
 export function safeWriteFileSync(userPath: string, allowedBase: string, data: string): void {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   writeFileSync(safe, data);
 }
 
@@ -110,6 +143,11 @@ export function safeMkdirSync(
   options?: Parameters<typeof mkdirSync>[1],
 ): string {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   mkdirSync(safe, options ?? { recursive: true });
   return safe;
 }
@@ -124,6 +162,11 @@ export function safeChmodSync(
   mode: Parameters<typeof chmodSync>[1],
 ): string {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   chmodSync(safe, mode);
   return safe;
 }
@@ -138,6 +181,11 @@ export function safeReadFileAtomic(
   maxSize: number,
 ): { content: string; size: number } {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
 
   const fd = openSync(safe, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
@@ -155,15 +203,30 @@ export function safeReadFileAtomic(
 
 export function safeStatSync(userPath: string, allowedBase: string): Stats {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return statSync(safe);
 }
 
 export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[] {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return readdirSync(safe, { withFileTypes: true }) as Dirent[];
 }
 
 export async function safeReaddir(userPath: string, allowedBase: string): Promise<Dirent[]> {
   const safe = sanitizePath(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return readdir(safe, { withFileTypes: true });
 }
