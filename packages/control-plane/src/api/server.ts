@@ -730,6 +730,11 @@ export async function createServer({
       });
     }
 
+    if (err.statusCode === 429) {
+      const { statusCode: _statusCode, ...payload } = err as FastifyError & Record<string, unknown>;
+      return reply.status(429).send(payload);
+    }
+
     // Fastify validation errors (e.g. schema validation failures)
     if (err.statusCode === 400 && err.validation) {
       return reply.status(400).send(err);

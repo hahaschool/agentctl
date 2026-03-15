@@ -175,6 +175,7 @@ describe('claude-mem routes — /api/claude-mem', () => {
 
       expect(res?.statusCode).toBe(429);
       expect(res?.json()).toEqual({
+        statusCode: 429,
         error: 'RATE_LIMITED',
         message: 'Too many requests',
       });
@@ -307,16 +308,12 @@ describe('claude-mem routes — /api/claude-mem', () => {
 });
 
 describe('claudeMemRoutes source shape', () => {
-  it('declares route-local rateLimit config on all endpoints', () => {
+  it('declares direct Fastify rate-limit preHandlers on all endpoints', () => {
     const source = readFileSync(new URL('./claude-mem.ts', import.meta.url), 'utf8');
 
-    expect(source).toMatch(/const claudeMemRouteRateLimit = \{/);
-    expect(source).toMatch(/'\/search'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemRouteRateLimit/);
-    expect(source).toMatch(
-      /'\/observations\/:id'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemRouteRateLimit/,
-    );
-    expect(source).toMatch(
-      /'\/timeline'[\s\S]*?config:\s*\{\s*rateLimit:\s*claudeMemRouteRateLimit/,
-    );
+    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
+    expect(source).toMatch(/'\/search'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
+    expect(source).toMatch(/'\/observations\/:id'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
+    expect(source).toMatch(/'\/timeline'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
   });
 });

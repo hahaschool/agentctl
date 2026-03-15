@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { AgentError, generateDispatchSigningKeyPair, signDispatchPayload } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type pino from 'pino';
@@ -71,6 +73,7 @@ describe('Agent CRUD routes', () => {
         expect(first.statusCode).toBe(200);
         expect(second.statusCode).toBe(429);
         expect(second.json()).toEqual({
+          statusCode: 429,
           error: 'Too many agent start requests. Try again later.',
           code: 'RATE_LIMITED',
         });
@@ -104,12 +107,11 @@ describe('Agent CRUD routes', () => {
         });
 
         expect(limited.statusCode).toBe(429);
-        expect(limited.json()).toMatchObject({
+        expect(limited.json()).toEqual({
           statusCode: 429,
-          error: 'Too Many Requests',
+          error: 'Too many agent start requests. Try again later.',
+          code: 'RATE_LIMITED',
         });
-        expect(limited.body).toContain('Rate limit exceeded');
-        expect(limited.body).not.toContain('Too many agent start requests. Try again later.');
       } finally {
         delete process.env.AGENT_START_RATE_LIMIT_MAX;
         delete process.env.AGENT_START_RATE_LIMIT_WINDOW_MS;
@@ -912,5 +914,17 @@ describe('Agent CRUD routes', () => {
       expect(typeof body.totalCostUsd).toBe('number');
       expect(body.totalCostUsd).toBeGreaterThanOrEqual(0);
     });
+  });
+});
+
+describe('agentRoutes source shape', () => {
+  it('declares the start route with a direct Fastify rate-limit preHandler', () => {
+    const source = readFileSync(new URL('./agents.ts', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
+    expect(source).toMatch(
+      /'\/:id\/start'[\s\S]*?preHandler:\s*app\.rateLimit\(\{\s*max:\s*agentStartRateLimitMax,\s*timeWindow:\s*agentStartRateLimitWindowMs,/,
+    );
+    expect(source).not.toMatch(/config:\s*\{\s*rateLimit:/);
   });
 });
