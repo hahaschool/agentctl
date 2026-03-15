@@ -1163,9 +1163,46 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [ ] Each page has exactly one primary action button
 - [ ] Normalize all pages to use shadcn Button variants (remove raw styled links)
 
+**Sessions page:**
+- [ ] Session IDs as titles (f1220b44-584f...) — should show agent name or summary instead
+- [ ] "Duration: 0s" for most sessions — misleading, should show actual elapsed time or hide
+- [ ] Multiple empty sessions (Duration: 0s) from failed starts clutter the list — filter or mark as "empty"
+- [ ] Right panel "Select a session to view details" is wasted space — could show summary stats
+
+**Machines page:**
+- [ ] Same 4 metric card pattern (Total/Online/Offline/Degraded) — acceptable here but still generic
+- [ ] "GPU" / "Docker" capability badges use monospace raw text — should be proper badges with icons
+- [ ] Machine card green left border is inconsistent with other cards
+
+**Settings page (Runtime Control Center):**
+- [ ] Best designed page — good sidebar nav, clear hierarchy, informative right panel ✅
+- [ ] "WHY THIS CHANGED" callout box is a nice touch ✅
+- [ ] Minor: dependency latency cards (Postgres 2ms, Redis 1ms) could use color coding for degraded
+
+**Memory page:**
+- [ ] "0 facts" with empty state — should guide user to import data
+- [ ] Entity type checkboxes not styled as badges/chips — looks like a raw HTML form
+- [ ] Min Confidence slider has no visual feedback
+
+**Spaces page:**
+- [ ] Empty state is clean and actionable ✅ ("Create your first space" button)
+- [ ] Header "Spaces" duplicated (breadcrumb + h1)
+
+**Discover page:**
+- [ ] Codex sessions show "# AGENTS.md instructions for..." as summary — this is the raw system prompt, not a meaningful summary. Need to extract first user message instead.
+- [ ] Session IDs truncated to 7 chars — could show more context
+- [ ] "3 already imported" link is nice ✅
+
+**Deployment page:**
+- [ ] Best specialized page — tier cards with green border + RUNNING badge work well ✅
+- [ ] Dev 1 shows RUNNING with services but MEM/UPTIME shows "—" — should show real values or "starting"
+- [ ] "PROMOTION HISTORY: No promotions yet" is lonely — could be collapsed or hidden when empty
+
 **General:**
 - [ ] Version in sidebar: auto-update from package.json (version-bump.sh should update Sidebar.tsx)
-- [ ] Beta version display still shows v0.1.0 (needs rebuild)
+- [ ] "New Session" blue button on dashboard still has invisible/truncated text
+- [ ] Dashboard still shows "View Agents" and "Runtime Sessions" buttons (beta wasn't rebuilt until now)
+- [ ] Discover session summaries leak raw XML/system prompt text — sanitize
 
 ### 16.4 Agent Settings Config Preview Sidebar — P1
 
