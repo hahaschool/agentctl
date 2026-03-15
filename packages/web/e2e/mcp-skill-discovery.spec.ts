@@ -1,174 +1,486 @@
-import { test } from '@playwright/test';
+import { type APIRequestContext, expect, type Locator, type Page, test } from '@playwright/test';
 
-// ---------------------------------------------------------------------------
-// MCP & Skill Discovery E2E Tests
-//
-// These tests cover the auto-discovery picker UX in agent create and edit
-// flows. They require:
-//   - Control plane running on port 8080
-//   - Worker running on port 9000 (with real machine registered)
-//   - At least one machine with MCP servers / skills discoverable
-//
-// Related: runtime-selector.spec.ts covers runtime switching and model
-// dropdown behavior. This file focuses on the MCP picker and skill picker
-// integration specifically.
-// ---------------------------------------------------------------------------
+type ManagedRuntime = 'claude-code' | 'codex';
+
+type MachineRecord = {
+  id: string;
+  hostname: string;
+  status: string;
+};
+
+type RuntimeConfigDriftResponse = {
+  items: Array<{
+    machineId: string;
+    runtime: ManagedRuntime;
+    isInstalled: boolean;
+  }>;
+};
+
+type AgentMcpOverride = {
+  excluded?: string[];
+  custom?: Array<{ name: string; command: string; args?: string[] }>;
+};
+
+type AgentSkillOverride = {
+  excluded?: string[];
+  custom?: Array<{ id: string; path: string; enabled?: boolean; name?: string }>;
+};
+
+function uniqueName(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function listMachines(request: APIRequestContext): Promise<MachineRecord[]> {
+  const res = await request.get('/api/agents');
+  expect(res.ok()).toBeTruthy();
+  const machines = (await res.json()) as MachineRecord[];
+  expect(Array.isArray(machines)).toBeTruthy();
+  expect(machines.length).toBeGreaterThan(0);
+  return machines;
+}
+
+async function getRuntimeCompatibleMachine(
+  request: APIRequestContext,
+  runtime: ManagedRuntime,
+): Promise<MachineRecord> {
+  const machines = await listMachines(request);
+  const [firstMachine] = machines;
+  if (!firstMachine) {
+    throw new Error('Expected at least one machine');
+  }
+
+  const driftRes = await request.get('/api/runtime-config/drift');
+  if (!driftRes.ok()) {
+    return machines.find((m) => m.status === 'online') ?? firstMachine;
+  }
+
+  const drift = (await driftRes.json()) as RuntimeConfigDriftResponse;
+  const compatibleIds = new Set(
+    drift.items
+      .filter((item) => item.runtime === runtime && item.isInstalled)
+      .map((item) => item.machineId),
+  );
+
+  return (
+    machines.find((m) => m.status === 'online' && compatibleIds.has(m.id)) ??
+    machines.find((m) => compatibleIds.has(m.id)) ??
+    machines.find((m) => m.status === 'online') ??
+    firstMachine
+  );
+}
+
+async function createAgentViaApi(
+  request: APIRequestContext,
+  params: {
+    machineId: string;
+    runtime: ManagedRuntime;
+    name: string;
+    config?: Record<string, unknown>;
+  },
+): Promise<string> {
+  const response = await request.post('/api/agents', {
+    data: {
+      machineId: params.machineId,
+      name: params.name,
+      type: 'adhoc',
+      runtime: params.runtime,
+      projectPath: '/tmp/agentctl-e2e-mcp-skill',
+      ...(params.config ? { config: params.config } : {}),
+    },
+  });
+
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { agentId: string };
+  expect(body.agentId).toBeTruthy();
+  return body.agentId;
+}
+
+async function deleteAgentQuietly(request: APIRequestContext, agentId: string): Promise<void> {
+  try {
+    await request.delete(`/api/agents/${agentId}`);
+  } catch {
+    // Best-effort cleanup for E2E data.
+  }
+}
+
+async function selectOptionFromAnyCombobox(
+  scope: Locator,
+  page: Page,
+  optionName: string,
+): Promise<void> {
+  const comboboxes = scope.getByRole('combobox');
+  const count = await comboboxes.count();
+
+  for (let i = 0; i < count; i++) {
+    const combo = comboboxes.nth(i);
+    await combo.click();
+
+    const option = page.getByRole('option', { name: optionName }).first();
+    const optionVisible = await option.isVisible().catch(() => false);
+    if (optionVisible) {
+      await option.click();
+      return;
+    }
+
+    await page.keyboard.press('Escape');
+  }
+
+  throw new Error(`Could not find option "${optionName}" in any combobox`);
+}
 
 test.describe('MCP & Skill Discovery', () => {
-  // -------------------------------------------------------------------------
-  // Test 1: Create agent flow — MCP picker shows discovered servers
-  // -------------------------------------------------------------------------
-
   test('create agent shows MCP picker with discovered servers', async ({ page }) => {
-    await page.goto('/agents');
+    let agentId: string | null = null;
 
-    // 1. Open create agent dialog
-    //    - Click "Create Agent" button
-    //    - Fill in required fields: name, machineId, projectPath
+    try {
+      await page.goto('/agents');
+      await expect(page.getByRole('heading', { name: /agents/i })).toBeVisible({ timeout: 15_000 });
 
-    // 2. Expand the "Advanced" section in the create dialog
+      await page.getByRole('button', { name: /new agent/i }).click();
+      const dialog = page.getByRole('dialog', { name: /new agent/i });
+      await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    // 3. Verify the "MCP Servers" collapsible section is visible
-    //    - Click to expand it
-    //    - Wait for the "Scanning for MCP servers..." loading state to appear
-    //    - Wait for server rows to render (discovered from machine config)
+      await dialog
+        .locator('textarea[aria-label="Agent prompt"]')
+        .fill('Validate MCP picker discovery flow');
+      await dialog.locator('#create-agent-project').fill('/tmp/agentctl-e2e-mcp-create');
 
-    // 4. Verify discovered servers have source badges (e.g. "project", "machine default")
-    //    - Each server row should show a checkbox + name + badge
+      const mcpPickerToggle = dialog.getByRole('button', { name: /^MCP Servers/ });
+      await mcpPickerToggle.click();
 
-    // 5. Toggle some servers off (uncheck)
-    //    - Verify the unchecked server shows "excluded" badge and strikethrough styling
-    //    - Verify the enabled count in the section header updates
+      const scanning = dialog.getByText('Scanning for MCP servers...');
+      await scanning.isVisible({ timeout: 5_000 }).catch(() => false);
 
-    // 6. Save the agent
-    //    - Click "Create" button
-    //    - Wait for dialog to close / success toast
+      const serverToggles = dialog.locator('input[aria-label^="Toggle "]');
+      await expect
+        .poll(async () => await serverToggles.count(), { timeout: 15_000 })
+        .toBeGreaterThan(0);
 
-    // 7. Verify agent config persisted correctly
-    //    - GET /api/agents/:id
-    //    - Assert config.mcpOverride.excluded contains the toggled-off server names
-    //    - Assert config.mcpOverride.custom is empty (no custom servers added)
+      const firstToggle = serverToggles.first();
+      const firstToggleLabel = (await firstToggle.getAttribute('aria-label')) ?? '';
+      const excludedServerName = firstToggleLabel.replace(/^Toggle\s+/, '').trim();
+      expect(excludedServerName).toBeTruthy();
 
-    test.skip(true, 'E2E stub — requires running backend with discoverable MCP servers');
+      await firstToggle.uncheck();
+      await expect(dialog.getByText('excluded').first()).toBeVisible({ timeout: 10_000 });
+
+      const createResponsePromise = page.waitForResponse(
+        (res) => res.request().method() === 'POST' && res.url().includes('/api/agents'),
+      );
+
+      await dialog.getByRole('button', { name: 'Start Agent' }).click();
+
+      const createResponse = await createResponsePromise;
+      expect(createResponse.ok()).toBeTruthy();
+      const createBody = (await createResponse.json()) as { agentId: string };
+      expect(createBody.agentId).toBeTruthy();
+      agentId = createBody.agentId;
+
+      await expect(dialog).toBeHidden({ timeout: 10_000 });
+
+      const getAgentResponse = await page.request.get(`/api/agents/${agentId}`);
+      expect(getAgentResponse.ok()).toBeTruthy();
+      const agent = (await getAgentResponse.json()) as {
+        config?: { mcpOverride?: AgentMcpOverride };
+      };
+
+      const excluded = agent.config?.mcpOverride?.excluded ?? [];
+      expect(excluded).toContain(excludedServerName);
+
+      const customServers = agent.config?.mcpOverride?.custom ?? [];
+      expect(customServers).toEqual([]);
+    } finally {
+      if (agentId) {
+        await deleteAgentQuietly(page.request, agentId);
+      }
+    }
   });
-
-  // -------------------------------------------------------------------------
-  // Test 2: Edit agent flow — MCP tab uses picker, not manual form
-  // -------------------------------------------------------------------------
 
   test('edit agent MCP tab shows McpServerPicker instead of manual form', async ({ page }) => {
-    await page.goto('/agents');
+    let agentId: string | null = null;
 
-    // 1. Navigate to an existing agent's settings page
-    //    - Click on agent row or "Settings" action
-    //    - Wait for agent settings tabs to load
+    try {
+      const machine = await getRuntimeCompatibleMachine(page.request, 'claude-code');
+      agentId = await createAgentViaApi(page.request, {
+        machineId: machine.id,
+        runtime: 'claude-code',
+        name: uniqueName('pw-mcp-settings'),
+      });
 
-    // 2. Click the "MCP Servers" tab
-    //    - Verify the McpServersTab component renders
-    //    - Verify the description text: "MCP servers discovered from machine config"
+      await page.goto(`/agents/${agentId}/settings`);
+      await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible({
+        timeout: 15_000,
+      });
 
-    // 3. Verify the picker is shown (not a manual JSON/form editor)
-    //    - Expand the "MCP Servers" collapsible picker section
-    //    - Verify server rows appear with checkboxes and source badges
-    //    - Verify the "Refresh" button is available
-    //    - Verify the "+ Custom Server" button is available
+      await page.getByRole('tab', { name: 'MCP Servers' }).click();
+      const mcpPanel = page
+        .locator('div')
+        .filter({
+          hasText:
+            'MCP servers discovered from machine config. Uncheck to exclude, or add custom servers.',
+        })
+        .first();
+      await expect(mcpPanel).toBeVisible({ timeout: 10_000 });
 
-    // 4. Modify overrides
-    //    - Toggle one discovered server off (exclude it)
-    //    - Click "+ Custom Server" to open the inline form
-    //    - Fill in custom server name + command
-    //    - Click "Add"
-    //    - Verify "You have unsaved changes" indicator appears
+      const mcpPickerToggle = mcpPanel.getByRole('button', { name: /^MCP Servers/ });
+      await mcpPickerToggle.click();
 
-    // 5. Save changes
-    //    - Click "Save" button
-    //    - Wait for success toast: "MCP servers saved"
+      await expect(mcpPanel.getByRole('button', { name: '+ Custom Server' })).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(mcpPanel.getByRole('button', { name: 'Refresh' })).toBeVisible({
+        timeout: 10_000,
+      });
 
-    // 6. Verify persistence
-    //    - Reload the page
-    //    - Navigate back to agent settings > MCP tab
-    //    - Verify excluded server is still unchecked
-    //    - Verify custom server still appears
+      const serverToggles = mcpPanel.locator('input[aria-label^="Toggle "]');
+      let excludedServerName: string | null = null;
+      const discoveredCount = await serverToggles.count();
+      if (discoveredCount > 0) {
+        const firstToggle = serverToggles.first();
+        if (!(await firstToggle.isDisabled())) {
+          const firstToggleLabel = (await firstToggle.getAttribute('aria-label')) ?? '';
+          excludedServerName = firstToggleLabel.replace(/^Toggle\s+/, '').trim();
+          if (excludedServerName) {
+            await firstToggle.uncheck();
+          }
+        }
+      }
 
-    test.skip(true, 'E2E stub — requires running backend with at least one agent');
+      const customServerName = uniqueName('custom-mcp');
+      await mcpPanel.getByRole('button', { name: '+ Custom Server' }).click();
+      await mcpPanel.locator('#custom-mcp-name').fill(customServerName);
+      await mcpPanel.locator('#custom-mcp-cmd').fill('node');
+      await mcpPanel.getByRole('button', { name: 'Add' }).click();
+
+      await expect(mcpPanel.getByText('You have unsaved changes')).toBeVisible({ timeout: 10_000 });
+
+      await mcpPanel.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'MCP servers saved' })).toBeVisible({
+        timeout: 10_000,
+      });
+
+      await page.reload();
+      await page.getByRole('tab', { name: 'MCP Servers' }).click();
+      const refreshedPanel = page
+        .locator('div')
+        .filter({
+          hasText:
+            'MCP servers discovered from machine config. Uncheck to exclude, or add custom servers.',
+        })
+        .first();
+      await refreshedPanel.getByRole('button', { name: /^MCP Servers/ }).click();
+      await expect(refreshedPanel.getByText(customServerName)).toBeVisible({ timeout: 10_000 });
+
+      const getAgentResponse = await page.request.get(`/api/agents/${agentId}`);
+      expect(getAgentResponse.ok()).toBeTruthy();
+      const agent = (await getAgentResponse.json()) as {
+        config?: { mcpOverride?: AgentMcpOverride };
+      };
+
+      const customServers = agent.config?.mcpOverride?.custom ?? [];
+      expect(customServers.some((server) => server.name === customServerName)).toBe(true);
+
+      if (excludedServerName) {
+        const excluded = agent.config?.mcpOverride?.excluded ?? [];
+        expect(excluded).toContain(excludedServerName);
+      }
+    } finally {
+      if (agentId) {
+        await deleteAgentQuietly(page.request, agentId);
+      }
+    }
   });
-
-  // -------------------------------------------------------------------------
-  // Test 3: Edit agent flow — Skills tab with SkillPicker
-  // -------------------------------------------------------------------------
 
   test('edit agent Skills tab shows SkillPicker with discovered skills', async ({ page }) => {
-    await page.goto('/agents');
+    let agentId: string | null = null;
 
-    // 1. Navigate to an existing agent's settings page
-    //    - Click on agent row or "Settings" action
+    try {
+      const machine = await getRuntimeCompatibleMachine(page.request, 'claude-code');
+      agentId = await createAgentViaApi(page.request, {
+        machineId: machine.id,
+        runtime: 'claude-code',
+        name: uniqueName('pw-skills-settings'),
+      });
 
-    // 2. Verify "Skills" tab is visible in the tab bar
-    //    - Click the "Skills" tab
-    //    - Verify the description text: "Skills discovered from machine config"
+      await page.goto(`/agents/${agentId}/settings`);
+      await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible({
+        timeout: 15_000,
+      });
 
-    // 3. Expand the "Skills" collapsible picker section
-    //    - Wait for "Scanning for skills..." loading to resolve
-    //    - Verify skill rows grouped by source: "Global", "Project"
-    //    - Each skill row shows: checkbox + name + source badge + optional "invokable" badge
+      await page.getByRole('tab', { name: 'Skills' }).click();
+      const skillsPanel = page
+        .locator('div')
+        .filter({
+          hasText:
+            'Skills discovered from machine config. Uncheck to exclude, or add custom skills.',
+        })
+        .first();
+      await expect(skillsPanel).toBeVisible({ timeout: 10_000 });
 
-    // 4. Toggle a skill off
-    //    - Uncheck a discovered skill
-    //    - Verify "excluded" badge appears on the unchecked row
-    //    - Verify "You have unsaved changes" indicator appears
+      const skillsPickerToggle = skillsPanel.getByRole('button', { name: /^Skills/ });
+      await skillsPickerToggle.click();
 
-    // 5. Save
-    //    - Click "Save" button
-    //    - Wait for success toast: "Skills saved"
+      const scanning = skillsPanel.getByText('Scanning for skills...');
+      await scanning.isVisible({ timeout: 5_000 }).catch(() => false);
 
-    // 6. Verify persistence
-    //    - GET /api/agents/:id
-    //    - Assert config.skillOverride.excluded contains the excluded skill ID
-    //    - Assert the UI reflects the saved state after reload
+      const skillToggles = skillsPanel.locator('input[aria-label^="Toggle "]');
+      let excludedSkillId: string | null = null;
+      const discoveredCount = await skillToggles.count();
+      if (discoveredCount > 0) {
+        const firstToggle = skillToggles.first();
+        if (!(await firstToggle.isDisabled())) {
+          const firstToggleLabel = (await firstToggle.getAttribute('aria-label')) ?? '';
+          excludedSkillId = firstToggleLabel.replace(/^Toggle\s+/, '').trim();
+          if (excludedSkillId) {
+            await firstToggle.uncheck();
+          }
+        }
+      }
 
-    test.skip(true, 'E2E stub — requires running backend with discoverable skills');
+      const customSkillId = uniqueName('custom-skill');
+      await skillsPanel.getByRole('button', { name: '+ Custom Skill' }).click();
+      await skillsPanel.locator('#custom-skill-id').fill(customSkillId);
+      await skillsPanel.locator('#custom-skill-path').fill(`/tmp/${customSkillId}/SKILL.md`);
+      await skillsPanel.getByRole('button', { name: 'Add' }).click();
+
+      await expect(skillsPanel.getByText('You have unsaved changes')).toBeVisible({
+        timeout: 10_000,
+      });
+
+      await skillsPanel.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Skills saved' })).toBeVisible({
+        timeout: 10_000,
+      });
+
+      await page.reload();
+      await page.getByRole('tab', { name: 'Skills' }).click();
+      const refreshedPanel = page
+        .locator('div')
+        .filter({
+          hasText:
+            'Skills discovered from machine config. Uncheck to exclude, or add custom skills.',
+        })
+        .first();
+      await refreshedPanel.getByRole('button', { name: /^Skills/ }).click();
+      await expect(refreshedPanel.getByText(customSkillId)).toBeVisible({ timeout: 10_000 });
+
+      const getAgentResponse = await page.request.get(`/api/agents/${agentId}`);
+      expect(getAgentResponse.ok()).toBeTruthy();
+      const agent = (await getAgentResponse.json()) as {
+        config?: { skillOverride?: AgentSkillOverride };
+      };
+
+      const customSkills = agent.config?.skillOverride?.custom ?? [];
+      expect(customSkills.some((skill) => skill.id === customSkillId)).toBe(true);
+
+      if (excludedSkillId) {
+        const excluded = agent.config?.skillOverride?.excluded ?? [];
+        expect(excluded).toContain(excludedSkillId);
+      }
+    } finally {
+      if (agentId) {
+        await deleteAgentQuietly(page.request, agentId);
+      }
+    }
   });
 
-  // -------------------------------------------------------------------------
-  // Test 4: Switching runtime refreshes pickers with new discovery results
-  //
-  // Related: runtime-selector.spec.ts "agent settings runtime change shows
-  // confirmation" covers the confirmation dialog and MCP clearing. This test
-  // focuses on the picker list refreshing after a runtime switch.
-  // -------------------------------------------------------------------------
-
   test('switching runtime refreshes picker with new discovery results', async ({ page }) => {
-    await page.goto('/agents');
+    let agentId: string | null = null;
 
-    // 1. Create or navigate to an agent with claude-code runtime
-    //    - Via create dialog or existing agent settings > General tab
+    const observedSkillRuntimeRequests = new Set<string>();
+    page.on('request', (request) => {
+      if (request.method() !== 'GET' || !request.url().includes('/api/skills/discover')) return;
+      const runtime = new URL(request.url()).searchParams.get('runtime');
+      if (runtime) observedSkillRuntimeRequests.add(runtime);
+    });
 
-    // 2. Open MCP Servers section in the create dialog or settings MCP tab
-    //    - Expand the picker
-    //    - Wait for discovery to complete
-    //    - Note the server names and source badges (should reflect Claude Code config sources)
-    //    - e.g., servers from ~/.claude.json or .mcp.json
+    try {
+      const machine = await getRuntimeCompatibleMachine(page.request, 'claude-code');
+      agentId = await createAgentViaApi(page.request, {
+        machineId: machine.id,
+        runtime: 'claude-code',
+        name: uniqueName('pw-runtime-refresh'),
+        config: {
+          mcpOverride: {
+            excluded: ['seed-mcp-server'],
+            custom: [{ name: 'seed-custom-mcp', command: 'node' }],
+          },
+          skillOverride: {
+            excluded: ['seed-skill-id'],
+            custom: [
+              {
+                id: 'seed-custom-skill',
+                path: '/tmp/seed-custom-skill/SKILL.md',
+                enabled: true,
+                name: 'seed-custom-skill',
+              },
+            ],
+          },
+        },
+      });
 
-    // 3. Switch runtime to codex
-    //    - In create dialog: change runtime dropdown to "codex"
-    //    - In edit flow: go to General tab, change runtime, confirm the prompt
-    //    - (runtime-selector.spec.ts covers the confirmation dialog details)
+      await page.goto(`/agents/${agentId}/settings`);
+      await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible({
+        timeout: 15_000,
+      });
 
-    // 4. Go back to MCP Servers section
-    //    - Verify the picker triggers a new discovery request
-    //    - Verify "Scanning for MCP servers..." loading state appears briefly
-    //    - Verify the server list updates with Codex-specific sources
-    //    - e.g., servers from codex TOML config instead of Claude JSON config
+      await page.getByRole('tab', { name: 'Skills' }).click();
+      const skillsPanel = page
+        .locator('div')
+        .filter({
+          hasText:
+            'Skills discovered from machine config. Uncheck to exclude, or add custom skills.',
+        })
+        .first();
+      await skillsPanel.getByRole('button', { name: /^Skills/ }).click();
 
-    // 5. Verify Skills section also refreshes
-    //    - Open Skills picker
-    //    - Verify skills are re-fetched for the new runtime
-    //    - Codex may have a different set of discovered skills than Claude Code
+      await expect.poll(() => observedSkillRuntimeRequests.has('claude-code')).toBeTruthy();
 
-    // 6. Verify previous exclusions are reset
-    //    - Since runtime changed, the mcpOverride should be reset
-    //    - All newly discovered servers should default to enabled (no exclusions)
+      await page.getByRole('tab', { name: 'General' }).click();
+      await selectOptionFromAnyCombobox(page.locator('body'), page, 'Codex');
 
-    test.skip(true, 'E2E stub — requires running backend with both claude-code and codex runtimes');
+      const saveButton = page.getByRole('button', { name: 'Save' }).first();
+      await expect(saveButton).toBeEnabled({ timeout: 10_000 });
+      await saveButton.click();
+
+      await expect(
+        page.getByRole('alert').filter({
+          hasText: 'General settings saved. MCP/skill overrides cleared due to runtime change.',
+        }),
+      ).toBeVisible({ timeout: 10_000 });
+
+      await page.getByRole('tab', { name: 'Skills' }).click();
+      await skillsPanel.getByRole('button', { name: /^Skills/ }).click();
+
+      await expect.poll(() => observedSkillRuntimeRequests.has('codex')).toBeTruthy();
+
+      await page.getByRole('tab', { name: 'MCP Servers' }).click();
+      const mcpPanel = page
+        .locator('div')
+        .filter({
+          hasText:
+            'MCP servers discovered from machine config. Uncheck to exclude, or add custom servers.',
+        })
+        .first();
+      await expect(mcpPanel).toBeVisible({ timeout: 10_000 });
+
+      const getAgentResponse = await page.request.get(`/api/agents/${agentId}`);
+      expect(getAgentResponse.ok()).toBeTruthy();
+      const updatedAgent = (await getAgentResponse.json()) as {
+        runtime?: string;
+        config?: {
+          mcpOverride?: unknown;
+          skillOverride?: unknown;
+        };
+      };
+
+      expect(updatedAgent.runtime).toBe('codex');
+      expect(updatedAgent.config?.mcpOverride ?? null).toBeNull();
+      expect(updatedAgent.config?.skillOverride ?? null).toBeNull();
+    } finally {
+      if (agentId) {
+        await deleteAgentQuietly(page.request, agentId);
+      }
+    }
   });
 });
