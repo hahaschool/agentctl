@@ -6,6 +6,9 @@ import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
@@ -34,11 +37,23 @@ import {
   discoverQuery,
   healthQuery,
   machinesQuery,
+  memoryStatsQuery,
   metricsQuery,
   runtimeHandoffSummaryQuery,
   runtimeSessionsQuery,
   sessionsQuery,
 } from '../lib/queries';
+
+function sanitizeSessionSummary(summary: string | null | undefined): string {
+  if (!summary) {
+    return '';
+  }
+
+  return summary
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -53,6 +68,7 @@ export function DashboardPage(): React.JSX.Element {
   const sessions = useQuery(sessionsQuery());
   const runtimeSessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
   const runtimeHandoffSummary = useQuery(runtimeHandoffSummaryQuery(100));
+  const memoryStats = useQuery({ ...memoryStatsQuery(), retry: false });
 
   const { status: wsStatus } = useWebSocket();
   const [showHelp, setShowHelp] = useState(false);
@@ -92,6 +108,7 @@ export function DashboardPage(): React.JSX.Element {
   const handingOffManagedRuntimeCount = managedRuntimeSessions.filter(
     (session) => session.status === 'handing_off',
   ).length;
+  const agentErrorCount = agentList.filter((agent) => agent.status === 'error').length;
 
   // Per-agent cost breakdown (top spenders)
   const agentCostBreakdown = useMemo(() => {
@@ -112,6 +129,16 @@ export function DashboardPage(): React.JSX.Element {
       })
       .slice(0, 8);
   }, [sessionList]);
+
+  const visibleDiscoveredSessions = useMemo(() => {
+    return discoveredSessions
+      .filter((session) => {
+        const summary = sanitizeSessionSummary(session.summary);
+        const messageCount = session.messageCount ?? 0;
+        return !(summary.length === 0 && messageCount === 0);
+      })
+      .slice(0, 4);
+  }, [discoveredSessions]);
 
   const refreshAll = useMemo(
     () => (): void => {
@@ -224,12 +251,9 @@ export function DashboardPage(): React.JSX.Element {
           <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <Link
-            href="/sessions"
-            className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium no-underline transition-colors bg-primary text-primary-foreground border border-primary hover:bg-primary/90 hover:text-primary-foreground hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-          >
-            New Session
-          </Link>
+          <Button asChild size="sm">
+            <Link href="/sessions">New Session</Link>
+          </Button>
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>
@@ -294,89 +318,135 @@ export function DashboardPage(): React.JSX.Element {
       sessions.isLoading ||
       runtimeSessions.isLoading ||
       runtimeHandoffSummary.isLoading ? (
-        <div
-          className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6"
-          data-testid="stat-cards-skeleton"
-        >
-          {Array.from({ length: 8 }, (_, i) => (
-            <Skeleton key={`sk-${String(i)}`} className="h-20 rounded-lg" />
-          ))}
-        </div>
+        <>
+          <div
+            className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3"
+            data-testid="stat-cards-skeleton"
+          >
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={`sk-${String(i)}`} className="h-20 rounded-lg" />
+            ))}
+          </div>
+          <div className="mb-6" data-testid="secondary-stats-skeleton">
+            <Skeleton className="h-14 rounded-lg" />
+          </div>
+        </>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-          <StatCard
-            label="Machines Online"
-            value={`${machinesOnline} / ${machineList.length}`}
-            accent={machinesOnline > 0 ? 'green' : undefined}
-            tooltip="Active machines connected via Tailscale"
-            sublabel={
-              machineList.length > 0
-                ? `${machineList.filter((m) => m.status === 'offline').length} offline`
-                : undefined
-            }
-          />
-          <StatCard
-            label="Sessions Discovered"
-            value={formatNumber(discovered.data?.count ?? 0)}
-            accent="blue"
-            sublabel={
-              discovered.data
-                ? `${discovered.data.machinesQueried} queried, ${discovered.data.machinesFailed} failed`
-                : undefined
-            }
-          />
-          <StatCard
-            label="Agents Registered"
-            value={String(agentsRegistered)}
-            accent={agentList.filter((a) => a?.status === 'error').length > 0 ? 'red' : 'blue'}
-            sublabel={
-              agentList.filter((a) => a?.status === 'error').length > 0
-                ? `${agentList.filter((a) => a?.status === 'error').length} in error`
-                : undefined
-            }
-          />
-          <StatCard
-            label="Active Runs"
-            value={formatNumber(activeRuns)}
-            accent={activeRuns > 0 ? 'green' : undefined}
-            sublabel={`${formatNumber(totalRuns)} total`}
-          />
-          <StatCard
-            label="Active Sessions"
-            value={String(activeSessionCount)}
-            accent={activeSessionCount > 0 ? 'green' : undefined}
-            sublabel={`${sessionList.length} total`}
-          />
-          <StatCard
-            label="Managed Runtimes"
-            value={String(managedRuntimeSessions.length)}
-            accent={activeManagedRuntimeCount > 0 ? 'blue' : undefined}
-            sublabel={`${activeManagedRuntimeCount} active · ${handingOffManagedRuntimeCount} switching`}
-          />
-          <StatCard
-            label="Native Import"
-            value={String(runtimeHandoffMetrics.nativeImportSuccesses)}
-            accent={runtimeHandoffMetrics.nativeImportSuccesses > 0 ? 'green' : undefined}
-            sublabel={`${runtimeHandoffRates.nativeImportSuccessRate}% native import · ${runtimeHandoffRates.fallbackRate}% fallback`}
-          />
-          <StatCard
-            label="Total Cost"
-            value={formatCost(totalAgentCost)}
-            accent="purple"
-            tooltip="Cumulative API costs across all sessions"
-            sublabel={
-              agentCostBreakdown.length > 0
-                ? `top: ${agentCostBreakdown[0]?.name ?? 'N/A'}`
-                : undefined
-            }
-          />
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+            <StatCard
+              label="Machines Online"
+              value={`${machinesOnline} / ${machineList.length}`}
+              accent={machinesOnline > 0 ? 'green' : undefined}
+              tooltip="Active machines connected via Tailscale"
+              sublabel={
+                machineList.length > 0
+                  ? `${machineList.filter((m) => m.status === 'offline').length} offline`
+                  : undefined
+              }
+            />
+            <StatCard
+              label="Active Runs"
+              value={formatNumber(activeRuns)}
+              accent={activeRuns > 0 ? 'green' : undefined}
+              sublabel={`${formatNumber(totalRuns)} total`}
+            />
+            <StatCard
+              label="Active Sessions"
+              value={String(activeSessionCount)}
+              accent={activeSessionCount > 0 ? 'green' : undefined}
+              sublabel={`${sessionList.length} total`}
+            />
+          </div>
+          <Card className="mb-6 border-border/50 bg-card/90 rounded-lg py-0 gap-0 shadow-none">
+            <CardContent className="px-4 py-2.5">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                <div
+                  className="flex items-center gap-2 min-w-0"
+                  data-testid="secondary-stat-Sessions Discovered"
+                >
+                  <Badge variant="outline" className="border-border/60 bg-background/40">
+                    Sessions Discovered
+                  </Badge>
+                  <span className="font-mono text-foreground">
+                    {formatNumber(discovered.data?.count ?? 0)}
+                  </span>
+                  {discovered.data && (
+                    <span className="text-muted-foreground whitespace-nowrap">
+                      {discovered.data.machinesQueried} queried · {discovered.data.machinesFailed}{' '}
+                      failed
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="flex items-center gap-2 min-w-0"
+                  data-testid="secondary-stat-Agents Registered"
+                >
+                  <Badge variant="outline" className="border-border/60 bg-background/40">
+                    Agents Registered
+                  </Badge>
+                  <span className="font-mono text-foreground">{String(agentsRegistered)}</span>
+                  {agentErrorCount > 0 && (
+                    <span className="text-red-500 dark:text-red-400 whitespace-nowrap">
+                      {agentErrorCount} in error
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="flex items-center gap-2 min-w-0"
+                  data-testid="secondary-stat-Managed Runtimes"
+                >
+                  <Badge variant="outline" className="border-border/60 bg-background/40">
+                    Managed Runtimes
+                  </Badge>
+                  <span className="font-mono text-foreground">
+                    {String(managedRuntimeSessions.length)}
+                  </span>
+                  <span className="text-muted-foreground whitespace-nowrap">
+                    {activeManagedRuntimeCount} active · {handingOffManagedRuntimeCount} switching
+                  </span>
+                </div>
+                <div
+                  className="flex items-center gap-2 min-w-0"
+                  data-testid="secondary-stat-Native Import"
+                >
+                  <Badge variant="outline" className="border-border/60 bg-background/40">
+                    Native Import
+                  </Badge>
+                  <span className="font-mono text-foreground">
+                    {String(runtimeHandoffMetrics.nativeImportSuccesses)}
+                  </span>
+                  <span className="text-muted-foreground whitespace-nowrap">
+                    {runtimeHandoffRates.nativeImportSuccessRate}% native ·{' '}
+                    {runtimeHandoffRates.fallbackRate}% fallback
+                  </span>
+                </div>
+                <div
+                  className="flex items-center gap-2 min-w-0"
+                  data-testid="secondary-stat-Total Cost"
+                >
+                  <Badge variant="outline" className="border-border/60 bg-background/40">
+                    Total Cost
+                  </Badge>
+                  <span className="font-mono text-foreground">{formatCost(totalAgentCost)}</span>
+                  {agentCostBreakdown.length > 0 && (
+                    <span className="text-muted-foreground truncate max-w-[200px]">
+                      top: {agentCostBreakdown[0]?.name ?? 'N/A'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Memory health card */}
-      <div className="mb-5">
-        <DashboardMemoryCard />
-      </div>
+      {memoryStats.isSuccess && memoryStats.data?.stats && (
+        <div className="mb-5">
+          <DashboardMemoryCard />
+        </div>
+      )}
 
       {/* Two-column layout: Recent Sessions Activity + Machine Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -514,7 +584,7 @@ export function DashboardPage(): React.JSX.Element {
           <div>
             <DashboardSectionHeader title="Discovered Sessions" href="/discover" />
             <div className="border border-border/50 rounded-lg overflow-hidden">
-              {discoveredSessions.length === 0 ? (
+              {visibleDiscoveredSessions.length === 0 ? (
                 <div className="p-6 text-center bg-card">
                   <div className="text-[13px] text-muted-foreground mb-2">
                     No sessions discovered yet.
@@ -527,7 +597,7 @@ export function DashboardPage(): React.JSX.Element {
                   </Link>
                 </div>
               ) : (
-                discoveredSessions.slice(0, 4).map((session, idx) => (
+                visibleDiscoveredSessions.map((session, idx) => (
                   <Link
                     key={session.sessionId}
                     href="/discover"
@@ -538,7 +608,10 @@ export function DashboardPage(): React.JSX.Element {
                   >
                     <div className="flex justify-between items-center">
                       <span className="text-[12px] font-medium text-foreground truncate">
-                        {truncate(session?.summary || 'Untitled session', 40)}
+                        {truncate(
+                          sanitizeSessionSummary(session?.summary) || 'Untitled session',
+                          40,
+                        )}
                       </span>
                       <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
                         <LiveTimeAgo date={session?.lastActivity ?? new Date().toISOString()} />
