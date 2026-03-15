@@ -1113,7 +1113,7 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 ### 16.1 Agent Run Quality — P0
 
 - Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(in progress)*
-- Status note: `main` was re-stabilized through PRs #167-#181. The follow-up hardening batch landed via PRs #182-#185, the residual path/session cleanup landed via PRs #187-#188, the first residual agents/control-plane/loop follow-up landed via PRs #190-#192, and the shared local coordination board landed via PR #193. `skill-discovery.ts` is out of the open-alert list, but the `cli-session-manager.ts` path finding still needs follow-up, and GitHub still reports the agents/control-plane rate-limit findings plus the loop-controller timer finding after PRs #190-#192. The remaining backlog is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, modeled rate-limit follow-ups, loop-controller timer finding, and dependency/base-image triage.
+- Status note: `main` was re-stabilized through PRs #167-#181. The follow-up hardening batch landed via PRs #182-#185, the residual path/session cleanup landed via PRs #187-#188, the first residual agents/control-plane/loop follow-up landed via PRs #190-#192, the shared local coordination board landed via PR #193, the custom MCP preview source regression was fixed in PR #199, the modeled Fastify rate-limit follow-up landed in PR #200, and visible worktree leases for the coordination board landed in PR #201. The loop-controller timer alert has dropped out of the open-alert list, but GitHub still reports the `agents.ts` and control-plane memory-route rate-limit findings after PR #200, while the `cli-session-manager.ts` path finding and `path-security.ts` file-write findings still need follow-up. The remaining backlog is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, the still-unmodeled agent/control-plane rate-limit alerts, and dependency/base-image triage.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1142,6 +1142,9 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Control-plane memory-route residual follow-up landed, but GitHub still reports the routes as unmodeled by CodeQL *(PR #191)*
 - [x] Loop delay validation/clamping residual follow-up landed, but GitHub still reports the timer duration alert *(PR #192)*
 - [x] Shared local agent coordination board for worktree claims + handoffs *(PR #193)*
+- [x] Custom MCP preview now preserves `source: 'custom'` for user-defined servers *(PR #199)*
+- [x] Modeled Fastify rate-limit follow-up landed, but GitHub still reports the agent/control-plane routes as unmodeled by CodeQL *(PR #200)*
+- [x] Coordination-board worktree claims now write visible `.agentcoord.json` leases and resolve branch metadata from the claimed worktree *(PR #201)*
 
 ### 16.2 Dev Environment Infrastructure — P0
 
