@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-15 (stability/security cycle PRs #167-#175 landed on `main`; dev-tier CD remains gated to protect beta)
+> Last updated: 2026-03-15 (stability/security cycle PRs #167-#177 landed on `main`; PRs #179-#180 are the next security batch in flight)
 
 ## Current State
 
@@ -1113,7 +1113,7 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 ### 16.1 Agent Run Quality — P0
 
 - Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(in progress)*
-- Status note: `main` was re-stabilized through PRs #167-#175. Remaining work is the next CodeQL sweep batch (discovery/worktree path alerts plus older dependency/base-image findings), not the control-plane/web regressions already fixed in this cycle.
+- Status note: `main` was re-stabilized through PRs #167-#177. Discovery/worktree hardening is now on `main`; the active follow-up batch is PRs #179-#180 (`agents.ts` framework rate limiting + `mcp-discover.ts` safe file reads), followed by the older dependency/base-image findings.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1128,6 +1128,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Loop max-iteration bounds hardened to stop runaway configuration values *(PR #173)*
 - [x] Audit temp-file handling hardened *(PR #174)*
 - [x] Worker path-security surface hardened for file route helpers + CodeQL-recognized guards *(PR #175)*
+- [x] Discovery path reads hardened to remove unsafe directory/config access patterns *(PR #176)*
+- [x] Worktree manager path writes now go through guarded mkdir/chmod helpers *(PR #177)*
 
 ### 16.2 Dev Environment Infrastructure — P0
 
@@ -1292,7 +1294,8 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **—** | ~~Hardcoded Port Audit~~ | 12.0 | ✅ Delivered — scripts, TUI, Playwright config (PR #137) |
 | **—** | ~~Open Source & Community~~ | 13 | ✅ Delivered — BSL 1.1, CONTRIBUTING, SECURITY, GitHub templates |
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
-| **—** | Security: Discovery + Worktree Path Hardening | — | Queued next: isolated Codex branches are ready for discovery path alerts (#247-#252) and worktree-manager path alerts (#218-#220) after PR #175 landed |
+| **—** | ~~Security: Discovery + Worktree Path Hardening~~ | — | ✅ Delivered — discovery path reads (PR #176) + worktree-manager path writes (PR #177) |
+| **—** | Security: Agent Start + MCP Discover Hardening | — | In progress: PR #179 adds explicit agent-start framework rate limiting; PR #180 hardens MCP discover file reads |
 | **P0** | ~~MCP & Skill Auto-Discovery: Types + Override Resolution~~ | 14.1 | ✅ Delivered (PR #146) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Worker Discovery~~ | 14.2 | ✅ Delivered (PR #147) |
 | **P0** | ~~MCP & Skill Auto-Discovery: CP Proxies & Sync~~ | 14.3 | ✅ Delivered (PR #149) |
@@ -1301,7 +1304,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | In progress: stability/security fixes through PR #175 are on `main`; remaining work is the next CodeQL/dependency sweep tracked in the 2026-03-15 plan |
+| **P0** | Agent Run Quality | 16.1 | In progress: stability/security fixes through PR #177 are on `main`; PRs #179-#180 are the next alert batch before the remaining dependency/base-image sweep |
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
 | **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -1436,7 +1439,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
 | [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Delivered (PR #163) | 16.4 |
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#175 landed; remaining alert triage + roadmap sync continue here | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#177 landed; PRs #179-#180 plus remaining alert triage continue here | 16.1-16.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 

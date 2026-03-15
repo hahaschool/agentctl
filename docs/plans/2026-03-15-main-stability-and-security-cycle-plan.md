@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, and #175 fixed the reproduced control-plane regressions, strengthened Discover sanitization, added route/path guards, and cleared the latest pending PR queue. The remaining work in this plan is the next CodeQL batch (discovery/worktree alerts, plus dependency/base-image triage) and keeping roadmap/docs synchronized with what has landed.
+> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, #175, #176, and #177 fixed the reproduced control-plane regressions, strengthened Discover sanitization, hardened the worker file/discovery/worktree path surfaces, and cleared the previous pending PR queue. The active follow-up batch is now PRs #179-#180 (`agents.ts` route-level limiting and `mcp-discover.ts` safe file reads), followed by the remaining dependency/base-image triage and another roadmap sync pass.
 
 ---
 
@@ -137,10 +137,11 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
 
-Current grouping after PR #175:
-- Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are queued in an isolated Codex branch with local verification complete.
-- Worktree-manager path alerts are queued in a second isolated Codex branch with local verification complete.
-- Older `path-security.ts`, `mcp-discover.ts`, `agents.ts`, rate-limiting, BusyBox CVE, and `pm2` dependency findings remain the next triage batch on `main`.
+Current grouping after PR #177:
+- Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are delivered on `main` via PR #176.
+- Worktree-manager path alerts are delivered on `main` via PR #177.
+- The active queued PRs are #179 (`agents.ts` framework limiter) and #180 (`mcp-discover.ts` safe file reads).
+- Older `path-security.ts`, BusyBox CVE, and `pm2` dependency findings remain after the current PR batch.
 
 **Step 2: Update roadmap status to match this cycle**
 
