@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-15 (§14 fully delivered PRs #146-#153; §15 fully delivered PRs #148-#156; §12.7 PR #154-#155)
+> Last updated: 2026-03-15 (stability/security cycle PRs #167-#175 landed on `main`; dev-tier CD remains gated to protect beta)
 
 ## Current State
 
@@ -891,6 +891,8 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 > Dev/beta tier separation so AI agent development never disrupts the developer's running services.
 > Plan: [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | User guide: [USER-SETUP-CD-TIERS.md](USER-SETUP-CD-TIERS.md)
+>
+> Status note: active development should stay on `dev-1` / `dev-2`. Beta promotion remains manual and protected via the GitHub environment gate + deployment UI preflight, so security/CI cleanup can proceed without interrupting the beta stage.
 
 ### 12.0 De-Hardcode Ports (Prerequisite) — ✅ Delivered (PR #103)
 
@@ -1111,14 +1113,21 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 ### 16.1 Agent Run Quality — P0
 
 - Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(in progress)*
+- Status note: `main` was re-stabilized through PRs #167-#175. Remaining work is the next CodeQL sweep batch (discovery/worktree path alerts plus older dependency/base-image findings), not the control-plane/web regressions already fixed in this cycle.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
+- [x] Main CI regressions around dispatch lifecycle + registry expectations fixed *(PR #167)*
 - [x] Frontend double-click prevention on Start button *(PR #165)*
 - [x] MCP servers not loading in CLI `-p` mode — pass `--mcp-config` explicitly *(direct commit c9ebe4e)*
 - [x] Codex worktree sessions grouped as separate projects — normalize paths *(direct commit e0ca99f)*
 - [x] ModelPromptsTab hardcoded Claude models — use runtime-aware options *(direct commit 2c198f3)*
 - [x] McpServersTab/SkillsTab showed "not available" for agents without runtime — default to claude-code *(direct commit 7b1388c)*
+- [x] Discover summary sanitization hardened against nested / malformed tag payloads *(PR #169)*
+- [x] Explicit rate limiting added for git + memory routes uncovered by CodeQL/CI follow-up *(PRs #170-#171)*
+- [x] Loop max-iteration bounds hardened to stop runaway configuration values *(PR #173)*
+- [x] Audit temp-file handling hardened *(PR #174)*
+- [x] Worker path-security surface hardened for file route helpers + CodeQL-recognized guards *(PR #175)*
 
 ### 16.2 Dev Environment Infrastructure — P0
 
@@ -1191,7 +1200,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [x] Header "Spaces" deduplicated *(PR #165)*
 
 **Discover page:**
-- [ ] Codex sessions show "# AGENTS.md instructions for..." as summary — this is the raw system prompt, not a meaningful summary. Need to extract first user message instead.
+- [ ] Codex sessions can still show the AGENTS/system-prompt preamble as the summary. Sanitization is fixed, but the remaining bug is summary selection: extract the first meaningful user task instead.
 - [ ] Session IDs truncated to 7 chars — could show more context
 - [ ] "3 already imported" link is nice ✅
 
@@ -1204,7 +1213,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [x] Version in sidebar: auto-update from package.json (version-bump.sh updates `Sidebar.tsx`) *(PR #166)*
 - [x] "New Session" button text visibility fixed *(PR #158)*
 - [x] Dashboard stale "View Agents" and "Runtime Sessions" buttons removed *(direct commit ff9ab3e)*
-- [ ] Discover session summaries leak raw XML/system prompt text — sanitize
+- [ ] Discover summary extraction still prefers system prompt text for some Codex sessions
 
 ### 16.4 Agent Settings Config Preview Sidebar — P1
 
@@ -1283,7 +1292,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **—** | ~~Hardcoded Port Audit~~ | 12.0 | ✅ Delivered — scripts, TUI, Playwright config (PR #137) |
 | **—** | ~~Open Source & Community~~ | 13 | ✅ Delivered — BSL 1.1, CONTRIBUTING, SECURITY, GitHub templates |
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
-| **—** | Security: CodeQL rescan pending | — | Push trigger added (PR #140); rescan in progress |
+| **—** | Security: Discovery + Worktree Path Hardening | — | Queued next: isolated Codex branches are ready for discovery path alerts (#247-#252) and worktree-manager path alerts (#218-#220) after PR #175 landed |
 | **P0** | ~~MCP & Skill Auto-Discovery: Types + Override Resolution~~ | 14.1 | ✅ Delivered (PR #146) |
 | **P0** | ~~MCP & Skill Auto-Discovery: Worker Discovery~~ | 14.2 | ✅ Delivered (PR #147) |
 | **P0** | ~~MCP & Skill Auto-Discovery: CP Proxies & Sync~~ | 14.3 | ✅ Delivered (PR #149) |
@@ -1292,9 +1301,9 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | In progress: PRs #157 and #165 landed; remaining CI/security follow-ups tracked in the 2026-03-15 stability plan |
-| **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev PM2 isolation and version-bump automation landed through PR #166 |
-| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#165 landed; critique follow-ups remain |
+| **P0** | Agent Run Quality | 16.1 | In progress: stability/security fixes through PR #175 are on `main`; remaining work is the next CodeQL/dependency sweep tracked in the 2026-03-15 plan |
+| **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
+| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
 
 ---
@@ -1427,7 +1436,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
 | [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Delivered (PR #163) | 16.4 |
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | In progress | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#175 landed; remaining alert triage + roadmap sync continue here | 16.1-16.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
