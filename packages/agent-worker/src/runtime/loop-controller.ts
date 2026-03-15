@@ -406,7 +406,8 @@ export class LoopController extends EventEmitter {
 
     if (
       config.iterationDelayMs != null &&
-      (config.iterationDelayMs < MIN_ITERATION_DELAY_MS ||
+      (!Number.isFinite(config.iterationDelayMs) ||
+        config.iterationDelayMs < MIN_ITERATION_DELAY_MS ||
         config.iterationDelayMs > MAX_ITERATION_DELAY_MS)
     ) {
       throw new AgentError(
@@ -551,12 +552,16 @@ export class LoopController extends EventEmitter {
    */
   private delay(ms: number): Promise<void> {
     return new Promise<void>((resolve) => {
+      const safeDelayMs = Number.isFinite(ms)
+        ? Math.min(MAX_ITERATION_DELAY_MS, Math.max(MIN_ITERATION_DELAY_MS, ms))
+        : DEFAULT_ITERATION_DELAY_MS;
+
       this.delayResolver = resolve;
       this.delayTimer = setTimeout(() => {
         this.delayTimer = null;
         this.delayResolver = null;
         resolve();
-      }, ms);
+      }, safeDelayMs);
     });
   }
 

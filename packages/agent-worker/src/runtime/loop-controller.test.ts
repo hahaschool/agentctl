@@ -170,6 +170,29 @@ describe('LoopController', () => {
     }
   });
 
+  it('throws LOOP_INVALID_DELAY when iterationDelayMs is NaN', () => {
+    const agent = createMockAgent();
+
+    expect(
+      () =>
+        new LoopController(
+          agent,
+          { mode: 'result-feedback', maxIterations: 3, iterationDelayMs: Number.NaN },
+          mockLogger,
+        ),
+    ).toThrow(AgentError);
+
+    try {
+      new LoopController(
+        agent,
+        { mode: 'result-feedback', maxIterations: 3, iterationDelayMs: Number.NaN },
+        mockLogger,
+      );
+    } catch (err) {
+      expect((err as AgentError).code).toBe('LOOP_INVALID_DELAY');
+    }
+  });
+
   it('throws LOOP_MISSING_FIXED_PROMPT when fixed-prompt mode has no fixedPrompt', () => {
     const agent = createMockAgent();
 
