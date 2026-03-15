@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { join, normalize, resolve } from 'node:path';
 
 import type { ManagedRuntime } from '@agentctl/shared';
@@ -6,6 +5,7 @@ import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
   safeReaddir,
+  safeReadFile,
   sanitizePath,
 } from '../../utils/path-security.js';
 
@@ -92,7 +92,7 @@ async function scanSkillsDir(
     }
 
     try {
-      const content = await readFile(skillMdPath, 'utf-8');
+      const content = await safeReadFile(skillMdPath, dirPath);
       const frontmatter = parseFrontmatter(content);
       if (!frontmatter?.name || !frontmatter.description) continue;
 

@@ -7,7 +7,9 @@ import {
   safeChmodSync,
   safeExistsSync,
   safeMkdirSync,
+  safeReaddir,
   safeReaddirSync,
+  safeReadFile,
   safeReadFileAtomic,
   safeReadFileSync,
   safeStatSync,
@@ -142,6 +144,14 @@ describe('safe file wrappers', () => {
     expect(safeReadFileSync(filePath, baseDir)).toBe('hello world');
   });
 
+  it('reads file content asynchronously within the allowed base', async () => {
+    const baseDir = makeTempRoot();
+    const filePath = join(baseDir, 'content-async.txt');
+    writeFileSync(filePath, 'hello async');
+
+    await expect(safeReadFile(filePath, baseDir)).resolves.toBe('hello async');
+  });
+
   it('reads content atomically for files within the allowed base', () => {
     const baseDir = makeTempRoot();
     const filePath = join(baseDir, 'atomic.txt');
@@ -152,7 +162,18 @@ describe('safe file wrappers', () => {
     expect(result).toEqual({ content: 'atomic', size: 6 });
   });
 
-  it('rejects path traversal for write/read/atomic wrappers', () => {
+  it('lists directories with async wrapper within the allowed base', async () => {
+    const baseDir = makeTempRoot();
+    const nestedDir = join(baseDir, 'async-dir');
+    safeMkdirSync(nestedDir, baseDir);
+    writeFileSync(join(nestedDir, 'entry.txt'), 'hello');
+
+    const entries = await safeReaddir(nestedDir, baseDir);
+
+    expect(entries.map((entry) => entry.name)).toEqual(['entry.txt']);
+  });
+
+  it('rejects path traversal for write/read/atomic wrappers', async () => {
     const baseDir = makeTempRoot();
     const escapedPath = `${baseDir}/../../etc/passwd`;
 
@@ -161,6 +182,18 @@ describe('safe file wrappers', () => {
     );
     expect(() => safeReadFileSync(escapedPath, baseDir)).toThrow(/outside the allowed base path/i);
     expect(() => safeReadFileAtomic(escapedPath, baseDir, 128)).toThrow(
+      /outside the allowed base path/i,
+    );
+    await expect(safeReadFile(escapedPath, baseDir)).rejects.toThrow(
+      /outside the allowed base path/i,
+    );
+  });
+
+  it('rejects path traversal for async readdir wrapper', async () => {
+    const baseDir = makeTempRoot();
+    const escapedPath = `${baseDir}/../../etc`;
+
+    await expect(safeReaddir(escapedPath, baseDir)).rejects.toThrow(
       /outside the allowed base path/i,
     );
   });
