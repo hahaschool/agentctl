@@ -43,6 +43,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: '5273',
         NEXT_PUBLIC_API_URL: 'http://localhost:8180',
+        HOSTNAME: '0.0.0.0',
       },
     },
   ],
