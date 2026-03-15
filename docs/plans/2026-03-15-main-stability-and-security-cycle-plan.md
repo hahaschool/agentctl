@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, #175, #176, #177, #179, and #180 fixed the reproduced control-plane regressions, strengthened Discover sanitization, hardened the worker file/discovery/worktree surfaces, added an explicit framework limiter on `agents.ts`, and moved MCP discover file reads behind shared safe-path helpers. The remaining backlog is the older `path-security.ts` / `git.ts` findings, legacy missing-rate-limit alerts, loop-controller resource exhaustion, dependency/base-image triage, and the final roadmap sync.
+> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, #175, #176, #177, #179, #180, and #181 fixed the reproduced control-plane regressions, strengthened Discover sanitization, hardened the worker file/discovery/worktree surfaces, added an explicit framework limiter on `agents.ts`, moved MCP discover file reads behind shared safe-path helpers, and resynced roadmap/docs. The active follow-up batch is now PRs #182-#185 (`path-security.ts`, `git.ts`, control-plane memory-route limiters, and loop-controller resource caps), followed by the remaining discovery / cli-session-manager findings and dependency/base-image triage.
 
 ---
 
@@ -137,12 +137,13 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
 
-Current grouping after PR #180:
+Current grouping after PR #181:
 - Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are delivered on `main` via PR #176.
 - Worktree-manager path alerts are delivered on `main` via PR #177.
 - Agent-start rate limiting is delivered on `main` via PR #179.
 - MCP discover file-read hardening is delivered on `main` via PR #180.
-- Older `path-security.ts` / `git.ts` findings, legacy missing-rate-limit alerts, loop-controller resource exhaustion, BusyBox CVEs, and the `pm2` advisory remain after this PR batch.
+- The active queued PRs are #182 (`path-security.ts` wrappers), #183 (`git.ts` hardening), #184 (control-plane memory-route limiters), and #185 (loop-controller hard cap).
+- After that batch, the expected remaining backlog is the still-open `skill-discovery.ts` / `cli-session-manager.ts` path findings, BusyBox CVEs, and the `pm2` advisory.
 
 **Step 2: Update roadmap status to match this cycle**
 
