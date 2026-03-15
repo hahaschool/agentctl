@@ -40,9 +40,12 @@ async function buildApp(): Promise<FastifyInstance> {
         message: err.message,
       });
     }
-    // Fastify schema validation errors
-    if ((err as { statusCode?: number; validation?: unknown }).statusCode === 400) {
-      return reply.status(400).send(err);
+    // Fastify-generated HTTP errors (schema, rate-limit, etc.)
+    if (typeof (err as { statusCode?: number }).statusCode === 'number') {
+      const statusCode = (err as { statusCode: number }).statusCode;
+      if (statusCode >= 400 && statusCode < 600) {
+        return reply.status(statusCode).send(err);
+      }
     }
     return reply.status(500).send({ error: 'INTERNAL_ERROR', message: err.message });
   });
@@ -243,6 +246,30 @@ describe('Git routes', () => {
       expect(body.worktrees).toHaveLength(2);
       expect(body.worktrees[0].isMain).toBe(true);
     });
+
+    it('normalizes the requested path before passing cwd to git commands', async () => {
+      mockValidDirectory();
+
+      mockGitCommands({
+        'rev-parse --git-dir': '.git',
+        'rev-parse --abbrev-ref HEAD': 'main',
+        'rev-parse --show-toplevel': '/Users/testuser/project',
+        'status --porcelain': '',
+        'status --branch --porcelain': '## main',
+        'log -1 --format=%H%n%s%n%an%n%aI': 'abc1234567890\ninit\nDev\n2026-03-06T10:00:00Z',
+        'worktree list --porcelain': 'worktree /Users/testuser/project\nbranch refs/heads/main\n',
+        'rev-parse --git-common-dir': '.git',
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/git/status?path=/Users/testuser/project/../project',
+      });
+
+      expect(res.statusCode).toBe(200);
+      const firstOptions = vi.mocked(execFile).mock.calls[0]?.[2] as { cwd?: string } | undefined;
+      expect(firstOptions?.cwd).toBe('/Users/testuser/project');
+    });
   });
 
   // =========================================================================
@@ -296,6 +323,47 @@ describe('Git routes', () => {
         delete process.env.GIT_STATUS_RATE_LIMIT_WINDOW_MS;
       }
     });
+
+    it('enforces Fastify route-level rate limiting on status requests', async () => {
+      process.env.GIT_STATUS_RATE_LIMIT_MAX = '1000';
+      process.env.GIT_STATUS_RATE_LIMIT_WINDOW_MS = '60000';
+
+      await app.close();
+      app = await buildApp();
+
+      mockValidDirectory();
+      mockGitCommands({
+        'rev-parse --git-dir': '.git',
+        'rev-parse --abbrev-ref HEAD': 'main',
+        'rev-parse --show-toplevel': '/Users/testuser/project',
+        'status --porcelain': '',
+        'status --branch --porcelain': '## main',
+        'log -1 --format=%H%n%s%n%an%n%aI': 'abc1234567890\ninit\nDev\n2026-03-06T10:00:00Z',
+        'worktree list --porcelain': 'worktree /Users/testuser/project\nbranch refs/heads/main\n',
+        'rev-parse --git-common-dir': '.git',
+      });
+
+      try {
+        for (let i = 0; i < 60; i++) {
+          const response = await app.inject({
+            method: 'GET',
+            url: '/api/git/status?path=/Users/testuser/project',
+          });
+          expect(response.statusCode).toBe(200);
+        }
+
+        const limited = await app.inject({
+          method: 'GET',
+          url: '/api/git/status?path=/Users/testuser/project',
+        });
+
+        expect(limited.statusCode).toBe(429);
+        expect(limited.body).not.toContain('Too many git status requests. Try again later.');
+      } finally {
+        delete process.env.GIT_STATUS_RATE_LIMIT_MAX;
+        delete process.env.GIT_STATUS_RATE_LIMIT_WINDOW_MS;
+      }
+    });
   });
 
   // =========================================================================
@@ -325,6 +393,18 @@ describe('Git routes', () => {
       expect(res.statusCode).toBe(404);
       const body = res.json();
       expect(body.error).toBe('PATH_NOT_FOUND');
+    });
+
+    it('returns 400 when path includes denied directory segments', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/git/status?path=/Users/testuser/.ssh/repo',
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = res.json();
+      expect(body.error).toBe('INVALID_PATH');
+      expect(body.message).toContain('.ssh');
     });
 
     it('returns 400 when path is not a directory', async () => {
