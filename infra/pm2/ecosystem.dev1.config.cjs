@@ -35,9 +35,10 @@ module.exports = {
     },
     {
       name: 'agentctl-web-dev1',
-      script: 'node_modules/.bin/next',
+      script: 'node_modules/next/dist/bin/next',
       args: 'start -p 5273',
       cwd: path.join(REPO_ROOT, 'packages/web'),
+      interpreter: 'node',
       env: {
         NODE_ENV: 'production',
         PORT: '5273',
