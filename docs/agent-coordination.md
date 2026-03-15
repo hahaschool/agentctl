@@ -18,6 +18,14 @@ $(git rev-parse --git-common-dir)/agentctl/coordination/
 
 That means every worktree in the same repository clone sees the same `claims.json` and `board.ndjson`.
 
+Each claimed worktree also gets a visible lease file at:
+
+```text
+<worktree>/.agentcoord.json
+```
+
+The common-dir board is the shared bulletin board; the per-worktree lease file is the "do not delete me" marker for humans and cleanup scripts scanning directories directly.
+
 ## Commands
 
 ```bash
@@ -60,7 +68,9 @@ pnpm coord release --type task --id task:blocked-cleanup --force
 ## Cleanup Model
 
 - `claim` locks the worktree with `git worktree lock`
+- `claim` also writes `.agentcoord.json` into the claimed worktree root with owner, purpose, branch, and heartbeat metadata
 - `release` unlocks it and marks the claim released
+- `heartbeat` refreshes both the central claim and the visible worktree lease file
 - `heartbeat` and `prune` are secondary maintenance commands; the core workflow is `status`, `claim`, `post`, and `release`
 - `prune` cleans released or missing claims and marks old active claims stale
 - `prune` does not force-delete worktrees
