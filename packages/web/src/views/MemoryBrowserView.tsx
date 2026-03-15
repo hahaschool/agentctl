@@ -2,6 +2,7 @@
 
 import type { EntityType, MemoryEdge, MemoryFact, MemoryScope } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -234,6 +235,17 @@ export function MemoryBrowserView(): React.JSX.Element {
               <>
                 {filteredFacts.length} fact{filteredFacts.length !== 1 ? 's' : ''}
                 {debouncedQ ? ` matching "${debouncedQ}"` : ''}
+                {filteredFacts.length === 0 && (
+                  <>
+                    {' · '}
+                    <Link
+                      href="/memory/import"
+                      className="text-primary hover:underline underline-offset-2"
+                    >
+                      Import data from claude-mem
+                    </Link>
+                  </>
+                )}
               </>
             )}
           </div>

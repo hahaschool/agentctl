@@ -91,6 +91,7 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
   const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
 
@@ -145,16 +146,19 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const handleStart = (): void => {
     const effectivePrompt = prompt.trim() || agent.data?.config?.defaultPrompt || '';
-    if (!effectivePrompt) return;
+    if (!effectivePrompt || isStarting) return;
+    setIsStarting(true);
     startAgent.mutate(
       { id: agentId, prompt: effectivePrompt },
       {
         onSuccess: () => {
+          setIsStarting(false);
           toast.success('Agent started');
           setPrompt('');
           setStartDialogOpen(false);
         },
         onError: (err) => {
+          setIsStarting(false);
           toast.error(err instanceof Error ? err.message : String(err));
         },
       },
@@ -332,7 +336,7 @@ export default function AgentDetailPage(): React.JSX.Element {
                 confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
               />
             ) : (
-              <Button size="sm" onClick={() => setStartDialogOpen(true)}>
+              <Button size="sm" onClick={() => setStartDialogOpen(true)} disabled={isStarting}>
                 Start
               </Button>
             )}
@@ -381,6 +385,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               }}
               placeholder={data.config?.defaultPrompt ? 'Use default prompt' : 'Enter prompt...'}
               aria-label="Prompt to start agent"
+              disabled={isStarting}
               autoFocus
             />
             {data.config?.defaultPrompt && (
@@ -388,14 +393,14 @@ export default function AgentDetailPage(): React.JSX.Element {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeStartDialog}>
+            <Button variant="outline" onClick={closeStartDialog} disabled={isStarting}>
               Cancel
             </Button>
             <Button
               onClick={handleStart}
-              disabled={(!prompt.trim() && !data.config?.defaultPrompt) || startAgent.isPending}
+              disabled={(!prompt.trim() && !data.config?.defaultPrompt) || isStarting}
             >
-              {startAgent.isPending ? 'Starting...' : 'Go'}
+              {isStarting ? 'Starting...' : 'Go'}
             </Button>
           </DialogFooter>
         </DialogContent>

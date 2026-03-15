@@ -66,6 +66,7 @@ export function AgentsPage(): React.JSX.Element {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [startDialogAgent, setStartDialogAgent] = useState<StartDialogAgent | null>(null);
   const [startPrompt, setStartPrompt] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
 
   // Extract unique project paths from recent sessions
   const recentProjectPaths = useMemo(() => {
@@ -170,16 +171,19 @@ export function AgentsPage(): React.JSX.Element {
 
   // -- Start agent handler --
   const handleStart = (): void => {
-    if (!startDialogAgent || !startPrompt.trim()) return;
+    if (!startDialogAgent || !startPrompt.trim() || isStarting) return;
+    setIsStarting(true);
     startAgent.mutate(
       { id: startDialogAgent.id, prompt: startPrompt.trim() },
       {
         onSuccess: () => {
+          setIsStarting(false);
           toast.success('Agent started');
           setStartPrompt('');
           setStartDialogAgent(null);
         },
         onError: (err) => {
+          setIsStarting(false);
           toast.error(err instanceof Error ? err.message : String(err));
         },
       },
@@ -274,6 +278,7 @@ export function AgentsPage(): React.JSX.Element {
           if (!open) {
             setStartDialogAgent(null);
             setStartPrompt('');
+            setIsStarting(false);
           }
         }}
       >
@@ -301,7 +306,7 @@ export function AgentsPage(): React.JSX.Element {
                 }
               }}
               placeholder="Enter prompt..."
-              disabled={startAgent.isPending}
+              disabled={isStarting}
               autoFocus
             />
           </div>
@@ -312,17 +317,18 @@ export function AgentsPage(): React.JSX.Element {
               onClick={() => {
                 setStartDialogAgent(null);
                 setStartPrompt('');
+                setIsStarting(false);
               }}
-              disabled={startAgent.isPending}
+              disabled={isStarting}
             >
               Cancel
             </Button>
             <Button
               type="button"
               onClick={handleStart}
-              disabled={!startPrompt.trim() || startAgent.isPending}
+              disabled={!startPrompt.trim() || isStarting}
             >
-              {startAgent.isPending ? 'Starting...' : 'Start'}
+              {isStarting ? 'Starting...' : 'Start'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -547,9 +553,7 @@ export function AgentsPage(): React.JSX.Element {
                       setStartPrompt('');
                     }}
                     disabled={
-                      startAgent.isPending ||
-                      agent.status === 'running' ||
-                      agent.status === 'starting'
+                      isStarting || agent.status === 'running' || agent.status === 'starting'
                     }
                   >
                     Start
