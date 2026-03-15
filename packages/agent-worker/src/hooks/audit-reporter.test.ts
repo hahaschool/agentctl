@@ -1,4 +1,5 @@
 import type { FileHandle } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,6 +26,9 @@ const mockLogger = createMockLogger();
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
+const TEST_AUDIT_LOG_DIR = '/var/agentctl/audit';
+const TEST_AUDIT_FILE_PATH = `${TEST_AUDIT_LOG_DIR}/audit.ndjson`;
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 type ReporterOverrides = {
@@ -47,8 +51,9 @@ function makeReporter(overrides?: ReporterOverrides): AuditReporter {
   return new AuditReporter({
     controlPlaneUrl: overrides?.controlPlaneUrl ?? 'http://localhost:4000',
     runId: overrides?.runId ?? 'run-123',
-    auditLogDir: overrides?.auditLogDir ?? dirname(overrides?.auditFilePath ?? '/tmp/audit.ndjson'),
-    auditFilePath: overrides?.auditFilePath ?? '/tmp/audit.ndjson',
+    auditLogDir:
+      overrides?.auditLogDir ?? dirname(overrides?.auditFilePath ?? TEST_AUDIT_FILE_PATH),
+    auditFilePath: overrides?.auditFilePath ?? TEST_AUDIT_FILE_PATH,
     auditFileToken: overrides?.auditFileToken,
     logger: mockLogger,
     flushIntervalMs: overrides?.flushIntervalMs ?? 1_000,
@@ -152,6 +157,7 @@ describe('AuditReporter', () => {
         controlPlaneUrl: 'http://cp:4000',
         runId: 'run-abc',
         auditFilePath: '/var/log/audit.ndjson',
+        auditLogDir: '/var/log',
         flushIntervalMs: 2_000,
       });
 
@@ -162,8 +168,8 @@ describe('AuditReporter', () => {
       const reporter = new AuditReporter({
         controlPlaneUrl: 'http://localhost:4000',
         runId: 'run-1',
-        auditLogDir: '/tmp',
-        auditFilePath: '/tmp/audit.ndjson',
+        auditLogDir: TEST_AUDIT_LOG_DIR,
+        auditFilePath: TEST_AUDIT_FILE_PATH,
         logger: mockLogger,
       });
 
@@ -182,6 +188,19 @@ describe('AuditReporter', () => {
           }),
       ).toThrow(/outside the allowed base path/i);
     });
+
+    it('rejects audit log directories under the OS temp directory', () => {
+      expect(
+        () =>
+          new AuditReporter({
+            controlPlaneUrl: 'http://localhost:4000',
+            runId: 'run-1',
+            auditLogDir: `${tmpdir()}/agentctl-audit`,
+            auditFilePath: `${tmpdir()}/agentctl-audit/audit.ndjson`,
+            logger: mockLogger,
+          }),
+      ).toThrow(/OS temp directory/i);
+    });
   });
 
   // ── start() ────────────────────────────────────────────────────────
@@ -196,7 +215,7 @@ describe('AuditReporter', () => {
       await vi.advanceTimersByTimeAsync(1_000);
 
       expect(mockOpen).toHaveBeenCalledTimes(1);
-      expect(mockOpen).toHaveBeenCalledWith('/tmp/audit.ndjson', expect.any(Number));
+      expect(mockOpen).toHaveBeenCalledWith(TEST_AUDIT_FILE_PATH, expect.any(Number));
     });
 
     it('is idempotent when called multiple times', async () => {
@@ -216,7 +235,7 @@ describe('AuditReporter', () => {
       reporter.start();
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({ flushIntervalMs: 1_000, auditFilePath: '/tmp/audit.ndjson' }),
+        expect.objectContaining({ flushIntervalMs: 1_000, auditFilePath: TEST_AUDIT_FILE_PATH }),
         'Audit reporter started',
       );
     });

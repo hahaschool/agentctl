@@ -1,6 +1,7 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
@@ -12,6 +13,7 @@ const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH_SIZE = 100;
 const MAX_AUDIT_BYTES_PER_FLUSH = 1024 * 1024;
 const INSECURE_AUDIT_PERMISSION_MASK = 0o022;
+const TEMP_AUDIT_DIR_ERROR = 'Audit reporter cannot read audit logs from the OS temp directory';
 
 type AuditActionPayload = {
   actionType: string;
@@ -81,7 +83,7 @@ export class AuditReporter {
   constructor(options: AuditReporterOptions) {
     this.controlPlaneUrl = options.controlPlaneUrl;
     this.runId = options.runId;
-    this.auditLogDir = resolve(options.auditLogDir);
+    this.auditLogDir = assertNonTemporaryAuditLogDir(options.auditLogDir);
     this.auditFilePath = sanitizePath(
       options.auditFilePath ??
         buildAuditLogFilePath(
@@ -292,4 +294,18 @@ export class AuditReporter {
       );
     }
   }
+}
+
+function assertNonTemporaryAuditLogDir(auditLogDir: string): string {
+  const resolvedAuditLogDir = resolve(auditLogDir);
+  const resolvedTempDir = resolve(tmpdir());
+  const rel = relative(resolvedTempDir, resolvedAuditLogDir);
+  if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) {
+    throw new WorkerError('AUDIT_INSECURE_LOG_DIR', TEMP_AUDIT_DIR_ERROR, {
+      auditLogDir: resolvedAuditLogDir,
+      tempDir: resolvedTempDir,
+    });
+  }
+
+  return resolvedAuditLogDir;
 }
