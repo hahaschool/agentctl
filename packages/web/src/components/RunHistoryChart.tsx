@@ -1,10 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import type React from 'react';
-import type { ReactNode } from 'react';
-import { useCallback, useMemo } from 'react';
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-
+import { useMemo } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { AgentRun } from '@/lib/api';
 import { formatCost, formatDurationMs } from '@/lib/format-utils';
 
@@ -14,50 +13,86 @@ import { formatCost, formatDurationMs } from '@/lib/format-utils';
 
 export type RunHistoryChartProps = {
   runs: AgentRun[];
-  /** Optional callback when a bar is clicked; receives the run ID */
+  /** Optional callback when a run bar is clicked; receives the run ID */
   onRunClick?: (runId: string) => void;
 };
 
-type ChartEntry = {
+type TimelineEntry = {
   id: string;
-  index: number;
-  durationMin: number;
   status: string;
-  costUsd: number | null;
-  dateLabel: string;
+  trigger: string;
   startedAt: string;
+  startedAtLabel: string;
+  durationMs: number;
+  durationHeightPct: number;
+  costUsd: number | null;
   sessionId?: string | null;
+};
+
+type TimelineTone = {
+  barClassName: string;
+  dotClassName: string;
+  label: string;
 };
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const STATUS_COLORS: Record<string, string> = {
-  success: '#22c55e',
-  failure: '#ef4444',
-  error: '#ef4444',
-  timeout: '#f59e0b',
-  cancelled: '#6b7280',
-  running: '#eab308',
+const MAX_RUNS = 30;
+const MIN_DURATION_HEIGHT = 22;
+const MAX_DURATION_HEIGHT = 100;
+
+const STATUS_TONES: Record<string, TimelineTone> = {
+  success: {
+    barClassName: 'bg-emerald-500/20 border-emerald-500/40',
+    dotClassName: 'bg-emerald-500/70',
+    label: 'Success',
+  },
+  failure: {
+    barClassName: 'bg-red-500/20 border-red-500/40',
+    dotClassName: 'bg-red-500/70',
+    label: 'Failure',
+  },
+  error: {
+    barClassName: 'bg-red-500/20 border-red-500/40',
+    dotClassName: 'bg-red-500/70',
+    label: 'Error',
+  },
+  timeout: {
+    barClassName: 'bg-red-500/20 border-red-500/40',
+    dotClassName: 'bg-red-500/70',
+    label: 'Timeout',
+  },
+  running: {
+    barClassName: 'bg-emerald-500/20 border-emerald-500/40',
+    dotClassName: 'bg-emerald-500/70',
+    label: 'Running',
+  },
+  empty: {
+    barClassName: 'bg-neutral-500/20 border-neutral-500/40',
+    dotClassName: 'bg-neutral-500/70',
+    label: 'Empty',
+  },
+  cancelled: {
+    barClassName: 'bg-neutral-500/20 border-neutral-500/40',
+    dotClassName: 'bg-neutral-500/70',
+    label: 'Cancelled',
+  },
 };
 
-const DEFAULT_COLOR = '#6b7280';
-const MIN_BAR_DURATION = 0.3;
-const CHART_HEIGHT = 48;
-const MAX_RUNS = 30;
+const DEFAULT_TONE: TimelineTone = {
+  barClassName: 'bg-neutral-500/20 border-neutral-500/40',
+  dotClassName: 'bg-neutral-500/70',
+  label: 'Unknown',
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getStatusColor(status: string): string {
-  return STATUS_COLORS[status] ?? DEFAULT_COLOR;
-}
-
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function formatAxisDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function formatTooltipDate(dateStr: string): string {
@@ -69,44 +104,13 @@ function formatTooltipDate(dateStr: string): string {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Custom Tooltip
-// ---------------------------------------------------------------------------
+function getTone(status: string): TimelineTone {
+  return STATUS_TONES[status] ?? DEFAULT_TONE;
+}
 
-function renderChartTooltip(props: {
-  active?: boolean;
-  payload?: ReadonlyArray<{ payload?: unknown }>;
-}): ReactNode {
-  const { active, payload } = props;
-  if (!active || !payload || payload.length === 0) return null;
-
-  const entry = payload[0]?.payload as ChartEntry | undefined;
-  if (!entry) return null;
-
-  const durationMs = entry.durationMin * 60_000;
-
-  return (
-    <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs shadow-lg z-50">
-      <div className="flex items-center gap-2 mb-1">
-        <span
-          className="inline-block h-2 w-2 rounded-full"
-          style={{ backgroundColor: getStatusColor(entry.status) }}
-        />
-        <span className="font-medium capitalize text-foreground">{entry.status}</span>
-      </div>
-      <div className="space-y-0.5 text-muted-foreground">
-        <div>
-          <span className="text-foreground/70">Date:</span> {formatTooltipDate(entry.startedAt)}
-        </div>
-        <div>
-          <span className="text-foreground/70">Duration:</span> {formatDurationMs(durationMs)}
-        </div>
-        <div>
-          <span className="text-foreground/70">Cost:</span> {formatCost(entry.costUsd ?? undefined)}
-        </div>
-      </div>
-    </div>
-  );
+function formatTrigger(trigger: string): string {
+  if (!trigger.trim()) return 'Manual';
+  return `${trigger.charAt(0).toUpperCase()}${trigger.slice(1)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,75 +121,132 @@ export function RunHistoryChart({
   runs,
   onRunClick,
 }: RunHistoryChartProps): React.JSX.Element | null {
-  const entries: ChartEntry[] = useMemo(() => {
-    const recent = runs.slice(0, MAX_RUNS);
-    return recent
-      .map((run, idx) => {
-        const rawDurationMin = (run.durationMs ?? 0) / 60_000;
-        return {
-          id: run.id,
-          index: idx,
-          durationMin: Math.max(rawDurationMin, MIN_BAR_DURATION),
-          status: run.status,
-          costUsd: run.costUsd ?? null,
-          dateLabel: formatShortDate(run.startedAt),
-          startedAt: run.startedAt,
-          sessionId: run.sessionId,
-        };
-      })
-      .reverse();
+  const entries = useMemo<TimelineEntry[]>(() => {
+    const recent = runs
+      .slice(0, MAX_RUNS)
+      .slice()
+      .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+
+    if (recent.length === 0) {
+      return [];
+    }
+
+    const maxDurationMs = Math.max(
+      ...recent.map((run) => run.durationMs ?? 0),
+      MIN_DURATION_HEIGHT,
+    );
+
+    return recent.map((run) => {
+      const durationMs = run.durationMs ?? 0;
+      const proportionalHeight = Math.round((durationMs / maxDurationMs) * MAX_DURATION_HEIGHT);
+      const durationHeightPct = Math.min(
+        MAX_DURATION_HEIGHT,
+        Math.max(proportionalHeight, MIN_DURATION_HEIGHT),
+      );
+
+      return {
+        id: run.id,
+        status: run.status,
+        trigger: run.trigger ?? 'manual',
+        startedAt: run.startedAt,
+        startedAtLabel: formatAxisDate(run.startedAt),
+        durationMs,
+        durationHeightPct,
+        costUsd: run.costUsd ?? null,
+        sessionId: run.sessionId,
+      };
+    });
   }, [runs]);
 
-  const handleBarClick = useCallback(
-    // biome-ignore lint/suspicious/noExplicitAny: recharts BarRectangleItem merges data fields at runtime
-    (data: any) => {
-      const id = (data as ChartEntry | undefined)?.id;
-      if (id) {
-        onRunClick?.(id);
-      }
-    },
-    [onRunClick],
-  );
+  if (entries.length === 0) {
+    return null;
+  }
 
-  if (entries.length === 0) return null;
-
-  const successCount = entries.filter((e) => e.status === 'success').length;
+  const successCount = entries.filter((entry) => entry.status === 'success').length;
   const successRate = Math.round((successCount / entries.length) * 100);
+  const firstDate = entries[0]?.startedAtLabel;
+  const lastDate = entries[entries.length - 1]?.startedAtLabel;
 
   return (
-    <div className="mb-4" data-testid="run-history-bar">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-medium text-muted-foreground">Run History</span>
+    <div className="mb-4" data-testid="run-history-timeline">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-medium text-muted-foreground">Run Timeline</span>
         <span className="text-[11px] text-muted-foreground">
           {successRate}% success ({entries.length} runs)
         </span>
       </div>
-      <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-        <BarChart data={entries} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-          <XAxis dataKey="dateLabel" hide />
-          <YAxis hide />
-          <Tooltip
-            content={renderChartTooltip}
-            cursor={{ fill: 'hsl(var(--accent))', opacity: 0.2 }}
-          />
-          <Bar
-            dataKey="durationMin"
-            radius={[2, 2, 0, 0]}
-            maxBarSize={16}
-            onClick={handleBarClick}
-            className="cursor-pointer"
-          >
-            {entries.map((entry) => (
-              <Cell
-                key={entry.id}
-                fill={getStatusColor(entry.status)}
-                opacity={0.85}
-                className={entry.status === 'running' ? 'animate-pulse' : ''}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+
+      <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+        <div className="relative h-24">
+          <div className="absolute inset-x-0 bottom-0 border-t border-border/60" />
+          <div className="flex h-full items-end gap-1 overflow-x-auto pb-1">
+            {entries.map((entry) => {
+              const tone = getTone(entry.status);
+              const sessionLink = entry.sessionId ? `/sessions/${entry.sessionId}` : null;
+              return (
+                <Tooltip key={entry.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Run ${entry.id} (${entry.status})`}
+                      onClick={() => onRunClick?.(entry.id)}
+                      className={`min-w-3 flex-1 rounded-sm border transition-colors hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${tone.barClassName} ${
+                        entry.status === 'running' ? 'animate-pulse' : ''
+                      }`}
+                      style={{ height: `${entry.durationHeightPct}%` }}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    align="center"
+                    className="max-w-xs border-border bg-popover text-xs"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${tone.dotClassName}`} />
+                        <span className="font-medium text-foreground">{tone.label}</span>
+                      </div>
+                      <div className="space-y-0.5 text-muted-foreground">
+                        <div>
+                          <span className="text-foreground/80">Time:</span>{' '}
+                          {formatTooltipDate(entry.startedAt)}
+                        </div>
+                        <div>
+                          <span className="text-foreground/80">Duration:</span>{' '}
+                          {formatDurationMs(entry.durationMs)}
+                        </div>
+                        <div>
+                          <span className="text-foreground/80">Cost:</span>{' '}
+                          {formatCost(entry.costUsd ?? undefined)}
+                        </div>
+                        <div>
+                          <span className="text-foreground/80">Trigger:</span>{' '}
+                          {formatTrigger(entry.trigger)}
+                        </div>
+                        {sessionLink && (
+                          <div>
+                            <span className="text-foreground/80">Session:</span>{' '}
+                            <Link
+                              href={sessionLink}
+                              className="text-primary underline underline-offset-2"
+                            >
+                              Open session
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+          <span>{firstDate}</span>
+          <span>{lastDate}</span>
+        </div>
+      </div>
     </div>
   );
 }

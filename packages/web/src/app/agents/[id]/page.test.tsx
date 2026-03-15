@@ -10,6 +10,7 @@ import type { Agent, AgentRun, ApiAccount, Machine, Session } from '@/lib/api';
 
 const {
   mockAgentQuery,
+  mockAgentHealthQuery,
   mockAgentRunsQuery,
   mockSessionsQuery,
   mockAccountsQuery,
@@ -19,6 +20,7 @@ const {
   mockUpdateAgent,
 } = vi.hoisted(() => ({
   mockAgentQuery: vi.fn(),
+  mockAgentHealthQuery: vi.fn(),
   mockAgentRunsQuery: vi.fn(),
   mockSessionsQuery: vi.fn(),
   mockAccountsQuery: vi.fn(),
@@ -84,6 +86,7 @@ vi.mock('@/components/ui/dialog', () => ({
   ),
   DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
   DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
@@ -244,6 +247,7 @@ vi.mock('@/components/Toast', () => ({
 
 vi.mock('@/lib/queries', () => ({
   agentQuery: (id: string) => mockAgentQuery(id),
+  agentHealthQuery: (agentId: string) => mockAgentHealthQuery(agentId),
   agentRunsQuery: (agentId: string) => mockAgentRunsQuery(agentId),
   sessionsQuery: (params?: Record<string, unknown>) => mockSessionsQuery(params),
   accountsQuery: () => mockAccountsQuery(),
@@ -396,6 +400,14 @@ describe('AgentDetailPage', () => {
     vi.clearAllMocks();
 
     mockAgentQuery.mockReturnValue(makeQueryResult('agent', createAgent()));
+    mockAgentHealthQuery.mockReturnValue(
+      makeQueryResult('agent-health', {
+        consecutiveFailures: 0,
+        failureRate24h: 0,
+        lastSuccessAt: '2026-03-05T10:00:00Z',
+        status: 'healthy',
+      }),
+    );
     mockAgentRunsQuery.mockReturnValue(makeQueryResult('agent-runs', [createRun()]));
     mockSessionsQuery.mockReturnValue(
       makeQueryResult('sessions', {

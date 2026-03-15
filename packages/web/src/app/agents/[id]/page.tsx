@@ -21,12 +21,20 @@ import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { AgentMemorySection } from '@/components/memory/AgentMemorySection';
 import { RefreshButton } from '@/components/RefreshButton';
 import { RunHistoryChart } from '@/components/RunHistoryChart';
-import { RunTimeline } from '@/components/RunTimeline';
 import { SimpleTooltip } from '@/components/SimpleTooltip';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -81,7 +89,7 @@ export default function AgentDetailPage(): React.JSX.Element {
     ),
   );
 
-  const [promptVisible, setPromptVisible] = useState(false);
+  const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
   const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
@@ -144,7 +152,7 @@ export default function AgentDetailPage(): React.JSX.Element {
         onSuccess: () => {
           toast.success('Agent started');
           setPrompt('');
-          setPromptVisible(false);
+          setStartDialogOpen(false);
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : String(err));
@@ -158,6 +166,11 @@ export default function AgentDetailPage(): React.JSX.Element {
       onSuccess: () => toast.success('Agent stopped'),
       onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
     });
+  };
+
+  const closeStartDialog = (): void => {
+    setStartDialogOpen(false);
+    setPrompt('');
   };
 
   // -- Export & Duplicate handlers --
@@ -254,114 +267,139 @@ export default function AgentDetailPage(): React.JSX.Element {
       <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: data.name }]} />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3 flex-wrap min-w-0">
-          <h1
-            className="text-[22px] font-semibold tracking-tight truncate min-w-0 max-w-[300px]"
-            title={data.name}
-          >
-            {data.name}
-          </h1>
-          <StatusBadge status={data.status} />
-          {(data.type === 'cron' || data.type === 'heartbeat' || data.type === 'loop') && (
-            <AgentHealthBadge agentId={agentId} />
-          )}
-          {(data.config?.model as string | undefined) && (
-            <span className="font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30 text-[11px]">
-              {data.config?.model as string}
-            </span>
-          )}
-          <Link href={`/agents/${agentId}/settings`}>
-            <Button variant="outline" size="sm">
-              <Settings className="h-3.5 w-3.5 mr-1.5" />
-              Settings
-            </Button>
-          </Link>
-          <SimpleTooltip content="Export config as JSON">
-            <Button
-              variant="outline"
-              size="sm"
-              className="px-2"
-              onClick={handleExportConfig}
-              aria-label="Export config"
+      <div className="mb-6 space-y-3">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 flex-wrap min-w-0">
+            <h1
+              className="text-[22px] font-semibold tracking-tight truncate min-w-0 max-w-[300px]"
+              title={data.name}
             >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
-          </SimpleTooltip>
-          <SimpleTooltip content="Copy config to clipboard">
-            <Button
-              variant="outline"
-              size="sm"
-              className="px-2"
-              onClick={handleDuplicate}
-              aria-label="Duplicate agent"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </SimpleTooltip>
-        </div>
-        <div className="flex gap-2">
-          {data.status === 'running' ? (
-            <ConfirmButton
-              label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
-              confirmLabel="Confirm Stop"
-              onConfirm={handleStop}
-              disabled={stopAgent.isPending}
-              className="px-3 py-1.5 text-sm font-medium rounded-md bg-destructive text-destructive-foreground cursor-pointer"
-              confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
-            />
-          ) : promptVisible ? (
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleStart();
-                  if (e.key === 'Escape') {
-                    setPromptVisible(false);
-                    setPrompt('');
-                  }
-                }}
-                placeholder={
-                  data.config?.defaultPrompt ? 'Using default prompt...' : 'Enter prompt...'
-                }
-                aria-label="Prompt to start agent"
-                className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[200px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-              />
-              <Button
-                size="sm"
-                onClick={handleStart}
-                disabled={(!prompt.trim() && !data.config?.defaultPrompt) || startAgent.isPending}
-              >
-                {startAgent.isPending ? 'Starting...' : 'Go'}
-              </Button>
+              {data.name}
+            </h1>
+            <StatusBadge status={data.status} />
+            {(data.type === 'cron' || data.type === 'heartbeat' || data.type === 'loop') && (
+              <AgentHealthBadge agentId={agentId} />
+            )}
+            {(data.config?.model as string | undefined) && (
+              <span className="font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30 text-[11px]">
+                {data.config?.model as string}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <SimpleTooltip content="Export config as JSON">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setPromptVisible(false);
-                  setPrompt('');
-                }}
+                className="px-2"
+                onClick={handleExportConfig}
+                aria-label="Export config"
               >
-                Cancel
+                <Download className="h-3.5 w-3.5" />
               </Button>
-            </div>
-          ) : (
-            <Button size="sm" onClick={() => setPromptVisible(true)}>
-              Start
-            </Button>
-          )}
-          <LastUpdated dataUpdatedAt={agent.dataUpdatedAt} />
-          <RefreshButton
-            onClick={() => {
-              void agent.refetch();
-              void runs.refetch();
-            }}
-            isFetching={(agent.isFetching || runs.isFetching) && !agent.isLoading}
-          />
+            </SimpleTooltip>
+            <SimpleTooltip content="Copy config to clipboard">
+              <Button
+                variant="outline"
+                size="sm"
+                className="px-2"
+                onClick={handleDuplicate}
+                aria-label="Duplicate agent"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </SimpleTooltip>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Link href={`/agents/${agentId}/settings`}>
+              <Button variant="outline" size="sm">
+                <Settings className="h-3.5 w-3.5 mr-1.5" />
+                Settings
+              </Button>
+            </Link>
+          </div>
+          <div className="flex items-center gap-2">
+            {data.status === 'running' ? (
+              <ConfirmButton
+                label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
+                confirmLabel="Confirm Stop"
+                onConfirm={handleStop}
+                disabled={stopAgent.isPending}
+                className="px-3 py-1.5 text-sm font-medium rounded-md bg-destructive text-destructive-foreground cursor-pointer"
+                confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
+              />
+            ) : (
+              <Button size="sm" onClick={() => setStartDialogOpen(true)}>
+                Start
+              </Button>
+            )}
+            <LastUpdated dataUpdatedAt={agent.dataUpdatedAt} />
+            <RefreshButton
+              onClick={() => {
+                void agent.refetch();
+                void runs.refetch();
+              }}
+              isFetching={(agent.isFetching || runs.isFetching) && !agent.isLoading}
+            />
+          </div>
         </div>
       </div>
+
+      <Dialog
+        open={startDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setStartDialogOpen(true);
+          } else {
+            closeStartDialog();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start Agent</DialogTitle>
+            <DialogDescription>
+              {data.config?.defaultPrompt
+                ? 'Provide an override prompt or leave empty to use the configured default prompt.'
+                : 'Provide a prompt to start this agent run.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Input
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleStart();
+                }
+                if (e.key === 'Escape') {
+                  closeStartDialog();
+                }
+              }}
+              placeholder={data.config?.defaultPrompt ? 'Use default prompt' : 'Enter prompt...'}
+              aria-label="Prompt to start agent"
+              autoFocus
+            />
+            {data.config?.defaultPrompt && (
+              <p className="text-[11px] text-muted-foreground">Default prompt is configured.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeStartDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleStart}
+              disabled={(!prompt.trim() && !data.config?.defaultPrompt) || startAgent.isPending}
+            >
+              {startAgent.isPending ? 'Starting...' : 'Go'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Info grid */}
       <Card className="mb-4">
@@ -642,18 +680,6 @@ export default function AgentDetailPage(): React.JSX.Element {
 
       {/* Run history visualization */}
       <RunHistoryChart runs={runList} onRunClick={setHighlightedRunId} />
-
-      {/* Run timeline chart */}
-      {runList.length >= 2 && (
-        <Card className="mb-4" data-testid="run-timeline-card">
-          <CardHeader>
-            <CardTitle className="text-sm">Run Timeline</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RunTimeline runs={runList} />
-          </CardContent>
-        </Card>
-      )}
 
       {/* Execution history — grouped by date with filters */}
       <Card>
