@@ -564,7 +564,8 @@ export class LoopController extends EventEmitter {
    * Check all configured limits. Returns a reason string if a limit is hit, null otherwise.
    */
   private checkLimits(): string | null {
-    if (this.config.maxIterations != null && this.iteration >= this.config.maxIterations) {
+    const maxIterations = this.config.maxIterations ?? MAX_LOOP_ITERATIONS;
+    if (this.iteration >= maxIterations) {
       return 'max_iterations_reached';
     }
 
