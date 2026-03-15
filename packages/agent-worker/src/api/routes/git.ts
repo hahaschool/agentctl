@@ -4,15 +4,19 @@
 // ---------------------------------------------------------------------------
 
 import { execFile } from 'node:child_process';
-import { lstatSync, realpathSync, statSync } from 'node:fs';
-import { normalize, resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { promisify } from 'node:util';
 
 import { WorkerError } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
-import { DEFAULT_DENIED_PATH_SEGMENTS, findDeniedPathSegment } from '../../utils/path-security.js';
+import {
+  DEFAULT_DENIED_PATH_SEGMENTS,
+  findDeniedPathSegment,
+  safeStatSync,
+  sanitizePath,
+} from '../../utils/path-security.js';
 import {
   createInMemoryRateLimiter,
   createIpRateLimitPreHandler,
@@ -27,6 +31,7 @@ const execFileAsync = promisify(execFile);
 
 const GIT_COMMAND_TIMEOUT_MS = 5_000;
 const GIT_MAX_BUFFER = 1024 * 1024; // 1 MB
+const ROOT_PATH = '/';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,13 +92,8 @@ function validateGitPath(raw: unknown): string {
     throw new WorkerError('INVALID_PATH', 'A non-empty "path" query parameter is required');
   }
 
-  // resolve + normalize collapses `..` components, eliminating traversal
-  const resolved = resolve(normalize(raw));
-
-  // Must be absolute after normalisation
-  if (!resolved.startsWith('/')) {
-    throw new WorkerError('INVALID_PATH', 'Path must be absolute', { path: raw });
-  }
+  // Shared normalization helper used across worker routes.
+  const resolved = sanitizePath(raw, ROOT_PATH);
 
   const deniedSegment = findDeniedPathSegment(resolved, DEFAULT_DENIED_PATH_SEGMENTS);
   if (deniedSegment) {
@@ -116,13 +116,14 @@ function validateGitPath(raw: unknown): string {
  * of the validated directory and re-applying the deny list.
  */
 function resolveAndRevalidate(validated: string): string {
+  const safeValidated = sanitizePath(validated, ROOT_PATH);
   let realPath: string;
   try {
-    realPath = realpathSync(validated);
+    realPath = realpathSync(safeValidated);
   } catch {
     // If realpath fails (e.g. broken symlink), fall back to the
     // already-validated path — statSync will catch the real error.
-    return validated;
+    return safeValidated;
   }
 
   const deniedSegment = findDeniedPathSegment(realPath, DEFAULT_DENIED_PATH_SEGMENTS);
@@ -138,8 +139,9 @@ function resolveAndRevalidate(validated: string): string {
 }
 
 async function runGit(args: string[], cwd: string): Promise<string> {
+  const safeCwd = sanitizePath(cwd, ROOT_PATH);
   const { stdout } = await execFileAsync('git', args, {
-    cwd,
+    cwd: safeCwd,
     timeout: GIT_COMMAND_TIMEOUT_MS,
     maxBuffer: GIT_MAX_BUFFER,
   });
@@ -254,7 +256,6 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
     ),
     'Too many git status requests. Try again later.',
   );
-
   // GET /api/git/status?path=<absolute-path>
   app.get<{ Querystring: { path?: string } }>(
     '/status',
@@ -280,24 +281,16 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
         return reply.code(400).send({ error: 'INVALID_PATH', message: msg });
       }
 
-      // Security: inline assertion that the path is absolute and normalised
-      // so CodeQL can verify no traversal reaches the fs sinks below.
-      const normalizedGitPath = resolve(normalize(validatedDirPath));
-      if (!normalizedGitPath.startsWith('/')) {
-        return reply.code(400).send({ error: 'INVALID_PATH', message: 'Path must be absolute' });
-      }
-      validatedDirPath = normalizedGitPath;
+      validatedDirPath = sanitizePath(validatedDirPath, ROOT_PATH);
 
       // Validate path exists and is a directory.
-      // Security: use lstatSync first to detect symlinks before following
-      // them (js/path-injection). If the path is a symlink, resolve the
-      // real path and re-validate against the denied path segments.
+      // Security: always resolve the canonical path before the final stat.
+      // This collapses symlinks and re-applies the denied-segment checks
+      // before any filesystem access that follows user input.
       try {
-        const lstatResult = lstatSync(validatedDirPath);
-        if (lstatResult.isSymbolicLink()) {
-          validatedDirPath = resolveAndRevalidate(validatedDirPath);
-        }
-        const statResult = statSync(validatedDirPath);
+        const fsPath = sanitizePath(validatedDirPath, ROOT_PATH);
+        validatedDirPath = resolveAndRevalidate(fsPath);
+        const statResult = safeStatSync(validatedDirPath, ROOT_PATH);
         if (!statResult.isDirectory()) {
           return reply.code(400).send({
             error: 'NOT_A_DIRECTORY',
