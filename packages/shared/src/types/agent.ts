@@ -54,8 +54,8 @@ export type McpServerConfig = {
   env?: Record<string, string>;
 };
 
-/** Source indicating where an MCP server config was discovered. */
-export type McpServerSource = 'project' | 'machine' | 'global' | 'template';
+/** Source indicating where an MCP server config was discovered or injected. */
+export type McpServerSource = 'project' | 'machine' | 'global' | 'template' | 'custom';
 
 /** An MCP server discovered via auto-detection or templates. */
 export type DiscoveredMcpServer = {
