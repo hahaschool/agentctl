@@ -1,7 +1,12 @@
 import { access, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, normalize, resolve } from 'node:path';
 import type { McpServerSource } from '@agentctl/shared';
 import { parse } from 'smol-toml';
+import {
+  DEFAULT_DENIED_PATH_SEGMENTS,
+  findDeniedPathSegment,
+  sanitizePath,
+} from '../../utils/path-security.js';
 
 import type { DiscoveredMcpServerWithProvenance } from './_type-stubs.js';
 
@@ -19,6 +24,24 @@ type CodexTomlConfig = {
   mcp_servers?: Record<string, CodexTomlMcpEntry>;
 };
 
+function resolveCodexConfigPath(basePath: string): string | null {
+  if (typeof basePath !== 'string' || basePath.trim().length === 0) {
+    return null;
+  }
+
+  const resolvedBase = resolve(normalize(basePath));
+  const deniedSegment = findDeniedPathSegment(resolvedBase, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment) {
+    return null;
+  }
+
+  try {
+    return sanitizePath(join(resolvedBase, '.codex', 'config.toml'), resolvedBase);
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
@@ -34,7 +57,10 @@ export async function discoverCodexMcpServers(
   basePath: string,
   sourceType: McpServerSource = 'global',
 ): Promise<DiscoveredMcpServerWithProvenance[]> {
-  const configPath = join(basePath, '.codex', 'config.toml');
+  const configPath = resolveCodexConfigPath(basePath);
+  if (!configPath) {
+    return [];
+  }
 
   try {
     await access(configPath);

@@ -1,7 +1,12 @@
 import { access, readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, normalize, resolve } from 'node:path';
 
 import type { ManagedRuntime } from '@agentctl/shared';
+import {
+  DEFAULT_DENIED_PATH_SEGMENTS,
+  findDeniedPathSegment,
+  sanitizePath,
+} from '../../utils/path-security.js';
 
 import type { DiscoveredSkill } from './_type-stubs.js';
 
@@ -13,6 +18,24 @@ const SKILLS_PATHS: Record<ManagedRuntime, { global: string; project: string }> 
   'claude-code': { global: '.claude/skills', project: '.claude/skills' },
   codex: { global: '.agents/skills', project: '.agents/skills' },
 };
+
+function resolveSkillsBaseDir(basePath: string, relativePath: string): string | null {
+  if (typeof basePath !== 'string' || basePath.trim().length === 0) {
+    return null;
+  }
+
+  const resolvedBase = resolve(normalize(basePath));
+  const deniedSegment = findDeniedPathSegment(resolvedBase, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment) {
+    return null;
+  }
+
+  try {
+    return sanitizePath(join(resolvedBase, relativePath), resolvedBase);
+  } catch {
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Frontmatter parser
@@ -60,7 +83,13 @@ async function scanSkillsDir(
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
 
-    const skillMdPath = join(dirPath, entry.name, 'SKILL.md');
+    let skillMdPath: string;
+    try {
+      skillMdPath = sanitizePath(join(dirPath, entry.name, 'SKILL.md'), dirPath);
+    } catch {
+      continue;
+    }
+
     try {
       const content = await readFile(skillMdPath, 'utf-8');
       const frontmatter = parseFrontmatter(content);
@@ -104,15 +133,19 @@ export async function discoverSkills(
   const results: DiscoveredSkill[] = [];
 
   // Global skills
-  const globalDir = join(homePath, paths.global);
-  const globalSkills = await scanSkillsDir(globalDir, 'global', runtime);
-  results.push(...globalSkills);
+  const globalDir = resolveSkillsBaseDir(homePath, paths.global);
+  if (globalDir) {
+    const globalSkills = await scanSkillsDir(globalDir, 'global', runtime);
+    results.push(...globalSkills);
+  }
 
   // Project skills
   if (projectPath) {
-    const projectDir = join(projectPath, paths.project);
-    const projectSkills = await scanSkillsDir(projectDir, 'project', runtime);
-    results.push(...projectSkills);
+    const projectDir = resolveSkillsBaseDir(projectPath, paths.project);
+    if (projectDir) {
+      const projectSkills = await scanSkillsDir(projectDir, 'project', runtime);
+      results.push(...projectSkills);
+    }
   }
 
   return results;
