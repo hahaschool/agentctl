@@ -569,4 +569,143 @@ describe('discoverLocalSessions', () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0].sessionId).toBe('valid');
   });
+
+  it('extracts codex summary from first non-system line in user content', () => {
+    const codexDir = '/Users/testuser/.codex/archived_sessions';
+
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (p === codexDir) return true;
+      return false;
+    });
+
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) return [];
+      if (p === codexDir) return ['codex-session.jsonl'];
+      return [];
+    }) as typeof readdirSync);
+
+    mockReadFileSync.mockImplementation(((p: string) => {
+      if (p === join(codexDir, 'codex-session.jsonl')) {
+        return [
+          JSON.stringify({
+            type: 'session_meta',
+            timestamp: '2026-03-10T10:00:00Z',
+            payload: {
+              id: 'codex-001',
+              cwd: '/Users/testuser/project',
+              timestamp: '2026-03-10T10:00:00Z',
+              git: { branch: 'main' },
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-03-10T10:01:00Z',
+            payload: {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: '# AGENTS.md instructions for /Users/testuser/.codex\n## Skills\nFix discover page UI issues in AgentCTL.',
+                },
+              ],
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-03-10T10:02:00Z',
+            payload: {
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Done' }],
+            },
+          }),
+        ].join('\n');
+      }
+      return '';
+    }) as typeof readFileSync);
+
+    const sessions = discoverLocalSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'codex-001',
+        summary: 'Fix discover page UI issues in AgentCTL.',
+        messageCount: 2,
+        runtime: 'codex',
+      }),
+    );
+  });
+
+  it('falls back to the next user message when first codex user content is only prompt metadata', () => {
+    const codexDir = '/Users/testuser/.codex/archived_sessions';
+
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (p === codexDir) return true;
+      return false;
+    });
+
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) return [];
+      if (p === codexDir) return ['codex-session-2.jsonl'];
+      return [];
+    }) as typeof readdirSync);
+
+    mockReadFileSync.mockImplementation(((p: string) => {
+      if (p === join(codexDir, 'codex-session-2.jsonl')) {
+        return [
+          JSON.stringify({
+            type: 'session_meta',
+            timestamp: '2026-03-10T11:00:00Z',
+            payload: {
+              id: 'codex-002',
+              cwd: '/Users/testuser/project',
+              timestamp: '2026-03-10T11:00:00Z',
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-03-10T11:01:00Z',
+            payload: {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: '# AGENTS.md instructions\n## Skills',
+                },
+              ],
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-03-10T11:02:00Z',
+            payload: {
+              role: 'user',
+              content: [{ type: 'input_text', text: 'Ship the discover page fix.' }],
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-03-10T11:03:00Z',
+            payload: {
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Done' }],
+            },
+          }),
+        ].join('\n');
+      }
+      return '';
+    }) as typeof readFileSync);
+
+    const sessions = discoverLocalSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'codex-002',
+        summary: 'Ship the discover page fix.',
+        messageCount: 3,
+        runtime: 'codex',
+      }),
+    );
+  });
 });

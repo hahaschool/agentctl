@@ -134,6 +134,29 @@ function normalizeSummary(text: string | null | undefined): string {
   return normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
 }
 
+function stripPromptMetadataLines(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !line.startsWith('#'))
+    .filter((line) => !line.toLowerCase().includes('agents.md'))
+    .join('\n');
+}
+
+function extractCodexSummaryFromUserContent(content: unknown): string {
+  const text = extractTextContent(content);
+  if (!text) {
+    return '';
+  }
+
+  const normalized = normalizeSummary(stripPromptMetadataLines(text));
+  if (normalized.length <= 120) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 117)}...`;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -638,10 +661,7 @@ function discoverCodexSessions(
               }
               // Use first user message as summary
               if (role === 'user' && !summary) {
-                const text = line.payload?.content?.[0]?.text;
-                if (text) {
-                  summary = text.length > 120 ? text.substring(0, 117) + '...' : text;
-                }
+                summary = extractCodexSummaryFromUserContent(line.payload?.content);
               }
             }
             if (line.timestamp) {

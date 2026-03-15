@@ -58,6 +58,8 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
   onCancelResume,
 }: DiscoverSessionRowProps): React.JSX.Element {
   const dotClass = recencyColorClass(s.lastActivity);
+  const sanitizedSummary = s.summary.replace(/<[^>]*>/g, '').trim();
+  const displaySummary = sanitizedSummary || 'Untitled';
 
   return (
     <div key={`${s.machineId}-${s.sessionId}`}>
@@ -103,9 +105,9 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
           </span>
 
           {/* Summary */}
-          <SimpleTooltip content={s.summary || 'Untitled'}>
+          <SimpleTooltip content={displaySummary}>
             <span className="flex-1 text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-              <HighlightText text={s.summary || 'Untitled'} highlight={search} />
+              <HighlightText text={displaySummary} highlight={search} />
             </span>
           </SimpleTooltip>
         </button>

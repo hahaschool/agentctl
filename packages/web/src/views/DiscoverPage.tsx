@@ -25,6 +25,10 @@ import type { DiscoveredSession } from '../lib/api';
 import { api } from '../lib/api';
 import { discoverQuery, queryKeys, sessionsQuery } from '../lib/queries';
 
+function sanitizeSummary(summary: string): string {
+  return summary.replace(/<[^>]*>/g, '').trim();
+}
+
 export function DiscoverPage(): React.JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -147,7 +151,8 @@ export function DiscoverPage(): React.JSX.Element {
         }
       }
       if (lowerSearch) {
-        const haystack = `${s.summary} ${s.projectPath} ${s.sessionId} ${s.hostname}`.toLowerCase();
+        const haystack =
+          `${sanitizeSummary(s.summary)} ${s.projectPath} ${s.sessionId} ${s.hostname}`.toLowerCase();
         if (!haystack.includes(lowerSearch)) return false;
       }
       return true;
@@ -161,7 +166,9 @@ export function DiscoverPage(): React.JSX.Element {
       const sorted = [...filtered];
       sorted.sort((a, b) => {
         if (sort === 'messages') return b.messageCount - a.messageCount;
-        if (sort === 'project') return (a.summary || '').localeCompare(b.summary || '');
+        if (sort === 'project') {
+          return sanitizeSummary(a.summary).localeCompare(sanitizeSummary(b.summary));
+        }
         return b.lastActivity.localeCompare(a.lastActivity);
       });
       let totalMessages = 0;
@@ -219,7 +226,9 @@ export function DiscoverPage(): React.JSX.Element {
     for (const g of result) {
       g.sessions.sort((a, b) => {
         if (sort === 'messages') return b.messageCount - a.messageCount;
-        if (sort === 'project') return (a.summary || '').localeCompare(b.summary || '');
+        if (sort === 'project') {
+          return sanitizeSummary(a.summary).localeCompare(sanitizeSummary(b.summary));
+        }
         return b.lastActivity.localeCompare(a.lastActivity);
       });
     }
