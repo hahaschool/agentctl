@@ -10,7 +10,8 @@ vi.mock('@/lib/utils', () => ({
 }));
 
 vi.mock('../lib/format-utils', () => ({
-  formatDuration: (_start: string, end?: string | null) => {
+  formatDuration: (start: string, end?: string | null) => {
+    if (start === 'instant') return '0s';
     if (!end) return '5m 30s';
     return '10m 0s';
   },
@@ -70,7 +71,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     agentName: 'my-agent',
     machineId: 'machine-1',
     sessionUrl: null,
-    claudeSessionId: null,
+    claudeSessionId: 'claude-session-1',
     status: 'active',
     projectPath: '/home/user/project',
     pid: 1234,
@@ -139,7 +140,7 @@ describe('SessionListItem', () => {
 
     it('renders truncated agentId when agentName is null', () => {
       renderItem({ session: makeSession({ agentName: null, agentId: 'agent-abc12345' }) });
-      expect(screen.getByText('agent-ab')).toBeDefined();
+      expect(screen.getByText('agent-abc12345')).toBeDefined();
     });
 
     it('renders machineId', () => {
@@ -346,6 +347,20 @@ describe('SessionListItem', () => {
       const durationSpan = container.querySelector('[title="Total duration"]');
       expect(durationSpan).not.toBeNull();
     });
+
+    it('shows "Running now" when duration is instant', () => {
+      renderItem({
+        session: makeSession({ startedAt: 'instant', endedAt: null }),
+      });
+      expect(screen.getByText('Running now')).toBeDefined();
+    });
+
+    it('shows "Duration: instant" for ended instant sessions', () => {
+      renderItem({
+        session: makeSession({ startedAt: 'instant', endedAt: '2026-03-07T00:10:00Z' }),
+      });
+      expect(screen.getByText('Duration: instant')).toBeDefined();
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -479,6 +494,21 @@ describe('SessionListItem', () => {
       });
       const option = container.querySelector('[role="option"]');
       expect(option?.className).toContain('border-l-transparent');
+    });
+
+    it('shows empty badge and muted style for empty failed sessions', () => {
+      const { container } = renderItem({
+        session: makeSession({
+          status: 'error',
+          claudeSessionId: null,
+          endedAt: '2026-03-07T00:00:00Z',
+          metadata: { costUsd: 0, messageCount: 0 },
+        }),
+      });
+      expect(screen.getByText('empty')).toBeDefined();
+      const option = container.querySelector('[role="option"]');
+      expect(option?.className).toContain('border-l-muted-foreground/35');
+      expect(option?.className).toContain('opacity-70');
     });
   });
 
