@@ -538,6 +538,31 @@ describe('LoopController', () => {
 
   // ── iterationDelayMs enforcement ───────────────────────────────
 
+  it('uses the controller-configured delay for the internal timer', async () => {
+    const agent = createMockAgent();
+    const controller = new LoopController(
+      agent,
+      { mode: 'result-feedback', maxIterations: 3, iterationDelayMs: 750 },
+      mockLogger,
+    );
+
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const delay = (
+      controller as unknown as {
+        delay: (ms?: number) => Promise<void>;
+      }
+    ).delay.bind(controller);
+
+    const delayPromise = delay(5);
+
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 750);
+
+    await vi.advanceTimersByTimeAsync(750);
+    await delayPromise;
+
+    setTimeoutSpy.mockRestore();
+  });
+
   it('enforces minimum 500ms iteration delay', () => {
     const agent = createMockAgent();
 

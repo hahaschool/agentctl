@@ -81,11 +81,7 @@ export class LoopController extends EventEmitter {
     this.log = logger.child({ component: 'loop-controller', agentId: agent.agentId });
 
     this.validateConfig(config);
-
-    this.iterationDelayMs = Math.max(
-      MIN_ITERATION_DELAY_MS,
-      config.iterationDelayMs ?? DEFAULT_ITERATION_DELAY_MS,
-    );
+    this.iterationDelayMs = this.resolveIterationDelayMs(config.iterationDelayMs);
   }
 
   /**
@@ -231,7 +227,7 @@ export class LoopController extends EventEmitter {
 
         // Delay between iterations (unless stopping)
         if (this.currentStatus() === 'running' && !this.stopRequested) {
-          await this.delay(this.iterationDelayMs);
+          await this.delay();
         }
       }
 
@@ -374,6 +370,30 @@ export class LoopController extends EventEmitter {
     return this.status;
   }
 
+  private resolveIterationDelayMs(iterationDelayMs: number | undefined): number {
+    if (iterationDelayMs == null) {
+      return DEFAULT_ITERATION_DELAY_MS;
+    }
+
+    if (
+      !Number.isFinite(iterationDelayMs) ||
+      iterationDelayMs < MIN_ITERATION_DELAY_MS ||
+      iterationDelayMs > MAX_ITERATION_DELAY_MS
+    ) {
+      throw new AgentError(
+        'LOOP_INVALID_DELAY',
+        `iterationDelayMs must be between ${MIN_ITERATION_DELAY_MS}ms and ${MAX_ITERATION_DELAY_MS}ms, got ${iterationDelayMs}ms`,
+        {
+          iterationDelayMs,
+          minimum: MIN_ITERATION_DELAY_MS,
+          maximum: MAX_ITERATION_DELAY_MS,
+        },
+      );
+    }
+
+    return iterationDelayMs;
+  }
+
   private validateConfig(config: LoopConfig): void {
     const hasMaxIterations = config.maxIterations != null && config.maxIterations > 0;
     const hasCostLimit = config.costLimitUsd != null && config.costLimitUsd > 0;
@@ -400,23 +420,6 @@ export class LoopController extends EventEmitter {
           maxIterations: config.maxIterations,
           minimum: 1,
           maximum: MAX_LOOP_ITERATIONS,
-        },
-      );
-    }
-
-    if (
-      config.iterationDelayMs != null &&
-      (!Number.isFinite(config.iterationDelayMs) ||
-        config.iterationDelayMs < MIN_ITERATION_DELAY_MS ||
-        config.iterationDelayMs > MAX_ITERATION_DELAY_MS)
-    ) {
-      throw new AgentError(
-        'LOOP_INVALID_DELAY',
-        `iterationDelayMs must be between ${MIN_ITERATION_DELAY_MS}ms and ${MAX_ITERATION_DELAY_MS}ms, got ${config.iterationDelayMs}ms`,
-        {
-          iterationDelayMs: config.iterationDelayMs,
-          minimum: MIN_ITERATION_DELAY_MS,
-          maximum: MAX_ITERATION_DELAY_MS,
         },
       );
     }
@@ -550,18 +553,14 @@ export class LoopController extends EventEmitter {
    * Delay between iterations with cancellation support.
    * When stop() is called, it resolves the delay promise immediately.
    */
-  private delay(ms: number): Promise<void> {
+  private delay(): Promise<void> {
     return new Promise<void>((resolve) => {
-      const safeDelayMs = Number.isFinite(ms)
-        ? Math.min(MAX_ITERATION_DELAY_MS, Math.max(MIN_ITERATION_DELAY_MS, ms))
-        : DEFAULT_ITERATION_DELAY_MS;
-
       this.delayResolver = resolve;
       this.delayTimer = setTimeout(() => {
         this.delayTimer = null;
         this.delayResolver = null;
         resolve();
-      }, safeDelayMs);
+      }, this.iterationDelayMs);
     });
   }
 
