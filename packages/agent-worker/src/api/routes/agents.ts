@@ -109,11 +109,6 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
     ),
     'Too many agent start requests. Try again later.',
   );
-  const frameworkAgentStartRateLimit = app.rateLimit({
-    max: 30,
-    timeWindow: '1 minute',
-  });
-
   // GET /api/agents — list all agents in the pool
   app.get('/', async (_request, reply) => {
     const agents = pool.listAgents();
@@ -149,7 +144,8 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
   app.post<{ Params: AgentIdParams; Body: StartAgentBody }>(
     '/:id/start',
     {
-      preHandler: [frameworkAgentStartRateLimit, agentStartRateLimit],
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      preHandler: agentStartRateLimit,
     },
     async (request, reply) => {
       const { id } = request.params;
