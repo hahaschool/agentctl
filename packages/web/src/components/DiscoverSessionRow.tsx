@@ -20,6 +20,20 @@ function recencyTitle(dateStr: string): string {
   return 'Older';
 }
 
+function sanitizeSummary(summary: string): string {
+  const trimmed = summary.trim();
+  if (!trimmed) return '';
+  if (typeof document === 'undefined') return trimmed;
+
+  const template = document.createElement('template');
+  template.innerHTML = trimmed;
+  template.content
+    .querySelectorAll('script,style,noscript,iframe,object,embed')
+    .forEach((node) => node.remove());
+
+  return (template.content.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
 type DiscoverSessionRowProps = {
   session: DiscoveredSession;
   isFlat: boolean;
@@ -58,7 +72,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
   onCancelResume,
 }: DiscoverSessionRowProps): React.JSX.Element {
   const dotClass = recencyColorClass(s.lastActivity);
-  const sanitizedSummary = s.summary.replace(/<[^>]*>/g, '').trim();
+  const sanitizedSummary = sanitizeSummary(s.summary);
   const displaySummary = sanitizedSummary || 'Untitled';
 
   return (

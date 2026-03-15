@@ -26,7 +26,17 @@ import { api } from '../lib/api';
 import { discoverQuery, queryKeys, sessionsQuery } from '../lib/queries';
 
 function sanitizeSummary(summary: string): string {
-  return summary.replace(/<[^>]*>/g, '').trim();
+  const trimmed = summary.trim();
+  if (!trimmed) return '';
+  if (typeof document === 'undefined') return trimmed;
+
+  const template = document.createElement('template');
+  template.innerHTML = trimmed;
+  template.content
+    .querySelectorAll('script,style,noscript,iframe,object,embed')
+    .forEach((node) => node.remove());
+
+  return (template.content.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
 export function DiscoverPage(): React.JSX.Element {

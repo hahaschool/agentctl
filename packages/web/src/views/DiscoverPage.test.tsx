@@ -484,6 +484,33 @@ describe('DiscoverPage', () => {
     });
   });
 
+  it('does not match hostile nested tag payload text from summary scripts in search', async () => {
+    setupDefaultMocks([
+      createDiscoveredSession({
+        sessionId: 's1',
+        summary: 'Deploy <div><script>xsspayload</script><span>pipeline</span></div>',
+      }),
+      createDiscoveredSession({ sessionId: 's2', summary: 'Add dashboard' }),
+    ]);
+
+    renderDiscover();
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 2 of 2/)).toBeDefined();
+    });
+
+    const searchInput = screen.getByLabelText('Search sessions') as HTMLInputElement;
+
+    fireEvent.change(searchInput, { target: { value: 'xsspayload' } });
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 0 of 2/)).toBeDefined();
+    });
+
+    fireEvent.change(searchInput, { target: { value: 'pipeline' } });
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 1 of 2/)).toBeDefined();
+    });
+  });
+
   it('filters sessions by search term on project path', async () => {
     setupDefaultMocks([
       createDiscoveredSession({ sessionId: 's1', projectPath: '/home/user/web-app' }),
