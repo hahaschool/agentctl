@@ -12,6 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
 
 export const DEFAULT_DENIED_PATH_SEGMENTS = [
@@ -156,6 +157,16 @@ export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[]
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return readdirSync(safe, { withFileTypes: true }) as Dirent[];
+}
+
+export async function safeReaddir(userPath: string, allowedBase: string): Promise<Dirent[]> {
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
+  return readdir(safe, { withFileTypes: true });
 }
 
 export function safeMkdirSync(userPath: string, allowedBase: string): string | undefined {

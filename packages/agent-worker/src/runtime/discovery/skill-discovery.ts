@@ -1,10 +1,11 @@
-import { access, readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join, normalize, resolve } from 'node:path';
 
 import type { ManagedRuntime } from '@agentctl/shared';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeReaddir,
   sanitizePath,
 } from '../../utils/path-security.js';
 
@@ -71,13 +72,13 @@ async function scanSkillsDir(
   source: 'global' | 'project',
   runtime: ManagedRuntime,
 ): Promise<DiscoveredSkill[]> {
+  let entries: Awaited<ReturnType<typeof safeReaddir>>;
   try {
-    await access(dirPath);
+    entries = await safeReaddir(dirPath, dirPath);
   } catch {
     return [];
   }
 
-  const entries = await readdir(dirPath, { withFileTypes: true });
   const skills: DiscoveredSkill[] = [];
 
   for (const entry of entries) {

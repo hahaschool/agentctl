@@ -1,10 +1,10 @@
-import { access, readFile } from 'node:fs/promises';
 import { join, normalize, resolve } from 'node:path';
 import type { McpServerSource } from '@agentctl/shared';
 import { parse } from 'smol-toml';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
+  safeReadFileAtomic,
   sanitizePath,
 } from '../../utils/path-security.js';
 
@@ -24,7 +24,11 @@ type CodexTomlConfig = {
   mcp_servers?: Record<string, CodexTomlMcpEntry>;
 };
 
-function resolveCodexConfigPath(basePath: string): string | null {
+const MAX_CODEX_CONFIG_FILE_SIZE_BYTES = 1024 * 1024;
+
+function resolveCodexConfigPath(
+  basePath: string,
+): { configPath: string; resolvedBase: string } | null {
   if (typeof basePath !== 'string' || basePath.trim().length === 0) {
     return null;
   }
@@ -36,7 +40,10 @@ function resolveCodexConfigPath(basePath: string): string | null {
   }
 
   try {
-    return sanitizePath(join(resolvedBase, '.codex', 'config.toml'), resolvedBase);
+    return {
+      configPath: sanitizePath(join(resolvedBase, '.codex', 'config.toml'), resolvedBase),
+      resolvedBase,
+    };
   } catch {
     return null;
   }
@@ -57,19 +64,19 @@ export async function discoverCodexMcpServers(
   basePath: string,
   sourceType: McpServerSource = 'global',
 ): Promise<DiscoveredMcpServerWithProvenance[]> {
-  const configPath = resolveCodexConfigPath(basePath);
-  if (!configPath) {
+  const configLocation = resolveCodexConfigPath(basePath);
+  if (!configLocation) {
     return [];
   }
 
-  try {
-    await access(configPath);
-  } catch {
-    return [];
-  }
+  const { configPath, resolvedBase } = configLocation;
 
   try {
-    const content = await readFile(configPath, 'utf-8');
+    const { content } = safeReadFileAtomic(
+      configPath,
+      resolvedBase,
+      MAX_CODEX_CONFIG_FILE_SIZE_BYTES,
+    );
     const parsed = parse(content) as CodexTomlConfig;
 
     if (!parsed.mcp_servers) {
