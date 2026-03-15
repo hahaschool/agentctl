@@ -48,6 +48,38 @@ describe('Agent CRUD routes', () => {
   // ── POST /api/agents/:id/start ──────────────────────────────────
 
   describe('POST /api/agents/:id/start', () => {
+    it('should rate limit repeated agent start requests when configured', async () => {
+      process.env.AGENT_START_RATE_LIMIT_MAX = '1';
+      process.env.AGENT_START_RATE_LIMIT_WINDOW_MS = '60000';
+
+      await app.close();
+      app = await createWorkerServer({ logger, agentPool: pool, machineId: MACHINE_ID });
+
+      try {
+        const first = await app.inject({
+          method: 'POST',
+          url: '/api/agents/agent-rate-1/start',
+          payload: { prompt: 'First start request' },
+        });
+
+        const second = await app.inject({
+          method: 'POST',
+          url: '/api/agents/agent-rate-2/start',
+          payload: { prompt: 'Second start request' },
+        });
+
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(429);
+        expect(second.json()).toEqual({
+          error: 'Too many agent start requests. Try again later.',
+          code: 'RATE_LIMITED',
+        });
+      } finally {
+        delete process.env.AGENT_START_RATE_LIMIT_MAX;
+        delete process.env.AGENT_START_RATE_LIMIT_WINDOW_MS;
+      }
+    });
+
     it('should start a new agent and return 200 with agentId and status', async () => {
       const response = await app.inject({
         method: 'POST',

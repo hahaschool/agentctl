@@ -1,0 +1,151 @@
+# Main Stability And Security Cycle Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Restore `main` CI health, remove the highest-value open security regressions, and then update roadmap/plan documents to match the codebase state.
+
+**Architecture:** Keep this cycle narrow and evidence-driven. First reproduce the current control-plane failures locally and fix only the root causes. Then address the actionable open CodeQL alerts in small, isolated batches so parallel work can land without overlapping files.
+
+**Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
+
+> Status note (2026-03-15): targeted control-plane CI reproduction/fix is complete locally; Discover sanitization and worker path-hardening are being landed in parallel branches; roadmap alignment is tracked in this worktree.
+
+---
+
+### Task 1: Reproduce Current Control-Plane CI Failures
+
+**Files:**
+- Modify: `packages/control-plane/src/integration/dispatch-lifecycle.test.ts`
+- Modify: `packages/control-plane/src/registry/db-registry.test.ts`
+- Verify: `packages/control-plane/src/scheduler/task-worker.ts`
+
+**Step 1: Run the smallest failing reproduction**
+
+Run:
+
+```bash
+pnpm --filter @agentctl/control-plane vitest run \
+  src/integration/dispatch-lifecycle.test.ts \
+  src/registry/db-registry.test.ts
+```
+
+Expected: failures mentioning `job.updateData is not a function` and a stale `getRecentRuns()` expectation around `retryOf` / `retryIndex`.
+
+**Step 2: Inspect the current implementation and tests**
+
+Read:
+
+```bash
+sed -n '320,390p' packages/control-plane/src/scheduler/task-worker.ts
+sed -n '620,730p' packages/control-plane/src/registry/db-registry.test.ts
+sed -n '120,220p' packages/control-plane/src/integration/dispatch-lifecycle.test.ts
+sed -n '240,320p' packages/control-plane/src/integration/dispatch-lifecycle.test.ts
+sed -n '500,560p' packages/control-plane/src/integration/dispatch-lifecycle.test.ts
+```
+
+Expected: identify whether the worker should guard `updateData` for test doubles or whether the test mocks are outdated.
+
+**Step 3: Implement the minimal root-cause fix**
+
+- Either make `task-worker.ts` tolerant of BullMQ job doubles without `updateData`, or update the integration-test mock so it matches the real job contract.
+- Update `db-registry.test.ts` so the asserted mapped run includes `retryOf` and `retryIndex`.
+
+**Step 4: Verify the targeted tests**
+
+Run:
+
+```bash
+pnpm --filter @agentctl/control-plane vitest run \
+  src/integration/dispatch-lifecycle.test.ts \
+  src/registry/db-registry.test.ts
+```
+
+Expected: PASS.
+
+### Task 2: Fix Discover Sanitization CodeQL Alerts
+
+**Files:**
+- Modify: `packages/web/src/views/DiscoverPage.tsx`
+- Modify: `packages/web/src/components/DiscoverSessionRow.tsx`
+- Test: `packages/web/src/views/DiscoverPage.test.tsx`
+- Test: `packages/web/src/components/DiscoverSessionRow.test.tsx`
+
+**Step 1: Reproduce the existing sanitization behavior**
+
+Run:
+
+```bash
+pnpm --filter @agentctl/web vitest run \
+  src/views/DiscoverPage.test.tsx \
+  src/components/DiscoverSessionRow.test.tsx
+```
+
+Expected: current tests pass but do not fully cover nested / reintroduced tag payloads reported by CodeQL.
+
+**Step 2: Add focused failing tests for hostile summary strings**
+
+Add cases covering strings like:
+
+```ts
+'<scr<script>ipt>alert(1)</scr<script>ipt>'
+'<<script>bad</script>>'
+```
+
+Expected: sanitized display text contains no `<` or `>` remnants and still falls back to `Untitled` when empty.
+
+**Step 3: Implement a stronger summary sanitizer**
+
+- Replace the current one-pass tag-strip regex with a sanitizer that removes angle brackets or repeatedly strips tags until stable.
+- Reuse the same helper where possible to keep Discover search, sort, and row display consistent.
+
+**Step 4: Verify the targeted tests**
+
+Run:
+
+```bash
+pnpm --filter @agentctl/web vitest run \
+  src/views/DiscoverPage.test.tsx \
+  src/components/DiscoverSessionRow.test.tsx
+```
+
+Expected: PASS.
+
+### Task 3: Triage Remaining High-Severity Alerts And Update Docs
+
+**Files:**
+- Modify: `docs/ROADMAP.md`
+- Modify: `docs/plans/2026-03-15-main-stability-and-security-cycle-plan.md`
+- Review: `docs/plans/*.md`
+- Modify: `packages/agent-worker/src/api/routes/agents.ts`
+- Modify: `packages/agent-worker/src/api/routes/agents.test.ts`
+- Review: `packages/agent-worker/src/runtime/cli-session-manager.ts`
+- Review: `packages/agent-worker/src/runtime/discovery/*.ts`
+- Review: `packages/agent-worker/src/api/routes/*.ts`
+
+**Step 1: Summarize the remaining open alerts by type**
+
+Run:
+
+```bash
+gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' \
+  --jq '.[] | [.number, .rule.id, .most_recent_instance.location.path] | @tsv'
+```
+
+Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
+
+**Step 2: Update roadmap status to match this cycle**
+
+- Record the current `main` CI issue and its fix status only after verification.
+- Align roadmap text with any newly delivered security or stability work.
+- Check whether any recent delivered items are still listed as open.
+
+**Step 3: Verify plan/roadmap consistency**
+
+Run:
+
+```bash
+rg -n "Status note|PR #" docs/ROADMAP.md
+find docs/plans -maxdepth 1 -type f | sort
+```
+
+Expected: no obvious mismatch between delivered features, open items, and plan artifacts created in this cycle.

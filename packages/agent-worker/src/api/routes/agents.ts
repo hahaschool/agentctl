@@ -5,10 +5,16 @@ import type {
   SafetyDecisionRequest,
 } from '@agentctl/shared';
 import { AgentError, SAFETY_DECISIONS, verifyDispatchPayloadSignature } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from '../../runtime/agent-pool.js';
+import {
+  createInMemoryRateLimiter,
+  createIpRateLimitPreHandler,
+  readRateLimitEnv,
+} from '../rate-limit.js';
 
 type AgentRouteOptions = FastifyPluginOptions & {
   pool: AgentPool;
@@ -87,6 +93,20 @@ function errorToResponse(err: unknown): {
 export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptions): Promise<void> {
   const { pool, machineId, logger, getDispatchVerificationConfig } = options;
 
+  await app.register(rateLimit, {
+    global: false,
+    max: readRateLimitEnv('AGENT_START_GLOBAL_RATE_LIMIT_MAX', 60),
+    timeWindow: readRateLimitEnv('AGENT_START_GLOBAL_RATE_LIMIT_WINDOW_MS', 60_000),
+  });
+
+  const agentStartRateLimit = createIpRateLimitPreHandler(
+    createInMemoryRateLimiter(
+      readRateLimitEnv('AGENT_START_RATE_LIMIT_MAX', 30),
+      readRateLimitEnv('AGENT_START_RATE_LIMIT_WINDOW_MS', 60_000),
+    ),
+    'Too many agent start requests. Try again later.',
+  );
+
   // GET /api/agents — list all agents in the pool
   app.get('/', async (_request, reply) => {
     const agents = pool.listAgents();
@@ -121,6 +141,10 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
   // POST /api/agents/:id/start — create agent in pool (if needed) and start it
   app.post<{ Params: AgentIdParams; Body: StartAgentBody }>(
     '/:id/start',
+    {
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      preHandler: agentStartRateLimit,
+    },
     async (request, reply) => {
       const { id } = request.params;
       const unsignedDispatchPayload = { ...request.body };
