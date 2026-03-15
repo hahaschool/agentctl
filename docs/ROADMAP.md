@@ -1146,6 +1146,12 @@ Visual bugs and layout issues across multiple pages. Root cause: features were s
 - [ ] Project path text overflows/wraps awkwardly in card layout
 - [ ] Start flow should be a dedicated dialog or panel, not inline in the card
 
+**Run History (Agent Detail):**
+- [ ] Run History strip (red/green blocks) + Run Timeline bar chart show same data twice — merge into one
+- [ ] Raw red/green colors violate dark-first aesthetic — use muted semantic colors (emerald-500/10, red-500/10)
+- [ ] recharts BarChart feels generic enterprise, not "cyber/terminal" — redesign as timeline or heatmap
+- [ ] No information on hover — needs tooltip with run details (cost, duration, trigger, session link)
+
 **General:**
 - [ ] Inconsistent button styles across pages (some use shadcn Button, some use raw styled links)
 - [ ] Version display in sidebar should auto-update from package.json (currently hardcoded)
