@@ -71,7 +71,12 @@ function resolveWithinBase(candidatePath: string, allowedBase: string): string {
  * `allowedBase` and returns the resolved path only if it exists.
  */
 export function safeExistsSync(userPath: string, allowedBase: string): string | null {
-  const safe = resolveWithinBase(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const rel = relative(resolvedBase, safe);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return existsSync(safe) ? safe : null;
 }
 
@@ -84,7 +89,12 @@ export function safeReadFileSync(
   allowedBase: string,
   encoding: BufferEncoding = 'utf-8',
 ): string {
-  const safe = resolveWithinBase(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const rel = relative(resolvedBase, safe);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return readFileSync(safe, encoding);
 }
 
@@ -93,7 +103,12 @@ export function safeReadFileSync(
  * Sanitises + validates the path before writing.
  */
 export function safeWriteFileSync(userPath: string, allowedBase: string, data: string): void {
-  const safe = resolveWithinBase(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const rel = relative(resolvedBase, safe);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   writeFileSync(safe, data);
 }
 
@@ -106,7 +121,12 @@ export function safeReadFileAtomic(
   allowedBase: string,
   maxSize: number,
 ): { content: string; size: number } {
-  const safe = resolveWithinBase(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const rel = relative(resolvedBase, safe);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
 
   const fd = openSync(safe, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
@@ -123,16 +143,31 @@ export function safeReadFileAtomic(
 }
 
 export function safeStatSync(userPath: string, allowedBase: string): Stats {
-  const safe = resolveWithinBase(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const rel = relative(resolvedBase, safe);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return statSync(safe);
 }
 
 export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[] {
-  const safe = resolveWithinBase(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const rel = relative(resolvedBase, safe);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return readdirSync(safe, { withFileTypes: true }) as Dirent[];
 }
 
 export function safeMkdirSync(userPath: string, allowedBase: string): string | undefined {
-  const safe = resolveWithinBase(userPath, allowedBase);
+  const resolvedBase = resolve(normalize(allowedBase));
+  const safe = resolve(normalize(userPath));
+  const rel = relative(resolvedBase, safe);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
   return mkdirSync(safe, { recursive: true });
 }
