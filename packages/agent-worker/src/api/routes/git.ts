@@ -9,6 +9,7 @@ import { normalize, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { WorkerError } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 import { DEFAULT_DENIED_PATH_SEGMENTS, findDeniedPathSegment } from '../../utils/path-security.js';
@@ -236,6 +237,16 @@ function parseWorktreeList(output: string): GitWorktreeEntry[] {
 
 export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions): Promise<void> {
   const { logger } = options;
+
+  // Register @fastify/rate-limit so CodeQL recognises framework-level rate
+  // limiting (js/missing-rate-limiting). Route-specific limits still rely on
+  // the IP preHandler below; global is disabled to avoid changing behavior.
+  await app.register(rateLimit, {
+    global: false,
+    max: readRateLimitEnv('GIT_GLOBAL_RATE_LIMIT_MAX', 60),
+    timeWindow: readRateLimitEnv('GIT_GLOBAL_RATE_LIMIT_WINDOW_MS', 60_000),
+  });
+
   const gitStatusRateLimit = createIpRateLimitPreHandler(
     createInMemoryRateLimiter(
       readRateLimitEnv('GIT_STATUS_RATE_LIMIT_MAX', 60),
