@@ -51,6 +51,19 @@ function getProcessor(): ProcessorFn {
   return capturedProcessor;
 }
 
+function makeJob(
+  id: string,
+  data: AgentTaskJobData,
+): Job<AgentTaskJobData, void, AgentTaskJobName> {
+  return {
+    id,
+    name: 'agent:start',
+    data,
+    attemptsMade: 0,
+    updateData: vi.fn().mockResolvedValue(undefined),
+  } as unknown as Job<AgentTaskJobData, void, AgentTaskJobName>;
+}
+
 // ===========================================================================
 // Integration: dispatch → completion lifecycle
 // ===========================================================================
@@ -148,11 +161,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
 
       // Build the job object from the data that was enqueued
       const enqueuedJobData = mockTaskQueue.add.mock.calls[0][1] as AgentTaskJobData;
-      const job = {
-        id: 'job-1',
-        name: 'agent:start',
-        data: enqueuedJobData,
-      } as unknown as Job<AgentTaskJobData, void, AgentTaskJobName>;
+      const job = makeJob('job-1', enqueuedJobData);
 
       await processor(job);
 
@@ -257,11 +266,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
       const processor = getProcessor();
 
       const enqueuedJobData = mockTaskQueue.add.mock.calls[0][1] as AgentTaskJobData;
-      const job = {
-        id: 'job-2',
-        name: 'agent:start',
-        data: enqueuedJobData,
-      } as unknown as Job<AgentTaskJobData, void, AgentTaskJobName>;
+      const job = makeJob('job-2', enqueuedJobData);
 
       await processor(job);
 
@@ -334,11 +339,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
       const processor = getProcessor();
 
       const enqueuedJobData = mockTaskQueue.add.mock.calls[0][1] as AgentTaskJobData;
-      const job = {
-        id: 'job-3',
-        name: 'agent:start',
-        data: enqueuedJobData,
-      } as unknown as Job<AgentTaskJobData, void, AgentTaskJobName>;
+      const job = makeJob('job-3', enqueuedJobData);
 
       // The processor should throw because the dispatch failed
       await expect(processor(job)).rejects.toBeInstanceOf(ControlPlaneError);
@@ -515,10 +516,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
 
       const processor = getProcessor();
 
-      const job = {
-        id: 'job-consistency',
-        name: 'agent:start' as const,
-        data: {
+      const job = makeJob('job-consistency', {
           agentId: 'agent-abc',
           machineId: 'machine-xyz',
           prompt: 'Check runId consistency',
@@ -527,8 +525,7 @@ describe('Integration: dispatch → completion lifecycle', () => {
           tools: null,
           resumeSession: null,
           createdAt: '2026-03-02T00:00:00Z',
-        },
-      } as unknown as Job<AgentTaskJobData, void, AgentTaskJobName>;
+        });
 
       await processor(job);
 

@@ -1110,9 +1110,11 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(in progress)*
+
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
-- [ ] Frontend double-click prevention on Start button
+- [x] Frontend double-click prevention on Start button *(PR #165)*
 - [x] MCP servers not loading in CLI `-p` mode — pass `--mcp-config` explicitly *(direct commit c9ebe4e)*
 - [x] Codex worktree sessions grouped as separate projects — normalize paths *(direct commit e0ca99f)*
 - [x] ModelPromptsTab hardcoded Claude models — use runtime-aware options *(direct commit 2c198f3)*
@@ -1123,8 +1125,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Dev-1 PM2 config (`infra/pm2/ecosystem.dev1.config.cjs`) *(direct commits)*
 - [x] Runtime API proxy via Next.js middleware — same build for all tiers *(direct commit 879f27f)*
 - [x] Dev-1 database setup + migrations
-- [ ] Dev-2 PM2 config (`infra/pm2/ecosystem.dev2.config.cjs`)
-- [ ] `DISPATCH_SIGNING_SECRET_KEY` env var in dev PM2 configs for stable keys
+- [x] Dev-2 PM2 config (`infra/pm2/ecosystem.dev2.config.cjs`) *(PR #166)*
+- [x] `DISPATCH_SIGNING_SECRET_KEY` env var in dev PM2 configs for stable keys *(PR #166)*
 - [x] Dashboard stale buttons removed (View Agents, Runtime Sessions) *(direct commit ff9ab3e)*
 - [x] Version display updated to v0.2.0 *(direct commit ff9ab3e)*
 
@@ -1171,7 +1173,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 
 **Machines page:**
 - [ ] Same 4 metric card pattern (Total/Online/Offline/Degraded) — acceptable here but still generic
-- [ ] "GPU" / "Docker" capability badges use monospace raw text — should be proper badges with icons
+- [x] "GPU" / "Docker" capability badges use proper badges with icons *(PR #165)*
 - [ ] Machine card green left border is inconsistent with other cards
 
 **Settings page (Runtime Control Center):**
@@ -1180,13 +1182,13 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [ ] Minor: dependency latency cards (Postgres 2ms, Redis 1ms) could use color coding for degraded
 
 **Memory page:**
-- [ ] "0 facts" with empty state — should guide user to import data
+- [x] "0 facts" empty state guides users to import data *(PR #165)*
 - [ ] Entity type checkboxes not styled as badges/chips — looks like a raw HTML form
 - [ ] Min Confidence slider has no visual feedback
 
 **Spaces page:**
 - [ ] Empty state is clean and actionable ✅ ("Create your first space" button)
-- [ ] Header "Spaces" duplicated (breadcrumb + h1)
+- [x] Header "Spaces" deduplicated *(PR #165)*
 
 **Discover page:**
 - [ ] Codex sessions show "# AGENTS.md instructions for..." as summary — this is the raw system prompt, not a meaningful summary. Need to extract first user message instead.
@@ -1199,9 +1201,9 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [ ] "PROMOTION HISTORY: No promotions yet" is lonely — could be collapsed or hidden when empty
 
 **General:**
-- [ ] Version in sidebar: auto-update from package.json (version-bump.sh should update Sidebar.tsx)
-- [ ] "New Session" blue button on dashboard still has invisible/truncated text
-- [ ] Dashboard still shows "View Agents" and "Runtime Sessions" buttons (beta wasn't rebuilt until now)
+- [x] Version in sidebar: auto-update from package.json (version-bump.sh updates `Sidebar.tsx`) *(PR #166)*
+- [x] "New Session" button text visibility fixed *(PR #158)*
+- [x] Dashboard stale "View Agents" and "Runtime Sessions" buttons removed *(direct commit ff9ab3e)*
 - [ ] Discover session summaries leak raw XML/system prompt text — sanitize
 
 ### 16.4 Agent Settings Config Preview Sidebar — P1
@@ -1290,8 +1292,9 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | ~~Agent Run Quality (empty runs + retry tracking)~~ | 16.1 | ✅ Delivered (PR #157) |
-| **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered (PRs #158-#162) |
+| **P0** | Agent Run Quality | 16.1 | In progress: PRs #157 and #165 landed; remaining CI/security follow-ups tracked in the 2026-03-15 stability plan |
+| **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev PM2 isolation and version-bump automation landed through PR #166 |
+| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#165 landed; critique follow-ups remain |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
 
 ---
@@ -1424,6 +1427,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
 | [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Delivered (PR #163) | 16.4 |
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | In progress | 16.1-16.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
