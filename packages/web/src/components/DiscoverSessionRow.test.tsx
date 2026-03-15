@@ -98,6 +98,26 @@ describe('DiscoverSessionRow', () => {
     expect(screen.getByText('Untitled')).toBeDefined();
   });
 
+  it('strips XML/HTML tags from the rendered summary and tooltip', () => {
+    render(
+      <DiscoverSessionRow
+        {...defaultProps({
+          session: makeSession({
+            summary: 'Run <local-command-caveat>carefully</local-command-caveat>',
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Run carefully')).toBeDefined();
+
+    const tooltips = screen.getAllByTestId('simple-tooltip');
+    const summaryTooltip = tooltips.find(
+      (t) => t.getAttribute('data-tooltip-content') === 'Run carefully',
+    );
+    expect(summaryTooltip).toBeDefined();
+  });
+
   it('renders message count', () => {
     render(<DiscoverSessionRow {...defaultProps()} />);
     expect(screen.getByText('42 msgs')).toBeDefined();

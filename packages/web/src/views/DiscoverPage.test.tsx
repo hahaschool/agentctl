@@ -463,6 +463,27 @@ describe('DiscoverPage', () => {
     });
   });
 
+  it('filters sessions using sanitized summary text when summary includes XML tags', async () => {
+    setupDefaultMocks([
+      createDiscoveredSession({
+        sessionId: 's1',
+        summary: 'Fix <local-command-caveat>authentication</local-command-caveat>',
+      }),
+      createDiscoveredSession({ sessionId: 's2', summary: 'Add dashboard' }),
+    ]);
+    renderDiscover();
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 2 of 2/)).toBeDefined();
+    });
+
+    const searchInput = screen.getByLabelText('Search sessions') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'authentication' } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 1 of 2/)).toBeDefined();
+    });
+  });
+
   it('filters sessions by search term on project path', async () => {
     setupDefaultMocks([
       createDiscoveredSession({ sessionId: 's1', projectPath: '/home/user/web-app' }),
