@@ -1,6 +1,5 @@
-import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import type { DiscoveredMcpServer, McpServerConfig, McpServerSource } from '@agentctl/shared';
 import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
@@ -10,7 +9,11 @@ import type { Logger } from 'pino';
 import type { DiscoveredMcpServerWithProvenance } from '../../runtime/discovery/_type-stubs.js';
 import { discoverCodexMcpServers } from '../../runtime/discovery/codex-mcp-discovery.js';
 import { DiscoveryCache } from '../../runtime/discovery/discovery-cache.js';
-import { DEFAULT_DENIED_PATH_SEGMENTS, findDeniedPathSegment } from '../../utils/path-security.js';
+import {
+  DEFAULT_DENIED_PATH_SEGMENTS,
+  findDeniedPathSegment,
+  safeReadFileSync,
+} from '../../utils/path-security.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,18 +50,12 @@ export const mcpDiscoverCache = new DiscoveryCache<
 
 /**
  * Safely read and parse a JSON file. Returns null on any error.
- * Security: validates that the resolved path stays under the given base
- * directory to prevent path traversal (js/path-injection).
+ * Security: `safeReadFileSync` enforces allowed-base path validation at the
+ * filesystem sink to prevent path injection (js/path-injection).
  */
 async function readJsonFile(filePath: string, allowedBase: string): Promise<unknown | null> {
-  const resolvedBase = resolve(allowedBase);
-  const resolvedPath = resolve(filePath);
-  const prefix = resolvedBase.endsWith(sep) ? resolvedBase : `${resolvedBase}${sep}`;
-  if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(prefix)) {
-    return null; // Path escapes base — treat as missing
-  }
   try {
-    const raw = await readFile(resolvedPath, 'utf-8');
+    const raw = safeReadFileSync(filePath, allowedBase, 'utf-8');
     return JSON.parse(raw) as unknown;
   } catch {
     return null;
