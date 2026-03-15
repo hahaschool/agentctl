@@ -141,7 +141,8 @@ export function safeReadFileAtomic(
 export function safeStatSync(userPath: string, allowedBase: string): Stats {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return statSync(safe);
@@ -150,7 +151,8 @@ export function safeStatSync(userPath: string, allowedBase: string): Stats {
 export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[] {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return readdirSync(safe, { withFileTypes: true }) as Dirent[];
@@ -159,7 +161,8 @@ export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[]
 export function safeMkdirSync(userPath: string, allowedBase: string): string | undefined {
   const resolvedBase = resolve(normalize(allowedBase));
   const safe = resolve(normalize(userPath));
-  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
   return mkdirSync(safe, { recursive: true });
