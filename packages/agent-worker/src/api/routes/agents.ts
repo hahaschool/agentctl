@@ -4,8 +4,8 @@ import type {
   DispatchVerificationConfig,
   SafetyDecisionRequest,
 } from '@agentctl/shared';
-import rateLimit from '@fastify/rate-limit';
 import { AgentError, SAFETY_DECISIONS, verifyDispatchPayloadSignature } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 

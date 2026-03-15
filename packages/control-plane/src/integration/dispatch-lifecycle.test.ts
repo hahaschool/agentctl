@@ -517,15 +517,15 @@ describe('Integration: dispatch → completion lifecycle', () => {
       const processor = getProcessor();
 
       const job = makeJob('job-consistency', {
-          agentId: 'agent-abc',
-          machineId: 'machine-xyz',
-          prompt: 'Check runId consistency',
-          model: 'claude-opus-4-6',
-          trigger: 'manual' as const,
-          tools: null,
-          resumeSession: null,
-          createdAt: '2026-03-02T00:00:00Z',
-        });
+        agentId: 'agent-abc',
+        machineId: 'machine-xyz',
+        prompt: 'Check runId consistency',
+        model: 'claude-opus-4-6',
+        trigger: 'manual' as const,
+        tools: null,
+        resumeSession: null,
+        createdAt: '2026-03-02T00:00:00Z',
+      });
 
       await processor(job);
 
