@@ -21,6 +21,7 @@ const {
   mockSessionsQuery,
   mockRuntimeSessionsQuery,
   mockRuntimeHandoffSummaryQuery,
+  mockMemoryStatsQuery,
   mockUseWebSocket,
   mockUseHotkeys,
 } = vi.hoisted(() => ({
@@ -32,6 +33,7 @@ const {
   mockSessionsQuery: vi.fn(),
   mockRuntimeSessionsQuery: vi.fn(),
   mockRuntimeHandoffSummaryQuery: vi.fn(),
+  mockMemoryStatsQuery: vi.fn(),
   mockUseWebSocket: vi.fn(),
   mockUseHotkeys: vi.fn(),
 }));
@@ -168,6 +170,7 @@ vi.mock('@/lib/queries', () => ({
   sessionsQuery: () => mockSessionsQuery(),
   runtimeSessionsQuery: () => mockRuntimeSessionsQuery(),
   runtimeHandoffSummaryQuery: () => mockRuntimeHandoffSummaryQuery(),
+  memoryStatsQuery: () => mockMemoryStatsQuery(),
 }));
 
 vi.mock('../components/memory/DashboardMemoryCard', () => ({
@@ -328,6 +331,16 @@ function setupDefaultMocks(overrides?: {
       nativeImportFallbacks: number;
     };
   };
+  memoryStatsData?: {
+    ok: boolean;
+    stats: {
+      totalFacts: number;
+      newThisWeek: number;
+      avgConfidence: number;
+      pendingConsolidation: number;
+      growthTrend: Array<{ date: string; count: number }>;
+    };
+  };
   wsStatus?: string;
   neverResolve?: (
     | 'health'
@@ -338,6 +351,7 @@ function setupDefaultMocks(overrides?: {
     | 'sessions'
     | 'runtimeSessions'
     | 'runtimeHandoffSummary'
+    | 'memoryStats'
   )[];
 }) {
   const neverResolve = new Set(overrides?.neverResolve ?? []);
@@ -447,6 +461,32 @@ function setupDefaultMocks(overrides?: {
         ),
   });
 
+  mockMemoryStatsQuery.mockReturnValue({
+    queryKey: ['memory', 'stats'],
+    queryFn: neverResolve.has('memoryStats')
+      ? vi.fn().mockReturnValue(new Promise(() => {}))
+      : vi.fn().mockResolvedValue(
+          overrides?.memoryStatsData ?? {
+            ok: true,
+            stats: {
+              totalFacts: 120,
+              newThisWeek: 12,
+              avgConfidence: 0.86,
+              pendingConsolidation: 3,
+              growthTrend: [
+                { date: '2026-03-09', count: 80 },
+                { date: '2026-03-10', count: 90 },
+                { date: '2026-03-11', count: 96 },
+                { date: '2026-03-12', count: 104 },
+                { date: '2026-03-13', count: 108 },
+                { date: '2026-03-14', count: 115 },
+                { date: '2026-03-15', count: 120 },
+              ],
+            },
+          },
+        ),
+  });
+
   mockUseWebSocket.mockReturnValue({ status: overrides?.wsStatus ?? 'connected' });
 }
 
@@ -486,16 +526,16 @@ describe('DashboardPage', () => {
       expect(screen.getAllByTestId('link-/sessions').length).toBeGreaterThan(0);
     });
 
-    it('renders "View Agents" quick action link to /agents', () => {
+    it('does not render deprecated "View Agents" quick action link', () => {
       renderDashboard();
-      expect(screen.getByText('View Agents')).toBeDefined();
-      expect(screen.getByTestId('link-/agents')).toBeDefined();
+      expect(screen.queryByText('View Agents')).toBeNull();
+      expect(screen.queryByTestId('link-/agents')).toBeNull();
     });
 
-    it('renders "Runtime Sessions" quick action link to /sessions?type=runtime', () => {
+    it('does not render deprecated "Runtime Sessions" quick action link', () => {
       renderDashboard();
-      expect(screen.getByText('Runtime Sessions')).toBeDefined();
-      expect(screen.getByTestId('link-/sessions?type=runtime')).toBeDefined();
+      expect(screen.queryByText('Runtime Sessions')).toBeNull();
+      expect(screen.queryByTestId('link-/sessions?type=runtime')).toBeNull();
     });
 
     it('renders last-updated component', () => {
@@ -688,17 +728,17 @@ describe('DashboardPage', () => {
   // =========================================================================
 
   describe('StatCards', () => {
-    it('renders all eight stat cards', async () => {
+    it('renders three primary stat cards and demotes secondary stats to inline row', async () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByTestId('stat-card-Machines Online')).toBeDefined();
-        expect(screen.getByTestId('stat-card-Sessions Discovered')).toBeDefined();
-        expect(screen.getByTestId('stat-card-Agents Registered')).toBeDefined();
         expect(screen.getByTestId('stat-card-Active Runs')).toBeDefined();
         expect(screen.getByTestId('stat-card-Active Sessions')).toBeDefined();
-        expect(screen.getByTestId('stat-card-Managed Runtimes')).toBeDefined();
-        expect(screen.getByTestId('stat-card-Native Import')).toBeDefined();
-        expect(screen.getByTestId('stat-card-Total Cost')).toBeDefined();
+        expect(screen.queryByTestId('stat-card-Sessions Discovered')).toBeNull();
+        expect(screen.queryByTestId('stat-card-Agents Registered')).toBeNull();
+        expect(screen.queryByTestId('stat-card-Managed Runtimes')).toBeNull();
+        expect(screen.queryByTestId('stat-card-Native Import')).toBeNull();
+        expect(screen.queryByTestId('stat-card-Total Cost')).toBeNull();
       });
     });
 
@@ -729,7 +769,7 @@ describe('DashboardPage', () => {
       });
     });
 
-    it('displays correct Sessions Discovered value and sublabel', async () => {
+    it('displays sessions discovered in the secondary stats row', async () => {
       setupDefaultMocks({
         discoverData: {
           sessions: [],
@@ -740,14 +780,14 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-value-Sessions Discovered').textContent).toBe('5');
-        expect(screen.getByTestId('stat-sublabel-Sessions Discovered').textContent).toBe(
-          '3 queried, 1 failed',
-        );
+        const stat = screen.getByTestId('secondary-stat-Sessions Discovered');
+        expect(stat.textContent).toContain('5');
+        expect(stat.textContent).toContain('3 queried');
+        expect(stat.textContent).toContain('1 failed');
       });
     });
 
-    it('displays correct Agents Registered value', async () => {
+    it('displays agents registered in the secondary stats row', async () => {
       setupDefaultMocks({
         agentsData: [
           createAgent({ id: 'a1' }),
@@ -757,11 +797,11 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-value-Agents Registered').textContent).toBe('3');
+        expect(screen.getByTestId('secondary-stat-Agents Registered').textContent).toContain('3');
       });
     });
 
-    it('shows agent error count in Agents Registered sublabel', async () => {
+    it('shows agent error count in the secondary stats row', async () => {
       setupDefaultMocks({
         agentsData: [
           createAgent({ id: 'a1', status: 'registered' }),
@@ -771,7 +811,7 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-sublabel-Agents Registered').textContent).toBe(
+        expect(screen.getByTestId('secondary-stat-Agents Registered').textContent).toContain(
           '2 in error',
         );
       });
@@ -815,7 +855,7 @@ describe('DashboardPage', () => {
       });
     });
 
-    it('displays managed runtime summary with active and switching counts', async () => {
+    it('displays managed runtime summary in the secondary stats row', async () => {
       setupDefaultMocks({
         runtimeSessionsData: {
           sessions: [
@@ -828,14 +868,14 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-value-Managed Runtimes').textContent).toBe('3');
-        expect(screen.getByTestId('stat-sublabel-Managed Runtimes').textContent).toBe(
-          '1 active · 1 switching',
-        );
+        const stat = screen.getByTestId('secondary-stat-Managed Runtimes');
+        expect(stat.textContent).toContain('3');
+        expect(stat.textContent).toContain('1 active');
+        expect(stat.textContent).toContain('1 switching');
       });
     });
 
-    it('displays native import successes and fallback summary', async () => {
+    it('displays native import summary in the secondary stats row', async () => {
       setupDefaultMocks({
         runtimeHandoffSummaryData: {
           ok: true,
@@ -852,14 +892,14 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-value-Native Import').textContent).toBe('2');
-        expect(screen.getByTestId('stat-sublabel-Native Import').textContent).toBe(
-          '50% native import · 25% fallback',
-        );
+        const stat = screen.getByTestId('secondary-stat-Native Import');
+        expect(stat.textContent).toContain('2');
+        expect(stat.textContent).toContain('50% native');
+        expect(stat.textContent).toContain('25% fallback');
       });
     });
 
-    it('displays correct Total Cost value from agent costs', async () => {
+    it('displays total cost in the secondary stats row', async () => {
       setupDefaultMocks({
         agentsData: [
           createAgent({ id: 'a1', totalCostUsd: 5.0, name: 'expensive-agent' }),
@@ -868,11 +908,11 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-value-Total Cost').textContent).toBe('$8.00');
+        expect(screen.getByTestId('secondary-stat-Total Cost').textContent).toContain('$8.00');
       });
     });
 
-    it('shows top spender name in Total Cost sublabel', async () => {
+    it('shows top spender name in total cost secondary stat', async () => {
       setupDefaultMocks({
         agentsData: [
           createAgent({ id: 'a1', totalCostUsd: 10.0, name: 'big-spender' }),
@@ -881,24 +921,39 @@ describe('DashboardPage', () => {
       });
       renderDashboard();
       await waitFor(() => {
-        expect(screen.getByTestId('stat-sublabel-Total Cost').textContent).toBe('top: big-spender');
-      });
-    });
-
-    it('does not show Total Cost sublabel when no agents have cost', async () => {
-      setupDefaultMocks({
-        agentsData: [createAgent({ totalCostUsd: 0 })],
-      });
-      renderDashboard();
-      await waitFor(() => {
-        expect(screen.getByTestId('stat-card-Total Cost')).toBeDefined();
-        expect(screen.queryByTestId('stat-sublabel-Total Cost')).toBeNull();
+        expect(screen.getByTestId('secondary-stat-Total Cost').textContent).toContain(
+          'top: big-spender',
+        );
       });
     });
   });
 
   // =========================================================================
-  // 6. Recent sessions list
+  // 6. Memory health visibility
+  // =========================================================================
+
+  describe('Memory health', () => {
+    it('renders memory health card when memory stats query succeeds', async () => {
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.getByTestId('dashboard-memory-card-mock')).toBeDefined();
+      });
+    });
+
+    it('hides memory health card when memory stats query fails', async () => {
+      mockMemoryStatsQuery.mockReturnValue({
+        queryKey: ['memory', 'stats'],
+        queryFn: vi.fn().mockRejectedValue(new Error('Route GET:/api/memory/stats not found')),
+      });
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.queryByTestId('dashboard-memory-card-mock')).toBeNull();
+      });
+    });
+  });
+
+  // =========================================================================
+  // 7. Recent sessions list
   // =========================================================================
 
   describe('Recent sessions', () => {
@@ -1334,6 +1389,26 @@ describe('DashboardPage', () => {
       });
     });
 
+    it('strips XML/HTML tags from discovered session summaries', async () => {
+      setupDefaultMocks({
+        discoverData: {
+          sessions: [
+            createDiscoveredSession({
+              summary: '<local-command-caveat>Fix parser</local-command-caveat>',
+            }),
+          ],
+          count: 1,
+          machinesQueried: 1,
+          machinesFailed: 0,
+        },
+      });
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.getByText('Fix parser')).toBeDefined();
+        expect(screen.queryByText(/local-command-caveat/)).toBeNull();
+      });
+    });
+
     it('shows "Untitled session" for empty summary', async () => {
       setupDefaultMocks({
         discoverData: {
@@ -1346,6 +1421,29 @@ describe('DashboardPage', () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByText('Untitled session')).toBeDefined();
+      });
+    });
+
+    it('filters out discovered sessions that are untitled with zero messages', async () => {
+      setupDefaultMocks({
+        discoverData: {
+          sessions: [
+            createDiscoveredSession({ sessionId: 'empty-1', summary: '', messageCount: 0 }),
+            createDiscoveredSession({
+              sessionId: 'valid-1',
+              summary: 'Deploy check',
+              messageCount: 3,
+            }),
+          ],
+          count: 2,
+          machinesQueried: 1,
+          machinesFailed: 0,
+        },
+      });
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.getByText('Deploy check')).toBeDefined();
+        expect(screen.queryByText('Untitled session')).toBeNull();
       });
     });
 
