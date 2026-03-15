@@ -10,6 +10,7 @@ import type {
   AgentStatus,
   AgentType,
   DiscoveredSession as BaseDiscoveredSession,
+  ConfigPreviewResponse,
   ConsolidationItem,
   ConsolidationStatus,
   ContentMessage,
@@ -1121,14 +1122,7 @@ export const api = {
 
   // Agent config preview (dry-run rendering of managed runtime config)
   getAgentConfigPreview: (agentId: string) =>
-    request<{
-      ok: boolean;
-      runtime: string;
-      rendered: {
-        runtime: string;
-        files: Array<{ scope: string; path: string; content: string }>;
-      };
-    }>(`/api/agents/${encodeURIComponent(agentId)}/config-preview`),
+    request<ConfigPreviewResponse>(`/api/agents/${encodeURIComponent(agentId)}/config-preview`),
 
   // Machine capability sync (triggers fresh MCP + skill discovery on the worker)
   syncCapabilities: (machineId: string, runtime?: string, projectPath?: string) =>

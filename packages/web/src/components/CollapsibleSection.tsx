@@ -3,7 +3,7 @@ import { useId } from 'react';
 import { cn } from '@/lib/utils';
 
 export type CollapsibleSectionProps = {
-  title: string;
+  title: React.ReactNode;
   badge?: string;
   open: boolean;
   onToggle: () => void;

@@ -562,6 +562,12 @@ export function useUpdateAgent() {
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
       void queryClient.invalidateQueries({ queryKey: queryKeys.agent(variables.id) });
+      // Delay preview invalidation so worker-side config state has time to settle.
+      setTimeout(() => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.agentConfigPreview(variables.id),
+        });
+      }, 500);
     },
   });
 }

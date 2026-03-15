@@ -133,6 +133,11 @@ export {
   THREAD_TYPES,
 } from './collaboration.js';
 export type {
+  ConfigPreviewFile,
+  ConfigPreviewFileStatus,
+  ConfigPreviewResponse,
+} from './config-preview.js';
+export type {
   ContextBudget,
   ContextBudgetPolicy,
   ContextBudgetSummary,
