@@ -1240,15 +1240,15 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 - [x] Remove old `ConfigPreview.tsx` *(PR #163)* from RuntimeConfigTab
 - [x] Mobile fallback: *(PR #163)* collapsible bottom panel
 
-### 16.5 Config Preview Data Accuracy — P0
+### 16.5 Config Preview Data Accuracy — P0 ✅
 
-Config preview sidebar shows layout correctly but data is inaccurate:
+> Delivered in PRs #194-#196.
 
-- [ ] Skills not included in preview — CP proxy doesn't pass discovered skills to worker (same bug as MCP was)
-- [ ] CLAUDE.md shows empty managed template when agent has no instructions — should show "Not managed" or omit
-- [ ] `.claude.json` and `.mcp.json` show identical content — renderer should split global (home) vs project (workspace) MCP servers correctly
-- [ ] Runtime Config options (sandbox, approval policy) need descriptive tooltips explaining each option and which runtime they apply to
-- [ ] Deployment: "Run Preflight" button unclickable on initial page load — state initialization bug in PromoteGate
+- [x] Skills included in preview — CP proxy passes discovered skills to worker *(PR #194)*
+- [x] CLAUDE.md omitted when agent has no instructions *(PR #194)*
+- [x] `.claude.json` and `.mcp.json` split by scope (global vs project) *(PR #194)*
+- [x] Runtime Config options have descriptive tooltips + runtime applicability labels *(PR #196)*
+- [x] Deployment "Run Preflight" button clickable on initial load *(PR #195)*
 
 ### 16.6 Security Hardening (Codex batch) — P0
 
@@ -1339,7 +1339,7 @@ Config preview sidebar shows layout correctly but data is inaccurate:
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
 | **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
-| **P0** | Config Preview Data Accuracy | 16.5 | Planned — skills missing, CLAUDE.md empty template, MCP scope split, tooltips, preflight button |
+| **P0** | ~~Config Preview Data Accuracy~~ | 16.5 | ✅ Delivered (PRs #194-#196) |
 | **P0** | ~~Security Hardening (Codex batch)~~ | 16.6 | ✅ Delivered (PRs #167-#188) |
 
 ---
