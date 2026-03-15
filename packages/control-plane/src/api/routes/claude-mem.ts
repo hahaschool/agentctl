@@ -5,11 +5,7 @@ import { join } from 'node:path';
 import rateLimit from '@fastify/rate-limit';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
-import {
-  createInMemoryRateLimiter,
-  createIpRateLimitPreHandler,
-  readRateLimitEnv,
-} from '../rate-limit.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 const CLAUDE_MEM_DB_PATH = join(homedir(), '.claude-mem', 'claude-mem.db');
 
@@ -33,21 +29,12 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
 
   await app.register(rateLimit, {
     global: false,
-    max: claudeMemRateLimitMax + 1,
-    timeWindow: claudeMemRateLimitWindowMs,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
   });
-
-  // Keep the CodeQL-recognized framework limit slightly looser so the custom
-  // preHandler still produces the existing 429 response body at the threshold.
-  const claudeMemRouteRateLimit = {
-    max: claudeMemRateLimitMax + 1,
-    timeWindow: claudeMemRateLimitWindowMs,
-  } as const;
-
-  const enforceClaudeMemRateLimit = createIpRateLimitPreHandler(
-    createInMemoryRateLimiter(claudeMemRateLimitMax, claudeMemRateLimitWindowMs),
-    'Too many requests',
-  );
 
   // ---------------------------------------------------------------------------
   // Search observations by text query
@@ -59,8 +46,15 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/search',
     {
       schema: { tags: ['memory'], summary: 'Search claude-mem observations' },
-      config: { rateLimit: claudeMemRouteRateLimit },
-      preHandler: enforceClaudeMemRateLimit,
+      preHandler: app.rateLimit({
+        max: claudeMemRateLimitMax,
+        timeWindow: claudeMemRateLimitWindowMs,
+        errorResponseBuilder: () => ({
+          statusCode: 429,
+          error: 'RATE_LIMITED',
+          message: 'Too many requests',
+        }),
+      }),
     },
     async (request, reply) => {
       const { q, project, type, limit } = request.query;
@@ -117,8 +111,15 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/observations/:id',
     {
       schema: { tags: ['memory'], summary: 'Get observation by ID' },
-      config: { rateLimit: claudeMemRouteRateLimit },
-      preHandler: enforceClaudeMemRateLimit,
+      preHandler: app.rateLimit({
+        max: claudeMemRateLimitMax,
+        timeWindow: claudeMemRateLimitWindowMs,
+        errorResponseBuilder: () => ({
+          statusCode: 429,
+          error: 'RATE_LIMITED',
+          message: 'Too many requests',
+        }),
+      }),
     },
     async (request, reply) => {
       const { id } = request.params;
@@ -151,8 +152,15 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/timeline',
     {
       schema: { tags: ['memory'], summary: 'Get observation timeline for a session' },
-      config: { rateLimit: claudeMemRouteRateLimit },
-      preHandler: enforceClaudeMemRateLimit,
+      preHandler: app.rateLimit({
+        max: claudeMemRateLimitMax,
+        timeWindow: claudeMemRateLimitWindowMs,
+        errorResponseBuilder: () => ({
+          statusCode: 429,
+          error: 'RATE_LIMITED',
+          message: 'Too many requests',
+        }),
+      }),
     },
     async (request, reply) => {
       const { sessionId, limit } = request.query;

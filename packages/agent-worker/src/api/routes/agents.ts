@@ -10,11 +10,7 @@ import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
 import type { AgentPool } from '../../runtime/agent-pool.js';
-import {
-  createInMemoryRateLimiter,
-  createIpRateLimitPreHandler,
-  readRateLimitEnv,
-} from '../rate-limit.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 type AgentRouteOptions = FastifyPluginOptions & {
   pool: AgentPool;
@@ -92,23 +88,24 @@ function errorToResponse(err: unknown): {
 
 export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptions): Promise<void> {
   const { pool, machineId, logger, getDispatchVerificationConfig } = options;
+  const agentStartRateLimitMax = Math.min(readRateLimitEnv('AGENT_START_RATE_LIMIT_MAX', 30), 30);
+  const agentStartRateLimitWindowMs = readRateLimitEnv('AGENT_START_RATE_LIMIT_WINDOW_MS', 60_000);
 
-  // Register @fastify/rate-limit so CodeQL recognises framework-level rate
-  // limiting (js/missing-rate-limiting). Route-specific limits still rely on
-  // the IP preHandler below; global is disabled to avoid changing behavior.
+  // Register @fastify/rate-limit so the start route can use the framework's
+  // own preHandler directly, which CodeQL models more reliably than wrappers.
   await app.register(rateLimit, {
     global: false,
-    max: readRateLimitEnv('AGENT_START_GLOBAL_RATE_LIMIT_MAX', 60),
-    timeWindow: readRateLimitEnv('AGENT_START_GLOBAL_RATE_LIMIT_WINDOW_MS', 60_000),
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      error: 'Too many agent start requests. Try again later.',
+      code: 'RATE_LIMITED',
+    }),
   });
-
-  const agentStartRateLimit = createIpRateLimitPreHandler(
-    createInMemoryRateLimiter(
-      readRateLimitEnv('AGENT_START_RATE_LIMIT_MAX', 30),
-      readRateLimitEnv('AGENT_START_RATE_LIMIT_WINDOW_MS', 60_000),
-    ),
-    'Too many agent start requests. Try again later.',
-  );
   // GET /api/agents — list all agents in the pool
   app.get('/', async (_request, reply) => {
     const agents = pool.listAgents();
@@ -144,8 +141,10 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
   app.post<{ Params: AgentIdParams; Body: StartAgentBody }>(
     '/:id/start',
     {
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-      preHandler: agentStartRateLimit,
+      preHandler: app.rateLimit({
+        max: agentStartRateLimitMax,
+        timeWindow: agentStartRateLimitWindowMs,
+      }),
     },
     async (request, reply) => {
       const { id } = request.params;

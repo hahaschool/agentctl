@@ -9,11 +9,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import type { MemoryDecayOptions } from '../../memory/memory-decay.js';
 import { MemoryDecay } from '../../memory/memory-decay.js';
-import {
-  createInMemoryRateLimiter,
-  createIpRateLimitPreHandler,
-  readRateLimitEnv,
-} from '../rate-limit.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 export type MemoryDecayRoutesOptions = Pick<MemoryDecayOptions, 'pool' | 'logger'>;
 
@@ -39,21 +35,12 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
 
   await app.register(rateLimit, {
     global: false,
-    max: memoryDecayRateLimitMax + 1,
-    timeWindow: memoryDecayRateLimitWindowMs,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
   });
-
-  // Keep the CodeQL-recognized framework limit slightly looser so the custom
-  // preHandler still produces the existing 429 response body at the threshold.
-  const memoryDecayRouteRateLimit = {
-    max: memoryDecayRateLimitMax + 1,
-    timeWindow: memoryDecayRateLimitWindowMs,
-  } as const;
-
-  const enforceMemoryDecayRateLimit = createIpRateLimitPreHandler(
-    createInMemoryRateLimiter(memoryDecayRateLimitMax, memoryDecayRateLimitWindowMs),
-    'Too many requests',
-  );
 
   app.post(
     '/run',
@@ -62,8 +49,15 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Run Ebbinghaus memory decay cycle',
       },
-      config: { rateLimit: memoryDecayRouteRateLimit },
-      preHandler: enforceMemoryDecayRateLimit,
+      preHandler: app.rateLimit({
+        max: memoryDecayRateLimitMax,
+        timeWindow: memoryDecayRateLimitWindowMs,
+        errorResponseBuilder: () => ({
+          statusCode: 429,
+          error: 'RATE_LIMITED',
+          message: 'Too many requests',
+        }),
+      }),
     },
     async () => {
       const result = await decay.runDecay();
@@ -78,8 +72,15 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Get memory strength distribution statistics',
       },
-      config: { rateLimit: memoryDecayRouteRateLimit },
-      preHandler: enforceMemoryDecayRateLimit,
+      preHandler: app.rateLimit({
+        max: memoryDecayRateLimitMax,
+        timeWindow: memoryDecayRateLimitWindowMs,
+        errorResponseBuilder: () => ({
+          statusCode: 429,
+          error: 'RATE_LIMITED',
+          message: 'Too many requests',
+        }),
+      }),
     },
     async () => {
       const stats = await decay.getDecayStats();

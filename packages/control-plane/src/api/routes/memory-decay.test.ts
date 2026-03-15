@@ -47,14 +47,12 @@ async function buildApp() {
 }
 
 describe('memoryDecayRoutes source shape', () => {
-  it('declares route-local rateLimit config on both endpoints', () => {
+  it('declares direct Fastify rate-limit preHandlers on both endpoints', () => {
     const source = readFileSync(new URL('./memory-decay.ts', import.meta.url), 'utf8');
 
-    expect(source).toMatch(/const memoryDecayRouteRateLimit = \{/);
-    expect(source).toMatch(/'\/run'[\s\S]*?config:\s*\{\s*rateLimit:\s*memoryDecayRouteRateLimit/);
-    expect(source).toMatch(
-      /'\/stats'[\s\S]*?config:\s*\{\s*rateLimit:\s*memoryDecayRouteRateLimit/,
-    );
+    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
+    expect(source).toMatch(/'\/run'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
+    expect(source).toMatch(/'\/stats'[\s\S]*?preHandler:\s*app\.rateLimit\(\{/);
   });
 });
 
@@ -110,6 +108,7 @@ describe('memoryDecayRoutes', () => {
 
     expect(res?.statusCode).toBe(429);
     expect(res?.json()).toEqual({
+      statusCode: 429,
       error: 'RATE_LIMITED',
       message: 'Too many requests',
     });
