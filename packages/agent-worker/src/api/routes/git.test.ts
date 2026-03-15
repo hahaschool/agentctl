@@ -246,11 +246,11 @@ describe('Git routes', () => {
   });
 
   // =========================================================================
-  // GET /api/git/status — validation / error cases
+  // GET /api/git/status — rate limiting
   // =========================================================================
 
-  describe('GET /api/git/status (validation & errors)', () => {
-    it('returns 429 when repeated status requests exceed the configured limit', async () => {
+  describe('GET /api/git/status (rate limiting)', () => {
+    it('rejects repeated requests with 429 and the existing RATE_LIMITED payload', async () => {
       process.env.GIT_STATUS_RATE_LIMIT_MAX = '1';
       process.env.GIT_STATUS_RATE_LIMIT_WINDOW_MS = '60000';
 
@@ -278,19 +278,31 @@ describe('Git routes', () => {
           method: 'GET',
           url: '/api/git/status?path=/Users/testuser/project',
         });
+        const third = await app.inject({
+          method: 'GET',
+          url: '/api/git/status?path=/Users/testuser/project',
+        });
 
         expect(first.statusCode).toBe(200);
-        expect(second.statusCode).toBe(429);
-        expect(second.json()).toEqual({
-          error: 'Too many git status requests. Try again later.',
-          code: 'RATE_LIMITED',
-        });
+        for (const limited of [second, third]) {
+          expect(limited.statusCode).toBe(429);
+          expect(limited.json()).toEqual({
+            error: 'Too many git status requests. Try again later.',
+            code: 'RATE_LIMITED',
+          });
+        }
       } finally {
         delete process.env.GIT_STATUS_RATE_LIMIT_MAX;
         delete process.env.GIT_STATUS_RATE_LIMIT_WINDOW_MS;
       }
     });
+  });
 
+  // =========================================================================
+  // GET /api/git/status — validation / error cases
+  // =========================================================================
+
+  describe('GET /api/git/status (validation & errors)', () => {
     it('returns 400 when path query parameter is missing', async () => {
       const res = await app.inject({
         method: 'GET',
