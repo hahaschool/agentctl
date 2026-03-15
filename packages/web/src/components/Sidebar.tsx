@@ -318,7 +318,7 @@ export function Sidebar(): React.JSX.Element {
           {/* Version + theme */}
           <div className="flex items-center justify-between md:justify-center lg:justify-between">
             <span className="text-[10px] text-muted-foreground/50 max-md:inline hidden lg:inline">
-              v0.1.0
+              v0.2.0
             </span>
             {mounted ? (
               <button

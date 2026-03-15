@@ -230,18 +230,6 @@ export function DashboardPage(): React.JSX.Element {
           >
             New Session
           </Link>
-          <Link
-            href="/agents"
-            className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
-          >
-            View Agents
-          </Link>
-          <Link
-            href="/sessions?type=runtime"
-            className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
-          >
-            Runtime Sessions
-          </Link>
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>
