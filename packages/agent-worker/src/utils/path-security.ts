@@ -60,6 +60,32 @@ function resolveWithinBase(candidatePath: string, allowedBase: string): string {
   throw new Error(`Resolved path "${resolvedPath}" is outside the allowed base path`);
 }
 
+function validateWriteContent(data: string): string {
+  if (typeof data !== 'string') {
+    throw new Error('File content must be a string');
+  }
+  if (data.includes('\u0000')) {
+    throw new Error('File content contains null bytes');
+  }
+  return data;
+}
+
+function openSafeWriteFd(path: string): number {
+  try {
+    return openSync(
+      path,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+      0o600,
+    );
+  } catch (err) {
+    const nodeErr = err as NodeJS.ErrnoException;
+    if (nodeErr.code !== 'EEXIST') {
+      throw err;
+    }
+    return openSync(path, fsConstants.O_WRONLY | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Safe fs wrappers — sanitise + operate atomically so CodeQL sees that
 // user-controlled paths never reach raw fs sinks directly.
@@ -130,16 +156,13 @@ export function safeWriteFileSync(userPath: string, allowedBase: string, data: s
   if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
     throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
   }
+  const safeData = validateWriteContent(data);
 
   // Open the final path without following symlinks so a validated path cannot
   // be redirected outside the allowed base between the check and the write.
-  const fd = openSync(
-    safe,
-    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
-    0o600,
-  );
+  const fd = openSafeWriteFd(safe);
   try {
-    const buffer = Buffer.from(data, 'utf-8');
+    const buffer = Buffer.from(safeData, 'utf-8');
     let offset = 0;
     while (offset < buffer.length) {
       offset += writeSync(fd, buffer, offset, buffer.length - offset);
