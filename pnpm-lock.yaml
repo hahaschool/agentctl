@@ -26,6 +26,9 @@ importers:
       react:
         specifier: ^19.2.4
         version: 19.2.4
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.0
 
   packages/agent-worker:
     dependencies:
@@ -185,7 +188,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.4(happy-dom@20.8.3)
+        version: 3.2.4(happy-dom@20.8.3)(tsx@4.21.0)
 
   packages/shared:
     dependencies:
@@ -295,7 +298,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(happy-dom@20.8.3)
+        version: 3.2.4(happy-dom@20.8.3)(tsx@4.21.0)
 
 packages:
 
@@ -9434,7 +9437,7 @@ packages:
       - yaml
     dev: true
 
-  /vitest@3.2.4(happy-dom@20.8.3):
+  /vitest@3.2.4(happy-dom@20.8.3)(tsx@4.21.0):
     resolution: {integrity: sha512-LUCP5ev3GURDysTWiP47wRRUpLKMOfPh+yKTx3kVIEiu5KOMeqzpnYNsKyOoVrULivR8tLcks4+lga33Whn90A==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true

@@ -147,6 +147,10 @@ claude --worktree <name>
 # Manual: create worktree for an agent task
 git worktree add .trees/<name> -b agent/<id>/<type>/<topic>
 
+# Before using the worktree, register it on the shared coordination board
+pnpm coord status
+pnpm coord claim --type worktree --purpose "<task>"
+
 # Subagent frontmatter (for dispatched agents):
 # isolation: worktree
 ```
@@ -242,7 +246,11 @@ Every commit must leave the codebase in a state where another agent could pick u
 Stale worktrees waste disk and create confusion:
 
 ```bash
-# After PR is merged, remove the worktree
+# Before cleanup, check and release the shared claim
+pnpm coord status
+pnpm coord release --type worktree
+
+# After PR is merged, remove the worktree explicitly
 git worktree remove .trees/<name>
 
 # Prune any stale worktree references
