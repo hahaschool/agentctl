@@ -11,6 +11,7 @@ import { LoopController } from './loop-controller.js';
 // ── Mock helpers ────────────────────────────────────────────────────
 
 const mockLogger = createMockLogger();
+const ABSOLUTE_MAX_LOOP_ITERATIONS = 10_000;
 
 /**
  * Create a mock AgentInstance that simulates completing after start() is called.
@@ -351,6 +352,42 @@ describe('LoopController', () => {
     if (completeEvent?.event === 'loop_complete') {
       expect(completeEvent.data.reason).toBe('max_iterations_reached');
       expect(completeEvent.data.totalIterations).toBe(2);
+    }
+  });
+
+  it('applies the hard iteration cap when maxIterations is omitted', async () => {
+    const agent = createMockAgent({ costs: [0] });
+    const controller = new LoopController(
+      agent,
+      makeConfig({ maxIterations: undefined, maxDurationMs: undefined, costLimitUsd: 1_000_000 }),
+      mockLogger,
+    );
+
+    const events: AgentEvent[] = [];
+    controller.on('loop-event', (event: AgentEvent) => events.push(event));
+
+    const loopPromise = controller.start('go');
+
+    try {
+      await vi.advanceTimersByTimeAsync(500 * (ABSOLUTE_MAX_LOOP_ITERATIONS + 2));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(controller.getState().status).toBe('completed');
+      expect(controller.getState().iteration).toBe(ABSOLUTE_MAX_LOOP_ITERATIONS);
+
+      const completeEvent = events.find((e) => e.event === 'loop_complete');
+      expect(completeEvent).toBeDefined();
+      if (completeEvent?.event === 'loop_complete') {
+        expect(completeEvent.data.reason).toBe('max_iterations_reached');
+      }
+    } finally {
+      const { status } = controller.getState();
+      if (status === 'running' || status === 'paused') {
+        controller.stop();
+        await vi.advanceTimersByTimeAsync(500);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      await loopPromise;
     }
   });
 
