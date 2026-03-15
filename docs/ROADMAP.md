@@ -1128,7 +1128,29 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Dashboard stale buttons removed (View Agents, Runtime Sessions) *(direct commit ff9ab3e)*
 - [x] Version display updated to v0.2.0 *(direct commit ff9ab3e)*
 
-### 16.3 Agent Settings Config Preview Sidebar — P1
+### 16.3 Frontend UI Polish — P0
+
+Visual bugs and layout issues across multiple pages. Root cause: features were stacked without holistic design review.
+
+**Dashboard:**
+- [ ] "New Session" button text invisible (white on blue, or missing text)
+- [ ] "Discover Sessions" / "Refresh All" links feel disconnected from the health card
+
+**Agent Detail Page (`/agents/[id]`):**
+- [ ] Icon buttons (download + copy) below agent name have no labels/tooltips — unclear purpose
+- [ ] Prompt input + Go/Cancel + Updated/Refresh all crammed into one row — needs layout restructuring
+- [ ] Go button color (bright blue) clashes with dark theme — use primary token consistently
+
+**Agents List (Agent Cards):**
+- [ ] Prompt input + Go button embedded in agent card — cards should show info, not be action forms
+- [ ] Project path text overflows/wraps awkwardly in card layout
+- [ ] Start flow should be a dedicated dialog or panel, not inline in the card
+
+**General:**
+- [ ] Inconsistent button styles across pages (some use shadcn Button, some use raw styled links)
+- [ ] Version display in sidebar should auto-update from package.json (currently hardcoded)
+
+### 16.4 Agent Settings Config Preview Sidebar — P1
 
 > Design spec: [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md)
 > Impl plan: [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md)
@@ -1215,7 +1237,8 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
 | **P0** | ~~Agent Run Quality (empty runs + retry tracking)~~ | 16.1 | ✅ Delivered (PR #157) |
-| **P1** | Agent Settings Config Preview Sidebar | 16.3 | Planned |
+| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | Planned |
+| **P1** | Agent Settings Config Preview Sidebar | 16.4 | Planned |
 
 ---
 
@@ -1345,8 +1368,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [runtime-selector-penetration](superpowers/plans/2026-03-14-runtime-selector-penetration.md) | Delivered (PRs #148, #150) | 15.1 |
 | [codex-config-capabilities-design](superpowers/specs/2026-03-14-codex-config-capabilities-design.md) | Delivered (PR #156) | 15.2 |
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
-| [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Planned | 16.3 |
-| [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Planned | 16.3 |
+| [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Planned | 16.4 |
+| [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Planned | 16.4 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
