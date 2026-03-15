@@ -190,6 +190,15 @@ function RuntimeConfigTabInner({
             ))}
           </SelectContent>
         </Select>
+        <div className="space-y-1 pt-1 text-xs text-muted-foreground">
+          <p>read-only: Agent can read files but cannot write or modify anything.</p>
+          <p>
+            workspace-write: Agent can read and write files within the project workspace (default,
+            recommended).
+          </p>
+          <p>danger-full-access: Agent has unrestricted filesystem access (use with caution).</p>
+          <p>Applies to both Claude Code and Codex.</p>
+        </div>
       </div>
 
       {/* Approval Policy */}
@@ -207,6 +216,13 @@ function RuntimeConfigTabInner({
             ))}
           </SelectContent>
         </Select>
+        <div className="space-y-1 pt-1 text-xs text-muted-foreground">
+          <p>untrusted: Every tool use requires manual approval.</p>
+          <p>on-failure: Only re-approve after a tool use fails.</p>
+          <p>on-request: Approve when the agent explicitly asks.</p>
+          <p>never: No approval needed, fully autonomous (use with caution).</p>
+          <p>Applies to both Claude Code and Codex.</p>
+        </div>
       </div>
 
       {/* Codex-only fields */}
@@ -226,6 +242,7 @@ function RuntimeConfigTabInner({
                 ))}
               </SelectContent>
             </Select>
+            <p className="pt-1 text-xs text-muted-foreground">Codex only.</p>
           </div>
 
           <div className="space-y-1.5">
@@ -242,6 +259,7 @@ function RuntimeConfigTabInner({
                 ))}
               </SelectContent>
             </Select>
+            <p className="pt-1 text-xs text-muted-foreground">Codex only.</p>
           </div>
         </>
       )}
