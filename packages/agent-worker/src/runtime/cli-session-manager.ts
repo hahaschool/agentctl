@@ -14,6 +14,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { existsSync } from 'node:fs';
 import { normalize, join as pathJoin, resolve as resolvePath } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
@@ -256,19 +257,31 @@ export class CliSessionManager extends EventEmitter {
     // Build child environment with credential injection
     const childEnv = buildChildEnv(options.accountProvider, options.accountCredential);
 
-    // Write .mcp.json before spawning if MCP servers are configured.
+    // Write .mcp.json before spawning if MCP servers are configured via AgentCTL.
     // Claude Code reads this file at startup to discover available MCP servers.
+    const mcpConfigPath = pathJoin(sanitizedCwd, '.mcp.json');
     if (options.config?.mcpServers && Object.keys(options.config.mcpServers).length > 0) {
-      const mcpConfigPath = sanitizePath(pathJoin(sanitizedCwd, '.mcp.json'), sanitizedCwd);
+      const safeMcpPath = sanitizePath(mcpConfigPath, sanitizedCwd);
       const mcpPayload = { mcpServers: options.config.mcpServers };
-      safeWriteFileSync(mcpConfigPath, sanitizedCwd, JSON.stringify(mcpPayload, null, 2));
+      safeWriteFileSync(safeMcpPath, sanitizedCwd, JSON.stringify(mcpPayload, null, 2));
       this.logger?.debug(
         {
           sessionId: id,
-          mcpConfigPath,
+          mcpConfigPath: safeMcpPath,
           serverCount: Object.keys(options.config.mcpServers).length,
         },
         'Wrote .mcp.json for session',
+      );
+    }
+
+    // Explicitly pass --mcp-config if .mcp.json exists in project dir.
+    // Claude CLI in -p mode may not auto-discover project .mcp.json;
+    // passing it explicitly ensures MCP servers are loaded.
+    if (existsSync(mcpConfigPath)) {
+      args.push('--mcp-config', mcpConfigPath);
+      this.logger?.debug(
+        { sessionId: id, mcpConfigPath },
+        'Passing --mcp-config to CLI for project MCP servers',
       );
     }
 
