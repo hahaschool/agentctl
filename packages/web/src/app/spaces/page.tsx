@@ -5,7 +5,6 @@ import { Plus } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
-import { Breadcrumb } from '@/components/Breadcrumb';
 import { SpaceCard } from '@/components/collaboration/SpaceCard';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
@@ -182,7 +181,6 @@ export default function SpacesPage(): React.JSX.Element {
   return (
     <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
       <FetchingBar isFetching={spaces.isFetching && !spaces.isLoading} />
-      <Breadcrumb items={[{ label: 'Spaces' }]} />
 
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-6">

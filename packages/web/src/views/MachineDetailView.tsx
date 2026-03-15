@@ -15,6 +15,7 @@ import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { PathBadge } from '@/components/PathBadge';
 import { RefreshButton } from '@/components/RefreshButton';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
@@ -558,20 +559,17 @@ function InfoField({
 
 function CapabilityIndicator({ enabled }: { enabled: boolean }): React.JSX.Element {
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        'inline-flex items-center gap-1.5 text-sm',
-        enabled ? 'text-green-500' : 'text-muted-foreground',
+        'rounded-md px-2 py-0 text-[11px] font-medium',
+        enabled
+          ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
+          : 'border-border bg-muted/40 text-muted-foreground',
       )}
     >
-      <span
-        className={cn(
-          'h-2 w-2 rounded-full shrink-0',
-          enabled ? 'bg-green-500' : 'bg-muted-foreground/30',
-        )}
-      />
       {enabled ? 'Available' : 'Not available'}
-    </span>
+    </Badge>
   );
 }
 
