@@ -162,6 +162,19 @@ describe('CliSessionManager', () => {
       expect(opts.cwd).toBe('/tmp/normalized-project');
     });
 
+    it('rejects relative project paths before spawning', () => {
+      expect(() =>
+        manager.startSession(
+          defaultStartOptions({
+            projectPath: 'tmp/project',
+          }),
+        ),
+      ).toThrow(/Project path must be absolute/);
+
+      expect(manager.listSessions()).toHaveLength(0);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
     it('rejects denied project paths before creating session state', () => {
       expect(() =>
         manager.startSession(

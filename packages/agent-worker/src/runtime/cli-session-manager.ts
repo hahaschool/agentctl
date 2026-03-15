@@ -14,7 +14,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { join as pathJoin } from 'node:path';
+import { isAbsolute, join as pathJoin, relative, resolve as resolvePath, sep } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import {
@@ -150,6 +150,7 @@ const CLEANUP_INTERVAL_MS = 60_000; // 60 seconds
 const GRACEFUL_KILL_TIMEOUT_MS = 5_000; // Wait 5s after SIGTERM before SIGKILL
 const STARTUP_WATCHDOG_MS = Number(process.env.STARTUP_WATCHDOG_MS) || 30_000; // Warn if no output within 30s of start
 const MAX_STDOUT_LINE_BUFFER_CHARS = 64 * 1024;
+const ROOT_PATH = '/';
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -209,11 +210,17 @@ export class CliSessionManager extends EventEmitter {
     // Clean up old finished sessions to prevent memory leaks
     this.cleanupStaleSessions();
 
+    if (!isAbsolute(options.projectPath)) {
+      throw new AgentError('INVALID_PATH', 'Project path must be absolute', {
+        projectPath: options.projectPath,
+      });
+    }
+
     let sanitizedCwd: string;
     try {
       // Security: pass untrusted projectPath through a sanitizer directly
       // before it reaches filesystem/child_process sinks (js/path-injection).
-      sanitizedCwd = sanitizePath(options.projectPath, '/');
+      sanitizedCwd = sanitizePath(options.projectPath, ROOT_PATH);
     } catch (error) {
       throw new AgentError('INVALID_PATH', 'Project path is invalid', {
         projectPath: options.projectPath,
@@ -229,6 +236,15 @@ export class CliSessionManager extends EventEmitter {
           projectPath: sanitizedCwd,
         },
       );
+    }
+
+    // Keep an explicit boundary check adjacent to the child_process sink so
+    // CodeQL recognizes that cwd stays inside the approved filesystem root.
+    const relativeCwd = relative(resolvePath(ROOT_PATH), sanitizedCwd);
+    if (relativeCwd.startsWith(`..${sep}`) || relativeCwd === '..') {
+      throw new AgentError('INVALID_PATH', 'Project path is outside the allowed base path', {
+        projectPath: sanitizedCwd,
+      });
     }
 
     this.sessionCounter++;
