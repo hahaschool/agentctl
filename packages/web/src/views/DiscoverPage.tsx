@@ -32,9 +32,11 @@ function sanitizeSummary(summary: string): string {
 
   const template = document.createElement('template');
   template.innerHTML = trimmed;
-  template.content
-    .querySelectorAll('script,style,noscript,iframe,object,embed')
-    .forEach((node) => node.remove());
+  for (const node of template.content.querySelectorAll(
+    'script,style,noscript,iframe,object,embed',
+  )) {
+    node.remove();
+  }
 
   return (template.content.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
