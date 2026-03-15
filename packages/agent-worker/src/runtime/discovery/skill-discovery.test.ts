@@ -5,14 +5,12 @@ import { discoverSkills } from './skill-discovery.js';
 vi.mock('node:fs/promises', () => ({
   readdir: vi.fn(),
   readFile: vi.fn(),
-  access: vi.fn(),
 }));
 
-import { access, readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 
 const mockReaddir = vi.mocked(readdir);
 const mockReadFile = vi.mocked(readFile);
-const mockAccess = vi.mocked(access);
 
 describe('discoverSkills', () => {
   beforeEach(() => {
@@ -20,7 +18,6 @@ describe('discoverSkills', () => {
   });
 
   it('discovers claude-code global skills from ~/.claude/skills/', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([
       { name: 'systematic-debugging', isDirectory: () => true },
       { name: 'tdd', isDirectory: () => true },
@@ -59,7 +56,6 @@ TDD content`;
   });
 
   it('discovers codex skills from ~/.agents/skills/', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([{ name: 'code-review', isDirectory: () => true }] as any);
     mockReadFile.mockResolvedValue(`---
 name: Code Review
@@ -74,14 +70,13 @@ Content`);
   });
 
   it('returns empty when skills directory does not exist', async () => {
-    mockAccess.mockRejectedValue(new Error('ENOENT'));
+    mockReaddir.mockRejectedValue(new Error('ENOENT'));
 
     const result = await discoverSkills('claude-code', '/home/user');
     expect(result).toEqual([]);
   });
 
   it('skips entries without SKILL.md', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([
       { name: 'valid-skill', isDirectory: () => true },
       { name: 'no-skill-md', isDirectory: () => true },
@@ -103,7 +98,6 @@ Content`;
   });
 
   it('skips skills with missing frontmatter', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([{ name: 'no-frontmatter', isDirectory: () => true }] as any);
     mockReadFile.mockResolvedValue('Just content, no frontmatter');
 
@@ -112,7 +106,6 @@ Content`;
   });
 
   it('skips non-directory entries', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([
       { name: 'README.md', isDirectory: () => false },
       { name: 'valid-skill', isDirectory: () => true },
@@ -129,13 +122,13 @@ Content`);
   });
 
   it('discovers project-scoped skills when projectPath provided', async () => {
-    mockAccess.mockImplementation(async (path) => {
+    mockReaddir.mockImplementation(async (path) => {
       // Global path fails, project path succeeds
       if (String(path).includes('/home/user')) {
         throw new Error('ENOENT');
       }
+      return [{ name: 'project-skill', isDirectory: () => true }] as any;
     });
-    mockReaddir.mockResolvedValue([{ name: 'project-skill', isDirectory: () => true }] as any);
     mockReadFile.mockResolvedValue(`---
 name: Project Skill
 description: A project skill
@@ -149,26 +142,23 @@ Content`);
   });
 
   it('normalizes homePath before scanning global skill directories', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([]);
 
     await discoverSkills('claude-code', '/home/user/../user');
 
-    expect(mockAccess).toHaveBeenCalledWith('/home/user/.claude/skills');
+    expect(mockReaddir).toHaveBeenCalledWith('/home/user/.claude/skills', { withFileTypes: true });
   });
 
   it('skips project skill scanning for denied project paths', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([]);
 
     await discoverSkills('claude-code', '/home/user', '/tmp/.aws/project');
 
-    expect(mockAccess).toHaveBeenCalledTimes(1);
-    expect(mockAccess).toHaveBeenCalledWith('/home/user/.claude/skills');
+    expect(mockReaddir).toHaveBeenCalledTimes(1);
+    expect(mockReaddir).toHaveBeenCalledWith('/home/user/.claude/skills', { withFileTypes: true });
   });
 
   it('skips entries whose SKILL.md path escapes the skills directory', async () => {
-    mockAccess.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([{ name: '../escape', isDirectory: () => true }] as any);
 
     const result = await discoverSkills('claude-code', '/home/user');

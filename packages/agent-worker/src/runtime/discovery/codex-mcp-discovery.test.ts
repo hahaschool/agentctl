@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../utils/path-security.js', async () => {
+  const actual = await vi.importActual<typeof import('../../utils/path-security.js')>(
+    '../../utils/path-security.js',
+  );
+  return {
+    ...actual,
+    safeReadFileAtomic: vi.fn(),
+  };
+});
+
+import { safeReadFileAtomic } from '../../utils/path-security.js';
 import { discoverCodexMcpServers } from './codex-mcp-discovery.js';
 
-// Mock fs/promises
-vi.mock('node:fs/promises', () => ({
-  readFile: vi.fn(),
-  access: vi.fn(),
-}));
-
-import { access, readFile } from 'node:fs/promises';
-
-const mockReadFile = vi.mocked(readFile);
-const mockAccess = vi.mocked(access);
+const mockSafeReadFileAtomic = vi.mocked(safeReadFileAtomic);
 
 describe('discoverCodexMcpServers', () => {
   beforeEach(() => {
@@ -31,8 +33,7 @@ ROOT = "/workspace"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
 `;
-    mockAccess.mockResolvedValue(undefined);
-    mockReadFile.mockResolvedValue(toml);
+    mockSafeReadFileAtomic.mockReturnValue({ content: toml, size: toml.length });
 
     const result = await discoverCodexMcpServers('/home/user');
 
@@ -49,7 +50,10 @@ args = ["-y", "@modelcontextprotocol/server-memory"]
   });
 
   it('returns empty array when config.toml does not exist', async () => {
-    mockAccess.mockRejectedValue(new Error('ENOENT'));
+    const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    mockSafeReadFileAtomic.mockImplementation(() => {
+      throw err;
+    });
 
     const result = await discoverCodexMcpServers('/home/user');
     expect(result).toEqual([]);
@@ -60,16 +64,17 @@ args = ["-y", "@modelcontextprotocol/server-memory"]
 model = "gpt-5"
 reasoning_effort = "high"
 `;
-    mockAccess.mockResolvedValue(undefined);
-    mockReadFile.mockResolvedValue(toml);
+    mockSafeReadFileAtomic.mockReturnValue({ content: toml, size: toml.length });
 
     const result = await discoverCodexMcpServers('/home/user');
     expect(result).toEqual([]);
   });
 
   it('handles malformed TOML gracefully', async () => {
-    mockAccess.mockResolvedValue(undefined);
-    mockReadFile.mockResolvedValue('invalid [[[toml content');
+    mockSafeReadFileAtomic.mockReturnValue({
+      content: 'invalid [[[toml content',
+      size: 'invalid [[[toml content'.length,
+    });
 
     const result = await discoverCodexMcpServers('/home/user');
     expect(result).toEqual([]);
@@ -81,8 +86,7 @@ reasoning_effort = "high"
 command = "npx"
 args = ["-y", "pg-server"]
 `;
-    mockAccess.mockResolvedValue(undefined);
-    mockReadFile.mockResolvedValue(toml);
+    mockSafeReadFileAtomic.mockReturnValue({ content: toml, size: toml.length });
 
     const result = await discoverCodexMcpServers('/project', 'project');
 
@@ -95,20 +99,21 @@ args = ["-y", "pg-server"]
 [mcp_servers.fs]
 command = "npx"
 `;
-    mockAccess.mockResolvedValue(undefined);
-    mockReadFile.mockResolvedValue(toml);
+    mockSafeReadFileAtomic.mockReturnValue({ content: toml, size: toml.length });
 
     await discoverCodexMcpServers('/home/user/work/../project');
 
-    expect(mockAccess).toHaveBeenCalledWith('/home/user/project/.codex/config.toml');
-    expect(mockReadFile).toHaveBeenCalledWith('/home/user/project/.codex/config.toml', 'utf-8');
+    expect(mockSafeReadFileAtomic).toHaveBeenCalledWith(
+      '/home/user/project/.codex/config.toml',
+      '/home/user/project',
+      1024 * 1024,
+    );
   });
 
   it('returns empty and avoids fs access for denied base paths', async () => {
     const result = await discoverCodexMcpServers('/home/user/.ssh/project');
 
     expect(result).toEqual([]);
-    expect(mockAccess).not.toHaveBeenCalled();
-    expect(mockReadFile).not.toHaveBeenCalled();
+    expect(mockSafeReadFileAtomic).not.toHaveBeenCalled();
   });
 });
