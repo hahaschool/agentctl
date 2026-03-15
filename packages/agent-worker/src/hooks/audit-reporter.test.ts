@@ -9,14 +9,12 @@ import { AuditReporter } from './audit-reporter.js';
 // ── Mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('node:fs/promises', () => ({
-  lstat: vi.fn(),
   open: vi.fn(),
 }));
 
 // Re-import the mocked functions so we can control them per test.
-import { lstat, open } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 
-const mockLstat = vi.mocked(lstat);
 const mockOpen = vi.mocked(open);
 
 const mockLogger = createMockLogger();
@@ -92,19 +90,16 @@ function makeSessionEndEntry(): AuditEntry {
 }
 
 /**
- * Build a Buffer from NDJSON lines and set up the mock lstat and
- * open to return it from the given byte offset.
+ * Build a Buffer from NDJSON lines and set up the mock open handle
+ * to return it from the given byte offset.
  */
-function makeAuditStats(
-  size: number,
-  overrides?: Partial<MockAuditStats>,
-): ReturnType<typeof lstat> extends Promise<infer T> ? T : never {
+function makeAuditStats(size: number, overrides?: Partial<MockAuditStats>): MockAuditStats {
   return {
     size,
     mode: overrides?.mode ?? 0o600,
     isFile: overrides?.isFile ?? (() => true),
     isSymbolicLink: overrides?.isSymbolicLink ?? (() => false),
-  } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never;
+  };
 }
 
 function setupAuditFile(
@@ -116,7 +111,6 @@ function setupAuditFile(
   const buf = Buffer.from(ndjson, 'utf-8');
 
   const stats = makeAuditStats(startOffset + buf.byteLength, statOverrides);
-  mockLstat.mockResolvedValue(stats);
 
   const mockHandle = {
     stat: vi.fn().mockResolvedValue(stats),
@@ -176,25 +170,25 @@ describe('AuditReporter', () => {
   describe('start()', () => {
     it('begins periodic flush on the configured interval', async () => {
       const reporter = makeReporter({ flushIntervalMs: 1_000 });
-      mockLstat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockOpen.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       reporter.start();
 
       await vi.advanceTimersByTimeAsync(1_000);
 
-      expect(mockLstat).toHaveBeenCalledTimes(1);
+      expect(mockOpen).toHaveBeenCalledTimes(1);
     });
 
     it('is idempotent when called multiple times', async () => {
       const reporter = makeReporter({ flushIntervalMs: 1_000 });
-      mockLstat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockOpen.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       reporter.start();
       reporter.start();
 
       await vi.advanceTimersByTimeAsync(1_000);
 
-      expect(mockLstat).toHaveBeenCalledTimes(1);
+      expect(mockOpen).toHaveBeenCalledTimes(1);
     });
 
     it('logs a start message', () => {
@@ -224,7 +218,7 @@ describe('AuditReporter', () => {
     });
 
     it('logs a stop message', async () => {
-      mockLstat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockOpen.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       const reporter = makeReporter();
       reporter.start();
@@ -234,7 +228,7 @@ describe('AuditReporter', () => {
     });
 
     it('does not crash if the final flush fails', async () => {
-      mockLstat.mockRejectedValue(new Error('disk failure'));
+      mockOpen.mockRejectedValue(new Error('disk failure'));
 
       const reporter = makeReporter();
       reporter.start();
@@ -248,7 +242,7 @@ describe('AuditReporter', () => {
     });
 
     it('no longer flushes after stop is called', async () => {
-      mockLstat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockOpen.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       const reporter = makeReporter({ flushIntervalMs: 500 });
       reporter.start();
@@ -258,7 +252,7 @@ describe('AuditReporter', () => {
 
       await vi.advanceTimersByTimeAsync(2_000);
 
-      expect(mockLstat).not.toHaveBeenCalled();
+      expect(mockOpen).not.toHaveBeenCalled();
     });
   });
 
@@ -339,7 +333,6 @@ describe('AuditReporter', () => {
       const buf = Buffer.from(ndjson, 'utf-8');
 
       const stats = makeAuditStats(buf.byteLength);
-      mockLstat.mockResolvedValue(stats);
 
       const mockHandle = {
         stat: vi.fn().mockResolvedValue(stats),
@@ -382,7 +375,6 @@ describe('AuditReporter', () => {
 
       const buf1 = Buffer.from(line1, 'utf-8');
       const firstStats = makeAuditStats(firstChunkSize);
-      mockLstat.mockResolvedValueOnce(firstStats);
 
       const mockHandle1 = {
         stat: vi.fn().mockResolvedValue(firstStats),
@@ -406,7 +398,6 @@ describe('AuditReporter', () => {
 
       const buf2 = Buffer.from(line2, 'utf-8');
       const secondStats = makeAuditStats(firstChunkSize + secondChunkSize);
-      mockLstat.mockResolvedValueOnce(secondStats);
 
       const mockHandle2 = {
         stat: vi.fn().mockResolvedValue(secondStats),
@@ -437,7 +428,13 @@ describe('AuditReporter', () => {
       await vi.advanceTimersByTimeAsync(1_000);
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
-      mockLstat.mockResolvedValueOnce(makeAuditStats(fileSize));
+      const stableStats = makeAuditStats(fileSize);
+      const mockHandle = {
+        stat: vi.fn().mockResolvedValue(stableStats),
+        read: vi.fn().mockResolvedValue({ bytesRead: 0 }),
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as FileHandle;
+      mockOpen.mockResolvedValueOnce(mockHandle);
 
       await vi.advanceTimersByTimeAsync(1_000);
 
@@ -539,7 +536,6 @@ describe('AuditReporter', () => {
       const buf1 = Buffer.from(line1, 'utf-8');
 
       const firstStats = makeAuditStats(chunk1Size);
-      mockLstat.mockResolvedValueOnce(firstStats);
 
       const mockHandle1 = {
         stat: vi.fn().mockResolvedValue(firstStats),
@@ -564,7 +560,6 @@ describe('AuditReporter', () => {
 
       expect(mockLogger.warn).toHaveBeenCalled();
 
-      mockLstat.mockResolvedValueOnce(firstStats);
       mockOpen.mockResolvedValueOnce(mockHandle1);
       mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
@@ -578,17 +573,20 @@ describe('AuditReporter', () => {
 
   describe('empty file', () => {
     it('no-ops when file size equals current offset (no new entries)', async () => {
-      mockLstat.mockResolvedValue({
-        size: 0,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      const stats = makeAuditStats(0);
+      const mockHandle = {
+        stat: vi.fn().mockResolvedValue(stats),
+        read: vi.fn().mockResolvedValue({ bytesRead: 0 }),
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as FileHandle;
+      mockOpen.mockResolvedValue(mockHandle);
 
       const reporter = makeReporter();
       reporter.start();
 
       await vi.advanceTimersByTimeAsync(1_000);
 
-      expect(mockOpen).not.toHaveBeenCalled();
+      expect(mockOpen).toHaveBeenCalledTimes(1);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
@@ -597,7 +595,6 @@ describe('AuditReporter', () => {
       const buf = Buffer.from(ndjson, 'utf-8');
 
       const stats = makeAuditStats(buf.byteLength);
-      mockLstat.mockResolvedValue(stats);
 
       const mockHandle = {
         stat: vi.fn().mockResolvedValue(stats),
@@ -623,19 +620,19 @@ describe('AuditReporter', () => {
 
   describe('file not found', () => {
     it('handles gracefully when audit file does not exist yet', async () => {
-      mockLstat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockOpen.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       const reporter = makeReporter();
       reporter.start();
 
       await vi.advanceTimersByTimeAsync(1_000);
 
-      expect(mockOpen).not.toHaveBeenCalled();
+      expect(mockOpen).toHaveBeenCalledTimes(1);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('does not log a warning for ENOENT (file not yet created)', async () => {
-      mockLstat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockOpen.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       const reporter = makeReporter();
       reporter.start();
@@ -646,7 +643,7 @@ describe('AuditReporter', () => {
     });
 
     it('propagates non-ENOENT stat errors as flush failures', async () => {
-      mockLstat.mockRejectedValue(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+      mockOpen.mockRejectedValue(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
 
       const reporter = makeReporter();
       reporter.start();
@@ -664,12 +661,7 @@ describe('AuditReporter', () => {
 
   describe('symlink rejection', () => {
     it('rejects audit file path that is a symbolic link', async () => {
-      mockLstat.mockResolvedValue({
-        size: 100,
-        mode: 0o600,
-        isFile: () => true,
-        isSymbolicLink: () => true,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      mockOpen.mockRejectedValue(Object.assign(new Error('ELOOP'), { code: 'ELOOP' }));
 
       const reporter = makeReporter();
       reporter.start();
@@ -681,7 +673,7 @@ describe('AuditReporter', () => {
         'Audit flush failed',
       );
 
-      expect(mockOpen).not.toHaveBeenCalled();
+      expect(mockOpen).toHaveBeenCalledTimes(1);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
@@ -705,36 +697,41 @@ describe('AuditReporter', () => {
 
   describe('concurrency guard', () => {
     it('does not run overlapping flushes', async () => {
-      let resolveLstatPromise:
-        | ((value: { size: number; isSymbolicLink: () => boolean }) => void)
-        | undefined;
-      const slowLstatPromise = new Promise<{ size: number; isSymbolicLink: () => boolean }>(
-        (resolve) => {
-          resolveLstatPromise = resolve;
-        },
-      );
+      const zeroStats = makeAuditStats(0);
+      const slowHandle = {
+        stat: vi.fn().mockResolvedValue(zeroStats),
+        read: vi.fn().mockResolvedValue({ bytesRead: 0 }),
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as FileHandle;
 
-      mockLstat.mockReturnValueOnce(slowLstatPromise as ReturnType<typeof lstat>);
+      let resolveOpenPromise: ((value: FileHandle) => void) | undefined;
+      const slowOpenPromise = new Promise<FileHandle>((resolve) => {
+        resolveOpenPromise = resolve;
+      });
+
+      mockOpen.mockReturnValueOnce(slowOpenPromise);
 
       const reporter = makeReporter({ flushIntervalMs: 100 });
       reporter.start();
 
       await vi.advanceTimersByTimeAsync(100);
 
-      mockLstat.mockResolvedValueOnce({
-        size: 0,
-        isSymbolicLink: () => false,
-      } as ReturnType<typeof lstat> extends Promise<infer T> ? T : never);
+      const secondHandle = {
+        stat: vi.fn().mockResolvedValue(zeroStats),
+        read: vi.fn().mockResolvedValue({ bytesRead: 0 }),
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as FileHandle;
+      mockOpen.mockResolvedValueOnce(secondHandle);
 
       await vi.advanceTimersByTimeAsync(100);
 
-      expect(mockLstat).toHaveBeenCalledTimes(1);
+      expect(mockOpen).toHaveBeenCalledTimes(1);
 
-      resolveLstatPromise?.({ size: 0, isSymbolicLink: () => false });
+      resolveOpenPromise?.(slowHandle);
       await vi.advanceTimersByTimeAsync(0);
 
       await vi.advanceTimersByTimeAsync(100);
-      expect(mockLstat).toHaveBeenCalledTimes(2);
+      expect(mockOpen).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -743,8 +740,6 @@ describe('AuditReporter', () => {
       const maxBytesPerFlush = 1024 * 1024;
       const oversizedChunk = Buffer.from('x'.repeat(maxBytesPerFlush + 128), 'utf-8');
       const stats = makeAuditStats(oversizedChunk.byteLength);
-
-      mockLstat.mockResolvedValue(stats);
 
       const mockHandle = {
         stat: vi.fn().mockResolvedValue(stats),

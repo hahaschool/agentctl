@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, open } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 
 import { WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
@@ -133,21 +133,10 @@ export class AuditReporter {
     this.isFlushing = true;
 
     try {
-      const fileSize = await this.getFileSize();
-
-      if (fileSize === null || fileSize <= this.byteOffset) {
+      const handle = await this.openAuditFileSecurely();
+      if (!handle) {
         return;
       }
-
-      // Security: verify the audit file is not a symlink before opening (TOCTOU
-      // mitigation). Combined with O_NOFOLLOW this prevents symlink attacks on
-      // predictable file paths (js/insecure-temporary-file).
-      const preStat = await lstat(this.auditFilePath);
-      if (preStat.isSymbolicLink()) {
-        this.log.error({ path: this.auditFilePath }, 'Audit file is a symlink — refusing to read');
-        return;
-      }
-      const handle = await open(this.auditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
 
       try {
         const info = await handle.stat();
@@ -242,35 +231,29 @@ export class AuditReporter {
   }
 
   /**
-   * Safely lstat the audit file, returning null if it does not exist yet.
+   * Open the audit file using O_NOFOLLOW so the final path component cannot
+   * be a symlink. Returns null when the file is not created yet.
    *
-   * Security: uses lstat (not stat) so that symlinks are detected rather
-   * than followed. If the path is a symbolic link, the reporter refuses
-   * to read it — preventing a local attacker from redirecting audit reads
-   * to an arbitrary file (js/insecure-temporary-file).
+   * Security: this open + fstat flow avoids TOCTOU races between a path
+   * check and read (js/file-system-race) and rejects symlink targets on
+   * predictable temporary paths (js/insecure-temporary-file).
    */
-  private async getFileSize(): Promise<number | null> {
+  private async openAuditFileSecurely(): Promise<Awaited<ReturnType<typeof open>> | null> {
     try {
-      const info = await lstat(this.auditFilePath);
-
-      if (info.isSymbolicLink()) {
+      return await open(this.auditFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        return null;
+      }
+      if (nodeErr.code === 'ELOOP') {
         throw new WorkerError(
           'AUDIT_SYMLINK_REJECTED',
           'Audit file path is a symbolic link — refusing to read for security',
           { path: this.auditFilePath },
         );
       }
-
-      return info.size;
-    } catch (err) {
-      if (err instanceof WorkerError) {
-        throw err;
-      }
-      const nodeErr = err as NodeJS.ErrnoException;
-      if (nodeErr.code === 'ENOENT') {
-        return null;
-      }
-      throw new WorkerError('AUDIT_STAT_FAILED', `Failed to stat audit file: ${nodeErr.message}`, {
+      throw new WorkerError('AUDIT_OPEN_FAILED', `Failed to open audit file: ${nodeErr.message}`, {
         path: this.auditFilePath,
       });
     }
