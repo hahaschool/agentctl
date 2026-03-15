@@ -183,6 +183,31 @@ describe('LoopController', () => {
     }
   });
 
+  it('throws INVALID_INPUT when maxIterations exceeds 10000', () => {
+    const agent = createMockAgent();
+
+    expect(
+      () =>
+        new LoopController(agent, { mode: 'result-feedback', maxIterations: 10001 }, mockLogger),
+    ).toThrow(AgentError);
+
+    try {
+      new LoopController(agent, { mode: 'result-feedback', maxIterations: 10001 }, mockLogger);
+    } catch (err) {
+      expect((err as AgentError).code).toBe('INVALID_INPUT');
+    }
+  });
+
+  it('accepts maxIterations at upper boundary (10000)', () => {
+    const agent = createMockAgent();
+    const controller = new LoopController(
+      agent,
+      { mode: 'result-feedback', maxIterations: 10000 },
+      mockLogger,
+    );
+    expect(controller).toBeDefined();
+  });
+
   it('accepts config with only maxIterations as limit', () => {
     const agent = createMockAgent();
     const controller = new LoopController(agent, makeConfig({ maxIterations: 10 }), mockLogger);
