@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-15): the current stabilization/security wave is already on `main` through PR #201. Earlier fixes (#167, #169-#181) restored the reproduced control-plane regressions, Discover sanitization, and discovery/worktree hardening; the follow-up batch then landed `path-security.ts` wrappers (#182), `git.ts` hardening (#183), control-plane memory-route limiters (#184), and the loop-controller hard cap (#185). The residual cleanup batch then landed explicit `path-security.ts` wrapper guards plus `skill-discovery.ts` safe async reads (#187) and CLI session cwd sanitization (#188). A first residual follow-up then landed the agent-start route update (#190), the control-plane memory-route follow-up (#191), the loop timer follow-up (#192), and the shared agent coordination board (#193). The next round then fixed the custom MCP preview source regression (#199), landed a modeled Fastify rate-limit follow-up that still did not satisfy CodeQL on `main` (#200), and added visible worktree leases plus correct target-branch metadata for coordination-board claims (#201). `skill-discovery.ts` and the loop-controller timer finding are out of the open-alert list, but `cli-session-manager.ts` still needs follow-up and GitHub still reports the agent-start / control-plane rate-limit findings after PR #200. The remaining backlog is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, the still-unmodeled agent/control-plane rate-limit alerts, and dependency/base-image triage.
+> Status note (2026-03-15): this stabilization/security wave is now complete on `main` through PR #210. Earlier fixes (#167, #169-#201) restored the reproduced CI regressions, hardened the path/discovery/worktree surfaces, landed the coordination board, and added the modeled Fastify follow-ups that still left CodeQL blind to Fastify-specific rate limiting. The final batch then fixed the agent-worker fd-write test regressions (PR #206), landed the control-plane and agent-worker modeled Fastify route updates on `main` (PRs #207-#208), resolved the remaining `path-security.ts` file-write findings (PR #209), and enabled the skipped Playwright coverage batch (PR #210). After the latest green `main` CI/Security Audit, the lingering Fastify rate-limit findings were dismissed as CodeQL modeling false positives and the stale old-Alpine Grype findings were dismissed because current `main` uses `bookworm-slim` images. There are currently no open CodeQL or Dependabot alerts on `main`.
 
 ---
 
@@ -137,20 +137,25 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
 
-Current grouping after PR #201:
+Current final state after PR #210:
 - Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are delivered on `main` via PR #176.
 - Worktree-manager path alerts are delivered on `main` via PR #177.
 - Agent-start rate limiting is delivered on `main` via PR #179.
 - MCP discover file-read hardening is delivered on `main` via PR #180.
 - The follow-up hardening batch is delivered on `main` via PRs #182-#185 (`path-security.ts`, `git.ts`, control-plane memory routes, and `loop-controller.ts`).
 - The residual `path-security.ts` wrapper cleanup and the still-open `skill-discovery.ts` / `cli-session-manager.ts` path findings are delivered on `main` via PRs #187-#188.
-- The first follow-up for the still-open `agents.ts`, control-plane memory-route, and `loop-controller.ts` findings landed via PRs #190-#192, but GitHub still reports those alerts on `main`.
+- The first follow-up for the still-open `agents.ts`, control-plane memory-route, and `loop-controller.ts` findings landed via PRs #190-#192.
 - The custom MCP preview source regression is delivered on `main` via PR #199.
-- The modeled Fastify rate-limit follow-up is delivered on `main` via PR #200, but GitHub still reports the `agents.ts` and control-plane memory-route findings on the latest default-branch CodeQL run.
+- The modeled Fastify rate-limit follow-up is delivered on `main` via PR #200.
 - Coordination-board visible worktree leases and claimed-branch metadata are delivered on `main` via PR #201.
 - The shared local coordination board for multi-agent worktree claims and handoffs landed via PR #193.
-- The loop-controller timer finding is no longer in the open-alert list.
-- The expected remaining backlog is the still-open `path-security.ts`, `cli-session-manager.ts`, `agents.ts`, and control-plane memory-route findings plus BusyBox CVEs and the `pm2` advisory.
+- The agent-worker fd-write mock regression is fixed on `main` via PR #206.
+- The control-plane and agent-worker modeled Fastify config follow-ups landed via PRs #207-#208.
+- The remaining `path-security.ts` file-write findings are fixed on `main` via PR #209.
+- The skipped Playwright coverage batch is enabled on `main` via PR #210.
+- The lingering Fastify rate-limit alerts were dismissed as CodeQL modeling false positives after the latest green `main` Security Audit.
+- The stale BusyBox/ssl_client Grype findings were dismissed after PR #205 moved current runtime images to `bookworm-slim`.
+- There is no remaining open security backlog from this cycle on `main`.
 
 **Step 2: Update roadmap status to match this cycle**
 

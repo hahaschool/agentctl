@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-15 (stability/security cycle through PR #193 is on `main`; PRs #190-#192 landed but the agents/control-plane/loop CodeQL findings remain open, so the current backlog is `path-security.ts` file-write findings, `cli-session-manager.ts`, modeled rate-limit follow-ups, the loop timer finding, plus dependency/base-image advisories)
+> Last updated: 2026-03-15 (stability/security cycle through PR #210 is on `main`; PRs #206-#210 closed the remaining agent-worker regression, `path-security.ts` CodeQL findings, and skipped Playwright coverage, and the latest `main` CI/Security Audit is green with no open CodeQL or Dependabot alerts)
 
 ## Current State
 
@@ -1112,8 +1112,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
-- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(in progress)*
-- Status note: `main` was re-stabilized through PRs #167-#181. The follow-up hardening batch landed via PRs #182-#185, the residual path/session cleanup landed via PRs #187-#188, the first residual agents/control-plane/loop follow-up landed via PRs #190-#192, the shared local coordination board landed via PR #193, the custom MCP preview source regression was fixed in PR #199, the modeled Fastify rate-limit follow-up landed in PR #200, and visible worktree leases for the coordination board landed in PR #201. The loop-controller timer alert has dropped out of the open-alert list, but GitHub still reports the `agents.ts` and control-plane memory-route rate-limit findings after PR #200, while the `cli-session-manager.ts` path finding and `path-security.ts` file-write findings still need follow-up. The remaining backlog is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, the still-unmodeled agent/control-plane rate-limit alerts, and dependency/base-image triage.
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(completed; synced after PRs #206-#210)*
+- Status note: `main` is now re-stabilized through PR #210. After PRs #206-#210 and the latest green `main` Security Audit, the remaining `path-security.ts` file-write findings are fixed on `main`, the skipped Playwright coverage batch is enabled, and the lingering Fastify rate-limit plus stale Alpine-image findings have been dispositioned as tooling/modeling false positives relative to the current source. There are currently no open CodeQL or Dependabot alerts on `main`.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1134,17 +1134,23 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] MCP discover config reads now go through shared safe file-read guards *(PR #180)*
 - [x] Tighten `path-security.ts` wrappers for the remaining CodeQL path/file alerts *(PRs #182, #187)*
 - [x] Harden the worker git status route path handling + framework rate limiting *(PR #183)*
-- [x] Add explicit Fastify limiters to control-plane memory routes while preserving custom 429 behavior *(PR #184; GitHub still reports modeled rate-limit follow-up alerts after PR #191)*
-- [x] Enforce the loop-controller fallback 10k iteration hard cap even without an explicit `maxIterations` limit *(PR #185; separate timer-specific alert remains after PR #192)*
+- [x] Add explicit Fastify limiters to control-plane memory routes while preserving custom 429 behavior *(PR #184; later superseded by PR #207 and dismissed as a Fastify-model false positive after the latest green audit)*
+- [x] Enforce the loop-controller fallback 10k iteration hard cap even without an explicit `maxIterations` limit *(PR #185; timer-specific follow-up resolved in PR #198)*
 - [x] Skill discovery now uses shared safe async file-read guards for SKILL.md enumeration *(PR #187)*
 - [x] CLI session cwd is sanitized through shared path guards before reaching `spawn()` *(PR #188)*
-- [x] Agent-start route residual follow-up landed, but GitHub still reports the route as unmodeled by CodeQL *(PR #190)*
-- [x] Control-plane memory-route residual follow-up landed, but GitHub still reports the routes as unmodeled by CodeQL *(PR #191)*
-- [x] Loop delay validation/clamping residual follow-up landed, but GitHub still reports the timer duration alert *(PR #192)*
+- [x] Agent-start route residual follow-up landed *(PR #190; later superseded by PR #208 and dismissed as a Fastify-model false positive after the latest green audit)*
+- [x] Control-plane memory-route residual follow-up landed *(PR #191; later superseded by PR #207 and dismissed as a Fastify-model false positive after the latest green audit)*
+- [x] Loop delay validation/clamping residual follow-up landed *(PR #192; timer duration follow-up resolved in PR #198)*
 - [x] Shared local agent coordination board for worktree claims + handoffs *(PR #193)*
 - [x] Custom MCP preview now preserves `source: 'custom'` for user-defined servers *(PR #199)*
-- [x] Modeled Fastify rate-limit follow-up landed, but GitHub still reports the agent/control-plane routes as unmodeled by CodeQL *(PR #200)*
+- [x] Modeled Fastify rate-limit follow-up landed *(PR #200; final alert disposition was dismissal after the latest green audit because CodeQL still does not model Fastify rate-limit)*
 - [x] Coordination-board worktree claims now write visible `.agentcoord.json` leases and resolve branch metadata from the claimed worktree *(PR #201)*
+- [x] Agent-worker fd-write mock regressions fixed after `safeWriteFileSync` landed on `main` *(PR #206)*
+- [x] Control-plane memory-route modeled Fastify config follow-up landed on `main` *(PR #207; later dismissed as a Fastify-model false positive after the latest green audit)*
+- [x] Agent-worker start-route modeled Fastify config follow-up landed on `main` *(PR #208; later dismissed as a Fastify-model false positive after the latest green audit)*
+- [x] Remaining `path-security.ts` file-write CodeQL findings resolved with content validation + secure create/truncate fallback *(PR #209)*
+- [x] Remaining skipped Playwright coverage implemented and enabled across runtime selector / MCP discovery / critical flows *(PR #210)*
+- [x] Stale old-Alpine Grype findings dismissed after PR #205 moved current runtime images to `bookworm-slim` *(direct dismissal, 2026-03-15)*
 
 ### 16.2 Dev Environment Infrastructure — P0
 
