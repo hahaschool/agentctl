@@ -26,9 +26,9 @@ vi.mock('node:fs', async (importOriginal) => {
     fstatSync: vi.fn(actual.fstatSync),
     readFileSync: vi.fn(actual.readFileSync),
     readdirSync: vi.fn(actual.readdirSync),
-    writeFileSync: vi.fn(),
     openSync: vi.fn(actual.openSync),
     readSync: vi.fn(actual.readSync),
+    writeSync: vi.fn(actual.writeSync),
     closeSync: vi.fn(actual.closeSync),
   };
 });
@@ -50,7 +50,7 @@ import {
   readFileSync,
   readSync,
   statSync,
-  writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 
@@ -422,6 +422,8 @@ describe('Worker session routes', () => {
     const PARENT_JSONL = `${JSONL_DIR}/${PARENT_CLAUDE_ID}.jsonl`;
 
     function setupTruncationMocks(opts: { fileContent: string }): void {
+      const writtenChunks: Buffer[] = [];
+
       vi.mocked(homedir).mockReturnValue(FAKE_HOME);
 
       vi.mocked(existsSync).mockImplementation((p: string | URL) => {
@@ -436,13 +438,30 @@ describe('Worker session routes', () => {
         throw new Error(`ENOENT: ${String(p)}`);
       });
 
+      vi.mocked(openSync).mockReturnValue(123);
+      vi.mocked(writeSync).mockImplementation(
+        (_fd, buffer: Buffer | string, offset?: number, length?: number) => {
+          const source = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+          const start = offset ?? 0;
+          const end = length === undefined ? source.length : start + length;
+          writtenChunks.push(source.subarray(start, end));
+          return end - start;
+        },
+      );
+      vi.mocked(closeSync).mockImplementation(() => undefined);
       vi.mocked(readdirSync).mockReturnValue([]);
+
+      (
+        setupTruncationMocks as typeof setupTruncationMocks & { writtenChunks?: Buffer[] }
+      ).writtenChunks = writtenChunks;
     }
 
     afterEach(() => {
       vi.mocked(existsSync).mockReset();
       vi.mocked(readFileSync).mockReset();
-      vi.mocked(writeFileSync).mockReset();
+      vi.mocked(openSync).mockReset();
+      vi.mocked(writeSync).mockReset();
+      vi.mocked(closeSync).mockReset();
       vi.mocked(readdirSync).mockReset();
       vi.mocked(homedir).mockReset();
     });
@@ -485,12 +504,18 @@ describe('Worker session routes', () => {
       expect(res.statusCode).toBe(201);
 
       // Should have written a truncated JSONL file
-      expect(writeFileSync).toHaveBeenCalledTimes(1);
-      const [writePath, writeContent] = vi.mocked(writeFileSync).mock.calls[0] as [string, string];
+      expect(openSync).toHaveBeenCalledTimes(1);
+      const [writePath] = vi.mocked(openSync).mock.calls[0] as [string];
       expect(writePath).toBe(`${JSONL_DIR}/fork-session-1.jsonl`);
 
       // The truncated content should contain fewer lines than the original
-      const writtenLines = (writeContent as string).trim().split('\n');
+      const writtenContent = (
+        (setupTruncationMocks as typeof setupTruncationMocks & { writtenChunks?: Buffer[] })
+          .writtenChunks ?? []
+      )
+        .map((chunk) => chunk.toString('utf-8'))
+        .join('');
+      const writtenLines = writtenContent.trim().split('\n');
       expect(writtenLines.length).toBeLessThanOrEqual(4);
       expect(writtenLines.length).toBeGreaterThanOrEqual(1);
 
@@ -516,7 +541,7 @@ describe('Worker session routes', () => {
       });
 
       expect(res.statusCode).toBe(201);
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(writeSync).not.toHaveBeenCalled();
 
       // Should use original resumeSessionId
       expect(manager.startSession).toHaveBeenCalledWith(
@@ -545,7 +570,7 @@ describe('Worker session routes', () => {
       });
 
       expect(res.statusCode).toBe(201);
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(writeSync).not.toHaveBeenCalled();
 
       // Should fall back to original resumeSessionId
       expect(manager.startSession).toHaveBeenCalledWith(
@@ -581,7 +606,7 @@ describe('Worker session routes', () => {
         error: 'Invalid session ID',
         code: 'INVALID_INPUT',
       });
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(writeSync).not.toHaveBeenCalled();
     });
   });
 

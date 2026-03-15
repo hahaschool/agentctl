@@ -13,13 +13,19 @@ vi.mock('node:fs', () => ({
   statSync: vi.fn(),
   readdirSync: vi.fn(),
   readFileSync: vi.fn(),
-  writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
   openSync: vi.fn(),
   readSync: vi.fn(),
+  writeSync: vi.fn(),
   closeSync: vi.fn(),
   fstatSync: vi.fn(),
-  constants: { O_RDONLY: 0, O_NOFOLLOW: 0x20000 },
+  constants: {
+    O_RDONLY: 0,
+    O_WRONLY: 1,
+    O_CREAT: 0x0200,
+    O_TRUNC: 0x0400,
+    O_NOFOLLOW: 0x20000,
+  },
 }));
 
 // We need os.homedir() to return a stable path for validatePath()
@@ -36,7 +42,7 @@ import {
   readdirSync,
   readSync,
   statSync,
-  writeFileSync,
+  writeSync,
 } from 'node:fs';
 
 // ---------------------------------------------------------------------------
@@ -106,6 +112,11 @@ describe('File routes', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(openSync).mockReturnValue(77);
+    vi.mocked(writeSync).mockImplementation((_fd, buffer: Buffer | string) =>
+      Buffer.isBuffer(buffer) ? buffer.length : Buffer.byteLength(buffer),
+    );
+    vi.mocked(closeSync).mockImplementation(() => undefined);
     app = await buildApp();
   });
 
@@ -392,7 +403,10 @@ describe('File routes', () => {
       const body = res.json();
       expect(body.success).toBe(true);
       expect(body.path).toBe(filePath);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, 'new content here');
+      expect(openSync).toHaveBeenCalledWith(filePath, expect.any(Number), 0o600);
+      expect(writeSync).toHaveBeenCalledOnce();
+      const [, content] = vi.mocked(writeSync).mock.calls[0] as [number, Buffer];
+      expect(content.toString('utf-8')).toBe('new content here');
     });
 
     it('creates parent directories when they do not exist', async () => {
@@ -410,7 +424,8 @@ describe('File routes', () => {
       expect(mkdirSync).toHaveBeenCalledWith('/Users/testuser/project/deep/nested', {
         recursive: true,
       });
-      expect(writeFileSync).toHaveBeenCalled();
+      expect(openSync).toHaveBeenCalledWith(filePath, expect.any(Number), 0o600);
+      expect(writeSync).toHaveBeenCalled();
     });
 
     it('returns 400 when path is missing', async () => {
@@ -463,7 +478,8 @@ describe('File routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().success).toBe(true);
-      expect(writeFileSync).toHaveBeenCalledWith(filePath, '');
+      expect(openSync).toHaveBeenCalledWith(filePath, expect.any(Number), 0o600);
+      expect(writeSync).not.toHaveBeenCalled();
     });
 
     it('accepts paths under /tmp', async () => {
