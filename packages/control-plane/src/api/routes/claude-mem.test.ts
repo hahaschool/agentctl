@@ -1,3 +1,4 @@
+import fastifyRateLimit from '@fastify/rate-limit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock better-sqlite3 BEFORE imports.
@@ -37,6 +38,11 @@ import { claudeMemRoutes } from './claude-mem.js';
 
 async function buildApp() {
   const app = Fastify();
+  await app.register(fastifyRateLimit, {
+    global: false,
+    max: 1_000,
+    timeWindow: '1 minute',
+  });
   await app.register(claudeMemRoutes, { prefix: '/api/claude-mem' });
   return app;
 }
@@ -141,6 +147,24 @@ describe('claude-mem routes — /api/claude-mem', () => {
       mockAll.mockReturnValueOnce([]);
       await app.inject({ method: 'GET', url: '/api/claude-mem/search?q=test' });
       expect(mockClose).toHaveBeenCalled();
+    });
+
+    it('returns 429 after repeated requests exceed the route limit', async () => {
+      mockAll.mockReturnValue([]);
+
+      let res: Awaited<ReturnType<typeof app.inject>> | undefined;
+      for (let attempt = 0; attempt < 61; attempt += 1) {
+        res = await app.inject({
+          method: 'GET',
+          url: '/api/claude-mem/search?q=rate-limit-test',
+        });
+      }
+
+      expect(res?.statusCode).toBe(429);
+      expect(res?.json()).toEqual({
+        error: 'RATE_LIMITED',
+        message: 'Too many requests',
+      });
     });
   });
 
