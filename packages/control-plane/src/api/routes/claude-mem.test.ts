@@ -92,6 +92,17 @@ describe('claude-mem routes — /api/claude-mem', () => {
       expect(body.observations[0].title).toBe('Use PostgreSQL');
     });
 
+    it('includes Fastify rate-limit headers on the route', async () => {
+      mockAll.mockReturnValueOnce([]);
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/claude-mem/search?q=postgres',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['x-ratelimit-limit']).toBeDefined();
+      expect(res.headers['x-ratelimit-remaining']).toBeDefined();
+    });
+
     it('passes project filter to SQL', async () => {
       mockAll.mockReturnValueOnce([]);
       await app.inject({

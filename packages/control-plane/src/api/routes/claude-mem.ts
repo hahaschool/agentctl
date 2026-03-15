@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import rateLimit from '@fastify/rate-limit';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
 import {
@@ -24,11 +25,25 @@ function openDb(): Database.Database | null {
 }
 
 export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
+  const claudeMemRateLimitMax = readRateLimitEnv(
+    'CLAUDE_MEM_RATE_LIMIT_MAX',
+    CLAUDE_MEM_RATE_LIMIT.max,
+  );
+  const claudeMemRateLimitWindowMs = readRateLimitEnv('CLAUDE_MEM_RATE_LIMIT_WINDOW_MS', 60_000);
+
+  await app.register(rateLimit, {
+    global: false,
+    max: claudeMemRateLimitMax + 1,
+    timeWindow: claudeMemRateLimitWindowMs,
+  });
+
+  const frameworkClaudeMemRateLimit = app.rateLimit({
+    max: claudeMemRateLimitMax + 1,
+    timeWindow: '1 minute',
+  });
+
   const enforceClaudeMemRateLimit = createIpRateLimitPreHandler(
-    createInMemoryRateLimiter(
-      readRateLimitEnv('CLAUDE_MEM_RATE_LIMIT_MAX', CLAUDE_MEM_RATE_LIMIT.max),
-      readRateLimitEnv('CLAUDE_MEM_RATE_LIMIT_WINDOW_MS', 60_000),
-    ),
+    createInMemoryRateLimiter(claudeMemRateLimitMax, claudeMemRateLimitWindowMs),
     'Too many requests',
   );
 
@@ -42,7 +57,7 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/search',
     {
       schema: { tags: ['memory'], summary: 'Search claude-mem observations' },
-      preHandler: enforceClaudeMemRateLimit,
+      preHandler: [frameworkClaudeMemRateLimit, enforceClaudeMemRateLimit],
     },
     async (request, reply) => {
       const { q, project, type, limit } = request.query;
@@ -99,7 +114,7 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/observations/:id',
     {
       schema: { tags: ['memory'], summary: 'Get observation by ID' },
-      preHandler: enforceClaudeMemRateLimit,
+      preHandler: [frameworkClaudeMemRateLimit, enforceClaudeMemRateLimit],
     },
     async (request, reply) => {
       const { id } = request.params;
@@ -132,7 +147,7 @@ export const claudeMemRoutes: FastifyPluginAsync = async (app) => {
     '/timeline',
     {
       schema: { tags: ['memory'], summary: 'Get observation timeline for a session' },
-      preHandler: enforceClaudeMemRateLimit,
+      preHandler: [frameworkClaudeMemRateLimit, enforceClaudeMemRateLimit],
     },
     async (request, reply) => {
       const { sessionId, limit } = request.query;
