@@ -93,6 +93,9 @@ function errorToResponse(err: unknown): {
 export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptions): Promise<void> {
   const { pool, machineId, logger, getDispatchVerificationConfig } = options;
 
+  // Register @fastify/rate-limit so CodeQL recognises framework-level rate
+  // limiting (js/missing-rate-limiting). Route-specific limits still rely on
+  // the IP preHandler below; global is disabled to avoid changing behavior.
   await app.register(rateLimit, {
     global: false,
     max: readRateLimitEnv('AGENT_START_GLOBAL_RATE_LIMIT_MAX', 60),
@@ -106,6 +109,10 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
     ),
     'Too many agent start requests. Try again later.',
   );
+  const frameworkAgentStartRateLimit = app.rateLimit({
+    max: 30,
+    timeWindow: '1 minute',
+  });
 
   // GET /api/agents — list all agents in the pool
   app.get('/', async (_request, reply) => {
@@ -142,8 +149,7 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
   app.post<{ Params: AgentIdParams; Body: StartAgentBody }>(
     '/:id/start',
     {
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-      preHandler: agentStartRateLimit,
+      preHandler: [frameworkAgentStartRateLimit, agentStartRateLimit],
     },
     async (request, reply) => {
       const { id } = request.params;
