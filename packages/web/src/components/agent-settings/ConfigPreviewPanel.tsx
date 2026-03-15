@@ -49,7 +49,16 @@ function ConfigPreviewPanelInner({ agentId }: { agentId: string }): React.JSX.El
     );
   }
 
-  const files = previewQuery.data?.files ?? [];
+  // API may return { files: [...] } or { rendered: { files: [...] } } depending on endpoint version
+  const rawData = previewQuery.data as any;
+  const rawFiles = rawData?.files ?? rawData?.rendered?.files ?? [];
+  const files = (rawFiles as any[]).map((f: any) => ({
+    path: f.path as string,
+    scope: (f.scope ?? 'workspace') as 'home' | 'workspace',
+    content: f.content as string,
+    status: (f.status ?? 'managed') as 'managed' | 'merged',
+    overriddenFields: f.overriddenFields as string[] | undefined,
+  }));
 
   if (files.length === 0) {
     return <div className="text-sm text-muted-foreground">No config files to preview.</div>;
