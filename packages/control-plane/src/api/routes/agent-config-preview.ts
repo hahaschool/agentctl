@@ -1,4 +1,4 @@
-import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
+import { type DiscoveredMcpServer, isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -11,6 +11,26 @@ import { resolveWorkerUrl } from '../resolve-worker-url.js';
 export type AgentConfigPreviewRoutesOptions = {
   dbRegistry?: DbAgentRegistry;
   workerPort?: number;
+};
+
+type DiscoverMcpResponse = {
+  discovered?: DiscoveredMcpServer[];
+};
+
+const fetchDiscoveredMcp = async (
+  workerUrl: string,
+  runtime: 'claude-code' | 'codex',
+): Promise<DiscoveredMcpServer[]> => {
+  const response = await fetch(`${workerUrl}/api/mcp/discover?runtime=${runtime}`, {
+    signal: AbortSignal.timeout(5_000),
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const data = (await response.json()) as DiscoverMcpResponse;
+  return data.discovered ?? [];
 };
 
 // ---------------------------------------------------------------------------
@@ -75,43 +95,42 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
     }
 
     // Fetch discovered MCP servers from worker — query BOTH runtimes and merge
-    let discoveredMcp: Array<{ name: string; config: Record<string, unknown> }> = [];
+    let discoveredMcp: DiscoveredMcpServer[] = [];
     try {
-      const [res1, res2] = await Promise.all([
-        fetch(`${workerResult.url}/api/mcp/discover?runtime=claude-code`, { signal: AbortSignal.timeout(5_000) }).then((r) => r.ok ? r.json() : { discovered: [] }),
-        fetch(`${workerResult.url}/api/mcp/discover?runtime=codex`, { signal: AbortSignal.timeout(5_000) }).then((r) => r.ok ? r.json() : { discovered: [] }),
+      const [primary, secondaryCandidates] = await Promise.all([
+        fetchDiscoveredMcp(workerResult.url, 'claude-code'),
+        fetchDiscoveredMcp(workerResult.url, 'codex'),
       ]);
-      const primary = (res1 as any).discovered ?? [];
-      const secondary = ((res2 as any).discovered ?? []).filter(
-        (s: any) => !primary.some((p: any) => p.name === s.name),
+
+      const secondary = secondaryCandidates.filter(
+        (server) => !primary.some((existing) => existing.name === server.name),
       );
+
       discoveredMcp = [...primary, ...secondary];
     } catch {
       // Discovery failed — preview will show empty MCP (acceptable degradation)
     }
 
     // Resolve effective MCP: discovery defaults - excluded + custom
-    const mcpOverride = agent.config?.mcpOverride as
-      | { excluded?: string[]; custom?: Array<Record<string, unknown>> }
-      | undefined;
+    const mcpOverride = agent.config?.mcpOverride;
     const excludedSet = new Set(mcpOverride?.excluded ?? []);
     const effectiveMcpServers = discoveredMcp
-      .filter((s) => !excludedSet.has(s.name))
-      .map((s) => ({
-        id: s.name,
-        name: s.name,
-        command: (s.config as any)?.command ?? '',
-        args: (s.config as any)?.args ?? [],
-        env: (s.config as any)?.env ?? {},
+      .filter((server) => !excludedSet.has(server.name))
+      .map((server) => ({
+        id: server.name,
+        name: server.name,
+        command: server.config.command,
+        args: server.config.args ?? [],
+        env: server.config.env ?? {},
       }));
+
     for (const custom of mcpOverride?.custom ?? []) {
-      const c = custom as Record<string, unknown>;
       effectiveMcpServers.push({
-        id: String(c.name ?? ''),
-        name: String(c.name ?? ''),
-        command: String(c.command ?? ''),
-        args: (c.args as string[]) ?? [],
-        env: (c.env as Record<string, string>) ?? {},
+        id: custom.name,
+        name: custom.name,
+        command: custom.command,
+        args: custom.args ?? [],
+        env: custom.env ?? {},
       });
     }
 
