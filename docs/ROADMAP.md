@@ -1106,6 +1106,28 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ---
 
+## 16. Bug Fixes & Quality
+
+### 16.1 Agent Run Quality — P0
+
+- [ ] Runs with 0 cost/tokens should be marked `empty` not `success`
+- [ ] Retry runs should show `retryOf` (original run ID) + `retryIndex` (attempt number)
+- [ ] Frontend double-click prevention on Start button
+- [x] MCP servers not loading in CLI `-p` mode — pass `--mcp-config` explicitly *(direct commit c9ebe4e)*
+- [x] Codex worktree sessions grouped as separate projects — normalize paths *(direct commit e0ca99f)*
+- [x] ModelPromptsTab hardcoded Claude models — use runtime-aware options *(direct commit 2c198f3)*
+- [x] McpServersTab/SkillsTab showed "not available" for agents without runtime — default to claude-code *(direct commit 7b1388c)*
+
+### 16.2 Dev Environment Infrastructure — P0
+
+- [x] Dev-1 PM2 config (`infra/pm2/ecosystem.dev1.config.cjs`) *(direct commits)*
+- [x] Runtime API proxy via Next.js middleware — same build for all tiers *(direct commit 879f27f)*
+- [x] Dev-1 database setup + migrations
+- [ ] Dev-2 PM2 config (`infra/pm2/ecosystem.dev2.config.cjs`)
+- [ ] `DISPATCH_SIGNING_SECRET_KEY` env var in dev PM2 configs for stable keys
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
