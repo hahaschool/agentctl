@@ -271,12 +271,12 @@ export default function AgentDetailPage(): React.JSX.Element {
               {data.config?.model as string}
             </span>
           )}
-          <Link href={`/agents/${agentId}/settings`}>
-            <Button variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/agents/${agentId}/settings`}>
               <Settings className="h-3.5 w-3.5 mr-1.5" />
               Settings
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <SimpleTooltip content="Export config as JSON">
             <Button
               variant="outline"

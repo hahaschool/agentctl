@@ -93,12 +93,9 @@ export function RuntimeAccessSection(): React.JSX.Element {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Link
-                    href={`/machines/${machine.id}/terminal`}
-                    className="inline-flex h-8 items-center rounded-md border px-3 text-sm hover:bg-accent"
-                  >
-                    Open Terminal
-                  </Link>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/machines/${machine.id}/terminal`}>Open Terminal</Link>
+                  </Button>
                   <Button
                     size="sm"
                     onClick={() => handleSync(machine.id)}
@@ -134,12 +131,13 @@ export function RuntimeAccessSection(): React.JSX.Element {
                         <span className="text-muted-foreground">Login command: </span>
                         <code>{loginCommand(runtime)}</code>
                       </div>
-                      <Link
-                        href={`/machines/${machine.id}/terminal?command=${encodeURIComponent(loginCommand(runtime))}`}
-                        className="inline-flex h-8 items-center rounded-md border px-3 text-sm hover:bg-accent"
-                      >
-                        {runtime === 'claude-code' ? 'Run Claude Login' : 'Run Codex Login'}
-                      </Link>
+                      <Button asChild variant="outline" size="sm">
+                        <Link
+                          href={`/machines/${machine.id}/terminal?command=${encodeURIComponent(loginCommand(runtime))}`}
+                        >
+                          {runtime === 'claude-code' ? 'Run Claude Login' : 'Run Codex Login'}
+                        </Link>
+                      </Button>
                     </div>
                   );
                 })}

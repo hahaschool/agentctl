@@ -20,6 +20,7 @@ import { PathBadge } from '@/components/PathBadge';
 import { RefreshButton } from '@/components/RefreshButton';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { RuntimeSession } from '../lib/api';
 import { formatDuration, formatNumber, timeAgo, truncate } from '../lib/format-utils';
@@ -263,12 +264,9 @@ export function RuntimeSessionsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Link
-            href="/sessions"
-            className="px-3 py-1.5 bg-transparent text-primary border border-primary/50 rounded-md text-xs font-medium no-underline hover:bg-primary/10 transition-colors"
-          >
-            Classic Sessions
-          </Link>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/sessions">Classic Sessions</Link>
+          </Button>
           <LastUpdated dataUpdatedAt={combinedUpdatedAt} />
           <RefreshButton
             onClick={refreshAll}

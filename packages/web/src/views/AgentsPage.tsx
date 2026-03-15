@@ -468,14 +468,15 @@ export function AgentsPage(): React.JSX.Element {
 
               {/* Actions */}
               <div className="mt-2.5 pt-2.5 border-t border-border flex gap-2 items-center">
-                <Link
-                  href={`/agents/${agent.id}/settings`}
-                  aria-label={`Settings for agent ${agent.name}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs font-medium cursor-pointer hover:bg-accent transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-                >
-                  <Settings className="h-3 w-3" />
-                  Settings
-                </Link>
+                <Button asChild variant="outline" size="sm">
+                  <Link
+                    href={`/agents/${agent.id}/settings`}
+                    aria-label={`Settings for agent ${agent.name}`}
+                  >
+                    <Settings className="h-3 w-3" />
+                    Settings
+                  </Link>
+                </Button>
                 {agent.status === 'running' ? (
                   <ConfirmButton
                     label={stopAgent.isPending ? 'Stopping...' : 'Stop'}

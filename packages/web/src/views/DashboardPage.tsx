@@ -6,6 +6,7 @@ import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
@@ -224,12 +225,9 @@ export function DashboardPage(): React.JSX.Element {
           <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <Link
-            href="/sessions"
-            className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium no-underline transition-colors bg-primary text-primary-foreground border border-primary hover:bg-primary/90 hover:text-primary-foreground hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-          >
-            New Session
-          </Link>
+          <Button asChild size="sm">
+            <Link href="/sessions">New Session</Link>
+          </Button>
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>
