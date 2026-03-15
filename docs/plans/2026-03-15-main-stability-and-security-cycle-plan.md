@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, #175, #176, and #177 fixed the reproduced control-plane regressions, strengthened Discover sanitization, hardened the worker file/discovery/worktree path surfaces, and cleared the previous pending PR queue. The active follow-up batch is now PRs #179-#180 (`agents.ts` route-level limiting and `mcp-discover.ts` safe file reads), followed by the remaining dependency/base-image triage and another roadmap sync pass.
+> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, #175, #176, #177, #179, and #180 fixed the reproduced control-plane regressions, strengthened Discover sanitization, hardened the worker file/discovery/worktree surfaces, added an explicit framework limiter on `agents.ts`, and moved MCP discover file reads behind shared safe-path helpers. The remaining backlog is the older `path-security.ts` / `git.ts` findings, legacy missing-rate-limit alerts, loop-controller resource exhaustion, dependency/base-image triage, and the final roadmap sync.
 
 ---
 
@@ -137,11 +137,12 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
 
-Current grouping after PR #177:
+Current grouping after PR #180:
 - Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are delivered on `main` via PR #176.
 - Worktree-manager path alerts are delivered on `main` via PR #177.
-- The active queued PRs are #179 (`agents.ts` framework limiter) and #180 (`mcp-discover.ts` safe file reads).
-- Older `path-security.ts`, BusyBox CVE, and `pm2` dependency findings remain after the current PR batch.
+- Agent-start rate limiting is delivered on `main` via PR #179.
+- MCP discover file-read hardening is delivered on `main` via PR #180.
+- Older `path-security.ts` / `git.ts` findings, legacy missing-rate-limit alerts, loop-controller resource exhaustion, BusyBox CVEs, and the `pm2` advisory remain after this PR batch.
 
 **Step 2: Update roadmap status to match this cycle**
 
