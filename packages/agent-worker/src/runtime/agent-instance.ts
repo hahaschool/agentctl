@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { writeFileSync } from 'node:fs';
-import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
+import { join as pathJoin, resolve as pathResolve } from 'node:path';
 
 import type {
   AgentConfig,
@@ -22,6 +21,7 @@ import { AuditReporter } from '../hooks/audit-reporter.js';
 import { createPostToolUseHook } from '../hooks/post-tool-use.js';
 import { createPreToolUseHook } from '../hooks/pre-tool-use.js';
 import { createStopHook } from '../hooks/stop-hook.js';
+import { safeWriteFileSync, sanitizePath } from '../utils/path-security.js';
 import { EventedAgentOutputStream } from './agent-output-stream.js';
 import type { HandoffController } from './handoff-controller.js';
 import { LiveHandoffOrchestrator } from './live-handoff-orchestrator.js';
@@ -808,15 +808,11 @@ export class AgentInstance extends EventEmitter {
     // Security: validate the config path stays within the project directory
     // to prevent path injection (js/path-injection, js/insecure-temporary-file).
     const projectBase = pathResolve(this.executionProjectPath);
-    const mcpConfigPath = pathResolve(pathJoin(projectBase, '.mcp.json'));
-    if (!mcpConfigPath.startsWith(projectBase + pathSep) && mcpConfigPath !== projectBase) {
-      this.log.warn({ mcpConfigPath, projectBase }, 'MCP config path escapes project — skipping');
-      return;
-    }
+    const mcpConfigPath = sanitizePath(pathJoin(projectBase, '.mcp.json'), projectBase);
     const mcpPayload = { mcpServers };
 
     try {
-      writeFileSync(mcpConfigPath, JSON.stringify(mcpPayload, null, 2), 'utf-8');
+      safeWriteFileSync(mcpConfigPath, projectBase, JSON.stringify(mcpPayload, null, 2));
       this.log.info(
         { mcpConfigPath, serverCount: Object.keys(mcpServers).length },
         'Wrote .mcp.json for agent',
