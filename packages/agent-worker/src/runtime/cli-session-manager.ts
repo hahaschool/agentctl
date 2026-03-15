@@ -14,7 +14,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { normalize, join as pathJoin, resolve as resolvePath } from 'node:path';
+import { join as pathJoin } from 'node:path';
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import {
@@ -209,12 +209,15 @@ export class CliSessionManager extends EventEmitter {
     // Clean up old finished sessions to prevent memory leaks
     this.cleanupStaleSessions();
 
-    const sanitizedCwd = resolvePath(normalize(options.projectPath));
-    // Security: ensure the resolved path is absolute and doesn't contain
-    // traversal components after normalization (js/path-injection).
-    if (!sanitizedCwd.startsWith('/')) {
-      throw new AgentError('INVALID_PATH', 'Project path must resolve to an absolute path', {
-        projectPath: sanitizedCwd,
+    let sanitizedCwd: string;
+    try {
+      // Security: pass untrusted projectPath through a sanitizer directly
+      // before it reaches filesystem/child_process sinks (js/path-injection).
+      sanitizedCwd = sanitizePath(options.projectPath, '/');
+    } catch (error) {
+      throw new AgentError('INVALID_PATH', 'Project path is invalid', {
+        projectPath: options.projectPath,
+        reason: error instanceof Error ? error.message : String(error),
       });
     }
     const deniedSegment = findDeniedPathSegment(sanitizedCwd, DEFAULT_DENIED_PATH_SEGMENTS);
