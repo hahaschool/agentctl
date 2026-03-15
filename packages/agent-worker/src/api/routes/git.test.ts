@@ -9,7 +9,6 @@ import { gitRoutes } from './git.js';
 // ---------------------------------------------------------------------------
 
 vi.mock('node:fs', () => ({
-  lstatSync: vi.fn(),
   realpathSync: vi.fn(),
   statSync: vi.fn(),
 }));
@@ -19,7 +18,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { execFile } from 'node:child_process';
-import { lstatSync, realpathSync, statSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -114,11 +113,11 @@ function mockGitFailure(failPattern: string, errorMsg: string): void {
 }
 
 /**
- * Set up the default lstatSync + statSync mocks for a valid directory.
- * lstatSync returns a non-symlink, statSync returns a directory.
+ * Set up the default realpathSync + statSync mocks for a valid directory.
+ * realpathSync preserves the requested path and statSync returns a directory.
  */
 function mockValidDirectory(): void {
-  vi.mocked(lstatSync).mockReturnValue(makeStat(true));
+  vi.mocked(realpathSync).mockImplementation((path) => path as string);
   vi.mocked(statSync).mockReturnValue(makeStat(true));
 }
 
@@ -381,7 +380,10 @@ describe('Git routes', () => {
     });
 
     it('returns 404 when directory does not exist', async () => {
-      vi.mocked(lstatSync).mockImplementation(() => {
+      vi.mocked(realpathSync).mockImplementation(() => {
+        throw new Error('ENOENT: no such file or directory');
+      });
+      vi.mocked(statSync).mockImplementation(() => {
         throw new Error('ENOENT: no such file or directory');
       });
 
@@ -408,7 +410,7 @@ describe('Git routes', () => {
     });
 
     it('returns 400 when path is not a directory', async () => {
-      vi.mocked(lstatSync).mockReturnValue(makeStat(false));
+      vi.mocked(realpathSync).mockReturnValue('/Users/testuser/somefile.txt');
       vi.mocked(statSync).mockReturnValue(makeStat(false));
 
       const res = await app.inject({
@@ -437,13 +439,6 @@ describe('Git routes', () => {
     });
 
     it('returns 400 when symlink resolves to denied directory', async () => {
-      const symlinkStat = {
-        isDirectory: () => false,
-        isFile: () => false,
-        isSymbolicLink: () => true,
-      } as unknown as ReturnType<typeof statSync>;
-      vi.mocked(lstatSync).mockReturnValue(symlinkStat);
-
       vi.mocked(realpathSync).mockReturnValue('/home/user/.ssh/keys');
 
       const res = await app.inject({

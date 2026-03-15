@@ -14,7 +14,6 @@ import type { Logger } from 'pino';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
-  safeLstatSync,
   safeStatSync,
   sanitizePath,
 } from '../../utils/path-security.js';
@@ -285,17 +284,12 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
       validatedDirPath = sanitizePath(validatedDirPath, ROOT_PATH);
 
       // Validate path exists and is a directory.
-      // Security: use lstatSync first to detect symlinks before following
-      // them (js/path-injection). If the path is a symlink, resolve the
-      // real path and re-validate against the denied path segments.
+      // Security: always resolve the canonical path before the final stat.
+      // This collapses symlinks and re-applies the denied-segment checks
+      // before any filesystem access that follows user input.
       try {
         const fsPath = sanitizePath(validatedDirPath, ROOT_PATH);
-        const lstatResult = safeLstatSync(fsPath, ROOT_PATH);
-        if (lstatResult.isSymbolicLink()) {
-          validatedDirPath = resolveAndRevalidate(fsPath);
-        } else {
-          validatedDirPath = fsPath;
-        }
+        validatedDirPath = resolveAndRevalidate(fsPath);
         const statResult = safeStatSync(validatedDirPath, ROOT_PATH);
         if (!statResult.isDirectory()) {
           return reply.code(400).send({
