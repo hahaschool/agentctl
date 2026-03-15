@@ -8,11 +8,11 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-15): targeted control-plane CI reproduction/fix is complete locally; Discover sanitization and worker path-hardening are being landed in parallel branches; roadmap alignment is tracked in this worktree.
+> Status note (2026-03-15): the first stabilization wave is already on `main`. PRs #167, #169, #170, #171, #173, #174, and #175 fixed the reproduced control-plane regressions, strengthened Discover sanitization, added route/path guards, and cleared the latest pending PR queue. The remaining work in this plan is the next CodeQL batch (discovery/worktree alerts, plus dependency/base-image triage) and keeping roadmap/docs synchronized with what has landed.
 
 ---
 
-### Task 1: Reproduce Current Control-Plane CI Failures
+### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
 
 **Files:**
 - Modify: `packages/control-plane/src/integration/dispatch-lifecycle.test.ts`
@@ -62,7 +62,9 @@ pnpm --filter @agentctl/control-plane vitest run \
 
 Expected: PASS.
 
-### Task 2: Fix Discover Sanitization CodeQL Alerts
+Delivered follow-through: merged on `main` as PR #167, with later route hardening follow-ups in PRs #170-#171 and loop-bound hardening in PR #173.
+
+### Task 2: Fix Discover Sanitization CodeQL Alerts — Completed on `main`
 
 **Files:**
 - Modify: `packages/web/src/views/DiscoverPage.tsx`
@@ -110,7 +112,9 @@ pnpm --filter @agentctl/web vitest run \
 
 Expected: PASS.
 
-### Task 3: Triage Remaining High-Severity Alerts And Update Docs
+Delivered follow-through: merged on `main` as PR #169. The security bug is fixed; remaining Discover work is now UX-level summary selection, not sanitization.
+
+### Task 3: Triage Remaining High-Severity Alerts, Queue Follow-up Branches, And Update Docs
 
 **Files:**
 - Modify: `docs/ROADMAP.md`
@@ -132,6 +136,11 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 ```
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
+
+Current grouping after PR #175:
+- Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are queued in an isolated Codex branch with local verification complete.
+- Worktree-manager path alerts are queued in a second isolated Codex branch with local verification complete.
+- Older `path-security.ts`, `mcp-discover.ts`, `agents.ts`, rate-limiting, BusyBox CVE, and `pm2` dependency findings remain the next triage batch on `main`.
 
 **Step 2: Update roadmap status to match this cycle**
 
