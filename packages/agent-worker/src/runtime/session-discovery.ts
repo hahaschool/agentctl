@@ -215,6 +215,11 @@ export function discoverLocalSessions(
     );
   }
 
+  // ── Codex sessions ──────────────────────────────────────────────────
+  // Codex stores sessions in ~/.codex/archived_sessions/*.jsonl
+  // Each file starts with a session_meta line containing id, cwd, timestamp, git info
+  discoverCodexSessions(projectPathFilter, discovered, logger);
+
   // Deduplicate by sessionId (subdirectory nesting may cause duplicates)
   const seen = new Set<string>();
   const deduped = discovered.filter((s) => {
@@ -555,4 +560,124 @@ export function decodeProjectPath(encoded: string): string {
   }
 
   return path;
+}
+
+// ---------------------------------------------------------------------------
+// Codex session discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * Discover Codex sessions from ~/.codex/archived_sessions/*.jsonl
+ *
+ * Each Codex session file starts with a `session_meta` line containing:
+ * - id (session UUID)
+ * - cwd (project path)
+ * - timestamp
+ * - git.branch, git.commit_hash
+ *
+ * We also count response_item lines with role=user/assistant as message count.
+ */
+function discoverCodexSessions(
+  projectPathFilter: string | undefined,
+  discovered: DiscoveredSession[],
+  logger?: DiscoveryLogger,
+): void {
+  const codexSessionsDir = join(homedir(), '.codex', 'archived_sessions');
+  if (!existsSync(codexSessionsDir)) {
+    return;
+  }
+
+  try {
+    const files = readdirSync(codexSessionsDir).filter((f) => f.endsWith('.jsonl'));
+
+    for (const file of files) {
+      try {
+        const filePath = join(codexSessionsDir, file);
+        const content = readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n').filter((l) => l.trim());
+
+        if (lines.length === 0) continue;
+
+        // First line should be session_meta
+        const firstLine = JSON.parse(lines[0]);
+        if (firstLine.type !== 'session_meta') continue;
+
+        const payload = firstLine.payload;
+        if (!payload?.id || !payload?.cwd) continue;
+
+        const projectPath = payload.cwd;
+
+        // Apply project path filter if provided
+        if (projectPathFilter && !projectPath.startsWith(projectPathFilter)) {
+          continue;
+        }
+
+        // Count messages (response_item with role user or assistant)
+        let messageCount = 0;
+        let lastTimestamp = payload.timestamp || firstLine.timestamp || '';
+        let summary = '';
+
+        for (let i = 1; i < Math.min(lines.length, 200); i++) {
+          try {
+            const line = JSON.parse(lines[i]);
+            if (line.type === 'response_item') {
+              const role = line.payload?.role;
+              if (role === 'user' || role === 'assistant') {
+                messageCount++;
+              }
+              // Use first user message as summary
+              if (role === 'user' && !summary) {
+                const text = line.payload?.content?.[0]?.text;
+                if (text) {
+                  summary = text.length > 120 ? text.substring(0, 117) + '...' : text;
+                }
+              }
+            }
+            if (line.timestamp) {
+              lastTimestamp = line.timestamp;
+            }
+          } catch {
+            // Skip unparseable lines
+          }
+        }
+
+        // For large files, get last timestamp from the end
+        if (lines.length > 200) {
+          for (let i = lines.length - 1; i >= lines.length - 10; i--) {
+            try {
+              const line = JSON.parse(lines[i]);
+              if (line.timestamp) {
+                lastTimestamp = line.timestamp;
+                break;
+              }
+            } catch {
+              // skip
+            }
+          }
+          // Estimate message count for large sessions
+          messageCount = Math.round(messageCount * (lines.length / 200));
+        }
+
+        discovered.push({
+          sessionId: payload.id,
+          projectPath,
+          summary: summary || `Codex session ${payload.id.substring(0, 8)}`,
+          messageCount,
+          lastActivity: lastTimestamp,
+          branch: payload.git?.branch ?? null,
+          runtime: 'codex',
+        });
+      } catch (err) {
+        logger?.debug(
+          { error: err instanceof Error ? err.message : String(err), file },
+          'Skipped unreadable Codex session file',
+        );
+      }
+    }
+  } catch (err) {
+    logger?.debug(
+      { error: err instanceof Error ? err.message : String(err), path: codexSessionsDir },
+      'Failed to read Codex sessions directory',
+    );
+  }
 }
