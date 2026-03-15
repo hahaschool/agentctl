@@ -1169,7 +1169,8 @@ describe('AgentInstance', () => {
 
       const callBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
       expect(callBody.runId).toBe('run-42');
-      expect(callBody.status).toBe('success');
+      // With 0 cost/tokens, resolveCompletionStatus returns 'empty'
+      expect(callBody.status).toBe('empty');
 
       fetchSpy.mockRestore();
       vi.runAllTimers();

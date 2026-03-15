@@ -135,5 +135,7 @@ export function makeJob(
     id: 'job-1',
     name: jobName,
     data,
+    attemptsMade: 0,
+    updateData: async (newData: AgentTaskJobData) => { Object.assign(data, newData); },
   } as unknown as Job<AgentTaskJobData, void, AgentTaskJobName>;
 }
