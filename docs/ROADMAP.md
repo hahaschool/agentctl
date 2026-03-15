@@ -1135,38 +1135,38 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 **P1 — Dashboard visual hierarchy:**
 - [ ] Reduce 8 metric cards to 3 prominent ones (Health, Active Runs, Active Sessions) + inline secondary stats
 - [ ] Remove "Native Import" and "Total Cost" cards (always 0, no value)
-- [ ] Fix "New Session" button text visibility
-- [ ] Fix "Memory Health: Could not load memory stats" — either fix or hide
-- [ ] Sanitize session summaries (raw XML tags like `<local-command-caveat>` showing)
-- [ ] Filter out "Untitled session / 0 msgs" from discovered sessions list
+- [x] Fix "New Session" button text visibility *(PR #158)*
+- [x] Fix "Memory Health: Could not load memory stats" — either fix or hide
+- [x] Sanitize session summaries *(PR #158)* (raw XML tags like `<local-command-caveat>` showing)
+- [x] Filter out "Untitled session *(PR #158)* / 0 msgs" from discovered sessions list
 
 **P2 — Agent Detail page restructure:**
-- [ ] Separate metadata (name/status/model) from actions (start/settings/refresh) into distinct rows
-- [ ] Move prompt input from inline to a Start dialog (triggered by Start button)
-- [ ] Remove or label icon buttons (download/copy) below agent name — add tooltips or remove
-- [ ] Go button color: use `primary` token consistently, not raw blue
+- [x] Separate metadata *(PR #159)* (name/status/model) from actions (start/settings/refresh) into distinct rows
+- [x] Move prompt input from inline *(PR #159)* to a Start dialog (triggered by Start button)
+- [x] Remove or label icon buttons *(PR #159)* (download/copy) below agent name — add tooltips or remove
+- [x] Go button color: *(PR #159)* use `primary` token consistently, not raw blue
 
 **P3 — Run History redesign:**
-- [ ] Merge Run History strip + Run Timeline chart into single timeline view (same data shown twice)
-- [ ] Replace raw red/green with muted semantic colors (`emerald-500/20`, `red-500/20`, `neutral-500/20` for empty)
-- [ ] Add hover tooltips with run details (time, cost, duration, trigger, session link)
-- [ ] Style as terminal-native timeline, not generic recharts BarChart
+- [x] Merge Run History strip *(PR #159)* + Run Timeline chart into single timeline view (same data shown twice)
+- [x] Replace raw red/green *(PR #159)* with muted semantic colors (`emerald-500/20`, `red-500/20`, `neutral-500/20` for empty)
+- [x] Add hover tooltips *(PR #159)* (time, cost, duration, trigger, session link)
+- [x] Style as terminal-native timeline *(PR #159)*, not generic recharts BarChart
 
 **P4 — Agent Cards (list page):**
-- [ ] Remove prompt input + Go from card body — cards show info only
-- [ ] Card actions: "Start" button (opens dialog) + "Settings" link only
-- [ ] Truncate project path with tooltip instead of wrapping
-- [ ] Display: name, status badge, machine, project (truncated), last run, cost
+- [x] Remove prompt input + Go from card *(PR #160)* body — cards show info only
+- [x] Card actions: "Start" button *(PR #160)* (opens dialog) + "Settings" link only
+- [x] Truncate project path *(PR #160)* with tooltip instead of wrapping
+- [x] Display: name, status badge *(PR #160)*, machine, project (truncated), last run, cost
 
 **P5 — Button consistency:**
-- [ ] Establish button hierarchy: primary (filled), secondary (outline), ghost (text only)
+- [x] Establish button hierarchy *(PRs #158-#160)*: primary (filled), secondary (outline), ghost (text only)
 - [ ] Each page has exactly one primary action button
 - [ ] Normalize all pages to use shadcn Button variants (remove raw styled links)
 
 **Sessions page:**
-- [ ] Session IDs as titles (f1220b44-584f...) — should show agent name or summary instead
+- [x] Session IDs as titles *(PR #161)* (f1220b44-584f...) — should show agent name or summary instead
 - [ ] "Duration: 0s" for most sessions — misleading, should show actual elapsed time or hide
-- [ ] Multiple empty sessions (Duration: 0s) from failed starts clutter the list — filter or mark as "empty"
+- [x] Multiple empty sessions *(PR #161)* (Duration: 0s) from failed starts clutter the list — filter or mark as "empty"
 - [ ] Right panel "Select a session to view details" is wasted space — could show summary stats
 
 **Machines page:**
@@ -1211,13 +1211,13 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 
 Persistent two-column layout for agent settings: tabs + forms on left, live config preview on right.
 
-- [ ] Shared `ConfigPreviewFile` / `ConfigPreviewResponse` types
-- [ ] Worker config-preview endpoint returns per-file response with Managed/Merged status
-- [ ] `ConfigFileCard` component with status badges + override highlighting
-- [ ] `ConfigPreviewPanel` component with skeleton/error states
-- [ ] Settings page two-column layout (`max-w-[1400px]`, sticky sidebar)
-- [ ] Remove old `ConfigPreview.tsx` from RuntimeConfigTab
-- [ ] Mobile fallback: collapsible bottom panel
+- [x] Shared `ConfigPreviewFile` *(PR #163)* / `ConfigPreviewResponse` types
+- [x] Worker config-preview endpoint *(PR #163)* returns per-file response with Managed/Merged status
+- [x] `ConfigFileCard` component *(PR #163)* with status badges + override highlighting
+- [x] `ConfigPreviewPanel` component *(PR #163)* with skeleton/error states
+- [x] Settings page two-column layout *(PR #163)* (`max-w-[1400px]`, sticky sidebar)
+- [x] Remove old `ConfigPreview.tsx` *(PR #163)* from RuntimeConfigTab
+- [x] Mobile fallback: *(PR #163)* collapsible bottom panel
 
 ---
 
@@ -1291,8 +1291,8 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
 | **P0** | ~~Agent Run Quality (empty runs + retry tracking)~~ | 16.1 | ✅ Delivered (PR #157) |
-| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | Planned |
-| **P1** | Agent Settings Config Preview Sidebar | 16.4 | Planned |
+| **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered (PRs #158-#162) |
+| **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
 
 ---
 
