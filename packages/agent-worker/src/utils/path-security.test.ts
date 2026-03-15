@@ -5,9 +5,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   safeChmodSync,
+  safeExistsSync,
   safeMkdirSync,
   safeReaddirSync,
+  safeReadFileAtomic,
+  safeReadFileSync,
   safeStatSync,
+  safeWriteFileSync,
   sanitizePath,
 } from './path-security.js';
 
@@ -114,5 +118,50 @@ describe('safeChmodSync', () => {
     expect(() =>
       safeChmodSync('/tmp/path-security/../../etc/passwd', '/tmp/path-security', 0o600),
     ).toThrow(/outside the allowed base path/i);
+  });
+});
+
+describe('safe file wrappers', () => {
+  it('returns resolved path for existing files and null for missing files', () => {
+    const baseDir = makeTempRoot();
+    const existingFile = join(baseDir, 'exists.txt');
+    const missingFile = join(baseDir, 'missing.txt');
+
+    writeFileSync(existingFile, 'ok');
+
+    expect(safeExistsSync(existingFile, baseDir)).toBe(resolve(existingFile));
+    expect(safeExistsSync(missingFile, baseDir)).toBeNull();
+  });
+
+  it('writes and reads file content within the allowed base', () => {
+    const baseDir = makeTempRoot();
+    const filePath = join(baseDir, 'content.txt');
+
+    safeWriteFileSync(filePath, baseDir, 'hello world');
+
+    expect(safeReadFileSync(filePath, baseDir)).toBe('hello world');
+  });
+
+  it('reads content atomically for files within the allowed base', () => {
+    const baseDir = makeTempRoot();
+    const filePath = join(baseDir, 'atomic.txt');
+    writeFileSync(filePath, 'atomic');
+
+    const result = safeReadFileAtomic(filePath, baseDir, 1024);
+
+    expect(result).toEqual({ content: 'atomic', size: 6 });
+  });
+
+  it('rejects path traversal for write/read/atomic wrappers', () => {
+    const baseDir = makeTempRoot();
+    const escapedPath = `${baseDir}/../../etc/passwd`;
+
+    expect(() => safeWriteFileSync(escapedPath, baseDir, 'nope')).toThrow(
+      /outside the allowed base path/i,
+    );
+    expect(() => safeReadFileSync(escapedPath, baseDir)).toThrow(/outside the allowed base path/i);
+    expect(() => safeReadFileAtomic(escapedPath, baseDir, 128)).toThrow(
+      /outside the allowed base path/i,
+    );
   });
 });

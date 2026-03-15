@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
+import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 export const DEFAULT_DENIED_PATH_SEGMENTS = [
   '.ssh',
@@ -64,8 +64,9 @@ function resolveWithinBase(candidatePath: string, allowedBase: string): string {
 // Safe fs wrappers — sanitise + operate atomically so CodeQL sees that
 // user-controlled paths never reach raw fs sinks directly.
 //
-// Each wrapper inlines the path prefix check immediately before the fs
-// operation so static analysis (CodeQL) can trace the sanitisation barrier.
+// Each wrapper resolves the final sink path via sanitizePath() immediately
+// before the fs operation so static analysis can trace a single sanitisation
+// boundary.
 // ---------------------------------------------------------------------------
 
 /**
@@ -73,11 +74,7 @@ function resolveWithinBase(candidatePath: string, allowedBase: string): string {
  * `allowedBase` and returns the resolved path only if it exists.
  */
 export function safeExistsSync(userPath: string, allowedBase: string): string | null {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   return existsSync(safe) ? safe : null;
 }
 
@@ -90,11 +87,7 @@ export function safeReadFileSync(
   allowedBase: string,
   encoding: BufferEncoding = 'utf-8',
 ): string {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   return readFileSync(safe, encoding);
 }
 
@@ -103,11 +96,7 @@ export function safeReadFileSync(
  * Sanitises + validates the path before writing.
  */
 export function safeWriteFileSync(userPath: string, allowedBase: string, data: string): void {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   writeFileSync(safe, data);
 }
 
@@ -120,12 +109,7 @@ export function safeMkdirSync(
   allowedBase: string,
   options?: Parameters<typeof mkdirSync>[1],
 ): string {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  const relativePath = relative(resolvedBase, safe);
-  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   mkdirSync(safe, options ?? { recursive: true });
   return safe;
 }
@@ -139,12 +123,7 @@ export function safeChmodSync(
   allowedBase: string,
   mode: Parameters<typeof chmodSync>[1],
 ): string {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  const relativePath = relative(resolvedBase, safe);
-  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   chmodSync(safe, mode);
   return safe;
 }
@@ -158,11 +137,7 @@ export function safeReadFileAtomic(
   allowedBase: string,
   maxSize: number,
 ): { content: string; size: number } {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  if (safe !== resolvedBase && !safe.startsWith(`${resolvedBase}${sep}`)) {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
 
   const fd = openSync(safe, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
@@ -179,31 +154,16 @@ export function safeReadFileAtomic(
 }
 
 export function safeStatSync(userPath: string, allowedBase: string): Stats {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  const relativePath = relative(resolvedBase, safe);
-  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   return statSync(safe);
 }
 
 export function safeReaddirSync(userPath: string, allowedBase: string): Dirent[] {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  const relativePath = relative(resolvedBase, safe);
-  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   return readdirSync(safe, { withFileTypes: true }) as Dirent[];
 }
 
 export async function safeReaddir(userPath: string, allowedBase: string): Promise<Dirent[]> {
-  const resolvedBase = resolve(normalize(allowedBase));
-  const safe = resolve(normalize(userPath));
-  const relativePath = relative(resolvedBase, safe);
-  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
-    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
-  }
+  const safe = sanitizePath(userPath, allowedBase);
   return readdir(safe, { withFileTypes: true });
 }
