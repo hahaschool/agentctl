@@ -19,13 +19,23 @@ vi.mock('node:child_process', () => ({
 const existsSyncSpy = vi.fn();
 const readdirSyncSpy = vi.fn();
 const readFileSyncSpy = vi.fn();
-const writeFileSyncSpy = vi.fn();
+const openSyncSpy = vi.fn();
+const writeSyncSpy = vi.fn();
+const closeSyncSpy = vi.fn();
 
 vi.mock('node:fs', () => ({
   existsSync: (...args: unknown[]) => existsSyncSpy(...args),
   readdirSync: (...args: unknown[]) => readdirSyncSpy(...args),
   readFileSync: (...args: unknown[]) => readFileSyncSpy(...args),
-  writeFileSync: (...args: unknown[]) => writeFileSyncSpy(...args),
+  openSync: (...args: unknown[]) => openSyncSpy(...args),
+  writeSync: (...args: unknown[]) => writeSyncSpy(...args),
+  closeSync: (...args: unknown[]) => closeSyncSpy(...args),
+  constants: {
+    O_WRONLY: 0x0001,
+    O_CREAT: 0x0200,
+    O_TRUNC: 0x0400,
+    O_NOFOLLOW: 0x20000,
+  },
 }));
 
 // ── Mock node:os for homedir ─────────────────────────────────────────
@@ -106,6 +116,11 @@ describe('CliSessionManager', () => {
     vi.clearAllMocks();
     mockChild = createMockChildProcess();
     spawnSpy.mockReturnValue(mockChild);
+    openSyncSpy.mockReturnValue(101);
+    writeSyncSpy.mockImplementation((_fd, buffer: Buffer | string) =>
+      Buffer.isBuffer(buffer) ? buffer.length : Buffer.byteLength(buffer),
+    );
+    closeSyncSpy.mockImplementation(() => undefined);
     manager = new CliSessionManager({ claudePath: '/usr/local/bin/claude' });
   });
 
@@ -720,11 +735,14 @@ describe('CliSessionManager', () => {
         }),
       );
 
-      expect(writeFileSyncSpy).toHaveBeenCalledOnce();
-      const [path, content] = writeFileSyncSpy.mock.calls[0];
+      expect(openSyncSpy).toHaveBeenCalledOnce();
+      expect(writeSyncSpy).toHaveBeenCalledOnce();
+      expect(closeSyncSpy).toHaveBeenCalledOnce();
+      const [path] = openSyncSpy.mock.calls[0];
       expect(path).toBe('/tmp/project/.mcp.json');
+      const [, content] = writeSyncSpy.mock.calls[0] as [number, Buffer];
 
-      const parsed = JSON.parse(content as string);
+      const parsed = JSON.parse(content.toString('utf-8'));
       expect(parsed).toEqual({
         mcpServers: {
           memory: {
@@ -748,8 +766,10 @@ describe('CliSessionManager', () => {
         }),
       );
 
-      expect(writeFileSyncSpy).toHaveBeenCalledOnce();
-      const parsed = JSON.parse(writeFileSyncSpy.mock.calls[0][1] as string);
+      expect(openSyncSpy).toHaveBeenCalledOnce();
+      expect(writeSyncSpy).toHaveBeenCalledOnce();
+      const [, content] = writeSyncSpy.mock.calls[0] as [number, Buffer];
+      const parsed = JSON.parse(content.toString('utf-8'));
       expect(Object.keys(parsed.mcpServers)).toHaveLength(2);
       expect(parsed.mcpServers.memory.command).toBe('mem-server');
       expect(parsed.mcpServers.search.command).toBe('search-server');
@@ -762,7 +782,7 @@ describe('CliSessionManager', () => {
         }),
       );
 
-      expect(writeFileSyncSpy).not.toHaveBeenCalled();
+      expect(openSyncSpy).not.toHaveBeenCalled();
     });
 
     it('does not write .mcp.json when mcpServers is empty', () => {
@@ -772,18 +792,28 @@ describe('CliSessionManager', () => {
         }),
       );
 
-      expect(writeFileSyncSpy).not.toHaveBeenCalled();
+      expect(openSyncSpy).not.toHaveBeenCalled();
     });
 
     it('does not write .mcp.json when config is undefined', () => {
       manager.startSession(defaultStartOptions({ config: undefined }));
 
-      expect(writeFileSyncSpy).not.toHaveBeenCalled();
+      expect(openSyncSpy).not.toHaveBeenCalled();
     });
 
     it('writes .mcp.json before spawn is called', () => {
       const callOrder: string[] = [];
-      writeFileSyncSpy.mockImplementation(() => callOrder.push('writeFileSync'));
+      openSyncSpy.mockImplementation(() => {
+        callOrder.push('openSync');
+        return 101;
+      });
+      writeSyncSpy.mockImplementation((_fd, buffer: Buffer | string) => {
+        callOrder.push('writeSync');
+        return Buffer.isBuffer(buffer) ? buffer.length : Buffer.byteLength(buffer);
+      });
+      closeSyncSpy.mockImplementation(() => {
+        callOrder.push('closeSync');
+      });
       spawnSpy.mockImplementation((..._args: unknown[]) => {
         callOrder.push('spawn');
         return createMockChildProcess();
@@ -799,7 +829,7 @@ describe('CliSessionManager', () => {
         }),
       );
 
-      expect(callOrder).toEqual(['writeFileSync', 'spawn']);
+      expect(callOrder).toEqual(['openSync', 'writeSync', 'closeSync', 'spawn']);
     });
   });
 
