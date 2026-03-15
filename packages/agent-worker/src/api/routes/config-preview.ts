@@ -1,11 +1,15 @@
-import type { AgentRuntimeConfigOverrides, ManagedRuntimeConfig } from '@agentctl/shared';
+import type {
+  AgentRuntimeConfigOverrides,
+  ConfigPreviewFile,
+  ConfigPreviewResponse,
+  ManagedRuntimeConfig,
+} from '@agentctl/shared';
 import { WorkerError } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
 
 import { ClaudeConfigRenderer } from '../../runtime/config/claude-config-renderer.js';
 import { CodexConfigRenderer } from '../../runtime/config/codex-config-renderer.js';
-import type { RenderedRuntimeConfig } from '../../runtime/config/shared-rendering.js';
 
 // ---------------------------------------------------------------------------
 // Route options
@@ -13,16 +17,6 @@ import type { RenderedRuntimeConfig } from '../../runtime/config/shared-renderin
 
 export type ConfigPreviewRoutesOptions = {
   logger: Logger;
-};
-
-// ---------------------------------------------------------------------------
-// Response type
-// ---------------------------------------------------------------------------
-
-type ConfigPreviewResponse = {
-  ok: true;
-  runtime: string;
-  rendered: RenderedRuntimeConfig;
 };
 
 // ---------------------------------------------------------------------------
@@ -82,13 +76,25 @@ export const configPreviewRoutes: FastifyPluginAsync<ConfigPreviewRoutesOptions>
       runtime === 'claude-code'
         ? new ClaudeConfigRenderer().render(config, overrides)
         : new CodexConfigRenderer().render(config, overrides);
+    const overridden = computeOverriddenFields(overrides);
+    const files: ConfigPreviewFile[] = rendered.files.map((f) => {
+      const hasOverride =
+        overridden.length > 0 && overridden.some((field) => f.content.includes(field));
+      return {
+        path: f.path,
+        scope: f.scope,
+        content: f.content,
+        status: hasOverride ? 'merged' : 'managed',
+        overriddenFields: hasOverride ? overridden : undefined,
+      };
+    });
 
     logger.info({ runtime }, 'Config preview requested');
 
     const response: ConfigPreviewResponse = {
       ok: true,
       runtime,
-      rendered,
+      files,
     };
 
     return reply.send(response);
@@ -117,4 +123,11 @@ function buildDefaultPreviewConfig(): ManagedRuntimeConfig {
     },
     runtimeOverrides: {},
   };
+}
+
+function computeOverriddenFields(overrides?: AgentRuntimeConfigOverrides): string[] {
+  if (!overrides) return [];
+  return Object.entries(overrides)
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key);
 }

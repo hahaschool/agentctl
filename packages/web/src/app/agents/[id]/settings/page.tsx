@@ -1,6 +1,5 @@
 'use client';
 
-import { isManagedRuntime } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Settings } from 'lucide-react';
 import Link from 'next/link';
@@ -8,7 +7,7 @@ import { useParams } from 'next/navigation';
 import type React from 'react';
 import { useState } from 'react';
 
-import { ConfigPreview } from '@/components/agent-settings/ConfigPreview';
+import { ConfigPreviewPanel } from '@/components/agent-settings/ConfigPreviewPanel';
 import { GeneralTab } from '@/components/agent-settings/GeneralTab';
 import { McpServersTab } from '@/components/agent-settings/McpServersTab';
 import { MemoryTab } from '@/components/agent-settings/MemoryTab';
@@ -17,6 +16,7 @@ import { PermissionsToolsTab } from '@/components/agent-settings/PermissionsTool
 import { RuntimeConfigTab } from '@/components/agent-settings/RuntimeConfigTab';
 import { SkillsTab } from '@/components/agent-settings/SkillsTab';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { CollapsibleSection } from '@/components/CollapsibleSection';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -50,11 +50,12 @@ export default function AgentSettingsPage(): React.JSX.Element {
   const machinesList = useQuery(machinesQuery());
 
   const [activeTab, setActiveTab] = useState<TabValue>('general');
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // -- Loading --
   if (agent.isLoading) {
     return (
-      <div className="p-4 md:p-6 max-w-[900px]">
+      <div className="p-4 md:p-6 max-w-[1400px]">
         <Skeleton className="h-4 w-48 mb-4" />
         <Skeleton className="h-8 w-72 mb-6" />
         <Skeleton className="h-9 w-full mb-6" />
@@ -70,7 +71,7 @@ export default function AgentSettingsPage(): React.JSX.Element {
   // -- Error --
   if (agent.error) {
     return (
-      <div className="p-4 md:p-6 max-w-[900px]">
+      <div className="p-4 md:p-6 max-w-[1400px]">
         <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: 'Error' }]} />
         <ErrorBanner
           message={`Failed to load agent: ${agent.error.message}`}
@@ -85,7 +86,7 @@ export default function AgentSettingsPage(): React.JSX.Element {
 
   if (!data) {
     return (
-      <div className="p-4 md:p-6 max-w-[900px]">
+      <div className="p-4 md:p-6 max-w-[1400px]">
         <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: 'Error' }]} />
         <div className="mt-6 text-center text-muted-foreground text-sm py-12">Agent not found.</div>
       </div>
@@ -95,7 +96,7 @@ export default function AgentSettingsPage(): React.JSX.Element {
   const machines = machinesList.data ?? [];
 
   return (
-    <div className="p-4 md:p-6 max-w-[900px] animate-page-enter">
+    <div className="p-4 md:p-6 max-w-[1400px] animate-page-enter">
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
@@ -121,49 +122,64 @@ export default function AgentSettingsPage(): React.JSX.Element {
         </h1>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
-        <TabsList className="w-full flex flex-wrap justify-start mb-6">
-          {TABS.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
+        {/* Left column: tabs and forms */}
+        <div>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
+            <TabsList className="w-full flex flex-wrap justify-start mb-6">
+              {TABS.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-        <TabsContent value="general">
-          <GeneralTab agent={data} machines={machines} />
-        </TabsContent>
+            <TabsContent value="general">
+              <GeneralTab agent={data} machines={machines} />
+            </TabsContent>
 
-        <TabsContent value="model-prompts">
-          <ModelPromptsTab agent={data} />
-        </TabsContent>
+            <TabsContent value="model-prompts">
+              <ModelPromptsTab agent={data} />
+            </TabsContent>
 
-        <TabsContent value="permissions">
-          <PermissionsToolsTab agent={data} />
-        </TabsContent>
+            <TabsContent value="permissions">
+              <PermissionsToolsTab agent={data} />
+            </TabsContent>
 
-        <TabsContent value="mcp">
-          <McpServersTab agent={data} />
-        </TabsContent>
+            <TabsContent value="mcp">
+              <McpServersTab agent={data} />
+            </TabsContent>
 
-        <TabsContent value="skills">
-          <SkillsTab agent={data} />
-        </TabsContent>
+            <TabsContent value="skills">
+              <SkillsTab agent={data} />
+            </TabsContent>
 
-        <TabsContent value="memory">
-          <MemoryTab agent={data} />
-        </TabsContent>
+            <TabsContent value="memory">
+              <MemoryTab agent={data} />
+            </TabsContent>
 
-        <TabsContent value="runtime-config">
-          <div className="space-y-6">
-            <RuntimeConfigTab agent={data} />
-            {data.runtime && isManagedRuntime(data.runtime) && (
-              <ConfigPreview agentId={data.id} runtime={data.runtime} />
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+            <TabsContent value="runtime-config">
+              <RuntimeConfigTab agent={data} />
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Desktop sidebar */}
+        <div className="hidden lg:block sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto">
+          <ConfigPreviewPanel agentId={data.id} runtime={data.runtime} />
+        </div>
+      </div>
+
+      {/* Mobile preview panel */}
+      <div className="lg:hidden mt-6">
+        <CollapsibleSection
+          title="Config Preview"
+          open={previewOpen}
+          onToggle={() => setPreviewOpen((v) => !v)}
+        >
+          <ConfigPreviewPanel agentId={data.id} runtime={data.runtime} />
+        </CollapsibleSection>
+      </div>
     </div>
   );
 }
