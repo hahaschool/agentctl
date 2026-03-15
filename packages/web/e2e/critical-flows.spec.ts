@@ -59,7 +59,7 @@ test.describe('Session CRUD (API)', () => {
   });
 
   test('list sessions includes created session', async ({ request }) => {
-    if (!sessionId) test.skip();
+    expect(sessionId, 'sessionId should be created by the setup test').toBeTruthy();
     const res = await request.get('/api/sessions');
     expect(res.ok()).toBeTruthy();
     const sessions = await res.json();
@@ -68,7 +68,7 @@ test.describe('Session CRUD (API)', () => {
   });
 
   test('get single session by id', async ({ request }) => {
-    if (!sessionId) test.skip();
+    expect(sessionId, 'sessionId should be created by the setup test').toBeTruthy();
     const res = await request.get(`/api/sessions/${sessionId}`);
     expect(res.ok()).toBeTruthy();
     const session = await res.json();
@@ -76,7 +76,7 @@ test.describe('Session CRUD (API)', () => {
   });
 
   test('delete session succeeds', async ({ request }) => {
-    if (!sessionId) test.skip();
+    expect(sessionId, 'sessionId should be created by the setup test').toBeTruthy();
     const res = await request.delete(`/api/sessions/${sessionId}`);
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
@@ -85,7 +85,7 @@ test.describe('Session CRUD (API)', () => {
   });
 
   test('delete already-ended session returns ok', async ({ request }) => {
-    if (!sessionId) test.skip();
+    expect(sessionId, 'sessionId should be created by the setup test').toBeTruthy();
     const res = await request.delete(`/api/sessions/${sessionId}`);
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
@@ -159,7 +159,7 @@ test.describe('Accounts CRUD (API)', () => {
   });
 
   test('list accounts includes created account', async ({ request }) => {
-    if (!accountId) test.skip();
+    expect(accountId, 'accountId should be created by the setup test').toBeTruthy();
     const res = await request.get('/api/settings/accounts');
     expect(res.ok()).toBeTruthy();
     const accounts = await res.json();
@@ -169,7 +169,7 @@ test.describe('Accounts CRUD (API)', () => {
   });
 
   test('test account returns result (expected to fail with invalid key)', async ({ request }) => {
-    if (!accountId) test.skip();
+    expect(accountId, 'accountId should be created by the setup test').toBeTruthy();
     const res = await request.post(`/api/settings/accounts/${accountId}/test`);
     // Should succeed (200) with ok: false (invalid key)
     expect(res.ok()).toBeTruthy();
@@ -179,7 +179,7 @@ test.describe('Accounts CRUD (API)', () => {
   });
 
   test('delete account', async ({ request }) => {
-    if (!accountId) test.skip();
+    expect(accountId, 'accountId should be created by the setup test').toBeTruthy();
     const res = await request.delete(`/api/settings/accounts/${accountId}`);
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
