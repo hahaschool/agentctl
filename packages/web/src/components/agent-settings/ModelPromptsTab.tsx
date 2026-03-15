@@ -1,8 +1,8 @@
 'use client';
 
+import { isManagedRuntime } from '@agentctl/shared';
 import type React from 'react';
 import { useCallback, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Agent, AgentConfig } from '@/lib/api';
-import { isManagedRuntime } from '@agentctl/shared';
-import { RUNTIME_MODEL_OPTIONS, ALL_MODELS } from '@/lib/model-options';
+import { ALL_MODELS, RUNTIME_MODEL_OPTIONS } from '@/lib/model-options';
 import { useUpdateAgent } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -48,7 +47,8 @@ export function ModelPromptsTab({ agent }: ModelPromptsTabProps): React.JSX.Elem
   const toast = useToast();
 
   const cfg = agent.config ?? {};
-  const effectiveRuntime = agent.runtime && isManagedRuntime(agent.runtime) ? agent.runtime : 'claude-code';
+  const effectiveRuntime =
+    agent.runtime && isManagedRuntime(agent.runtime) ? agent.runtime : 'claude-code';
   const MODEL_OPTIONS = RUNTIME_MODEL_OPTIONS[effectiveRuntime] ?? ALL_MODELS;
   const [model, setModel] = useState(cfg.model ?? '');
   const [initialPrompt, setInitialPrompt] = useState(cfg.initialPrompt ?? '');
