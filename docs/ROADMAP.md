@@ -1276,13 +1276,13 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 
 ### 17.1 Remaining CodeQL Alerts — P0
 
-- [ ] `js/http-to-file-access` in `path-security.ts:133` — HTTP-sourced data written to files
-- [ ] `js/insecure-temporary-file` in `path-security.ts:133` — insecure temp file creation
+- [x] `js/http-to-file-access` *(PR #209)* in `path-security.ts:133` — HTTP-sourced data written to files
+- [x] `js/insecure-temporary-file` *(PR #209)* in `path-security.ts:133` — insecure temp file creation
 
 ### 17.2 E2E Test Coverage — P1
 
-- [ ] Enable 17 skipped E2E tests across mcp-skill-discovery, runtime-selector, critical-flows, smoke specs
-- [ ] Write real Playwright implementations for stub tests (currently just comments)
+- [x] Enable 17 skipped *(PR #210)* E2E tests across mcp-skill-discovery, runtime-selector, critical-flows, smoke specs
+- [x] Write real Playwright *(PR #210)* implementations for stub tests (currently just comments)
 
 ---
 
