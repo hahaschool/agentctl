@@ -1422,8 +1422,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [runtime-selector-penetration](superpowers/plans/2026-03-14-runtime-selector-penetration.md) | Delivered (PRs #148, #150) | 15.1 |
 | [codex-config-capabilities-design](superpowers/specs/2026-03-14-codex-config-capabilities-design.md) | Delivered (PR #156) | 15.2 |
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
-| [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Planned | 16.4 |
-| [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Planned | 16.4 |
+| [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Delivered (PR #163) | 16.4 |
+| [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
