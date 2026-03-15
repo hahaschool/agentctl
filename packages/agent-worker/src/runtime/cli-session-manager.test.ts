@@ -175,6 +175,19 @@ describe('CliSessionManager', () => {
       expect(spawnSpy).not.toHaveBeenCalled();
     });
 
+    it('rejects project paths with null bytes before spawning', () => {
+      expect(() =>
+        manager.startSession(
+          defaultStartOptions({
+            projectPath: '/tmp/project\u0000/evil',
+          }),
+        ),
+      ).toThrow(/Project path is invalid/);
+
+      expect(manager.listSessions()).toHaveLength(0);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
     it('includes --resume flag when resumeSessionId is provided', () => {
       manager.startSession(defaultStartOptions({ resumeSessionId: 'prev-session-123' }));
 
