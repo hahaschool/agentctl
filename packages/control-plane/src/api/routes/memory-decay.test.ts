@@ -74,6 +74,17 @@ describe('memoryDecayRoutes', () => {
     });
   });
 
+  it('includes Fastify rate-limit headers on the route', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/memory/decay/run',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-ratelimit-limit']).toBeDefined();
+    expect(res.headers['x-ratelimit-remaining']).toBeDefined();
+  });
+
   it('returns 429 after repeated requests exceed the route limit', async () => {
     let res: Awaited<ReturnType<typeof app.inject>> | undefined;
     for (let attempt = 0; attempt < 31; attempt += 1) {

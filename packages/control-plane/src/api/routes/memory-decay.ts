@@ -5,6 +5,7 @@
 // GET  /api/memory/decay/stats — retrieve strength distribution statistics
 // ---------------------------------------------------------------------------
 
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import type { MemoryDecayOptions } from '../../memory/memory-decay.js';
 import { MemoryDecay } from '../../memory/memory-decay.js';
@@ -27,11 +28,28 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
   opts,
 ) => {
   const decay = new MemoryDecay({ pool: opts.pool, logger: opts.logger });
+  const memoryDecayRateLimitMax = readRateLimitEnv(
+    'MEMORY_DECAY_RATE_LIMIT_MAX',
+    MEMORY_DECAY_RATE_LIMIT.max,
+  );
+  const memoryDecayRateLimitWindowMs = readRateLimitEnv(
+    'MEMORY_DECAY_RATE_LIMIT_WINDOW_MS',
+    60_000,
+  );
+
+  await app.register(rateLimit, {
+    global: false,
+    max: memoryDecayRateLimitMax + 1,
+    timeWindow: memoryDecayRateLimitWindowMs,
+  });
+
+  const frameworkMemoryDecayRateLimit = app.rateLimit({
+    max: memoryDecayRateLimitMax + 1,
+    timeWindow: '1 minute',
+  });
+
   const enforceMemoryDecayRateLimit = createIpRateLimitPreHandler(
-    createInMemoryRateLimiter(
-      readRateLimitEnv('MEMORY_DECAY_RATE_LIMIT_MAX', MEMORY_DECAY_RATE_LIMIT.max),
-      readRateLimitEnv('MEMORY_DECAY_RATE_LIMIT_WINDOW_MS', 60_000),
-    ),
+    createInMemoryRateLimiter(memoryDecayRateLimitMax, memoryDecayRateLimitWindowMs),
     'Too many requests',
   );
 
@@ -42,7 +60,7 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Run Ebbinghaus memory decay cycle',
       },
-      preHandler: enforceMemoryDecayRateLimit,
+      preHandler: [frameworkMemoryDecayRateLimit, enforceMemoryDecayRateLimit],
     },
     async () => {
       const result = await decay.runDecay();
@@ -57,7 +75,7 @@ export const memoryDecayRoutes: FastifyPluginAsync<MemoryDecayRoutesOptions> = a
         tags: ['memory'],
         summary: 'Get memory strength distribution statistics',
       },
-      preHandler: enforceMemoryDecayRateLimit,
+      preHandler: [frameworkMemoryDecayRateLimit, enforceMemoryDecayRateLimit],
     },
     async () => {
       const stats = await decay.getDecayStats();
