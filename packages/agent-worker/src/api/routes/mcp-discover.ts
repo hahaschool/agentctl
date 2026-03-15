@@ -10,6 +10,7 @@ import type { Logger } from 'pino';
 import type { DiscoveredMcpServerWithProvenance } from '../../runtime/discovery/_type-stubs.js';
 import { discoverCodexMcpServers } from '../../runtime/discovery/codex-mcp-discovery.js';
 import { DiscoveryCache } from '../../runtime/discovery/discovery-cache.js';
+import { DEFAULT_DENIED_PATH_SEGMENTS, findDeniedPathSegment } from '../../utils/path-security.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -135,6 +136,35 @@ function objectToDiscoveredServers(
   return results;
 }
 
+function parseProjectPath(
+  raw: unknown,
+): { ok: true; path: string } | { ok: false; message: string } {
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    return { ok: false, message: 'projectPath must be a non-empty string when provided' };
+  }
+
+  const candidate = raw.trim();
+
+  if (!candidate.startsWith('/')) {
+    return { ok: false, message: 'projectPath must be an absolute path' };
+  }
+
+  if (candidate.split('/').includes('..')) {
+    return { ok: false, message: 'projectPath cannot contain path traversal segments' };
+  }
+
+  const resolved = resolve(candidate);
+  const deniedSegment = findDeniedPathSegment(resolved, DEFAULT_DENIED_PATH_SEGMENTS);
+  if (deniedSegment) {
+    return {
+      ok: false,
+      message: `projectPath cannot include denied segment "${deniedSegment}"`,
+    };
+  }
+
+  return { ok: true, path: resolved };
+}
+
 // ---------------------------------------------------------------------------
 // Core discovery functions (exported for use in heartbeat)
 // ---------------------------------------------------------------------------
@@ -166,7 +196,11 @@ export async function discoverGlobalMcpServers(): Promise<DiscoveredMcpServer[]>
 export async function discoverProjectMcpServers(
   projectPath: string,
 ): Promise<DiscoveredMcpServer[]> {
-  const resolvedProject = resolve(projectPath);
+  const parsedProjectPath = parseProjectPath(projectPath);
+  if (!parsedProjectPath.ok) {
+    return [];
+  }
+  const resolvedProject = parsedProjectPath.path;
   const projectPaths = [
     join(resolvedProject, '.mcp.json'),
     join(resolvedProject, '.claude', 'settings.json'),
@@ -227,9 +261,11 @@ async function discoverAllCodexMcpServers(
   projectPath?: string,
 ): Promise<DiscoveredMcpServerWithProvenance[]> {
   const home = homedir();
+  const parsedProjectPath = projectPath === undefined ? undefined : parseProjectPath(projectPath);
+  const safeProjectPath = parsedProjectPath?.ok ? parsedProjectPath.path : undefined;
   const [globalServers, projectServers] = await Promise.all([
     discoverCodexMcpServers(home, 'global'),
-    projectPath ? discoverCodexMcpServers(projectPath, 'project') : Promise.resolve([]),
+    safeProjectPath ? discoverCodexMcpServers(safeProjectPath, 'project') : Promise.resolve([]),
   ]);
 
   // Deduplicate: project-level entries win over global
@@ -267,6 +303,7 @@ export async function mcpDiscoverRoutes(
   app.get<{ Querystring: DiscoverQuerystring }>('/discover', async (request, reply) => {
     const { projectPath } = request.query;
     const runtime = request.query.runtime ?? 'claude-code';
+    let safeProjectPath: string | undefined;
 
     // Validate runtime
     if (!isManagedRuntime(runtime)) {
@@ -276,7 +313,18 @@ export async function mcpDiscoverRoutes(
       });
     }
 
-    const cacheKey = `mcp:${runtime}:${projectPath ?? 'global'}`;
+    if (projectPath !== undefined) {
+      const parsed = parseProjectPath(projectPath);
+      if (!parsed.ok) {
+        return reply.status(400).send({
+          error: 'INVALID_PATH',
+          message: parsed.message,
+        });
+      }
+      safeProjectPath = parsed.path;
+    }
+
+    const cacheKey = `mcp:${runtime}:${safeProjectPath ?? 'global'}`;
 
     // Check cache
     const cached = mcpDiscoverCache.get(cacheKey);
@@ -296,8 +344,8 @@ export async function mcpDiscoverRoutes(
     try {
       const discovered =
         runtime === 'codex'
-          ? await discoverAllCodexMcpServers(projectPath)
-          : await discoverAllMcpServers(projectPath);
+          ? await discoverAllCodexMcpServers(safeProjectPath)
+          : await discoverAllMcpServers(safeProjectPath);
 
       // Store in cache
       mcpDiscoverCache.set(cacheKey, discovered);
@@ -317,14 +365,14 @@ export async function mcpDiscoverRoutes(
       const result: DiscoverResult = { discovered, sources, cached: false };
 
       logger.info(
-        { projectPath, runtime, discoveredCount: discovered.length },
+        { projectPath: safeProjectPath, runtime, discoveredCount: discovered.length },
         'MCP server discovery completed',
       );
 
       return reply.send(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err, projectPath, runtime }, 'MCP discovery failed');
+      logger.error({ err, projectPath: safeProjectPath, runtime }, 'MCP discovery failed');
       return reply.status(500).send({
         error: 'MCP_DISCOVER_FAILED',
         message: `Failed to discover MCP servers: ${message}`,

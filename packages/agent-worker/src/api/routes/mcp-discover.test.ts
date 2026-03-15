@@ -75,6 +75,29 @@ describe('GET /api/mcp/discover', () => {
     expect(body.error).toBeDefined();
   });
 
+  it('returns 400 when projectPath is relative', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/mcp/discover?runtime=codex&projectPath=relative/path',
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = response.json();
+    expect(body.error).toBe('INVALID_PATH');
+  });
+
+  it('returns 400 when projectPath includes denied segments', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/mcp/discover?runtime=codex&projectPath=/Users/test/.ssh/project',
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = response.json();
+    expect(body.error).toBe('INVALID_PATH');
+    expect(body.message).toContain('.ssh');
+  });
+
   it('uses cached results on second call within TTL', async () => {
     mockDiscoverCodex.mockResolvedValue([
       {
