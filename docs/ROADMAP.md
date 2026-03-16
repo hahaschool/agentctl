@@ -1290,6 +1290,19 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 - [x] Enable 17 skipped *(PR #210)* E2E tests across mcp-skill-discovery, runtime-selector, critical-flows, smoke specs
 - [x] Write real Playwright *(PR #210)* implementations for stub tests (currently just comments)
 
+### 17.3 CLAUDE.md Management Strategy — P0
+
+Agent settings should allow users to control how CLAUDE.md is handled at session start:
+
+- [ ] Add "Instructions Strategy" selector to Model & Prompts tab with 3 options:
+  - **"Use project's CLAUDE.md"** (default) — AgentCTL does NOT write CLAUDE.md, Claude CLI reads the project's existing file
+  - **"Managed by AgentCTL"** — AgentCTL writes a managed CLAUDE.md (current behavior, but only when user explicitly opts in)
+  - **"Merge"** — AgentCTL reads the project's CLAUDE.md, appends the agent's System Prompt + custom instructions, writes the merged result
+- [ ] Store strategy in `AgentConfig.instructionsStrategy: 'project' | 'managed' | 'merge'` (default: `'project'`)
+- [ ] Config renderer: implement all 3 strategies in `ClaudeConfigRenderer` and `CodexConfigRenderer`
+- [ ] Config preview: show the effective CLAUDE.md based on selected strategy (project content, managed template, or merged)
+- [ ] Default new agents to `'project'` — never override CLAUDE.md unless user chooses to
+
 ---
 
 ## Active Priorities
