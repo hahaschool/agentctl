@@ -636,6 +636,98 @@ describe('discoverLocalSessions', () => {
     );
   });
 
+  it('prefers the goal task over AGENTS and system-prompt preamble in Codex user content', () => {
+    const codexDir = '/Users/testuser/.codex/archived_sessions';
+
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (p === codexDir) return true;
+      return false;
+    });
+
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) return [];
+      if (p === codexDir) return ['codex-session-structured.jsonl'];
+      return [];
+    }) as typeof readdirSync);
+
+    mockReadFileSync.mockImplementation(((p: string) => {
+      if (p === join(codexDir, 'codex-session-structured.jsonl')) {
+        return [
+          JSON.stringify({
+            type: 'session_meta',
+            timestamp: '2026-03-16T09:00:00Z',
+            payload: {
+              id: 'codex-structured-001',
+              cwd: '/Users/testuser/agentctl',
+              timestamp: '2026-03-16T09:00:00Z',
+              git: { branch: 'agent/codex-53/fix/discover-summary-selection' },
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-03-16T09:01:00Z',
+            payload: {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: [
+                    '# AGENTS.md instructions for /Users/testuser/agentctl',
+                    '',
+                    '# Agent Coordination Protocol',
+                    '',
+                    'All local agents working in this repository should use the shared coordination board before starting or cleaning up parallel work.',
+                    '',
+                    '## Required Workflow',
+                    '1. Run `pnpm coord status` before creating, reusing, or deleting a worktree.',
+                    '2. Run `pnpm coord claim --type worktree --purpose "<what you are doing>"` when you start using a worktree.',
+                    '',
+                    '<environment_context>',
+                    '  <cwd>/Users/testuser/agentctl/.trees/codex-discover-summary-selection</cwd>',
+                    '</environment_context>',
+                    '',
+                    'You are in the agentctl repo on branch agent/codex-53/fix/discover-summary-selection inside worktree /Users/testuser/agentctl/.trees/codex-discover-summary-selection.',
+                    '',
+                    'Goal:',
+                    '- Fix the roadmap backlog item where Discover can still show the AGENTS/system-prompt preamble for Codex sessions instead of the first meaningful user task summary.',
+                    '- Keep the change minimal and robust.',
+                    '',
+                    'Relevant context:',
+                    '- Likely core file: packages/agent-worker/src/runtime/session-discovery.ts',
+                  ].join('\n'),
+                },
+              ],
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-03-16T09:02:00Z',
+            payload: {
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Investigating the summary extractor now.' }],
+            },
+          }),
+        ].join('\n');
+      }
+      return '';
+    }) as typeof readFileSync);
+
+    const sessions = discoverLocalSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'codex-structured-001',
+        messageCount: 2,
+        runtime: 'codex',
+      }),
+    );
+    expect(sessions[0].summary).toContain(
+      'Fix the roadmap backlog item where Discover can still show',
+    );
+    expect(sessions[0].summary).not.toContain('All local agents working');
+  });
+
   it('falls back to the next user message when first codex user content is only prompt metadata', () => {
     const codexDir = '/Users/testuser/.codex/archived_sessions';
 
