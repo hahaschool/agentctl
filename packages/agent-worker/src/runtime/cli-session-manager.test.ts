@@ -833,6 +833,66 @@ describe('CliSessionManager', () => {
     });
   });
 
+  describe('instruction strategy handling', () => {
+    it('does not write CLAUDE.md when instructionsStrategy is project (default)', () => {
+      manager.startSession(
+        defaultStartOptions({
+          config: {
+            systemPrompt: 'Use strict project conventions.',
+          },
+        }),
+      );
+
+      expect(openSyncSpy).not.toHaveBeenCalledWith('/tmp/project/CLAUDE.md', expect.any(Number));
+    });
+
+    it('writes managed CLAUDE.md when instructionsStrategy is managed', () => {
+      manager.startSession(
+        defaultStartOptions({
+          config: {
+            instructionsStrategy: 'managed',
+            systemPrompt: 'Always run tests before edits.',
+          },
+        }),
+      );
+
+      expect(openSyncSpy).toHaveBeenCalledOnce();
+      const [path] = openSyncSpy.mock.calls[0];
+      expect(path).toBe('/tmp/project/CLAUDE.md');
+      const [, content] = writeSyncSpy.mock.calls[0] as [number, Buffer];
+      const rendered = content.toString('utf-8');
+      expect(rendered).toContain('# Claude Code Instructions');
+      expect(rendered).toContain('Always run tests before edits.');
+      expect(rendered).not.toContain('<!-- agentctl:managed-instructions:start -->');
+    });
+
+    it('merges existing CLAUDE.md when instructionsStrategy is merge', () => {
+      existsSyncSpy.mockImplementation(
+        (targetPath: string) => targetPath === '/tmp/project/CLAUDE.md',
+      );
+      readFileSyncSpy.mockReturnValue('# Project CLAUDE\n\nLocal notes go here.');
+
+      manager.startSession(
+        defaultStartOptions({
+          config: {
+            instructionsStrategy: 'merge',
+            systemPrompt: 'Managed instructions.',
+          },
+        }),
+      );
+
+      expect(openSyncSpy).toHaveBeenCalledOnce();
+      const [path] = openSyncSpy.mock.calls[0];
+      expect(path).toBe('/tmp/project/CLAUDE.md');
+      const [, content] = writeSyncSpy.mock.calls[0] as [number, Buffer];
+      const rendered = content.toString('utf-8');
+      expect(rendered).toContain('# Project CLAUDE');
+      expect(rendered).toContain('<!-- agentctl:managed-instructions:start -->');
+      expect(rendered).toContain('Managed instructions.');
+      expect(rendered).toContain('<!-- agentctl:managed-instructions:end -->');
+    });
+  });
+
   // ── Stop session ───────────────────────────────────────────────────
 
   describe('stopSession', () => {

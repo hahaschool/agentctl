@@ -1,5 +1,9 @@
-import type { AgentRuntimeConfigOverrides, ManagedRuntimeConfig } from '@agentctl/shared';
-
+import type {
+  AgentConfig,
+  AgentRuntimeConfigOverrides,
+  ManagedRuntimeConfig,
+} from '@agentctl/shared';
+import { resolveInstructionContent } from './instructions-strategy.js';
 import {
   type RenderedRuntimeConfig,
   renderManagedInstructions,
@@ -10,39 +14,65 @@ export class CodexConfigRenderer {
   render(
     baseConfig: ManagedRuntimeConfig,
     overrides?: AgentRuntimeConfigOverrides,
+    options: {
+      instructionsStrategy?: AgentConfig['instructionsStrategy'];
+      projectPath?: string | null;
+    } = {},
   ): RenderedRuntimeConfig {
     const config = applyCodexOverrides(baseConfig, overrides);
     const configToml = renderConfigToml(config);
+    const managedInstructions = renderManagedInstructions('Codex', config);
+    const workspaceAgentsContent = resolveInstructionContent({
+      instructionsStrategy: options.instructionsStrategy,
+      projectPath: options.projectPath,
+      fileName: 'AGENTS.md',
+      managedContent: managedInstructions,
+    });
+    const homeAgentsContent = resolveInstructionContent({
+      instructionsStrategy: options.instructionsStrategy,
+      projectPath: undefined,
+      fileName: 'AGENTS.md',
+      managedContent: managedInstructions,
+    });
+
+    const files: RenderedRuntimeConfig['files'] = [
+      {
+        scope: 'home',
+        path: '.codex/config.toml',
+        content: configToml,
+      },
+      {
+        scope: 'workspace',
+        path: '.codex/config.toml',
+        content: configToml,
+      },
+    ];
+
+    if (homeAgentsContent) {
+      files.push({
+        scope: 'home',
+        path: '.codex/AGENTS.md',
+        content: homeAgentsContent,
+      });
+    }
+
+    if (workspaceAgentsContent) {
+      files.push({
+        scope: 'workspace',
+        path: 'AGENTS.md',
+        content: workspaceAgentsContent,
+      });
+    }
+
+    files.push({
+      scope: 'workspace',
+      path: '.agents/skills/agentctl-managed-skills.json',
+      content: renderSkillsManifest(config),
+    });
 
     return {
       runtime: 'codex',
-      files: [
-        {
-          scope: 'home',
-          path: '.codex/config.toml',
-          content: configToml,
-        },
-        {
-          scope: 'workspace',
-          path: '.codex/config.toml',
-          content: configToml,
-        },
-        {
-          scope: 'home',
-          path: '.codex/AGENTS.md',
-          content: renderManagedInstructions('Codex', config),
-        },
-        {
-          scope: 'workspace',
-          path: 'AGENTS.md',
-          content: renderManagedInstructions('Codex', config),
-        },
-        {
-          scope: 'workspace',
-          path: '.agents/skills/agentctl-managed-skills.json',
-          content: renderSkillsManifest(config),
-        },
-      ],
+      files,
     };
   }
 }

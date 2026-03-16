@@ -1,5 +1,9 @@
-import type { AgentRuntimeConfigOverrides, ManagedRuntimeConfig } from '@agentctl/shared';
-
+import type {
+  AgentConfig,
+  AgentRuntimeConfigOverrides,
+  ManagedRuntimeConfig,
+} from '@agentctl/shared';
+import { resolveInstructionContent } from './instructions-strategy.js';
 import {
   hasManagedInstructions,
   type RenderedRuntimeConfig,
@@ -22,6 +26,10 @@ export class ClaudeConfigRenderer {
   render(
     baseConfig: ManagedRuntimeConfig,
     overrides?: AgentRuntimeConfigOverrides,
+    options: {
+      instructionsStrategy?: AgentConfig['instructionsStrategy'];
+      projectPath?: string | null;
+    } = {},
   ): RenderedRuntimeConfig {
     const config = applyClaudeOverrides(baseConfig, overrides);
     const settings = {
@@ -78,11 +86,20 @@ export class ClaudeConfigRenderer {
       },
     ];
 
-    if (hasManagedInstructions(config)) {
+    const managedInstructions = hasManagedInstructions(config)
+      ? renderManagedInstructions('Claude Code', config)
+      : '';
+    const claudeMdContent = resolveInstructionContent({
+      instructionsStrategy: options.instructionsStrategy,
+      projectPath: options.projectPath,
+      fileName: 'CLAUDE.md',
+      managedContent: managedInstructions,
+    });
+    if (claudeMdContent) {
       files.push({
         scope: 'workspace',
         path: 'CLAUDE.md',
-        content: renderManagedInstructions('Claude Code', config),
+        content: claudeMdContent,
       });
     }
 

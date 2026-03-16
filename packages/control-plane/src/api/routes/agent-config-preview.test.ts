@@ -99,6 +99,7 @@ describe('Agent config preview routes — /api/agents/:id/config-preview', () =>
 
   it('discovers skills for both runtimes and forwards merged skills into preview config', async () => {
     let forwardedPreviewConfig: Record<string, unknown> | null = null;
+    let forwardedInstructionsStrategy: string | null = null;
 
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
       if (url.includes('/api/mcp/discover?runtime=claude-code')) {
@@ -168,6 +169,7 @@ describe('Agent config preview routes — /api/agents/:id/config-preview', () =>
         forwardedPreviewConfig = JSON.parse(
           parsed.searchParams.get('configJson') ?? '{}',
         ) as Record<string, unknown>;
+        forwardedInstructionsStrategy = parsed.searchParams.get('instructionsStrategy');
         return okJson({ ok: true, runtime: 'claude-code', files: [] });
       }
 
@@ -203,5 +205,44 @@ describe('Agent config preview routes — /api/agents/:id/config-preview', () =>
 
     expect(filesystem?.source).toBe('global');
     expect(customMcp?.source).toBe('custom');
+    expect(forwardedInstructionsStrategy).toBe('project');
+  });
+
+  it('omits instruction files from preview when instructionsStrategy is project', async () => {
+    vi.mocked(mockDbRegistry.getAgent).mockResolvedValue({
+      ...buildAgent(),
+      config: {
+        ...buildAgent().config,
+        instructionsStrategy: 'project',
+      },
+    } as never);
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes('/api/mcp/discover?') || url.includes('/api/skills/discover?')) {
+        return okJson({ discovered: [] });
+      }
+
+      if (url.includes('/api/config/preview?')) {
+        return okJson({
+          ok: true,
+          runtime: 'claude-code',
+          files: [
+            { path: '.mcp.json', scope: 'workspace', content: '{}', status: 'managed' },
+            { path: 'CLAUDE.md', scope: 'workspace', content: 'managed', status: 'managed' },
+          ],
+        });
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/agents/agent-1/config-preview',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { files: Array<{ path: string }> };
+    expect(body.files.map((file) => file.path)).toEqual(['.mcp.json']);
   });
 });

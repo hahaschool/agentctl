@@ -1,4 +1,5 @@
 import type {
+  AgentConfig,
   AgentRuntimeConfigOverrides,
   ConfigPreviewFile,
   ConfigPreviewResponse,
@@ -10,6 +11,7 @@ import type { Logger } from 'pino';
 
 import { ClaudeConfigRenderer } from '../../runtime/config/claude-config-renderer.js';
 import { CodexConfigRenderer } from '../../runtime/config/codex-config-renderer.js';
+import { resolveInstructionStrategy } from '../../runtime/config/instructions-strategy.js';
 
 // ---------------------------------------------------------------------------
 // Route options
@@ -43,6 +45,8 @@ export const configPreviewRoutes: FastifyPluginAsync<ConfigPreviewRoutesOptions>
       runtime?: string;
       configJson?: string;
       overridesJson?: string;
+      instructionsStrategy?: string;
+      projectPath?: string;
     };
   }>('/preview', async (request, reply) => {
     const runtime = request.query.runtime ?? 'claude-code';
@@ -72,10 +76,18 @@ export const configPreviewRoutes: FastifyPluginAsync<ConfigPreviewRoutesOptions>
       }
     }
 
+    const instructionsStrategy = parseInstructionsStrategy(request.query.instructionsStrategy);
+
     const rendered =
       runtime === 'claude-code'
-        ? new ClaudeConfigRenderer().render(config, overrides)
-        : new CodexConfigRenderer().render(config, overrides);
+        ? new ClaudeConfigRenderer().render(config, overrides, {
+            instructionsStrategy,
+            projectPath: request.query.projectPath ?? undefined,
+          })
+        : new CodexConfigRenderer().render(config, overrides, {
+            instructionsStrategy,
+            projectPath: request.query.projectPath ?? undefined,
+          });
     const overridden = computeOverriddenFields(overrides);
     const files: ConfigPreviewFile[] = rendered.files.map((f) => {
       const hasOverride =
@@ -130,4 +142,17 @@ function computeOverriddenFields(overrides?: AgentRuntimeConfigOverrides): strin
   return Object.entries(overrides)
     .filter(([, value]) => value !== undefined)
     .map(([key]) => key);
+}
+
+function parseInstructionsStrategy(value: string | undefined): AgentConfig['instructionsStrategy'] {
+  if (!value || value.length === 0) {
+    return 'project';
+  }
+  if (value === 'project' || value === 'managed' || value === 'merge') {
+    return resolveInstructionStrategy(value);
+  }
+  throw new WorkerError(
+    'INVALID_INSTRUCTIONS_STRATEGY',
+    `instructionsStrategy must be one of: project, managed, merge (received "${value}")`,
+  );
 }

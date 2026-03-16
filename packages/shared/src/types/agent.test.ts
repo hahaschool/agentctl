@@ -94,6 +94,7 @@ describe('AgentConfig', () => {
       model: 'claude-sonnet-4-20250514',
       maxTurns: 25,
       permissionMode: 'acceptEdits',
+      instructionsStrategy: 'project',
       systemPrompt: 'You are a helpful coding assistant.',
     };
 
@@ -102,6 +103,7 @@ describe('AgentConfig', () => {
     expect(config.model).toBe('claude-sonnet-4-20250514');
     expect(config.maxTurns).toBe(25);
     expect(config.permissionMode).toBe('acceptEdits');
+    expect(config.instructionsStrategy).toBe('project');
     expect(config.systemPrompt).toBe('You are a helpful coding assistant.');
   });
 
@@ -113,7 +115,21 @@ describe('AgentConfig', () => {
     expect(config.model).toBeUndefined();
     expect(config.maxTurns).toBeUndefined();
     expect(config.permissionMode).toBeUndefined();
+    expect(config.instructionsStrategy).toBeUndefined();
     expect(config.systemPrompt).toBeUndefined();
+  });
+
+  it('accepts all valid instructionsStrategy values', () => {
+    const strategies: NonNullable<AgentConfig['instructionsStrategy']>[] = [
+      'project',
+      'managed',
+      'merge',
+    ];
+
+    for (const instructionsStrategy of strategies) {
+      const config: AgentConfig = { instructionsStrategy };
+      expect(config.instructionsStrategy).toBe(instructionsStrategy);
+    }
   });
 
   it('accepts all valid permissionMode values', () => {

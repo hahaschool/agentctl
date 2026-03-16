@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { ManagedRuntimeConfig } from '@agentctl/shared';
 import { describe, expect, it } from 'vitest';
 
@@ -38,7 +41,7 @@ function makeConfig(overrides: Partial<ManagedRuntimeConfig> = {}): ManagedRunti
 }
 
 describe('ClaudeConfigRenderer', () => {
-  it('renders Claude settings, MCP, instructions, and skills manifest files', () => {
+  it('renders Claude settings, MCP, and skills manifest files', () => {
     const renderer = new ClaudeConfigRenderer();
     const rendered = renderer.render(makeConfig());
 
@@ -53,13 +56,20 @@ describe('ClaudeConfigRenderer', () => {
       expect.objectContaining({ scope: 'workspace', path: '.mcp.json' }),
     );
     expect(rendered.files).toContainEqual(
-      expect.objectContaining({ scope: 'workspace', path: 'CLAUDE.md' }),
-    );
-    expect(rendered.files).toContainEqual(
       expect.objectContaining({
         scope: 'workspace',
         path: '.claude/skills/agentctl-managed-skills.json',
       }),
+    );
+    expect(rendered.files.find((file) => file.path === 'CLAUDE.md')).toBeUndefined();
+  });
+
+  it('renders managed CLAUDE.md when instructionsStrategy is managed', () => {
+    const renderer = new ClaudeConfigRenderer();
+    const rendered = renderer.render(makeConfig(), undefined, { instructionsStrategy: 'managed' });
+
+    expect(rendered.files).toContainEqual(
+      expect.objectContaining({ scope: 'workspace', path: 'CLAUDE.md' }),
     );
   });
 
@@ -85,10 +95,34 @@ describe('ClaudeConfigRenderer', () => {
           projectTemplate: '',
         },
       }),
+      undefined,
+      { instructionsStrategy: 'managed' },
     );
 
     const claudeMd = rendered.files.find((file) => file.path === 'CLAUDE.md');
     expect(claudeMd).toBeUndefined();
+  });
+
+  it('merges project CLAUDE.md with managed instructions for merge strategy', () => {
+    const renderer = new ClaudeConfigRenderer();
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'agentctl-claude-render-'));
+    const existingContent = '# Project CLAUDE\n\nFollow local conventions first.';
+    writeFileSync(path.join(projectPath, 'CLAUDE.md'), existingContent, 'utf-8');
+
+    try {
+      const rendered = renderer.render(makeConfig(), undefined, {
+        instructionsStrategy: 'merge',
+        projectPath,
+      });
+
+      const claudeMd = rendered.files.find((file) => file.path === 'CLAUDE.md');
+      expect(claudeMd?.content).toContain(existingContent);
+      expect(claudeMd?.content).toContain('<!-- agentctl:managed-instructions:start -->');
+      expect(claudeMd?.content).toContain('# Claude Code Instructions');
+      expect(claudeMd?.content).toContain('<!-- agentctl:managed-instructions:end -->');
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
   });
 
   it('splits MCP payload by source between .claude.json and .mcp.json', () => {

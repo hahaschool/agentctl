@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { ManagedRuntimeConfig } from '@agentctl/shared';
 import { describe, expect, it } from 'vitest';
 
@@ -38,7 +41,7 @@ function makeConfig(overrides: Partial<ManagedRuntimeConfig> = {}): ManagedRunti
 }
 
 describe('CodexConfigRenderer', () => {
-  it('renders Codex config, instructions, and skills manifest files', () => {
+  it('renders Codex config and skills manifest files', () => {
     const renderer = new CodexConfigRenderer();
     const rendered = renderer.render(makeConfig());
 
@@ -50,16 +53,24 @@ describe('CodexConfigRenderer', () => {
       expect.objectContaining({ scope: 'workspace', path: '.codex/config.toml' }),
     );
     expect(rendered.files).toContainEqual(
-      expect.objectContaining({ scope: 'home', path: '.codex/AGENTS.md' }),
-    );
-    expect(rendered.files).toContainEqual(
-      expect.objectContaining({ scope: 'workspace', path: 'AGENTS.md' }),
-    );
-    expect(rendered.files).toContainEqual(
       expect.objectContaining({
         scope: 'workspace',
         path: '.agents/skills/agentctl-managed-skills.json',
       }),
+    );
+    expect(rendered.files.find((file) => file.path === '.codex/AGENTS.md')).toBeUndefined();
+    expect(rendered.files.find((file) => file.path === 'AGENTS.md')).toBeUndefined();
+  });
+
+  it('renders managed AGENTS.md files when instructionsStrategy is managed', () => {
+    const renderer = new CodexConfigRenderer();
+    const rendered = renderer.render(makeConfig(), undefined, { instructionsStrategy: 'managed' });
+
+    expect(rendered.files).toContainEqual(
+      expect.objectContaining({ scope: 'home', path: '.codex/AGENTS.md' }),
+    );
+    expect(rendered.files).toContainEqual(
+      expect.objectContaining({ scope: 'workspace', path: 'AGENTS.md' }),
     );
   });
 
@@ -116,5 +127,27 @@ describe('CodexConfigRenderer', () => {
     );
 
     expect(configFile?.content).toContain(`sandbox_mode = "${sandbox}"`);
+  });
+
+  it('merges project AGENTS.md with managed instructions for merge strategy', () => {
+    const renderer = new CodexConfigRenderer();
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'agentctl-codex-render-'));
+    const existingContent = '# Existing AGENTS\n\nUse project style first.';
+    writeFileSync(path.join(projectPath, 'AGENTS.md'), existingContent, 'utf-8');
+
+    try {
+      const rendered = renderer.render(makeConfig(), undefined, {
+        instructionsStrategy: 'merge',
+        projectPath,
+      });
+
+      const agentsMd = rendered.files.find((file) => file.path === 'AGENTS.md');
+      expect(agentsMd?.content).toContain(existingContent);
+      expect(agentsMd?.content).toContain('<!-- agentctl:managed-instructions:start -->');
+      expect(agentsMd?.content).toContain('# Codex Instructions');
+      expect(agentsMd?.content).toContain('<!-- agentctl:managed-instructions:end -->');
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
   });
 });

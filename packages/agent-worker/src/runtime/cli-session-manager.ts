@@ -21,9 +21,11 @@ import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
   safeExistsSync,
+  safeReadFileSync,
   safeWriteFileSync,
   sanitizePath,
 } from '../utils/path-security.js';
+import { resolveInstructionStrategy } from './config/instructions-strategy.js';
 
 import {
   type DiscoveredSession,
@@ -151,6 +153,8 @@ const GRACEFUL_KILL_TIMEOUT_MS = 5_000; // Wait 5s after SIGTERM before SIGKILL
 const STARTUP_WATCHDOG_MS = Number(process.env.STARTUP_WATCHDOG_MS) || 30_000; // Warn if no output within 30s of start
 const MAX_STDOUT_LINE_BUFFER_CHARS = 64 * 1024;
 const ROOT_PATH = '/';
+const MANAGED_SECTION_START = '<!-- agentctl:managed-instructions:start -->';
+const MANAGED_SECTION_END = '<!-- agentctl:managed-instructions:end -->';
 
 // ---------------------------------------------------------------------------
 // CliSessionManager
@@ -292,6 +296,13 @@ export class CliSessionManager extends EventEmitter {
         'Wrote .mcp.json for session',
       );
     }
+
+    // Optionally write managed CLAUDE.md when explicitly requested by strategy.
+    this.writeSessionInstructionFile({
+      sessionId: id,
+      projectPath: sanitizedCwd,
+      config: options.config,
+    });
 
     // Explicitly pass --mcp-config if .mcp.json exists in project dir.
     // Claude CLI in -p mode may not auto-discover project .mcp.json;
@@ -642,6 +653,51 @@ export class CliSessionManager extends EventEmitter {
     return args;
   }
 
+  private writeSessionInstructionFile(input: {
+    sessionId: string;
+    projectPath: string;
+    config?: AgentConfig;
+  }): void {
+    const strategy = resolveInstructionStrategy(input.config?.instructionsStrategy);
+    const systemPrompt = input.config?.systemPrompt?.trim() ?? '';
+
+    if (strategy === 'project' || systemPrompt.length === 0) {
+      return;
+    }
+
+    const instructionPath = sanitizePath(
+      pathJoin(input.projectPath, 'CLAUDE.md'),
+      input.projectPath,
+    );
+    const managedContent = [
+      '# Claude Code Instructions',
+      '',
+      '> Managed by AgentCTL (session-level).',
+      '',
+      '## Session Guidance',
+      systemPrompt,
+      '',
+    ].join('\n');
+
+    let finalContent = managedContent;
+
+    if (strategy === 'merge') {
+      const existingPath = safeExistsSync(instructionPath, input.projectPath);
+      const existing = existingPath ? safeReadFileSync(existingPath, input.projectPath) : '';
+      finalContent = mergeManagedInstructions(existing, managedContent);
+    }
+
+    safeWriteFileSync(instructionPath, input.projectPath, finalContent);
+    this.logger?.debug(
+      {
+        sessionId: input.sessionId,
+        instructionPath,
+        strategy,
+      },
+      'Wrote CLAUDE.md for session startup',
+    );
+  }
+
   /**
    * Handle raw stdout data from a CLI process.
    * The stream-json format outputs one JSON object per line.
@@ -881,6 +937,29 @@ export class CliSessionManager extends EventEmitter {
     this.emit('session-event', event);
     this.emit(event.type, event);
   }
+}
+
+function mergeManagedInstructions(existingContent: string, managedContent: string): string {
+  const stripped = stripManagedInstructionsSection(existingContent).trimEnd();
+  const managedBlock = [MANAGED_SECTION_START, managedContent.trimEnd(), MANAGED_SECTION_END].join(
+    '\n',
+  );
+
+  return stripped ? `${stripped}\n\n${managedBlock}\n` : `${managedBlock}\n`;
+}
+
+function stripManagedInstructionsSection(content: string): string {
+  const start = content.indexOf(MANAGED_SECTION_START);
+  if (start === -1) {
+    return content;
+  }
+
+  const end = content.indexOf(MANAGED_SECTION_END, start);
+  if (end === -1) {
+    return content.slice(0, start);
+  }
+
+  return `${content.slice(0, start)}${content.slice(end + MANAGED_SECTION_END.length)}`;
 }
 
 // ---------------------------------------------------------------------------

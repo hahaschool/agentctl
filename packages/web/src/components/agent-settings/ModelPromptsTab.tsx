@@ -50,6 +50,9 @@ export function ModelPromptsTab({ agent }: ModelPromptsTabProps): React.JSX.Elem
   const effectiveRuntime =
     agent.runtime && isManagedRuntime(agent.runtime) ? agent.runtime : 'claude-code';
   const MODEL_OPTIONS = RUNTIME_MODEL_OPTIONS[effectiveRuntime] ?? ALL_MODELS;
+  const [instructionsStrategy, setInstructionsStrategy] = useState<
+    NonNullable<AgentConfig['instructionsStrategy']>
+  >(cfg.instructionsStrategy ?? 'project');
   const [model, setModel] = useState(cfg.model ?? '');
   const [initialPrompt, setInitialPrompt] = useState(cfg.initialPrompt ?? '');
   const [defaultPrompt, setDefaultPrompt] = useState(cfg.defaultPrompt ?? '');
@@ -57,6 +60,7 @@ export function ModelPromptsTab({ agent }: ModelPromptsTabProps): React.JSX.Elem
   const [maxTurns, setMaxTurns] = useState(cfg.maxTurns != null ? String(cfg.maxTurns) : '');
 
   const isDirty =
+    instructionsStrategy !== (cfg.instructionsStrategy ?? 'project') ||
     model !== (cfg.model ?? '') ||
     initialPrompt !== (cfg.initialPrompt ?? '') ||
     defaultPrompt !== (cfg.defaultPrompt ?? '') ||
@@ -65,6 +69,13 @@ export function ModelPromptsTab({ agent }: ModelPromptsTabProps): React.JSX.Elem
 
   const handleSave = useCallback(() => {
     const config: AgentConfig = { ...cfg };
+
+    // Model
+    if (instructionsStrategy !== 'project') {
+      config.instructionsStrategy = instructionsStrategy;
+    } else {
+      delete config.instructionsStrategy;
+    }
 
     // Model
     if (model.trim()) {
@@ -111,6 +122,7 @@ export function ModelPromptsTab({ agent }: ModelPromptsTabProps): React.JSX.Elem
   }, [
     agent.id,
     cfg,
+    instructionsStrategy,
     model,
     initialPrompt,
     defaultPrompt,
@@ -122,6 +134,29 @@ export function ModelPromptsTab({ agent }: ModelPromptsTabProps): React.JSX.Elem
 
   return (
     <div className="space-y-6 max-w-xl">
+      <div className="space-y-2">
+        <Label>CLAUDE.md Strategy</Label>
+        <Select
+          value={instructionsStrategy}
+          onValueChange={(value) =>
+            setInstructionsStrategy(value as NonNullable<AgentConfig['instructionsStrategy']>)
+          }
+          disabled={updateAgent.isPending}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="project">Use project CLAUDE.md (recommended)</SelectItem>
+            <SelectItem value="merge">Merge project + agent instructions</SelectItem>
+            <SelectItem value="managed">Fully managed by AgentCTL</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Controls how CLAUDE.md is handled when the agent starts a session.
+        </p>
+      </div>
+
       {/* Model */}
       <div className="space-y-1.5">
         <Label htmlFor="agent-model">Model</Label>
