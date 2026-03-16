@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-15 (stability/security cycle through PR #210 is on `main`; PRs #206-#210 closed the remaining agent-worker regression, `path-security.ts` CodeQL findings, and skipped Playwright coverage, and the latest `main` CI/Security Audit is green with no open CodeQL or Dependabot alerts)
+> Last updated: 2026-03-16 (stability/security cycle through PR #210 remains on `main`; follow-up UI polish PRs #212-#213 are now on `main`, closing the remaining Codex Discover summary-selection bug and misleading zero-duration session copy, and there are still no open CodeQL or Dependabot alerts)
 
 ## Current State
 
@@ -1166,6 +1166,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 Systematic design critique (2026-03-15) identified these issues. Root cause: features stacked without holistic design review, violating CLAUDE.md design principles (Cyber · Geeky · Futuristic).
 
+> Follow-up PRs #212-#213 (2026-03-16) closed the remaining Discover summary-selection bug for Codex sessions and replaced misleading zero-duration session copy with clearer "Running now"/"instant" states.
+
 **P1 — Dashboard visual hierarchy:**
 - [ ] Reduce 8 metric cards to 3 prominent ones (Health, Active Runs, Active Sessions) + inline secondary stats
 - [ ] Remove "Native Import" and "Total Cost" cards (always 0, no value)
@@ -1199,7 +1201,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 
 **Sessions page:**
 - [x] Session IDs as titles *(PR #161)* (f1220b44-584f...) — should show agent name or summary instead
-- [ ] "Duration: 0s" for most sessions — misleading, should show actual elapsed time or hide
+- [x] "Duration: 0s" copy clarified *(PR #213)* — active zero-duration sessions render as "Running now" and completed zero-duration sessions render as "instant"
 - [x] Multiple empty sessions *(PR #161)* (Duration: 0s) from failed starts clutter the list — filter or mark as "empty"
 - [ ] Right panel "Select a session to view details" is wasted space — could show summary stats
 
@@ -1223,7 +1225,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [x] Header "Spaces" deduplicated *(PR #165)*
 
 **Discover page:**
-- [ ] Codex sessions can still show the AGENTS/system-prompt preamble as the summary. Sanitization is fixed, but the remaining bug is summary selection: extract the first meaningful user task instead.
+- [x] Codex session discovery now prefers the first meaningful user task over AGENTS/system-prompt preamble *(PR #212)*
 - [ ] Session IDs truncated to 7 chars — could show more context
 - [ ] "3 already imported" link is nice ✅
 
@@ -1236,7 +1238,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [x] Version in sidebar: auto-update from package.json (version-bump.sh updates `Sidebar.tsx`) *(PR #166)*
 - [x] "New Session" button text visibility fixed *(PR #158)*
 - [x] Dashboard stale "View Agents" and "Runtime Sessions" buttons removed *(direct commit ff9ab3e)*
-- [ ] Discover summary extraction still prefers system prompt text for some Codex sessions
+- [x] Discover summary extraction no longer prefers system prompt text for Codex sessions *(PR #212)*
 
 ### 16.4 Agent Settings Config Preview Sidebar — P1
 
