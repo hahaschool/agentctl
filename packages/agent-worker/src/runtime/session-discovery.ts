@@ -134,14 +134,91 @@ function normalizeSummary(text: string | null | undefined): string {
   return normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
 }
 
-function stripPromptMetadataLines(text: string): string {
+const CODEX_TASK_SECTION_LABELS = new Set(['goal', 'task', 'request', 'objective']);
+const CODEX_SECTION_LINE_RE = /^([A-Za-z][A-Za-z /-]{0,40}):\s*(.*)$/;
+const CODEX_XML_TAG_RE = /^<\/?[\w:-]+(?:\s[^>]*)?>$/;
+const CODEX_TASK_LINE_RE =
+  /^(?:please\s+)?(?:fix|implement|investigate|review|add|build|create|update|write|refactor|ship|make|debug|analyze|audit|execute|continue|handle|repair|resolve|improve|complete|finish|draft|summarize|switch|consolidate|restore|remove|expose|extend|redesign|migrate|replace|turn|decide|determine|support)\b/i;
+const CODEX_PROMPT_PREAMBLE_MARKERS = [
+  'agents.md instructions',
+  'all local agents working in this repository',
+  'you are codex',
+  'you are in the ',
+  '<environment_context>',
+];
+
+function parseCodexSectionLine(line: string): { label: string; remainder: string } | null {
+  const match = line.match(CODEX_SECTION_LINE_RE);
+  if (!match) {
+    return null;
+  }
+  return {
+    label: match[1].trim().toLowerCase(),
+    remainder: match[2].trim(),
+  };
+}
+
+function normalizeCodexSummaryCandidate(line: string): string {
+  return normalizeSummary(
+    line
+      .replace(/^[-*]\s+/, '')
+      .replace(/^\d+\.\s+/, '')
+      .trim(),
+  );
+}
+
+function stripCodexPromptMetadataLines(text: string): string[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .filter((line) => !line.startsWith('#'))
     .filter((line) => !line.toLowerCase().includes('agents.md'))
-    .join('\n');
+    .filter((line) => !CODEX_XML_TAG_RE.test(line))
+    .filter((line) => !line.startsWith('```'));
+}
+
+function extractCodexTaskSectionSummary(lines: string[]): string {
+  for (let index = 0; index < lines.length; index += 1) {
+    const section = parseCodexSectionLine(lines[index]);
+    if (!section || !CODEX_TASK_SECTION_LABELS.has(section.label)) {
+      continue;
+    }
+
+    if (section.remainder) {
+      return normalizeCodexSummaryCandidate(section.remainder);
+    }
+
+    for (let nextIndex = index + 1; nextIndex < lines.length; nextIndex += 1) {
+      const nextSection = parseCodexSectionLine(lines[nextIndex]);
+      if (nextSection && !CODEX_TASK_SECTION_LABELS.has(nextSection.label)) {
+        break;
+      }
+
+      const candidate = normalizeCodexSummaryCandidate(lines[nextIndex]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  return '';
+}
+
+function extractFirstLikelyCodexTaskLine(lines: string[]): string {
+  for (const line of lines) {
+    const candidate = normalizeCodexSummaryCandidate(line);
+    if (candidate && CODEX_TASK_LINE_RE.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
+function hasCodexPromptPreamble(text: string): boolean {
+  const lower = text.toLowerCase();
+  return CODEX_PROMPT_PREAMBLE_MARKERS.some((marker) => lower.includes(marker));
 }
 
 function extractCodexSummaryFromUserContent(content: unknown): string {
@@ -150,7 +227,20 @@ function extractCodexSummaryFromUserContent(content: unknown): string {
     return '';
   }
 
-  const normalized = normalizeSummary(stripPromptMetadataLines(text));
+  const lines = stripCodexPromptMetadataLines(text);
+  if (lines.length === 0) {
+    return '';
+  }
+
+  const normalized =
+    extractCodexTaskSectionSummary(lines) ||
+    extractFirstLikelyCodexTaskLine(lines) ||
+    (hasCodexPromptPreamble(text) ? '' : normalizeCodexSummaryCandidate(lines[0]));
+
+  if (!normalized) {
+    return '';
+  }
+
   if (normalized.length <= 120) {
     return normalized;
   }
