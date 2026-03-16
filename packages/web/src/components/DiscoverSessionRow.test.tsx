@@ -93,7 +93,7 @@ function defaultProps(overrides: Partial<Parameters<typeof DiscoverSessionRow>[0
 // DiscoverSessionRow
 // ===========================================================================
 describe('DiscoverSessionRow', () => {
-  const sessionIdPrefix = 'abcdef12-345';
+  const sessionIdPrefix = makeSession().sessionId.slice(0, 12);
 
   // -------------------------------------------------------------------------
   // Basic rendering
