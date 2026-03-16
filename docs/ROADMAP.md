@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (stability/security cycle follow-ups through PR #227 are now on `main`; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
+> Last updated: 2026-03-16 (stability/security cycle follow-ups through PR #230 are now on `main`; PR #231 execution-history polish is also on `main`; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
 
 ## Current State
 
@@ -941,6 +941,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 > Delivered in PR #144. Full deployment page with tier status, gated promotion, and history.
 
 - [x] Tier status cards (dev-1, dev-2, beta, production) with health indicators *(PR #144)*
+- [x] Dev-tier cards now surface health-derived MEM/UPTIME and prefer PM2 metrics when PM2 data is available *(PR #230)*
 - [x] Gated promotion UI with preflight checks *(PR #144)*
 - [x] Promotion history panel *(PR #144)*
 - [x] SSE-powered progress streaming during promotions *(PR #144)*
@@ -1230,7 +1231,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 
 **Deployment page:**
 - [ ] Best specialized page — tier cards with green border + RUNNING badge work well ✅
-- [ ] Dev 1 shows RUNNING with services but MEM/UPTIME shows "—" — should show real values or "starting"
+- [x] Dev tier cards now show real MEM/UPTIME values from health payloads, with PM2 metrics taking precedence when present *(PR #230)*
 - [ ] "PROMOTION HISTORY: No promotions yet" is lonely — could be collapsed or hidden when empty
 
 **General:**
@@ -1238,6 +1239,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [x] "New Session" button text visibility fixed *(PR #158)*
 - [x] Dashboard stale "View Agents" and "Runtime Sessions" buttons removed *(direct commit ff9ab3e)*
 - [x] Discover summary extraction no longer prefers system prompt text for Codex sessions *(PR #212)*
+- [x] Execution history now shows retry badges, clearer empty-status labels, and collapsible retry groups *(PR #231)*
 
 ### 16.4 Agent Settings Config Preview Sidebar — P1
 
