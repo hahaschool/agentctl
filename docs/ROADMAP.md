@@ -1328,15 +1328,15 @@ Critical gap: when agent permission mode is NOT bypass, CLI outputs `permission_
 - [ ] Worker writes approval/denial to CLI stdin (stream-json input)
 - [ ] Timeout handling: auto-deny after configurable timeout (default 5 min)
 - [ ] Mobile (iOS): push notification for pending approvals
-- [ ] Fix: `bypassPermissions` now correctly uses `--dangerously-skip-permissions` *(direct commit 7c66ec2)*
+- [x] Fix: `bypassPermissions` now correctly uses `--dangerously-skip-permissions` *(direct commit 7c66ec2)*
 
 ### 17.5 Agent Run State Machine Visibility — P1
 
 Agent run lifecycle has hidden intermediate states users can't see:
 
 - [ ] Show dispatch states in UI: queued → dispatching → worker_contacted → cli_spawning → mcp_loading → running → completed
-- [ ] Retry runs visually grouped under original run (collapsible)
-- [ ] Empty runs shown with gray badge + "(no output)" label
+- [x] Retry runs visually grouped under original run (collapsible) *(PR #231)*
+- [x] Empty runs shown with gray badge + clearer empty-status labeling *(PR #231)*
 - [ ] Run timeline shows state transitions with timestamps
 
 ---
