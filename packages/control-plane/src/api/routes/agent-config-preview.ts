@@ -164,7 +164,10 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
         command: server.config.command,
         args: server.config.args ?? [],
         env: server.config.env ?? {},
-        source: server.source,
+        // Mark all as 'project' so they go to .mcp.json (workspace scope).
+        // The CLI session manager writes ALL agent MCP servers to the project's .mcp.json,
+        // not to the home-level .claude.json. The preview should reflect this.
+        source: 'project' as const,
       }));
 
     for (const custom of mcpOverride?.custom ?? []) {
