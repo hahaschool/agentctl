@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (stability/security cycle through PR #210 remains on `main`; follow-up UI polish PRs #212-#213 are now on `main`, closing the remaining Codex Discover summary-selection bug and misleading zero-duration session copy, and there are still no open CodeQL or Dependabot alerts)
+> Last updated: 2026-03-16 (stability/security cycle through PR #210 remains on `main`; follow-up UI polish PRs #212-#213 plus CLAUDE.md management strategy PR #215 are now on `main`, and there are still no open CodeQL or Dependabot alerts)
 
 ## Current State
 
@@ -1294,16 +1294,18 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 
 ### 17.3 CLAUDE.md Management Strategy — P0
 
+> Delivered in PR #215.
+
 Agent settings should allow users to control how CLAUDE.md is handled at session start:
 
-- [ ] Add "Instructions Strategy" selector to Model & Prompts tab with 3 options:
+- [x] Add "Instructions Strategy" selector to Model & Prompts tab with 3 options *(PR #215)*:
   - **"Use project's CLAUDE.md"** (default) — AgentCTL does NOT write CLAUDE.md, Claude CLI reads the project's existing file
   - **"Managed by AgentCTL"** — AgentCTL writes a managed CLAUDE.md (current behavior, but only when user explicitly opts in)
   - **"Merge"** — AgentCTL reads the project's CLAUDE.md, appends the agent's System Prompt + custom instructions, writes the merged result
-- [ ] Store strategy in `AgentConfig.instructionsStrategy: 'project' | 'managed' | 'merge'` (default: `'project'`)
-- [ ] Config renderer: implement all 3 strategies in `ClaudeConfigRenderer` and `CodexConfigRenderer`
-- [ ] Config preview: show the effective CLAUDE.md based on selected strategy (project content, managed template, or merged)
-- [ ] Default new agents to `'project'` — never override CLAUDE.md unless user chooses to
+- [x] Store strategy in `AgentConfig.instructionsStrategy: 'project' | 'managed' | 'merge'` *(PR #215)* with `'project'` as the default
+- [x] Config renderer: implement all 3 strategies in `ClaudeConfigRenderer` and `CodexConfigRenderer` *(PR #215)*
+- [x] Config preview: show the effective CLAUDE.md based on selected strategy (project content, managed template, or merged) *(PR #215)*
+- [x] Default new agents to `'project'` — never override CLAUDE.md unless user chooses to *(PR #215)*
 
 ---
 
@@ -1312,6 +1314,7 @@ Agent settings should allow users to control how CLAUDE.md is handled at session
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
+| **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, renderer support, and config preview landed (PR #215) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
 | **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — 8 pages + integration points + MCP tools (PRs #47,#50,#52-#59); backend routes for consolidation, reports, and decay all landed |
 | **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all ARIA items complete (PRs #51,#54,#59) |
