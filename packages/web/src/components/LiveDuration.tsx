@@ -18,13 +18,17 @@ type Props = {
  */
 export function LiveDuration({ startedAt, endedAt, className }: Props): React.JSX.Element {
   const [, setTick] = useState(0);
+  const isActive = !endedAt;
 
   useEffect(() => {
     // Only tick when there's no endedAt (session is still active)
-    if (endedAt) return;
+    if (!isActive) return;
     const timer = setInterval(() => setTick((t) => t + 1), 1_000);
     return () => clearInterval(timer);
-  }, [endedAt]);
+  }, [isActive]);
 
-  return <span className={className}>{formatDuration(startedAt, endedAt)}</span>;
+  const formatted = formatDuration(startedAt, endedAt);
+  const text = formatted === '0s' ? (isActive ? 'Running now' : 'instant') : formatted;
+
+  return <span className={className}>{text}</span>;
 }
