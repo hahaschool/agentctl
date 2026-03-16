@@ -16,7 +16,15 @@ vi.mock('../lib/format-utils', () => ({
 }));
 
 vi.mock('./CopyableText', () => ({
-  CopyableText: ({ value }: { value: string }) => <span data-testid="copyable-text">{value}</span>,
+  CopyableText: ({
+    value,
+    maxDisplay,
+    label,
+  }: {
+    value: string;
+    maxDisplay?: number;
+    label?: string;
+  }) => <span data-testid="copyable-text">{label ?? value.slice(0, maxDisplay ?? 8)}</span>,
 }));
 
 vi.mock('./HighlightText', () => ({
@@ -85,6 +93,8 @@ function defaultProps(overrides: Partial<Parameters<typeof DiscoverSessionRow>[0
 // DiscoverSessionRow
 // ===========================================================================
 describe('DiscoverSessionRow', () => {
+  const sessionIdPrefix = 'abcdef12-345';
+
   // -------------------------------------------------------------------------
   // Basic rendering
   // -------------------------------------------------------------------------
@@ -155,10 +165,10 @@ describe('DiscoverSessionRow', () => {
     expect(timeAgo.textContent).toBe('2026-03-07T12:00:00Z');
   });
 
-  it('renders CopyableText with sessionId', () => {
+  it('renders CopyableText with a longer desktop session id prefix', () => {
     render(<DiscoverSessionRow {...defaultProps()} />);
     const copyable = screen.getByTestId('copyable-text');
-    expect(copyable.textContent).toBe('abcdef12-3456-7890-abcd-ef1234567890');
+    expect(copyable.textContent).toBe(sessionIdPrefix);
   });
 
   it('renders a recency dot', () => {
@@ -258,9 +268,11 @@ describe('DiscoverSessionRow', () => {
     expect(onToggleCheck).toHaveBeenCalledWith('abcdef12-3456-7890-abcd-ef1234567890');
   });
 
-  it('checkbox has correct aria-label', () => {
+  it('uses the same longer session id prefix in checkbox, import, and resume aria-labels', () => {
     render(<DiscoverSessionRow {...defaultProps()} />);
-    expect(screen.getByLabelText('Select session abcdef12')).toBeDefined();
+    expect(screen.getByLabelText(`Select session ${sessionIdPrefix}`)).toBeDefined();
+    expect(screen.getByLabelText(`Import session ${sessionIdPrefix}`)).toBeDefined();
+    expect(screen.getByLabelText(`Resume session ${sessionIdPrefix}`)).toBeDefined();
   });
 
   // -------------------------------------------------------------------------
