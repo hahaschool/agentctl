@@ -31,6 +31,7 @@ const MOCK_TIER_CONFIGS: readonly TierConfig[] = [
 
 const mockRunPreflight = vi.fn();
 const mockPromote = vi.fn();
+const mockPm2List = vi.fn().mockResolvedValue([]);
 
 // ── Module mocks (hoisted) ───────────────────────────────────────
 
@@ -41,7 +42,7 @@ vi.mock('../../utils/tier-config.js', () => ({
 }));
 
 vi.mock('../../utils/pm2-client.js', () => ({
-  pm2List: vi.fn().mockResolvedValue([]),
+  pm2List: mockPm2List,
   pm2Restart: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -143,6 +144,21 @@ async function buildApp(): Promise<FastifyInstance> {
   return app;
 }
 
+function mockJsonResponse(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response;
+}
+
+function mockHeadResponse(status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+  } as Response;
+}
+
 // ── Tests ────────────────────────────────────────────────────────
 
 describe('deploymentRoutes', () => {
@@ -201,6 +217,154 @@ describe('deploymentRoutes', () => {
       expect(body.tiers).toHaveLength(2);
       expect(body.tiers[0].status).toBe('running');
       expect(body.tiers[0].services.every((s: { healthy: boolean }) => s.healthy)).toBe(true);
+    });
+
+    it('preserves dev cp and worker metrics from health payloads without PM2', async () => {
+      mockFetch.mockImplementation(async (input, init) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+        if (init?.method === 'HEAD') {
+          return mockHeadResponse();
+        }
+
+        if (url === 'http://localhost:8081/health') {
+          return mockJsonResponse({
+            status: 'ok',
+            uptime: 123,
+            memoryUsage: { rss: 512 * 1024 * 1024 },
+          });
+        }
+
+        if (url === 'http://localhost:9001/health') {
+          return mockJsonResponse({
+            status: 'ok',
+            uptime: 789,
+            memoryUsage: { rss: 256 * 1024 * 1024 },
+          });
+        }
+
+        return mockJsonResponse({ status: 'ok' });
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/tiers',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      const devTier = body.tiers.find((tier: { name: string }) => tier.name === 'dev-1');
+      expect(devTier.status).toBe('running');
+
+      const cpService = devTier.services.find((svc: { name: string }) => svc.name === 'cp');
+      const workerService = devTier.services.find((svc: { name: string }) => svc.name === 'worker');
+      const webService = devTier.services.find((svc: { name: string }) => svc.name === 'web');
+
+      expect(cpService).toMatchObject({
+        healthy: true,
+        memoryMb: 512,
+        uptimeSeconds: 123,
+      });
+      expect(workerService).toMatchObject({
+        healthy: true,
+        memoryMb: 256,
+        uptimeSeconds: 789,
+      });
+      expect(typeof cpService.memoryMb).toBe('number');
+      expect(typeof cpService.uptimeSeconds).toBe('number');
+      expect(typeof workerService.memoryMb).toBe('number');
+      expect(typeof workerService.uptimeSeconds).toBe('number');
+      expect(webService.memoryMb).toBeUndefined();
+      expect(webService.uptimeSeconds).toBeUndefined();
+    });
+
+    it('prefers PM2 metrics over health payload metrics when available for dev tiers', async () => {
+      mockPm2List.mockResolvedValueOnce([
+        {
+          name: 'agentctl-cp-dev1',
+          pid: 101,
+          status: 'online',
+          memoryMb: 999.99,
+          uptimeMs: 12_000,
+          restarts: 2,
+        },
+        {
+          name: 'agentctl-worker-dev1',
+          pid: 202,
+          status: 'online',
+          memoryMb: 888.88,
+          uptimeMs: 34_000,
+          restarts: 1,
+        },
+        {
+          name: 'agentctl-web-dev1',
+          pid: 303,
+          status: 'online',
+          memoryMb: 777.77,
+          uptimeMs: 56_000,
+          restarts: 0,
+        },
+      ]);
+
+      mockFetch.mockImplementation(async (input, init) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+        if (init?.method === 'HEAD') {
+          return mockHeadResponse();
+        }
+
+        if (url === 'http://localhost:8081/health') {
+          return mockJsonResponse({
+            status: 'ok',
+            uptime: 10,
+            memoryUsage: { rss: 20 * 1024 * 1024 },
+          });
+        }
+
+        if (url === 'http://localhost:9001/health') {
+          return mockJsonResponse({
+            status: 'ok',
+            uptime: 30,
+            memoryUsage: { rss: 40 * 1024 * 1024 },
+          });
+        }
+
+        return mockJsonResponse({ status: 'ok' });
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/deployment/tiers',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      const devTier = body.tiers.find((tier: { name: string }) => tier.name === 'dev-1');
+
+      const cpService = devTier.services.find((svc: { name: string }) => svc.name === 'cp');
+      const workerService = devTier.services.find((svc: { name: string }) => svc.name === 'worker');
+      const webService = devTier.services.find((svc: { name: string }) => svc.name === 'web');
+
+      expect(cpService).toMatchObject({
+        memoryMb: 999.99,
+        uptimeSeconds: 12,
+        restarts: 2,
+        pid: 101,
+      });
+      expect(workerService).toMatchObject({
+        memoryMb: 888.88,
+        uptimeSeconds: 34,
+        restarts: 1,
+        pid: 202,
+      });
+      expect(webService).toMatchObject({
+        memoryMb: 777.77,
+        uptimeSeconds: 56,
+        restarts: 0,
+        pid: 303,
+      });
     });
   });
 

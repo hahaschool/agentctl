@@ -7,7 +7,7 @@ import type { Logger } from 'pino';
 
 import type { Database } from '../../db/index.js';
 import { promotionHistory } from '../../db/schema-deployment.js';
-import { pm2List } from '../../utils/pm2-client.js';
+import { type Pm2ProcessInfo, pm2List } from '../../utils/pm2-client.js';
 import { createPromotionMutex, PromotionRunner } from '../../utils/promotion-runner.js';
 import { isValidSourceTier, loadTierConfigs } from '../../utils/tier-config.js';
 
@@ -54,6 +54,48 @@ async function probeHealth(
   }
 }
 
+function getNumericValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function toMegabytes(bytes: number): number {
+  return Math.round((bytes / 1024 / 1024) * 100) / 100;
+}
+
+function extractHealthMetrics(
+  data?: Record<string, unknown>,
+): Pick<ServiceHealthResult, 'memoryMb' | 'uptimeSeconds'> {
+  const uptime = getNumericValue(data?.uptime);
+  const memoryUsage = data?.memoryUsage;
+  const rss =
+    memoryUsage && typeof memoryUsage === 'object'
+      ? getNumericValue((memoryUsage as Record<string, unknown>).rss)
+      : undefined;
+
+  return {
+    ...(rss === undefined ? {} : { memoryMb: toMegabytes(rss) }),
+    ...(uptime === undefined ? {} : { uptimeSeconds: Math.round(uptime) }),
+  };
+}
+
+function normalizeProcessToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function findPm2ProcessMatch(
+  processes: readonly Pm2ProcessInfo[],
+  tierName: string,
+  serviceName: ServiceHealthResult['name'],
+): Pm2ProcessInfo | undefined {
+  const tierToken = normalizeProcessToken(tierName);
+  const serviceToken = normalizeProcessToken(serviceName);
+
+  return processes.find((process) => {
+    const processName = normalizeProcessToken(process.name);
+    return processName.includes(tierToken) && processName.includes(serviceToken);
+  });
+}
+
 async function probeTierServices(tier: TierConfig): Promise<readonly ServiceHealthResult[]> {
   const [cpResult, workerResult, webResult] = await Promise.all([
     probeHealth(`http://localhost:${tier.cpPort}/health`),
@@ -62,8 +104,18 @@ async function probeTierServices(tier: TierConfig): Promise<readonly ServiceHeal
   ]);
 
   return [
-    { name: 'cp' as const, port: tier.cpPort, healthy: cpResult.healthy },
-    { name: 'worker' as const, port: tier.workerPort, healthy: workerResult.healthy },
+    {
+      name: 'cp' as const,
+      port: tier.cpPort,
+      healthy: cpResult.healthy,
+      ...(cpResult.healthy ? extractHealthMetrics(cpResult.data) : {}),
+    },
+    {
+      name: 'worker' as const,
+      port: tier.workerPort,
+      healthy: workerResult.healthy,
+      ...(workerResult.healthy ? extractHealthMetrics(workerResult.data) : {}),
+    },
     { name: 'web' as const, port: tier.webPort, healthy: webResult.healthy },
   ];
 }
@@ -97,39 +149,25 @@ export const deploymentRoutes: FastifyPluginAsync<DeploymentRoutesOptions> = asy
   app.get('/tiers', async (_request, reply) => {
     try {
       const tierConfigs = loadTierConfigs(repoRoot);
+      const pm2Processes = await pm2List(logger);
 
       const tiers = await Promise.all(
         tierConfigs.map(async (tier) => {
           const services = await probeTierServices(tier);
-          const enrichedServices = [...services];
-
-          // For beta tier, enrich with PM2 process info
-          if (tier.name === 'beta') {
-            try {
-              const pm2Processes = await pm2List(logger);
-              for (let i = 0; i < enrichedServices.length; i++) {
-                const svc = enrichedServices[i];
-                const pm2Match = pm2Processes.find(
-                  (p) =>
-                    p.name.includes(`beta`) && p.name.includes(svc.name === 'cp' ? 'cp' : svc.name),
-                );
-                if (pm2Match) {
-                  enrichedServices[i] = {
-                    ...svc,
-                    memoryMb: pm2Match.memoryMb,
-                    uptimeSeconds: Math.round(pm2Match.uptimeMs / 1000),
-                    restarts: pm2Match.restarts,
-                    pid: pm2Match.pid ?? undefined,
-                  };
-                }
-              }
-            } catch (err) {
-              logger.warn(
-                { error: err instanceof Error ? err.message : String(err) },
-                'Failed to fetch PM2 info for beta tier',
-              );
+          const enrichedServices = services.map((svc) => {
+            const pm2Match = findPm2ProcessMatch(pm2Processes, tier.name, svc.name);
+            if (!pm2Match) {
+              return svc;
             }
-          }
+
+            return {
+              ...svc,
+              memoryMb: pm2Match.memoryMb,
+              uptimeSeconds: Math.round(pm2Match.uptimeMs / 1000),
+              restarts: pm2Match.restarts,
+              pid: pm2Match.pid ?? undefined,
+            };
+          });
 
           return {
             name: tier.name,

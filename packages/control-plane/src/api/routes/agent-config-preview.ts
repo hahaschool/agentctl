@@ -26,6 +26,15 @@ type DiscoverSkillResponse = {
   discovered?: DiscoveredSkill[];
 };
 
+type PreviewMcpServer = {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  source: DiscoveredMcpServer['source'];
+};
+
 const fetchDiscoveredMcp = async (
   workerUrl: string,
   runtime: 'claude-code' | 'codex',
@@ -156,7 +165,7 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
     // Resolve effective MCP: discovery defaults - excluded + custom
     const mcpOverride = agent.config?.mcpOverride;
     const excludedSet = new Set(mcpOverride?.excluded ?? []);
-    const effectiveMcpServers = discoveredMcp
+    const effectiveMcpServers: PreviewMcpServer[] = discoveredMcp
       .filter((server) => !excludedSet.has(server.name))
       .map((server) => ({
         id: server.name,
