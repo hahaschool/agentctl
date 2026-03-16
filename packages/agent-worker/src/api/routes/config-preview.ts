@@ -1,6 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
 import type {
   AgentConfig,
   AgentRuntimeConfigOverrides,
@@ -15,6 +12,7 @@ import type { Logger } from 'pino';
 import { ClaudeConfigRenderer } from '../../runtime/config/claude-config-renderer.js';
 import { CodexConfigRenderer } from '../../runtime/config/codex-config-renderer.js';
 import { resolveInstructionStrategy } from '../../runtime/config/instructions-strategy.js';
+import { safeExistsSync, safeReadFile } from '../../utils/path-security.js';
 
 // ---------------------------------------------------------------------------
 // Route options
@@ -206,10 +204,9 @@ async function readProjectInstructionFile({
     return null;
   }
 
-  const instructionPath = path.resolve(projectPath, fileName);
-
   try {
-    return await readFile(instructionPath, 'utf-8');
+    const instructionPath = safeExistsSync(`${projectPath}/${fileName}`, projectPath);
+    return instructionPath ? await safeReadFile(instructionPath, projectPath) : null;
   } catch {
     return null;
   }
