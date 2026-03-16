@@ -1312,6 +1312,31 @@ Agent settings should allow users to control how CLAUDE.md is handled at session
 - [x] Default new agents to `'project'` — never override CLAUDE.md unless user chooses to *(PR #215)*
 - [x] Web regression coverage for instructions-strategy saves + fallback behavior *(PR #220)*
 
+### 17.4 Agent Permission Approval System — P0
+
+Critical gap: when agent permission mode is NOT bypass, CLI outputs `permission_request` events but AgentCTL has no way for users to approve/deny. Agent hangs until timeout → killed.
+
+**Architecture**: Use existing notification center (NotificationBell) + WebSocket infrastructure.
+
+- [ ] Worker captures `permission_request` events from CLI stdout stream
+- [ ] Worker forwards permission requests via SSE to control plane
+- [ ] CP stores pending approvals in DB + pushes to frontend via WebSocket
+- [ ] Notification center shows pending approval with: agent name, tool name, command preview, approve/deny buttons
+- [ ] User clicks Approve/Deny → frontend sends decision via WebSocket → CP → Worker
+- [ ] Worker writes approval/denial to CLI stdin (stream-json input)
+- [ ] Timeout handling: auto-deny after configurable timeout (default 5 min)
+- [ ] Mobile (iOS): push notification for pending approvals
+- [ ] Fix: `bypassPermissions` now correctly uses `--dangerously-skip-permissions` *(direct commit 7c66ec2)*
+
+### 17.5 Agent Run State Machine Visibility — P1
+
+Agent run lifecycle has hidden intermediate states users can't see:
+
+- [ ] Show dispatch states in UI: queued → dispatching → worker_contacted → cli_spawning → mcp_loading → running → completed
+- [ ] Retry runs visually grouped under original run (collapsible)
+- [ ] Empty runs shown with gray badge + "(no output)" label
+- [ ] Run timeline shows state transitions with timestamps
+
 ---
 
 ## Active Priorities
