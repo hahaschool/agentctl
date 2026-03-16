@@ -9,6 +9,8 @@ import { HighlightText } from './HighlightText';
 import { LiveTimeAgo } from './LiveTimeAgo';
 import { SimpleTooltip } from './SimpleTooltip';
 
+const SESSION_ID_DISPLAY_CHARS = 12;
+
 /** Compute a human-readable recency label directly from a date string. */
 function recencyTitle(dateStr: string): string {
   if (!dateStr) return 'Older';
@@ -76,6 +78,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
   const dotClass = recencyColorClass(s.lastActivity);
   const sanitizedSummary = sanitizeSummary(s.summary);
   const displaySummary = sanitizedSummary || 'Untitled';
+  const sessionIdLabel = s.sessionId.slice(0, SESSION_ID_DISPLAY_CHARS);
 
   return (
     <div key={`${s.machineId}-${s.sessionId}`}>
@@ -96,7 +99,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
           disabled={isImported}
           onChange={() => onToggleCheck(s.sessionId)}
           onClick={(e) => e.stopPropagation()}
-          aria-label={`Select session ${s.sessionId.slice(0, 8)}`}
+          aria-label={`Select session ${sessionIdLabel}`}
           className={cn(
             'shrink-0 w-3.5 h-3.5 accent-primary cursor-pointer',
             isImported && 'opacity-30 cursor-not-allowed',
@@ -187,7 +190,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
 
         {/* Session ID (copyable) */}
         <span className="hidden md:inline">
-          <CopyableText value={s.sessionId} />
+          <CopyableText value={s.sessionId} maxDisplay={SESSION_ID_DISPLAY_CHARS} />
         </span>
 
         {/* Import button */}
@@ -199,7 +202,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
               onImport(s);
             }}
             disabled={isImporting}
-            aria-label={`Import session ${s.sessionId.slice(0, 8)}`}
+            aria-label={`Import session ${sessionIdLabel}`}
             className={cn(
               'px-2.5 py-1 min-h-[32px] bg-muted text-muted-foreground border border-border rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap shrink-0 transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40',
               isImporting && 'opacity-50 cursor-not-allowed',
@@ -217,7 +220,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
               e.stopPropagation();
               onStartResume(s.sessionId);
             }}
-            aria-label={`Resume session ${s.sessionId.slice(0, 8)}`}
+            aria-label={`Resume session ${sessionIdLabel}`}
             className="px-2.5 py-1 bg-primary text-white rounded-md text-[11px] font-medium border-none cursor-pointer whitespace-nowrap shrink-0 transition-colors hover:bg-primary/90 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           >
             Resume
