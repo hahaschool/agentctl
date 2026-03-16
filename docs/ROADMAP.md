@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (recent follow-ups through PR #233 are now on `main`, including Discover session ID context in PR #229, deployment metrics in PR #230, execution-history polish in PR #231, and the roadmap sync/consistency updates in PRs #232-#233; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
+> Last updated: 2026-03-16 (recent follow-ups through PR #235 are now on `main`, including Discover session ID context in PR #229, deployment metrics in PR #230, execution-history polish in PR #231, the roadmap sync/consistency updates in PRs #232-#234, and deployment empty-history polish in PR #235; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
 
 ## Current State
 
@@ -1232,7 +1232,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 **Deployment page:**
 - [ ] Best specialized page — tier cards with green border + RUNNING badge work well ✅
 - [x] Dev tier cards now show real MEM/UPTIME values from health payloads, with PM2 metrics taking precedence when present *(PR #230)*
-- [ ] "PROMOTION HISTORY: No promotions yet" is lonely — could be collapsed or hidden when empty
+- [x] Empty promotion history now renders a subtle designed placeholder instead of a lonely text-only line *(PR #235)*
 
 **General:**
 - [x] Version in sidebar: auto-update from package.json (version-bump.sh updates `Sidebar.tsx`) *(PR #166)*
