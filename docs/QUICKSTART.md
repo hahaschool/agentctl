@@ -54,7 +54,7 @@ docker run -d --name postgres -p 5432:5432 \
   -e POSTGRES_USER=agentctl \
   -e POSTGRES_PASSWORD=agentctl \
   -e POSTGRES_DB=agentctl \
-  postgres:16-alpine
+  pgvector/pgvector:pg16
 ```
 
 ## 3. Configure Environment

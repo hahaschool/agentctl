@@ -34,11 +34,11 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  # ── PostgreSQL 16 ────────────────────────────────────────────────
+  # ── PostgreSQL 16 + pgvector ─────────────────────────────────────
   # Stores agent registry, run history, audit trail, and machine state.
   # Dev credentials match the defaults in PM2 ecosystem configs.
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: agentctl-postgres
     ports:
       - "5432:5432"
