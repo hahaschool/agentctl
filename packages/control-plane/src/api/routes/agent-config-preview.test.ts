@@ -208,9 +208,13 @@ describe('Agent config preview routes — /api/agents/:id/config-preview', () =>
     expect(forwardedInstructionsStrategy).toBe('project');
   });
 
-  it('omits instruction files from preview when instructionsStrategy is project', async () => {
+  it('passes through project instruction files from worker preview', async () => {
+    let forwardedProjectPath: string | null = null;
+    let forwardedInstructionsStrategy: string | null = null;
+
     vi.mocked(mockDbRegistry.getAgent).mockResolvedValue({
       ...buildAgent(),
+      projectPath: '/workspace/project-a',
       config: {
         ...buildAgent().config,
         instructionsStrategy: 'project',
@@ -223,12 +227,20 @@ describe('Agent config preview routes — /api/agents/:id/config-preview', () =>
       }
 
       if (url.includes('/api/config/preview?')) {
+        const parsed = new URL(url);
+        forwardedProjectPath = parsed.searchParams.get('projectPath');
+        forwardedInstructionsStrategy = parsed.searchParams.get('instructionsStrategy');
         return okJson({
           ok: true,
           runtime: 'claude-code',
           files: [
             { path: '.mcp.json', scope: 'workspace', content: '{}', status: 'managed' },
-            { path: 'CLAUDE.md', scope: 'workspace', content: 'managed', status: 'managed' },
+            {
+              path: 'CLAUDE.md',
+              scope: 'workspace',
+              content: '# Project guidance',
+              status: 'project',
+            },
           ],
         });
       }
@@ -242,7 +254,19 @@ describe('Agent config preview routes — /api/agents/:id/config-preview', () =>
     });
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { files: Array<{ path: string }> };
-    expect(body.files.map((file) => file.path)).toEqual(['.mcp.json']);
+    const body = res.json() as {
+      files: Array<{ path: string; scope: string; content: string; status: string }>;
+    };
+    expect(body.files).toEqual([
+      { path: '.mcp.json', scope: 'workspace', content: '{}', status: 'managed' },
+      {
+        path: 'CLAUDE.md',
+        scope: 'workspace',
+        content: '# Project guidance',
+        status: 'project',
+      },
+    ]);
+    expect(forwardedInstructionsStrategy).toBe('project');
+    expect(forwardedProjectPath).toBe('/workspace/project-a');
   });
 });

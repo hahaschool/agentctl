@@ -20,6 +20,10 @@ const STATUS_STYLES = {
     label: 'Merged',
     className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
   },
+  project: {
+    label: 'Project',
+    className: 'bg-neutral-500/10 text-neutral-400 border-neutral-500/30',
+  },
 } as const;
 
 export function ConfigFileCard({
