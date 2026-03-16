@@ -1,8 +1,9 @@
 # OWASP ZAP DAST (Dynamic Application Security Testing)
 #
-# Spins up the control-plane stack in Docker, then runs OWASP ZAP baseline
-# and WebSocket fuzz scans against the live API. Results are uploaded as
-# SARIF (GitHub Security tab) and HTML artifacts.
+# Resolves the scan target, then runs OWASP ZAP baseline and WebSocket fuzz
+# scans against the live API. In local mode each scan job self-hosts the
+# control-plane stack on its own runner so localhost targets stay reachable.
+# Results are uploaded as SARIF (GitHub Security tab) and HTML artifacts.
 #
 # Triggers:
 #   - Weekly on Monday at 03:00 UTC
@@ -46,7 +47,7 @@ env:
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────
-  # Job 1: Start the application stack (skipped when a target URL is given)
+  # Job 1: Resolve the scan target
   # ────────────────────────────────────────────────────────────────────────
   setup-target:
     name: Set up scan target
@@ -61,34 +62,6 @@ jobs:
     outputs:
       target_url: ${{ steps.resolve.outputs.target_url }}
       is_local: ${{ steps.resolve.outputs.is_local }}
-
-    services:
-      # PostgreSQL backing service (GitHub-hosted, available before steps run)
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: agentctl
-          POSTGRES_PASSWORD: agentctl
-          POSTGRES_DB: agentctl
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U agentctl -d agentctl"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 10s
-
-      # Redis backing service
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -117,13 +90,52 @@ jobs:
             echo "Building local Docker stack"
           fi
 
-      # ── Build and start the control-plane (local mode only) ──────────
+  # ────────────────────────────────────────────────────────────────────────
+  # Job 2: OWASP ZAP API baseline scan
+  # ────────────────────────────────────────────────────────────────────────
+  zap-api-scan:
+    name: ZAP API baseline scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: setup-target
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: agentctl
+          POSTGRES_PASSWORD: agentctl
+          POSTGRES_DB: agentctl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentctl -d agentctl"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Local Docker targets cannot be shared across GitHub-hosted jobs,
+      # so each local-mode scan job bootstraps the stack on its own runner.
       - name: Set up Docker Buildx
-        if: steps.resolve.outputs.is_local == 'true'
+        if: needs.setup-target.outputs.is_local == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Build control-plane image
-        if: steps.resolve.outputs.is_local == 'true'
+        if: needs.setup-target.outputs.is_local == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -134,7 +146,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=dast-control-plane
 
       - name: Start control-plane container
-        if: steps.resolve.outputs.is_local == 'true'
+        if: needs.setup-target.outputs.is_local == 'true'
         run: |
           docker run -d \
             --name agentctl-dast \
@@ -147,9 +159,9 @@ jobs:
             agentctl-control-plane:dast
 
       - name: Wait for health check
-        if: steps.resolve.outputs.is_local == 'true'
+        if: needs.setup-target.outputs.is_local == 'true'
         run: |
-          TARGET="${{ steps.resolve.outputs.target_url }}"
+          TARGET="${{ needs.setup-target.outputs.target_url }}"
           echo "Waiting for $TARGET/health ..."
 
           ATTEMPT=0
@@ -172,19 +184,6 @@ jobs:
           echo "::error::Health check failed after $MAX_ATTEMPTS attempts"
           docker logs agentctl-dast 2>&1 | tail -50 || true
           exit 1
-
-  # ────────────────────────────────────────────────────────────────────────
-  # Job 2: OWASP ZAP API baseline scan
-  # ────────────────────────────────────────────────────────────────────────
-  zap-api-scan:
-    name: ZAP API baseline scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: setup-target
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
       # Generate a minimal OpenAPI spec that covers the endpoints we want to scan.
       # ZAP's API scan uses this to discover and exercise routes.
@@ -443,9 +442,89 @@ jobs:
     timeout-minutes: 15
     needs: setup-target
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: agentctl
+          POSTGRES_PASSWORD: agentctl
+          POSTGRES_DB: agentctl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentctl -d agentctl"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: needs.setup-target.outputs.is_local == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build control-plane image
+        if: needs.setup-target.outputs.is_local == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.control-plane
+          tags: agentctl-control-plane:dast
+          load: true
+          cache-from: type=gha,scope=dast-control-plane
+          cache-to: type=gha,mode=max,scope=dast-control-plane
+
+      - name: Start control-plane container
+        if: needs.setup-target.outputs.is_local == 'true'
+        run: |
+          docker run -d \
+            --name agentctl-dast \
+            --network host \
+            -e NODE_ENV=production \
+            -e PORT=${{ env.CONTROL_PLANE_PORT }} \
+            -e DATABASE_URL="postgresql://agentctl:agentctl@127.0.0.1:5432/agentctl" \
+            -e REDIS_URL="redis://127.0.0.1:6379" \
+            -e LOG_LEVEL=warn \
+            agentctl-control-plane:dast
+
+      - name: Wait for health check
+        if: needs.setup-target.outputs.is_local == 'true'
+        run: |
+          TARGET="${{ needs.setup-target.outputs.target_url }}"
+          echo "Waiting for $TARGET/health ..."
+
+          ATTEMPT=0
+          MAX_ATTEMPTS=30
+          INTERVAL=5
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "$TARGET/health" 2>/dev/null || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed on attempt $ATTEMPT (HTTP $STATUS)"
+              exit 0
+            fi
+
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS — HTTP $STATUS, retrying in ${INTERVAL}s..."
+            sleep $INTERVAL
+          done
+
+          echo "::error::Health check failed after $MAX_ATTEMPTS attempts"
+          docker logs agentctl-dast 2>&1 | tail -50 || true
+          exit 1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
