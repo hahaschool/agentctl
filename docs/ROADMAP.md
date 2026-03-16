@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (stability/security cycle follow-ups through PRs #217-#220 are now on `main`; the project-CLAUDE preview fix from PR #218 is also on `main`, and there are currently no open CodeQL or Dependabot alerts)
+> Last updated: 2026-03-16 (stability/security cycle follow-ups through PR #222 are now on `main`; the post-#222 DAST rerun exposed a remaining pgvector image mismatch and follow-up PR #223 is open; there are currently no open CodeQL or Dependabot alerts)
 
 ## Current State
 
@@ -1112,8 +1112,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
-- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(completed; synced after PRs #206-#220)*
-- Status note: `main` is now re-stabilized through PR #220. After PRs #206-#210, the follow-up instructions-strategy/config-preview path hardening landed via PRs #217 and #219, the last open CodeQL alert is resolved on `main`, and the agent-settings coverage follow-up landed via PR #220. The lingering Fastify rate-limit plus stale Alpine-image findings remain dispositioned as tooling/modeling false positives relative to the current source. There are currently no open CodeQL or Dependabot alerts on `main`.
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(active follow-up; synced after PR #222 landed, and after the rerun exposed the remaining pgvector image mismatch now tracked in PR #223)*
+- Status note: `main` is re-stabilized for the CI/CodeQL/Dependabot backlog through PR #222. After PRs #206-#210, the follow-up instructions-strategy/config-preview path hardening landed via PRs #217 and #219, the agent-settings coverage follow-up landed via PR #220, and PR #222 bundled control-plane drizzle migrations during build to address the first scheduled DAST target bootstrap failure with `DATABASE_URL` set. The post-#222 manual DAST rerun then revealed that the workflow and compose PostgreSQL images still lack `pgvector`, so DAST recovery is not yet complete and follow-up PR #223 is now open to align those images. The lingering Fastify rate-limit plus stale Alpine-image findings remain dispositioned as tooling/modeling false positives relative to the current source. There are currently no open CodeQL or Dependabot alerts on `main`.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1268,7 +1268,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 
 ### 16.6 Security Hardening (Codex batch) — P0
 
-> Delivered via PRs #167-#188 by Codex security agents.
+> Delivered via PRs #167-#220 by Codex security agents.
 
 - [x] Path security wrappers hardened across agent-worker *(PRs #167-#177, #182, #187)*
 - [x] Rate limiting on CP memory-decay + agents routes *(PRs #184)*
@@ -1388,12 +1388,12 @@ Agent settings should allow users to control how CLAUDE.md is handled at session
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | In progress: the current stability/security batch is on `main` through PR #193; remaining alert triage is the still-open `path-security.ts` file-write findings, `cli-session-manager.ts`, modeled agents/control-plane rate-limit follow-ups, the loop timer finding, plus dependency/base-image refreshes |
+| **P0** | Agent Run Quality | 16.1 | In progress: PRs #167-#220 cleared the reproduced CI and CodeQL backlog on `main`, PR #222 landed for the first DAST bootstrap fix, and PR #223 is pending after the rerun exposed a remaining pgvector image mismatch |
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
-| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: PRs #158-#169 landed; remaining critique items are mainly discover summary extraction plus lower-priority page polish |
+| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: major polish PRs #158-#165 and #212-#213 are on `main`; remaining critique items are mostly dashboard/session/machines simplification plus lower-priority deployment/memory polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
 | **P0** | ~~Config Preview Data Accuracy~~ | 16.5 | ✅ Delivered (PRs #194-#196) |
-| **P0** | ~~Security Hardening (Codex batch)~~ | 16.6 | ✅ Delivered (PRs #167-#188) |
+| **P0** | ~~Security Hardening (Codex batch)~~ | 16.6 | ✅ Delivered (PRs #167-#220) |
 
 ---
 
@@ -1525,7 +1525,9 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [codex-config-capabilities](superpowers/plans/2026-03-14-codex-config-capabilities.md) | Delivered (PR #156) | 15.2 |
 | [config-preview-sidebar-design](superpowers/specs/2026-03-15-config-preview-sidebar-design.md) | Delivered (PR #163) | 16.4 |
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#188 are on `main`; remaining alert triage continues here | 16.1-16.3 |
+| [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
+| [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#220 are on `main`; PR #222 landed, and PR #223 is pending after the DAST rerun exposed the remaining pgvector image mismatch | 16.1-16.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
