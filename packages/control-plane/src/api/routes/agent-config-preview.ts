@@ -239,22 +239,6 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
         return reply.code(response.status).send(data);
       }
 
-      if (
-        instructionsStrategy === 'project' &&
-        isConfigPreviewResponse(data) &&
-        Array.isArray(data.files)
-      ) {
-        return reply.send({
-          ...data,
-          files: data.files.filter(
-            (file) =>
-              file.path !== 'CLAUDE.md' &&
-              file.path !== 'AGENTS.md' &&
-              file.path !== '.codex/AGENTS.md',
-          ),
-        });
-      }
-
       return reply.send(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -265,15 +249,3 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
     }
   });
 };
-
-function isConfigPreviewResponse(value: unknown): value is {
-  files: Array<{ path: string }>;
-  [key: string]: unknown;
-} {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'files' in value &&
-    Array.isArray((value as { files?: unknown }).files)
-  );
-}

@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
 import type {
   AgentConfig,
   AgentRuntimeConfigOverrides,
@@ -77,29 +80,58 @@ export const configPreviewRoutes: FastifyPluginAsync<ConfigPreviewRoutesOptions>
     }
 
     const instructionsStrategy = parseInstructionsStrategy(request.query.instructionsStrategy);
+    const projectPath = request.query.projectPath ?? undefined;
+    const workspaceInstructionFilePath = getWorkspaceInstructionFilePath(runtime);
 
     const rendered =
       runtime === 'claude-code'
         ? new ClaudeConfigRenderer().render(config, overrides, {
             instructionsStrategy,
-            projectPath: request.query.projectPath ?? undefined,
+            projectPath,
           })
         : new CodexConfigRenderer().render(config, overrides, {
             instructionsStrategy,
-            projectPath: request.query.projectPath ?? undefined,
+            projectPath,
           });
     const overridden = computeOverriddenFields(overrides);
-    const files: ConfigPreviewFile[] = rendered.files.map((f) => {
+    let files: ConfigPreviewFile[] = rendered.files.map((f) => {
       const hasOverride =
         overridden.length > 0 && overridden.some((field) => f.content.includes(field));
+      const isWorkspaceInstructions =
+        f.scope === 'workspace' && f.path === workspaceInstructionFilePath;
+
+      let status: ConfigPreviewFile['status'] = hasOverride ? 'merged' : 'managed';
+      if (isWorkspaceInstructions) {
+        status = instructionsStrategy === 'merge' ? 'merged' : 'managed';
+      }
+
       return {
         path: f.path,
         scope: f.scope,
         content: f.content,
-        status: hasOverride ? 'merged' : 'managed',
+        status,
         overriddenFields: hasOverride ? overridden : undefined,
       };
     });
+
+    if (instructionsStrategy === 'project') {
+      const projectInstructionContent = await readProjectInstructionFile({
+        fileName: workspaceInstructionFilePath,
+        projectPath,
+      });
+
+      files = files.filter(
+        (file) => !(file.scope === 'workspace' && file.path === workspaceInstructionFilePath),
+      );
+      files.push({
+        path: workspaceInstructionFilePath,
+        scope: 'workspace',
+        content:
+          projectInstructionContent ??
+          `(No ${workspaceInstructionFilePath} found in project directory)`,
+        status: 'project',
+      });
+    }
 
     logger.info({ runtime }, 'Config preview requested');
 
@@ -155,4 +187,30 @@ function parseInstructionsStrategy(value: string | undefined): AgentConfig['inst
     'INVALID_INSTRUCTIONS_STRATEGY',
     `instructionsStrategy must be one of: project, managed, merge (received "${value}")`,
   );
+}
+
+function getWorkspaceInstructionFilePath(
+  runtime: 'claude-code' | 'codex',
+): 'CLAUDE.md' | 'AGENTS.md' {
+  return runtime === 'claude-code' ? 'CLAUDE.md' : 'AGENTS.md';
+}
+
+async function readProjectInstructionFile({
+  fileName,
+  projectPath,
+}: {
+  fileName: 'CLAUDE.md' | 'AGENTS.md';
+  projectPath: string | undefined;
+}): Promise<string | null> {
+  if (!projectPath || projectPath.trim().length === 0) {
+    return null;
+  }
+
+  const instructionPath = path.resolve(projectPath, fileName);
+
+  try {
+    return await readFile(instructionPath, 'utf-8');
+  } catch {
+    return null;
+  }
 }

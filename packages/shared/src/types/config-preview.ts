@@ -1,4 +1,4 @@
-export type ConfigPreviewFileStatus = 'managed' | 'merged';
+export type ConfigPreviewFileStatus = 'managed' | 'merged' | 'project';
 
 export type ConfigPreviewFile = {
   path: string;
