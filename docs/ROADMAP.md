@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (stability/security cycle through PR #210 remains on `main`; follow-up UI polish PRs #212-#213 plus CLAUDE.md management strategy PR #215 are now on `main`, and there are still no open CodeQL or Dependabot alerts)
+> Last updated: 2026-03-16 (stability/security cycle follow-ups through PRs #217-#220 are now on `main`; the project-CLAUDE preview fix from PR #218 is also on `main`, and there are currently no open CodeQL or Dependabot alerts)
 
 ## Current State
 
@@ -1112,8 +1112,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
-- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(completed; synced after PRs #206-#210)*
-- Status note: `main` is now re-stabilized through PR #210. After PRs #206-#210 and the latest green `main` Security Audit, the remaining `path-security.ts` file-write findings are fixed on `main`, the skipped Playwright coverage batch is enabled, and the lingering Fastify rate-limit plus stale Alpine-image findings have been dispositioned as tooling/modeling false positives relative to the current source. There are currently no open CodeQL or Dependabot alerts on `main`.
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(completed; synced after PRs #206-#220)*
+- Status note: `main` is now re-stabilized through PR #220. After PRs #206-#210, the follow-up instructions-strategy/config-preview path hardening landed via PRs #217 and #219, the last open CodeQL alert is resolved on `main`, and the agent-settings coverage follow-up landed via PR #220. The lingering Fastify rate-limit plus stale Alpine-image findings remain dispositioned as tooling/modeling false positives relative to the current source. There are currently no open CodeQL or Dependabot alerts on `main`.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1123,6 +1123,7 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Codex worktree sessions grouped as separate projects — normalize paths *(direct commit e0ca99f)*
 - [x] ModelPromptsTab hardcoded Claude models — use runtime-aware options *(direct commit 2c198f3)*
 - [x] McpServersTab/SkillsTab showed "not available" for agents without runtime — default to claude-code *(direct commit 7b1388c)*
+- [x] Config preview project strategy now shows the project's actual `CLAUDE.md` / `AGENTS.md` content *(PR #218)*
 - [x] Discover summary sanitization hardened against nested / malformed tag payloads *(PR #169)*
 - [x] Explicit rate limiting added for git + memory routes uncovered by CodeQL/CI follow-up *(PRs #170-#171)*
 - [x] Loop max-iteration bounds hardened to stop runaway configuration values *(PR #173)*
@@ -1279,6 +1280,9 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 - [x] Safe file write hardening *(PR #204)*
 - [x] PM2 package dropped, images moved off alpine *(PR #205)*
 - [x] Loop timer CodeQL alert resolved *(PR #198)*
+- [x] Instructions-strategy file reads hardened through shared path-security wrappers *(PR #217)*
+- [x] Config preview instruction reads hardened through shared path-security wrappers *(PR #219)*
+- [x] Agent settings tests updated for managed-runtime fallback + instructions-strategy saves *(PR #220)*
 
 ## 17. Ongoing Quality & Testing
 
@@ -1286,6 +1290,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 
 - [x] `js/http-to-file-access` *(PR #209)* in `path-security.ts:133` — HTTP-sourced data written to files
 - [x] `js/insecure-temporary-file` *(PR #209)* in `path-security.ts:133` — insecure temp file creation
+- [x] `js/path-injection` *(PR #219)* in `config-preview.ts:212` — preview route project-instruction reads now use shared path-security wrappers
 
 ### 17.2 E2E Test Coverage — P1
 
@@ -1294,7 +1299,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 
 ### 17.3 CLAUDE.md Management Strategy — P0
 
-> Delivered in PR #215.
+> Delivered in PRs #215 and #218, with targeted web coverage in PR #220.
 
 Agent settings should allow users to control how CLAUDE.md is handled at session start:
 
@@ -1305,7 +1310,9 @@ Agent settings should allow users to control how CLAUDE.md is handled at session
 - [x] Store strategy in `AgentConfig.instructionsStrategy: 'project' | 'managed' | 'merge'` *(PR #215)* with `'project'` as the default
 - [x] Config renderer: implement all 3 strategies in `ClaudeConfigRenderer` and `CodexConfigRenderer` *(PR #215)*
 - [x] Config preview: show the effective CLAUDE.md based on selected strategy (project content, managed template, or merged) *(PR #215)*
+- [x] Project strategy preview reads the actual project `CLAUDE.md` / `AGENTS.md` content instead of a managed placeholder *(PR #218)*
 - [x] Default new agents to `'project'` — never override CLAUDE.md unless user chooses to *(PR #215)*
+- [x] Web regression coverage for instructions-strategy saves + fallback behavior *(PR #220)*
 
 ---
 
@@ -1314,7 +1321,7 @@ Agent settings should allow users to control how CLAUDE.md is handled at session
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
-| **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, renderer support, and config preview landed (PR #215) |
+| **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
 | **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — 8 pages + integration points + MCP tools (PRs #47,#50,#52-#59); backend routes for consolidation, reports, and decay all landed |
 | **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all ARIA items complete (PRs #51,#54,#59) |
