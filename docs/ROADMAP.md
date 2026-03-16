@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (stability/security cycle follow-ups through PR #222 are now on `main`; the post-#222 DAST rerun exposed a remaining pgvector image mismatch and follow-up PR #223 is open; there are currently no open CodeQL or Dependabot alerts)
+> Last updated: 2026-03-16 (stability/security cycle follow-ups through PR #227 are now on `main`; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
 
 ## Current State
 
@@ -181,11 +181,9 @@ Inject guidance into running sessions via SDK `streamInput()`.
 > Design doc: [plans/2026-03-11-execution-environment-registry-design.md](plans/2026-03-11-execution-environment-registry-design.md)
 > Impl plan: [plans/2026-03-11-execution-environment-registry-impl-plan.md](plans/2026-03-11-execution-environment-registry-impl-plan.md)
 >
-> Status note: Phase 1 is already on `main`. Shared execution-environment
-> contracts, `ExecutionEnvironment`/`DirectEnvironment`, worker capability
-> reporting, and control-plane environment selection are landed. The remaining
-> gap here is `DockerEnvironment`, which the plan intentionally stages after
-> `AgentOutputStream` stabilizes.
+> Status note: Delivered on `main`. Shared execution-environment contracts,
+> `ExecutionEnvironment` / `DirectEnvironment` / `DockerEnvironment`, worker
+> capability reporting, and control-plane environment selection are all landed.
 
 Orthogonal WHERE (local/Docker/SSH) vs WHAT (Claude/Codex) abstraction.
 
@@ -243,12 +241,10 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 
 ### 3.4 Codex Operational Parity — P2
 
-> Status note: Partially delivered on `main`. The worker already renders managed
-> Codex config, including sandbox, approval, provider, and shell-environment
-> policy, detects Codex auth, runs under the shared PM2 worker process, and
-> includes sandbox/network helper primitives. LiteLLM routing/failover is already
-> landed; the remaining gap is runtime-level enforcement/evidence for
-> bubblewrap/Seatbelt or container-backed restrictions on the Codex path.
+> Status note: Delivered on `main`. The worker renders managed Codex config,
+> including sandbox, approval, provider, and shell-environment policy, detects
+> Codex auth, runs under the shared PM2 worker process, and includes runtime
+> sandbox/network enforcement evidence alongside LiteLLM routing/failover.
 
 - [x] LiteLLM config: Codex model routing with OpenAI Direct → Azure OpenAI failover
 - [x] PM2 ecosystem config for Codex-capable worker processes
@@ -256,18 +252,19 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 - [x] Config renderer: `modelProvider`, `reasoningEffort`, and shell environment policy in Codex TOML
 - [x] Sandbox constraints end-to-end: post-spawn verification (bubblewrap/Seatbelt/Codex), network enforcement, SSE `sandbox_verified` event *(PR #70)*
 
-> **Gap**: Codex TOML MCP config (`[mcp_servers.*]`) not auto-discovered. Addressed in §14 — runtime-aware MCP discovery reads `.codex/config.toml` alongside Claude Code JSON configs.
+> Follow-through: the earlier Codex TOML MCP-discovery gap is addressed in §14,
+> where runtime-aware discovery reads `.codex/config.toml` alongside Claude Code
+> JSON configs.
 
 ### 3.5 Automatic Handoff Triggers — P2
 
 > Design doc: [plans/2026-03-11-automatic-handoff-triggers-design.md](plans/2026-03-11-automatic-handoff-triggers-design.md)
 > Impl plan: [plans/2026-03-11-automatic-handoff-triggers-impl-plan.md](plans/2026-03-11-automatic-handoff-triggers-impl-plan.md)
 >
-> Status note: Phase 1 is already on `main`. Shared auto-handoff contracts,
-> decision persistence, policy evaluation, run handoff history, and
-> dispatch-time task-affinity dry-run suggestions are landed. Live
-> rate-limit/cost-threshold execution remains deferred until
-> `AgentOutputStream` is stable.
+> Status note: Delivered on `main`. Shared auto-handoff contracts, decision
+> persistence, policy evaluation, run handoff history, dispatch-time
+> task-affinity dry-run suggestions, and live rate-limit/cost-threshold
+> execution are all landed.
 
 - [x] Rate limit hit → failover to other agent type *(PR #66 — LiveHandoffOrchestrator + AgentInstance integration)*
 - [x] Cost threshold → switch to cheaper model/provider *(PR #66 — CostThresholdTrigger wired into AgentInstance)*
@@ -279,11 +276,11 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 > Design doc: [plans/2026-03-10-unified-memory-layer-design.md](plans/2026-03-10-unified-memory-layer-design.md)
 > Impl plan: [plans/2026-03-10-unified-memory-layer-impl-plan.md](plans/2026-03-10-unified-memory-layer-impl-plan.md)
 >
-> Status note: Substantially delivered on `main` via PRs #30 (claude-mem
-> migration tooling), #31 (memory cutover: dual-backend `MemoryInjector`,
-> memory API routes, memory MCP server), and #43 (3-tier context budget:
-> pinned + on-demand + triggered injection with token/fact limits).
-> Remaining work is knowledge-engineering follow-through.
+> Status note: Delivered on `main` via PRs #30 (claude-mem migration tooling),
+> #31 (memory cutover: dual-backend `MemoryInjector`, memory API routes, memory
+> MCP server), #43 (3-tier context budget: pinned + on-demand + triggered
+> injection with token/fact limits), and later knowledge-engineering follow-
+> through PRs/direct commits captured below.
 
 PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolation (global > project > agent > session), pgvector + tsvector + graph traversal fused via Reciprocal Rank Fusion.
 
@@ -495,11 +492,9 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 > Design doc: [plans/2026-03-09-fork-ux-overhaul.md](plans/2026-03-09-fork-ux-overhaul.md)
 >
-> Status note: Partially delivered on `main` through the unified
-> `ContextPickerDialog`, memory search/timeline panel, smart selection helpers,
-> and prompt preview. Remaining gaps are centered on automatic related-message
-> selection and carrying the runtime dimension all the way through classic fork
-> flows.
+> Status note: Delivered on `main` through the unified `ContextPickerDialog`,
+> memory search/timeline panel, smart selection helpers, prompt preview, and
+> runtime-aware fork flows.
 
 - [x] claude-mem memory integration in fork context selection
 - [x] Smart selection helpers for key decisions/topics
@@ -518,10 +513,9 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 
 ### 5.1 Mobile Session Browser — P3
 
-> Status note: Partially delivered on `main`. The mobile app already has a
-> unified browser model and `SessionBrowserScreen` covering classic + managed
-> sessions with type/runtime/machine/status filters. Time-range filtering,
-> richer cards, and deeper replay/live entry remain.
+> Status note: Delivered on `main`. The mobile app has a unified browser model
+> and `SessionBrowserScreen` covering classic + managed sessions with
+> type/runtime/machine/status filters, time-range filtering, and richer cards.
 
 - [x] Discovered-session browser with status, message count, and last activity
 - [x] Managed runtime session browser with runtime/status/machine metadata
@@ -1112,8 +1106,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
-- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(active follow-up; synced after PR #222 landed, and after the rerun exposed the remaining pgvector image mismatch now tracked in PR #223)*
-- Status note: `main` is re-stabilized for the CI/CodeQL/Dependabot backlog through PR #222. After PRs #206-#210, the follow-up instructions-strategy/config-preview path hardening landed via PRs #217 and #219, the agent-settings coverage follow-up landed via PR #220, and PR #222 bundled control-plane drizzle migrations during build to address the first scheduled DAST target bootstrap failure with `DATABASE_URL` set. The post-#222 manual DAST rerun then revealed that the workflow and compose PostgreSQL images still lack `pgvector`, so DAST recovery is not yet complete and follow-up PR #223 is now open to align those images. The lingering Fastify rate-limit plus stale Alpine-image findings remain dispositioned as tooling/modeling false positives relative to the current source. There are currently no open CodeQL or Dependabot alerts on `main`.
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(delivered on `main`; synced after PR #227 and successful DAST rerun `23131047045`)*
+- Status note: `main` is re-stabilized for the CI/CodeQL/Dependabot/DAST backlog through PR #227. After PRs #206-#210, the follow-up instructions-strategy/config-preview path hardening landed via PRs #217 and #219, the agent-settings coverage follow-up landed via PR #220, PR #222 bundled control-plane drizzle migrations during build, PR #223 aligned the DAST/bootstrap PostgreSQL images with `pgvector`, PR #226 moved the generated OpenAPI target into the ZAP-mounted workspace, and PR #227 moved local DAST bootstrap onto the same runners that execute the scans. The post-merge DAST rerun `23131047045` succeeded. The lingering Fastify rate-limit plus stale Alpine-image findings remain dispositioned as tooling/modeling false positives relative to the current source. There are currently no open PRs, CodeQL alerts, or Dependabot alerts on `main`.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1151,6 +1145,10 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Agent-worker start-route modeled Fastify config follow-up landed on `main` *(PR #208; later dismissed as a Fastify-model false positive after the latest green audit)*
 - [x] Remaining `path-security.ts` file-write CodeQL findings resolved with content validation + secure create/truncate fallback *(PR #209)*
 - [x] Remaining skipped Playwright coverage implemented and enabled across runtime selector / MCP discovery / critical flows *(PR #210)*
+- [x] Control-plane DAST bootstrap now bundles drizzle migrations during build *(PR #222)*
+- [x] DAST/bootstrap PostgreSQL images now use `pgvector/pgvector:pg16` across workflow + compose docs *(PR #223)*
+- [x] ZAP API scan now reads its generated OpenAPI target from the mounted workspace path *(PR #226)*
+- [x] Local DAST scan jobs now self-bootstrap the control-plane on the same runners that execute the scans; post-merge rerun `23131047045` succeeded *(PR #227)*
 - [x] Stale old-Alpine Grype findings dismissed after PR #205 moved current runtime images to `bookworm-slim` *(direct dismissal, 2026-03-15)*
 
 ### 16.2 Dev Environment Infrastructure — P0
@@ -1286,7 +1284,7 @@ Persistent two-column layout for agent settings: tabs + forms on left, live conf
 
 ## 17. Ongoing Quality & Testing
 
-### 17.1 Remaining CodeQL Alerts — P0
+### 17.1 Resolved CodeQL Alert Cleanup — P0 ✅
 
 - [x] `js/http-to-file-access` *(PR #209)* in `path-security.ts:133` — HTTP-sourced data written to files
 - [x] `js/insecure-temporary-file` *(PR #209)* in `path-security.ts:133` — insecure temp file creation
@@ -1388,7 +1386,7 @@ Agent settings should allow users to control how CLAUDE.md is handled at session
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | In progress: PRs #167-#220 cleared the reproduced CI and CodeQL backlog on `main`, PR #222 landed for the first DAST bootstrap fix, and PR #223 is pending after the rerun exposed a remaining pgvector image mismatch |
+| **P0** | ~~Agent Run Quality~~ | 16.1 | ✅ Delivered — PRs #167-#227 cleared the reproduced CI/CodeQL backlog and closed the DAST recovery chain through a successful rerun on `main` |
 | **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
 | **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: major polish PRs #158-#165 and #212-#213 are on `main`; remaining critique items are mostly dashboard/session/machines simplification plus lower-priority deployment/memory polish |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -1527,7 +1525,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Active — PRs #167-#220 are on `main`; PR #222 landed, and PR #223 is pending after the DAST rerun exposed the remaining pgvector image mismatch | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered — PRs #167-#227 are on `main`, and post-merge DAST rerun `23131047045` succeeded | 16.1-16.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 

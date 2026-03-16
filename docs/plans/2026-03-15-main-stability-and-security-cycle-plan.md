@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-16): this stabilization/security wave is now complete on `main` for the CI + CodeQL/Dependabot backlog through PR #222. Earlier fixes (#167, #169-#201) restored the reproduced CI regressions, hardened the path/discovery/worktree surfaces, landed the coordination board, and added the modeled Fastify follow-ups that still left CodeQL blind to Fastify-specific rate limiting. The later batch then fixed the agent-worker fd-write test regressions (PR #206), landed the control-plane and agent-worker modeled Fastify route updates on `main` (PRs #207-#208), resolved the remaining `path-security.ts` file-write findings (PR #209), enabled the skipped Playwright coverage batch (PR #210), hardened the instructions-strategy/config-preview instruction-read surfaces (PRs #217 and #219), added targeted web regression coverage for the CLAUDE.md strategy settings flow (PR #220), and bundled control-plane drizzle migrations during build for the scheduled DAST bootstrap path (PR #222). After the latest green Security Audit/CodeQL pass, the lingering Fastify rate-limit findings remain dismissed as CodeQL modeling false positives and the stale old-Alpine Grype findings remain dismissed because current `main` uses `bookworm-slim` images. There are currently no open CodeQL or Dependabot alerts on `main`. The post-#222 manual DAST rerun still failed because the workflow and compose PostgreSQL images do not include `pgvector`; follow-up PR #223 is now open to align those images, so DAST recovery is not yet marked complete.
+> Status note (2026-03-16): this stabilization/security wave is now complete on `main` for the CI + CodeQL + Dependabot + DAST backlog through PR #227. Earlier fixes (#167, #169-#201) restored the reproduced CI regressions, hardened the path/discovery/worktree surfaces, landed the coordination board, and added the modeled Fastify follow-ups that still left CodeQL blind to Fastify-specific rate limiting. The later batch then fixed the agent-worker fd-write test regressions (PR #206), landed the control-plane and agent-worker modeled Fastify route updates on `main` (PRs #207-#208), resolved the remaining `path-security.ts` file-write findings (PR #209), enabled the skipped Playwright coverage batch (PR #210), hardened the instructions-strategy/config-preview instruction-read surfaces (PRs #217 and #219), added targeted web regression coverage for the CLAUDE.md strategy settings flow (PR #220), bundled control-plane drizzle migrations during build for the scheduled DAST bootstrap path (PR #222), aligned the DAST/bootstrap PostgreSQL images with `pgvector` (PR #223), moved the generated OpenAPI target into the ZAP-mounted workspace (PR #226), and moved local DAST bootstrap onto the same runners that execute the scans (PR #227). The post-merge DAST rerun `23131047045` succeeded. After the latest green Security Audit/CodeQL pass, the lingering Fastify rate-limit findings remain dismissed as CodeQL modeling false positives and the stale old-Alpine Grype findings remain dismissed because current `main` uses `bookworm-slim` images. There are currently no open PRs, CodeQL alerts, or Dependabot alerts on `main`.
 
 ---
 
@@ -114,7 +114,7 @@ Expected: PASS.
 
 Delivered follow-through: merged on `main` as PR #169. The security bug is fixed; remaining Discover work is now UX-level summary selection, not sanitization.
 
-### Task 3: Triage Remaining High-Severity Alerts, Queue Follow-up Branches, And Update Docs
+### Task 3: Historical Alert Triage Log, Follow-up Branch Queue, And Docs Sync — Completed on `main`
 
 **Files:**
 - Modify: `docs/ROADMAP.md`
@@ -126,7 +126,7 @@ Delivered follow-through: merged on `main` as PR #169. The security bug is fixed
 - Review: `packages/agent-worker/src/runtime/discovery/*.ts`
 - Review: `packages/agent-worker/src/api/routes/*.ts`
 
-**Step 1: Summarize the remaining open alerts by type**
+**Step 1: Capture the historical open-alert summary by type**
 
 Run:
 
@@ -137,7 +137,7 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
 
-Current final state after PR #223 opened:
+Current final state after PR #227 merged and DAST rerun `23131047045` succeeded:
 - Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are delivered on `main` via PR #176.
 - Worktree-manager path alerts are delivered on `main` via PR #177.
 - Agent-start rate limiting is delivered on `main` via PR #179.
@@ -159,10 +159,12 @@ Current final state after PR #223 opened:
 - The targeted web regression coverage for `SkillsTab` / `ModelPromptsTab` landed on `main` via PR #220.
 - The lingering Fastify rate-limit alerts were dismissed as CodeQL modeling false positives after the latest green `main` Security Audit.
 - The stale BusyBox/ssl_client Grype findings were dismissed after PR #205 moved current runtime images to `bookworm-slim`.
-- There is no remaining open CodeQL or Dependabot backlog from this cycle on `main`.
+- There is no remaining open PR, CodeQL, or Dependabot backlog from this cycle on `main`.
 - PR #222 landed on `main` to address the scheduled DAST target bootstrap failure by bundling control-plane drizzle migrations during build.
-- The post-#222 manual DAST rerun still failed because the workflow/local PostgreSQL images do not include `pgvector`.
-- Follow-up PR #223 is now open to align those PostgreSQL images; do not treat DAST recovery as complete until that fix is merged and rerun.
+- PR #223 landed on `main` to align the workflow/local PostgreSQL images with `pgvector`.
+- PR #226 landed on `main` to move the generated OpenAPI target into the ZAP-mounted workspace path.
+- PR #227 landed on `main` to make each local-mode scan job bootstrap the control-plane on the same runner that performs the scan.
+- The post-merge DAST rerun `23131047045` completed successfully; treat DAST recovery as complete for this cycle.
 
 **Step 2: Update roadmap status to match this cycle**
 
