@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (stability/security cycle follow-ups through PR #230 are now on `main`; PR #231 execution-history polish is also on `main`; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
+> Last updated: 2026-03-16 (recent follow-ups through PR #233 are now on `main`, including Discover session ID context in PR #229, deployment metrics in PR #230, execution-history polish in PR #231, and the roadmap sync/consistency updates in PRs #232-#233; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
 
 ## Current State
 
@@ -1226,7 +1226,7 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 
 **Discover page:**
 - [x] Codex session discovery now prefers the first meaningful user task over AGENTS/system-prompt preamble *(PR #212)*
-- [ ] Session IDs truncated to 7 chars — could show more context
+- [x] Session IDs now show 12 characters for better context *(PR #229)*
 - [ ] "3 already imported" link is nice ✅
 
 **Deployment page:**
