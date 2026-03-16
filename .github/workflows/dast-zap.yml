@@ -190,7 +190,8 @@ jobs:
       # ZAP's API scan uses this to discover and exercise routes.
       - name: Generate target endpoint list
         run: |
-          cat > /tmp/openapi-target.yaml << 'OPENAPI_SPEC'
+          mkdir -p "$GITHUB_WORKSPACE/.zap"
+          cat > "$GITHUB_WORKSPACE/.zap/openapi-target.yaml" << 'OPENAPI_SPEC'
           openapi: "3.0.3"
           info:
             title: AgentCTL Control Plane — DAST Target
@@ -313,7 +314,7 @@ jobs:
       - name: Run ZAP API baseline scan
         uses: zaproxy/action-api-scan@v0.9.0
         with:
-          target: /tmp/openapi-target.yaml
+          target: /zap/wrk/.zap/openapi-target.yaml
           format: openapi
           # Use the rules file to suppress known false positives
           rules_file_name: infra/zap/rules.tsv
