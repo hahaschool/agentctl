@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle, ChevronDown, ChevronRight, Minus, XCircle } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronRight, History, Minus, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
 import type { DeploymentPromotionRecord } from '@/lib/api';
@@ -130,7 +130,15 @@ export function PromotionHistory({ records }: PromotionHistoryProps): React.JSX.
       </h3>
 
       {records.length === 0 ? (
-        <p className="text-xs text-muted-foreground/50 py-4 text-center">No promotions yet</p>
+        <div className="rounded-md border border-dashed border-border/70 bg-muted/20 px-3 py-5 text-center">
+          <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-background/70">
+            <History size={14} className="text-muted-foreground/60" aria-hidden="true" />
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">No promotions yet</p>
+          <p className="mt-1 text-[11px] leading-5 text-muted-foreground/70">
+            Run a beta promotion from a dev tier to see recent history here.
+          </p>
+        </div>
       ) : (
         <div className="max-h-[480px] overflow-y-auto">
           {records.map((record) => (
