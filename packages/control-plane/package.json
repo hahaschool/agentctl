@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "pnpm --filter @agentctl/shared build && tsc",
-    "postbuild": "cp -r drizzle dist/drizzle",
+    "build": "pnpm --filter @agentctl/shared build && tsc && mkdir -p dist/drizzle && cp -R drizzle/. dist/drizzle/",
     "start": "node dist/index.js",
     "test": "pnpm --filter @agentctl/shared build && vitest run",
     "test:coverage": "pnpm --filter @agentctl/shared build && vitest run --coverage",
