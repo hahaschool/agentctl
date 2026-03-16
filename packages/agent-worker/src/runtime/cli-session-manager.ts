@@ -612,15 +612,21 @@ export class CliSessionManager extends EventEmitter {
 
     // Permission / tool controls from config
     if (options.config?.permissionMode) {
-      const permMap: Record<string, string> = {
-        default: 'default',
-        acceptEdits: 'acceptEdits',
-        plan: 'plan',
-        bypassPermissions: 'bypassPermissions',
-      };
-      const mapped = permMap[options.config.permissionMode];
-      if (mapped) {
-        args.push('--permission-mode', mapped);
+      if (options.config.permissionMode === 'bypassPermissions') {
+        // bypassPermissions needs --dangerously-skip-permissions to truly skip
+        // all permission checks including Bash command approval.
+        // --permission-mode bypassPermissions alone is not sufficient.
+        args.push('--dangerously-skip-permissions');
+      } else {
+        const permMap: Record<string, string> = {
+          default: 'default',
+          acceptEdits: 'acceptEdits',
+          plan: 'plan',
+        };
+        const mapped = permMap[options.config.permissionMode];
+        if (mapped) {
+          args.push('--permission-mode', mapped);
+        }
       }
     } else {
       // No explicit permissionMode configured: bypass permissions so the CLI
