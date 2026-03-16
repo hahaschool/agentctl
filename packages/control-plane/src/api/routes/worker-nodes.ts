@@ -6,16 +6,18 @@ import {
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { AgentProfileStore } from '../../collaboration/agent-profile-store.js';
 import type { TaskRunStore } from '../../collaboration/task-run-store.js';
 import type { WorkerNodeStore } from '../../collaboration/worker-node-store.js';
 
 export type WorkerNodeRoutesOptions = {
+  agentProfileStore: AgentProfileStore;
   workerNodeStore: WorkerNodeStore;
   taskRunStore: TaskRunStore;
 };
 
 export const workerNodeRoutes: FastifyPluginAsync<WorkerNodeRoutesOptions> = async (app, opts) => {
-  const { workerNodeStore, taskRunStore } = opts;
+  const { agentProfileStore, workerNodeStore, taskRunStore } = opts;
 
   // ── Register Node ──────────────────────────────────────────
 
@@ -145,15 +147,18 @@ export const workerNodeRoutes: FastifyPluginAsync<WorkerNodeRoutesOptions> = asy
     '/overview',
     { schema: { tags: ['fleet'], summary: 'Get aggregate fleet status' } },
     async () => {
-      const nodes = await workerNodeStore.listNodes();
-      const runs = await taskRunStore.listRuns();
+      const [nodes, runs, totalAgentInstances] = await Promise.all([
+        workerNodeStore.listNodes(),
+        taskRunStore.listRuns(),
+        agentProfileStore.countInstances(),
+      ]);
 
       const overview: FleetOverview = {
         totalNodes: nodes.length,
         onlineNodes: nodes.filter((n) => n.status === 'online').length,
         offlineNodes: nodes.filter((n) => n.status === 'offline').length,
         drainingNodes: nodes.filter((n) => n.status === 'draining').length,
-        totalAgentInstances: 0, // TODO: add agent instance store query
+        totalAgentInstances,
         activeTaskRuns: runs.filter((r) => r.status === 'running' || r.status === 'claimed').length,
         pendingTaskRuns: runs.filter((r) => r.status === 'pending').length,
         completedTaskRuns: runs.filter((r) => r.status === 'completed').length,

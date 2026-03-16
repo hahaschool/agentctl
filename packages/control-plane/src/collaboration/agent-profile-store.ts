@@ -1,6 +1,6 @@
 import type { AgentInstance, AgentProfile } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
@@ -130,6 +130,13 @@ export class AgentProfileStore {
       .from(agentInstances)
       .where(eq(agentInstances.profileId, profileId));
     return rows.map((row) => this.toInstance(row));
+  }
+
+  async countInstances(): Promise<number> {
+    const rows = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(agentInstances);
+    return rows[0]?.count ?? 0;
   }
 
   async updateInstance(id: string, input: UpdateInstanceInput): Promise<AgentInstance> {
