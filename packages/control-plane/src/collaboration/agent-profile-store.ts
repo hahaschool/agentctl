@@ -133,9 +133,7 @@ export class AgentProfileStore {
   }
 
   async countInstances(): Promise<number> {
-    const rows = await this.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(agentInstances);
+    const rows = await this.db.select({ count: sql<number>`count(*)::int` }).from(agentInstances);
     return rows[0]?.count ?? 0;
   }
 
