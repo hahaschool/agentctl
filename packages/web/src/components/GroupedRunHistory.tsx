@@ -3,12 +3,11 @@
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import type { RunStatusFilter, RunTriggerFilter } from '@/components/RunHistoryFilters';
 import { RunHistoryFilters } from '@/components/RunHistoryFilters';
-import { StatusBadge } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { AgentRun } from '@/lib/api';
@@ -19,10 +18,24 @@ import { cn } from '@/lib/utils';
 // Types
 // ---------------------------------------------------------------------------
 
+type RunWithRetryMeta = AgentRun & {
+  retryOf?: string | null;
+  retryIndex?: number | null;
+};
+
+type RetryRunGroup = {
+  groupId: string;
+  leadRun: RunWithRetryMeta;
+  previousRuns: RunWithRetryMeta[];
+  allRuns: RunWithRetryMeta[];
+  retryCount: number;
+};
+
 type DateGroup = {
   label: string;
   dateKey: string;
-  runs: AgentRun[];
+  runs: RunWithRetryMeta[];
+  runGroups: RetryRunGroup[];
   successCount: number;
   totalCost: number;
 };
@@ -56,18 +69,10 @@ export function GroupedRunHistory({
   const [triggerFilter, setTriggerFilter] = useState<RunTriggerFilter>('all');
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [expandedRetryGroups, setExpandedRetryGroups] = useState<Set<string>>(new Set());
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
   const highlightRef = useRef<HTMLTableRowElement | null>(null);
   const highlightMobileRef = useRef<HTMLDivElement | null>(null);
-
-  // Scroll to highlighted run when it changes
-  useEffect(() => {
-    if (!highlightedRunId) return;
-    const el = highlightRef.current ?? highlightMobileRef.current;
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [highlightedRunId]);
 
   // -- Filter runs --
   const filteredRuns = useMemo(() => {
@@ -94,13 +99,47 @@ export function GroupedRunHistory({
 
   // -- Paginate --
   const paginatedRuns = useMemo(
-    () => filteredRuns.slice(0, visibleCount),
+    () => filteredRuns.slice(0, visibleCount).map((run) => run as RunWithRetryMeta),
     [filteredRuns, visibleCount],
   );
   const hasMore = visibleCount < filteredRuns.length;
 
   // -- Group by date --
   const groups = useMemo(() => groupRunsByDate(paginatedRuns), [paginatedRuns]);
+
+  const highlightedRetryGroupKey = useMemo(() => {
+    if (!highlightedRunId) return null;
+
+    for (const group of groups) {
+      for (const runGroup of group.runGroups) {
+        if (runGroup.allRuns.some((run) => run.id === highlightedRunId)) {
+          return makeRetryGroupKey(group.dateKey, runGroup.groupId);
+        }
+      }
+    }
+
+    return null;
+  }, [groups, highlightedRunId]);
+
+  // Auto-expand retry groups when the highlighted run is nested.
+  useEffect(() => {
+    if (!highlightedRetryGroupKey) return;
+    setExpandedRetryGroups((prev) => {
+      if (prev.has(highlightedRetryGroupKey)) return prev;
+      const next = new Set(prev);
+      next.add(highlightedRetryGroupKey);
+      return next;
+    });
+  }, [highlightedRetryGroupKey]);
+
+  // Scroll to highlighted run when it changes.
+  useEffect(() => {
+    if (!highlightedRunId) return;
+    const el = highlightRef.current ?? highlightMobileRef.current;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightedRunId]);
 
   const toggleGroup = useCallback((dateKey: string) => {
     setCollapsedGroups((prev) => {
@@ -109,6 +148,18 @@ export function GroupedRunHistory({
         next.delete(dateKey);
       } else {
         next.add(dateKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleRetryGroup = useCallback((key: string) => {
+    setExpandedRetryGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
       }
       return next;
     });
@@ -188,19 +239,64 @@ export function GroupedRunHistory({
                 {!isCollapsed && (
                   <>
                     {/* Mobile layout */}
-                    <div className="sm:hidden space-y-1.5 pl-5">
-                      {group.runs.map((run) => (
-                        <RunCardMobile
-                          key={run.id}
-                          run={run}
-                          errorExpanded={expandedErrors.has(run.id)}
-                          onToggleError={() => toggleError(run.id)}
-                          isHighlighted={run.id === highlightedRunId}
-                          highlightRef={
-                            run.id === highlightedRunId ? highlightMobileRef : undefined
-                          }
-                        />
-                      ))}
+                    <div className="sm:hidden space-y-2 pl-5">
+                      {group.runGroups.map((runGroup) => {
+                        const retryGroupKey = makeRetryGroupKey(group.dateKey, runGroup.groupId);
+                        const retriesExpanded = expandedRetryGroups.has(retryGroupKey);
+
+                        return (
+                          <div key={retryGroupKey} className="space-y-1.5">
+                            <RunCardMobile
+                              run={runGroup.leadRun}
+                              errorExpanded={expandedErrors.has(runGroup.leadRun.id)}
+                              onToggleError={() => toggleError(runGroup.leadRun.id)}
+                              isHighlighted={runGroup.leadRun.id === highlightedRunId}
+                              highlightRef={
+                                runGroup.leadRun.id === highlightedRunId
+                                  ? highlightMobileRef
+                                  : undefined
+                              }
+                            />
+                            {runGroup.retryCount > 0 && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                                  onClick={() => toggleRetryGroup(retryGroupKey)}
+                                  aria-expanded={retriesExpanded}
+                                >
+                                  {retriesExpanded ? (
+                                    <ChevronDown className="h-3 w-3" />
+                                  ) : (
+                                    <ChevronRight className="h-3 w-3" />
+                                  )}
+                                  {runGroup.retryCount} retr
+                                  {runGroup.retryCount === 1 ? 'y' : 'ies'}
+                                </button>
+                                {retriesExpanded && (
+                                  <div className="pl-3 border-l border-border/40 space-y-1.5">
+                                    {runGroup.previousRuns.map((run) => (
+                                      <RunCardMobile
+                                        key={run.id}
+                                        run={run}
+                                        errorExpanded={expandedErrors.has(run.id)}
+                                        onToggleError={() => toggleError(run.id)}
+                                        isHighlighted={run.id === highlightedRunId}
+                                        highlightRef={
+                                          run.id === highlightedRunId
+                                            ? highlightMobileRef
+                                            : undefined
+                                        }
+                                        isRetryDetail
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Desktop table layout */}
@@ -232,16 +328,63 @@ export function GroupedRunHistory({
                           </tr>
                         </thead>
                         <tbody>
-                          {group.runs.map((run) => (
-                            <RunRowDesktop
-                              key={run.id}
-                              run={run}
-                              errorExpanded={expandedErrors.has(run.id)}
-                              onToggleError={() => toggleError(run.id)}
-                              isHighlighted={run.id === highlightedRunId}
-                              highlightRef={run.id === highlightedRunId ? highlightRef : undefined}
-                            />
-                          ))}
+                          {group.runGroups.map((runGroup) => {
+                            const retryGroupKey = makeRetryGroupKey(
+                              group.dateKey,
+                              runGroup.groupId,
+                            );
+                            const retriesExpanded = expandedRetryGroups.has(retryGroupKey);
+
+                            return (
+                              <Fragment key={retryGroupKey}>
+                                <RunRowDesktop
+                                  run={runGroup.leadRun}
+                                  errorExpanded={expandedErrors.has(runGroup.leadRun.id)}
+                                  onToggleError={() => toggleError(runGroup.leadRun.id)}
+                                  isHighlighted={runGroup.leadRun.id === highlightedRunId}
+                                  highlightRef={
+                                    runGroup.leadRun.id === highlightedRunId
+                                      ? highlightRef
+                                      : undefined
+                                  }
+                                />
+                                {runGroup.retryCount > 0 && (
+                                  <tr className="border-b border-border/20">
+                                    <td colSpan={7} className="py-1.5 pr-3">
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                                        onClick={() => toggleRetryGroup(retryGroupKey)}
+                                        aria-expanded={retriesExpanded}
+                                      >
+                                        {retriesExpanded ? (
+                                          <ChevronDown className="h-3 w-3" />
+                                        ) : (
+                                          <ChevronRight className="h-3 w-3" />
+                                        )}
+                                        {runGroup.retryCount} retr
+                                        {runGroup.retryCount === 1 ? 'y' : 'ies'}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                )}
+                                {retriesExpanded &&
+                                  runGroup.previousRuns.map((run) => (
+                                    <RunRowDesktop
+                                      key={run.id}
+                                      run={run}
+                                      errorExpanded={expandedErrors.has(run.id)}
+                                      onToggleError={() => toggleError(run.id)}
+                                      isHighlighted={run.id === highlightedRunId}
+                                      highlightRef={
+                                        run.id === highlightedRunId ? highlightRef : undefined
+                                      }
+                                      isRetryDetail
+                                    />
+                                  ))}
+                              </Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -316,39 +459,89 @@ function TriggerBadge({ trigger }: { trigger?: string }): React.JSX.Element {
   );
 }
 
+function RunStatusBadge({ status }: { status: string }): React.JSX.Element {
+  const tone = getRunStatusTone(status);
+
+  return (
+    <div className="inline-flex items-center gap-1.5 flex-wrap">
+      <Badge
+        variant="outline"
+        className={cn('h-5 px-2 gap-1 text-[10px] font-medium', tone.badgeClass)}
+      >
+        <span
+          className={cn(
+            'h-1.5 w-1.5 rounded-full bg-current shrink-0',
+            tone.shouldPulse && 'animate-pulse',
+          )}
+        />
+        {tone.label}
+      </Badge>
+      {tone.description ? (
+        <span className="text-[10px] text-muted-foreground">{tone.description}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function RetryBadge({ run }: { run: RunWithRetryMeta }): React.JSX.Element | null {
+  if (!run.retryOf) return null;
+
+  return (
+    <Badge
+      variant="outline"
+      className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground border-border/50 bg-muted/30"
+    >
+      Retry #{run.retryIndex ?? 1}
+    </Badge>
+  );
+}
+
+function RetryOfText({ run }: { run: RunWithRetryMeta }): React.JSX.Element | null {
+  if (!run.retryOf) return null;
+
+  return (
+    <span className="text-[10px] text-muted-foreground">
+      Retry of <span className="font-mono">{shortRunId(run.retryOf)}</span>
+    </span>
+  );
+}
+
 function RunCardMobile({
   run,
   errorExpanded,
   onToggleError,
   isHighlighted,
   highlightRef,
+  isRetryDetail = false,
 }: {
-  run: AgentRun;
+  run: RunWithRetryMeta;
   errorExpanded: boolean;
   onToggleError: () => void;
   isHighlighted?: boolean;
   highlightRef?: React.Ref<HTMLDivElement>;
+  isRetryDetail?: boolean;
 }): React.JSX.Element {
   return (
     <div
       ref={isHighlighted ? highlightRef : undefined}
       className={cn(
         'rounded-lg border p-3 space-y-1.5 transition-colors hover:border-border',
-        isHighlighted
-          ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/30'
-          : 'border-border/50',
+        isRetryDetail ? 'border-border/40 bg-muted/20 ml-1' : 'border-border/50',
+        isHighlighted && 'border-primary/60 bg-primary/5 ring-1 ring-primary/30',
       )}
       data-run-id={run.id}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <StatusBadge status={run.status} />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <RunStatusBadge status={run.status} />
+          <RetryBadge run={run} />
           <TriggerBadge trigger={run.trigger} />
         </div>
         <span className="text-xs font-mono text-muted-foreground">
           {formatDurationMs(run.durationMs ?? 0)}
         </span>
       </div>
+      <RetryOfText run={run} />
       <div>
         <span
           className={cn(
@@ -404,29 +597,38 @@ function RunRowDesktop({
   onToggleError,
   isHighlighted,
   highlightRef,
+  isRetryDetail = false,
 }: {
-  run: AgentRun;
+  run: RunWithRetryMeta;
   errorExpanded: boolean;
   onToggleError: () => void;
   isHighlighted?: boolean;
   highlightRef?: React.Ref<HTMLTableRowElement>;
+  isRetryDetail?: boolean;
 }): React.JSX.Element {
   return (
     <tr
       ref={isHighlighted ? highlightRef : undefined}
       className={cn(
         'border-b border-border/30 last:border-0',
+        isRetryDetail && 'bg-muted/20',
         isHighlighted && 'bg-primary/5 ring-1 ring-primary/30 rounded',
       )}
       data-run-id={run.id}
     >
-      <td className="py-2 pr-3">
-        <StatusBadge status={run.status} />
+      <td className={cn('py-2 pr-3 align-top', isRetryDetail && 'pl-4')}>
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <RunStatusBadge status={run.status} />
+            <RetryBadge run={run} />
+          </div>
+          <RetryOfText run={run} />
+        </div>
       </td>
-      <td className="py-2 pr-3">
+      <td className="py-2 pr-3 align-top">
         <TriggerBadge trigger={run.trigger} />
       </td>
-      <td className="py-2 pr-3 max-w-[300px]">
+      <td className="py-2 pr-3 max-w-[300px] align-top">
         <span
           className={cn('text-xs', run.prompt ? 'text-foreground' : 'text-muted-foreground')}
           title={run.prompt}
@@ -446,20 +648,20 @@ function RunRowDesktop({
           />
         )}
       </td>
-      <td className="py-2 pr-3 text-xs font-mono text-muted-foreground whitespace-nowrap">
+      <td className="py-2 pr-3 text-xs font-mono text-muted-foreground whitespace-nowrap align-top">
         {formatDurationMs(run.durationMs ?? 0)}
       </td>
-      <td className="py-2 pr-3 text-xs font-mono text-muted-foreground whitespace-nowrap">
+      <td className="py-2 pr-3 text-xs font-mono text-muted-foreground whitespace-nowrap align-top">
         {formatCost(run.costUsd ?? null)}
       </td>
-      <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">
+      <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap align-top">
         {run.finishedAt ? (
           <LiveTimeAgo date={run.finishedAt} />
         ) : (
           <LiveTimeAgo date={run.startedAt} />
         )}
       </td>
-      <td className="py-2 text-xs whitespace-nowrap">
+      <td className="py-2 text-xs whitespace-nowrap align-top">
         {run.sessionId && (
           <Link
             href={`/sessions/${run.sessionId}`}
@@ -508,8 +710,8 @@ function ErrorButton({
 // Grouping logic
 // ---------------------------------------------------------------------------
 
-function groupRunsByDate(runs: AgentRun[]): DateGroup[] {
-  const groups = new Map<string, AgentRun[]>();
+function groupRunsByDate(runs: RunWithRetryMeta[]): DateGroup[] {
+  const groups = new Map<string, RunWithRetryMeta[]>();
 
   for (const run of runs) {
     const dateKey = getDateKey(run.startedAt);
@@ -525,9 +727,149 @@ function groupRunsByDate(runs: AgentRun[]): DateGroup[] {
     label: formatDateLabel(dateKey),
     dateKey,
     runs: groupRuns,
+    runGroups: groupRunsByRetryChain(groupRuns),
     successCount: groupRuns.filter((r) => r.status === 'success').length,
     totalCost: groupRuns.reduce((sum, r) => sum + (r.costUsd ?? 0), 0),
   }));
+}
+
+function groupRunsByRetryChain(runs: RunWithRetryMeta[]): RetryRunGroup[] {
+  const runsById = new Map(runs.map((run) => [run.id, run]));
+  const chains = new Map<string, RunWithRetryMeta[]>();
+
+  for (const run of runs) {
+    const rootId = findRootRunId(run, runsById);
+    const existing = chains.get(rootId);
+    if (existing) {
+      existing.push(run);
+    } else {
+      chains.set(rootId, [run]);
+    }
+  }
+
+  return Array.from(chains.entries())
+    .map(([groupId, chainRuns]) => {
+      const attemptsAsc = [...chainRuns].sort(compareRunsByAttemptAsc);
+      const leadRun = attemptsAsc.at(-1);
+      if (!leadRun) return null;
+
+      return {
+        groupId,
+        leadRun,
+        previousRuns: attemptsAsc.slice(0, -1).reverse(),
+        allRuns: attemptsAsc,
+        retryCount: Math.max(0, attemptsAsc.length - 1),
+      };
+    })
+    .filter((group): group is RetryRunGroup => group !== null)
+    .sort((a, b) => toEpochMs(b.leadRun.startedAt) - toEpochMs(a.leadRun.startedAt));
+}
+
+function findRootRunId(run: RunWithRetryMeta, runsById: Map<string, RunWithRetryMeta>): string {
+  let current = run;
+  let rootId = run.id;
+  const seen = new Set<string>([run.id]);
+
+  while (current.retryOf) {
+    const parentId = current.retryOf;
+    rootId = parentId;
+
+    if (seen.has(parentId)) {
+      break;
+    }
+
+    seen.add(parentId);
+
+    const parent = runsById.get(parentId);
+    if (!parent) {
+      break;
+    }
+
+    current = parent;
+  }
+
+  return rootId;
+}
+
+function compareRunsByAttemptAsc(a: RunWithRetryMeta, b: RunWithRetryMeta): number {
+  const attemptA = a.retryIndex ?? (a.retryOf ? 1 : 0);
+  const attemptB = b.retryIndex ?? (b.retryOf ? 1 : 0);
+
+  if (attemptA !== attemptB) {
+    return attemptA - attemptB;
+  }
+
+  return toEpochMs(a.startedAt) - toEpochMs(b.startedAt);
+}
+
+function getRunStatusTone(status: string): {
+  label: string;
+  badgeClass: string;
+  description?: string;
+  shouldPulse?: boolean;
+} {
+  if (status === 'success') {
+    return {
+      label: 'Success',
+      badgeClass: 'bg-green-500/10 text-green-500 border-green-500/20',
+    };
+  }
+
+  if (FAILURE_STATUSES.has(status)) {
+    return {
+      label: 'Failure',
+      badgeClass: 'bg-red-500/10 text-red-500 border-red-500/20',
+    };
+  }
+
+  if (status === 'empty') {
+    return {
+      label: 'Empty',
+      badgeClass: 'bg-muted text-muted-foreground border-border/50',
+      description: '(no output produced)',
+    };
+  }
+
+  if (status === 'running') {
+    return {
+      label: 'Running',
+      badgeClass: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+      shouldPulse: true,
+    };
+  }
+
+  if (status === 'cancelled') {
+    return {
+      label: 'Cancelled',
+      badgeClass: 'bg-muted text-muted-foreground border-border/50',
+    };
+  }
+
+  return {
+    label: toTitleCase(status),
+    badgeClass: 'bg-muted text-muted-foreground border-border/50',
+  };
+}
+
+function toEpochMs(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function shortRunId(runId: string): string {
+  return runId.slice(0, 8);
+}
+
+function makeRetryGroupKey(dateKey: string, groupId: string): string {
+  return `${dateKey}:${groupId}`;
 }
 
 function getDateKey(dateStr: string): string {
