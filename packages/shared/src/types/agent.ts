@@ -142,6 +142,8 @@ export type AgentConfig = {
   model?: string;
   maxTurns?: number;
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+  /** How AgentCTL should handle project instruction files (CLAUDE.md/AGENTS.md). */
+  instructionsStrategy?: 'project' | 'managed' | 'merge';
   systemPrompt?: string;
   initialPrompt?: string;
   /** Default prompt used when no explicit prompt is provided (e.g. cron/heartbeat triggers). */

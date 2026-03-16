@@ -210,10 +210,15 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
       environmentPolicy: { inherit: ['HOME', 'PATH', 'SHELL'], set: {} },
       runtimeOverrides: { claudeCode: {}, codex: {} },
     };
+    const instructionsStrategy = agent.config?.instructionsStrategy ?? 'project';
 
     // Build query string for worker preview endpoint
     const qs = new URLSearchParams({ runtime });
     qs.set('configJson', JSON.stringify(previewConfig));
+    qs.set('instructionsStrategy', instructionsStrategy);
+    if (agent.projectPath) {
+      qs.set('projectPath', agent.projectPath);
+    }
 
     const overrides = agent.config?.runtimeConfigOverrides;
     if (overrides && Object.keys(overrides).length > 0) {
@@ -234,6 +239,22 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
         return reply.code(response.status).send(data);
       }
 
+      if (
+        instructionsStrategy === 'project' &&
+        isConfigPreviewResponse(data) &&
+        Array.isArray(data.files)
+      ) {
+        return reply.send({
+          ...data,
+          files: data.files.filter(
+            (file) =>
+              file.path !== 'CLAUDE.md' &&
+              file.path !== 'AGENTS.md' &&
+              file.path !== '.codex/AGENTS.md',
+          ),
+        });
+      }
+
       return reply.send(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -244,3 +265,15 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
     }
   });
 };
+
+function isConfigPreviewResponse(value: unknown): value is {
+  files: Array<{ path: string }>;
+  [key: string]: unknown;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'files' in value &&
+    Array.isArray((value as { files?: unknown }).files)
+  );
+}
