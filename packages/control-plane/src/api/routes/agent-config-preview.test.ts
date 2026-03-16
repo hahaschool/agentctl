@@ -203,7 +203,7 @@ describe('Agent config preview routes — /api/agents/:id/config-preview', () =>
     const duplicateSkillCount = skillIds.filter((id) => id === 'duplicate-skill').length;
     expect(duplicateSkillCount).toBe(1);
 
-    expect(filesystem?.source).toBe('global');
+    expect(filesystem?.source).toBe('project');
     expect(customMcp?.source).toBe('custom');
     expect(forwardedInstructionsStrategy).toBe('project');
   });
