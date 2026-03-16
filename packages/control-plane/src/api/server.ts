@@ -615,6 +615,7 @@ export async function createServer({
     const taskRunStore = new TaskRunStore(db, logger);
     const workerNodeStore = new WorkerNodeStore(db, logger);
     const workerLeaseStore = new WorkerLeaseStore(db, logger);
+    const agentProfileStore = new AgentProfileStore(db, logger);
 
     await app.register(taskGraphRoutes, {
       prefix: '/api/task-graphs',
@@ -630,12 +631,12 @@ export async function createServer({
 
     await app.register(workerNodeRoutes, {
       prefix: '/api/fleet/nodes',
+      agentProfileStore,
       workerNodeStore,
       taskRunStore,
     });
 
     // Phase 2: Agent identity + approval gates
-    const agentProfileStore = new AgentProfileStore(db, logger);
     await app.register(agentProfileRoutes, {
       prefix: '/api/agent-profiles',
       agentProfileStore,
