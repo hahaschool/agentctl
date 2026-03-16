@@ -1,7 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-
 import type { AgentConfig } from '@agentctl/shared';
+import { safeExistsSync, safeReadFileSync } from '../../utils/path-security.js';
 
 export type InstructionsStrategy = NonNullable<AgentConfig['instructionsStrategy']>;
 
@@ -48,14 +46,9 @@ function readProjectInstructionFile(
     return null;
   }
 
-  const instructionPath = path.resolve(projectPath, fileName);
-
-  if (!existsSync(instructionPath)) {
-    return null;
-  }
-
   try {
-    return readFileSync(instructionPath, 'utf-8');
+    const instructionPath = safeExistsSync(`${projectPath}/${fileName}`, projectPath);
+    return instructionPath ? safeReadFileSync(instructionPath, projectPath) : null;
   } catch {
     return null;
   }
