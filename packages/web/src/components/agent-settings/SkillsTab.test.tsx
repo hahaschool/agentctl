@@ -128,22 +128,24 @@ describe('SkillsTab', () => {
     expect(screen.getByText('Skills')).toBeDefined();
   });
 
-  it('shows message for non-managed runtime agents', () => {
+  it('falls back to managed-runtime skill discovery for non-managed runtime agents', () => {
     renderTab(makeAgent({ runtime: 'nanoclaw' as Agent['runtime'] }));
+    expect(screen.getByText('Skills')).toBeDefined();
     expect(
-      screen.getByText(
+      screen.queryByText(
         'Skill discovery is only available for managed runtimes (claude-code, codex).',
       ),
-    ).toBeDefined();
+    ).toBeNull();
   });
 
-  it('shows message when runtime is not set', () => {
+  it('falls back to managed-runtime skill discovery when runtime is not set', () => {
     renderTab(makeAgent({ runtime: undefined }));
+    expect(screen.getByText('Skills')).toBeDefined();
     expect(
-      screen.getByText(
+      screen.queryByText(
         'Skill discovery is only available for managed runtimes (claude-code, codex).',
       ),
-    ).toBeDefined();
+    ).toBeNull();
   });
 
   it('renders save button', () => {
