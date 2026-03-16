@@ -97,7 +97,12 @@ export default function AgentDetailPage(): React.JSX.Element {
 
   const accountList = accounts.data ?? [];
   const machines = machinesList.data ?? [];
-  const runList = runs.data ?? [];
+  const runList = useMemo(() => {
+    const list = runs.data ?? [];
+    return [...list].sort(
+      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+    );
+  }, [runs.data]);
 
   // Build a sessionId -> runId lookup for linkage
   const sessionToRunMap = useMemo(() => {
