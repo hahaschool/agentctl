@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace, Vitest, Fastify, Next.js, TypeScript, GitHub Actions, CodeQL
 
-> Status note (2026-03-15): this stabilization/security wave is now complete on `main` through PR #210. Earlier fixes (#167, #169-#201) restored the reproduced CI regressions, hardened the path/discovery/worktree surfaces, landed the coordination board, and added the modeled Fastify follow-ups that still left CodeQL blind to Fastify-specific rate limiting. The final batch then fixed the agent-worker fd-write test regressions (PR #206), landed the control-plane and agent-worker modeled Fastify route updates on `main` (PRs #207-#208), resolved the remaining `path-security.ts` file-write findings (PR #209), and enabled the skipped Playwright coverage batch (PR #210). After the latest green `main` CI/Security Audit, the lingering Fastify rate-limit findings were dismissed as CodeQL modeling false positives and the stale old-Alpine Grype findings were dismissed because current `main` uses `bookworm-slim` images. There are currently no open CodeQL or Dependabot alerts on `main`.
+> Status note (2026-03-16): this stabilization/security wave is now complete on `main` through PR #220. Earlier fixes (#167, #169-#201) restored the reproduced CI regressions, hardened the path/discovery/worktree surfaces, landed the coordination board, and added the modeled Fastify follow-ups that still left CodeQL blind to Fastify-specific rate limiting. The later batch then fixed the agent-worker fd-write test regressions (PR #206), landed the control-plane and agent-worker modeled Fastify route updates on `main` (PRs #207-#208), resolved the remaining `path-security.ts` file-write findings (PR #209), enabled the skipped Playwright coverage batch (PR #210), hardened the instructions-strategy/config-preview instruction-read surfaces (PRs #217 and #219), and added targeted web regression coverage for the CLAUDE.md strategy settings flow (PR #220). After the latest green Security Audit/CodeQL pass, the lingering Fastify rate-limit findings remain dismissed as CodeQL modeling false positives and the stale old-Alpine Grype findings remain dismissed because current `main` uses `bookworm-slim` images. There are currently no open CodeQL or Dependabot alerts on `main`.
 
 ---
 
@@ -137,7 +137,7 @@ gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' 
 
 Expected: group alerts into actionable code fixes vs dependency/base-image findings vs likely false positives already using `sanitizePath`.
 
-Current final state after PR #210:
+Current final state after PR #220:
 - Discovery path alerts (`skill-discovery.ts`, `codex-mcp-discovery.ts`) are delivered on `main` via PR #176.
 - Worktree-manager path alerts are delivered on `main` via PR #177.
 - Agent-start rate limiting is delivered on `main` via PR #179.
@@ -153,6 +153,10 @@ Current final state after PR #210:
 - The control-plane and agent-worker modeled Fastify config follow-ups landed via PRs #207-#208.
 - The remaining `path-security.ts` file-write findings are fixed on `main` via PR #209.
 - The skipped Playwright coverage batch is enabled on `main` via PR #210.
+- The instructions-strategy file-read follow-up is fixed on `main` via PR #217.
+- The project-instructions preview bugfix landed on `main` via PR #218.
+- The remaining `config-preview.ts` path-injection finding is fixed on `main` via PR #219.
+- The targeted web regression coverage for `SkillsTab` / `ModelPromptsTab` landed on `main` via PR #220.
 - The lingering Fastify rate-limit alerts were dismissed as CodeQL modeling false positives after the latest green `main` Security Audit.
 - The stale BusyBox/ssl_client Grype findings were dismissed after PR #205 moved current runtime images to `bookworm-slim`.
 - There is no remaining open security backlog from this cycle on `main`.
