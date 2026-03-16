@@ -18,22 +18,27 @@ describe('LiveDuration', () => {
     expect(screen.getByText('5m 30s')).toBeDefined();
   });
 
-  it('renders "0s" for a just-started session with no endedAt', () => {
+  it('renders "Running now" for a just-started session with no endedAt', () => {
     vi.setSystemTime(new Date('2026-03-06T10:00:00Z'));
     render(<LiveDuration startedAt="2026-03-06T10:00:00Z" />);
-    expect(screen.getByText('0s')).toBeDefined();
+    expect(screen.getByText('Running now')).toBeDefined();
   });
 
   it('live-updates duration when endedAt is null', () => {
     vi.setSystemTime(new Date('2026-03-06T10:00:00Z'));
     render(<LiveDuration startedAt="2026-03-06T10:00:00Z" endedAt={null} />);
-    expect(screen.getByText('0s')).toBeDefined();
+    expect(screen.getByText('Running now')).toBeDefined();
 
     // Advance 65 seconds
     act(() => {
       vi.advanceTimersByTime(65_000);
     });
     expect(screen.getByText('1m 5s')).toBeDefined();
+  });
+
+  it('renders "instant" for a completed session with zero measured duration', () => {
+    render(<LiveDuration startedAt="2026-03-06T10:00:00Z" endedAt="2026-03-06T10:00:00Z" />);
+    expect(screen.getByText('instant')).toBeDefined();
   });
 
   it('stops ticking when endedAt is provided', () => {

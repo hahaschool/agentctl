@@ -37,9 +37,9 @@ describe('LiveDuration', () => {
     });
 
     it('renders formatted duration for an active session (no endedAt)', () => {
-      mockFormatDuration.mockReturnValue('0s');
+      mockFormatDuration.mockReturnValue('5s');
       render(<LiveDuration startedAt="2026-03-06T10:00:00Z" />);
-      expect(screen.getByText('0s')).toBeDefined();
+      expect(screen.getByText('5s')).toBeDefined();
       expect(mockFormatDuration).toHaveBeenCalledWith('2026-03-06T10:00:00Z', undefined);
     });
 
@@ -48,6 +48,18 @@ describe('LiveDuration', () => {
       render(<LiveDuration startedAt="2026-03-06T10:00:00Z" endedAt={null} />);
       expect(screen.getByText('12s')).toBeDefined();
       expect(mockFormatDuration).toHaveBeenCalledWith('2026-03-06T10:00:00Z', null);
+    });
+
+    it('renders "Running now" for an active session before one second has elapsed', () => {
+      mockFormatDuration.mockReturnValue('0s');
+      render(<LiveDuration startedAt="2026-03-06T10:00:00Z" />);
+      expect(screen.getByText('Running now')).toBeDefined();
+    });
+
+    it('renders "instant" for a completed session with zero measured duration', () => {
+      mockFormatDuration.mockReturnValue('0s');
+      render(<LiveDuration startedAt="2026-03-06T10:00:00Z" endedAt="2026-03-06T10:00:00Z" />);
+      expect(screen.getByText('instant')).toBeDefined();
     });
 
     it('applies className to the span element', () => {
@@ -122,7 +134,7 @@ describe('LiveDuration', () => {
     it('updates displayed text when formatDuration returns new value after tick', () => {
       mockFormatDuration.mockReturnValue('0s');
       render(<LiveDuration startedAt="2026-03-06T10:00:00Z" />);
-      expect(screen.getByText('0s')).toBeDefined();
+      expect(screen.getByText('Running now')).toBeDefined();
 
       // After tick, formatDuration returns updated value
       mockFormatDuration.mockReturnValue('1s');
