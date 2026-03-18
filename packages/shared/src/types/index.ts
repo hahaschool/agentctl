@@ -61,6 +61,7 @@ export {
 } from './agent-message.js';
 export type {
   AgentRun,
+  RunPhase,
   RunStatus,
   RunTrigger,
 } from './agent-run.js';

@@ -561,6 +561,7 @@ describe('Agent routes — with dbRegistry', () => {
     listAgents: vi.fn().mockResolvedValue([]),
     getRecentRuns: vi.fn().mockResolvedValue([]),
     completeRun: vi.fn().mockResolvedValue(undefined),
+    updateRunPhase: vi.fn().mockResolvedValue(undefined),
     createRun: vi.fn().mockResolvedValue('run-001'),
     insertActions: vi.fn(),
     getMachine: vi.fn(),
@@ -1019,12 +1020,75 @@ describe('Agent routes — with dbRegistry', () => {
         'run-001',
         expect.objectContaining({
           status: 'success',
+          phase: 'completed',
           costUsd: '0.42',
           tokensIn: 800,
           tokensOut: 220,
           resultSummary,
         }),
       );
+    });
+
+    it('accepts phase-only updates and forwards them to dbRegistry.updateRunPhase', async () => {
+      vi.mocked(mockDbRegistry.updateRunPhase).mockClear();
+      vi.mocked(mockDbRegistry.completeRun).mockClear();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: {
+          runId: 'run-001',
+          phase: 'dispatching',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.updateRunPhase).toHaveBeenCalledWith('run-001', 'dispatching');
+      expect(mockDbRegistry.completeRun).not.toHaveBeenCalled();
+      expect(response.json()).toMatchObject({ ok: true, runId: 'run-001', phase: 'dispatching' });
+    });
+
+    it('returns 400 when phase is invalid', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: {
+          runId: 'run-001',
+          phase: 'bad_phase',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_PHASE' });
+    });
+
+    it('returns 400 when a terminal phase is sent without status', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: {
+          runId: 'run-001',
+          phase: 'failed',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_PHASE' });
+    });
+
+    it('returns 400 when status/phase are incompatible', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: {
+          runId: 'run-001',
+          status: 'success',
+          phase: 'failed',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_PHASE' });
     });
 
     it('best-effort cleans up the worker agent after successful PR completion', async () => {
@@ -1128,6 +1192,7 @@ describe('Agent routes — with dbRegistry', () => {
       expect(body.ok).toBe(true);
       expect(body.runId).toBe('run-001');
       expect(body.status).toBe('success');
+      expect(body.phase).toBe('completed');
     });
 
     it('returns 400 when runId is missing', async () => {

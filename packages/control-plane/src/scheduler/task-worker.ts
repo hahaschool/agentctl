@@ -5,6 +5,7 @@ import {
   type DispatchSigningKeyPair,
   generateDispatchSigningKeyPair,
   type McpServerConfig,
+  type RunPhase,
   signDispatchPayload,
 } from '@agentctl/shared';
 import { type ConnectionOptions, type Job, Worker } from 'bullmq';
@@ -403,6 +404,21 @@ export function createTaskWorker({
         // -------------------------------------------------------------------
         // 4. Dispatch to the agent worker HTTP endpoint
         // -------------------------------------------------------------------
+        const updateRunPhase = async (phase: RunPhase): Promise<void> => {
+          if (!runId) return;
+
+          try {
+            await registry.updateRunPhase(runId, phase);
+          } catch (phaseErr: unknown) {
+            jobLogger.warn(
+              { runId, phase, err: phaseErr },
+              'Failed to update run phase — continuing dispatch',
+            );
+          }
+        };
+
+        await updateRunPhase('dispatching');
+
         const workerPort = DEFAULT_WORKER_PORT;
         const address = machine.tailscaleIp ?? machine.hostname;
         const dispatchUrl = `http://${address}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
@@ -437,6 +453,10 @@ export function createTaskWorker({
         };
 
         const result = await dispatchToWorker(dispatchUrl, payload, jobLogger);
+
+        await updateRunPhase('worker_contacted');
+        await updateRunPhase('cli_spawning');
+        await updateRunPhase('running');
 
         // Record successful dispatch with the circuit breaker.
         circuitBreaker?.recordSuccess(machine.id);

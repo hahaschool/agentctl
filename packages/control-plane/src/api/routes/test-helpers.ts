@@ -86,6 +86,7 @@ export function createFullMockDbRegistry(
     listAgents: vi.fn().mockResolvedValue([]),
     listAgentsPaginated: vi.fn().mockResolvedValue({ agents: [], total: 0 }),
     createRun: vi.fn().mockResolvedValue('run-001'),
+    updateRunPhase: vi.fn(),
     completeRun: vi.fn(),
     getRun: vi.fn().mockResolvedValue(undefined),
     getRecentRuns: vi.fn().mockResolvedValue([]),

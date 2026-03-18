@@ -282,6 +282,16 @@ export type AgentRun = {
   agentId: string;
   trigger?: 'schedule' | 'manual' | 'signal' | 'adhoc' | 'heartbeat';
   status: string;
+  phase?:
+    | 'queued'
+    | 'dispatching'
+    | 'worker_contacted'
+    | 'cli_spawning'
+    | 'running'
+    | 'completed'
+    | 'failed'
+    | 'empty'
+    | null;
   prompt?: string;
   costUsd?: number;
   durationMs?: number;
@@ -290,6 +300,8 @@ export type AgentRun = {
   errorMessage?: string;
   resultSummary?: ExecutionSummary | string | null;
   sessionId?: string | null;
+  retryOf?: string | null;
+  retryIndex?: number | null;
 };
 
 export type ApiAccount = SharedApiAccount;

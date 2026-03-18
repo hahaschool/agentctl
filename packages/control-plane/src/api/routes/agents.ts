@@ -5,6 +5,7 @@ import type {
   ExecutionSummary,
   HeartbeatRequest,
   RegisterWorkerRequest,
+  RunPhase,
   SafetyDecisionRequest,
   SignalAgentRequest,
   StartAgentRequest,
@@ -752,12 +753,36 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // ---------------------------------------------------------------------------
 
   const VALID_COMPLETION_STATUSES = new Set(['success', 'failure', 'empty']);
+  const VALID_RUN_PHASES: RunPhase[] = [
+    'queued',
+    'dispatching',
+    'worker_contacted',
+    'cli_spawning',
+    'running',
+    'completed',
+    'failed',
+    'empty',
+  ];
+  const VALID_RUN_PHASE_SET = new Set(VALID_RUN_PHASES);
+  const TERMINAL_RUN_PHASES = new Set<RunPhase>(['completed', 'failed', 'empty']);
+
+  const completionStatusToPhase = (status: 'success' | 'failure' | 'empty'): RunPhase => {
+    if (status === 'success') return 'completed';
+    if (status === 'failure') return 'failed';
+    return 'empty';
+  };
+
+  const phaseMatchesCompletionStatus = (
+    status: 'success' | 'failure' | 'empty',
+    phase: RunPhase,
+  ): boolean => completionStatusToPhase(status) === phase;
 
   app.post<{
     Params: { id: string };
     Body: {
       runId: string;
-      status: 'success' | 'failure' | 'empty';
+      status?: 'success' | 'failure' | 'empty';
+      phase?: RunPhase;
       errorMessage?: string;
       costUsd?: number;
       tokensIn?: number;
@@ -780,6 +805,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       const {
         runId,
         status,
+        phase,
         errorMessage,
         costUsd,
         tokensIn,
@@ -796,16 +822,66 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
       }
 
-      if (!status || !VALID_COMPLETION_STATUSES.has(status)) {
+      if (status == null && phase == null) {
+        return reply.code(400).send({
+          error: 'INVALID_COMPLETION_PAYLOAD',
+          message: 'At least one of "status" or "phase" is required',
+        });
+      }
+
+      if (status != null && !VALID_COMPLETION_STATUSES.has(status)) {
         return reply.code(400).send({
           error: 'INVALID_STATUS',
           message: 'Status must be "success", "failure", or "empty"',
         });
       }
 
+      if (phase && !VALID_RUN_PHASE_SET.has(phase)) {
+        return reply.code(400).send({
+          error: 'INVALID_PHASE',
+          message: `Phase must be one of: ${VALID_RUN_PHASES.join(', ')}`,
+        });
+      }
+
+      if (status == null && phase && TERMINAL_RUN_PHASES.has(phase)) {
+        return reply.code(400).send({
+          error: 'INVALID_PHASE',
+          message: 'Terminal phases require a completion status update',
+        });
+      }
+
+      if (
+        status != null &&
+        phase &&
+        TERMINAL_RUN_PHASES.has(phase) &&
+        !phaseMatchesCompletionStatus(status, phase)
+      ) {
+        return reply.code(400).send({
+          error: 'INVALID_PHASE',
+          message: `Phase "${phase}" is not valid for status "${status}"`,
+        });
+      }
+
       try {
+        if (status == null && phase) {
+          await dbRegistry.updateRunPhase(runId, phase);
+          app.log.info(
+            {
+              agentId: request.params.id,
+              runId,
+              phase,
+            },
+            'Agent run phase update reported by worker',
+          );
+          return reply.code(200).send({ ok: true, runId, phase });
+        }
+
+        const completionStatus = status as 'success' | 'failure' | 'empty';
+        const finalPhase = phase ?? completionStatusToPhase(completionStatus);
+
         await dbRegistry.completeRun(runId, {
-          status,
+          status: completionStatus,
+          phase: finalPhase,
           sessionId: sessionId ?? null,
           errorMessage: errorMessage ?? null,
           costUsd: costUsd != null ? String(costUsd) : null,
@@ -815,7 +891,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         });
 
         // Check consecutive failures and log alerts
-        if (status === 'failure') {
+        if (completionStatus === 'failure') {
           try {
             const health = await dbRegistry.getAgentHealth(request.params.id);
             if (health.consecutiveFailures >= 5) {
@@ -849,7 +925,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
         }
 
         // Update agent's currentSessionId for session resume support
-        if (sessionId && status === 'success') {
+        if (sessionId && completionStatus === 'success') {
           try {
             await dbRegistry.updateAgent(request.params.id, {
               currentSessionId: sessionId,
@@ -870,7 +946,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
               sessionId,
               agentId: request.params.id,
               machineId: agent?.machineId ?? 'unknown',
-              status,
+              status: completionStatus,
               projectPath: agent?.projectPath ?? null,
               model: agent?.config?.model ?? null,
               endedAt: new Date(),
@@ -887,7 +963,8 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           {
             agentId: request.params.id,
             runId,
-            status,
+            status: completionStatus,
+            phase: finalPhase,
             costUsd: costUsd ?? null,
             tokensIn: tokensIn ?? null,
             tokensOut: tokensOut ?? null,
@@ -897,14 +974,14 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           'Agent run completion reported by worker',
         );
 
-        if (status === 'success' && resultSummary?.prUrl) {
+        if (completionStatus === 'success' && resultSummary?.prUrl) {
           await cleanupWorkerAgentAfterPrCompletion(request.params.id, resultSummary.prUrl);
         }
 
         // -----------------------------------------------------------------
         // Fire-and-forget: sync run metadata into memory on success
         // -----------------------------------------------------------------
-        if (memoryInjector && status === 'success') {
+        if (memoryInjector && completionStatus === 'success') {
           const agentId = request.params.id;
           const summary =
             resultSummary?.executiveSummary ??
@@ -914,7 +991,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           memoryInjector
             .syncAfterRun(agentId, summary, {
               runId,
-              status,
+              status: completionStatus,
               costUsd: costUsd ?? null,
             })
             .catch((syncErr: unknown) => {
@@ -925,7 +1002,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
             });
         }
 
-        return reply.code(200).send({ ok: true, runId, status });
+        return reply
+          .code(200)
+          .send({ ok: true, runId, status: completionStatus, phase: finalPhase });
       } catch (err) {
         if (err instanceof ControlPlaneError && err.code === 'RUN_NOT_FOUND') {
           return reply.code(404).send({

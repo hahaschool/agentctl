@@ -141,6 +141,13 @@
       "when": 1710979200000,
       "tag": "0017_add_promotion_history",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1711065600000,
+      "tag": "0018_add_agent_runs_phase",
+      "breakpoints": true
     }
   ]
 }

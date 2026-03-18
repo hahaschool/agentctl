@@ -224,6 +224,10 @@ describe('createTaskWorker()', () => {
       expect(registry.createRun).toHaveBeenCalledWith(
         expect.objectContaining({ agentId: 'agent-abc', trigger: 'manual' }),
       );
+      expect(registry.updateRunPhase).toHaveBeenNthCalledWith(1, 'run-001', 'dispatching');
+      expect(registry.updateRunPhase).toHaveBeenNthCalledWith(2, 'run-001', 'worker_contacted');
+      expect(registry.updateRunPhase).toHaveBeenNthCalledWith(3, 'run-001', 'cli_spawning');
+      expect(registry.updateRunPhase).toHaveBeenNthCalledWith(4, 'run-001', 'running');
 
       expect(fetch).toHaveBeenCalledOnce();
 
@@ -305,6 +309,7 @@ describe('createTaskWorker()', () => {
       await expect(processor(job)).rejects.toBeInstanceOf(ControlPlaneError);
 
       expect(registry.createRun).toHaveBeenCalledOnce();
+      expect(registry.updateRunPhase).toHaveBeenCalledWith('run-001', 'dispatching');
       expect(registry.completeRun).toHaveBeenCalledOnce();
       expect(registry.completeRun).toHaveBeenCalledWith(
         'run-001',
