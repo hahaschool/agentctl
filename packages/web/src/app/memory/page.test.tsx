@@ -1,3 +1,4 @@
+import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 const { mockRedirect } = vi.hoisted(() => ({
@@ -12,7 +13,7 @@ import Page from './page';
 
 describe('memory root route', () => {
   it('redirects to the browser shell', () => {
-    Page();
+    render(<Page />);
 
     expect(mockRedirect).toHaveBeenCalledWith('/memory/browser');
   });

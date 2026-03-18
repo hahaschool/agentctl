@@ -12,6 +12,12 @@ vi.mock('lucide-react', () => ({
   RotateCcw: (props: Record<string, unknown>) => <svg data-testid="icon-rotate" {...props} />,
 }));
 
+vi.mock('next/link', () => ({
+  default: ({ children, href }: { children: unknown; href: string }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
+
 import { ErrorBoundary } from './ErrorBoundary';
 
 // ===========================================================================
@@ -143,6 +149,15 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
     expect(screen.getByRole('button', { name: /reload page/i })).toBeDefined();
+  });
+
+  it('renders a "Go to Dashboard" link', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowingChild />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('link', { name: /go to dashboard/i })).toBeDefined();
   });
 
   it('calls window.location.reload when "Reload page" is clicked', () => {

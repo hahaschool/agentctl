@@ -18,6 +18,7 @@ import { SkillsTab } from '@/components/agent-settings/SkillsTab';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CollapsibleSection } from '@/components/CollapsibleSection';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { agentQuery, machinesQuery } from '@/lib/queries';
@@ -42,7 +43,7 @@ type TabValue = (typeof TABS)[number]['value'];
 // Page
 // ---------------------------------------------------------------------------
 
-export default function AgentSettingsPage(): React.JSX.Element {
+function AgentSettingsPageContent(): React.JSX.Element {
   const params = useParams<{ id: string }>();
   const agentId = params.id;
 
@@ -181,5 +182,13 @@ export default function AgentSettingsPage(): React.JSX.Element {
         </CollapsibleSection>
       </div>
     </div>
+  );
+}
+
+export default function AgentSettingsPage(): React.JSX.Element {
+  return (
+    <ErrorBoundary>
+      <AgentSettingsPageContent />
+    </ErrorBoundary>
   );
 }

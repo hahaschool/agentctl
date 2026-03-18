@@ -1,8 +1,19 @@
 'use client';
 
 import { AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
+import Link from 'next/link';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Component } from 'react';
+
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 type Props = {
   children: ReactNode;
@@ -33,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('ErrorBoundary caught:', error, errorInfo);
+    console.error('[ErrorBoundary] Caught render error:', error, errorInfo);
     this.setState({ errorInfo });
   }
 
@@ -41,49 +52,72 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
 
+      const errorMessage = this.state.error?.message?.trim() || 'An unexpected error occurred';
+
       return (
-        <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center animate-fade-in">
-          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
-            <AlertTriangle size={24} className="text-destructive" aria-hidden="true" />
-          </div>
-          <div className="text-lg font-semibold text-foreground mb-1">Something went wrong</div>
-          <p className="text-sm text-muted-foreground mb-6 max-w-md">
-            {this.state.error?.message ?? 'An unexpected error occurred'}
-          </p>
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity cursor-pointer"
-              onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
-            >
-              <RotateCcw size={14} aria-hidden="true" />
-              Try again
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-muted text-foreground border border-border rounded-md hover:bg-accent transition-colors cursor-pointer"
-              onClick={() => window.location.reload()}
-            >
-              <RefreshCw size={14} aria-hidden="true" />
-              Reload page
-            </button>
-          </div>
-          {this.state.error && (
-            <details className="mt-2 text-left w-full max-w-lg">
-              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                Error details
-              </summary>
-              <pre className="mt-2 p-3 bg-muted rounded-md text-[11px] text-muted-foreground overflow-auto max-h-[200px] font-mono">
-                {this.state.error.name}: {this.state.error.message}
-                {this.state.errorInfo?.componentStack && (
-                  <>
-                    {'\n\nComponent Stack:'}
-                    {this.state.errorInfo.componentStack}
-                  </>
-                )}
-              </pre>
-            </details>
-          )}
+        <div className="flex min-h-[50vh] items-center justify-center p-6 animate-fade-in">
+          <Card className="w-full max-w-2xl gap-4 border-zinc-800/80 bg-zinc-950 text-zinc-100 shadow-xl">
+            <CardHeader className="border-b border-zinc-800/80 pb-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/15">
+                  <AlertTriangle size={20} className="text-red-300" aria-hidden="true" />
+                </div>
+                <div>
+                  <CardTitle className="text-zinc-50">Something went wrong</CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    A page component crashed during render.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-200">
+                {errorMessage}
+              </div>
+              {this.state.error && (
+                <details className="text-left">
+                  <summary className="text-xs text-zinc-400 cursor-pointer hover:text-zinc-200 transition-colors">
+                    Error details
+                  </summary>
+                  <pre className="mt-2 overflow-auto max-h-[220px] rounded-md border border-zinc-800 bg-zinc-900 p-3 text-[11px] text-zinc-300 font-mono">
+                    {this.state.error.name}: {this.state.error.message}
+                    {this.state.errorInfo?.componentStack && (
+                      <>
+                        {'\n\nComponent Stack:'}
+                        {this.state.errorInfo.componentStack}
+                      </>
+                    )}
+                  </pre>
+                </details>
+              )}
+            </CardContent>
+            <CardFooter className="flex flex-wrap gap-3 border-t border-zinc-800/80 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+              >
+                <RotateCcw size={14} aria-hidden="true" />
+                Try again
+              </Button>
+              <Button
+                type="button"
+                className="bg-blue-500 text-white hover:bg-blue-400"
+                onClick={() => window.location.reload()}
+              >
+                <RefreshCw size={14} aria-hidden="true" />
+                Reload Page
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800 hover:text-zinc-100"
+              >
+                <Link href="/">Go to Dashboard</Link>
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       );
     }
