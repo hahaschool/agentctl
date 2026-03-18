@@ -126,7 +126,7 @@ describe('KnowledgeGraphView', () => {
 
     render(<KnowledgeGraphView />);
 
-    expect(screen.getByText('Loading…')).toBeDefined();
+    expect(screen.getByTestId('knowledge-graph-count-skeleton')).toBeDefined();
   });
 
   it('switches to Graph placeholder when Graph tab is clicked', () => {

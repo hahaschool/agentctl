@@ -131,7 +131,7 @@ describe('MemoryBrowserView', () => {
 
     render(<MemoryBrowserView />);
 
-    expect(screen.getByText('Loading...')).toBeDefined();
+    expect(screen.getByTestId('memory-browser-count-skeleton')).toBeDefined();
   });
 
   it('shows empty state when no facts match', () => {
@@ -142,7 +142,7 @@ describe('MemoryBrowserView', () => {
 
     render(<MemoryBrowserView />);
 
-    expect(screen.getByText('0 facts')).toBeDefined();
+    expect(screen.getByText(/0 fact/)).toBeDefined();
     expect(screen.getByText('No facts found matching your filters.')).toBeDefined();
   });
 

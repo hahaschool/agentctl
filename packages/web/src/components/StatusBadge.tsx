@@ -29,7 +29,7 @@ const STATUS_VARIANTS: Record<string, string> = {
   timeout: 'bg-red-500/10 text-red-500 border-red-500/20',
 };
 
-const PULSE_STATUSES = new Set(['running', 'active', 'starting', 'online', 'restarting']);
+const PULSE_STATUSES = new Set(['online', 'running', 'active', 'ok', 'success', 'completed']);
 
 function StatusBadgeBase({ status }: { status: string }): React.JSX.Element {
   const variant = STATUS_VARIANTS[status] ?? 'bg-muted text-muted-foreground';
@@ -40,7 +40,7 @@ function StatusBadgeBase({ status }: { status: string }): React.JSX.Element {
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full bg-current shrink-0',
-          shouldPulse && 'animate-pulse',
+          shouldPulse && 'animate-status-dot',
         )}
       />
       {status}

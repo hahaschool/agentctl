@@ -7,6 +7,7 @@ import { useCallback, useState } from 'react';
 
 import { GraphNodeDetail } from '@/components/memory/GraphNodeDetail';
 import { GraphTableView } from '@/components/memory/GraphTableView';
+import { Skeleton } from '@/components/ui/skeleton';
 import { memoryFactQuery, memoryGraphQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -193,7 +194,7 @@ export function KnowledgeGraphView(): React.JSX.Element {
 
         <span className="ml-auto text-xs text-muted-foreground">
           {graphQuery.isLoading ? (
-            'Loading…'
+            <Skeleton className="h-4 w-24" data-testid="knowledge-graph-count-skeleton" />
           ) : (
             <>
               {nodes.length} node{nodes.length !== 1 ? 's' : ''}, {edges.length} edge

@@ -296,11 +296,7 @@ export function MachineDetailView(): React.JSX.Element {
         <CardHeader className="pb-0">
           <CardTitle className="text-sm flex items-center justify-between">
             <span>Available Runtimes</span>
-            {driftQuery.isLoading && (
-              <span className="text-[10px] font-normal text-muted-foreground animate-pulse">
-                Loading...
-              </span>
-            )}
+            {driftQuery.isLoading && <Skeleton className="h-3 w-14" />}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -340,11 +336,7 @@ export function MachineDetailView(): React.JSX.Element {
         <CardHeader className="pb-0">
           <CardTitle className="text-sm flex items-center justify-between">
             <span>Memory Stats</span>
-            {machineMemory.isLoading && (
-              <span className="text-[10px] font-normal text-muted-foreground animate-pulse">
-                Loading...
-              </span>
-            )}
+            {machineMemory.isLoading && <Skeleton className="h-3 w-14" />}
           </CardTitle>
         </CardHeader>
         <CardContent>

@@ -13,6 +13,7 @@ import {
   type BrowserFilters,
 } from '@/components/memory/BrowserFilterSidebar';
 import { FactsList } from '@/components/memory/FactsList';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   memoryFactQuery,
   memoryFactsQuery,
@@ -230,7 +231,7 @@ export function MemoryBrowserView(): React.JSX.Element {
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
           <div className="text-sm text-muted-foreground">
             {factsQueryResult.isLoading ? (
-              'Loading...'
+              <Skeleton className="h-4 w-28" data-testid="memory-browser-count-skeleton" />
             ) : (
               <>
                 {filteredFacts.length} fact{filteredFacts.length !== 1 ? 's' : ''}
