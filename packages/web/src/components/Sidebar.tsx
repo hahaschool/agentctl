@@ -1,5 +1,6 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Bot,
   Compass,
@@ -18,7 +19,6 @@ import {
   Sun,
   X,
 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -101,10 +101,7 @@ export function Sidebar(): React.JSX.Element {
       if (msg.type === 'error') {
         toast.error(msg.message);
       }
-      if (
-        msg.type === 'permission_request_created' ||
-        msg.type === 'permission_request_resolved'
-      ) {
+      if (msg.type === 'permission_request_created' || msg.type === 'permission_request_resolved') {
         queryClient.invalidateQueries({ queryKey: ['permission-requests'] });
       }
     },
