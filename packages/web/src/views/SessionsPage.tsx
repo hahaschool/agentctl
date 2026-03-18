@@ -163,7 +163,8 @@ const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
       <button
         type="button"
         onClick={() => onSelect(row.id)}
-        className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
+        aria-label={`Open runtime session ${row.id.slice(0, 16)}`}
+        className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="flex justify-between items-center mb-1.5 gap-2">
           <span className="font-medium text-xs text-foreground/90 truncate">{row.label}</span>
@@ -508,6 +509,44 @@ export function SessionsPage(): React.JSX.Element {
       ),
     [filteredSessions],
   );
+
+  const [sessionUpdateAnnouncement, setSessionUpdateAnnouncement] = useState('');
+  const previousSessionStatusesRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (sessions.isLoading && runtimeSessions.isLoading) return;
+
+    const currentStatuses = new Map<string, string>();
+    for (const row of filteredSessions) {
+      currentStatuses.set(row.id, row.status);
+    }
+
+    const previousStatuses = previousSessionStatusesRef.current;
+    if (previousStatuses.size === 0) {
+      previousSessionStatusesRef.current = currentStatuses;
+      return;
+    }
+
+    const changes: string[] = [];
+    for (const row of filteredSessions) {
+      const previousStatus = previousStatuses.get(row.id);
+      if (!previousStatus || previousStatus === row.status) continue;
+
+      const label =
+        row.kind === 'agent'
+          ? (row.session.agentName ?? row.session.agentId).trim() || 'Session'
+          : row.label;
+      changes.push(
+        `${label} changed from ${previousStatus.replaceAll('_', ' ')} to ${row.status.replaceAll('_', ' ')}`,
+      );
+    }
+
+    if (changes.length > 0) {
+      setSessionUpdateAnnouncement(changes.slice(0, 2).join('. '));
+    }
+
+    previousSessionStatusesRef.current = currentStatuses;
+  }, [filteredSessions, runtimeSessions.isLoading, sessions.isLoading]);
 
   const groupedSessions = useMemo(() => {
     if (groupBy === 'none') return null;
@@ -855,6 +894,9 @@ export function SessionsPage(): React.JSX.Element {
   return (
     <div className="relative flex h-full animate-page-enter">
       <FetchingBar isFetching={sessions.isFetching && !sessions.isLoading} />
+      <output className="sr-only" aria-live="polite" aria-atomic="true">
+        {sessionUpdateAnnouncement}
+      </output>
       {/* Session list panel */}
       <div
         className={cn(
@@ -956,7 +998,7 @@ export function SessionsPage(): React.JSX.Element {
                 key={tab.key}
                 onClick={() => setStatusFilter(tab.key)}
                 className={cn(
-                  'shrink-0 px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2 text-center whitespace-nowrap',
+                  'shrink-0 px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2 text-center whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   isActive
                     ? 'font-medium text-foreground border-primary'
                     : 'font-normal text-muted-foreground border-transparent hover:text-foreground/70',
@@ -1012,7 +1054,7 @@ export function SessionsPage(): React.JSX.Element {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value as UnifiedSessionTypeFilter)}
-              aria-label="Type"
+              aria-label="Filter by session type"
               className="h-6 px-1.5 bg-transparent text-muted-foreground text-[10px] border-0 outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
             >
               {TYPE_OPTIONS.map((option) => (
@@ -1134,7 +1176,7 @@ export function SessionsPage(): React.JSX.Element {
                   <button
                     type="button"
                     onClick={() => setStatusFilter('all')}
-                    className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px]"
+                    className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                   >
                     Show all sessions
                   </button>
@@ -1151,7 +1193,7 @@ export function SessionsPage(): React.JSX.Element {
                       setSearchQuery('');
                       setStatusFilter('all');
                     }}
-                    className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px]"
+                    className="text-primary bg-transparent border-none p-0 cursor-pointer underline underline-offset-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                   >
                     Clear filters
                   </button>
@@ -1182,7 +1224,7 @@ export function SessionsPage(): React.JSX.Element {
                       type="button"
                       onClick={() => toggleGroupCollapsed(groupKey)}
                       aria-expanded={!collapsedGroups.has(groupKey)}
-                      className="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer bg-transparent border-0 text-left text-[11px] font-semibold text-muted-foreground"
+                      className="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer bg-transparent border-0 text-left text-[11px] font-semibold text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span
                         className={cn(
@@ -1259,7 +1301,7 @@ export function SessionsPage(): React.JSX.Element {
                   type="button"
                   onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
                   disabled={sessions.isFetching}
-                  className="w-full h-9 px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:bg-accent hover:text-foreground"
+                  className="w-full h-9 px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {sessions.isFetching
                     ? 'Loading...'

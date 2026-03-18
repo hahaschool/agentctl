@@ -9,8 +9,16 @@ const WS_STATUS_CONFIG: Record<
   WsConnectionStatus,
   { textClass: string; bgClass: string; label: string }
 > = {
-  connected: { textClass: 'text-green-500', bgClass: 'bg-green-500', label: 'Connected' },
-  connecting: { textClass: 'text-yellow-500', bgClass: 'bg-yellow-500', label: 'Connecting' },
+  connected: {
+    textClass: 'text-green-500 text-green-700 dark:text-green-300',
+    bgClass: 'bg-green-500',
+    label: 'Connected',
+  },
+  connecting: {
+    textClass: 'text-yellow-500 text-amber-700 dark:text-amber-300',
+    bgClass: 'bg-yellow-500 dark:bg-amber-500',
+    label: 'Connecting',
+  },
   disconnected: {
     textClass: 'text-muted-foreground',
     bgClass: 'bg-muted-foreground',
@@ -28,8 +36,10 @@ export function WsStatusIndicator({
   const { textClass, bgClass, label } = WS_STATUS_CONFIG[status];
 
   return (
-    <span
+    <output
       title={`WebSocket: ${label}`}
+      aria-live="polite"
+      aria-label={`Status: ${label}`}
       className={cn(
         'inline-flex items-center gap-1.5 font-medium',
         textClass,
@@ -42,8 +52,9 @@ export function WsStatusIndicator({
           bgClass,
           status === 'connecting' && 'animate-pulse',
         )}
+        aria-hidden="true"
       />
       {!compact && label}
-    </span>
+    </output>
   );
 }

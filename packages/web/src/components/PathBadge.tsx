@@ -63,7 +63,7 @@ export function PathBadge({
         onClick={handleCopy}
         aria-label={`Copy path: ${path}`}
         className={cn(
-          'font-mono text-xs text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer bg-transparent border-none p-0 text-left hover:text-foreground transition-colors',
+          'font-mono text-xs text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer bg-transparent border-none p-0 text-left hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm',
           className,
         )}
       >

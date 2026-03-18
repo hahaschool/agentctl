@@ -123,6 +123,7 @@ export function DiscoverFilterBar({
             id="discover-machine"
             value={machineFilter}
             onChange={(e) => onMachineFilterChange(e.target.value)}
+            aria-label="Filter by machine"
             className="w-[170px] rounded-md border border-border bg-background px-2 py-[5px] text-[13px] text-foreground focus:border-primary/40 focus:ring-2 focus:ring-primary/20 sm:w-auto"
           >
             <option value="all">All ({hostnames.length})</option>
@@ -157,7 +158,7 @@ export function DiscoverFilterBar({
           type="button"
           onClick={onToggleAll}
           aria-label={allExpanded ? 'Collapse all groups' : 'Expand all groups'}
-          className="w-full whitespace-nowrap rounded-md border border-border bg-muted px-3 py-[5px] text-xs text-muted-foreground transition-colors hover:bg-muted/80 focus:border-primary/40 focus:ring-2 focus:ring-primary/20 sm:w-auto"
+          className="w-full whitespace-nowrap rounded-md border border-border bg-muted px-3 py-[5px] text-xs text-muted-foreground transition-colors hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-auto"
         >
           {allExpanded ? 'Collapse All' : 'Expand All'}
         </button>

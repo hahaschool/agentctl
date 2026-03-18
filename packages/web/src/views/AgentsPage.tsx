@@ -500,7 +500,8 @@ export function AgentsPage(): React.JSX.Element {
                 <div className="flex items-center justify-between gap-2">
                   <Link
                     href={`/agents/${agent.id}`}
-                    className="min-w-0 text-[15px] font-semibold text-foreground no-underline transition-colors hover:text-primary"
+                    aria-label={`Open agent ${agent.name}`}
+                    className="min-w-0 text-[15px] font-semibold text-foreground no-underline transition-colors hover:text-primary rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span className="block truncate">{agent.name}</span>
                   </Link>

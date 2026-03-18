@@ -21,9 +21,13 @@ export function FetchingBar({ isFetching }: Props): React.JSX.Element {
         isFetching ? 'opacity-100' : 'opacity-0',
       )}
       role="progressbar"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-label={isFetching ? 'Loading updates' : undefined}
       aria-hidden={!isFetching}
     >
       <div className="h-full bg-primary animate-fetching-bar" />
+      <span className="sr-only">{isFetching ? 'Loading updates' : ''}</span>
     </div>
   );
 }

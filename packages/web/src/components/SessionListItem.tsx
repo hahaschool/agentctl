@@ -203,7 +203,7 @@ function SessionListItemBase({
           onChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Select session ${s.id.slice(0, 16)}`}
-          className="w-4 h-4 cursor-pointer"
+          className="w-4 h-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
       {/* Session card content — uses div+role instead of <button> to avoid
@@ -212,6 +212,7 @@ function SessionListItemBase({
       <div
         role="button"
         tabIndex={0}
+        aria-label={`Open session ${s.id.slice(0, 16)}`}
         onClick={handleClick}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -219,7 +220,7 @@ function SessionListItemBase({
             onSelect(s.id);
           }
         }}
-        className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0"
+        className="flex-1 text-left px-2.5 pr-4 py-3.5 bg-transparent border-0 cursor-pointer min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="flex justify-between items-center mb-1.5 gap-2">
           <span className="font-medium text-xs text-foreground/90 truncate">{primaryLabel}</span>
@@ -233,13 +234,13 @@ function SessionListItemBase({
               </Badge>
             )}
             {s.status === 'active' && (
-              <span className="relative flex h-2 w-2">
+              <span className="relative flex h-2 w-2" aria-hidden="true">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
               </span>
             )}
             {s.status === 'starting' && (
-              <span className="relative flex h-2 w-2">
+              <span className="relative flex h-2 w-2" aria-hidden="true">
                 <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
               </span>
@@ -261,7 +262,7 @@ function SessionListItemBase({
           />
           <span className="text-muted-foreground/50">|</span>
           <span>{s.machineId}</span>
-          <span className="text-purple-600/70 dark:text-purple-400/70 text-[11px]">
+          <span className="text-violet-700/80 dark:text-violet-300/80 text-[11px]">
             {s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}
           </span>
         </div>

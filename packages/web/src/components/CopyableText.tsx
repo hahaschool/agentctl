@@ -63,11 +63,12 @@ function CopyableTextBase({
 
   const display =
     label ?? (value && value.length > maxDisplay ? value.slice(0, maxDisplay) : (value ?? ''));
+  const accessibleLabel = label ? `Copy ${label}` : `Copy value: ${value}`;
 
   const baseClassName = cn(
     'inline-flex items-center gap-1 rounded-md px-1 py-0.5',
     'font-mono text-[11px] whitespace-nowrap shrink-0 cursor-pointer',
-    'transition-colors duration-200',
+    'transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
     copied ? 'text-green-500 bg-muted' : 'text-muted-foreground bg-transparent hover:bg-muted/50',
     className,
   );
@@ -89,6 +90,7 @@ function CopyableTextBase({
       <span
         role="button"
         tabIndex={0}
+        aria-label={accessibleLabel}
         onClick={handleCopy}
         onKeyDown={handleSpanKeyDown}
         title={copied ? 'Copied!' : `Click to copy: ${value}`}
@@ -103,6 +105,7 @@ function CopyableTextBase({
     <button
       type="button"
       onClick={handleCopy}
+      aria-label={accessibleLabel}
       title={copied ? 'Copied!' : `Click to copy: ${value}`}
       className={baseClassName}
     >

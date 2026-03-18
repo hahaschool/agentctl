@@ -183,7 +183,7 @@ export function Sidebar(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-foreground p-2.5 -ml-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md active:bg-accent/10"
+          className="text-foreground p-2.5 -ml-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md active:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Toggle navigation"
           aria-expanded={mobileOpen}
           aria-controls="app-sidebar"
@@ -213,6 +213,7 @@ export function Sidebar(): React.JSX.Element {
       {/* Sidebar */}
       <nav
         id="app-sidebar"
+        aria-label="Primary navigation"
         className={cn(
           'bg-sidebar border-r border-border flex flex-col py-4 shrink-0',
           // Desktop: always visible, fixed width
@@ -242,9 +243,10 @@ export function Sidebar(): React.JSX.Element {
             <div key={item.href} className="relative flex items-center group/nav">
               <Link
                 href={item.href}
+                aria-label={item.label}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0 flex-1 active:bg-accent/10',
+                  'flex items-center gap-2.5 px-5 py-3 md:justify-center lg:justify-start md:py-2.5 text-sm no-underline transition-all duration-150 min-h-[44px] md:min-h-0 flex-1 active:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'border-l-[3px]',
                   isActive
                     ? 'bg-accent/10 text-foreground font-semibold border-l-primary'
@@ -274,6 +276,7 @@ export function Sidebar(): React.JSX.Element {
                     'opacity-0 group-hover/nav:opacity-100 focus:opacity-100',
                     'hidden lg:flex items-center justify-center',
                     'min-w-[44px] min-h-[44px]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   )}
                 >
                   <Plus size={14} aria-hidden="true" />
@@ -327,7 +330,7 @@ export function Sidebar(): React.JSX.Element {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="text-muted-foreground/60 hover:text-foreground transition-colors p-2.5 md:p-1 rounded-md hover:bg-muted active:bg-muted min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+                className="text-muted-foreground/60 hover:text-foreground transition-colors p-2.5 md:p-1 rounded-md hover:bg-muted active:bg-muted min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               >

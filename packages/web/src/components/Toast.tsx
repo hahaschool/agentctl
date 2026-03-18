@@ -216,7 +216,7 @@ function ToastCard({ item }: { item: ToastItem }) {
         type="button"
         aria-label="Dismiss"
         onClick={() => dismissToast(item.id)}
-        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -246,6 +246,7 @@ export function ToastContainer() {
     <div
       role="log"
       aria-live="polite"
+      aria-atomic="true"
       aria-label="Notifications"
       className="fixed top-4 right-4 z-[9999] flex flex-col gap-2"
     >
