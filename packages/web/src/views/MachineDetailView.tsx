@@ -23,7 +23,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
 import { api } from '@/lib/api';
 import { formatDate, formatNumber, isStaleHeartbeat } from '@/lib/format-utils';
-import { agentsQuery, machineMemoryFactsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
+import {
+  agentsQuery,
+  machineMemoryFactsQuery,
+  machinesQuery,
+  sessionsQuery,
+  workerNodesQuery,
+} from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +44,7 @@ export function MachineDetailView(): React.JSX.Element {
   const agents = useQuery(agentsQuery());
   const sessions = useQuery(sessionsQuery({ machineId }));
   const machineMemory = useQuery(machineMemoryFactsQuery(machineId ?? ''));
+  const workerNodes = useQuery(workerNodesQuery());
   const driftQuery = useQuery({
     queryKey: ['runtime-config', 'drift', machineId],
     queryFn: () => api.getRuntimeConfigDrift(machineId),
@@ -53,10 +60,11 @@ export function MachineDetailView(): React.JSX.Element {
           void agents.refetch();
           void sessions.refetch();
           void machineMemory.refetch();
+          void workerNodes.refetch();
           void driftQuery.refetch();
         },
       }),
-      [machines, agents, sessions, machineMemory, driftQuery],
+      [machines, agents, sessions, machineMemory, workerNodes, driftQuery],
     ),
   );
 
@@ -76,6 +84,17 @@ export function MachineDetailView(): React.JSX.Element {
       (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
     );
   }, [sessions.data]);
+
+  const machineWorkerNodes = useMemo(() => {
+    if (!machine) return [];
+
+    const list = workerNodes.data ?? [];
+    return list.filter(
+      (node) =>
+        node.hostname === machine.hostname ||
+        (!!node.tailscaleIp && node.tailscaleIp === machine.tailscaleIp),
+    );
+  }, [machine, workerNodes.data]);
 
   // Derived memory stats for this machine (must be before early returns per rules of hooks)
   const machineMemoryStats = useMemo(() => {
@@ -136,6 +155,7 @@ export function MachineDetailView(): React.JSX.Element {
     agents.isFetching ||
     sessions.isFetching ||
     machineMemory.isFetching ||
+    workerNodes.isFetching ||
     driftQuery.isFetching;
   const heartbeatStale = machine.lastHeartbeat ? isStaleHeartbeat(machine.lastHeartbeat) : false;
   const machineStatusBorderClass =
@@ -212,6 +232,8 @@ export function MachineDetailView(): React.JSX.Element {
               void machines.refetch();
               void agents.refetch();
               void sessions.refetch();
+              void machineMemory.refetch();
+              void workerNodes.refetch();
               void driftQuery.refetch();
             }}
             isFetching={anyFetching && !machines.isLoading}
@@ -331,6 +353,103 @@ export function MachineDetailView(): React.JSX.Element {
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">No runtime data available.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Worker nodes card */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="text-sm">
+            Worker Nodes
+            {machineWorkerNodes.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({machineWorkerNodes.length})
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {workerNodes.isLoading ? (
+            <div className="space-y-2">
+              {['node-sk-1', 'node-sk-2'].map((key) => (
+                <Skeleton key={key} className="h-10 rounded" />
+              ))}
+            </div>
+          ) : workerNodes.error ? (
+            <ErrorBanner
+              message={`Failed to load worker nodes: ${workerNodes.error.message}`}
+              onRetry={() => void workerNodes.refetch()}
+            />
+          ) : machineWorkerNodes.length === 0 ? (
+            <div className="py-6 text-center text-muted-foreground text-sm">
+              No worker node registered for this machine.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" aria-label="Worker nodes for this machine">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Node
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Status
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Heartbeat
+                    </th>
+                    <th scope="col" className="pb-2 pr-4 font-medium">
+                      Leases
+                    </th>
+                    <th scope="col" className="pb-2 font-medium">
+                      Capacity
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {machineWorkerNodes.map((node) => {
+                    const maxCapacity = Math.max(node.maxConcurrentAgents, 0);
+                    const usedCapacity = Math.max(node.currentLoad, 0);
+                    const capacityPct =
+                      maxCapacity > 0 ? Math.min(100, (usedCapacity / maxCapacity) * 100) : 0;
+
+                    return (
+                      <tr key={node.id} className="border-b border-border/50 last:border-0">
+                        <td className="py-2.5 pr-4">
+                          <div className="font-medium">{node.hostname}</div>
+                          <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                            {node.id.slice(0, 12)}...
+                          </div>
+                        </td>
+                        <td className="py-2.5 pr-4">
+                          <StatusBadge status={node.status} />
+                        </td>
+                        <td className="py-2.5 pr-4 text-xs text-muted-foreground whitespace-nowrap">
+                          <LiveTimeAgo date={node.lastHeartbeatAt} />
+                        </td>
+                        <td className="py-2.5 pr-4 font-mono">
+                          {formatNumber(usedCapacity)} / {formatNumber(maxCapacity)}
+                        </td>
+                        <td className="py-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-20 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary transition-all"
+                                style={{ width: `${capacityPct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground min-w-[3rem]">
+                              {Math.round(capacityPct)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>

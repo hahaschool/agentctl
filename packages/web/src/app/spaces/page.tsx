@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
+import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
@@ -186,6 +187,9 @@ export default function SpacesPage(): React.JSX.Element {
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-[22px] font-semibold tracking-tight">Spaces</h1>
         <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/tasks">Tasks</Link>
+          </Button>
           <RefreshButton
             onClick={() => void spaces.refetch()}
             isFetching={spaces.isFetching && !spaces.isLoading}

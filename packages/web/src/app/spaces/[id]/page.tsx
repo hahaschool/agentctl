@@ -14,14 +14,17 @@ import { SpaceMembersList } from '@/components/collaboration/SpaceMembersList';
 import { ThreadList } from '@/components/collaboration/ThreadList';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
+import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  spaceContextRefsQuery,
   spaceEventsQuery,
   spaceQuery,
+  spaceSubscriptionsQuery,
   spaceThreadsQuery,
   useCreateThread,
   useDeleteSpace,
@@ -79,6 +82,8 @@ export default function SpaceDetailPage(): React.JSX.Element {
 
   const space = useQuery(spaceQuery(spaceId));
   const threads = useQuery(spaceThreadsQuery(spaceId));
+  const contextRefs = useQuery(spaceContextRefsQuery(spaceId));
+  const subscriptions = useQuery(spaceSubscriptionsQuery(spaceId));
 
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [showMembers, setShowMembers] = useState(false);
@@ -200,7 +205,15 @@ export default function SpaceDetailPage(): React.JSX.Element {
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1200px] animate-page-enter h-[calc(100vh-48px)] md:h-screen flex flex-col">
-      <FetchingBar isFetching={(space.isFetching || threads.isFetching) && !space.isLoading} />
+      <FetchingBar
+        isFetching={
+          (space.isFetching ||
+            threads.isFetching ||
+            contextRefs.isFetching ||
+            subscriptions.isFetching) &&
+          !space.isLoading
+        }
+      />
       <Breadcrumb items={[{ label: 'Spaces', href: '/spaces' }, { label: data.name }]} />
 
       {/* Header */}
@@ -227,8 +240,16 @@ export default function SpaceDetailPage(): React.JSX.Element {
               void space.refetch();
               void threads.refetch();
               void events.refetch();
+              void contextRefs.refetch();
+              void subscriptions.refetch();
             }}
-            isFetching={space.isFetching || threads.isFetching || events.isFetching}
+            isFetching={
+              space.isFetching ||
+              threads.isFetching ||
+              events.isFetching ||
+              contextRefs.isFetching ||
+              subscriptions.isFetching
+            }
           />
           <ConfirmButton
             label="Delete"
@@ -242,6 +263,92 @@ export default function SpaceDetailPage(): React.JSX.Element {
       </div>
 
       {data.description && <p className="text-xs text-muted-foreground mb-4">{data.description}</p>}
+
+      {/* Bridges section */}
+      <div className="mb-4 rounded-lg border border-border bg-card p-3">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">Bridges</h2>
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span>{(contextRefs.data ?? []).length} refs</span>
+            <span>{(subscriptions.data ?? []).length} subscriptions</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="rounded-md border border-border/60 p-2.5">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Context Refs
+            </div>
+            {contextRefs.isLoading ? (
+              <p className="text-xs text-muted-foreground">Loading refs...</p>
+            ) : contextRefs.error ? (
+              <p className="text-xs text-destructive">Failed to load refs.</p>
+            ) : (contextRefs.data ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">No context refs for this space.</p>
+            ) : (
+              <div className="space-y-2">
+                {(contextRefs.data ?? []).slice(0, 5).map((ref) => (
+                  <div key={ref.id} className="rounded border border-border/40 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-mono text-muted-foreground">
+                        {ref.sourceSpaceId.slice(0, 8)} → {ref.targetThreadId.slice(0, 8)}
+                      </span>
+                      <Badge variant="outline" className="capitalize text-[10px] px-1.5 py-0">
+                        {ref.mode}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-1">
+                      Created <LiveTimeAgo date={ref.createdAt} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-border/60 p-2.5">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Subscriptions
+            </div>
+            {subscriptions.isLoading ? (
+              <p className="text-xs text-muted-foreground">Loading subscriptions...</p>
+            ) : subscriptions.error ? (
+              <p className="text-xs text-destructive">Failed to load subscriptions.</p>
+            ) : (subscriptions.data ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">No subscriptions for this space.</p>
+            ) : (
+              <div className="space-y-2">
+                {(subscriptions.data ?? []).slice(0, 5).map((subscription) => (
+                  <div
+                    key={subscription.id}
+                    className="rounded border border-border/40 px-2 py-1.5 text-[11px]"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-muted-foreground">
+                        from {subscription.sourceSpaceId.slice(0, 8)}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-[10px] px-1.5 py-0',
+                          subscription.active
+                            ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
+                            : 'border-border text-muted-foreground',
+                        )}
+                      >
+                        {subscription.active ? 'Active' : 'Paused'}
+                      </Badge>
+                    </div>
+                    <div className="text-muted-foreground mt-1">
+                      by {subscription.createdBy} · <LiveTimeAgo date={subscription.createdAt} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Main layout: thread sidebar + event feed + optional members panel */}
       <div className="flex-1 flex gap-0 border border-border rounded-lg overflow-hidden min-h-0">

@@ -5,6 +5,7 @@ import {
   Compass,
   Database,
   Gauge,
+  ListTree,
   Menu,
   MessageSquare,
   Moon,
@@ -37,7 +38,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  shortcut: string;
+  shortcut?: string;
 };
 
 const SIDEBAR_GO_MAP: Record<string, string> = {
@@ -57,12 +58,15 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
   { href: '/memory', label: 'Memory', icon: Database, shortcut: '8' },
   { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9' },
+  { href: '/tasks', label: 'Tasks', icon: ListTree },
   { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
 for (const item of NAV_ITEMS) {
-  SHORTCUT_MAP[item.shortcut] = item.href;
+  if (item.shortcut) {
+    SHORTCUT_MAP[item.shortcut] = item.href;
+  }
 }
 
 export function Sidebar(): React.JSX.Element {
@@ -253,14 +257,16 @@ export function Sidebar(): React.JSX.Element {
               >
                 <Icon size={16} className="shrink-0" aria-hidden="true" />
                 <span className="flex-1 max-md:inline hidden lg:inline">{item.label}</span>
-                <span
-                  className={cn(
-                    'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm max-md:inline hidden lg:inline',
-                    isActive ? 'opacity-80' : 'opacity-50',
-                  )}
-                >
-                  {item.shortcut}
-                </span>
+                {item.shortcut && (
+                  <span
+                    className={cn(
+                      'text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm max-md:inline hidden lg:inline',
+                      isActive ? 'opacity-80' : 'opacity-50',
+                    )}
+                  >
+                    {item.shortcut}
+                  </span>
+                )}
               </Link>
               {item.href === '/sessions' && (
                 <button
