@@ -264,25 +264,27 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
     },
   );
 
-  const expiryTimer = setInterval(() => {
-    void expirePendingPermissionRequests({
+  const safeExpire = (): void => {
+    expirePendingPermissionRequests({
       db,
       dbRegistry,
       workerPort,
       logger: app.log,
+    }).catch((err) => {
+      app.log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'permission expiry check failed',
+      );
     });
-  }, PERMISSION_EXPIRY_INTERVAL_MS);
+  };
+
+  const expiryTimer = setInterval(safeExpire, PERMISSION_EXPIRY_INTERVAL_MS);
 
   app.addHook('onClose', async () => {
     clearInterval(expiryTimer);
   });
 
-  void expirePendingPermissionRequests({
-    db,
-    dbRegistry,
-    workerPort,
-    logger: app.log,
-  });
+  safeExpire();
 };
 
 function isPermissionRequestStatus(value: string): value is PermissionRequestStatus {
