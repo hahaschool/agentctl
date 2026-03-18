@@ -107,6 +107,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# ── Version tag gate ─────────────────────────────────────────────────
+HEAD_TAG="$(git describe --exact-match HEAD 2>/dev/null || true)"
+if [[ -z "$HEAD_TAG" ]]; then
+  log_err "Current HEAD does not have a version tag."
+  echo "Run ./scripts/version-bump.sh first"
+  exit 1
+fi
+log "Version gate passed at ${HEAD_TAG}"
+
 # ── Auto-detect source tier if not specified ─────────────────────────
 if [[ -z "$FROM_TIER" ]]; then
   # Look for .env.dev-* files and pick the first one
