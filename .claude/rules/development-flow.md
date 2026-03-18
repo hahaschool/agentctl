@@ -2,10 +2,10 @@
 
 These rules govern how code flows from development to production. Every AI agent MUST follow them.
 
-## The Flow: Dev → Main → Dev Verify → Promote → Beta
+## The Flow: Dev → Main → Dev Verify → Versioned Promote → Release
 
 ```
-Agent worktree → PR → merge to main → build in dev tier → verify → promote to beta
+Agent worktree → PR → merge to main → build in dev tier → verify → bump+tag locally → promote to beta → release publish
                                        ↑ NEVER skip this
 ```
 
@@ -40,15 +40,15 @@ curl http://localhost:${DEV_WORKER_PORT}/health
 # Run Playwright against dev tier if needed
 ```
 
-### Step 4: Promote to Beta
+### Step 4: Versioned Promotion Flow (MANDATORY 3-step sequence)
 
-Only after dev verification passes:
+Only after dev verification passes, run this exact sequence:
 
 ```bash
-# Bump version + generate changelog
+# Step 1: local version commit + local tag (no push, no release)
 ./scripts/version-bump.sh patch   # or minor / major
 
-# Promote to beta
+# Step 2: promote to beta (script enforces tag gate)
 ./scripts/env-promote.sh --from dev-1
 ```
 
@@ -60,11 +60,21 @@ pm2 list
 curl http://localhost:8080/health
 ```
 
+### Step 6: Publish Release (only after beta verification)
+
+```bash
+# Step 3: push branch/tags + create GitHub Release
+./scripts/version-release.sh
+```
+
+**NEVER run `pm2 restart` as a deploy path.** Deployment to beta must go through `./scripts/env-promote.sh`.
+
 ## What Agents MUST NOT Do
 
 | Action | Allowed? |
 |--------|----------|
 | `pnpm build` on main and `pm2 restart` beta | **NO — NEVER** |
+| `pm2 restart` as deployment path | **NO — NEVER** |
 | Push to main then immediately rebuild beta | **NO — NEVER** |
 | Test changes by restarting beta services | **NO — use dev tier** |
 | Skip dev verification before promoting | **NO — NEVER** |
@@ -81,17 +91,20 @@ curl http://localhost:8080/health
 
 ## Version Bumping
 
-Every promotion to beta MUST include a version bump:
+Every promotion to beta MUST include the 3-step versioned promotion flow:
 
 ```bash
 ./scripts/version-bump.sh <patch|minor|major> "Brief description of changes"
+./scripts/env-promote.sh --from dev-1
+./scripts/version-release.sh
 ```
 
-This:
+This ensures:
 1. Bumps version in all `package.json` files
 2. Appends entry to `CHANGELOG.md`
-3. Creates a git tag `v<version>`
-4. Commits the version bump
+3. Creates a local git tag `v<version>`
+4. Promotes tagged code to beta
+5. Pushes and creates GitHub Release only after beta verification
 
 ### When to Use Which Bump
 

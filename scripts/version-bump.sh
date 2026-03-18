@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# version-bump.sh — Bump monorepo version, update changelog, create git tag
+# version-bump.sh — Bump monorepo version, update changelog, commit + tag locally
 # Usage: ./scripts/version-bump.sh <patch|minor|major> ["Description of changes"]
 # Example: ./scripts/version-bump.sh minor "MCP/skill auto-discovery, runtime selector penetration"
 
@@ -119,30 +119,12 @@ ${DESCRIPTION}"
 
 git tag -a "v${NEW_VERSION}" -m "Release ${NEW_VERSION}: ${DESCRIPTION:-"Version bump"}"
 
-# ── Push + create GitHub Release ─────────────────────────────────────
-echo ""
-echo "Pushing to origin..."
-git push origin main --tags 2>&1
-
-# Extract this version's changelog section for release notes
-RELEASE_NOTES=$(echo -e "$ENTRY" | sed 's/^## .*//' | sed '/^$/d')
-
-if command -v gh &> /dev/null; then
-  echo "Creating GitHub Release..."
-  gh release create "v${NEW_VERSION}" \
-    --title "v${NEW_VERSION}" \
-    --notes "${RELEASE_NOTES:-$DESCRIPTION}" \
-    2>&1 || echo "  ⚠ GitHub Release creation failed (may need gh auth)"
-  echo "✓ GitHub Release v${NEW_VERSION} created"
-else
-  echo "⚠ gh CLI not found — create release manually at:"
-  echo "  https://github.com/hahaschool/agentctl/releases/new?tag=v${NEW_VERSION}"
-fi
-
 echo ""
 echo "✓ Version bumped to ${NEW_VERSION}"
 echo "✓ CHANGELOG.md updated"
-echo "✓ Git tag v${NEW_VERSION} pushed"
+echo "✓ Local git tag created: v${NEW_VERSION}"
 echo ""
 echo "Next steps:"
-echo "  ./scripts/env-promote.sh --from dev-1"
+echo "  1. ./scripts/env-promote.sh --from dev-1"
+echo "  2. Verify beta"
+echo "  3. ./scripts/version-release.sh"
