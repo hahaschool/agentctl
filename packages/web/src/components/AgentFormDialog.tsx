@@ -7,6 +7,7 @@ import {
   type ManagedRuntime,
 } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
+import { Bug, FileText, FlaskConical, GitPullRequest, type LucideIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CronBuilder } from '@/components/CronBuilder';
@@ -26,6 +27,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AGENT_TEMPLATES,
+  type AgentTemplate,
+  type AgentTemplateConfig,
+  type AgentTemplateIcon,
+} from '@/lib/agent-templates';
 import { cn } from '@/lib/utils';
 
 import type { Agent, AgentConfig, Machine } from '../lib/api';
@@ -45,6 +52,15 @@ import { SkillPicker } from './SkillPicker';
 
 const DEFAULT_MEMORY_MAX_TOKENS = 2400;
 const DEFAULT_MEMORY_MAX_FACTS = 20;
+
+const TEMPLATE_ICONS: Record<AgentTemplateIcon, LucideIcon> = {
+  GitPullRequest,
+  Bug,
+  FlaskConical,
+  FileText,
+};
+
+type CreateStep = 'template' | 'form';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -71,6 +87,21 @@ function pickDefaultMachine(machines: Machine[]): string {
   if (lastUsed && machines.some((m) => m.id === lastUsed)) return lastUsed;
   if (online.length > 0) return online[0]?.id ?? '';
   return machines.length > 0 ? (machines[0]?.id ?? '') : '';
+}
+
+function applyTemplateConfig(
+  template: AgentTemplate,
+  setConfigField: Record<keyof AgentTemplateConfig, (value: string) => void>,
+): void {
+  if (template.config.defaultPrompt) {
+    setConfigField.defaultPrompt(template.config.defaultPrompt);
+  }
+  if (template.config.permissionMode) {
+    setConfigField.permissionMode(template.config.permissionMode);
+  }
+  if (template.config.model) {
+    setConfigField.model(template.config.model);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +186,7 @@ export function AgentFormDialog({
   const [runtime, setRuntime] = useState<ManagedRuntime>('claude-code');
 
   // Create-only state
+  const [createStep, setCreateStep] = useState<CreateStep>('template');
   const [projectPath, setProjectPath] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
@@ -193,6 +225,7 @@ export function AgentFormDialog({
   // -----------------------------------------------------------------------
 
   const resetCreateForm = useCallback(() => {
+    setCreateStep('template');
     setInitialPrompt('');
     setName('');
     setMachineId('');
@@ -233,6 +266,29 @@ export function AgentFormDialog({
     setSkillOverride(a.config?.skillOverride ?? { excluded: [], custom: [] });
     setRuntime(a.runtime && isManagedRuntime(a.runtime) ? a.runtime : 'claude-code');
   }, []);
+
+  const focusPromptTextarea = useCallback(() => {
+    setTimeout(() => promptTextareaRef.current?.focus(), 50);
+  }, []);
+
+  const startFromTemplate = useCallback(
+    (template: AgentTemplate) => {
+      applyTemplateConfig(template, {
+        defaultPrompt: setDefaultPrompt,
+        permissionMode: setPermissionMode,
+        model: setModel,
+      });
+      setAdvancedOpen(true);
+      setCreateStep('form');
+      focusPromptTextarea();
+    },
+    [focusPromptTextarea],
+  );
+
+  const startFromScratch = useCallback(() => {
+    setCreateStep('form');
+    focusPromptTextarea();
+  }, [focusPromptTextarea]);
 
   // Close project dropdown on outside click
   useEffect(() => {
@@ -372,7 +428,6 @@ export function AgentFormDialog({
       onClose();
     } else if (isCreate) {
       autoSelectMachine();
-      setTimeout(() => promptTextareaRef.current?.focus(), 50);
     }
   };
 
@@ -389,6 +444,12 @@ export function AgentFormDialog({
       autoSelectMachine();
     }
   }, [open, isCreate, autoSelectMachine]);
+
+  useEffect(() => {
+    if (open && isCreate && createStep === 'form') {
+      focusPromptTextarea();
+    }
+  }, [open, isCreate, createStep, focusPromptTextarea]);
 
   // Clear MCP/skill overrides when runtime changes (not on initial mount)
   useEffect(() => {
@@ -668,191 +729,236 @@ export function AgentFormDialog({
           <DialogHeader>
             <DialogTitle>New Agent</DialogTitle>
           </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Prompt — primary input */}
-            <div className="space-y-1.5">
-              <textarea
-                ref={promptTextareaRef}
-                id="create-agent-prompt"
-                aria-label="Agent prompt"
-                rows={4}
-                placeholder="What do you want the agent to do?"
-                value={initialPrompt}
-                onChange={(e) => setInitialPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!isDisabled) handleSubmit();
-                  }
-                }}
-                disabled={isPending}
-                className={cn(
-                  'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2.5 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
-                  'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                  'dark:bg-input/30',
-                )}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Press Enter to start. Shift+Enter for newline.
-              </p>
-            </div>
-
-            {/* Project path — combobox with recent projects */}
-            <div className="space-y-1.5 relative">
-              <label className="text-sm font-medium" htmlFor="create-agent-project">
-                Project
-              </label>
-              <div className="relative">
-                <Input
-                  ref={projectInputRef}
-                  id="create-agent-project"
-                  placeholder={
-                    recentProjectPaths.length > 0
-                      ? 'Select or type a project path...'
-                      : '/path/to/project'
-                  }
-                  value={projectPath}
-                  onChange={(e) => {
-                    setProjectPath(e.target.value);
-                    setProjectSearchQuery(e.target.value);
-                    setShowProjectDropdown(true);
-                  }}
-                  onFocus={() => {
-                    if (recentProjectPaths.length > 0) setShowProjectDropdown(true);
-                  }}
-                  disabled={isPending}
-                />
-                {showProjectDropdown && filteredProjectPaths.length > 0 && (
-                  <div
-                    ref={projectDropdownRef}
-                    className="absolute z-50 mt-1 w-full max-h-[160px] overflow-y-auto rounded-md border border-border bg-popover shadow-md"
-                  >
-                    {filteredProjectPaths.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        className={cn(
-                          'w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors',
-                          p === projectPath && 'bg-accent',
-                        )}
-                        title={p}
-                        onClick={() => {
-                          setProjectPath(p);
-                          setProjectSearchQuery('');
-                          setShowProjectDropdown(false);
-                        }}
-                      >
-                        <span className="font-medium">{shortenPath(p)}</span>
-                        <span className="text-[11px] text-muted-foreground ml-2 font-mono">
-                          {p}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Machine */}
-            {machineSelect}
-
-            {/* Advanced options — collapsible */}
-            <div>
-              <button
-                type="button"
-                onClick={() => setAdvancedOpen(!advancedOpen)}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <span className="text-xs">{advancedOpen ? '\u25BE' : '\u25B8'}</span>
-                Advanced
-                {(name.trim() ||
-                  model !== DEFAULT_MODEL ||
-                  type !== 'adhoc' ||
-                  schedule.trim() ||
-                  maxTurns.trim() ||
-                  permissionMode !== 'default' ||
-                  systemPrompt.trim() ||
-                  defaultPrompt.trim() ||
-                  memoryScopeId.trim() ||
-                  memoryMaxTokens !== String(DEFAULT_MEMORY_MAX_TOKENS) ||
-                  memoryMaxFacts !== String(DEFAULT_MEMORY_MAX_FACTS)) && (
-                  <span className="text-[10px] text-primary">(customized)</span>
-                )}
-              </button>
-
-              {advancedOpen && (
-                <div className="mt-3 space-y-3 pl-4 border-l-2 border-border">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium" htmlFor="create-agent-name">
-                      Name
-                    </label>
-                    <Input
-                      id="create-agent-name"
-                      placeholder={
-                        initialPrompt.trim()
-                          ? slugifyPrompt(initialPrompt)
-                          : 'auto-generated from prompt'
-                      }
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      disabled={isPending}
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Leave blank to auto-generate from prompt.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {/* biome-ignore lint/a11y/noLabelWithoutControl: RuntimeSelector uses a radiogroup, not a single input */}
-                    <label className="text-sm font-medium">Runtime</label>
-                    <RuntimeSelector
-                      value={runtime}
-                      onChange={setRuntime}
-                      variant="radio"
-                      disabled={isPending}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium" htmlFor="create-agent-model">
-                      Model
-                    </label>
-                    <RuntimeAwareModelSelect
-                      runtime={runtime}
-                      value={model}
-                      onChange={setModel}
-                      disabled={isPending}
-                    />
-                  </div>
-
-                  {typeSelect}
-                  {scheduleInput}
-                  {maxTurnsInput}
-                  {permissionModeSelect}
-                  {systemPromptTextarea}
-                  {defaultPromptTextarea}
-                  {memoryScopeSelect}
-                  {memoryBudgetInputs}
+          {createStep === 'template' ? (
+            <>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Start from a template</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pick a prebuilt setup, or continue with an empty agent.
+                  </p>
                 </div>
-              )}
-            </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {AGENT_TEMPLATES.map((template) => {
+                    const Icon = TEMPLATE_ICONS[template.icon];
+                    return (
+                      <button
+                        type="button"
+                        key={template.id}
+                        className="w-full rounded-md border border-border p-3 text-left transition-colors hover:bg-accent"
+                        onClick={() => startFromTemplate(template)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="rounded-md border border-border bg-background p-1.5">
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <span className="space-y-0.5">
+                            <span className="block text-sm font-medium">{template.name}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {template.description}
+                            </span>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button onClick={startFromScratch}>Start from scratch</Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <div className="space-y-4">
+                {/* Prompt — primary input */}
+                <div className="space-y-1.5">
+                  <textarea
+                    ref={promptTextareaRef}
+                    id="create-agent-prompt"
+                    aria-label="Agent prompt"
+                    rows={4}
+                    placeholder="What do you want the agent to do?"
+                    value={initialPrompt}
+                    onChange={(e) => setInitialPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!isDisabled) handleSubmit();
+                      }
+                    }}
+                    disabled={isPending}
+                    className={cn(
+                      'w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2.5 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground resize-y',
+                      'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                      'dark:bg-input/30',
+                    )}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Press Enter to start. Shift+Enter for newline.
+                  </p>
+                </div>
 
-            {/* MCP Servers — collapsible section */}
-            {mcpServersSection}
+                {/* Project path — combobox with recent projects */}
+                <div className="space-y-1.5 relative">
+                  <label className="text-sm font-medium" htmlFor="create-agent-project">
+                    Project
+                  </label>
+                  <div className="relative">
+                    <Input
+                      ref={projectInputRef}
+                      id="create-agent-project"
+                      placeholder={
+                        recentProjectPaths.length > 0
+                          ? 'Select or type a project path...'
+                          : '/path/to/project'
+                      }
+                      value={projectPath}
+                      onChange={(e) => {
+                        setProjectPath(e.target.value);
+                        setProjectSearchQuery(e.target.value);
+                        setShowProjectDropdown(true);
+                      }}
+                      onFocus={() => {
+                        if (recentProjectPaths.length > 0) setShowProjectDropdown(true);
+                      }}
+                      disabled={isPending}
+                    />
+                    {showProjectDropdown && filteredProjectPaths.length > 0 && (
+                      <div
+                        ref={projectDropdownRef}
+                        className="absolute z-50 mt-1 w-full max-h-[160px] overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+                      >
+                        {filteredProjectPaths.map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            className={cn(
+                              'w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors',
+                              p === projectPath && 'bg-accent',
+                            )}
+                            title={p}
+                            onClick={() => {
+                              setProjectPath(p);
+                              setProjectSearchQuery('');
+                              setShowProjectDropdown(false);
+                            }}
+                          >
+                            <span className="font-medium">{shortenPath(p)}</span>
+                            <span className="text-[11px] text-muted-foreground ml-2 font-mono">
+                              {p}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-            {/* Skills — collapsible section */}
-            {skillsSection}
-          </div>
+                {/* Machine */}
+                {machineSelect}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={isDisabled}>
-              {isPending ? 'Starting...' : 'Start Agent'}
-            </Button>
-          </DialogFooter>
+                {/* Advanced options — collapsible */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen(!advancedOpen)}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <span className="text-xs">{advancedOpen ? '\u25BE' : '\u25B8'}</span>
+                    Advanced
+                    {(name.trim() ||
+                      model !== DEFAULT_MODEL ||
+                      type !== 'adhoc' ||
+                      schedule.trim() ||
+                      maxTurns.trim() ||
+                      permissionMode !== 'default' ||
+                      systemPrompt.trim() ||
+                      defaultPrompt.trim() ||
+                      memoryScopeId.trim() ||
+                      memoryMaxTokens !== String(DEFAULT_MEMORY_MAX_TOKENS) ||
+                      memoryMaxFacts !== String(DEFAULT_MEMORY_MAX_FACTS)) && (
+                      <span className="text-[10px] text-primary">(customized)</span>
+                    )}
+                  </button>
+
+                  {advancedOpen && (
+                    <div className="mt-3 space-y-3 pl-4 border-l-2 border-border">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium" htmlFor="create-agent-name">
+                          Name
+                        </label>
+                        <Input
+                          id="create-agent-name"
+                          placeholder={
+                            initialPrompt.trim()
+                              ? slugifyPrompt(initialPrompt)
+                              : 'auto-generated from prompt'
+                          }
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          disabled={isPending}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Leave blank to auto-generate from prompt.
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {/* biome-ignore lint/a11y/noLabelWithoutControl: RuntimeSelector uses a radiogroup, not a single input */}
+                        <label className="text-sm font-medium">Runtime</label>
+                        <RuntimeSelector
+                          value={runtime}
+                          onChange={setRuntime}
+                          variant="radio"
+                          disabled={isPending}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium" htmlFor="create-agent-model">
+                          Model
+                        </label>
+                        <RuntimeAwareModelSelect
+                          runtime={runtime}
+                          value={model}
+                          onChange={setModel}
+                          disabled={isPending}
+                        />
+                      </div>
+
+                      {typeSelect}
+                      {scheduleInput}
+                      {maxTurnsInput}
+                      {permissionModeSelect}
+                      {systemPromptTextarea}
+                      {defaultPromptTextarea}
+                      {memoryScopeSelect}
+                      {memoryBudgetInputs}
+                    </div>
+                  )}
+                </div>
+
+                {/* MCP Servers — collapsible section */}
+                {mcpServersSection}
+
+                {/* Skills — collapsible section */}
+                {skillsSection}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} disabled={isDisabled}>
+                  {isPending ? 'Starting...' : 'Start Agent'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     );
