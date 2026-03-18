@@ -1330,6 +1330,10 @@ Critical gap: when agent permission mode is NOT bypass, CLI outputs `permission_
 - [ ] Mobile (iOS): push notification for pending approvals
 - [x] Fix: `bypassPermissions` now correctly uses `--dangerously-skip-permissions` *(direct commit 7c66ec2)*
 
+> Design spec: [permission-approval-system-design v2](superpowers/specs/2026-03-16-permission-approval-system-design.md)
+> Impl plan: [permission-approval-system](superpowers/plans/2026-03-18-permission-approval-system.md)
+> Status: In progress — 3 Codex agents implementing backend + worker + frontend
+
 ### 17.5 Agent Run State Machine Visibility — P1
 
 Agent run lifecycle has hidden intermediate states users can't see:
