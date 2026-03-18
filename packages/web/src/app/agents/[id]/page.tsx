@@ -1,6 +1,6 @@
 'use client';
 
-import type { ExecutionSummary } from '@agentctl/shared';
+import type { ExecutionSummary, LoopConfig } from '@agentctl/shared';
 import { toExecutionSummary } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, Download, Settings } from 'lucide-react';
@@ -45,10 +45,12 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
+import { ApiError } from '@/lib/api';
 import { describeCron, getNextRuns, isValidCron } from '@/lib/cron-utils';
 import { formatCost, formatDate, formatDuration, formatDurationMs } from '@/lib/format-utils';
 import {
   accountsQuery,
+  agentLoopQuery,
   agentQuery,
   agentRunsQuery,
   machinesQuery,
@@ -71,6 +73,11 @@ export default function AgentDetailPage(): React.JSX.Element {
   const agentSessions = useQuery(sessionsQuery({ agentId, limit: 20 }));
   const accounts = useQuery(accountsQuery());
   const machinesList = useQuery(machinesQuery());
+  const loopConfig = useMemo(() => extractLoopConfig(agent.data), [agent.data]);
+  const loopStatus = useQuery({
+    ...agentLoopQuery(agentId),
+    enabled: !!agentId && !!loopConfig,
+  });
 
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
@@ -83,9 +90,10 @@ export default function AgentDetailPage(): React.JSX.Element {
         r: () => {
           void agent.refetch();
           void runs.refetch();
+          void loopStatus.refetch();
         },
       }),
-      [agent, runs],
+      [agent, runs, loopStatus],
     ),
   );
 
@@ -130,6 +138,17 @@ export default function AgentDetailPage(): React.JSX.Element {
     }
 
     return null;
+  }, [runList]);
+
+  const recentRunCosts = useMemo(() => {
+    return runList
+      .slice(0, 10)
+      .reverse()
+      .map((run) => ({
+        id: run.id,
+        startedAt: run.startedAt,
+        costUsd: run.costUsd ?? 0,
+      }));
   }, [runList]);
 
   // -- Handlers --
@@ -350,6 +369,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               onClick={() => {
                 void agent.refetch();
                 void runs.refetch();
+                void loopStatus.refetch();
               }}
               isFetching={(agent.isFetching || runs.isFetching) && !agent.isLoading}
             />
@@ -521,7 +541,86 @@ export default function AgentDetailPage(): React.JSX.Element {
             </div>
           </CardContent>
         </Card>
+        <Card className="sm:col-span-2">
+          <CardContent className="p-4">
+            <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
+              Cost per Run (Last 10)
+            </div>
+            <RunCostMiniBars points={recentRunCosts} />
+          </CardContent>
+        </Card>
       </div>
+
+      {loopConfig && (
+        <Card className="mb-4" data-testid="agent-loop-status-card">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm flex items-center justify-between">
+              <span>Loop Status</span>
+              {loopStatus.isFetching && (
+                <span className="text-[10px] font-normal text-muted-foreground animate-pulse">
+                  Loading...
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 text-sm">
+              <InfoField label="Iteration Count">
+                <span className="font-mono text-xs">{String(runList.length)}</span>
+              </InfoField>
+              <InfoField label="Current Iteration">
+                <span className="font-mono text-xs">
+                  {String(loopStatus.data?.loop.iteration ?? runList.length)}
+                </span>
+              </InfoField>
+              <InfoField label="Loop Status">
+                <span className="capitalize text-xs">
+                  {loopStatus.data?.loop.status ?? 'inactive'}
+                </span>
+              </InfoField>
+              <InfoField label="Total Loop Cost">
+                <span className="font-mono text-xs">
+                  {formatCost(loopStatus.data?.loop.totalCostUsd ?? 0)}
+                </span>
+              </InfoField>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+              <InfoField label="Max Iterations">
+                <span className="font-mono text-xs">
+                  {loopConfig.maxIterations != null ? String(loopConfig.maxIterations) : '—'}
+                </span>
+              </InfoField>
+              <InfoField label="Cost Limit">
+                <span className="font-mono text-xs">
+                  {loopConfig.costLimitUsd != null ? formatCost(loopConfig.costLimitUsd) : '—'}
+                </span>
+              </InfoField>
+              <InfoField label="Max Duration">
+                <span className="font-mono text-xs">
+                  {loopConfig.maxDurationMs != null
+                    ? formatDurationMs(loopConfig.maxDurationMs)
+                    : '—'}
+                </span>
+              </InfoField>
+              <InfoField label="Iteration Delay">
+                <span className="font-mono text-xs">
+                  {loopConfig.iterationDelayMs != null
+                    ? `${loopConfig.iterationDelayMs}ms`
+                    : '1000ms'}
+                </span>
+              </InfoField>
+            </div>
+
+            {loopStatus.error &&
+              !(loopStatus.error instanceof ApiError && loopStatus.error.status === 404) && (
+                <div className="text-[11px] text-muted-foreground mt-3">
+                  Failed to load live loop status.
+                </div>
+              )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Agent Configuration */}
       {data.config && Object.keys(data.config).length > 0 && (
@@ -743,6 +842,65 @@ function InfoField({
     <div>
       <div className="text-[11px] font-medium text-muted-foreground mb-1">{label}</div>
       <div className="text-foreground">{children}</div>
+    </div>
+  );
+}
+
+function extractLoopConfig(
+  agent: { loopConfig?: unknown; loop_config?: unknown } | undefined,
+): LoopConfig | null {
+  if (!agent) {
+    return null;
+  }
+
+  const candidate = agent.loopConfig ?? agent.loop_config;
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+
+  return candidate as LoopConfig;
+}
+
+type RunCostPoint = {
+  id: string;
+  startedAt: string;
+  costUsd: number;
+};
+
+function RunCostMiniBars({ points }: { points: RunCostPoint[] }): React.JSX.Element {
+  if (points.length === 0) {
+    return <div className="text-[12px] text-muted-foreground">No run cost history yet.</div>;
+  }
+
+  const maxCost = points.reduce((max, point) => Math.max(max, point.costUsd), 0);
+
+  return (
+    <div className="space-y-2" data-testid="agent-cost-mini-chart">
+      <div className="flex items-end gap-1.5 h-12">
+        {points.map((point) => {
+          const normalizedHeight = maxCost > 0 ? (point.costUsd / maxCost) * 100 : 0;
+          const barHeight = Math.max(Math.round(normalizedHeight), 8);
+          const tooltipDate = new Date(point.startedAt).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          });
+          return (
+            <div
+              key={point.id}
+              className="flex-1 min-w-0 rounded-sm bg-green-500/70 hover:bg-green-500 transition-colors"
+              style={{ height: `${barHeight}%` }}
+              title={`${tooltipDate}: ${formatCost(point.costUsd)}`}
+              data-testid="agent-cost-bar"
+            />
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+        <span>older</span>
+        <span>newer</span>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent, AgentRun, ApiAccount, Machine, Session } from '@/lib/api';
@@ -11,6 +11,7 @@ import type { Agent, AgentRun, ApiAccount, Machine, Session } from '@/lib/api';
 const {
   mockAgentQuery,
   mockAgentHealthQuery,
+  mockAgentLoopQuery,
   mockAgentRunsQuery,
   mockSessionsQuery,
   mockAccountsQuery,
@@ -21,6 +22,7 @@ const {
 } = vi.hoisted(() => ({
   mockAgentQuery: vi.fn(),
   mockAgentHealthQuery: vi.fn(),
+  mockAgentLoopQuery: vi.fn(),
   mockAgentRunsQuery: vi.fn(),
   mockSessionsQuery: vi.fn(),
   mockAccountsQuery: vi.fn(),
@@ -62,8 +64,16 @@ vi.mock('@/components/ui/skeleton', () => ({
 }));
 
 vi.mock('@/components/ui/card', () => ({
-  Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <div data-testid="card" className={className}>
+  Card: ({
+    children,
+    className,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    className?: string;
+    [key: string]: unknown;
+  }) => (
+    <div className={className} data-testid="card" {...rest}>
       {children}
     </div>
   ),
@@ -238,6 +248,16 @@ vi.mock('@/components/SimpleTooltip', () => ({
   ),
 }));
 
+vi.mock('@/components/memory/AgentMemorySection', () => ({
+  AgentMemorySection: ({ agentId }: { agentId: string }) => (
+    <div data-testid="agent-memory-section">{agentId}</div>
+  ),
+}));
+
+vi.mock('@/components/RunHistoryChart', () => ({
+  RunHistoryChart: () => <div data-testid="run-history-chart" />,
+}));
+
 vi.mock('@/components/Toast', () => ({
   useToast: () => ({
     success: vi.fn(),
@@ -248,6 +268,7 @@ vi.mock('@/components/Toast', () => ({
 vi.mock('@/lib/queries', () => ({
   agentQuery: (id: string) => mockAgentQuery(id),
   agentHealthQuery: (agentId: string) => mockAgentHealthQuery(agentId),
+  agentLoopQuery: (agentId: string) => mockAgentLoopQuery(agentId),
   agentRunsQuery: (agentId: string) => mockAgentRunsQuery(agentId),
   sessionsQuery: (params?: Record<string, unknown>) => mockSessionsQuery(params),
   accountsQuery: () => mockAccountsQuery(),
@@ -406,6 +427,18 @@ describe('AgentDetailPage', () => {
         failureRate24h: 0,
         lastSuccessAt: '2026-03-05T10:00:00Z',
         status: 'healthy',
+      }),
+    );
+    mockAgentLoopQuery.mockReturnValue(
+      makeQueryResult('agent-loop', {
+        agentId: 'agent-1',
+        loop: {
+          status: 'running',
+          iteration: 2,
+          totalCostUsd: 0.84,
+          startedAt: '2026-03-05T09:58:00Z',
+          lastIterationAt: '2026-03-05T10:00:00Z',
+        },
       }),
     );
     mockAgentRunsQuery.mockReturnValue(makeQueryResult('agent-runs', [createRun()]));
@@ -1231,6 +1264,88 @@ describe('AgentDetailPage', () => {
     });
     const costCards = screen.getAllByText('$0.00');
     expect(costCards.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders mini cost chart for the last 10 runs', async () => {
+    mockAgentRunsQuery.mockReturnValue(
+      makeQueryResult(
+        'agent-runs',
+        Array.from({ length: 12 }, (_, index) =>
+          createRun({
+            id: `run-${String(index)}`,
+            startedAt: new Date(Date.now() - index * 60_000).toISOString(),
+            costUsd: Number((0.1 + index * 0.01).toFixed(2)),
+          }),
+        ),
+      ),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Cost per Run (Last 10)')).toBeDefined();
+      expect(screen.getAllByTestId('agent-cost-bar').length).toBe(10);
+    });
+  });
+
+  it('renders empty mini cost chart state when there are no runs', async () => {
+    mockAgentRunsQuery.mockReturnValue(makeQueryResult('agent-runs', []));
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('No run cost history yet.')).toBeDefined();
+    });
+  });
+
+  it('does not render loop status card when loop config is missing', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('test-agent').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByTestId('agent-loop-status-card')).toBeNull();
+  });
+
+  it('renders loop status card when loop config is present', async () => {
+    mockAgentQuery.mockReturnValue(
+      makeQueryResult(
+        'agent',
+        createAgent({
+          type: 'loop',
+          loopConfig: {
+            mode: 'result-feedback',
+            maxIterations: 10,
+            costLimitUsd: 5,
+            maxDurationMs: 120000,
+            iterationDelayMs: 1500,
+          },
+        }),
+      ),
+    );
+    mockAgentRunsQuery.mockReturnValue(
+      makeQueryResult('agent-runs', [createRun({ id: 'run-1' }), createRun({ id: 'run-2' })]),
+    );
+    mockAgentLoopQuery.mockReturnValue(
+      makeQueryResult('agent-loop', {
+        agentId: 'agent-1',
+        loop: {
+          status: 'running',
+          iteration: 4,
+          totalCostUsd: 0.84,
+          startedAt: '2026-03-05T09:58:00Z',
+          lastIterationAt: '2026-03-05T10:00:00Z',
+        },
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      const card = screen.getByTestId('agent-loop-status-card');
+      expect(within(card).getAllByText('Loop Status').length).toBeGreaterThanOrEqual(1);
+      expect(within(card).getByText('Iteration Count')).toBeDefined();
+      expect(within(card).getByText('Current Iteration')).toBeDefined();
+      expect(within(card).getByText('Max Iterations')).toBeDefined();
+      expect(within(card).getByText('1500ms')).toBeDefined();
+      expect(within(card).getByText('$5.00')).toBeDefined();
+      expect(within(card).getByText('$0.84')).toBeDefined();
+    });
   });
 
   // =========================================================================

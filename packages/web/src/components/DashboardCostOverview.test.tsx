@@ -39,6 +39,7 @@ const makeSessions = (costs: number[]) =>
     id: `sess-${String(i)}`,
     agentName: `Agent ${String(i)}`,
     claudeSessionId: `claude-${String(i)}-abcdef01`,
+    startedAt: new Date(Date.now() - i * 86_400_000).toISOString(),
     metadata: { costUsd: cost },
   }));
 
@@ -105,6 +106,18 @@ describe('DashboardCostOverview', () => {
         />,
       );
       expect(screen.getByText('across 3 sessions')).toBeDefined();
+    });
+
+    it('renders a 7-day cost trend chart in the total cost card', () => {
+      render(
+        <DashboardCostOverview
+          sessionList={makeSessions([1.0, 0.5, 2.25])}
+          agentCostBreakdown={[]}
+          isLoading={false}
+        />,
+      );
+      expect(screen.getByTestId('cost-trend-chart')).toBeDefined();
+      expect(screen.getByText('7-day daily trend')).toBeDefined();
     });
   });
 

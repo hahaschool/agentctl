@@ -214,6 +214,28 @@ describe('api.getAgentRuns', () => {
   });
 });
 
+describe('api.getAgentLoopStatus', () => {
+  it('calls GET /api/agents/:id/loop', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({
+        agentId: 'a1',
+        loop: {
+          status: 'running',
+          iteration: 3,
+          totalCostUsd: 0.75,
+          startedAt: '2026-03-18T12:00:00.000Z',
+          lastIterationAt: '2026-03-18T12:01:00.000Z',
+        },
+      }),
+    );
+
+    await api.getAgentLoopStatus('a1');
+
+    const [url] = lastFetchCall();
+    expect(url).toBe('/api/agents/a1/loop');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------

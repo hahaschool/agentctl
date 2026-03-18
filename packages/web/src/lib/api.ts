@@ -28,6 +28,7 @@ import type {
   HandoffSnapshot,
   HandoffStrategy,
   ImportJob,
+  LoopConfig,
   MachineCapabilities,
   MachineStatus,
   ManagedRuntime,
@@ -118,11 +119,26 @@ export type Agent = {
   worktreeBranch: string | null;
   currentSessionId: string | null;
   config: AgentConfig;
+  loopConfig?: LoopConfig | null;
+  loop_config?: LoopConfig | null;
   lastRunAt: string | null;
   lastCostUsd: number | null;
   totalCostUsd: number;
   accountId: string | null;
   createdAt: string;
+};
+
+export type AgentLoopState = {
+  status: 'running' | 'paused' | 'completed' | 'stopped' | 'error';
+  iteration: number;
+  totalCostUsd: number;
+  startedAt: string;
+  lastIterationAt: string | null;
+};
+
+export type AgentLoopStatusResponse = {
+  agentId: string;
+  loop: AgentLoopState;
 };
 
 export type SessionMetadata = {
@@ -591,6 +607,8 @@ export const api = {
     }),
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
   getAgentHealth: (id: string) => request<AgentHealthResponse>(`/api/agents/${id}/health`),
+  getAgentLoopStatus: (id: string) =>
+    request<AgentLoopStatusResponse>(`/api/agents/${encodeURIComponent(id)}/loop`),
 
   // Sessions
   listSessions: (params?: {

@@ -8,11 +8,13 @@ import type { Agent, Machine, Session } from '@/lib/api';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockMachinesQuery, mockAgentsQuery, mockSessionsQuery } = vi.hoisted(() => ({
-  mockMachinesQuery: vi.fn(),
-  mockAgentsQuery: vi.fn(),
-  mockSessionsQuery: vi.fn(),
-}));
+const { mockMachinesQuery, mockAgentsQuery, mockSessionsQuery, mockRuntimeConfigDriftQuery } =
+  vi.hoisted(() => ({
+    mockMachinesQuery: vi.fn(),
+    mockAgentsQuery: vi.fn(),
+    mockSessionsQuery: vi.fn(),
+    mockRuntimeConfigDriftQuery: vi.fn(),
+  }));
 
 // ---------------------------------------------------------------------------
 // Mock dependencies — BEFORE the component import
@@ -127,6 +129,7 @@ vi.mock('@/lib/queries', () => ({
   agentsQuery: () => mockAgentsQuery(),
   sessionsQuery: (...args: unknown[]) => mockSessionsQuery(...args),
   machineMemoryFactsQuery: (...args: unknown[]) => mockMachineMemoryFactsQuery(...args),
+  runtimeConfigDriftQuery: (...args: unknown[]) => mockRuntimeConfigDriftQuery(...args),
 }));
 
 // ---------------------------------------------------------------------------
@@ -247,6 +250,46 @@ describe('MachineDetailView', () => {
     mockMachineMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { machineId: 'machine-1' }],
       queryFn: vi.fn().mockResolvedValue({ ok: true, facts: [], total: 0 }),
+    });
+
+    mockRuntimeConfigDriftQuery.mockReturnValue({
+      queryKey: ['runtime-config', 'drift', 'machine-1'],
+      queryFn: vi.fn().mockResolvedValue({
+        activeVersion: 1,
+        activeHash: 'hash-1',
+        items: [
+          {
+            id: 'drift-1',
+            machineId: 'machine-1',
+            runtime: 'claude-code',
+            isInstalled: true,
+            isAuthenticated: true,
+            syncStatus: 'synced',
+            configVersion: 1,
+            configHash: 'hash-1',
+            metadata: {},
+            lastConfigAppliedAt: null,
+            createdAt: null,
+            updatedAt: null,
+            drifted: false,
+          },
+          {
+            id: 'drift-2',
+            machineId: 'machine-1',
+            runtime: 'codex',
+            isInstalled: false,
+            isAuthenticated: false,
+            syncStatus: 'unknown',
+            configVersion: null,
+            configHash: null,
+            metadata: {},
+            lastConfigAppliedAt: null,
+            createdAt: null,
+            updatedAt: null,
+            drifted: false,
+          },
+        ],
+      }),
     });
   });
 
@@ -586,7 +629,35 @@ describe('MachineDetailView', () => {
   });
 
   // =========================================================================
-  // 6. Session list for this machine
+  // 6. Runtime status card
+  // =========================================================================
+
+  it('renders available runtimes with install and auth status', async () => {
+    renderView();
+    await waitFor(() => {
+      expect(screen.getByText('Available Runtimes')).toBeDefined();
+      expect(screen.getByText('Claude Code')).toBeDefined();
+      expect(screen.getByText('Codex')).toBeDefined();
+      expect(screen.getByText('Installed')).toBeDefined();
+      expect(screen.getByText('Authenticated')).toBeDefined();
+      expect(screen.getByText('Not installed')).toBeDefined();
+      expect(screen.getByText('Authentication n/a')).toBeDefined();
+    });
+  });
+
+  it('shows runtime load failure message when drift query fails', async () => {
+    mockRuntimeConfigDriftQuery.mockReturnValue({
+      queryKey: ['runtime-config', 'drift', 'machine-1'],
+      queryFn: vi.fn().mockRejectedValue(new Error('drift failed')),
+    });
+    renderView();
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load runtime info.')).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // 7. Session list for this machine
   // =========================================================================
 
   it('renders recent sessions card', async () => {

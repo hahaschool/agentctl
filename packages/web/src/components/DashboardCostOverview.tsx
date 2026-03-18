@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type React from 'react';
 import { useMemo } from 'react';
+import { Line, LineChart, ResponsiveContainer } from 'recharts';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCost, truncate } from '../lib/format-utils';
@@ -11,6 +12,7 @@ export type DashboardCostOverviewProps = {
     id: string;
     agentName: string | null;
     claudeSessionId: string | null;
+    startedAt?: string | null;
     metadata: { costUsd?: number; [key: string]: unknown };
   }[];
   agentCostBreakdown: { id: string; name: string; totalCostUsd: number }[];
@@ -38,6 +40,35 @@ export function DashboardCostOverview({
 
   const maxAgentCost =
     agentCostBreakdown.length > 0 ? (agentCostBreakdown[0]?.totalCostUsd ?? 0) : 0;
+
+  const dailyCostTrend = useMemo(() => {
+    const days: Array<{ key: string; label: string; costUsd: number }> = [];
+    const now = new Date();
+
+    for (let offset = 6; offset >= 0; offset--) {
+      const day = new Date(now);
+      day.setHours(0, 0, 0, 0);
+      day.setDate(day.getDate() - offset);
+      const key = day.toISOString().slice(0, 10);
+      const label = day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      days.push({ key, label, costUsd: 0 });
+    }
+
+    const byDay = new Map(days.map((d) => [d.key, d]));
+    for (const session of sessionList) {
+      if (!session.startedAt) continue;
+      const costUsd = session.metadata?.costUsd ?? 0;
+      if (costUsd <= 0) continue;
+
+      const dayKey = new Date(session.startedAt).toISOString().slice(0, 10);
+      const bucket = byDay.get(dayKey);
+      if (bucket) {
+        bucket.costUsd += costUsd;
+      }
+    }
+
+    return days;
+  }, [sessionList]);
 
   if (isLoading) {
     return (
@@ -68,9 +99,24 @@ export function DashboardCostOverview({
           <div className="text-2xl font-semibold font-mono text-foreground">
             {formatCost(totalCost)}
           </div>
+          <div className="mt-2 h-12" data-testid="cost-trend-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyCostTrend} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+                <Line
+                  type="monotone"
+                  dataKey="costUsd"
+                  stroke="#22c55e"
+                  strokeWidth={1.75}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
           <div className="text-[11px] text-muted-foreground mt-1">
             across {sessionList.filter((s) => (s.metadata?.costUsd ?? 0) > 0).length} sessions
           </div>
+          <div className="text-[10px] text-muted-foreground">7-day daily trend</div>
         </div>
 
         {/* Bar chart: cost per agent */}

@@ -21,9 +21,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHotkeys } from '@/hooks/use-hotkeys';
-import { api } from '@/lib/api';
 import { formatDate, formatNumber, isStaleHeartbeat } from '@/lib/format-utils';
-import { agentsQuery, machineMemoryFactsQuery, machinesQuery, sessionsQuery } from '@/lib/queries';
+import {
+  agentsQuery,
+  machineMemoryFactsQuery,
+  machinesQuery,
+  runtimeConfigDriftQuery,
+  sessionsQuery,
+} from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -38,12 +43,7 @@ export function MachineDetailView(): React.JSX.Element {
   const agents = useQuery(agentsQuery());
   const sessions = useQuery(sessionsQuery({ machineId }));
   const machineMemory = useQuery(machineMemoryFactsQuery(machineId ?? ''));
-  const driftQuery = useQuery({
-    queryKey: ['runtime-config', 'drift', machineId],
-    queryFn: () => api.getRuntimeConfigDrift(machineId),
-    staleTime: 30_000,
-    enabled: !!machineId,
-  });
+  const driftQuery = useQuery(runtimeConfigDriftQuery(machineId));
 
   useHotkeys(
     useMemo(
@@ -315,16 +315,26 @@ export function MachineDetailView(): React.JSX.Element {
                   </span>
                   <div className="flex items-center gap-2">
                     {entry.isInstalled ? (
-                      <span className="text-xs text-green-400">Installed</span>
+                      <span className="text-xs text-green-600 dark:text-green-400">Installed</span>
                     ) : (
-                      <span className="text-xs text-red-400">Not installed</span>
+                      <span className="text-xs text-red-600 dark:text-red-400">Not installed</span>
                     )}
-                    {entry.isInstalled &&
-                      (entry.isAuthenticated ? (
-                        <span className="text-xs text-green-400">Authenticated</span>
-                      ) : (
-                        <span className="text-xs text-yellow-400">Not authenticated</span>
-                      ))}
+                    <span
+                      className={cn(
+                        'text-xs',
+                        entry.isInstalled
+                          ? entry.isAuthenticated
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-yellow-600 dark:text-yellow-400'
+                          : 'text-muted-foreground',
+                      )}
+                    >
+                      {entry.isInstalled
+                        ? entry.isAuthenticated
+                          ? 'Authenticated'
+                          : 'Not authenticated'
+                        : 'Authentication n/a'}
+                    </span>
                   </div>
                 </div>
               ))}
