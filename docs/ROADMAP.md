@@ -1347,22 +1347,22 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 18.1 Agent Templates — P1
 
-- [ ] Prebuilt agent configurations for common use cases (code reviewer, bug fixer, test writer, docs)
-- [ ] Template selection step in AgentFormDialog before manual config
-- [ ] Templates pre-fill form fields; "Start from scratch" to skip
+- [x] Prebuilt agent configurations *(PR #253)* for common use cases (code reviewer, bug fixer, test writer, docs)
+- [x] Template selection step *(PR #253)* in AgentFormDialog before manual config
+- [x] Templates pre-fill form *(PR #253)* fields; "Start from scratch" to skip
 
 ### 18.2 Command Palette Enhancement — P1
 
-- [ ] Agent actions in search (Start, Settings, View for each agent)
-- [ ] Recent sessions in search results
-- [ ] Fuzzy search across agents, sessions, pages
-- [ ] Grouped results by category
+- [x] Agent actions in search *(PR #254)* (Start, Settings, View for each agent)
+- [x] Recent sessions in search *(PR #254)* results
+- [x] Fuzzy search across *(PR #254)* agents, sessions, pages
+- [x] Grouped results by *(PR #254)* category
 
 ### 18.3 Onboarding Empty States — P1
 
-- [ ] Dashboard welcome card for new users
-- [ ] Agents page shows templates when empty
-- [ ] Sessions/Memory pages guide users to first actions
+- [x] Dashboard welcome card *(PR #255)* for new users
+- [x] Agents page shows templates *(PR #255)* when empty
+- [x] Sessions/Memory pages guide *(PR #255)* users to first actions
 
 ### 18.4 Frontend Infrastructure — Delivered
 
