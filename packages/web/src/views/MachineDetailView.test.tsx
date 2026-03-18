@@ -2,17 +2,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Agent, Machine, Session } from '@/lib/api';
+import type { Agent, Machine, Session, WorkerNode } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockMachinesQuery, mockAgentsQuery, mockSessionsQuery } = vi.hoisted(() => ({
-  mockMachinesQuery: vi.fn(),
-  mockAgentsQuery: vi.fn(),
-  mockSessionsQuery: vi.fn(),
-}));
+const { mockMachinesQuery, mockAgentsQuery, mockSessionsQuery, mockWorkerNodesQuery } = vi.hoisted(
+  () => ({
+    mockMachinesQuery: vi.fn(),
+    mockAgentsQuery: vi.fn(),
+    mockSessionsQuery: vi.fn(),
+    mockWorkerNodesQuery: vi.fn(),
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Mock dependencies — BEFORE the component import
@@ -127,6 +130,7 @@ vi.mock('@/lib/queries', () => ({
   agentsQuery: () => mockAgentsQuery(),
   sessionsQuery: (...args: unknown[]) => mockSessionsQuery(...args),
   machineMemoryFactsQuery: (...args: unknown[]) => mockMachineMemoryFactsQuery(...args),
+  workerNodesQuery: () => mockWorkerNodesQuery(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -196,6 +200,21 @@ function createSession(overrides?: Partial<Session>): Session {
   };
 }
 
+function createWorkerNode(overrides?: Partial<WorkerNode>): WorkerNode {
+  return {
+    id: 'worker-node-1',
+    hostname: 'test-machine',
+    tailscaleIp: '100.0.0.1',
+    maxConcurrentAgents: 4,
+    currentLoad: 1,
+    capabilities: ['docker'],
+    status: 'online',
+    lastHeartbeatAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -247,6 +266,11 @@ describe('MachineDetailView', () => {
     mockMachineMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { machineId: 'machine-1' }],
       queryFn: vi.fn().mockResolvedValue({ ok: true, facts: [], total: 0 }),
+    });
+
+    mockWorkerNodesQuery.mockReturnValue({
+      queryKey: ['worker-nodes'],
+      queryFn: vi.fn().mockResolvedValue([createWorkerNode()]),
     });
   });
 
@@ -386,7 +410,7 @@ describe('MachineDetailView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(screen.getByTestId('status-badge-online')).toBeDefined();
+      expect(screen.getAllByTestId('status-badge-online').length).toBeGreaterThanOrEqual(1);
     });
   });
 

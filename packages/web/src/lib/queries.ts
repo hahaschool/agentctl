@@ -20,6 +20,14 @@ type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
 type MemoryFactsQueryParams = Parameters<typeof api.searchMemoryFacts>[0];
 type MemoryGraphQueryParams = Parameters<typeof api.getMemoryGraph>[0];
 
+export type TaskGraphSummary = {
+  id: string;
+  name: string;
+  status: 'empty' | 'ready' | 'invalid';
+  taskCount: number;
+  createdAt: string;
+};
+
 // ---------------------------------------------------------------------------
 // Helpers — read user preferences from localStorage
 // ---------------------------------------------------------------------------
@@ -38,7 +46,9 @@ function getRefetchInterval(): number | false {
 export const queryKeys = {
   health: ['health'] as const,
   machines: ['machines'] as const,
+  workerNodes: ['worker-nodes'] as const,
   agents: ['agents'] as const,
+  taskGraphs: ['task-graphs'] as const,
   agent: (id: string) => ['agents', id] as const,
   agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
   agentHealth: (agentId: string) => ['agents', agentId, 'health'] as const,
@@ -109,6 +119,8 @@ export const queryKeys = {
     all: ['spaces'] as const,
     detail: (id: string) => ['spaces', id] as const,
     threads: (spaceId: string) => ['spaces', spaceId, 'threads'] as const,
+    contextRefs: (spaceId: string) => ['spaces', spaceId, 'context-refs'] as const,
+    subscriptions: (spaceId: string) => ['spaces', spaceId, 'subscriptions'] as const,
     events: (spaceId: string, threadId: string) =>
       ['spaces', spaceId, 'threads', threadId, 'events'] as const,
   },
@@ -153,6 +165,52 @@ export function machinesQuery() {
   return queryOptions({
     queryKey: queryKeys.machines,
     queryFn: api.listMachines,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function workerNodesQuery() {
+  return queryOptions({
+    queryKey: queryKeys.workerNodes,
+    queryFn: api.listWorkerNodes,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function taskGraphsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.taskGraphs,
+    queryFn: async (): Promise<TaskGraphSummary[]> => {
+      const graphs = await api.listTaskGraphs();
+      const summaries = await Promise.all(
+        graphs.map(async (graph) => {
+          const [detail, validation] = await Promise.all([
+            api.getTaskGraph(graph.id),
+            api
+              .validateTaskGraph(graph.id)
+              .catch<import('./api').TaskGraphValidation | null>(() => null),
+          ]);
+
+          const taskCount = detail.definitions.length;
+          const status: TaskGraphSummary['status'] =
+            taskCount === 0 ? 'empty' : validation && !validation.valid ? 'invalid' : 'ready';
+
+          return {
+            id: graph.id,
+            name: graph.name,
+            status,
+            taskCount,
+            createdAt: graph.createdAt,
+          };
+        }),
+      );
+
+      return summaries.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    },
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
@@ -1084,6 +1142,26 @@ export function spaceThreadsQuery(spaceId: string) {
   return queryOptions({
     queryKey: queryKeys.spaces.threads(spaceId),
     queryFn: () => api.getThreads(spaceId),
+    enabled: !!spaceId,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function spaceContextRefsQuery(spaceId: string) {
+  return queryOptions({
+    queryKey: queryKeys.spaces.contextRefs(spaceId),
+    queryFn: () => api.getSpaceContextRefs(spaceId),
+    enabled: !!spaceId,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function spaceSubscriptionsQuery(spaceId: string) {
+  return queryOptions({
+    queryKey: queryKeys.spaces.subscriptions(spaceId),
+    queryFn: () => api.getSpaceSubscriptions(spaceId),
     enabled: !!spaceId,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,

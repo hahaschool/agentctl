@@ -186,7 +186,7 @@ describe('Sidebar', () => {
   describe('version display', () => {
     it('shows the version number text', () => {
       render(<Sidebar />);
-      expect(screen.getByText('v0.1.0')).toBeDefined();
+      expect(screen.getByText('v0.2.1')).toBeDefined();
     });
   });
 
@@ -368,7 +368,7 @@ describe('Sidebar', () => {
 
     it('does not navigate for unrecognized keys', () => {
       render(<Sidebar />);
-      fireEvent.keyDown(document, { key: '9' });
+      fireEvent.keyDown(document, { key: 'x' });
       expect(mockPush).not.toHaveBeenCalled();
     });
 

@@ -14,7 +14,9 @@ import type {
   ConsolidationItem,
   ConsolidationStatus,
   ContentMessage,
+  ContextRef,
   CreateManagedSessionRequest,
+  CrossSpaceSubscription,
   DiscoveredMcpServer,
   DiscoveredSkill,
   EntityType,
@@ -22,6 +24,7 @@ import type {
   EventVisibility,
   ExecutionSummary,
   FactSource,
+  FleetOverview,
   ForkManagedSessionRequest,
   HandoffManagedSessionRequest,
   HandoffReason,
@@ -61,16 +64,23 @@ import type {
   SpaceType,
   SpaceVisibility,
   StartManualTakeoverRequest,
+  TaskDefinition,
+  TaskEdge,
+  TaskGraph,
   Thread,
   ThreadType,
+  WorkerNode,
 } from '@agentctl/shared';
 
 export type {
   AgentConfig,
+  ContextRef,
+  CrossSpaceSubscription,
   DiscoveredMcpServer,
   DiscoveredSkill,
   EventSenderType,
   EventVisibility,
+  FleetOverview,
   ImportJob,
   McpServerConfig,
   McpServerTemplate,
@@ -84,8 +94,12 @@ export type {
   SpaceMemberType,
   SpaceType,
   SpaceVisibility,
+  TaskDefinition,
+  TaskEdge,
+  TaskGraph,
   Thread,
   ThreadType,
+  WorkerNode,
 };
 
 export type HealthResponse = {
@@ -197,6 +211,17 @@ export type SessionContentResponse = {
   messages: SessionContentMessage[];
   sessionId: string;
   totalMessages: number;
+};
+
+export type TaskGraphDetail = TaskGraph & {
+  definitions: TaskDefinition[];
+  edges: TaskEdge[];
+};
+
+export type TaskGraphValidation = {
+  valid: boolean;
+  errors: string[];
+  topologicalOrder?: string[];
 };
 
 export type SessionsPage = {
@@ -1276,6 +1301,29 @@ export const api = {
       `/api/spaces/${encodeURIComponent(spaceId)}/threads/${encodeURIComponent(threadId)}/events`,
       { method: 'POST', body: JSON.stringify(data) },
     ),
+
+  // Context bridge (cross-space refs + subscriptions)
+  getSpaceContextRefs: (spaceId: string) =>
+    request<ContextRef[]>(`/api/spaces/${encodeURIComponent(spaceId)}/context-refs`),
+
+  getSpaceSubscriptions: (spaceId: string) =>
+    request<CrossSpaceSubscription[]>(`/api/spaces/${encodeURIComponent(spaceId)}/subscriptions`),
+
+  // Task graphs
+  listTaskGraphs: () => request<TaskGraph[]>('/api/task-graphs'),
+
+  getTaskGraph: (id: string) =>
+    request<TaskGraphDetail>(`/api/task-graphs/${encodeURIComponent(id)}`),
+
+  validateTaskGraph: (id: string) =>
+    request<TaskGraphValidation>(`/api/task-graphs/${encodeURIComponent(id)}/validate`, {
+      method: 'POST',
+    }),
+
+  // Fleet worker nodes
+  listWorkerNodes: () => request<WorkerNode[]>('/api/fleet/nodes'),
+
+  getFleetOverview: () => request<FleetOverview>('/api/fleet/nodes/overview'),
 
   // ---------------------------------------------------------------------------
   // Deployment
