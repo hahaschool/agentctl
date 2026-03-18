@@ -805,8 +805,8 @@ function groupRunsByRetryChain(runs: RunWithRetryMeta[]): RetryRunGroup[] {
         latestActivityAtMs: toEpochMs(latestRun?.startedAt ?? leadRun.startedAt),
       };
     })
-    .filter((group): group is RetryRunGroup => group !== null)
-    .sort((a, b) => b.latestActivityAtMs - a.latestActivityAtMs);
+    .filter((group): group is NonNullable<typeof group> => group !== null)
+    .sort((a, b) => (b?.latestActivityAtMs ?? 0) - (a?.latestActivityAtMs ?? 0)) as RetryRunGroup[];
 }
 
 function findRootRunId(run: RunWithRetryMeta, runsById: Map<string, RunWithRetryMeta>): string {
