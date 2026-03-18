@@ -31,6 +31,7 @@ const {
   mockDeleteSession,
   mockGetSessionContent,
   mockPathBadge,
+  mockRouterPush,
 } = vi.hoisted(() => ({
   mockSessionsQuery: vi.fn(),
   mockRuntimeSessionsQuery: vi.fn(),
@@ -51,6 +52,7 @@ const {
   mockDeleteSession: vi.fn(),
   mockGetSessionContent: vi.fn(),
   mockPathBadge: vi.fn(),
+  mockRouterPush: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -65,6 +67,17 @@ vi.mock('@/hooks/use-session-stream', () => ({
   useSessionStream: () => ({
     connected: false,
     streamOutput: [],
+  }),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockRouterPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+    refresh: vi.fn(),
   }),
 }));
 
@@ -363,6 +376,7 @@ describe('SessionsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPathBadge.mockClear();
+    mockRouterPush.mockReset();
 
     // Default successful responses
     mockSessionsQuery.mockReturnValue({
@@ -855,6 +869,28 @@ describe('SessionsPage', () => {
       expect(screen.getByRole('button', { name: 'Resume Session' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Fork Session' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Start Native Import' })).toBeDefined();
+    });
+  });
+
+  it('navigates to full detail route on mobile when selecting an agent session', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 390,
+    });
+
+    renderSessions();
+    fireEvent.click(await screen.findByText('agent-1'));
+
+    await waitFor(() => {
+      expect(mockRouterPush).toHaveBeenCalledWith('/sessions/session-1');
+    });
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth,
     });
   });
 

@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Filter, MessageSquare } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -196,6 +197,7 @@ const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
 export function SessionsPage(): React.JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [offset, setOffset] = useState(0);
   const [accumulatedSessions, setAccumulatedSessions] = useState<Session[]>([]);
@@ -632,6 +634,28 @@ export function SessionsPage(): React.JSX.Element {
   const selectedRow = unifiedSessionList.find((row) => row.id === selectedId) ?? null;
   const selected = selectedRow?.kind === 'agent' ? selectedRow.session : null;
 
+  const selectSession = useCallback(
+    (row: UnifiedSessionRow) => {
+      const shouldUseDetailRoute =
+        typeof window !== 'undefined' && window.innerWidth < 768 && row.kind === 'agent';
+      if (shouldUseDetailRoute) {
+        router.push(`/sessions/${row.id}`);
+        return;
+      }
+      setSelectedId(row.id);
+    },
+    [router],
+  );
+
+  const selectSessionById = useCallback(
+    (id: string) => {
+      const row = filteredSessions.find((session) => session.id === id);
+      if (!row) return;
+      selectSession(row);
+    },
+    [filteredSessions, selectSession],
+  );
+
   const handleSend = useCallback(async () => {
     if (!selected || !prompt.trim()) return;
     const messageText = prompt.trim();
@@ -781,11 +805,11 @@ export function SessionsPage(): React.JSX.Element {
         e.preventDefault();
         const focused = list[focusedIndex];
         if (focused) {
-          setSelectedId(focused.id);
+          selectSession(focused);
         }
       }
     },
-    [filteredSessions, focusedIndex],
+    [filteredSessions, focusedIndex, selectSession],
   );
 
   // Scroll the focused session item into view
@@ -1155,7 +1179,7 @@ export function SessionsPage(): React.JSX.Element {
                           isFocused={
                             focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
                           }
-                          onSelect={setSelectedId}
+                          onSelect={selectSessionById}
                           isChecked={checkedIds.has(s.id)}
                           onToggleCheck={toggleChecked}
                           onItemClick={handleItemClick}
@@ -1168,7 +1192,7 @@ export function SessionsPage(): React.JSX.Element {
                           isFocused={
                             focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
                           }
-                          onSelect={setSelectedId}
+                          onSelect={selectSessionById}
                         />
                       ),
                     )}
@@ -1183,7 +1207,7 @@ export function SessionsPage(): React.JSX.Element {
                   session={s.session}
                   isSelected={selectedId === s.id}
                   isFocused={focusedIndex === i}
-                  onSelect={setSelectedId}
+                  onSelect={selectSessionById}
                   isChecked={checkedIds.has(s.id)}
                   onToggleCheck={toggleChecked}
                   onItemClick={handleItemClick}
@@ -1194,7 +1218,7 @@ export function SessionsPage(): React.JSX.Element {
                   row={s}
                   isSelected={selectedId === s.id}
                   isFocused={focusedIndex === i}
-                  onSelect={setSelectedId}
+                  onSelect={selectSessionById}
                 />
               ),
             )
@@ -1305,7 +1329,13 @@ export function SessionsPage(): React.JSX.Element {
           <RuntimeSessionPanel
             selectedSession={selectedRow.session}
             onBack={() => setSelectedId(null)}
-            onSelectedSessionChange={setSelectedId}
+            onSelectedSessionChange={(id) => {
+              if (!id) {
+                setSelectedId(null);
+                return;
+              }
+              selectSessionById(id);
+            }}
           />
         ) : (
           <div className="flex-1 overflow-auto p-4 md:p-6">

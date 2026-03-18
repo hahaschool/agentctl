@@ -321,8 +321,8 @@ export default function AgentDetailPage(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <Link href={`/agents/${agentId}/settings`}>
               <Button variant="outline" size="sm">
                 <Settings className="h-3.5 w-3.5 mr-1.5" />
@@ -330,7 +330,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               </Button>
             </Link>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {data.status === 'running' ? (
               <ConfirmButton
                 label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
@@ -501,7 +501,7 @@ export default function AgentDetailPage(): React.JSX.Element {
       </Card>
 
       {/* Cost cards */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card>
           <CardContent className="p-4">
             <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
