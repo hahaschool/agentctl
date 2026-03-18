@@ -1203,12 +1203,12 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [x] Session IDs as titles *(PR #161)* (f1220b44-584f...) — should show agent name or summary instead
 - [x] "Duration: 0s" copy clarified *(PR #213)* — active zero-duration sessions render as "Running now" and completed zero-duration sessions render as "instant"
 - [x] Multiple empty sessions *(PR #161)* (Duration: 0s) from failed starts clutter the list — filter or mark as "empty"
-- [ ] Right panel "Select a session to view details" is wasted space — could show summary stats
+- [x] Right panel "Select a session *(PR #242)* to view details" is wasted space — could show summary stats
 
 **Machines page:**
 - [ ] Same 4 metric card pattern (Total/Online/Offline/Degraded) — acceptable here but still generic
 - [x] "GPU" / "Docker" capability badges use proper badges with icons *(PR #165)*
-- [ ] Machine card green left border is inconsistent with other cards
+- [x] Machine card green left border *(PR #242)* is inconsistent with other cards
 
 **Settings page (Runtime Control Center):**
 - [ ] Best designed page — good sidebar nav, clear hierarchy, informative right panel ✅
@@ -1217,8 +1217,8 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 
 **Memory page:**
 - [x] "0 facts" empty state guides users to import data *(PR #165)*
-- [ ] Entity type checkboxes not styled as badges/chips — looks like a raw HTML form
-- [ ] Min Confidence slider has no visual feedback
+- [x] Entity type checkboxes *(PR #242)* not styled as badges/chips — looks like a raw HTML form
+- [x] Min Confidence slider *(PR #242)* has no visual feedback
 
 **Spaces page:**
 - [ ] Empty state is clean and actionable ✅ ("Create your first space" button)
@@ -1320,28 +1320,28 @@ Critical gap: when agent permission mode is NOT bypass, CLI outputs `permission_
 
 **Architecture**: Use existing notification center (NotificationBell) + WebSocket infrastructure.
 
-- [ ] Worker captures `permission_request` events from CLI stdout stream
-- [ ] Worker forwards permission requests via SSE to control plane
-- [ ] CP stores pending approvals in DB + pushes to frontend via WebSocket
-- [ ] Notification center shows pending approval with: agent name, tool name, command preview, approve/deny buttons
-- [ ] User clicks Approve/Deny → frontend sends decision via WebSocket → CP → Worker
-- [ ] Worker writes approval/denial to CLI stdin (stream-json input)
-- [ ] Timeout handling: auto-deny after configurable timeout (default 5 min)
+- [x] Worker captures `permission_request` *(PRs #238-240)* events from CLI stdout stream
+- [x] Worker forwards permission requests *(PRs #238-240)* via SSE to control plane
+- [x] CP stores pending approvals *(PRs #238-240)* in DB + pushes to frontend via WebSocket
+- [x] Notification center shows pending *(PRs #238-240)* approval with: agent name, tool name, command preview, approve/deny buttons
+- [x] User clicks Approve/Deny *(PRs #238-240)* → frontend sends decision via WebSocket → CP → Worker
+- [x] Worker writes approval via canUseTool hook *(PRs #238-240)* to CLI stdin (stream-json input)
+- [x] Timeout handling: auto-deny *(PRs #238-240)* after configurable timeout (default 5 min)
 - [ ] Mobile (iOS): push notification for pending approvals
 - [x] Fix: `bypassPermissions` now correctly uses `--dangerously-skip-permissions` *(direct commit 7c66ec2)*
 
 > Design spec: [permission-approval-system-design v2](superpowers/specs/2026-03-16-permission-approval-system-design.md)
 > Impl plan: [permission-approval-system](superpowers/plans/2026-03-18-permission-approval-system.md)
-> Status: In progress — 3 Codex agents implementing backend + worker + frontend
+> Status: ✅ Delivered in PRs #238-240
 
 ### 17.5 Agent Run State Machine Visibility — P1
 
 Agent run lifecycle has hidden intermediate states users can't see:
 
-- [ ] Show dispatch states in UI: queued → dispatching → worker_contacted → cli_spawning → mcp_loading → running → completed
+- [x] Show dispatch states in UI *(PR #241)*: queued → dispatching → worker_contacted → cli_spawning → mcp_loading → running → completed
 - [x] Retry runs visually grouped under original run (collapsible) *(PR #231)*
 - [x] Empty runs shown with gray badge + clearer empty-status labeling *(PR #231)*
-- [ ] Run timeline shows state transitions with timestamps
+- [x] Run timeline shows state transitions *(PR #241)* with timestamps
 
 ---
 
