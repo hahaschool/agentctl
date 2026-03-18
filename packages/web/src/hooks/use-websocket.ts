@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PermissionRequest } from '../lib/api';
 
 // ---------------------------------------------------------------------------
 // WebSocket message types — mirrors the control plane wire protocol defined in
@@ -61,7 +62,22 @@ type ErrorMessage = {
   code: string;
 };
 
-export type WsIncomingMessage = AgentEventMessage | PongMessage | ErrorMessage;
+type PermissionRequestCreatedMessage = {
+  type: 'permission_request_created';
+  data: PermissionRequest;
+};
+
+type PermissionRequestResolvedMessage = {
+  type: 'permission_request_resolved';
+  data: PermissionRequest;
+};
+
+export type WsIncomingMessage =
+  | AgentEventMessage
+  | PongMessage
+  | ErrorMessage
+  | PermissionRequestCreatedMessage
+  | PermissionRequestResolvedMessage;
 
 // ---------------------------------------------------------------------------
 // Connection status
