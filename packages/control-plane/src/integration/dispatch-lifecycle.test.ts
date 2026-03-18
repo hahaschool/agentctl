@@ -297,10 +297,13 @@ describe('Integration: dispatch → completion lifecycle', () => {
 
       // Verify completeRun was called with failure status and error message
       expect(dbRegistry.completeRun).toHaveBeenCalledOnce();
-      expect(dbRegistry.completeRun).toHaveBeenCalledWith('run-001', expect.objectContaining({
-        status: 'failure',
-        errorMessage: 'Agent exceeded token limit and was terminated',
-      });
+      expect(dbRegistry.completeRun).toHaveBeenCalledWith(
+        'run-001',
+        expect.objectContaining({
+          status: 'failure',
+          errorMessage: 'Agent exceeded token limit and was terminated',
+        }),
+      );
     });
   });
 

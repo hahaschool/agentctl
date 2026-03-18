@@ -1447,8 +1447,8 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
 | **P0** | ~~Agent Run Quality~~ | 16.1 | ✅ Delivered — PRs #167-#227 cleared the reproduced CI/CodeQL backlog and closed the DAST recovery chain through a successful rerun on `main` |
-| **P0** | Dev Environment Infrastructure | 16.2 | In progress: dev-1/dev-2 isolation landed; beta promotion remains manual/protected and should not be disturbed during agent work |
-| **P0** | Frontend UI Polish (dashboard, agent detail, cards) | 16.3 | In progress: major polish PRs #158-#165 and #212-#213 are on `main`; remaining critique items are mostly dashboard/session/machines simplification plus lower-priority deployment/memory polish |
+| **P0** | ~~Dev Environment Infrastructure~~ | 16.2 | ✅ Delivered — dev-1/dev-2 isolation, PM2 configs, Next.js middleware proxy, version display |
+| **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered — PRs #158-#165, #212-#213, #229-#246; all critique items resolved |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
 | **P0** | ~~Config Preview Data Accuracy~~ | 16.5 | ✅ Delivered (PRs #194-#196) |
 | **P0** | ~~Security Hardening (Codex batch)~~ | 16.6 | ✅ Delivered (PRs #167-#220) |

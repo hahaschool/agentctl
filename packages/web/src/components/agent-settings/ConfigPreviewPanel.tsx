@@ -50,14 +50,25 @@ function ConfigPreviewPanelInner({ agentId }: { agentId: string }): React.JSX.El
   }
 
   // API may return { files: [...] } or { rendered: { files: [...] } } depending on endpoint version
-  const rawData = previewQuery.data as any;
+  type RawFileEntry = {
+    path: string;
+    scope?: 'home' | 'workspace';
+    content: string;
+    status?: 'managed' | 'merged';
+    overriddenFields?: string[];
+  };
+  type RawPreviewData = {
+    files?: RawFileEntry[];
+    rendered?: { files?: RawFileEntry[] };
+  };
+  const rawData = previewQuery.data as RawPreviewData | undefined;
   const rawFiles = rawData?.files ?? rawData?.rendered?.files ?? [];
-  const files = (rawFiles as any[]).map((f: any) => ({
-    path: f.path as string,
-    scope: (f.scope ?? 'workspace') as 'home' | 'workspace',
-    content: f.content as string,
-    status: (f.status ?? 'managed') as 'managed' | 'merged',
-    overriddenFields: f.overriddenFields as string[] | undefined,
+  const files = rawFiles.map((f) => ({
+    path: f.path,
+    scope: f.scope ?? 'workspace',
+    content: f.content,
+    status: f.status ?? 'managed',
+    overriddenFields: f.overriddenFields,
   }));
 
   if (files.length === 0) {
