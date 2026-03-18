@@ -520,7 +520,13 @@ describe('SessionsPage', () => {
 
     renderSessions();
     await waitFor(() => {
-      expect(screen.getByText('No sessions yet')).toBeDefined();
+      expect(
+        screen.getByText(
+          'No sessions yet. Start an agent or discover existing Claude Code sessions.',
+        ),
+      ).toBeDefined();
+      expect(screen.getByTestId('link-/agents')).toBeDefined();
+      expect(screen.getByTestId('link-/discover')).toBeDefined();
     });
   });
 

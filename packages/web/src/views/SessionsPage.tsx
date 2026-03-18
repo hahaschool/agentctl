@@ -2,7 +2,9 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Filter, MessageSquare } from 'lucide-react';
+import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
@@ -1122,8 +1124,17 @@ export function SessionsPage(): React.JSX.Element {
             unifiedSessionList.length === 0 ? (
               <EmptyState
                 icon={MessageSquare}
-                title="No sessions yet"
-                description="Create a new session using the form above to get started."
+                title="No sessions yet. Start an agent or discover existing Claude Code sessions."
+                action={
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Button asChild size="sm">
+                      <Link href="/agents">View Agents</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/discover">Discover Sessions</Link>
+                    </Button>
+                  </div>
+                }
               />
             ) : statusFilter !== 'all' && !searchQuery ? (
               <EmptyState

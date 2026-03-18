@@ -79,6 +79,13 @@ export function DashboardPage(): React.JSX.Element {
   const sessionList = sessions.data?.sessions ?? [];
   const managedRuntimeSessions = runtimeSessions.data?.sessions ?? [];
   const metricsData = metrics.data ?? {};
+  const showGettingStartedCard =
+    !agents.isLoading &&
+    !sessions.isLoading &&
+    !runtimeSessions.isLoading &&
+    agentList.length === 0 &&
+    sessionList.length === 0 &&
+    managedRuntimeSessions.length === 0;
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;
   const agentsRegistered = agentList.length;
@@ -247,6 +254,31 @@ export function DashboardPage(): React.JSX.Element {
 
       {/* Error banner */}
       {anyError && <ErrorBanner message={errorMessages.join(' · ')} onRetry={refreshAll} />}
+
+      {showGettingStartedCard && (
+        <Card className="mb-5 border-border/60 bg-card/95">
+          <CardContent className="space-y-4 p-5">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-foreground">Welcome to AgentCTL</h2>
+              <p className="text-sm text-muted-foreground">
+                AgentCTL helps you create agents, monitor sessions, and manage your runtime fleet
+                from one command center.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/agents?new=1">Create your first agent</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/discover">Discover existing sessions</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings">Configure settings</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Health status card */}
       <div

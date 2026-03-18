@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Bot, Filter, Settings } from 'lucide-react';
+import { Filter, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
@@ -49,6 +49,22 @@ import {
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
 type StartDialogAgent = { id: string; name: string };
+type AgentTemplateCard = { title: string; description: string };
+
+const FALLBACK_AGENT_TEMPLATES: readonly AgentTemplateCard[] = [
+  {
+    title: 'Code Reviewer',
+    description: 'Run checks on pull requests and post concise review feedback.',
+  },
+  {
+    title: 'Release Assistant',
+    description: 'Prepare release notes, validate rollout steps, and flag risks.',
+  },
+  {
+    title: 'Incident Triage',
+    description: 'Summarize logs, propose fixes, and coordinate next actions quickly.',
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -169,6 +185,7 @@ export function AgentsPage(): React.JSX.Element {
 
     return sorted;
   }, [agentList, statusFilter, search, sortOrder]);
+  const templateCards = FALLBACK_AGENT_TEMPLATES;
 
   // -- Create agent handler (delegated to AgentFormDialog) --
   const handleCreateSubmit = (data: AgentFormCreateData | AgentFormEditData): void => {
@@ -486,11 +503,31 @@ export function AgentsPage(): React.JSX.Element {
         </div>
       ) : filteredAgents.length === 0 ? (
         agentList.length === 0 ? (
-          <EmptyState
-            icon={Bot}
-            title="No agents registered"
-            description="Create an agent using the button above to get started."
-          />
+          <Card className="border-border/60 py-0">
+            <CardContent className="space-y-4 p-6">
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-foreground">No agents yet</h2>
+                <p className="text-sm text-muted-foreground">
+                  Start with a template use case and create your first agent.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {templateCards.map((template) => (
+                  <Card key={template.title} className="border-border/50 bg-muted/20 py-0">
+                    <CardContent className="space-y-1 p-3">
+                      <h3 className="text-sm font-medium text-foreground">{template.title}</h3>
+                      <p className="text-xs text-muted-foreground">{template.description}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <div>
+                <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+                  Create Agent
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         ) : (
           <EmptyState icon={Filter} title="No agents match the current filters" />
         )

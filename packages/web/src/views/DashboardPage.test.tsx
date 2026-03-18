@@ -1495,6 +1495,21 @@ describe('DashboardPage', () => {
       });
     });
 
+    it('shows a getting started card when agents and sessions are empty', async () => {
+      setupDefaultMocks({
+        agentsData: [],
+        sessionsData: { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false },
+        runtimeSessionsData: { sessions: [], count: 0 },
+      });
+      renderDashboard();
+      await waitFor(() => {
+        expect(screen.getByText('Welcome to AgentCTL')).toBeDefined();
+        expect(screen.getByTestId('link-/agents?new=1')).toBeDefined();
+        expect(screen.getAllByTestId('link-/discover').length).toBeGreaterThan(0);
+        expect(screen.getByTestId('link-/settings')).toBeDefined();
+      });
+    });
+
     it('shows empty message for machines when none registered', async () => {
       setupDefaultMocks({ machinesData: [] });
       renderDashboard();
