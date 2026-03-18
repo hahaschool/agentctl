@@ -324,7 +324,7 @@ describe('MachinesPage', () => {
   // Stat Summary Cards
   // =========================================================================
 
-  it('shows Total Machines stat card', async () => {
+  it('shows Total inline machine count', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
       queryFn: vi
@@ -336,12 +336,12 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const statValue = screen.getByTestId('stat-value-Total Machines');
-      expect(statValue.textContent).toBe('2');
+      const inline = screen.getByTestId('machines-inline-stat-total');
+      expect(inline.textContent).toContain('2');
     });
   });
 
-  it('shows Online stat card with correct count', async () => {
+  it('shows Online Machines stat card with online/total ratio', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
       queryFn: vi
@@ -354,12 +354,12 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const statValue = screen.getByTestId('stat-value-Online');
-      expect(statValue.textContent).toBe('2');
+      const statValue = screen.getByTestId('stat-value-Online Machines');
+      expect(statValue.textContent).toBe('2 / 3');
     });
   });
 
-  it('shows Offline stat card with correct count', async () => {
+  it('shows Offline inline stat with correct count', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
       queryFn: vi
@@ -372,8 +372,8 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const statValue = screen.getByTestId('stat-value-Offline');
-      expect(statValue.textContent).toBe('2');
+      const inline = screen.getByTestId('machines-inline-stat-offline');
+      expect(inline.textContent).toContain('2');
     });
   });
 
@@ -384,8 +384,8 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const sublabel = screen.getByTestId('stat-sublabel-Offline');
-      expect(sublabel.textContent).toBe('Needs attention');
+      const inline = screen.getByTestId('machines-inline-stat-offline');
+      expect(inline.textContent).toContain('Needs attention');
     });
   });
 
@@ -396,12 +396,12 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const sublabel = screen.getByTestId('stat-sublabel-Offline');
-      expect(sublabel.textContent).toBe('All clear');
+      const inline = screen.getByTestId('machines-inline-stat-offline');
+      expect(inline.textContent).toContain('All clear');
     });
   });
 
-  it('shows Degraded stat card with correct count', async () => {
+  it('shows Degraded inline stat with correct count', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
       queryFn: vi
@@ -413,8 +413,8 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const statValue = screen.getByTestId('stat-value-Degraded');
-      expect(statValue.textContent).toBe('1');
+      const inline = screen.getByTestId('machines-inline-stat-degraded');
+      expect(inline.textContent).toContain('1');
     });
   });
 
@@ -425,8 +425,8 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const sublabel = screen.getByTestId('stat-sublabel-Degraded');
-      expect(sublabel.textContent).toBe('Partial issues');
+      const inline = screen.getByTestId('machines-inline-stat-degraded');
+      expect(inline.textContent).toContain('Partial issues');
     });
   });
 
@@ -437,8 +437,8 @@ describe('MachinesPage', () => {
     });
     renderMachines();
     await waitFor(() => {
-      const sublabel = screen.getByTestId('stat-sublabel-Degraded');
-      expect(sublabel.textContent).toBe('Healthy');
+      const inline = screen.getByTestId('machines-inline-stat-degraded');
+      expect(inline.textContent).toContain('Healthy');
     });
   });
 

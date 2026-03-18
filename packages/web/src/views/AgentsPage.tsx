@@ -325,6 +325,7 @@ export function AgentsPage(): React.JSX.Element {
             </Button>
             <Button
               type="button"
+              variant="secondary"
               onClick={handleStart}
               disabled={!startPrompt.trim() || isStarting}
             >
