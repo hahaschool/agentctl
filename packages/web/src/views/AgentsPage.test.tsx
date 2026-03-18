@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -225,6 +225,22 @@ vi.mock('@/lib/queries', () => ({
   agentsQuery: () => mockAgentsQuery(),
   machinesQuery: () => mockMachinesQuery(),
   sessionsQuery: (params?: Record<string, unknown>) => mockSessionsQuery(params),
+  memoryScopesQuery: () => ({
+    queryKey: ['memory', 'scopes'],
+    queryFn: vi.fn().mockResolvedValue({ scopes: [], total: 0 }),
+  }),
+  mcpDiscoverQuery: () => ({
+    queryKey: ['mcp', 'discover'],
+    queryFn: vi.fn().mockResolvedValue({ ok: true, discovered: [], count: 0 }),
+  }),
+  mcpTemplatesQuery: () => ({
+    queryKey: ['mcp', 'templates'],
+    queryFn: vi.fn().mockResolvedValue({ ok: true, templates: [], count: 0 }),
+  }),
+  skillDiscoverQuery: () => ({
+    queryKey: ['skill-discover'],
+    queryFn: vi.fn().mockResolvedValue({ ok: true, discovered: [], count: 0 }),
+  }),
   useCreateAgent: () => mockCreateAgent(),
   useStartAgent: () => mockStartAgent(),
   useStopAgent: () => mockStopAgent(),
@@ -682,8 +698,8 @@ describe('AgentsPage', () => {
     fireEvent.click(screen.getByText('Start'));
     const promptInput = await screen.findByPlaceholderText('Enter prompt...');
     fireEvent.change(promptInput, { target: { value: 'Run health checks' } });
-    const startButtons = screen.getAllByText('Start');
-    fireEvent.click(startButtons[startButtons.length - 1]);
+    const startDialog = screen.getByTestId('dialog-content');
+    fireEvent.click(within(startDialog).getByText('Start'));
 
     expect(mutateFn).toHaveBeenCalledWith(
       { id: 'agent-1', prompt: 'Run health checks' },
@@ -835,7 +851,11 @@ describe('AgentsPage', () => {
     });
     renderAgentsPage();
     await waitFor(() => {
-      expect(screen.getByText('No agents registered')).toBeDefined();
+      expect(screen.getByText('No agents yet')).toBeDefined();
+      expect(screen.getByText('Code Reviewer')).toBeDefined();
+      expect(screen.getByText('Release Assistant')).toBeDefined();
+      expect(screen.getByText('Incident Triage')).toBeDefined();
+      expect(screen.getByText('Create Agent')).toBeDefined();
     });
   });
 

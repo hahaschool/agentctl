@@ -13,6 +13,8 @@ import {
   type BrowserFilters,
 } from '@/components/memory/BrowserFilterSidebar';
 import { FactsList } from '@/components/memory/FactsList';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   memoryFactQuery,
@@ -123,6 +125,13 @@ export function MemoryBrowserView(): React.JSX.Element {
 
   const factsQueryResult = useQuery(memoryFactsQuery(queryParams));
   const facts = factsQueryResult.data?.facts ?? [];
+  const hasActiveFilters =
+    debouncedQ.trim().length > 0 ||
+    filters.scope.length > 0 ||
+    filters.entityTypes.length > 0 ||
+    filters.minConfidence > 0;
+  const showZeroFactsGuidance =
+    !factsQueryResult.isLoading && !hasActiveFilters && facts.length === 0;
 
   // Client-side filter for multiple entity types (API supports only one)
   const filteredFacts = useMemo(() => {
@@ -236,7 +245,7 @@ export function MemoryBrowserView(): React.JSX.Element {
               <>
                 {filteredFacts.length} fact{filteredFacts.length !== 1 ? 's' : ''}
                 {debouncedQ ? ` matching "${debouncedQ}"` : ''}
-                {filteredFacts.length === 0 && (
+                {filteredFacts.length === 0 && !showZeroFactsGuidance && (
                   <>
                     {' · '}
                     <Link
@@ -251,6 +260,21 @@ export function MemoryBrowserView(): React.JSX.Element {
             )}
           </div>
         </div>
+        {showZeroFactsGuidance && (
+          <div className="border-b border-border px-4 py-3">
+            <Card className="border-border/60">
+              <CardContent className="space-y-3 p-4">
+                <p className="text-sm text-muted-foreground">
+                  Memory stores facts about your projects. Import from claude-mem or create facts
+                  manually.
+                </p>
+                <Button asChild size="sm">
+                  <Link href="/memory/import">Import from claude-mem</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
         <FactsList
           facts={filteredFacts}
           isLoading={factsQueryResult.isLoading}

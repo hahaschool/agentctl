@@ -143,6 +143,12 @@ describe('MemoryBrowserView', () => {
     render(<MemoryBrowserView />);
 
     expect(screen.getByText(/0 fact/)).toBeDefined();
+    expect(
+      screen.getByText(
+        'Memory stores facts about your projects. Import from claude-mem or create facts manually.',
+      ),
+    ).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Import from claude-mem' })).toBeDefined();
     expect(screen.getByText('No facts found matching your filters.')).toBeDefined();
   });
 
