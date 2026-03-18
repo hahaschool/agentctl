@@ -20,6 +20,7 @@ import { SubagentBlock } from './SubagentBlock';
 import { TerminalView } from './TerminalView';
 import { ThinkingBlock } from './ThinkingBlock';
 import { TodoBlock } from './TodoBlock';
+import { ToolUseBlock } from './ToolUseBlock';
 
 export const CONTENT_POLL_MS = 3_000;
 
@@ -569,6 +570,26 @@ export function SessionContent({
                     <TodoBlock
                       key={`${msg.type}-${String(i)}`}
                       content={msg.content}
+                      timestamp={msg.timestamp}
+                    />
+                  );
+                case 'tool_use':
+                  return (
+                    <ToolUseBlock
+                      key={`${msg.type}-${String(i)}`}
+                      toolName={msg.toolName}
+                      content={msg.content}
+                      timestamp={msg.timestamp}
+                    />
+                  );
+                case 'tool_result':
+                  return (
+                    <ToolUseBlock
+                      key={`${msg.type}-${String(i)}`}
+                      toolName={msg.toolName}
+                      content={msg.content}
+                      isResult
+                      isError={msg.metadata?.isError === true}
                       timestamp={msg.timestamp}
                     />
                   );
