@@ -18,6 +18,7 @@ import {
   Sun,
   X,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -80,6 +81,7 @@ export function Sidebar(): React.JSX.Element {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const toast = useToast();
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotificationContext();
+  const queryClient = useQueryClient();
 
   // Track WS connection for reconnect/disconnect toasts (skip initial connect)
   const wasConnectedRef = useRef(false);
@@ -98,6 +100,12 @@ export function Sidebar(): React.JSX.Element {
     onMessage: (msg) => {
       if (msg.type === 'error') {
         toast.error(msg.message);
+      }
+      if (
+        msg.type === 'permission_request_created' ||
+        msg.type === 'permission_request_resolved'
+      ) {
+        queryClient.invalidateQueries({ queryKey: ['permission-requests'] });
       }
     },
   });
