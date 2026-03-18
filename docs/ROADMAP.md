@@ -1374,9 +1374,9 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 19. Quality & Depth
 
-### 19.1 Permission System Test Coverage — P1
+### 19.1 Permission System Test Coverage — Delivered
 
-- [ ] Comprehensive tests for `permission-requests.ts` CP route (POST, GET, PATCH, expiry)
+- [x] Comprehensive tests for `permission-requests.ts` CP route — 14 tests covering POST, GET, PATCH, validation *(direct commit dc0eb1c)*
 - [x] Fix unhandled rejection from permission expiry interval in test suites *(direct commit e6d6607)*
 
 ### 19.2 WebSocket Permission Event Wiring — Delivered
