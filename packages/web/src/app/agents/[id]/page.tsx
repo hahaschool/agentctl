@@ -14,6 +14,7 @@ import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { FetchingBar } from '@/components/FetchingBar';
 import { GroupedRunHistory } from '@/components/GroupedRunHistory';
 import { LastUpdated } from '@/components/LastUpdated';
@@ -62,7 +63,7 @@ import {
 // Main page component
 // ---------------------------------------------------------------------------
 
-export default function AgentDetailPage(): React.JSX.Element {
+function AgentDetailPageContent(): React.JSX.Element {
   const params = useParams<{ id: string }>();
   const agentId = params.id;
   const router = useRouter();
@@ -733,6 +734,14 @@ export default function AgentDetailPage(): React.JSX.Element {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function AgentDetailPage(): React.JSX.Element {
+  return (
+    <ErrorBoundary>
+      <AgentDetailPageContent />
+    </ErrorBoundary>
   );
 }
 
