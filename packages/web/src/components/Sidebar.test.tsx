@@ -224,6 +224,19 @@ describe('Sidebar', () => {
       const btn = screen.getByRole('button', { name: 'Close navigation' });
       expect(btn).toBeDefined();
     });
+
+    it('toggles the mobile sidebar open/closed state', () => {
+      const { container } = render(<Sidebar />);
+      const toggle = screen.getByRole('button', { name: 'Toggle navigation' });
+      const sidebar = container.querySelector('#app-sidebar');
+
+      expect(sidebar?.className).toContain('max-md:-translate-x-full');
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+      fireEvent.click(toggle);
+      expect(sidebar?.className).toContain('max-md:translate-x-0');
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    });
   });
 
   // =========================================================================

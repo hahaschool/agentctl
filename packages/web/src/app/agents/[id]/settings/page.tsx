@@ -126,9 +126,9 @@ export default function AgentSettingsPage(): React.JSX.Element {
         {/* Left column: tabs and forms */}
         <div>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
-            <TabsList className="w-full flex flex-wrap justify-start mb-6">
+            <TabsList className="mb-6 flex w-full justify-start gap-1 overflow-x-auto whitespace-nowrap">
               {TABS.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value}>
+                <TabsTrigger key={tab.value} value={tab.value} className="shrink-0">
                   {tab.label}
                 </TabsTrigger>
               ))}

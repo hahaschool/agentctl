@@ -56,8 +56,8 @@ export function DiscoverFilterBar({
   onToggleAll,
 }: DiscoverFilterBarProps): React.JSX.Element {
   return (
-    <div className="flex gap-3 items-center flex-wrap px-4 py-3 bg-card border border-border/50 rounded-lg mb-4">
-      <div className="relative flex-1 min-w-[140px]">
+    <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border/50 bg-card px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="relative w-full sm:min-w-[200px] sm:flex-1">
         <input
           ref={searchRef}
           id="discover-search"
@@ -74,14 +74,17 @@ export function DiscoverFilterBar({
           </kbd>
         )}
       </div>
-      <label htmlFor="discover-min-msgs" className="flex items-center gap-1.5 text-[13px]">
+      <label
+        htmlFor="discover-min-msgs"
+        className="flex w-full items-center justify-between gap-2 text-[13px] sm:w-auto sm:justify-start"
+      >
         <span className="text-muted-foreground">Min msgs:</span>
         <select
           id="discover-min-msgs"
           value={minMessages}
           onChange={(e) => onMinMessagesChange(Number(e.target.value) as MinMessages)}
           aria-label="Minimum message count"
-          className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          className="w-[130px] rounded-md border border-border bg-background px-2 py-[5px] text-[13px] text-foreground focus:border-primary/40 focus:ring-2 focus:ring-primary/20 sm:w-auto"
         >
           {MIN_MESSAGE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -90,14 +93,17 @@ export function DiscoverFilterBar({
           ))}
         </select>
       </label>
-      <label htmlFor="discover-sort" className="flex items-center gap-1.5 text-[13px]">
+      <label
+        htmlFor="discover-sort"
+        className="flex w-full items-center justify-between gap-2 text-[13px] sm:w-auto sm:justify-start"
+      >
         <span className="text-muted-foreground">Sort:</span>
         <select
           id="discover-sort"
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SortOption)}
           aria-label="Sort by"
-          className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          className="w-[170px] rounded-md border border-border bg-background px-2 py-[5px] text-[13px] text-foreground focus:border-primary/40 focus:ring-2 focus:ring-primary/20 sm:w-auto"
         >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -108,13 +114,16 @@ export function DiscoverFilterBar({
       </label>
       {/* Machine filter */}
       {hostnames.length > 1 && (
-        <label htmlFor="discover-machine" className="flex items-center gap-1.5 text-[13px]">
+        <label
+          htmlFor="discover-machine"
+          className="flex w-full items-center justify-between gap-2 text-[13px] sm:w-auto sm:justify-start"
+        >
           <span className="text-muted-foreground">Machine:</span>
           <select
             id="discover-machine"
             value={machineFilter}
             onChange={(e) => onMachineFilterChange(e.target.value)}
-            className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+            className="w-[170px] rounded-md border border-border bg-background px-2 py-[5px] text-[13px] text-foreground focus:border-primary/40 focus:ring-2 focus:ring-primary/20 sm:w-auto"
           >
             <option value="all">All ({hostnames.length})</option>
             {hostnames.map((h) => (
@@ -126,14 +135,17 @@ export function DiscoverFilterBar({
         </label>
       )}
       {/* Group by toggle */}
-      <label htmlFor="discover-group" className="flex items-center gap-1.5 text-[13px]">
+      <label
+        htmlFor="discover-group"
+        className="flex w-full items-center justify-between gap-2 text-[13px] sm:w-auto sm:justify-start"
+      >
         <span className="text-muted-foreground">Group:</span>
         <select
           id="discover-group"
           value={groupMode}
           onChange={(e) => onGroupModeChange(e.target.value as GroupMode)}
           aria-label="Group by"
-          className="px-2 py-[5px] bg-background text-foreground border border-border rounded-md text-[13px] focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          className="w-[170px] rounded-md border border-border bg-background px-2 py-[5px] text-[13px] text-foreground focus:border-primary/40 focus:ring-2 focus:ring-primary/20 sm:w-auto"
         >
           <option value="project">By Project</option>
           <option value="machine">By Machine</option>
@@ -145,7 +157,7 @@ export function DiscoverFilterBar({
           type="button"
           onClick={onToggleAll}
           aria-label={allExpanded ? 'Collapse all groups' : 'Expand all groups'}
-          className="py-[5px] px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer whitespace-nowrap transition-colors hover:bg-muted/80 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          className="w-full whitespace-nowrap rounded-md border border-border bg-muted px-3 py-[5px] text-xs text-muted-foreground transition-colors hover:bg-muted/80 focus:border-primary/40 focus:ring-2 focus:ring-primary/20 sm:w-auto"
         >
           {allExpanded ? 'Collapse All' : 'Expand All'}
         </button>

@@ -185,6 +185,8 @@ export function Sidebar(): React.JSX.Element {
           onClick={() => setMobileOpen(!mobileOpen)}
           className="text-foreground p-2.5 -ml-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md active:bg-accent/10"
           aria-label="Toggle navigation"
+          aria-expanded={mobileOpen}
+          aria-controls="app-sidebar"
         >
           {mobileOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
         </button>
@@ -210,6 +212,7 @@ export function Sidebar(): React.JSX.Element {
 
       {/* Sidebar */}
       <nav
+        id="app-sidebar"
         className={cn(
           'bg-sidebar border-r border-border flex flex-col py-4 shrink-0',
           // Desktop: always visible, fixed width
