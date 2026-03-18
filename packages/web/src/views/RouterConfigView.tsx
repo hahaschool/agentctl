@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -118,7 +119,10 @@ export function RouterConfigView(): React.JSX.Element {
           </p>
 
           {modelsInfo.isLoading && (
-            <p className="text-xs text-muted-foreground py-4 text-center">Loading models...</p>
+            <div className="space-y-2 py-4" data-testid="router-models-loading-skeleton">
+              <Skeleton className="mx-auto h-4 w-40" />
+              <Skeleton className="mx-auto h-4 w-56" />
+            </div>
           )}
 
           {modelsInfo.error && !modelsInfo.isLoading && (

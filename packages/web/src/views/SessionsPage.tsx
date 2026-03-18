@@ -1261,9 +1261,14 @@ export function SessionsPage(): React.JSX.Element {
                   disabled={sessions.isFetching}
                   className="w-full h-9 px-3 bg-muted text-muted-foreground border border-border rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:bg-accent hover:text-foreground"
                 >
-                  {sessions.isFetching
-                    ? 'Loading...'
-                    : `Load more (${totalCount - loadedCount} remaining)`}
+                  {sessions.isFetching ? (
+                    <>
+                      <Skeleton className="mx-auto h-3 w-16" />
+                      <span className="sr-only">Fetching more sessions</span>
+                    </>
+                  ) : (
+                    `Load more (${totalCount - loadedCount} remaining)`
+                  )}
                 </button>
               ) : unifiedSessionList.length > 0 ? (
                 <p className="text-[11px] text-muted-foreground text-center">

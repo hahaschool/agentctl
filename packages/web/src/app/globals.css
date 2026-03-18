@@ -280,6 +280,20 @@ a:hover {
   animation: page-enter 0.2s ease-out;
 }
 
+@keyframes status-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.animate-status-dot {
+  animation: status-dot-pulse 1.6s ease-out infinite;
+}
+
 /* Stagger children animation */
 @keyframes stagger-in {
   from {
@@ -348,6 +362,7 @@ a:hover {
   .animate-fade-in-up,
   .animate-fade-in,
   .animate-page-enter,
+  .animate-status-dot,
   .animate-toast-in,
   .animate-toast-out,
   .animate-banner-pulse,

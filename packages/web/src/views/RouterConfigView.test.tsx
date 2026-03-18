@@ -381,13 +381,13 @@ describe('RouterConfigView', () => {
   // Loading State
   // =========================================================================
 
-  it('shows "Loading models..." while models query is loading', () => {
+  it('shows model loading skeletons while models query is loading', () => {
     mockRouterModelsInfoQuery.mockReturnValue({
       queryKey: ['router-models-info'],
       queryFn: vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
     });
     renderView();
-    expect(screen.getByText('Loading models...')).toBeDefined();
+    expect(screen.getByTestId('router-models-loading-skeleton')).toBeDefined();
   });
 
   // =========================================================================

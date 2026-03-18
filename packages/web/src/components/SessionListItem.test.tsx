@@ -167,16 +167,16 @@ describe('SessionListItem', () => {
   // -----------------------------------------------------------------------
 
   describe('status indicators', () => {
-    it('shows green ping dot for active sessions', () => {
+    it('does not render legacy inline status dots for active sessions', () => {
       const { container } = renderItem({ session: makeSession({ status: 'active' }) });
-      const pingDot = container.querySelector('.animate-ping');
-      expect(pingDot).not.toBeNull();
+      expect(container.querySelector('.animate-ping')).toBeNull();
+      expect(container.querySelector('.animate-pulse')).toBeNull();
     });
 
-    it('shows yellow pulse dot for starting sessions', () => {
+    it('does not render legacy inline status dots for starting sessions', () => {
       const { container } = renderItem({ session: makeSession({ status: 'starting' }) });
-      const pulseDot = container.querySelector('.animate-pulse');
-      expect(pulseDot).not.toBeNull();
+      expect(container.querySelector('.animate-ping')).toBeNull();
+      expect(container.querySelector('.animate-pulse')).toBeNull();
     });
 
     it('does not show ping or pulse dot for ended sessions', () => {
