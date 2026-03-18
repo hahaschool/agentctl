@@ -9,15 +9,16 @@ describe('BrowserFilterSidebar', () => {
     vi.clearAllMocks();
   });
 
-  it('renders search input, scope select, entity type checkboxes, and confidence slider', () => {
+  it('renders search input, scope select, entity type chips, and confidence slider', () => {
     render(<BrowserFilterSidebar filters={INITIAL_FILTERS} onFiltersChange={onFiltersChange} />);
 
     expect(screen.getByLabelText('Search facts')).toBeDefined();
     expect(screen.getByLabelText('Scope filter')).toBeDefined();
     expect(screen.getByLabelText('Minimum confidence')).toBeDefined();
-    expect(screen.getByLabelText(/decision/i)).toBeDefined();
-    expect(screen.getByLabelText(/pattern/i)).toBeDefined();
-    expect(screen.getByLabelText(/error/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /toggle entity type: decision/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /toggle entity type: pattern/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /toggle entity type: error/i })).toBeDefined();
+    expect(screen.getByText('0%')).toBeDefined();
   });
 
   it('calls onFiltersChange when search input changes', () => {
@@ -42,10 +43,10 @@ describe('BrowserFilterSidebar', () => {
     });
   });
 
-  it('toggles entity type checkbox', () => {
+  it('toggles entity type chip', () => {
     render(<BrowserFilterSidebar filters={INITIAL_FILTERS} onFiltersChange={onFiltersChange} />);
 
-    fireEvent.click(screen.getByLabelText(/decision/i));
+    fireEvent.click(screen.getByRole('button', { name: /toggle entity type: decision/i }));
 
     expect(onFiltersChange).toHaveBeenCalledWith({
       ...INITIAL_FILTERS,
@@ -57,12 +58,19 @@ describe('BrowserFilterSidebar', () => {
     const filters: BrowserFilters = { ...INITIAL_FILTERS, entityTypes: ['decision', 'pattern'] };
     render(<BrowserFilterSidebar filters={filters} onFiltersChange={onFiltersChange} />);
 
-    fireEvent.click(screen.getByLabelText(/decision/i));
+    fireEvent.click(screen.getByRole('button', { name: /toggle entity type: decision/i }));
 
     expect(onFiltersChange).toHaveBeenCalledWith({
       ...filters,
       entityTypes: ['pattern'],
     });
+  });
+
+  it('shows current confidence percentage next to the slider label', () => {
+    const filters: BrowserFilters = { ...INITIAL_FILTERS, minConfidence: 0.65 };
+    render(<BrowserFilterSidebar filters={filters} onFiltersChange={onFiltersChange} />);
+
+    expect(screen.getByText('65%')).toBeDefined();
   });
 
   it('shows clear filters button when filters are active', () => {

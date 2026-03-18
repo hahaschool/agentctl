@@ -7,6 +7,7 @@ import { useCallback } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 
@@ -130,31 +131,45 @@ export function BrowserFilterSidebar({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Entity Type
         </h3>
-        <div className="space-y-1">
+        <div className="flex flex-wrap gap-2">
           {ENTITY_TYPES.map((entityType) => {
             const isChecked = filters.entityTypes.includes(entityType);
+            const label = entityType.replace(/_/g, ' ');
             return (
-              <label
+              <Badge
                 key={entityType}
-                className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent/10"
+                asChild
+                variant={isChecked ? 'default' : 'outline'}
+                className={cn(
+                  'px-0 py-0',
+                  !isChecked &&
+                    'border-border/70 bg-background/50 text-muted-foreground hover:bg-accent/10 hover:text-foreground',
+                )}
               >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => handleEntityTypeToggle(entityType)}
-                  className="size-3.5 rounded border-input accent-primary"
-                />
-                <span className="capitalize">{entityType.replace(/_/g, ' ')}</span>
-              </label>
+                <button
+                  type="button"
+                  onClick={() => handleEntityTypeToggle(entityType)}
+                  aria-pressed={isChecked}
+                  aria-label={`Toggle entity type: ${label}`}
+                  className="cursor-pointer rounded-full px-2 py-0.5 capitalize"
+                >
+                  {label}
+                </button>
+              </Badge>
             );
           })}
         </div>
       </div>
 
       <div className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Min Confidence
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Min Confidence
+          </h3>
+          <Badge variant="outline" className="text-[11px] tabular-nums">
+            {Math.round(filters.minConfidence * 100)}%
+          </Badge>
+        </div>
         <div className="flex items-center gap-3">
           <input
             type="range"
@@ -165,9 +180,6 @@ export function BrowserFilterSidebar({
             className="h-2 w-full cursor-pointer accent-primary"
             aria-label="Minimum confidence"
           />
-          <span className="min-w-[3ch] text-right text-xs tabular-nums text-muted-foreground">
-            {Math.round(filters.minConfidence * 100)}%
-          </span>
         </div>
       </div>
 

@@ -17,12 +17,15 @@ const {
   mockAccountsQuery,
   mockMachinesQuery,
   mockRuntimeSessionHandoffsQuery,
+  mockRuntimeSessionManualTakeoverQuery,
   mockRuntimeSessionPreflightQuery,
   mockListMachines,
   mockCreateSession,
   mockResumeRuntimeSessionMutateAsync,
   mockForkRuntimeSessionMutateAsync,
   mockHandoffRuntimeSessionMutateAsync,
+  mockStartRuntimeSessionManualTakeoverMutateAsync,
+  mockStopRuntimeSessionManualTakeoverMutateAsync,
   mockSendMessage,
   mockResumeSession,
   mockDeleteSession,
@@ -34,12 +37,15 @@ const {
   mockAccountsQuery: vi.fn(),
   mockMachinesQuery: vi.fn(),
   mockRuntimeSessionHandoffsQuery: vi.fn(),
+  mockRuntimeSessionManualTakeoverQuery: vi.fn(),
   mockRuntimeSessionPreflightQuery: vi.fn(),
   mockListMachines: vi.fn(),
   mockCreateSession: vi.fn(),
   mockResumeRuntimeSessionMutateAsync: vi.fn(),
   mockForkRuntimeSessionMutateAsync: vi.fn(),
   mockHandoffRuntimeSessionMutateAsync: vi.fn(),
+  mockStartRuntimeSessionManualTakeoverMutateAsync: vi.fn(),
+  mockStopRuntimeSessionManualTakeoverMutateAsync: vi.fn(),
   mockSendMessage: vi.fn(),
   mockResumeSession: vi.fn(),
   mockDeleteSession: vi.fn(),
@@ -162,6 +168,7 @@ vi.mock('@/lib/queries', () => ({
   machinesQuery: () => mockMachinesQuery(),
   runtimeSessionHandoffsQuery: (id: string, limit?: number) =>
     mockRuntimeSessionHandoffsQuery(id, limit),
+  runtimeSessionManualTakeoverQuery: (id: string) => mockRuntimeSessionManualTakeoverQuery(id),
   runtimeSessionPreflightQuery: (id: string, params: Record<string, unknown>) =>
     mockRuntimeSessionPreflightQuery(id, params),
   useResumeRuntimeSession: () => ({
@@ -174,6 +181,14 @@ vi.mock('@/lib/queries', () => ({
   }),
   useHandoffRuntimeSession: () => ({
     mutateAsync: mockHandoffRuntimeSessionMutateAsync,
+    isPending: false,
+  }),
+  useStartRuntimeSessionManualTakeover: () => ({
+    mutateAsync: mockStartRuntimeSessionManualTakeoverMutateAsync,
+    isPending: false,
+  }),
+  useStopRuntimeSessionManualTakeover: () => ({
+    mutateAsync: mockStopRuntimeSessionManualTakeoverMutateAsync,
     isPending: false,
   }),
   queryKeys: {
@@ -399,6 +414,10 @@ describe('SessionsPage', () => {
         handoffs: id ? [createRuntimeHandoff({ sourceSessionId: id })] : [],
         count: id ? 1 : 0,
       }),
+    }));
+    mockRuntimeSessionManualTakeoverQuery.mockImplementation((id: string) => ({
+      queryKey: ['runtime-sessions', id, 'manual-takeover'],
+      queryFn: vi.fn().mockResolvedValue({ manualTakeover: null }),
     }));
     mockRuntimeSessionPreflightQuery.mockImplementation(
       (id: string, params: Record<string, unknown>) => ({
@@ -905,9 +924,13 @@ describe('SessionsPage', () => {
   // Session Detail Panel
   // =========================================================================
 
-  it('shows detail panel placeholder when no session selected', () => {
+  it('shows session summary stats when no session is selected', () => {
     renderSessions();
-    expect(screen.getByText('Select a session to view details')).toBeDefined();
+    expect(screen.getByText('Session summary')).toBeDefined();
+    expect(screen.getByText('Total Sessions')).toBeDefined();
+    expect(screen.getByText('Active Count')).toBeDefined();
+    expect(screen.getByText('Total Cost')).toBeDefined();
+    expect(screen.getByText('Avg Duration')).toBeDefined();
   });
 
   // =========================================================================
