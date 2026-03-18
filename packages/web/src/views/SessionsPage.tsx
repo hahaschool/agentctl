@@ -19,7 +19,7 @@ import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AgentConfig, ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
-import { downloadCsv, shortenPath } from '../lib/format-utils';
+import { downloadCsv, formatCost, formatDurationMs, shortenPath } from '../lib/format-utils';
 import type { AgentRuntime } from '../lib/model-options';
 import {
   accountsQuery,
@@ -443,6 +443,51 @@ export function SessionsPage(): React.JSX.Element {
 
     return result;
   }, [hideEmpty, searchQuery, sortOrder, statusFilter, typeFilter, unifiedSessionList]);
+
+  const summaryStats = useMemo(() => {
+    const nowMs = Date.now();
+    let activeCount = 0;
+    let totalCostUsd = 0;
+    let totalDurationMs = 0;
+    let durationCount = 0;
+
+    for (const row of filteredSessions) {
+      const isActive = row.status === 'active' || row.status === 'starting';
+      if (isActive) {
+        activeCount++;
+      }
+
+      if (row.kind === 'agent') {
+        totalCostUsd += row.session.metadata?.costUsd ?? 0;
+      }
+
+      const startMs = new Date(row.session.startedAt ?? row.activityAt ?? nowMs).getTime();
+      if (!Number.isFinite(startMs)) {
+        continue;
+      }
+
+      const endMs = row.session.endedAt
+        ? new Date(row.session.endedAt).getTime()
+        : row.activityAt
+          ? new Date(row.activityAt).getTime()
+          : isActive
+            ? nowMs
+            : startMs;
+      if (!Number.isFinite(endMs)) {
+        continue;
+      }
+
+      totalDurationMs += Math.max(0, endMs - startMs);
+      durationCount++;
+    }
+
+    return {
+      totalSessions: filteredSessions.length,
+      activeCount,
+      totalCostUsd,
+      avgDurationMs: durationCount > 0 ? totalDurationMs / durationCount : null,
+    };
+  }, [filteredSessions]);
 
   const selectableRows = useMemo(
     () =>
@@ -1263,11 +1308,46 @@ export function SessionsPage(): React.JSX.Element {
             onSelectedSessionChange={setSelectedId}
           />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            <span className="text-sm">Select a session to view details</span>
-            <span className="text-xs text-muted-foreground/50">
-              Use arrow keys to navigate the list
-            </span>
+          <div className="flex-1 overflow-auto p-4 md:p-6">
+            <div className="mx-auto w-full max-w-xl rounded-xl border border-border bg-card/70 p-4 md:p-5">
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-foreground">Session summary</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {filteredSessions.length === unifiedSessionList.length
+                    ? 'All loaded sessions'
+                    : 'Based on active filters'}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+                  <div className="text-[11px] text-muted-foreground">Total Sessions</div>
+                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
+                    {String(summaryStats.totalSessions)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+                  <div className="text-[11px] text-muted-foreground">Active Count</div>
+                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
+                    {String(summaryStats.activeCount)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+                  <div className="text-[11px] text-muted-foreground">Total Cost</div>
+                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
+                    {formatCost(summaryStats.totalCostUsd)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+                  <div className="text-[11px] text-muted-foreground">Avg Duration</div>
+                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
+                    {formatDurationMs(summaryStats.avgDurationMs)}
+                  </div>
+                </div>
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground/70">
+                Use arrow keys to navigate the list.
+              </p>
+            </div>
           </div>
         )}
       </div>

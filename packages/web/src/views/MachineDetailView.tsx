@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Box, Check, Cpu, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
@@ -136,6 +137,14 @@ export function MachineDetailView(): React.JSX.Element {
     machineMemory.isFetching ||
     driftQuery.isFetching;
   const heartbeatStale = machine.lastHeartbeat ? isStaleHeartbeat(machine.lastHeartbeat) : false;
+  const machineStatusBorderClass =
+    machine.status === 'online'
+      ? 'border-l-green-500'
+      : machine.status === 'offline'
+        ? 'border-l-red-500'
+        : machine.status === 'degraded'
+          ? 'border-l-yellow-500'
+          : 'border-l-border';
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
@@ -211,7 +220,7 @@ export function MachineDetailView(): React.JSX.Element {
       </div>
 
       {/* Machine details card */}
-      <Card className="mb-4">
+      <Card className={cn('mb-4 border-l-2', machineStatusBorderClass)}>
         <CardHeader className="pb-0">
           <CardTitle className="text-sm">Machine Details</CardTitle>
         </CardHeader>
@@ -261,10 +270,18 @@ export function MachineDetailView(): React.JSX.Element {
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
               <InfoField label="GPU">
-                <CapabilityIndicator enabled={machine.capabilities?.gpu ?? false} />
+                <CapabilityIndicator
+                  label="GPU"
+                  icon={Cpu}
+                  enabled={machine.capabilities?.gpu ?? false}
+                />
               </InfoField>
               <InfoField label="Docker">
-                <CapabilityIndicator enabled={machine.capabilities?.docker ?? false} />
+                <CapabilityIndicator
+                  label="Docker"
+                  icon={Box}
+                  enabled={machine.capabilities?.docker ?? false}
+                />
               </InfoField>
               <InfoField label="Max Concurrent Agents">
                 <span className="font-mono">{machine.capabilities?.maxConcurrentAgents ?? 0}</span>
@@ -557,18 +574,31 @@ function InfoField({
   );
 }
 
-function CapabilityIndicator({ enabled }: { enabled: boolean }): React.JSX.Element {
+function CapabilityIndicator({
+  enabled,
+  label,
+  icon: Icon,
+}: {
+  enabled: boolean;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}): React.JSX.Element {
   return (
     <Badge
       variant="outline"
       className={cn(
-        'rounded-md px-2 py-0 text-[11px] font-medium',
+        'rounded-md px-2 py-0.5 text-[11px] font-medium gap-1.5',
         enabled
           ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
           : 'border-border bg-muted/40 text-muted-foreground',
       )}
     >
-      {enabled ? 'Available' : 'Not available'}
+      <Icon className="size-3" />
+      <span>{label}</span>
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide">
+        {enabled ? <Check className="size-3" /> : <X className="size-3" />}
+        {enabled ? 'Enabled' : 'Disabled'}
+      </span>
     </Badge>
   );
 }

@@ -1,6 +1,5 @@
 'use client';
 
-import { calculateHandoffAnalyticsRates } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
@@ -79,25 +78,12 @@ export function DashboardPage(): React.JSX.Element {
   const discoveredSessions = discovered.data?.sessions ?? [];
   const sessionList = sessions.data?.sessions ?? [];
   const managedRuntimeSessions = runtimeSessions.data?.sessions ?? [];
-  const runtimeHandoffMetrics = runtimeHandoffSummary.data?.summary ?? {
-    total: 0,
-    succeeded: 0,
-    failed: 0,
-    pending: 0,
-    nativeImportSuccesses: 0,
-    nativeImportFallbacks: 0,
-  };
-  const runtimeHandoffRates = calculateHandoffAnalyticsRates(runtimeHandoffMetrics);
   const metricsData = metrics.data ?? {};
 
   const machinesOnline = machineList.filter((m) => m.status === 'online').length;
   const agentsRegistered = agentList.length;
   const activeRuns = Number(metricsData.agentctl_agents_active ?? 0);
   const totalRuns = Number(metricsData.agentctl_runs_total ?? 0);
-  const totalAgentCost = useMemo(
-    () => agentList.reduce((sum, a) => sum + (a.totalCostUsd ?? 0), 0),
-    [agentList],
-  );
 
   // Active sessions (running or active status)
   const activeSessions = sessionList.filter((s) => s.status === 'running' || s.status === 'active');
@@ -405,35 +391,6 @@ export function DashboardPage(): React.JSX.Element {
                   <span className="text-muted-foreground whitespace-nowrap">
                     {activeManagedRuntimeCount} active · {handingOffManagedRuntimeCount} switching
                   </span>
-                </div>
-                <div
-                  className="flex items-center gap-2 min-w-0"
-                  data-testid="secondary-stat-Native Import"
-                >
-                  <Badge variant="outline" className="border-border/60 bg-background/40">
-                    Native Import
-                  </Badge>
-                  <span className="font-mono text-foreground">
-                    {String(runtimeHandoffMetrics.nativeImportSuccesses)}
-                  </span>
-                  <span className="text-muted-foreground whitespace-nowrap">
-                    {runtimeHandoffRates.nativeImportSuccessRate}% native ·{' '}
-                    {runtimeHandoffRates.fallbackRate}% fallback
-                  </span>
-                </div>
-                <div
-                  className="flex items-center gap-2 min-w-0"
-                  data-testid="secondary-stat-Total Cost"
-                >
-                  <Badge variant="outline" className="border-border/60 bg-background/40">
-                    Total Cost
-                  </Badge>
-                  <span className="font-mono text-foreground">{formatCost(totalAgentCost)}</span>
-                  {agentCostBreakdown.length > 0 && (
-                    <span className="text-muted-foreground truncate max-w-[200px]">
-                      top: {agentCostBreakdown[0]?.name ?? 'N/A'}
-                    </span>
-                  )}
                 </div>
               </div>
             </CardContent>

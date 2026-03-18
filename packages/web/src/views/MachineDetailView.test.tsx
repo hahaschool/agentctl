@@ -494,7 +494,7 @@ describe('MachineDetailView', () => {
     });
   });
 
-  it('shows GPU as "Available" when gpu is true', async () => {
+  it('shows GPU capability as enabled when gpu is true', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
       queryFn: vi.fn().mockResolvedValue([
@@ -505,13 +505,13 @@ describe('MachineDetailView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('GPU')).toBeDefined();
-      const availables = screen.getAllByText('Available');
-      expect(availables.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('GPU').length).toBeGreaterThanOrEqual(1);
+      const enabledBadges = screen.getAllByText('Enabled');
+      expect(enabledBadges.length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it('shows Docker as "Available" when docker is true', async () => {
+  it('shows Docker capability as enabled when docker is true', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
       queryFn: vi.fn().mockResolvedValue([
@@ -522,11 +522,11 @@ describe('MachineDetailView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('Docker')).toBeDefined();
+      expect(screen.getAllByText('Docker').length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it('shows "Not available" for disabled capabilities', async () => {
+  it('shows disabled state for unavailable capabilities', async () => {
     mockMachinesQuery.mockReturnValue({
       queryKey: ['machines'],
       queryFn: vi.fn().mockResolvedValue([
@@ -537,8 +537,24 @@ describe('MachineDetailView', () => {
     });
     renderView();
     await waitFor(() => {
-      const notAvailable = screen.getAllByText('Not available');
-      expect(notAvailable.length).toBe(2); // GPU + Docker
+      const disabledBadges = screen.getAllByText('Disabled');
+      expect(disabledBadges.length).toBe(2); // GPU + Docker
+    });
+  });
+
+  it('applies status-based left border accent on machine details card', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([createMachine({ status: 'degraded' })]),
+    });
+    renderView();
+
+    await waitFor(() => {
+      const title = screen.getByText('Machine Details');
+      const card = title.closest('[data-slot="card"]');
+      expect(card).not.toBeNull();
+      expect(card?.className).toContain('border-l-2');
+      expect(card?.className).toContain('border-l-yellow-500');
     });
   });
 

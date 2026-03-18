@@ -875,55 +875,11 @@ describe('DashboardPage', () => {
       });
     });
 
-    it('displays native import summary in the secondary stats row', async () => {
-      setupDefaultMocks({
-        runtimeHandoffSummaryData: {
-          ok: true,
-          limit: 100,
-          summary: {
-            total: 4,
-            succeeded: 3,
-            failed: 1,
-            pending: 0,
-            nativeImportSuccesses: 2,
-            nativeImportFallbacks: 1,
-          },
-        },
-      });
+    it('does not render Native Import or Total Cost in the secondary stats row', async () => {
       renderDashboard();
       await waitFor(() => {
-        const stat = screen.getByTestId('secondary-stat-Native Import');
-        expect(stat.textContent).toContain('2');
-        expect(stat.textContent).toContain('50% native');
-        expect(stat.textContent).toContain('25% fallback');
-      });
-    });
-
-    it('displays total cost in the secondary stats row', async () => {
-      setupDefaultMocks({
-        agentsData: [
-          createAgent({ id: 'a1', totalCostUsd: 5.0, name: 'expensive-agent' }),
-          createAgent({ id: 'a2', totalCostUsd: 3.0, name: 'cheap-agent' }),
-        ],
-      });
-      renderDashboard();
-      await waitFor(() => {
-        expect(screen.getByTestId('secondary-stat-Total Cost').textContent).toContain('$8.00');
-      });
-    });
-
-    it('shows top spender name in total cost secondary stat', async () => {
-      setupDefaultMocks({
-        agentsData: [
-          createAgent({ id: 'a1', totalCostUsd: 10.0, name: 'big-spender' }),
-          createAgent({ id: 'a2', totalCostUsd: 2.0, name: 'frugal-bot' }),
-        ],
-      });
-      renderDashboard();
-      await waitFor(() => {
-        expect(screen.getByTestId('secondary-stat-Total Cost').textContent).toContain(
-          'top: big-spender',
-        );
+        expect(screen.queryByTestId('secondary-stat-Native Import')).toBeNull();
+        expect(screen.queryByTestId('secondary-stat-Total Cost')).toBeNull();
       });
     });
   });
