@@ -10,8 +10,9 @@ import { useHotkeys } from './use-hotkeys';
 function fireKeydown(
   key: string,
   target: Partial<EventTarget & { tagName?: string }> = document.body,
+  init: KeyboardEventInit = {},
 ): KeyboardEvent {
-  const event = new KeyboardEvent('keydown', { key, bubbles: true });
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, ...init });
   Object.defineProperty(event, 'target', { value: target, writable: false });
   document.dispatchEvent(event);
   return event;
@@ -112,6 +113,42 @@ describe('useHotkeys — key matching', () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
+  it('matches Ctrl+key via "mod+<key>"', () => {
+    const handler = vi.fn();
+    renderHook(() => useHotkeys({ 'mod+k': handler }));
+
+    fireKeydown('k', document.body, { ctrlKey: true });
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('matches Cmd+key via "mod+<key>"', () => {
+    const handler = vi.fn();
+    renderHook(() => useHotkeys({ 'mod+k': handler }));
+
+    fireKeydown('k', document.body, { metaKey: true });
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('matches Ctrl+key via "ctrl+<key>"', () => {
+    const handler = vi.fn();
+    renderHook(() => useHotkeys({ 'ctrl+n': handler }));
+
+    fireKeydown('n', document.body, { ctrlKey: true });
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('matches Cmd+key via "cmd+<key>"', () => {
+    const handler = vi.fn();
+    renderHook(() => useHotkeys({ 'cmd+n': handler }));
+
+    fireKeydown('n', document.body, { metaKey: true });
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
   it('passes the KeyboardEvent to the handler', () => {
     const handler = vi.fn();
     renderHook(() => useHotkeys({ Escape: handler }));
@@ -184,6 +221,15 @@ describe('useHotkeys — form field suppression', () => {
     renderHook(() => useHotkeys({ r: handler }));
 
     fireKeydown('r', { tagName: 'DIV' });
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('fires the handler in INPUT when enableOnFormTags=true', () => {
+    const handler = vi.fn();
+    renderHook(() => useHotkeys({ 'mod+s': handler }, { enableOnFormTags: true }));
+
+    fireKeydown('s', { tagName: 'INPUT' }, { ctrlKey: true });
 
     expect(handler).toHaveBeenCalledOnce();
   });

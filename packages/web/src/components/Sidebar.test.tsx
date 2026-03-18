@@ -383,5 +383,49 @@ describe('Sidebar', () => {
       fireEvent.keyDown(input, { key: '1' });
       expect(mockPush).not.toHaveBeenCalled();
     });
+
+    it('navigates to new agent flow on Ctrl+N', () => {
+      render(<Sidebar />);
+      fireEvent.keyDown(document, { key: 'n', ctrlKey: true });
+      expect(mockPush).toHaveBeenCalledWith('/agents?new=1');
+    });
+
+    it('navigates to new agent flow on Cmd+N', () => {
+      render(<Sidebar />);
+      fireEvent.keyDown(document, { key: 'n', metaKey: true });
+      expect(mockPush).toHaveBeenCalledWith('/agents?new=1');
+    });
+
+    it('triggers save button on Ctrl+S while on settings pages', () => {
+      mockPathname.mockReturnValue('/settings');
+      const onSave = vi.fn();
+      render(
+        <div>
+          <Sidebar />
+          <button type="button" onClick={onSave}>
+            Save
+          </button>
+        </div>,
+      );
+
+      fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not trigger save button on Ctrl+S outside settings pages', () => {
+      mockPathname.mockReturnValue('/sessions');
+      const onSave = vi.fn();
+      render(
+        <div>
+          <Sidebar />
+          <button type="button" onClick={onSave}>
+            Save
+          </button>
+        </div>,
+      );
+
+      fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+      expect(onSave).not.toHaveBeenCalled();
+    });
   });
 });

@@ -56,8 +56,8 @@ describe('ALL_SHORTCUTS', () => {
     expect(ALL_SHORTCUTS.length).toBeGreaterThan(0);
   });
 
-  it('has 13 total entries (8 nav + 5 global)', () => {
-    expect(ALL_SHORTCUTS).toHaveLength(13);
+  it('has 15 total entries (8 nav + 7 global)', () => {
+    expect(ALL_SHORTCUTS).toHaveLength(15);
   });
 
   it('starts with navigation shortcuts (keys 1-8)', () => {
@@ -85,11 +85,13 @@ describe('ALL_SHORTCUTS', () => {
     expect(cmdK?.keys[0]).toContain('\u2318');
   });
 
-  it('contains refresh, search, escape, and help shortcuts', () => {
+  it('contains global action shortcuts', () => {
     const descs = ALL_SHORTCUTS.map((e) => e.desc);
+    expect(descs).toContain('New agent');
+    expect(descs).toContain('Save settings');
     expect(descs).toContain('Refresh current page');
     expect(descs).toContain('Focus search (Discover)');
-    expect(descs).toContain('Close panels / Cancel');
+    expect(descs).toContain('Close dialogs / Cancel');
     expect(descs).toContain('Toggle keyboard help');
   });
 
@@ -113,9 +115,9 @@ describe('SHORTCUT_GROUPS', () => {
     expect(SHORTCUT_GROUPS.length).toBeGreaterThan(0);
   });
 
-  it('has 4 groups: Global, Sessions, Session Detail, Agents', () => {
+  it('has 5 groups: Global, Sessions, Session Detail, Agents, Agent Detail', () => {
     const titles = SHORTCUT_GROUPS.map((g) => g.title);
-    expect(titles).toEqual(['Global', 'Sessions', 'Session Detail', 'Agents']);
+    expect(titles).toEqual(['Global', 'Sessions', 'Session Detail', 'Agents', 'Agent Detail']);
   });
 
   it('Global group contains navigation and command palette shortcuts', () => {
@@ -123,6 +125,8 @@ describe('SHORTCUT_GROUPS', () => {
     expect(global).toBeDefined();
     const descs = global?.shortcuts.map((s) => s.desc) ?? [];
     expect(descs).toContain('Command palette');
+    expect(descs).toContain('New agent');
+    expect(descs).toContain('Save settings (Settings pages)');
     expect(descs).toContain('Navigate to page');
     expect(descs).toContain('Show keyboard shortcuts');
   });
@@ -154,6 +158,15 @@ describe('SHORTCUT_GROUPS', () => {
     expect(descs).toContain('Refresh');
     expect(descs).toContain('New agent');
     expect(descs).toContain('Close dialog');
+  });
+
+  it('Agent Detail group contains run-specific shortcuts', () => {
+    const detail = SHORTCUT_GROUPS.find((g) => g.title === 'Agent Detail');
+    expect(detail).toBeDefined();
+    const descs = detail?.shortcuts.map((s) => s.desc) ?? [];
+    expect(descs).toContain('Start agent');
+    expect(descs).toContain('Refresh');
+    expect(descs).toContain('Open settings');
   });
 
   it('every group has at least one shortcut', () => {

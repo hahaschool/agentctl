@@ -3,8 +3,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Bot, Filter, Settings } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -54,6 +55,8 @@ type StartDialogAgent = { id: string; name: string };
 // ---------------------------------------------------------------------------
 
 export function AgentsPage(): React.JSX.Element {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const agents = useQuery(agentsQuery());
   const machines = useQuery(machinesQuery());
@@ -67,6 +70,16 @@ export function AgentsPage(): React.JSX.Element {
   const [startDialogAgent, setStartDialogAgent] = useState<StartDialogAgent | null>(null);
   const [startPrompt, setStartPrompt] = useState('');
   const [isStarting, setIsStarting] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setShowCreateDialog(true);
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('new');
+    const query = nextParams.toString();
+    router.replace(query ? `/agents?${query}` : '/agents');
+  }, [router, searchParams]);
 
   // Extract unique project paths from recent sessions
   const recentProjectPaths = useMemo(() => {
@@ -89,6 +102,7 @@ export function AgentsPage(): React.JSX.Element {
     useMemo(
       () => ({
         r: () => void agents.refetch(),
+        n: () => setShowCreateDialog(true),
         Escape: () => {
           if (startDialogAgent) {
             setStartDialogAgent(null);
