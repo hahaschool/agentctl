@@ -170,7 +170,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         id: `nav-${nav.href}`,
         label: nav.label,
         icon: nav.icon,
-        shortcut: nav.shortcut,
+        shortcut: 'shortcut' in nav ? nav.shortcut : undefined,
         section: nav.section,
         keywords: [nav.label, nav.href, 'navigation'],
         action: () => {
@@ -492,12 +492,12 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           label: page.label,
           description: page.href,
           icon: page.icon,
-          shortcut: page.shortcut,
+          shortcut: 'shortcut' in page ? page.shortcut : undefined,
           action: () => {
             router.push(page.href);
             onClose();
           },
-        } satisfies CommandPaletteResultItem,
+        } as CommandPaletteResultItem,
       };
     })
       .filter((entry): entry is { score: number; item: CommandPaletteResultItem } => entry !== null)
@@ -522,7 +522,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
               router.push(`/agents/${agent.id}`);
               onClose();
             },
-          } satisfies CommandPaletteResultItem,
+          } as CommandPaletteResultItem,
         };
       })
       .filter((entry): entry is { score: number; item: CommandPaletteResultItem } => entry !== null)
@@ -547,7 +547,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
               router.push(`/sessions/${session.id}`);
               onClose();
             },
-          } satisfies CommandPaletteResultItem,
+          } as CommandPaletteResultItem,
         };
       })
       .filter((entry): entry is { score: number; item: CommandPaletteResultItem } => entry !== null)
