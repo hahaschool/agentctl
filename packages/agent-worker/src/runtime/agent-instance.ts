@@ -395,7 +395,9 @@ export class AgentInstance extends EventEmitter {
       const result = await runWithSdk({
         prompt,
         agentId: this.agentId,
+        machineId: this.machineId,
         sessionId: this.state.sessionId ?? '',
+        controlPlaneUrl: this.controlPlaneUrl ?? undefined,
         config: this.config,
         projectPath: this.executionProjectPath,
         logger: this.log,

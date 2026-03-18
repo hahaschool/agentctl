@@ -1,5 +1,5 @@
 import type { AgentConfig, AgentEvent } from '@agentctl/shared';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createMockLogger } from '../test-helpers.js';
 import { EventedAgentOutputStream } from './agent-output-stream.js';
@@ -21,6 +21,7 @@ function makeOptions(overrides?: Partial<SdkRunnerOptions>): SdkRunnerOptions {
   return {
     prompt: 'Write a hello world function',
     agentId: 'agent-1',
+    machineId: 'machine-1',
     sessionId: 'session-1',
     config: {} as AgentConfig,
     projectPath: '/tmp/test-project',
@@ -43,9 +44,16 @@ async function* asyncIterableFrom<T>(items: T[]): AsyncIterable<T> {
 // ── Tests ─────────────────────────────────────────────────────────────
 
 describe('sdk-runner', () => {
+  let originalFetch: typeof globalThis.fetch;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
   });
 
   describe('loadSdk (via runWithSdk fallback path)', () => {
@@ -410,6 +418,177 @@ describe('sdk-runner', () => {
       expect(callArgs.options).not.toHaveProperty('allowedTools');
       expect(callArgs.options).not.toHaveProperty('disallowedTools');
       expect(callArgs.options).not.toHaveProperty('systemPrompt');
+    });
+
+    it('posts permission requests and waits for CP decision when canUseTool is triggered', async () => {
+      let toolAllowed = false;
+      let capturedRequestId: string | null = null;
+
+      const mockQuery = vi
+        .fn()
+        .mockImplementation(({ options }: { options: Record<string, unknown> }) =>
+          (async function* () {
+            const canUseTool = options.canUseTool as (
+              toolName: string,
+              input: Record<string, unknown>,
+              context: { signal?: AbortSignal },
+            ) => Promise<{ allowed: boolean }>;
+
+            const decision = await canUseTool(
+              'Bash',
+              {
+                command: 'echo hello',
+                apiToken: 'secret-token',
+                nested: { dbPassword: 'super-secret' },
+              },
+              {},
+            );
+            toolAllowed = decision.allowed;
+
+            yield { type: 'result', result: 'Done', session_id: 'session-1' };
+          })(),
+        );
+
+      vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({
+        query: mockQuery,
+      }));
+
+      const { runWithSdk, resolvePendingPermissionDecision } = await import('./sdk-runner.js');
+
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        const payload = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        capturedRequestId = String(payload.requestId);
+        expect(payload).toEqual(
+          expect.objectContaining({
+            agentId: 'agent-1',
+            sessionId: 'session-1',
+            machineId: 'machine-1',
+            toolName: 'Bash',
+            timeoutSeconds: 300,
+            toolInput: {
+              command: 'echo hello',
+              apiToken: '[REDACTED]',
+              nested: { dbPassword: '[REDACTED]' },
+            },
+          }),
+        );
+
+        queueMicrotask(() => {
+          if (capturedRequestId) {
+            resolvePendingPermissionDecision(
+              { requestId: capturedRequestId, decision: 'approved' },
+              'agent-1',
+            );
+          }
+        });
+
+        return { ok: true, status: 201 } as Response;
+      });
+
+      await runWithSdk(
+        makeOptions({
+          config: { permissionMode: 'acceptEdits' },
+          controlPlaneUrl: 'http://control-plane.local',
+        }),
+      );
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'http://control-plane.local/api/permission-requests',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(toolAllowed).toBe(true);
+    });
+
+    it('denies tool use when canUseTool signal aborts before a decision arrives', async () => {
+      let toolAllowed = true;
+      let requestId = '';
+
+      const mockQuery = vi
+        .fn()
+        .mockImplementation(({ options }: { options: Record<string, unknown> }) =>
+          (async function* () {
+            const canUseTool = options.canUseTool as (
+              toolName: string,
+              input: Record<string, unknown>,
+              context: { signal?: AbortSignal },
+            ) => Promise<{ allowed: boolean }>;
+            const controller = new AbortController();
+
+            const decisionPromise = canUseTool(
+              'Read',
+              { file_path: '/tmp/test.txt' },
+              {
+                signal: controller.signal,
+              },
+            );
+            controller.abort();
+            const decision = await decisionPromise;
+            toolAllowed = decision.allowed;
+
+            yield { type: 'result', result: 'Done', session_id: 'session-1' };
+          })(),
+        );
+
+      vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({
+        query: mockQuery,
+      }));
+
+      const { runWithSdk, resolvePendingPermissionDecision } = await import('./sdk-runner.js');
+
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        const payload = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        requestId = String(payload.requestId);
+        return { ok: true, status: 201 } as Response;
+      });
+
+      await runWithSdk(
+        makeOptions({
+          config: { permissionMode: 'acceptEdits' },
+          controlPlaneUrl: 'http://control-plane.local',
+        }),
+      );
+
+      expect(toolAllowed).toBe(false);
+      expect(resolvePendingPermissionDecision({ requestId, decision: 'approved' }, 'agent-1')).toBe(
+        false,
+      );
+    });
+
+    it('denies tool use when permission mode requires approval but control plane URL is missing', async () => {
+      let toolAllowed = true;
+
+      const mockQuery = vi
+        .fn()
+        .mockImplementation(({ options }: { options: Record<string, unknown> }) =>
+          (async function* () {
+            const canUseTool = options.canUseTool as (
+              toolName: string,
+              input: Record<string, unknown>,
+              context: { signal?: AbortSignal },
+            ) => Promise<{ allowed: boolean }>;
+            const decision = await canUseTool('Write', { file_path: '/tmp/test.ts' }, {});
+            toolAllowed = decision.allowed;
+
+            yield { type: 'result', result: 'Done', session_id: 'session-1' };
+          })(),
+        );
+
+      vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({
+        query: mockQuery,
+      }));
+
+      const { runWithSdk } = await import('./sdk-runner.js');
+      globalThis.fetch = vi.fn();
+
+      await runWithSdk(
+        makeOptions({
+          config: { permissionMode: 'acceptEdits' },
+          controlPlaneUrl: undefined,
+        }),
+      );
+
+      expect(toolAllowed).toBe(false);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
   });
 
