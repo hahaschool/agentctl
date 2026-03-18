@@ -1379,16 +1379,16 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [ ] Comprehensive tests for `permission-requests.ts` CP route (POST, GET, PATCH, expiry)
 - [x] Fix unhandled rejection from permission expiry interval in test suites *(direct commit e6d6607)*
 
-### 19.2 WebSocket Permission Event Wiring — P2
+### 19.2 WebSocket Permission Event Wiring — Delivered
 
-- [ ] Wire `permission_request_created` / `permission_request_resolved` WS events to `queryClient.invalidateQueries` in Sidebar.tsx
-- [ ] Eliminate 5-second polling lag for permission notifications
+- [x] Wire `permission_request_created` / `permission_request_resolved` WS events to `queryClient.invalidateQueries` in Sidebar.tsx *(direct commit 32908bb)*
+- [x] Eliminate 5-second polling lag for permission notifications *(direct commit 32908bb)*
 
-### 19.3 ToolUseBlock Session Display Component — P2
+### 19.3 ToolUseBlock Session Display Component — Delivered
 
-- [ ] Create `ToolUseBlock.tsx` with syntax-highlighted input/output, tool icon mapping, collapsible sections
-- [ ] Integrate into SessionContent.tsx switch statement for `tool_use` message type
-- [ ] Completes Task 4 of the session display plan
+- [x] Create `ToolUseBlock.tsx` with tool icon mapping, collapsible sections, error styling *(direct commit c25058a)*
+- [x] Integrate into SessionContent.tsx switch statement for `tool_use`/`tool_result` message types *(direct commit c25058a)*
+- [x] Completes Task 4 of the session display plan
 
 ---
 
