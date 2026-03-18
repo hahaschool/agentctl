@@ -1,223 +1,244 @@
-# Permission Approval System
+# Permission Approval System (v2 — post Codex GPT-5.4 review)
 
-**Date**: 2026-03-16
-**Status**: Draft
-**Scope**: End-to-end permission approval pipeline — CLI permission requests surface in 3 UI locations with approve/deny actions
+**Date**: 2026-03-16 (revised 2026-03-18)
+**Status**: Draft v2
+**Scope**: End-to-end permission approval pipeline via Agent SDK `canUseTool` hook
 
 ## Problem
 
-When an agent's permission mode is not `bypassPermissions`, Claude CLI outputs `permission_request` events for dangerous operations (Bash commands, file writes, network access). AgentCTL has no mechanism for users to respond to these requests. The agent hangs waiting for approval until it times out and is killed.
+When an agent's permission mode is not `bypassPermissions`, tool executions require user approval. Currently AgentCTL has no mechanism for users to respond — the agent hangs until timeout.
+
+## Critical Design Decision: Transport
+
+**v1 spec proposed writing to CLI stdin — this is impossible.** The worker spawns Claude with `stdin: 'ignore'` and `-p` mode doesn't read stdin.
+
+**v2 uses Agent SDK `canUseTool` hook** — the SDK provides an async callback called before each tool execution. We implement it to:
+1. Check if the tool needs approval (based on permission mode)
+2. If yes: create a pending request, notify the user, wait for response
+3. Return `{ allowed: true/false }` to the SDK
+
+This is the SDK's intended mechanism for headless permission handling.
 
 ## Goals
 
-1. Capture CLI `permission_request` events and surface them to users in realtime
-2. Three approval surfaces: session inline, notification bell, dedicated `/approvals` page
-3. User can approve/deny from any surface; decision propagates back to CLI
-4. Auto-deny on timeout (configurable, default 5 minutes)
-5. Full approval history for audit
+1. Capture tool approval requests via Agent SDK `canUseTool` hook
+2. Surface pending approvals in 2 UI locations (MVP): session inline + notification bell
+3. User can approve/deny; decision resolves the `canUseTool` promise
+4. Auto-deny on timeout (use Claude's per-request timeout, default 5 min)
+5. Full audit trail with user identity
 
-## Non-Goals
+## Non-Goals (MVP)
 
-- Automated approval policies (auto-approve certain tools) — future enhancement
-- Approval delegation to other users — single-user MVP
-- Mobile push notifications — use existing infrastructure later
+- Dedicated `/approvals` page (Phase 2)
+- Batch approve/deny (Phase 2)
+- Mobile push notifications (Phase 2)
+- Auto-approve policies (Phase 2)
 
-## Data Flow
+## Architecture
 
 ```
-CLI stdout ──→ Worker ──→ CP ──→ Frontend
-   permission_request    POST /api/approvals    WebSocket broadcast
-                                                      │
-                                          ┌───────────┼───────────┐
-                                          │           │           │
-                                    Session View   Notif Bell  /approvals
-                                    (inline btns)  (dropdown)  (full page)
-                                          │           │           │
-                                          └───────────┼───────────┘
-                                                      │
-Frontend decision ──→ WebSocket ──→ CP ──→ Worker ──→ CLI stdin
-   PATCH /api/approvals/:id     POST /api/agents/:id/approval-response
+Agent SDK calls canUseTool(toolName, input)
+    ↓
+Worker canUseTool implementation:
+    1. Generate requestId (UUID)
+    2. POST /api/permission-requests to CP
+    3. Return a Promise that resolves when CP calls back
+    ↓
+CP stores in DB, broadcasts via WebSocket
+    ↓
+Frontend receives WS event, shows in:
+    - Session message stream (inline approve/deny card)
+    - NotificationBell (badge + dropdown item)
+    ↓
+User clicks Approve/Deny
+    ↓
+Frontend PATCH /api/permission-requests/:id
+    ↓
+CP updates DB, calls Worker POST /api/agents/:id/permission-response
+    ↓
+Worker resolves the canUseTool Promise
+    ↓
+Agent SDK proceeds (tool runs or is blocked)
 ```
 
 ## Data Model
 
-### `pending_approvals` table
+### `permission_requests` table (NEW — avoids collision with existing `approval_gates`)
 
 ```sql
-CREATE TABLE pending_approvals (
+CREATE TABLE permission_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id UUID NOT NULL,
   session_id TEXT NOT NULL,
   machine_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,         -- correlation ID from canUseTool call
   tool_name TEXT NOT NULL,
-  command TEXT,
+  tool_input JSONB,                 -- sanitized input (secrets stripped)
   description TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',  -- pending | approved | denied | expired
+  status TEXT NOT NULL DEFAULT 'pending',
   requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  timeout_at TIMESTAMPTZ NOT NULL,  -- requestedAt + timeout from CLI
   resolved_at TIMESTAMPTZ,
-  resolved_by TEXT,  -- 'user' | 'timeout' | 'agent-killed'
-  timeout_seconds INTEGER NOT NULL DEFAULT 300,
-  CONSTRAINT valid_status CHECK (status IN ('pending', 'approved', 'denied', 'expired'))
+  resolved_by TEXT,                 -- user email/id, 'timeout', 'agent-killed'
+  decision TEXT,                    -- 'approved' | 'denied' (null when pending)
+  CONSTRAINT valid_status CHECK (status IN ('pending', 'approved', 'denied', 'expired', 'cancelled'))
 );
 
-CREATE INDEX idx_pending_approvals_status ON pending_approvals(status);
-CREATE INDEX idx_pending_approvals_agent ON pending_approvals(agent_id);
+CREATE INDEX idx_perm_req_status ON permission_requests(status);
+CREATE INDEX idx_perm_req_agent ON permission_requests(agent_id);
+CREATE INDEX idx_perm_req_session ON permission_requests(session_id);
 ```
 
-### Shared types
+### Shared types (`packages/shared/src/types/permission-request.ts`)
 
 ```typescript
-type PendingApproval = {
+export type PermissionRequestStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
+
+export type PermissionRequest = {
   id: string;
   agentId: string;
   sessionId: string;
   machineId: string;
+  requestId: string;
   toolName: string;
-  command?: string;
+  toolInput?: Record<string, unknown>;
   description?: string;
-  status: 'pending' | 'approved' | 'denied' | 'expired';
+  status: PermissionRequestStatus;
   requestedAt: string;
+  timeoutAt: string;
   resolvedAt?: string;
   resolvedBy?: string;
-  timeoutSeconds: number;
+  decision?: 'approved' | 'denied';
 };
 
-type ApprovalDecision = {
-  approvalId: string;
+export type PermissionDecision = {
+  requestId: string;
   decision: 'approved' | 'denied';
 };
 ```
 
 ## Backend
 
-### Worker — Capture permission requests
+### Worker — `canUseTool` implementation
 
-In `packages/agent-worker/src/runtime/cli-session-manager.ts`, the stream parser already has a `permission_request` case (line ~890). Extend it to:
+In `packages/agent-worker/src/runtime/sdk-runner.ts`, when creating the Agent SDK session, pass a `canUseTool` callback:
 
-1. Create a `PendingApproval` object from the event data
-2. POST to CP: `POST /api/approvals` with the approval data
-3. Store a promise resolver keyed by approval ID
-4. When CP calls back with decision (`POST /api/agents/:id/approval-response`), resolve the promise
-5. Write the decision to CLI stdin as a `permission_response` JSON event
+```typescript
+canUseTool: async (toolName, input, { signal }) => {
+  // Check if this tool needs approval based on permission mode
+  if (permissionMode === 'bypassPermissions') {
+    return { allowed: true };
+  }
 
-### Worker — Receive decision
+  const requestId = crypto.randomUUID();
 
-New route: `POST /api/agents/:agentId/approval-response`
-- Body: `{ approvalId, decision: 'approved' | 'denied' }`
-- Finds the agent instance, resolves the pending promise
-- Writes to CLI stdin
+  // POST to CP to create permission request
+  await fetch(`${controlPlaneUrl}/api/permission-requests`, {
+    method: 'POST',
+    body: JSON.stringify({
+      agentId, sessionId, machineId, requestId, toolName,
+      toolInput: sanitizeToolInput(input),
+      timeoutSeconds: 300,
+    }),
+  });
 
-### CP — Approval CRUD + broadcast
+  // Wait for response (resolved by approval-response route)
+  const decision = await waitForDecision(requestId, signal);
 
-New route plugin: `packages/control-plane/src/api/routes/approvals.ts`
+  return { allowed: decision === 'approved' };
+}
+```
 
-- `POST /api/approvals` — Worker creates approval request. CP stores in DB, broadcasts via WebSocket to all connected clients.
-- `GET /api/approvals?status=pending&agentId=...` — List approvals with optional filters.
-- `PATCH /api/approvals/:id` — Frontend resolves (approve/deny). CP updates DB, broadcasts resolution via WebSocket, forwards decision to worker via `POST /api/agents/:agentId/approval-response`.
-- Expiry: On each heartbeat cycle (or a dedicated interval), check for expired approvals (requestedAt + timeoutSeconds < now) and auto-deny them.
+`waitForDecision` stores a promise resolver in a Map keyed by `requestId`. The worker's `POST /api/agents/:id/permission-response` route resolves it.
 
-### WebSocket events
+### Worker — receive decision
+
+New route: `POST /api/agents/:agentId/permission-response`
+- Body: `{ requestId, decision }`
+- Resolves the waiting promise for that requestId
+
+### CP — permission request CRUD + broadcast
+
+New route plugin: `packages/control-plane/src/api/routes/permission-requests.ts`
+
+- `POST /api/permission-requests` — Worker creates request. CP stores in DB, broadcasts `permission_request_created` via WebSocket.
+- `GET /api/permission-requests?status=pending&agentId=...` — List with optional filters.
+- `PATCH /api/permission-requests/:id` — Frontend resolves. CP updates DB, broadcasts `permission_request_resolved`, forwards to worker.
+- Expiry check: on interval (30s), find expired requests (`timeout_at < now() AND status = 'pending'`), mark as `expired`, notify worker with denial.
+
+### WebSocket protocol extension
+
+Add two new event types to the existing WS protocol:
 
 ```typescript
 // CP → Frontend
-{ type: 'approval_request', data: PendingApproval }
-{ type: 'approval_resolved', data: PendingApproval }
-
-// Frontend → CP (via existing WS or REST)
-PATCH /api/approvals/:id { decision: 'approved' | 'denied' }
+{ type: 'permission_request_created', data: PermissionRequest }
+{ type: 'permission_request_resolved', data: PermissionRequest }
 ```
 
 ## Frontend
 
 ### Surface 1: Session View (inline)
 
-In the session message stream component, when a message has type `permission_request` (or `tool_result` with content "This command requires approval"):
+When the session SSE stream emits an `approval_needed` event (or when the WS broadcasts `permission_request_created` for the current session):
 
-```tsx
-<div className="border border-yellow-500/30 bg-yellow-500/5 rounded-lg p-3 my-2">
-  <div className="flex items-center gap-2 mb-2">
-    <ShieldAlert className="w-4 h-4 text-yellow-500" />
-    <span className="text-sm font-medium">Permission Required</span>
-    <CountdownBadge seconds={remainingSeconds} />
-  </div>
-  <pre className="text-xs bg-neutral-900 p-2 rounded font-mono mb-3">
-    {command}
-  </pre>
-  <div className="flex gap-2">
-    <Button size="sm" variant="default" onClick={approve}>Approve</Button>
-    <Button size="sm" variant="destructive" onClick={deny}>Deny</Button>
-  </div>
-</div>
-```
-
-After resolution, replace buttons with status text: "Approved" (green) / "Denied" (red) / "Expired" (gray).
+- Render an inline card in the message stream with:
+  - Yellow border, ShieldAlert icon, "Permission Required"
+  - Tool name + sanitized input preview (monospace)
+  - Countdown showing time until auto-deny
+  - Approve (green) + Deny (red) buttons
+  - After resolution: status text replaces buttons
 
 ### Surface 2: Notification Bell
 
-Modify `packages/web/src/components/NotificationBell.tsx`:
+Extend `NotificationBell.tsx`:
 
-- Query `GET /api/approvals?status=pending` on mount + subscribe to WebSocket events
-- Badge shows count of pending approvals (red dot with number)
-- Dropdown items show: agent name, tool name, command preview, time remaining
-- Each item has inline Approve/Deny buttons
-- Click on item navigates to `/approvals` or the agent's session
-
-### Surface 3: `/approvals` page
-
-New page: `packages/web/src/app/approvals/page.tsx`
-
-- Add "Approvals" to sidebar nav with pending count badge
-- Table columns: Status | Agent | Tool | Command | Requested | Time Left | Actions
-- Pending approvals at top, resolved below (collapsible history)
-- Batch actions: "Approve All Pending" / "Deny All Pending"
-- Filter tabs: All | Pending | Approved | Denied | Expired
-- Empty state: "No pending approvals. Agents with bypassPermissions won't generate approval requests."
-
-### Countdown component
-
-Shared `CountdownBadge` component:
-- Shows remaining seconds/minutes until auto-deny
-- Color transitions: green (>2min) → yellow (>30s) → red (<30s) → gray (expired)
-- Updates every second via `useEffect` + `setInterval`
+- Subscribe to `permission_request_created` WebSocket events
+- Show red badge with pending count
+- Dropdown items: agent name, tool, time remaining, inline approve/deny buttons
+- Persist pending requests via React Query polling `GET /api/permission-requests?status=pending` (fallback if WS disconnects)
 
 ## Error Handling
 
-- **Agent killed while waiting**: Worker detects process exit → POST to CP marking all pending approvals for that session as `expired` with `resolvedBy: 'agent-killed'`
-- **User offline**: Approval expires after timeout → auto-deny → worker writes denial to CLI → agent receives denial and can handle gracefully
-- **Race condition**: CP uses DB transaction — first `PATCH` wins, subsequent attempts get 409 Conflict with "Already resolved"
-- **WebSocket disconnected**: Approvals page polls `GET /api/approvals?status=pending` as fallback (React Query refetchInterval: 5s)
-- **Worker unreachable when forwarding decision**: CP retries 3 times with 1s delay, then marks approval as `denied` with `resolvedBy: 'worker-unreachable'`
+- **Agent killed**: Worker detects process exit → POST to CP cancelling all pending requests for that session (`status: 'cancelled'`, `resolvedBy: 'agent-killed'`)
+- **CLI timeout first**: If Claude's internal timeout fires before ours, `canUseTool` signal aborts → catch abort → mark as `expired`
+- **Worker unreachable**: CP retries 3x, then marks as `expired` with `resolvedBy: 'delivery-failed'` (NOT `denied` — preserves audit integrity)
+- **WS disconnected**: Frontend falls back to polling `GET /api/permission-requests?status=pending` every 5s
+- **Race condition**: DB transaction on PATCH — first write wins, 409 on duplicate
+
+## Security
+
+- `resolvedBy` stores actual user identifier (not generic 'user')
+- `toolInput` is sanitized before storage: strip env vars matching `*KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*`
+- Only authenticated users can PATCH (existing auth middleware)
+- Broadcast only to clients subscribed to the agent's machine
 
 ## Testing
 
 **Backend (Vitest):**
-- Worker: parse permission_request → create PendingApproval → POST to CP
-- Worker: receive approval-response → write to CLI stdin
-- CP: approval CRUD, WebSocket broadcast, expiry logic
-- CP: race condition handling (409 on double-resolve)
+- canUseTool: creates request, waits, resolves on callback
+- CP: permission request CRUD, WS broadcast, expiry
+- Worker: receives response, resolves promise
 
 **Frontend (Vitest):**
-- Session inline card: renders with countdown, buttons trigger PATCH
-- NotificationBell: shows pending count, dropdown items
-- Approvals page: table renders, filters work, batch actions
+- Session inline card: renders, buttons trigger PATCH, countdown works
+- NotificationBell: shows pending count, dropdown actions
 
-## Files to Create/Modify
+## Files
 
 ### New
-- `packages/shared/src/types/approval.ts` — PendingApproval, ApprovalDecision types
-- `packages/control-plane/src/db/schema-approvals.ts` — Drizzle schema
-- `packages/control-plane/drizzle/0018_add_pending_approvals.sql` — Migration
-- `packages/control-plane/src/api/routes/approvals.ts` — CRUD + broadcast
-- `packages/agent-worker/src/api/routes/approval-response.ts` — Decision receiver
-- `packages/web/src/app/approvals/page.tsx` — Full approvals page
-- `packages/web/src/app/approvals/layout.tsx` — Layout
-- `packages/web/src/components/ApprovalCard.tsx` — Shared inline approval card
-- `packages/web/src/components/CountdownBadge.tsx` — Countdown timer
+- `packages/shared/src/types/permission-request.ts`
+- `packages/control-plane/src/db/schema-permission-requests.ts`
+- `packages/control-plane/drizzle/0019_add_permission_requests.sql`
+- `packages/control-plane/src/api/routes/permission-requests.ts`
+- `packages/agent-worker/src/api/routes/permission-response.ts`
+- `packages/web/src/components/PermissionRequestCard.tsx`
 
 ### Modified
-- `packages/agent-worker/src/runtime/cli-session-manager.ts` — Capture permission_request, write response
-- `packages/agent-worker/src/api/server.ts` — Register approval-response route
-- `packages/control-plane/src/api/server.ts` — Register approvals routes, WebSocket events
-- `packages/web/src/components/NotificationBell.tsx` — Show pending approvals
-- `packages/web/src/components/Sidebar.tsx` — Add Approvals nav item with badge
-- `packages/web/src/components/SessionMessageList.tsx` — Render inline approval cards
+- `packages/agent-worker/src/runtime/sdk-runner.ts` — add canUseTool callback
+- `packages/agent-worker/src/api/server.ts` — register permission-response route
+- `packages/control-plane/src/api/server.ts` — register permission-requests routes
+- `packages/control-plane/src/api/routes/ws.ts` — add permission_request events
+- `packages/web/src/components/NotificationBell.tsx` — show pending approvals
+- `packages/web/src/components/SessionContent.tsx` — render inline approval cards
+- `packages/web/src/hooks/use-websocket.ts` — handle new event types
