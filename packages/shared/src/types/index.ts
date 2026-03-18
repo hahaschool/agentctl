@@ -258,6 +258,11 @@ export type {
 } from './memory.js';
 export { DEFAULT_INJECTION_BUDGET } from './memory.js';
 export type {
+  PermissionDecision,
+  PermissionRequest,
+  PermissionRequestStatus,
+} from './permission-request.js';
+export type {
   ExecutionEnvironmentCapability,
   ExecutionEnvironmentId,
   HandoffReason,
