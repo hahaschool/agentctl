@@ -9,10 +9,14 @@ import {
   Database,
   Gauge,
   HelpCircle,
+  ListTree,
   MessageSquare,
   Moon,
+  Network,
+  Play,
   Plus,
   RefreshCw,
+  Rocket,
   ScrollText,
   Server,
   Settings,
@@ -24,23 +28,21 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type React from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { toast } from '@/components/Toast';
 
+import { toast } from '@/components/Toast';
+import type { Session } from '@/lib/api';
 import { fuzzyScore } from '@/lib/fuzzy-search';
 import { agentsQuery, machinesQuery, sessionsQuery, useDeleteSession } from '@/lib/queries';
-import { cn } from '@/lib/utils';
 
-type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
+import {
+  type CommandPaletteResultItem,
+  type CommandPaletteResultSection,
+  CommandPaletteSearchResults,
+} from './CommandPaletteSearchResults';
 
-type CommandItem = {
-  id: string;
-  label: string;
-  description?: string;
-  icon: string | IconComponent;
-  shortcut?: string;
-  badge?: { text: string; variant: 'default' | 'success' | 'warning' | 'destructive' };
-  action: () => void;
+type CommandItem = CommandPaletteResultItem & {
   section: string;
+  keywords?: string[];
 };
 
 type Props = {
@@ -49,20 +51,29 @@ type Props = {
 };
 
 const NAV_COMMANDS = [
-  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1', section: 'Navigate' },
-  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2', section: 'Navigate' },
-  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3', section: 'Navigate' },
-  { href: '/sessions', label: 'Sessions', icon: MessageSquare, shortcut: '4', section: 'Navigate' },
+  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1', section: 'Navigation' },
+  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2', section: 'Navigation' },
+  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3', section: 'Navigation' },
   {
-    href: '/discover',
-    label: 'Discover Sessions',
-    icon: Compass,
-    shortcut: '5',
-    section: 'Navigate',
+    href: '/sessions',
+    label: 'Sessions',
+    icon: MessageSquare,
+    shortcut: '4',
+    section: 'Navigation',
   },
-  { href: '/logs', label: 'Logs & Metrics', icon: ScrollText, shortcut: '6', section: 'Navigate' },
-  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7', section: 'Navigate' },
-  { href: '/memory', label: 'Memory', icon: Database, shortcut: '8', section: 'Navigate' },
+  { href: '/discover', label: 'Discover', icon: Compass, shortcut: '5', section: 'Navigation' },
+  { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6', section: 'Navigation' },
+  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7', section: 'Navigation' },
+  { href: '/memory', label: 'Memory', icon: Database, shortcut: '8', section: 'Navigation' },
+  { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9', section: 'Navigation' },
+  { href: '/tasks', label: 'Tasks', icon: ListTree, section: 'Navigation' },
+  {
+    href: '/deployment',
+    label: 'Deployment',
+    icon: Rocket,
+    shortcut: '0',
+    section: 'Navigation',
+  },
 ] as const;
 
 const STATUS_BADGE_VARIANTS: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {
@@ -84,31 +95,44 @@ function badgeVariant(status: string): 'default' | 'success' | 'warning' | 'dest
   return STATUS_BADGE_VARIANTS[status.toLowerCase()] ?? 'default';
 }
 
-/**
- * Score a command item against a query by checking label, description,
- * section, badge text, and id. Returns the best score or null.
- */
-function scoreCommand(cmd: CommandItem, query: string): number | null {
-  let best: number | null = null;
-
-  const fields = [cmd.label, cmd.description, cmd.section, cmd.badge?.text, cmd.id];
-
-  for (const field of fields) {
-    if (!field) continue;
-    const s = fuzzyScore(query, field);
-    if (s !== null && (best === null || s > best)) {
-      best = s;
-    }
-  }
-
-  return best;
-}
-
 /** Truncate long paths to a readable suffix. */
 function shortPath(path: string | null, maxLen = 30): string {
   if (!path) return '';
   if (path.length <= maxLen) return path;
   return `...${path.slice(path.length - maxLen + 3)}`;
+}
+
+/** Session summary for search and recent-session labels. */
+function sessionSummary(session: Session): string {
+  if (typeof session.metadata.summary === 'string' && session.metadata.summary.trim()) {
+    return session.metadata.summary.trim();
+  }
+  if (typeof session.metadata.title === 'string' && session.metadata.title.trim()) {
+    return session.metadata.title.trim();
+  }
+  if (session.agentName?.trim()) {
+    return session.agentName.trim();
+  }
+  return `Session ${session.id.slice(0, 8)}`;
+}
+
+function shortSessionId(id: string, maxLen = 12): string {
+  if (id.length <= maxLen) return id;
+  return `${id.slice(0, 8)}...`;
+}
+
+function scoreFields(query: string, fields: Array<string | null | undefined>): number | null {
+  let best: number | null = null;
+
+  for (const field of fields) {
+    if (!field) continue;
+    const score = fuzzyScore(query, field);
+    if (score !== null && (best === null || score > best)) {
+      best = score;
+    }
+  }
+
+  return best;
 }
 
 export function CommandPalette({ open, onClose }: Props): React.JSX.Element | null {
@@ -136,11 +160,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     enabled: open,
   });
 
-  // Build command list
+  // Build command list for default (empty query) mode.
   const commands: CommandItem[] = useMemo(() => {
     const items: CommandItem[] = [];
 
-    // ----- Navigation commands -----
+    // ----- Navigation -----
     for (const nav of NAV_COMMANDS) {
       items.push({
         id: `nav-${nav.href}`,
@@ -148,6 +172,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         icon: nav.icon,
         shortcut: nav.shortcut,
         section: nav.section,
+        keywords: [nav.label, nav.href, 'navigation'],
         action: () => {
           router.push(nav.href);
           onClose();
@@ -155,21 +180,50 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       });
     }
 
-    // ----- Agents (recent, up to 8) -----
+    // ----- Agent actions (all agents) -----
     if (agents && agents.length > 0) {
-      const sorted = [...agents].sort(
-        (a, b) =>
-          new Date(b.lastRunAt ?? b.createdAt).getTime() -
-          new Date(a.lastRunAt ?? a.createdAt).getTime(),
-      );
-      for (const agent of sorted.slice(0, 8)) {
+      const sorted = [...agents].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+      for (const agent of sorted) {
+        const name = agent.name || agent.id;
+        const description = agent.projectPath ? shortPath(agent.projectPath, 40) : agent.type;
+        const sharedTerms = [name, agent.id, agent.projectPath ?? '', agent.type, agent.status];
+
         items.push({
-          id: `agent-${agent.id}`,
-          label: agent.name || agent.id,
-          description: agent.projectPath ? shortPath(agent.projectPath) : agent.type,
+          id: `agent-start-${agent.id}`,
+          label: `Start ${name}`,
+          description,
+          icon: Play,
+          badge: { text: agent.status, variant: badgeVariant(agent.status) },
+          section: 'Agent Actions',
+          keywords: [...sharedTerms, 'start'],
+          action: () => {
+            router.push(`/agents/${agent.id}`);
+            onClose();
+          },
+        });
+
+        items.push({
+          id: `agent-settings-${agent.id}`,
+          label: `Settings ${name}`,
+          description,
+          icon: Settings,
+          badge: { text: agent.status, variant: badgeVariant(agent.status) },
+          section: 'Agent Actions',
+          keywords: [...sharedTerms, 'settings'],
+          action: () => {
+            router.push(`/agents/${agent.id}/settings`);
+            onClose();
+          },
+        });
+
+        items.push({
+          id: `agent-view-${agent.id}`,
+          label: `View ${name}`,
+          description,
           icon: Bot,
           badge: { text: agent.status, variant: badgeVariant(agent.status) },
-          section: 'Agents',
+          section: 'Agent Actions',
+          keywords: [...sharedTerms, 'view'],
           action: () => {
             router.push(`/agents/${agent.id}`);
             onClose();
@@ -178,7 +232,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       }
     }
 
-    // ----- Machines (by hostname) -----
+    // ----- Machines -----
     if (machines && machines.length > 0) {
       const sorted = [...machines].sort(
         (a, b) =>
@@ -189,10 +243,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         items.push({
           id: `machine-${machine.id}`,
           label: machine.hostname,
-          description: `${machine.os}/${machine.arch} \u2014 ${machine.tailscaleIp}`,
+          description: `${machine.os}/${machine.arch} - ${machine.tailscaleIp}`,
           icon: Server,
           badge: { text: machine.status, variant: badgeVariant(machine.status) },
           section: 'Machines',
+          keywords: [machine.hostname, machine.id, machine.tailscaleIp, machine.os, machine.arch],
           action: () => {
             router.push(`/machines/${machine.id}`);
             onClose();
@@ -201,22 +256,28 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       }
     }
 
-    // ----- Sessions (recent, up to 8) -----
+    // ----- Recent sessions (last 5) -----
     const sessionList = sessions?.sessions ?? [];
     if (sessionList.length > 0) {
       const sorted = [...sessionList].sort(
         (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
       );
-      for (const session of sorted.slice(0, 8)) {
-        const shortId = session.id.length > 12 ? `${session.id.slice(0, 8)}...` : session.id;
-        const label = session.agentName ? `${session.agentName} \u2014 ${shortId}` : shortId;
+
+      for (const session of sorted.slice(0, 5)) {
+        const summary = sessionSummary(session);
+        const desc = [shortSessionId(session.id)];
+        if (session.projectPath) {
+          desc.push(shortPath(session.projectPath, 28));
+        }
+
         items.push({
-          id: `session-${session.id}`,
-          label,
-          description: session.projectPath ? shortPath(session.projectPath) : undefined,
+          id: `recent-session-view-${session.id}`,
+          label: `View ${summary}`,
+          description: desc.join(' • '),
           icon: MessageSquare,
           badge: { text: session.status, variant: badgeVariant(session.status) },
-          section: 'Sessions',
+          section: 'Recent Sessions',
+          keywords: [summary, session.id, session.agentName ?? '', session.projectPath ?? ''],
           action: () => {
             router.push(`/sessions/${session.id}`);
             onClose();
@@ -231,9 +292,9 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         (s) => s.status === 'active' || s.status === 'starting',
       );
       for (const session of activeSessions.slice(0, 5)) {
-        const shortId = session.id.length > 12 ? `${session.id.slice(0, 8)}...` : session.id;
+        const shortId = shortSessionId(session.id);
         const label = session.agentName
-          ? `Stop: ${session.agentName} — ${shortId}`
+          ? `Stop: ${session.agentName} - ${shortId}`
           : `Stop: ${shortId}`;
         items.push({
           id: `stop-${session.id}`,
@@ -242,6 +303,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           icon: StopCircle,
           badge: { text: session.status, variant: badgeVariant(session.status) },
           section: 'Actions',
+          keywords: ['stop', session.id, session.agentName ?? '', session.projectPath ?? ''],
           action: () => {
             deleteSession.mutate(session.id, {
               onSuccess: () => toast.success(`Session ${shortId} stopped`),
@@ -260,6 +322,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       description: 'Search memory facts',
       icon: Brain,
       section: 'Memory',
+      keywords: ['memory', 'search', 'facts'],
       action: () => {
         router.push('/memory/browser');
         onClose();
@@ -271,6 +334,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       description: 'Create a new memory fact',
       icon: Brain,
       section: 'Memory',
+      keywords: ['memory', 'create', 'fact'],
       action: () => {
         router.push('/memory/browser?create=true');
         onClose();
@@ -282,19 +346,21 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       description: 'View the memory knowledge graph',
       icon: Database,
       section: 'Memory',
+      keywords: ['memory', 'graph', 'knowledge'],
       action: () => {
         router.push('/memory/graph');
         onClose();
       },
     });
 
-    // ----- Action commands -----
+    // ----- Actions -----
     items.push({
       id: 'action-new-session',
       label: 'New Session',
       description: 'Create a new agent session',
       icon: Plus,
       section: 'Actions',
+      keywords: ['session', 'new', 'create'],
       action: () => {
         router.push('/sessions?create=true');
         onClose();
@@ -309,6 +375,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           description: 'Open interactive terminal',
           icon: Terminal,
           section: 'Actions',
+          keywords: [machine.hostname, machine.id, 'terminal'],
           action: () => {
             router.push(`/machines/${machine.id}/terminal`);
             onClose();
@@ -323,6 +390,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       description: 'Invalidate all cached queries',
       icon: RefreshCw,
       section: 'Actions',
+      keywords: ['refresh', 'cache', 'reload'],
       action: () => {
         void queryClient.invalidateQueries();
         toast.success('All data refreshed');
@@ -336,6 +404,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       icon: theme === 'dark' ? Sun : Moon,
       section: 'Actions',
       shortcut: 'Theme',
+      keywords: ['theme', 'dark', 'light'],
       action: () => {
         setTheme(theme === 'dark' ? 'light' : 'dark');
         onClose();
@@ -348,6 +417,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       description: 'Dismiss all toast messages',
       icon: BellOff,
       section: 'Actions',
+      keywords: ['notifications', 'clear', 'toast'],
       action: () => {
         toast.dismiss();
         onClose();
@@ -360,8 +430,8 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
       icon: HelpCircle,
       section: 'Actions',
       shortcut: '?',
+      keywords: ['keyboard', 'shortcuts', 'help'],
       action: () => {
-        // Close palette, then trigger help
         onClose();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }));
       },
@@ -370,63 +440,151 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     return items;
   }, [router, onClose, theme, setTheme, agents, machines, sessions, queryClient, deleteSession]);
 
-  // Filter commands by fuzzy query and sort by match score
-  const filtered = useMemo(() => {
-    if (!query.trim()) return commands;
-    const scored: { cmd: CommandItem; score: number }[] = [];
-    for (const cmd of commands) {
-      const s = scoreCommand(cmd, query.trim());
-      if (s !== null) {
-        scored.push({ cmd, score: s });
-      }
-    }
-    // Sort descending by score (best matches first)
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((entry) => entry.cmd);
-  }, [commands, query]);
+  const commandSections = useMemo<CommandPaletteResultSection[]>(() => {
+    const sectionOrder = [
+      'Navigation',
+      'Memory',
+      'Agent Actions',
+      'Machines',
+      'Recent Sessions',
+      'Actions',
+    ];
 
-  // Group by section with stable ordering
-  const sections = useMemo(() => {
-    const sectionOrder = ['Navigate', 'Memory', 'Agents', 'Machines', 'Sessions', 'Actions'];
     const map = new Map<string, CommandItem[]>();
-    for (const cmd of filtered) {
-      const arr = map.get(cmd.section);
-      if (arr) {
-        arr.push(cmd);
+    for (const command of commands) {
+      const bucket = map.get(command.section);
+      if (bucket) {
+        bucket.push(command);
       } else {
-        map.set(cmd.section, [cmd]);
+        map.set(command.section, [command]);
       }
     }
-    // Return in stable order
-    const ordered = new Map<string, CommandItem[]>();
+
+    const ordered: CommandPaletteResultSection[] = [];
+
     for (const section of sectionOrder) {
       const items = map.get(section);
-      if (items) ordered.set(section, items);
+      if (items && items.length > 0) {
+        ordered.push({ key: section, title: section, items });
+      }
     }
-    // Add any remaining sections not in the predefined order
-    for (const [section, items] of map) {
-      if (!ordered.has(section)) ordered.set(section, items);
-    }
-    return ordered;
-  }, [filtered]);
 
-  // Reset active index when filter changes
+    for (const [section, items] of map) {
+      if (!sectionOrder.includes(section)) {
+        ordered.push({ key: section, title: section, items });
+      }
+    }
+
+    return ordered;
+  }, [commands]);
+
+  const searchSections = useMemo<CommandPaletteResultSection[]>(() => {
+    const q = query.trim();
+    if (!q) return [];
+
+    const pages = NAV_COMMANDS.map((page) => {
+      const score = scoreFields(q, [page.label, page.href]);
+      if (score === null) return null;
+      return {
+        score,
+        item: {
+          id: `search-page-${page.href}`,
+          label: page.label,
+          description: page.href,
+          icon: page.icon,
+          shortcut: page.shortcut,
+          action: () => {
+            router.push(page.href);
+            onClose();
+          },
+        } satisfies CommandPaletteResultItem,
+      };
+    })
+      .filter((entry): entry is { score: number; item: CommandPaletteResultItem } => entry !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map((entry) => entry.item);
+
+    const agentResults = (agents ?? [])
+      .map((agent) => {
+        const name = agent.name || agent.id;
+        const score = scoreFields(q, [name, agent.projectPath, agent.id, agent.type]);
+        if (score === null) return null;
+        return {
+          score,
+          item: {
+            id: `search-agent-${agent.id}`,
+            label: name,
+            description: agent.projectPath ? shortPath(agent.projectPath, 40) : agent.id,
+            icon: Bot,
+            badge: { text: agent.status, variant: badgeVariant(agent.status) },
+            action: () => {
+              router.push(`/agents/${agent.id}`);
+              onClose();
+            },
+          } satisfies CommandPaletteResultItem,
+        };
+      })
+      .filter((entry): entry is { score: number; item: CommandPaletteResultItem } => entry !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map((entry) => entry.item);
+
+    const sessionResults = (sessions?.sessions ?? [])
+      .map((session) => {
+        const summary = sessionSummary(session);
+        const score = scoreFields(q, [summary, session.id, session.projectPath, session.agentName]);
+        if (score === null) return null;
+        return {
+          score,
+          item: {
+            id: `search-session-${session.id}`,
+            label: summary,
+            description: `${session.id}${session.projectPath ? ` • ${shortPath(session.projectPath, 24)}` : ''}`,
+            icon: MessageSquare,
+            badge: { text: session.status, variant: badgeVariant(session.status) },
+            action: () => {
+              router.push(`/sessions/${session.id}`);
+              onClose();
+            },
+          } satisfies CommandPaletteResultItem,
+        };
+      })
+      .filter((entry): entry is { score: number; item: CommandPaletteResultItem } => entry !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map((entry) => entry.item);
+
+    return [
+      { key: 'agents', title: 'Agents', items: agentResults },
+      { key: 'sessions', title: 'Sessions', items: sessionResults },
+      { key: 'pages', title: 'Pages', items: pages },
+    ].filter((section) => section.items.length > 0);
+  }, [query, agents, sessions, router, onClose]);
+
+  const isSearchMode = query.trim().length > 0;
+  const visibleSections = isSearchMode ? searchSections : commandSections;
+
+  const visibleItems = useMemo(
+    () => visibleSections.flatMap((section) => section.items),
+    [visibleSections],
+  );
+
+  // Reset active index when result count changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset index when result count changes
   useEffect(() => {
     setActiveIndex(0);
-  }, [filtered.length]);
+  }, [visibleItems.length]);
 
-  // Focus input when opened
+  // Focus input when opened.
   useEffect(() => {
     if (open) {
       setQuery('');
       setActiveIndex(0);
-      // Slight delay for animation
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
 
-  // Close on Escape, navigate on Arrow/Enter
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -437,26 +595,28 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex((prev) => (prev < filtered.length - 1 ? prev + 1 : 0));
+        if (visibleItems.length === 0) return;
+        setActiveIndex((prev) => (prev < visibleItems.length - 1 ? prev + 1 : 0));
         return;
       }
 
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveIndex((prev) => (prev > 0 ? prev - 1 : filtered.length - 1));
+        if (visibleItems.length === 0) return;
+        setActiveIndex((prev) => (prev > 0 ? prev - 1 : visibleItems.length - 1));
         return;
       }
 
       if (e.key === 'Enter') {
         e.preventDefault();
-        const cmd = filtered[activeIndex];
-        if (cmd) cmd.action();
+        const command = visibleItems[activeIndex];
+        if (command) command.action();
       }
     },
-    [filtered, activeIndex, onClose],
+    [visibleItems, activeIndex, onClose],
   );
 
-  // Scroll active item into view
+  // Scroll active item into view.
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when active index changes
   useEffect(() => {
     if (!listRef.current) return;
@@ -468,13 +628,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
 
   if (!open) return null;
 
-  let flatIndex = 0;
   const activeOptionId =
-    filtered.length > 0 ? `${optionIdPrefix}-command-option-${activeIndex}` : undefined;
+    visibleItems.length > 0 ? `${optionIdPrefix}-command-option-${activeIndex}` : undefined;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]">
-      {/* Backdrop */}
       <button
         type="button"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm border-none"
@@ -482,13 +640,11 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
         aria-label="Close command palette"
       />
 
-      {/* Panel */}
       <div
         className="relative w-full max-w-[520px] mx-4 bg-card border border-border rounded-lg shadow-xl overflow-hidden animate-fade-in"
         role="dialog"
         aria-label="Command palette"
       >
-        {/* Search input */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
           <span className="text-muted-foreground text-sm">{'\u2315'}</span>
           <input
@@ -497,7 +653,7 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command or search agents, machines, sessions..."
+            placeholder="Search agents, sessions, pages, or run a command..."
             aria-label="Search commands"
             className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
           />
@@ -506,7 +662,6 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           </kbd>
         </div>
 
-        {/* Command list */}
         <div
           ref={listRef}
           className="max-h-[360px] overflow-auto py-1"
@@ -515,77 +670,17 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
           aria-activedescendant={activeOptionId}
           tabIndex={-1}
         >
-          {filtered.length === 0 && (
-            <div className="px-4 py-6 text-center text-muted-foreground text-sm">
-              No matching commands
-            </div>
-          )}
-
-          {Array.from(sections.entries()).map(([section, items]) => (
-            <div key={section}>
-              <div className="px-4 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                {section}
-              </div>
-              {items.map((cmd) => {
-                const idx = flatIndex++;
-                const isActive = idx === activeIndex;
-                const optionId = `${optionIdPrefix}-command-option-${idx}`;
-                return (
-                  <button
-                    key={cmd.id}
-                    id={optionId}
-                    type="button"
-                    role="option"
-                    aria-selected={isActive}
-                    data-active={isActive}
-                    onClick={() => cmd.action()}
-                    onMouseEnter={() => setActiveIndex(idx)}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition-colors duration-75 border-none',
-                      isActive
-                        ? 'bg-accent/15 text-foreground'
-                        : 'bg-transparent text-muted-foreground hover:bg-accent/10',
-                    )}
-                  >
-                    {typeof cmd.icon === 'string' ? (
-                      <span className="w-5 text-center text-base shrink-0">{cmd.icon}</span>
-                    ) : (
-                      <cmd.icon size={16} className="w-5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="flex-1 min-w-0">
-                      <span className="font-medium">{cmd.label}</span>
-                      {cmd.description && (
-                        <span className="ml-2 text-[11px] text-muted-foreground truncate">
-                          {cmd.description}
-                        </span>
-                      )}
-                    </span>
-                    {cmd.badge && (
-                      <span
-                        className={cn(
-                          'shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-full',
-                          cmd.badge.variant === 'success' && 'bg-emerald-500/15 text-emerald-500',
-                          cmd.badge.variant === 'warning' && 'bg-amber-500/15 text-amber-500',
-                          cmd.badge.variant === 'destructive' && 'bg-red-500/15 text-red-500',
-                          cmd.badge.variant === 'default' && 'bg-muted text-muted-foreground',
-                        )}
-                      >
-                        {cmd.badge.text}
-                      </span>
-                    )}
-                    {cmd.shortcut && (
-                      <kbd className="shrink-0 text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-px rounded-sm border border-border">
-                        {cmd.shortcut}
-                      </kbd>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          <CommandPaletteSearchResults
+            sections={visibleSections}
+            activeIndex={activeIndex}
+            optionIdPrefix={optionIdPrefix}
+            emptyText={
+              isSearchMode ? 'No matching agents, sessions, or pages' : 'No matching commands'
+            }
+            onItemHover={setActiveIndex}
+          />
         </div>
 
-        {/* Footer hint */}
         <div className="px-4 py-2 border-t border-border text-[10px] text-muted-foreground flex gap-3">
           <span>
             <kbd className="font-mono bg-muted px-1 py-px rounded-sm border border-border">
@@ -603,9 +698,9 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
             <kbd className="font-mono bg-muted px-1 py-px rounded-sm border border-border">Esc</kbd>{' '}
             Close
           </span>
-          {filtered.length > 0 && (
+          {visibleItems.length > 0 && (
             <span className="ml-auto">
-              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+              {visibleItems.length} result{visibleItems.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>
