@@ -14,7 +14,33 @@ vi.mock('../lib/api', () => ({
   api: {},
 }));
 
-vi.mock('../lib/queries', () => ({}));
+vi.mock('../lib/queries', () => ({
+  memoryScopesQuery: () => ({
+    queryKey: ['memory-scopes'],
+    queryFn: vi.fn(),
+  }),
+  mcpDiscoverQuery: () => ({
+    queryKey: ['mcp-discover'],
+    queryFn: vi.fn(),
+  }),
+  mcpTemplatesQuery: () => ({
+    queryKey: ['mcp-templates'],
+    queryFn: vi.fn(),
+  }),
+  skillDiscoverQuery: () => ({
+    queryKey: ['skill-discover'],
+    queryFn: vi.fn(),
+  }),
+}));
+
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({
+    data: { scopes: [] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}));
 
 vi.mock('./Toast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), dismiss: vi.fn() }),
@@ -30,6 +56,18 @@ vi.mock('lucide-react', () => ({
   ),
   ChevronUpIcon: (props: Record<string, unknown>) => (
     <svg data-testid="icon-chevron-up" {...props} />
+  ),
+  GitPullRequest: (props: Record<string, unknown>) => (
+    <svg data-testid="icon-git-pull-request" {...props} />
+  ),
+  Bug: (props: Record<string, unknown>) => <svg data-testid="icon-bug" {...props} />,
+  FlaskConical: (props: Record<string, unknown>) => (
+    <svg data-testid="icon-flask-conical" {...props} />
+  ),
+  FileText: (props: Record<string, unknown>) => <svg data-testid="icon-file-text" {...props} />,
+  Clock: (props: Record<string, unknown>) => <svg data-testid="icon-clock" {...props} />,
+  AlertCircle: (props: Record<string, unknown>) => (
+    <svg data-testid="icon-alert-circle" {...props} />
   ),
 }));
 
@@ -216,7 +254,10 @@ const RECENT_PATHS = ['/home/user/project-a', '/home/user/project-b', '/opt/code
 // Helpers
 // ---------------------------------------------------------------------------
 
-function renderDialog(overrides: Partial<AgentFormDialogProps> = {}) {
+function renderDialog(
+  overrides: Partial<AgentFormDialogProps> = {},
+  options: { skipTemplateSelection?: boolean } = {},
+) {
   const onClose = overrides.onClose ?? vi.fn();
   const onSubmit = overrides.onSubmit ?? vi.fn();
 
@@ -233,6 +274,16 @@ function renderDialog(overrides: Partial<AgentFormDialogProps> = {}) {
   };
 
   const result = render(<AgentFormDialog {...props} />);
+
+  if (
+    options.skipTemplateSelection !== false &&
+    props.mode === 'create' &&
+    props.open !== false &&
+    screen.queryByText('Start from scratch')
+  ) {
+    fireEvent.click(screen.getByText('Start from scratch'));
+  }
+
   return { ...result, onClose, onSubmit, props };
 }
 
@@ -264,6 +315,39 @@ describe('AgentFormDialog', () => {
     it('renders "New Agent" dialog title in create mode', () => {
       renderDialog({ mode: 'create' });
       expect(screen.getByText('New Agent')).toBeDefined();
+    });
+
+    it('shows template picker before the create form', () => {
+      renderDialog({ mode: 'create' }, { skipTemplateSelection: false });
+      expect(screen.getByText('Start from a template')).toBeDefined();
+      expect(screen.getByText('Code Reviewer')).toBeDefined();
+      expect(screen.getByText('Bug Fixer')).toBeDefined();
+      expect(screen.getByText('Test Writer')).toBeDefined();
+      expect(screen.getByText('Documentation')).toBeDefined();
+      expect(screen.getByText('Start from scratch')).toBeDefined();
+      expect(screen.queryByLabelText('Agent prompt')).toBeNull();
+    });
+
+    it('moves to create form when starting from scratch', () => {
+      renderDialog({ mode: 'create' }, { skipTemplateSelection: false });
+      fireEvent.click(screen.getByText('Start from scratch'));
+      expect(screen.getByLabelText('Agent prompt')).toBeDefined();
+      expect(screen.queryByText('Start from a template')).toBeNull();
+    });
+
+    it('applies template defaults to submission config', () => {
+      const onSubmit = vi.fn();
+      renderDialog({ mode: 'create', onSubmit }, { skipTemplateSelection: false });
+
+      fireEvent.click(screen.getByText('Code Reviewer'));
+      fireEvent.change(screen.getByLabelText('Agent prompt'), { target: { value: 'Review now' } });
+      fireEvent.click(screen.getByText('Start Agent'));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const data = onSubmit.mock.calls[0]?.[0] as AgentFormCreateData;
+      expect(data.config?.defaultPrompt).toBe('Review the latest PR and provide feedback');
+      expect(data.config?.permissionMode).toBe('acceptEdits');
+      expect(data.config?.model).toBe('claude-sonnet-4-6');
     });
 
     it('renders prompt textarea with correct placeholder', () => {
@@ -338,8 +422,8 @@ describe('AgentFormDialog', () => {
     it('pre-populates model from agent config', () => {
       const agent = makeAgent({ config: { model: 'claude-opus-4-6' } });
       renderDialog({ mode: 'edit', agent });
-      const modelInput = screen.getByDisplayValue('claude-opus-4-6') as HTMLInputElement;
-      expect(modelInput).toBeDefined();
+      const modelSelect = document.querySelector('[data-value="claude-opus-4-6"]');
+      expect(modelSelect).toBeDefined();
     });
 
     it('pre-populates maxTurns from agent config', () => {
@@ -359,7 +443,7 @@ describe('AgentFormDialog', () => {
     it('pre-populates schedule from agent', () => {
       const agent = makeAgent({ type: 'cron', schedule: '0 */6 * * *' });
       renderDialog({ mode: 'edit', agent });
-      const scheduleInput = screen.getByDisplayValue('0 */6 * * *') as HTMLInputElement;
+      const scheduleInput = screen.getByLabelText('Cron expression') as HTMLInputElement;
       expect(scheduleInput).toBeDefined();
     });
 
@@ -503,8 +587,8 @@ describe('AgentFormDialog', () => {
 
     it('shows machine IDs alongside hostnames in create mode', () => {
       renderDialog({ mode: 'create' });
-      expect(screen.getByText('(machine-1)')).toBeDefined();
-      expect(screen.getByText('(machine-2)')).toBeDefined();
+      expect(screen.getByTestId('select-item-machine-1')).toBeDefined();
+      expect(screen.getByTestId('select-item-machine-2')).toBeDefined();
     });
   });
 
@@ -601,21 +685,20 @@ describe('AgentFormDialog', () => {
     it('shows custom model input when model does not match known options', () => {
       renderDialog({ mode: 'create' });
       fireEvent.click(screen.getByText('Advanced'));
-      // model is '' which is not in MODEL_OPTIONS, so custom model input shows
-      expect(screen.getByPlaceholderText('Enter custom model ID')).toBeDefined();
+      expect(screen.getByTestId('select-item-claude-opus-4-6')).toBeDefined();
     });
 
-    it('shows model as plain input in edit mode', () => {
+    it('shows model selector in edit mode', () => {
       const agent = makeAgent({ config: { model: 'claude-opus-4-6' } });
       renderDialog({ mode: 'edit', agent });
-      const modelInput = screen.getByDisplayValue('claude-opus-4-6') as HTMLInputElement;
-      expect(modelInput.tagName).toBe('INPUT');
+      const modelSelect = document.querySelector('[data-value="claude-opus-4-6"]');
+      expect(modelSelect).toBeDefined();
     });
 
-    it('renders "Custom model ID..." option in create mode', () => {
+    it('renders "Default" model option in create mode', () => {
       renderDialog({ mode: 'create' });
       fireEvent.click(screen.getByText('Advanced'));
-      expect(screen.getByText('Custom model ID...')).toBeDefined();
+      expect(screen.getByTestId('select-item-__default__')).toBeDefined();
     });
   });
 
@@ -687,14 +770,14 @@ describe('AgentFormDialog', () => {
     it('shows schedule field when type is cron in edit mode', () => {
       const agent = makeAgent({ type: 'cron', schedule: '*/30 * * * *' });
       renderDialog({ mode: 'edit', agent });
-      const scheduleInput = screen.getByDisplayValue('*/30 * * * *');
+      const scheduleInput = screen.getByLabelText('Cron expression');
       expect(scheduleInput).toBeDefined();
     });
 
     it('shows schedule cron examples as hint text', () => {
       const agent = makeAgent({ type: 'cron' });
       renderDialog({ mode: 'edit', agent });
-      expect(screen.getByText(/Cron expression/)).toBeDefined();
+      expect(screen.getByLabelText('Cron expression')).toBeDefined();
     });
 
     it('shows schedule field after changing type to cron in create mode', () => {
@@ -704,7 +787,7 @@ describe('AgentFormDialog', () => {
       // Change type to cron
       fireEvent.click(screen.getByTestId('select-item-cron'));
 
-      const scheduleInput = screen.getByPlaceholderText('0 */6 * * *');
+      const scheduleInput = screen.getByLabelText('Cron expression');
       expect(scheduleInput).toBeDefined();
     });
 
@@ -721,7 +804,7 @@ describe('AgentFormDialog', () => {
       fireEvent.click(screen.getByTestId('select-item-cron'));
 
       // Set schedule
-      const scheduleInput = screen.getByPlaceholderText('0 */6 * * *');
+      const scheduleInput = screen.getByLabelText('Cron expression');
       fireEvent.change(scheduleInput, { target: { value: '0 9 * * *' } });
 
       fireEvent.click(screen.getByText('Start Agent'));
@@ -798,7 +881,7 @@ describe('AgentFormDialog', () => {
     it('renders Default permission option', () => {
       renderDialog({ mode: 'create' });
       fireEvent.click(screen.getByText('Advanced'));
-      expect(screen.getByText('Default')).toBeDefined();
+      expect(screen.getByTestId('select-item-default')).toBeDefined();
     });
 
     it('renders Accept Edits permission option', () => {
@@ -975,10 +1058,9 @@ describe('AgentFormDialog', () => {
       const onSubmit = vi.fn();
       renderDialog({ mode: 'create', onSubmit });
 
-      // Open advanced and type a custom model
+      // Open advanced and pick a model
       fireEvent.click(screen.getByText('Advanced'));
-      const customModelInput = screen.getByPlaceholderText('Enter custom model ID');
-      fireEvent.change(customModelInput, { target: { value: 'claude-opus-4-6' } });
+      fireEvent.click(screen.getByTestId('select-item-claude-opus-4-6'));
 
       const prompt = screen.getByLabelText('Agent prompt');
       fireEvent.change(prompt, { target: { value: 'Task' } });
@@ -1130,8 +1212,7 @@ describe('AgentFormDialog', () => {
       const agent = makeAgent({ config: {} });
       renderDialog({ mode: 'edit', agent, onSubmit });
 
-      const modelInput = screen.getByPlaceholderText('claude-sonnet-4-6');
-      fireEvent.change(modelInput, { target: { value: 'custom-model' } });
+      fireEvent.click(screen.getByTestId('select-item-claude-opus-4-6'));
 
       const promptTextarea = screen.getByPlaceholderText('Describe what this agent should do...');
       fireEvent.change(promptTextarea, { target: { value: 'New prompt' } });
@@ -1139,7 +1220,7 @@ describe('AgentFormDialog', () => {
       fireEvent.click(screen.getByText('Save Changes'));
 
       const data = onSubmit.mock.calls[0]?.[0] as AgentFormEditData;
-      expect(data.config?.model).toBe('custom-model');
+      expect(data.config?.model).toBe('claude-opus-4-6');
       expect(data.config?.initialPrompt).toBe('New prompt');
     });
 
@@ -1148,8 +1229,7 @@ describe('AgentFormDialog', () => {
       const agent = makeAgent({ config: { model: 'claude-opus-4-6' } });
       renderDialog({ mode: 'edit', agent, onSubmit });
 
-      const modelInput = screen.getByDisplayValue('claude-opus-4-6');
-      fireEvent.change(modelInput, { target: { value: '' } });
+      fireEvent.click(screen.getByTestId('select-item-__default__'));
 
       fireEvent.click(screen.getByText('Save Changes'));
 
@@ -1319,8 +1399,8 @@ describe('AgentFormDialog', () => {
       const agent = makeAgent({ config: {} });
       renderDialog({ mode: 'edit', agent });
 
-      const modelInput = screen.getByPlaceholderText('claude-sonnet-4-6') as HTMLInputElement;
-      expect(modelInput.value).toBe('');
+      const modelSelect = document.querySelector('[data-value="__default__"]');
+      expect(modelSelect).toBeDefined();
 
       const promptTextarea = screen.getByPlaceholderText(
         'Describe what this agent should do...',
