@@ -1343,6 +1343,35 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Empty runs shown with gray badge + clearer empty-status labeling *(PR #231)*
 - [x] Run timeline shows state transitions *(PR #241)* with timestamps
 
+## 18. UX Enhancements
+
+### 18.1 Agent Templates — P1
+
+- [ ] Prebuilt agent configurations for common use cases (code reviewer, bug fixer, test writer, docs)
+- [ ] Template selection step in AgentFormDialog before manual config
+- [ ] Templates pre-fill form fields; "Start from scratch" to skip
+
+### 18.2 Command Palette Enhancement — P1
+
+- [ ] Agent actions in search (Start, Settings, View for each agent)
+- [ ] Recent sessions in search results
+- [ ] Fuzzy search across agents, sessions, pages
+- [ ] Grouped results by category
+
+### 18.3 Onboarding Empty States — P1
+
+- [ ] Dashboard welcome card for new users
+- [ ] Agents page shows templates when empty
+- [ ] Sessions/Memory pages guide users to first actions
+
+### 18.4 Frontend Infrastructure — Delivered
+
+- [x] Tasks page for task graph DAGs *(PR #247)*
+- [x] Dark theme animations + hover effects *(PR #249)*
+- [x] Enhanced keyboard shortcuts *(PR #250)*
+- [x] Error boundaries for all pages *(PR #251)*
+- [x] Machine metrics + button consistency + dependency colors *(PR #246)*
+
 ---
 
 ## Active Priorities
