@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentEvent } from '@agentctl/shared';
+import type { AgentConfig, AgentEvent, PermissionRequest } from '@agentctl/shared';
 import { ControlPlaneError, DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import type { Queue } from 'bullmq';
 import type { FastifyPluginAsync } from 'fastify';
@@ -70,7 +70,16 @@ type ErrorMessage = {
   code: string;
 };
 
-type OutgoingMessage = AgentEventMessage | PongMessage | ErrorMessage;
+type PermissionRequestEventMessage = {
+  type: 'permission_request_created' | 'permission_request_resolved';
+  data: PermissionRequest;
+};
+
+type OutgoingMessage =
+  | AgentEventMessage
+  | PongMessage
+  | ErrorMessage
+  | PermissionRequestEventMessage;
 
 // ---------------------------------------------------------------------------
 // Route options
@@ -95,6 +104,24 @@ function sendJson(socket: WebSocket, message: OutgoingMessage): void {
 
 function sendError(socket: WebSocket, code: string, message: string): void {
   sendJson(socket, { type: 'error', code, message });
+}
+
+const websocketClients = new Set<WebSocket>();
+
+export function broadcastPermissionEvent(
+  type: 'permission_request_created' | 'permission_request_resolved',
+  data: PermissionRequest,
+): void {
+  const message: PermissionRequestEventMessage = { type, data };
+
+  for (const socket of websocketClients) {
+    if (socket.readyState === socket.OPEN) {
+      sendJson(socket, message);
+      continue;
+    }
+
+    websocketClients.delete(socket);
+  }
 }
 
 const VALID_INCOMING_TYPES: ReadonlySet<string> = new Set([
@@ -219,6 +246,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
 
   app.get('/ws', { websocket: true }, (socket, request) => {
     logger.info({ remoteAddress: request.ip }, 'WebSocket client connected');
+    websocketClients.add(socket);
 
     // Per-connection state: active SSE subscriptions keyed by agentId.
     const subscriptions = new Map<string, SseSubscription>();
@@ -271,6 +299,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
 
     socket.on('close', () => {
       logger.info({ remoteAddress: request.ip }, 'WebSocket client disconnected');
+      websocketClients.delete(socket);
       clearInterval(heartbeatTimer);
 
       for (const [, sub] of subscriptions) {
@@ -282,6 +311,7 @@ export const wsRoutes: FastifyPluginAsync<WsRouteOptions> = async (app, opts) =>
 
     socket.on('error', (err: Error) => {
       logger.warn({ err: err.message }, 'WebSocket error');
+      websocketClients.delete(socket);
     });
 
     // -----------------------------------------------------------------------

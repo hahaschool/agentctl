@@ -87,6 +87,7 @@ import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { notificationPreferenceRoutes } from './routes/notification-preferences.js';
 import { oauthRoutes } from './routes/oauth.js';
+import { permissionRequestRoutes } from './routes/permission-requests.js';
 import { replayRoutes } from './routes/replay.js';
 import { routerRoutes } from './routes/router.js';
 import { routingRoutes } from './routes/routing.js';
@@ -646,6 +647,13 @@ export async function createServer({
     await app.register(approvalRoutes, {
       prefix: '/api/approvals',
       approvalStore,
+    });
+
+    await app.register(permissionRequestRoutes, {
+      prefix: '/api/permission-requests',
+      db,
+      dbRegistry: dbRegistry ?? null,
+      workerPort,
     });
 
     // Context Bridge: cross-space context mobility (§10.4)
