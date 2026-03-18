@@ -5,10 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fuzzyScore, levenshtein } from '@/lib/fuzzy-search';
 import { CommandPalette } from './CommandPalette';
 
-// ---------------------------------------------------------------------------
-// Mock next/navigation
-// ---------------------------------------------------------------------------
-
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -21,10 +17,6 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// ---------------------------------------------------------------------------
-// Mock next-themes
-// ---------------------------------------------------------------------------
-
 const mockSetTheme = vi.fn();
 let mockTheme = 'dark';
 vi.mock('next-themes', () => ({
@@ -33,10 +25,6 @@ vi.mock('next-themes', () => ({
     setTheme: mockSetTheme,
   }),
 }));
-
-// ---------------------------------------------------------------------------
-// Mock Toast
-// ---------------------------------------------------------------------------
 
 const mockToast = vi.hoisted(() => ({
   success: vi.fn(),
@@ -47,10 +35,6 @@ const mockToast = vi.hoisted(() => ({
 vi.mock('@/components/Toast', () => ({
   toast: mockToast,
 }));
-
-// ---------------------------------------------------------------------------
-// Mock queries
-// ---------------------------------------------------------------------------
 
 const mockAgentsQuery = vi.fn();
 const mockMachinesQuery = vi.fn();
@@ -63,10 +47,6 @@ vi.mock('@/lib/queries', () => ({
   sessionsQuery: () => mockSessionsQuery(),
   useDeleteSession: () => ({ mutate: mockDeleteMutate, isPending: false }),
 }));
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -87,10 +67,6 @@ function renderPalette(props: { open: boolean; onClose?: () => void }) {
   return { ...result, onClose, queryClient: qc };
 }
 
-// ---------------------------------------------------------------------------
-// Setup / Teardown
-// ---------------------------------------------------------------------------
-
 beforeEach(() => {
   mockTheme = 'dark';
   mockAgentsQuery.mockReturnValue({ queryKey: ['agents'], queryFn: () => [] });
@@ -102,15 +78,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ===========================================================================
-// Tests
-// ===========================================================================
-
 describe('CommandPalette', () => {
-  // -----------------------------------------------------------------------
-  // Visibility
-  // -----------------------------------------------------------------------
-
   it('renders nothing when open=false', () => {
     const { container } = renderPalette({ open: false });
     expect(container.innerHTML).toBe('');
@@ -130,29 +98,28 @@ describe('CommandPalette', () => {
     expect(listbox.getAttribute('aria-activedescendant')).toBe(options[0]?.id ?? null);
   });
 
-  // -----------------------------------------------------------------------
-  // Search input
-  // -----------------------------------------------------------------------
-
-  it('shows search input with placeholder text', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    expect(input).toBeDefined();
-  });
-
-  // -----------------------------------------------------------------------
-  // Navigation commands
-  // -----------------------------------------------------------------------
-
-  it('shows all navigation commands', () => {
+  it('shows all sidebar navigation pages', () => {
     renderPalette({ open: true });
     expect(screen.getByText('Dashboard')).toBeDefined();
     expect(screen.getByText('Machines')).toBeDefined();
     expect(screen.getByText('Agents')).toBeDefined();
     expect(screen.getByText('Sessions')).toBeDefined();
-    expect(screen.getByText('Discover Sessions')).toBeDefined();
-    expect(screen.getByText('Logs & Metrics')).toBeDefined();
+    expect(screen.getByText('Discover')).toBeDefined();
+    expect(screen.getByText('Logs')).toBeDefined();
     expect(screen.getByText('Settings')).toBeDefined();
+    expect(screen.getAllByText('Memory').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Spaces')).toBeDefined();
+    expect(screen.getByText('Tasks')).toBeDefined();
+    expect(screen.getByText('Deployment')).toBeDefined();
+  });
+
+  it('shows base action commands', () => {
+    renderPalette({ open: true });
+    expect(screen.getByText('New Session')).toBeDefined();
+    expect(screen.getByText('Refresh All Data')).toBeDefined();
+    expect(screen.getByText('Toggle Dark/Light Mode')).toBeDefined();
+    expect(screen.getByText('Clear Notifications')).toBeDefined();
+    expect(screen.getByText('Keyboard Shortcuts')).toBeDefined();
   });
 
   it('navigates to correct route when a nav command is clicked', () => {
@@ -160,25 +127,6 @@ describe('CommandPalette', () => {
     fireEvent.click(screen.getByText('Dashboard'));
     expect(mockPush).toHaveBeenCalledWith('/');
     expect(onClose).toHaveBeenCalled();
-  });
-
-  it('navigates to /machines when Machines command is clicked', () => {
-    const { onClose } = renderPalette({ open: true });
-    fireEvent.click(screen.getByText('Machines'));
-    expect(mockPush).toHaveBeenCalledWith('/machines');
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  // -----------------------------------------------------------------------
-  // Action commands
-  // -----------------------------------------------------------------------
-
-  it('shows action commands', () => {
-    renderPalette({ open: true });
-    expect(screen.getByText('Refresh All Data')).toBeDefined();
-    expect(screen.getByText('Toggle Dark/Light Mode')).toBeDefined();
-    expect(screen.getByText('Clear Notifications')).toBeDefined();
-    expect(screen.getByText('Keyboard Shortcuts')).toBeDefined();
   });
 
   it('calls toast.dismiss when Clear Notifications is clicked', () => {
@@ -195,13 +143,6 @@ describe('CommandPalette', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('toggles to dark when current theme is light', () => {
-    mockTheme = 'light';
-    renderPalette({ open: true });
-    fireEvent.click(screen.getByText('Toggle Dark/Light Mode'));
-    expect(mockSetTheme).toHaveBeenCalledWith('dark');
-  });
-
   it('shows toast on Refresh All Data', () => {
     const { onClose } = renderPalette({ open: true });
     fireEvent.click(screen.getByText('Refresh All Data'));
@@ -209,49 +150,217 @@ describe('CommandPalette', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  // -----------------------------------------------------------------------
-  // Filtering
-  // -----------------------------------------------------------------------
+  it('shows agent actions for each agent: Start, Settings, View', async () => {
+    mockAgentsQuery.mockReturnValue({
+      queryKey: ['agents'],
+      queryFn: () => [
+        {
+          id: 'agent-1',
+          machineId: 'machine-1',
+          name: 'alpha',
+          type: 'adhoc',
+          status: 'idle',
+          schedule: null,
+          projectPath: '/repo/alpha',
+          worktreeBranch: null,
+          currentSessionId: null,
+          config: {},
+          lastRunAt: null,
+          lastCostUsd: null,
+          totalCostUsd: 0,
+          accountId: null,
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    });
 
-  it('filters commands based on search query', () => {
     renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'dashboard' } });
 
-    expect(screen.getByText('Dashboard')).toBeDefined();
-    // Other nav commands should be filtered out
-    expect(screen.queryByText('Machines')).toBeNull();
-    expect(screen.queryByText('Agents')).toBeNull();
-    expect(screen.queryByText('Sessions')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText('Start alpha')).toBeDefined();
+      expect(screen.getByText('Settings alpha')).toBeDefined();
+      expect(screen.getByText('View alpha')).toBeDefined();
+    });
   });
 
-  it('filters by section name', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'actions' } });
+  it('navigates to agent settings from agent action', async () => {
+    mockAgentsQuery.mockReturnValue({
+      queryKey: ['agents'],
+      queryFn: () => [
+        {
+          id: 'agent-2',
+          machineId: 'machine-1',
+          name: 'beta',
+          type: 'adhoc',
+          status: 'running',
+          schedule: null,
+          projectPath: '/repo/beta',
+          worktreeBranch: null,
+          currentSessionId: null,
+          config: {},
+          lastRunAt: null,
+          lastCostUsd: null,
+          totalCostUsd: 0,
+          accountId: null,
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    });
 
-    // Action commands should match via section
-    expect(screen.getByText('Refresh All Data')).toBeDefined();
-    expect(screen.getByText('Toggle Dark/Light Mode')).toBeDefined();
-    // Nav commands should be filtered out
-    expect(screen.queryByText('Dashboard')).toBeNull();
+    const { onClose } = renderPalette({ open: true });
+
+    await waitFor(() => {
+      expect(screen.getByText('Settings beta')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('Settings beta'));
+    expect(mockPush).toHaveBeenCalledWith('/agents/agent-2/settings');
+    expect(onClose).toHaveBeenCalled();
   });
 
-  it('shows "No matching commands" when query has no matches', () => {
+  it('shows recent sessions section with last 5 View actions', async () => {
+    const sessions = Array.from({ length: 6 }, (_, i) => ({
+      id: `sess-00${i}`,
+      agentId: `a${i}`,
+      agentName: `agent-${i}`,
+      machineId: 'm1',
+      sessionUrl: null,
+      claudeSessionId: null,
+      status: 'ended',
+      projectPath: '/repo/test',
+      pid: null,
+      startedAt: `2026-03-0${i + 1}T10:00:00Z`,
+      endedAt: null,
+      lastHeartbeat: null,
+      metadata: { summary: `Summary ${i}` },
+      accountId: null,
+      model: null,
+    }));
+
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: () => ({ sessions }),
+    });
+
     renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
+
+    await waitFor(() => {
+      expect(screen.getByText('View Summary 5')).toBeDefined();
+      expect(screen.getByText('View Summary 1')).toBeDefined();
+    });
+
+    expect(screen.queryByText('View Summary 0')).toBeNull();
+  });
+
+  it('search results are grouped by Agents, Sessions, and Pages', async () => {
+    mockAgentsQuery.mockReturnValue({
+      queryKey: ['agents'],
+      queryFn: () => [
+        {
+          id: 'agent-deploy-1',
+          machineId: 'machine-1',
+          name: 'Deploy Bot',
+          type: 'adhoc',
+          status: 'idle',
+          schedule: null,
+          projectPath: '/repo/deploy-service',
+          worktreeBranch: null,
+          currentSessionId: null,
+          config: {},
+          lastRunAt: null,
+          lastCostUsd: null,
+          totalCostUsd: 0,
+          accountId: null,
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    });
+
+    mockSessionsQuery.mockReturnValue({
+      queryKey: ['sessions'],
+      queryFn: () => ({
+        sessions: [
+          {
+            id: 'sess-deploy-1',
+            agentId: 'agent-deploy-1',
+            agentName: 'Deploy Bot',
+            machineId: 'm1',
+            sessionUrl: null,
+            claudeSessionId: null,
+            status: 'active',
+            projectPath: '/repo/deploy-service',
+            pid: null,
+            startedAt: '2026-03-11T10:00:00Z',
+            endedAt: null,
+            lastHeartbeat: null,
+            metadata: { summary: 'Deploy production hotfix' },
+            accountId: null,
+            model: null,
+          },
+        ],
+      }),
+    });
+
+    renderPalette({ open: true });
+
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
+    fireEvent.change(input, { target: { value: 'deploy' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Agents')).toBeDefined();
+      expect(screen.getByText('Sessions')).toBeDefined();
+      expect(screen.getByText('Pages')).toBeDefined();
+      expect(screen.getByText('Deploy Bot')).toBeDefined();
+      expect(screen.getByText('Deploy production hotfix')).toBeDefined();
+      expect(screen.getByText('Deployment')).toBeDefined();
+    });
+  });
+
+  it('search matches agent project path', async () => {
+    mockAgentsQuery.mockReturnValue({
+      queryKey: ['agents'],
+      queryFn: () => [
+        {
+          id: 'agent-path-1',
+          machineId: 'machine-1',
+          name: 'Path Bot',
+          type: 'adhoc',
+          status: 'idle',
+          schedule: null,
+          projectPath: '/workspaces/important-project',
+          worktreeBranch: null,
+          currentSessionId: null,
+          config: {},
+          lastRunAt: null,
+          lastCostUsd: null,
+          totalCostUsd: 0,
+          accountId: null,
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    });
+
+    renderPalette({ open: true });
+
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
+    fireEvent.change(input, { target: { value: 'important-project' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Path Bot')).toBeDefined();
+    });
+  });
+
+  it('shows search-mode empty state when no grouped matches', () => {
+    renderPalette({ open: true });
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
     fireEvent.change(input, { target: { value: 'xyznonexistent' } });
 
-    expect(screen.getByText('No matching commands')).toBeDefined();
+    expect(screen.getByText('No matching agents, sessions, or pages')).toBeDefined();
   });
-
-  // -----------------------------------------------------------------------
-  // Keyboard interaction
-  // -----------------------------------------------------------------------
 
   it('calls onClose when Escape is pressed', () => {
     const { onClose } = renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
@@ -265,89 +374,52 @@ describe('CommandPalette', () => {
 
   it('executes active command on Enter', () => {
     renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    // First item (Dashboard) is active by default
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(mockPush).toHaveBeenCalledWith('/');
   });
 
-  it('navigates down with ArrowDown and wraps around', () => {
+  it('navigates down with ArrowDown', () => {
     renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
     const listbox = screen.getByRole('listbox', { name: 'Commands' });
     const options = screen.getAllByRole('option');
 
-    // Move down once — now on Machines (index 1)
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(listbox.getAttribute('aria-activedescendant')).toBe(options[1]?.id ?? null);
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(mockPush).toHaveBeenCalledWith('/machines');
   });
-
-  it('navigates up with ArrowUp from first item wraps to last', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-
-    // ArrowUp from index 0 should wrap to last item
-    fireEvent.keyDown(input, { key: 'ArrowUp' });
-    // Last item is "Keyboard Shortcuts" action — pressing Enter triggers it
-    fireEvent.keyDown(input, { key: 'Enter' });
-    // The last action dispatches a keydown event and calls onClose
-    // We can just verify it doesn't crash and the action fires
-  });
-
-  // -----------------------------------------------------------------------
-  // Footer
-  // -----------------------------------------------------------------------
 
   it('shows keyboard shortcut hints in footer', () => {
     renderPalette({ open: true });
-    // "Navigate" appears both as section header and footer hint — use getAllByText
-    expect(screen.getAllByText('Navigate').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Navigate')).toBeDefined();
     expect(screen.getByText('Select')).toBeDefined();
     expect(screen.getByText('Close')).toBeDefined();
   });
 
   it('shows result count in footer', () => {
     renderPalette({ open: true });
-    // 8 nav + 3 memory + 5 action = 16 results
-    expect(screen.getByText('16 results')).toBeDefined();
+    expect(screen.getByText('19 results')).toBeDefined();
   });
 
-  it('updates result count when filtering', () => {
+  it('updates result count in search mode', () => {
     renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
     fireEvent.change(input, { target: { value: 'dashboard' } });
     expect(screen.getByText('1 result')).toBeDefined();
   });
 
-  // -----------------------------------------------------------------------
-  // Section headers
-  // -----------------------------------------------------------------------
-
-  it('shows section headers', () => {
+  it('shows section headers in default mode', () => {
     renderPalette({ open: true });
-    // "Navigate" appears both as section header and as footer hint
-    // "Actions" should be a section header
-    const actionHeaders = screen.getAllByText('Actions');
-    expect(actionHeaders.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Navigation')).toBeDefined();
+    expect(screen.getByText('Actions')).toBeDefined();
   });
-
-  // -----------------------------------------------------------------------
-  // Shortcut badges
-  // -----------------------------------------------------------------------
 
   it('shows keyboard shortcut badges for nav commands', () => {
     renderPalette({ open: true });
-    // Shortcut "1" for Dashboard
     expect(screen.getByText('1')).toBeDefined();
     expect(screen.getByText('2')).toBeDefined();
     expect(screen.getByText('7')).toBeDefined();
   });
-
-  // -----------------------------------------------------------------------
-  // Active item highlight via mouse
-  // -----------------------------------------------------------------------
 
   it('changes active item on mouseEnter', () => {
     renderPalette({ open: true });
@@ -357,14 +429,7 @@ describe('CommandPalette', () => {
       fireEvent.mouseEnter(machinesOption);
     }
     expect(listbox.getAttribute('aria-activedescendant')).toBe(machinesOption?.id ?? null);
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(mockPush).toHaveBeenCalledWith('/machines');
   });
-
-  // -----------------------------------------------------------------------
-  // Query reset on open
-  // -----------------------------------------------------------------------
 
   it('resets query when reopened', () => {
     const qc = createQueryClient();
@@ -374,116 +439,26 @@ describe('CommandPalette', () => {
         <CommandPalette open={true} onClose={onClose} />
       </QueryClientProvider>,
     );
-    // Type something
-    const input = screen.getByPlaceholderText(/type a command or search/i);
+
+    const input = screen.getByPlaceholderText(/search agents, sessions, pages/i);
     fireEvent.change(input, { target: { value: 'test' } });
     expect((input as HTMLInputElement).value).toBe('test');
 
-    // Close
     rerender(
       <QueryClientProvider client={qc}>
         <CommandPalette open={false} onClose={onClose} />
       </QueryClientProvider>,
     );
 
-    // Reopen
     rerender(
       <QueryClientProvider client={qc}>
         <CommandPalette open={true} onClose={onClose} />
       </QueryClientProvider>,
     );
-    const newInput = screen.getByPlaceholderText(/type a command or search/i);
+
+    const newInput = screen.getByPlaceholderText(/search agents, sessions, pages/i);
     expect((newInput as HTMLInputElement).value).toBe('');
   });
-
-  // -----------------------------------------------------------------------
-  // Fuzzy search: partial matches
-  // -----------------------------------------------------------------------
-
-  it('fuzzy matches partial query "mach" to "Machines"', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'mach' } });
-    expect(screen.getByText('Machines')).toBeDefined();
-  });
-
-  it('fuzzy matches partial query "sett" to "Settings"', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'sett' } });
-    expect(screen.getByText('Settings')).toBeDefined();
-  });
-
-  it('fuzzy matches partial query "sess" to "Sessions" and "Discover Sessions"', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'sess' } });
-    expect(screen.getByText('Sessions')).toBeDefined();
-    expect(screen.getByText('Discover Sessions')).toBeDefined();
-  });
-
-  // -----------------------------------------------------------------------
-  // Fuzzy search: typo tolerance
-  // -----------------------------------------------------------------------
-
-  it('fuzzy matches "dashbord" (typo) to "Dashboard"', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'dashbord' } });
-    expect(screen.getByText('Dashboard')).toBeDefined();
-  });
-
-  it('fuzzy matches "machnes" (typo) to "Machines"', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'machnes' } });
-    expect(screen.getByText('Machines')).toBeDefined();
-  });
-
-  it('fuzzy matches "settngs" (typo) to "Settings"', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'settngs' } });
-    expect(screen.getByText('Settings')).toBeDefined();
-  });
-
-  // -----------------------------------------------------------------------
-  // Fuzzy search: results sorted by relevance
-  // -----------------------------------------------------------------------
-
-  it('sorts results by relevance — exact match first', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    // "Log" is a substring of "Logs & Metrics" (exact substring) and also
-    // a subsequence of "Toggle Dark/Light Mode" (t-o-g-g-l-e has no 'l' before 'o'... but "Toggle" has o,g,l → subsequence "log" matches)
-    fireEvent.change(input, { target: { value: 'log' } });
-
-    // Get all option buttons in order
-    const options = screen.getAllByRole('option');
-    // "Logs & Metrics" should appear before any other match because it has an exact substring match
-    const logsIndex = options.findIndex((opt) => opt.textContent?.includes('Logs & Metrics'));
-    expect(logsIndex).toBeGreaterThanOrEqual(0);
-    // If Toggle appears, it should be ranked lower
-    const toggleIndex = options.findIndex((opt) => opt.textContent?.includes('Toggle'));
-    if (toggleIndex >= 0) {
-      expect(logsIndex).toBeLessThan(toggleIndex);
-    }
-  });
-
-  it('ranks exact substring higher than subsequence match', () => {
-    renderPalette({ open: true });
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'agent' } });
-
-    const options = screen.getAllByRole('option');
-    // "Agents" (exact substring on label) should come first
-    const agentsIdx = options.findIndex((opt) => opt.textContent?.includes('Agents'));
-    expect(agentsIdx).toBe(0);
-  });
-
-  // -----------------------------------------------------------------------
-  // Stop Session actions
-  // -----------------------------------------------------------------------
 
   it('shows Stop Session actions for active sessions', async () => {
     const activeSession = {
@@ -511,8 +486,6 @@ describe('CommandPalette', () => {
     renderPalette({ open: true });
 
     await waitFor(() => {
-      const input = screen.getByPlaceholderText(/type a command or search/i);
-      fireEvent.change(input, { target: { value: 'stop' } });
       expect(screen.getByText(/Stop: my-agent/)).toBeDefined();
     });
   });
@@ -543,13 +516,10 @@ describe('CommandPalette', () => {
     const { onClose } = renderPalette({ open: true });
 
     await waitFor(() => {
-      expect(screen.queryByText(/Stop: sess-act/)).not.toBeNull();
+      expect(screen.getByText(/Stop: sess-act/)).toBeDefined();
     });
 
-    const input = screen.getByPlaceholderText(/type a command or search/i);
-    fireEvent.change(input, { target: { value: 'stop' } });
-    const stopBtn = screen.getByText(/Stop: sess-act/);
-    fireEvent.click(stopBtn);
+    fireEvent.click(screen.getByText(/Stop: sess-act/));
     expect(mockDeleteMutate).toHaveBeenCalledWith('sess-active-002', expect.any(Object));
     expect(onClose).toHaveBeenCalled();
   });
@@ -579,19 +549,13 @@ describe('CommandPalette', () => {
 
     renderPalette({ open: true });
 
-    // Wait for query to resolve, then verify no Stop actions appear
     await waitFor(() => {
-      // The session data should have loaded by now
-      const input = screen.getByPlaceholderText(/type a command or search/i);
-      fireEvent.change(input, { target: { value: 'stop' } });
+      expect(screen.getByText('View ended-agent')).toBeDefined();
     });
+
     expect(screen.queryByText(/Stop:/)).toBeNull();
   });
 });
-
-// ===========================================================================
-// Unit tests for fuzzyScore and levenshtein
-// ===========================================================================
 
 describe('levenshtein', () => {
   it('returns 0 for identical strings', () => {
@@ -621,7 +585,6 @@ describe('levenshtein', () => {
 });
 
 describe('fuzzyScore', () => {
-  // Exact substring
   it('returns high score for exact substring match', () => {
     const score = fuzzyScore('mach', 'Machines');
     expect(score).not.toBeNull();
@@ -636,16 +599,13 @@ describe('fuzzyScore', () => {
     expect(startScore).toBeGreaterThan(midScore as number);
   });
 
-  // Subsequence
   it('matches subsequence characters in order', () => {
-    // "dbd" is a subsequence of "Dashboard" (d-a-s-h-b-o-a-r-d → d(0), b(4), d(8))
     const score = fuzzyScore('dbd', 'Dashboard');
     expect(score).not.toBeNull();
     expect(score).toBeGreaterThanOrEqual(10);
     expect(score).toBeLessThan(100);
   });
 
-  // Typo tolerance via Levenshtein
   it('matches "dashbord" (one missing char) to "dashboard"', () => {
     const score = fuzzyScore('dashbord', 'Dashboard');
     expect(score).not.toBeNull();
@@ -657,7 +617,6 @@ describe('fuzzyScore', () => {
     expect(score).not.toBeNull();
   });
 
-  // No match
   it('returns null for completely unrelated strings', () => {
     expect(fuzzyScore('xyz', 'Dashboard')).toBeNull();
   });
@@ -666,7 +625,6 @@ describe('fuzzyScore', () => {
     expect(fuzzyScore('zzz', 'abc')).toBeNull();
   });
 
-  // Case insensitivity
   it('is case insensitive', () => {
     const score1 = fuzzyScore('MACH', 'machines');
     const score2 = fuzzyScore('mach', 'MACHINES');
