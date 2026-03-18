@@ -21,10 +21,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { useNotificationContext } from '../contexts/notification-context';
+import { useHotkeys } from '../hooks/use-hotkeys';
 import { useWebSocket } from '../hooks/use-websocket';
 import { CommandPalette } from './CommandPalette';
 import { ConnectionBanner } from './ConnectionBanner';
@@ -112,16 +113,73 @@ export function Sidebar(): React.JSX.Element {
   const pendingKeyRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keyboard shortcuts: 1-8 to navigate pages, Cmd+K for command palette, Esc to close
+  const closePanels = useCallback((): void => {
+    setMobileOpen(false);
+    setShowHelp(false);
+    setShowCommandPalette(false);
+  }, []);
+
+  const isSettingsPath = useMemo(
+    () => pathname.startsWith('/settings') || /^\/agents\/[^/]+\/settings$/.test(pathname),
+    [pathname],
+  );
+
+  const triggerSettingsSave = useCallback((): boolean => {
+    if (!isSettingsPath) return false;
+
+    const saveButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(
+      (button) => {
+        if (button.disabled) return false;
+        const label = button.textContent?.trim().toLowerCase() ?? '';
+        if (!label.startsWith('save')) return false;
+
+        const panel = button.closest<HTMLElement>('[role="tabpanel"]');
+        if (
+          panel &&
+          (panel.hasAttribute('hidden') || panel.getAttribute('data-state') === 'inactive')
+        ) {
+          return false;
+        }
+
+        const style = window.getComputedStyle(button);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      },
+    );
+
+    const saveButton = saveButtons[0];
+    if (!saveButton) return false;
+    saveButton.click();
+    return true;
+  }, [isSettingsPath]);
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        'mod+k': (e: KeyboardEvent) => {
+          e.preventDefault();
+          setShowCommandPalette((prev) => !prev);
+        },
+        'mod+n': (e: KeyboardEvent) => {
+          e.preventDefault();
+          router.push('/agents?new=1');
+        },
+        'mod+s': (e: KeyboardEvent) => {
+          if (!isSettingsPath) return;
+          e.preventDefault();
+          triggerSettingsSave();
+        },
+        Escape: () => {
+          closePanels();
+        },
+      }),
+      [closePanels, isSettingsPath, router, triggerSettingsSave],
+    ),
+    { enableOnFormTags: true },
+  );
+
+  // Keyboard shortcuts: number navigation, go sequences, help overlay toggle
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
-      // Cmd+K / Ctrl+K — command palette (works even in inputs)
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setShowCommandPalette((prev) => !prev);
-        return;
-      }
-
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
@@ -152,8 +210,7 @@ export function Sidebar(): React.JSX.Element {
       }
 
       if (e.key === 'Escape') {
-        setMobileOpen(false);
-        setShowHelp(false);
+        closePanels();
         return;
       }
 
@@ -170,7 +227,7 @@ export function Sidebar(): React.JSX.Element {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [router]);
+  }, [closePanels, router]);
 
   const toggleTheme = useCallback((): void => {
     setTheme(theme === 'dark' ? 'light' : 'dark');

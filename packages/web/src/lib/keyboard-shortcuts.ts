@@ -38,10 +38,12 @@ const NAV_SHORTCUTS: ShortcutEntry[] = [
 
 /** Global (non-navigation) shortcuts. */
 const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
-  { keys: ['\u2318K'], desc: 'Command palette' },
+  { keys: ['\u2318K / Ctrl+K'], desc: 'Command palette' },
+  { keys: ['\u2318N / Ctrl+N'], desc: 'New agent' },
+  { keys: ['\u2318S / Ctrl+S'], desc: 'Save settings' },
   { keys: ['r'], desc: 'Refresh current page' },
   { keys: ['/'], desc: 'Focus search (Discover)' },
-  { keys: ['Esc'], desc: 'Close panels / Cancel' },
+  { keys: ['Esc'], desc: 'Close dialogs / Cancel' },
   { keys: ['?'], desc: 'Toggle keyboard help' },
 ];
 
@@ -59,9 +61,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Global',
     shortcuts: [
       { keys: ['?'], desc: 'Show keyboard shortcuts' },
-      { keys: ['\u2318K'], desc: 'Command palette' },
-      { keys: ['1\u20138'], desc: 'Navigate to page' },
-      { keys: ['Esc'], desc: 'Close panels / Cancel' },
+      { keys: ['\u2318K / Ctrl+K'], desc: 'Command palette' },
+      { keys: ['\u2318N / Ctrl+N'], desc: 'New agent' },
+      { keys: ['\u2318S / Ctrl+S'], desc: 'Save settings (Settings pages)' },
+      { keys: ['1\u20139'], desc: 'Navigate to page' },
+      { keys: ['Esc'], desc: 'Close dialogs / Cancel' },
       { keys: ['g', 'd'], desc: 'Go to Dashboard' },
       { keys: ['g', 's'], desc: 'Go to Sessions' },
       { keys: ['g', 'a'], desc: 'Go to Agents' },
@@ -96,6 +100,14 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['r'], desc: 'Refresh' },
       { keys: ['n'], desc: 'New agent' },
       { keys: ['Esc'], desc: 'Close dialog' },
+    ],
+  },
+  {
+    title: 'Agent Detail',
+    shortcuts: [
+      { keys: ['s'], desc: 'Start agent' },
+      { keys: ['r'], desc: 'Refresh' },
+      { keys: ['e'], desc: 'Open settings' },
     ],
   },
 ];

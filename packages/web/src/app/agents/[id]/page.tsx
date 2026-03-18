@@ -5,7 +5,7 @@ import { toExecutionSummary } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, Download, Settings } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -65,6 +65,7 @@ import {
 export default function AgentDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
   const agentId = params.id;
+  const router = useRouter();
 
   const agent = useQuery(agentQuery(agentId));
   const runs = useQuery(agentRunsQuery(agentId));
@@ -77,6 +78,12 @@ export default function AgentDetailPage(): React.JSX.Element {
   const updateAgent = useUpdateAgent();
   const toast = useToast();
 
+  const [startDialogOpen, setStartDialogOpen] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
+  const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
+  const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
+
   useHotkeys(
     useMemo(
       () => ({
@@ -84,16 +91,17 @@ export default function AgentDetailPage(): React.JSX.Element {
           void agent.refetch();
           void runs.refetch();
         },
+        s: () => {
+          if (agent.data?.status === 'running') return;
+          setStartDialogOpen(true);
+        },
+        e: () => {
+          router.push(`/agents/${agentId}/settings`);
+        },
       }),
-      [agent, runs],
+      [agent, agentId, router, runs],
     ),
   );
-
-  const [startDialogOpen, setStartDialogOpen] = useState(false);
-  const [prompt, setPrompt] = useState('');
-  const [isStarting, setIsStarting] = useState(false);
-  const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
-  const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
 
   const accountList = accounts.data ?? [];
   const machines = machinesList.data ?? [];

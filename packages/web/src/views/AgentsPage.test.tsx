@@ -17,6 +17,7 @@ const {
   mockStartAgent,
   mockStopAgent,
   mockUpdateAgent,
+  mockRouterReplace,
 } = vi.hoisted(() => ({
   mockAgentsQuery: vi.fn(),
   mockMachinesQuery: vi.fn(),
@@ -25,6 +26,7 @@ const {
   mockStartAgent: vi.fn(),
   mockStopAgent: vi.fn(),
   mockUpdateAgent: vi.fn(),
+  mockRouterReplace: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -33,6 +35,18 @@ const {
 
 vi.mock('@/hooks/use-hotkeys', () => ({
   useHotkeys: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: mockRouterReplace,
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('next/link', () => ({
