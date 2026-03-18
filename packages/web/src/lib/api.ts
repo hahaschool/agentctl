@@ -158,6 +158,29 @@ export type Session = {
   model: string | null;
 };
 
+// Local stub until backend shared types land.
+export type PermissionRequestStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
+
+export type PermissionDecision = 'approved' | 'denied';
+
+export type PermissionRequest = {
+  id: string;
+  agentId: string;
+  agentName?: string;
+  sessionId: string;
+  machineId: string;
+  requestId: string;
+  toolName: string;
+  toolInput?: Record<string, unknown>;
+  description?: string;
+  status: PermissionRequestStatus;
+  requestedAt: string;
+  timeoutAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  decision?: PermissionDecision;
+};
+
 // Web extends base DiscoveredSession with machine context added by CP aggregation
 export type DiscoveredSession = BaseDiscoveredSession & {
   machineId: string;
@@ -732,6 +755,18 @@ export const api = {
       `/api/sessions/content/${encodeURIComponent(sessionId)}?${qs}`,
     );
   },
+  getPermissionRequests: (params?: { status?: string; agentId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.agentId) qs.set('agentId', params.agentId);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return request<PermissionRequest[]>(`/api/permission-requests${suffix}`);
+  },
+  resolvePermissionRequest: (id: string, decision: PermissionDecision) =>
+    request<PermissionRequest>(`/api/permission-requests/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ decision }),
+    }),
 
   // OAuth
   initiateOAuth: (provider: string, accountName: string) =>

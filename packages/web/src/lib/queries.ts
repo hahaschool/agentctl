@@ -70,6 +70,8 @@ export const queryKeys = {
     sessionId: string,
     params: { machineId: string; projectPath?: string; limit?: number },
   ) => ['session-content', sessionId, params] as const,
+  permissionRequests: (status?: string, agentId?: string) =>
+    ['permission-requests', status ?? 'all', agentId ?? 'all'] as const,
   discover: ['discovered-sessions'] as const,
   metrics: ['metrics'] as const,
   accounts: ['accounts'] as const,
@@ -283,6 +285,16 @@ export function sessionContentQuery(
     queryKey: queryKeys.sessionContent(sessionId, params),
     queryFn: () => api.getSessionContent(sessionId, params),
     enabled: !!sessionId && !!params.machineId,
+  });
+}
+
+export function pendingPermissionRequestsQuery(agentId?: string) {
+  return queryOptions({
+    queryKey: queryKeys.permissionRequests('pending', agentId),
+    queryFn: () =>
+      api.getPermissionRequests({ status: 'pending', ...(agentId ? { agentId } : {}) }),
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
 }
 
