@@ -1169,8 +1169,8 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 > Follow-up PRs #212-#213 (2026-03-16) closed the remaining Discover summary-selection bug for Codex sessions and replaced misleading zero-duration session copy with clearer "Running now"/"instant" states.
 
 **P1 — Dashboard visual hierarchy:**
-- [ ] Reduce 8 metric cards to 3 prominent ones (Health, Active Runs, Active Sessions) + inline secondary stats
-- [ ] Remove "Native Import" and "Total Cost" cards (always 0, no value)
+- [x] Reduce 8 metric cards to 3 prominent + inline secondary stats *(PR #158)*
+- [x] Remove "Native Import" and "Total Cost" as standalone cards *(PR #158)*
 - [x] Fix "New Session" button text visibility *(PR #158)*
 - [x] Fix "Memory Health: Could not load memory stats" — either fix or hide
 - [x] Sanitize session summaries *(PR #158)* (raw XML tags like `<local-command-caveat>` showing)
@@ -1196,8 +1196,8 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 
 **P5 — Button consistency:**
 - [x] Establish button hierarchy *(PRs #158-#160)*: primary (filled), secondary (outline), ghost (text only)
-- [ ] Each page has exactly one primary action button
-- [ ] Normalize all pages to use shadcn Button variants (remove raw styled links)
+- [x] Each page has exactly one primary action button *(PRs #158-160, #246)*
+- [x] Normalize all pages to use shadcn Button variants *(PRs #158-160, #246)*
 
 **Sessions page:**
 - [x] Session IDs as titles *(PR #161)* (f1220b44-584f...) — should show agent name or summary instead
@@ -1206,14 +1206,14 @@ Systematic design critique (2026-03-15) identified these issues. Root cause: fea
 - [x] Right panel "Select a session *(PR #242)* to view details" is wasted space — could show summary stats
 
 **Machines page:**
-- [ ] Same 4 metric card pattern (Total/Online/Offline/Degraded) — acceptable here but still generic
+- [x] Machine metrics: Online prominent, rest inline *(PR #246)*
 - [x] "GPU" / "Docker" capability badges use proper badges with icons *(PR #165)*
 - [x] Machine card green left border *(PR #242)* is inconsistent with other cards
 
 **Settings page (Runtime Control Center):**
 - [ ] Best designed page — good sidebar nav, clear hierarchy, informative right panel ✅
 - [ ] "WHY THIS CHANGED" callout box is a nice touch ✅
-- [ ] Minor: dependency latency cards (Postgres 2ms, Redis 1ms) could use color coding for degraded
+- [x] Dependency latency cards with color coding (green/yellow/red) *(PR #246)*
 
 **Memory page:**
 - [x] "0 facts" empty state guides users to import data *(PR #165)*
