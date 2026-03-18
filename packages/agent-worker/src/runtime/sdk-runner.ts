@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { AgentConfig } from '@agentctl/shared';
 import { AgentError } from '@agentctl/shared';
 import type { Logger } from 'pino';
@@ -16,7 +18,9 @@ export type SdkRunnerHooks = {
 export type SdkRunnerOptions = {
   prompt: string;
   agentId: string;
+  machineId: string;
   sessionId: string;
+  controlPlaneUrl?: string;
   config: AgentConfig;
   projectPath: string;
   logger: Logger;
@@ -34,6 +38,58 @@ export type SdkRunResult = {
   tokensOut: number;
   result: string;
 };
+
+/**
+ * Local fallback types for Task 1 parallelization.
+ * Replace with `@agentctl/shared` imports once shared exports land.
+ */
+export type PermissionRequest = {
+  id: string;
+  agentId: string;
+  sessionId: string;
+  machineId: string;
+  requestId: string;
+  toolName: string;
+  toolInput?: Record<string, unknown>;
+  description?: string;
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
+  requestedAt: string;
+  timeoutAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  decision?: 'approved' | 'denied';
+};
+
+export type PermissionDecision = {
+  requestId: string;
+  decision: 'approved' | 'denied';
+};
+
+type SdkCanUseToolResult = {
+  allowed: boolean;
+};
+
+type SdkCanUseToolContext = {
+  signal?: AbortSignal;
+};
+
+type SdkCanUseTool = (
+  toolName: string,
+  input: Record<string, unknown>,
+  context: SdkCanUseToolContext,
+) => Promise<SdkCanUseToolResult>;
+
+type PendingPermissionDecision = {
+  agentId: string;
+  resolve: (decision: PermissionDecision['decision']) => void;
+};
+
+const pendingPermissionDecisions = new Map<string, PendingPermissionDecision>();
+
+const DEFAULT_PERMISSION_TIMEOUT_SECONDS = 300;
+const PERMISSION_REQUEST_POST_TIMEOUT_MS = 10_000;
+const REDACTED_INPUT_VALUE = '[REDACTED]';
+const SECRET_INPUT_MARKERS = ['key', 'secret', 'token', 'password'];
 
 /**
  * Minimal type describing the subset of the Claude Agent SDK we consume.
@@ -78,6 +134,122 @@ function getNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' ? value : fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSensitiveInputKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return SECRET_INPUT_MARKERS.some((marker) => lower.includes(marker));
+}
+
+function sanitizeValue(value: unknown, parentKey?: string): unknown {
+  if (parentKey && isSensitiveInputKey(parentKey)) {
+    return REDACTED_INPUT_VALUE;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeValue(entry));
+  }
+
+  if (isRecord(value)) {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value)) {
+      sanitized[key] = sanitizeValue(nested, key);
+    }
+    return sanitized;
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  if (typeof value === 'function') {
+    return '[omitted]';
+  }
+
+  if (typeof value === 'symbol') {
+    return value.toString();
+  }
+
+  return value;
+}
+
+export function sanitizeToolInput(
+  input: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  return sanitizeValue(input) as Record<string, unknown>;
+}
+
+function buildPermissionRequestSignal(signal?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(PERMISSION_REQUEST_POST_TIMEOUT_MS);
+  if (!signal) {
+    return timeoutSignal;
+  }
+  return AbortSignal.any([signal, timeoutSignal]);
+}
+
+function waitForPermissionDecision(
+  requestId: string,
+  agentId: string,
+  signal?: AbortSignal,
+): Promise<PermissionDecision['decision']> {
+  if (signal?.aborted) {
+    return Promise.resolve('denied');
+  }
+
+  return new Promise((resolve) => {
+    const cleanup = (): void => {
+      pendingPermissionDecisions.delete(requestId);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
+
+    const onAbort = (): void => {
+      cleanup();
+      resolve('denied');
+    };
+
+    pendingPermissionDecisions.set(requestId, {
+      agentId,
+      resolve: (decision) => {
+        cleanup();
+        resolve(decision);
+      },
+    });
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+export function resolvePendingPermissionDecision(
+  decision: PermissionDecision,
+  expectedAgentId?: string,
+): boolean {
+  const pending = pendingPermissionDecisions.get(decision.requestId);
+  if (!pending) {
+    return false;
+  }
+
+  if (expectedAgentId && pending.agentId !== expectedAgentId) {
+    return false;
+  }
+
+  pending.resolve(decision.decision);
+  return true;
+}
+
+export function __clearPendingPermissionDecisionsForTests(): void {
+  pendingPermissionDecisions.clear();
+}
+
 /**
  * Attempt to dynamically import the Claude Agent SDK.
  * Returns null if the SDK is not installed, allowing the caller
@@ -109,6 +281,7 @@ function buildSdkOptions(
   config: AgentConfig,
   projectPath: string,
   resumeSessionId?: string,
+  canUseTool?: SdkCanUseTool,
 ): Record<string, unknown> {
   return {
     model: config.model ?? 'sonnet',
@@ -117,8 +290,83 @@ function buildSdkOptions(
     ...(config.allowedTools ? { allowedTools: config.allowedTools } : {}),
     ...(config.disallowedTools ? { disallowedTools: config.disallowedTools } : {}),
     ...(config.systemPrompt ? { systemPrompt: config.systemPrompt } : {}),
+    ...(canUseTool ? { canUseTool } : {}),
     ...(resumeSessionId ? { resume: resumeSessionId } : {}),
     cwd: projectPath,
+  };
+}
+
+function createCanUseToolHandler({
+  agentId,
+  machineId,
+  sessionId,
+  permissionMode,
+  controlPlaneUrl,
+  logger,
+}: {
+  agentId: string;
+  machineId: string;
+  sessionId: string;
+  permissionMode: AgentConfig['permissionMode'];
+  controlPlaneUrl?: string;
+  logger: Logger;
+}): SdkCanUseTool {
+  return async (toolName, input, context) => {
+    if (permissionMode === 'bypassPermissions') {
+      return { allowed: true };
+    }
+
+    if (!controlPlaneUrl) {
+      logger.warn(
+        { agentId, toolName, permissionMode },
+        'Permission request denied because control plane URL is unavailable',
+      );
+      return { allowed: false };
+    }
+
+    const requestId = randomUUID();
+    const signal = context?.signal;
+    const decisionPromise = waitForPermissionDecision(requestId, agentId, signal);
+
+    const requestBody = {
+      agentId,
+      sessionId,
+      machineId,
+      requestId,
+      toolName,
+      toolInput: sanitizeToolInput(input),
+      timeoutSeconds: DEFAULT_PERMISSION_TIMEOUT_SECONDS,
+    };
+
+    try {
+      const response = await fetch(`${controlPlaneUrl}/api/permission-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        signal: buildPermissionRequestSignal(signal),
+      });
+
+      if (!response.ok) {
+        logger.warn(
+          { agentId, toolName, requestId, status: response.status },
+          'Control plane rejected permission request',
+        );
+        resolvePendingPermissionDecision({ requestId, decision: 'denied' }, agentId);
+        return { allowed: false };
+      }
+    } catch (err) {
+      if (!signal?.aborted) {
+        logger.warn(
+          { err, agentId, toolName, requestId },
+          'Failed to create permission request with control plane',
+        );
+      }
+      resolvePendingPermissionDecision({ requestId, decision: 'denied' }, agentId);
+      return { allowed: false };
+    }
+
+    const decision = await decisionPromise;
+    return { allowed: decision === 'approved' };
   };
 }
 
@@ -187,7 +435,9 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
   const {
     prompt,
     agentId,
+    machineId,
     sessionId,
+    controlPlaneUrl,
     config,
     projectPath,
     logger,
@@ -197,7 +447,16 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     resumeSessionId,
   } = options;
 
-  const sdkOptions = buildSdkOptions(config, projectPath, resumeSessionId);
+  const canUseTool = createCanUseToolHandler({
+    agentId,
+    machineId,
+    sessionId,
+    permissionMode: config.permissionMode,
+    controlPlaneUrl,
+    logger,
+  });
+
+  const sdkOptions = buildSdkOptions(config, projectPath, resumeSessionId, canUseTool);
 
   logger.info(
     {

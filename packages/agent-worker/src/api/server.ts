@@ -31,6 +31,7 @@ import { memoryReportRoutes } from './routes/memory-report.js';
 import { memorySearchRoutes } from './routes/memory-search.js';
 import { memoryStoreRoutes } from './routes/memory-store-route.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
+import { permissionResponseRoutes } from './routes/permission-response.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
 import { sessionRoutes } from './routes/sessions.js';
@@ -179,6 +180,11 @@ export async function createWorkerServer({
     machineId,
     logger,
     getDispatchVerificationConfig,
+  });
+
+  await app.register(permissionResponseRoutes, {
+    prefix: '/api/agents',
+    logger,
   });
 
   await app.register(loopRoutes, {
