@@ -420,6 +420,7 @@ describe('DbAgentRegistry', () => {
       expect(insertedValues.agentId).toBe('agent-1');
       expect(insertedValues.trigger).toBe('manual');
       expect(insertedValues.status).toBe('running');
+      expect(insertedValues.phase).toBe('queued');
       expect(insertedValues.startedAt).toBeInstanceOf(Date);
       expect(insertedValues.model).toBe('claude-sonnet-4-20250514');
       expect(insertedValues.provider).toBe('anthropic');
@@ -496,6 +497,7 @@ describe('DbAgentRegistry', () => {
 
       const setValues = mockDb.set.mock.calls[0][0];
       expect(setValues.status).toBe('success');
+      expect(setValues.phase).toBe('completed');
       expect(setValues.finishedAt).toBeInstanceOf(Date);
       expect(setValues.costUsd).toBe('0.042000');
       expect(setValues.tokensIn).toBe(1500);
@@ -509,6 +511,7 @@ describe('DbAgentRegistry', () => {
       await registry.completeRun('run-001', { status: 'failure' });
 
       const setValues = mockDb.set.mock.calls[0][0];
+      expect(setValues.phase).toBe('failed');
       expect(setValues.costUsd).toBeNull();
       expect(setValues.tokensIn).toBeNull();
       expect(setValues.tokensOut).toBeNull();
@@ -535,6 +538,31 @@ describe('DbAgentRegistry', () => {
       expect(logger.info).toHaveBeenCalledWith(
         expect.objectContaining({ runId: 'run-001', status: 'success' }),
         'Agent run completed',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // updateRunPhase()
+  // -------------------------------------------------------------------------
+
+  describe('updateRunPhase()', () => {
+    it('updates a run phase when the run exists', async () => {
+      mockDb.returning.mockResolvedValue([{ id: 'run-001' }]);
+
+      await registry.updateRunPhase('run-001', 'dispatching');
+
+      expect(mockDb.update).toHaveBeenCalledOnce();
+      expect(mockDb.set).toHaveBeenCalledWith({ phase: 'dispatching' });
+      expect(mockDb.where).toHaveBeenCalledOnce();
+      expect(mockDb.returning).toHaveBeenCalledOnce();
+    });
+
+    it('throws RUN_NOT_FOUND when phase update targets a missing run', async () => {
+      mockDb.returning.mockResolvedValue([]);
+
+      await expect(registry.updateRunPhase('ghost-run', 'running')).rejects.toThrow(
+        ControlPlaneError,
       );
     });
   });
@@ -627,6 +655,7 @@ describe('DbAgentRegistry', () => {
         agentId: 'agent-1',
         trigger: 'manual',
         status: 'success',
+        phase: 'completed',
         startedAt: new Date('2025-06-02'),
         finishedAt: new Date('2025-06-02T00:05:00Z'),
         costUsd: '0.050000',
@@ -645,6 +674,7 @@ describe('DbAgentRegistry', () => {
         agentId: 'agent-1',
         trigger: 'heartbeat',
         status: 'failure',
+        phase: 'failed',
         startedAt: new Date('2025-06-01'),
         finishedAt: new Date('2025-06-01T00:10:00Z'),
         costUsd: null,
@@ -700,6 +730,7 @@ describe('DbAgentRegistry', () => {
         agentId: 'agent-1',
         trigger: 'manual',
         status: 'success',
+        phase: 'completed',
         startedAt: new Date('2025-06-02'),
         finishedAt: new Date('2025-06-02T00:05:00Z'),
         costUsd: 0.05,
@@ -724,6 +755,7 @@ describe('DbAgentRegistry', () => {
           agentId: 'agent-1',
           trigger: 'manual',
           status: 'success',
+          phase: 'completed',
           startedAt: new Date('2026-03-11T10:00:00.000Z'),
           finishedAt: new Date('2026-03-11T10:01:00.000Z'),
           costUsd: '0.050000',

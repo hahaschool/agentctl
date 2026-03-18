@@ -61,6 +61,7 @@ export const agentRuns = pgTable(
     agentId: uuid('agent_id').references(() => agents.id),
     trigger: text('trigger').notNull(),
     status: text('status').notNull(),
+    phase: text('phase').notNull().default('queued'),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
     costUsd: numeric('cost_usd', { precision: 10, scale: 6 }),

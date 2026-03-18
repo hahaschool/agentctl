@@ -10,7 +10,7 @@ import type {
   SessionMode,
 } from './agent.js';
 import { AGENT_RUNTIMES, AGENT_STATUSES } from './agent.js';
-import type { AgentRun, RunStatus, RunTrigger } from './agent-run.js';
+import type { AgentRun, RunPhase, RunStatus, RunTrigger } from './agent-run.js';
 import { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 import type { Machine, MachineCapabilities, MachineStatus } from './machine.js';
 
@@ -450,12 +450,38 @@ describe('RunTrigger', () => {
 });
 
 describe('RunStatus', () => {
-  it('covers all five status types', () => {
-    const statuses: RunStatus[] = ['running', 'success', 'failure', 'timeout', 'cancelled'];
-    expect(statuses).toHaveLength(5);
+  it('covers all six status types', () => {
+    const statuses: RunStatus[] = [
+      'running',
+      'success',
+      'failure',
+      'timeout',
+      'cancelled',
+      'empty',
+    ];
+    expect(statuses).toHaveLength(6);
 
     const unique = new Set(statuses);
-    expect(unique.size).toBe(5);
+    expect(unique.size).toBe(6);
+  });
+});
+
+describe('RunPhase', () => {
+  it('covers all lifecycle phases', () => {
+    const phases: RunPhase[] = [
+      'queued',
+      'dispatching',
+      'worker_contacted',
+      'cli_spawning',
+      'running',
+      'completed',
+      'failed',
+      'empty',
+    ];
+    expect(phases).toHaveLength(8);
+
+    const unique = new Set(phases);
+    expect(unique.size).toBe(8);
   });
 });
 

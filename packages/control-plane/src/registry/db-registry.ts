@@ -4,6 +4,7 @@ import type {
   ExecutionSummary,
   Machine,
   RegisterWorkerRequest,
+  RunPhase,
 } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
 import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
@@ -37,12 +38,22 @@ type CreateRunData = {
 
 type CompleteRunData = {
   status: string;
+  phase?: RunPhase | null;
   sessionId?: string | null;
   costUsd?: string | null;
   tokensIn?: number | null;
   tokensOut?: number | null;
   errorMessage?: string | null;
   resultSummary?: ExecutionSummary | string | null;
+};
+
+const TERMINAL_RUN_PHASE_BY_STATUS: Record<string, RunPhase> = {
+  success: 'completed',
+  failure: 'failed',
+  error: 'failed',
+  timeout: 'failed',
+  cancelled: 'failed',
+  empty: 'empty',
 };
 
 type InsertActionData = {
@@ -363,6 +374,7 @@ export class DbAgentRegistry {
         agentId: data.agentId,
         trigger: data.trigger,
         status: 'running',
+        phase: 'queued',
         startedAt: new Date(),
         model: data.model ?? null,
         provider: data.provider ?? null,
@@ -382,10 +394,13 @@ export class DbAgentRegistry {
   }
 
   async completeRun(runId: string, data: CompleteRunData): Promise<void> {
+    const phase = data.phase ?? this.mapStatusToPhase(data.status);
+
     const result = await this.db
       .update(agentRuns)
       .set({
         status: data.status,
+        phase,
         ...(data.sessionId !== undefined ? { sessionId: data.sessionId ?? null } : {}),
         finishedAt: new Date(),
         costUsd: data.costUsd ?? null,
@@ -421,6 +436,20 @@ export class DbAgentRegistry {
     }
 
     this.logger.info({ runId, status: data.status }, 'Agent run completed');
+  }
+
+  async updateRunPhase(runId: string, phase: RunPhase): Promise<void> {
+    const result = await this.db
+      .update(agentRuns)
+      .set({ phase })
+      .where(eq(agentRuns.id, runId))
+      .returning({ id: agentRuns.id });
+
+    if (result.length === 0) {
+      throw new ControlPlaneError('RUN_NOT_FOUND', `Run '${runId}' does not exist`, { runId });
+    }
+
+    this.logger.debug({ runId, phase }, 'Agent run phase updated');
   }
 
   async computeAgentCostFromRuns(
@@ -887,6 +916,7 @@ export class DbAgentRegistry {
       agentId: row.agentId ?? '',
       trigger: row.trigger as AgentRun['trigger'],
       status: row.status as AgentRun['status'],
+      phase: (row.phase ?? this.mapStatusToPhase(row.status)) as AgentRun['phase'],
       startedAt: row.startedAt,
       finishedAt: row.finishedAt,
       costUsd: row.costUsd ? Number(row.costUsd) : null,
@@ -900,5 +930,13 @@ export class DbAgentRegistry {
       retryOf: row.retryOf ?? null,
       retryIndex: row.retryIndex ?? null,
     };
+  }
+
+  private mapStatusToPhase(status: string): RunPhase {
+    if (status === 'running') {
+      return 'running';
+    }
+
+    return TERMINAL_RUN_PHASE_BY_STATUS[status] ?? 'queued';
   }
 }

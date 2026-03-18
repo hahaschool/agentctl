@@ -1034,6 +1034,7 @@ export class AgentInstance extends EventEmitter {
     status: 'success' | 'failure' | 'empty',
     errorMessage?: string,
   ): Promise<void> {
+    const phase = this.completionStatusToPhase(status);
     const resultSummary = this.buildExecutionSummary(status, errorMessage);
     this.emitEvent({
       event: 'execution_summary',
@@ -1055,6 +1056,7 @@ export class AgentInstance extends EventEmitter {
     const body = {
       runId: this.runId,
       status,
+      phase,
       costUsd: this.state.costUsd,
       tokensIn: this.state.tokensIn,
       tokensOut: this.state.tokensOut,
@@ -1106,6 +1108,14 @@ export class AgentInstance extends EventEmitter {
       clearTimeout(this.executionTimer);
       this.executionTimer = null;
     }
+  }
+
+  private completionStatusToPhase(
+    status: 'success' | 'failure' | 'empty',
+  ): 'completed' | 'failed' | 'empty' {
+    if (status === 'success') return 'completed';
+    if (status === 'failure') return 'failed';
+    return 'empty';
   }
 
   /**

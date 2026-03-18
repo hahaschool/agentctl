@@ -21,7 +21,11 @@ import { cn } from '@/lib/utils';
 type RunWithRetryMeta = AgentRun & {
   retryOf?: string | null;
   retryIndex?: number | null;
+  attemptNumber?: number;
+  attemptTotal?: number;
 };
+
+type RunPhase = NonNullable<AgentRun['phase']>;
 
 type RetryRunGroup = {
   groupId: string;
@@ -29,6 +33,7 @@ type RetryRunGroup = {
   previousRuns: RunWithRetryMeta[];
   allRuns: RunWithRetryMeta[];
   retryCount: number;
+  latestActivityAtMs: number;
 };
 
 type DateGroup = {
@@ -55,6 +60,13 @@ export type GroupedRunHistoryProps = {
 const DEFAULT_PAGE_SIZE = 20;
 
 const FAILURE_STATUSES = new Set(['failure', 'error', 'timeout']);
+const ACTIVE_PHASES = new Set<RunPhase>([
+  'queued',
+  'dispatching',
+  'worker_contacted',
+  'cli_spawning',
+  'running',
+]);
 
 // ---------------------------------------------------------------------------
 // Component
@@ -483,15 +495,37 @@ function RunStatusBadge({ status }: { status: string }): React.JSX.Element {
   );
 }
 
+function RunPhaseIndicator({ run }: { run: RunWithRetryMeta }): React.JSX.Element {
+  const phase = resolveRunPhase(run);
+  const tone = getRunPhaseTone(phase);
+
+  return (
+    <span
+      data-phase-indicator={phase}
+      className={cn('inline-flex items-center gap-1 text-[10px] font-medium', tone.textClass)}
+    >
+      <span
+        className={cn(
+          'h-1.5 w-1.5 rounded-full bg-current shrink-0',
+          tone.animated && 'animate-pulse',
+        )}
+      />
+      {tone.label}
+    </span>
+  );
+}
+
 function RetryBadge({ run }: { run: RunWithRetryMeta }): React.JSX.Element | null {
-  if (!run.retryOf) return null;
+  if (!run.attemptTotal || run.attemptTotal <= 1 || !run.attemptNumber) {
+    return null;
+  }
 
   return (
     <Badge
       variant="outline"
       className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground border-border/50 bg-muted/30"
     >
-      Retry #{run.retryIndex ?? 1}
+      Attempt {run.attemptNumber}/{run.attemptTotal}
     </Badge>
   );
 }
@@ -534,6 +568,7 @@ function RunCardMobile({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <RunStatusBadge status={run.status} />
+          <RunPhaseIndicator run={run} />
           <RetryBadge run={run} />
           <TriggerBadge trigger={run.trigger} />
         </div>
@@ -620,6 +655,7 @@ function RunRowDesktop({
         <div className="flex flex-col items-start gap-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <RunStatusBadge status={run.status} />
+            <RunPhaseIndicator run={run} />
             <RetryBadge run={run} />
           </div>
           <RetryOfText run={run} />
@@ -750,19 +786,27 @@ function groupRunsByRetryChain(runs: RunWithRetryMeta[]): RetryRunGroup[] {
   return Array.from(chains.entries())
     .map(([groupId, chainRuns]) => {
       const attemptsAsc = [...chainRuns].sort(compareRunsByAttemptAsc);
-      const leadRun = attemptsAsc.at(-1);
+      const attemptTotal = attemptsAsc.length;
+      const attemptsWithMeta = attemptsAsc.map((run, index) => ({
+        ...run,
+        attemptNumber: index + 1,
+        attemptTotal,
+      }));
+      const leadRun = attemptsWithMeta[0];
       if (!leadRun) return null;
 
+      const latestRun = attemptsWithMeta.at(-1);
       return {
         groupId,
         leadRun,
-        previousRuns: attemptsAsc.slice(0, -1).reverse(),
-        allRuns: attemptsAsc,
-        retryCount: Math.max(0, attemptsAsc.length - 1),
+        previousRuns: attemptsWithMeta.slice(1),
+        allRuns: attemptsWithMeta,
+        retryCount: Math.max(0, attemptTotal - 1),
+        latestActivityAtMs: toEpochMs(latestRun?.startedAt ?? leadRun.startedAt),
       };
     })
     .filter((group): group is RetryRunGroup => group !== null)
-    .sort((a, b) => toEpochMs(b.leadRun.startedAt) - toEpochMs(a.leadRun.startedAt));
+    .sort((a, b) => b.latestActivityAtMs - a.latestActivityAtMs);
 }
 
 function findRootRunId(run: RunWithRetryMeta, runsById: Map<string, RunWithRetryMeta>): string {
@@ -848,6 +892,96 @@ function getRunStatusTone(status: string): {
   return {
     label: toTitleCase(status),
     badgeClass: 'bg-muted text-muted-foreground border-border/50',
+  };
+}
+
+function resolveRunPhase(run: RunWithRetryMeta): RunPhase {
+  if (run.phase) {
+    return run.phase;
+  }
+
+  if (run.status === 'running') {
+    return 'running';
+  }
+
+  if (run.status === 'success') {
+    return 'completed';
+  }
+
+  if (run.status === 'empty') {
+    return 'empty';
+  }
+
+  if (FAILURE_STATUSES.has(run.status)) {
+    return 'failed';
+  }
+
+  return 'queued';
+}
+
+function getRunPhaseTone(phase: RunPhase): { label: string; textClass: string; animated: boolean } {
+  const animated = ACTIVE_PHASES.has(phase);
+
+  if (phase === 'queued') {
+    return {
+      label: 'Queued',
+      textClass: 'text-muted-foreground',
+      animated,
+    };
+  }
+
+  if (phase === 'dispatching') {
+    return {
+      label: 'Dispatching',
+      textClass: 'text-blue-600 dark:text-blue-400',
+      animated,
+    };
+  }
+
+  if (phase === 'worker_contacted') {
+    return {
+      label: 'Worker contacted',
+      textClass: 'text-cyan-600 dark:text-cyan-400',
+      animated,
+    };
+  }
+
+  if (phase === 'cli_spawning') {
+    return {
+      label: 'CLI spawning',
+      textClass: 'text-sky-600 dark:text-sky-400',
+      animated,
+    };
+  }
+
+  if (phase === 'running') {
+    return {
+      label: 'Running',
+      textClass: 'text-yellow-600 dark:text-yellow-400',
+      animated,
+    };
+  }
+
+  if (phase === 'completed') {
+    return {
+      label: 'Completed',
+      textClass: 'text-green-600 dark:text-green-400',
+      animated: false,
+    };
+  }
+
+  if (phase === 'failed') {
+    return {
+      label: 'Failed',
+      textClass: 'text-red-600 dark:text-red-400',
+      animated: false,
+    };
+  }
+
+  return {
+    label: 'No output',
+    textClass: 'text-muted-foreground',
+    animated: false,
   };
 }
 

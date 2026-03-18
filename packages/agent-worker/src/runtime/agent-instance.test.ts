@@ -1171,6 +1171,7 @@ describe('AgentInstance', () => {
       expect(callBody.runId).toBe('run-42');
       // With 0 cost/tokens, resolveCompletionStatus returns 'empty'
       expect(callBody.status).toBe('empty');
+      expect(callBody.phase).toBe('empty');
 
       fetchSpy.mockRestore();
       vi.runAllTimers();
@@ -1386,6 +1387,7 @@ describe('AgentInstance', () => {
 
       const callBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
       expect(callBody.status).toBe('failure');
+      expect(callBody.phase).toBe('failed');
       expect(callBody.errorMessage).toContain('SDK crashed');
       expect(callBody.resultSummary).toMatchObject({
         status: 'failure',

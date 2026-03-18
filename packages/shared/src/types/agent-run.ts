@@ -4,11 +4,23 @@ export type RunTrigger = 'schedule' | 'manual' | 'signal' | 'adhoc' | 'heartbeat
 
 export type RunStatus = 'running' | 'success' | 'failure' | 'timeout' | 'cancelled' | 'empty';
 
+export type RunPhase =
+  | 'queued'
+  | 'dispatching'
+  | 'worker_contacted'
+  | 'cli_spawning'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'empty';
+
 export type AgentRun = {
   id: string;
   agentId: string;
   trigger: RunTrigger;
   status: RunStatus;
+  /** Lifecycle phase for dispatch/execution visibility. */
+  phase?: RunPhase | null;
   startedAt: Date;
   finishedAt: Date | null;
   costUsd: number | null;

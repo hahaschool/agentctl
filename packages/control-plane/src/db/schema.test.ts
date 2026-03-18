@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentType, RunStatus, RunTrigger } from '@agentctl/shared';
+import type { AgentStatus, AgentType, RunPhase, RunStatus, RunTrigger } from '@agentctl/shared';
 import { AGENT_STATUSES } from '@agentctl/shared';
 import { getTableColumns, getTableName } from 'drizzle-orm';
 import { getTableConfig } from 'drizzle-orm/pg-core';
@@ -396,8 +396,8 @@ describe('agents table columns', () => {
 describe('agentRuns table columns', () => {
   const meta = getColumnMeta(agentRuns);
 
-  it('has exactly 18 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(18);
+  it('has exactly 19 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(19);
   });
 
   it('has all expected column keys', () => {
@@ -406,6 +406,7 @@ describe('agentRuns table columns', () => {
       'agentId',
       'trigger',
       'status',
+      'phase',
       'startedAt',
       'finishedAt',
       'costUsd',
@@ -456,6 +457,12 @@ describe('agentRuns table columns', () => {
     expect(meta.status.columnType).toBe('PgText');
     expect(meta.status.notNull).toBe(true);
     expect(meta.status.hasDefault).toBe(false);
+  });
+
+  it('phase is a not-null text column with queued default', () => {
+    expect(meta.phase.columnType).toBe('PgText');
+    expect(meta.phase.notNull).toBe(true);
+    expect(meta.phase.hasDefault).toBe(true);
   });
 
   it('started_at is a not-null timestamp', () => {
@@ -527,6 +534,7 @@ describe('agentRuns table columns', () => {
       'agent_id',
       'trigger',
       'status',
+      'phase',
       'started_at',
       'finished_at',
       'cost_usd',
@@ -713,13 +721,13 @@ describe('Required (NOT NULL) vs nullable columns', () => {
     ]);
   });
 
-  it('agentRuns: id, trigger, status, started_at are NOT NULL', () => {
+  it('agentRuns: id, trigger, status, phase, started_at are NOT NULL', () => {
     const meta = getColumnMeta(agentRuns);
     const notNullKeys = Object.entries(meta)
       .filter(([, m]) => m.notNull)
       .map(([key]) => key);
 
-    expect(notNullKeys).toEqual(['id', 'trigger', 'status', 'startedAt']);
+    expect(notNullKeys).toEqual(['id', 'trigger', 'status', 'phase', 'startedAt']);
   });
 
   it('agentRuns: agent_id, finished_at, cost, tokens, etc. are nullable', () => {
@@ -813,12 +821,37 @@ describe('Enum compatibility with shared package types', () => {
   });
 
   it('RunStatus values are valid strings for agentRuns.status text column', () => {
-    const statuses: RunStatus[] = ['running', 'success', 'failure', 'timeout', 'cancelled'];
-    expect(statuses).toHaveLength(5);
+    const statuses: RunStatus[] = [
+      'running',
+      'success',
+      'failure',
+      'timeout',
+      'cancelled',
+      'empty',
+    ];
+    expect(statuses).toHaveLength(6);
 
     const meta = getColumnMeta(agentRuns);
     expect(meta.status.columnType).toBe('PgText');
     expect(meta.status.dataType).toBe('string');
+  });
+
+  it('RunPhase values are valid strings for agentRuns.phase text column', () => {
+    const phases: RunPhase[] = [
+      'queued',
+      'dispatching',
+      'worker_contacted',
+      'cli_spawning',
+      'running',
+      'completed',
+      'failed',
+      'empty',
+    ];
+    expect(phases).toHaveLength(8);
+
+    const meta = getColumnMeta(agentRuns);
+    expect(meta.phase.columnType).toBe('PgText');
+    expect(meta.phase.dataType).toBe('string');
   });
 
   it('machines.status default matches a valid MachineStatus', () => {

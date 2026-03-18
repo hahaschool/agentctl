@@ -64,6 +64,7 @@ export function createMockDbRegistry(overrides: Partial<DbAgentRegistry> = {}): 
     getAgent: vi.fn().mockResolvedValue(makeAgent()),
     getMachine: vi.fn().mockResolvedValue(makeMachine()),
     createRun: vi.fn().mockResolvedValue('run-001'),
+    updateRunPhase: vi.fn().mockResolvedValue(undefined),
     completeRun: vi.fn().mockResolvedValue(undefined),
     registerMachine: vi.fn(),
     heartbeat: vi.fn(),
