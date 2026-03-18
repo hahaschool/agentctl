@@ -5,6 +5,7 @@ import { Filter, Server } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { CopyableText } from '../components/CopyableText';
@@ -186,21 +187,42 @@ export function MachinesPage(): React.JSX.Element {
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-6">
-        <StatCard label="Total Machines" value={String(list.length)} accent="blue" />
-        <StatCard label="Online" value={String(online)} accent={online > 0 ? 'green' : undefined} />
-        <StatCard
-          label="Offline"
-          value={String(offline)}
-          accent={offline > 0 ? 'red' : undefined}
-          sublabel={offline > 0 ? 'Needs attention' : 'All clear'}
-        />
-        <StatCard
-          label="Degraded"
-          value={String(degraded)}
-          accent={degraded > 0 ? 'yellow' : undefined}
-          sublabel={degraded > 0 ? 'Partial issues' : 'Healthy'}
-        />
+      <div className="mb-6 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <StatCard
+            label="Online Machines"
+            value={`${online} / ${list.length}`}
+            accent={online > 0 ? 'green' : undefined}
+            sublabel={
+              offline > 0 || degraded > 0
+                ? `${offline} offline · ${degraded} degraded`
+                : 'All clear'
+            }
+          />
+        </div>
+        <div className="rounded-lg border border-border/50 bg-card/90 px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+            <InlineMachineStat
+              label="Total"
+              value={String(list.length)}
+              testId="machines-inline-stat-total"
+            />
+            <InlineMachineStat
+              label="Offline"
+              value={String(offline)}
+              tone={offline > 0 ? 'danger' : 'muted'}
+              helper={offline > 0 ? 'Needs attention' : 'All clear'}
+              testId="machines-inline-stat-offline"
+            />
+            <InlineMachineStat
+              label="Degraded"
+              value={String(degraded)}
+              tone={degraded > 0 ? 'warn' : 'muted'}
+              helper={degraded > 0 ? 'Partial issues' : 'Healthy'}
+              testId="machines-inline-stat-degraded"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Machine cards or empty state */}
@@ -241,6 +263,42 @@ export function MachinesPage(): React.JSX.Element {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inline status metric
+// ---------------------------------------------------------------------------
+
+function InlineMachineStat({
+  label,
+  value,
+  helper,
+  tone = 'muted',
+  testId,
+}: {
+  label: string;
+  value: string;
+  helper?: string;
+  tone?: 'muted' | 'warn' | 'danger';
+  testId?: string;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-2 min-w-0" data-testid={testId}>
+      <Badge variant="outline" className="border-border/60 bg-background/40">
+        {label}
+      </Badge>
+      <span
+        className={cn(
+          'font-mono text-foreground',
+          tone === 'danger' && 'text-red-500 dark:text-red-400',
+          tone === 'warn' && 'text-yellow-500 dark:text-yellow-400',
+        )}
+      >
+        {value}
+      </span>
+      {helper && <span className="text-muted-foreground whitespace-nowrap">{helper}</span>}
     </div>
   );
 }

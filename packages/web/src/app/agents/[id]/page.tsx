@@ -323,12 +323,12 @@ export default function AgentDetailPage(): React.JSX.Element {
 
         <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex w-full items-center gap-2 sm:w-auto">
-            <Link href={`/agents/${agentId}/settings`}>
-              <Button variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/agents/${agentId}/settings`}>
                 <Settings className="h-3.5 w-3.5 mr-1.5" />
                 Settings
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {data.status === 'running' ? (
@@ -402,6 +402,7 @@ export default function AgentDetailPage(): React.JSX.Element {
               Cancel
             </Button>
             <Button
+              variant="secondary"
               onClick={handleStart}
               disabled={(!prompt.trim() && !data.config?.defaultPrompt) || isStarting}
             >

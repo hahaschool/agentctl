@@ -375,7 +375,7 @@ describe('SettingsView', () => {
     renderSettings();
     await waitFor(() => {
       expect(screen.getByText('Error')).toBeDefined();
-      expect(screen.getByText('10ms')).toBeDefined();
+      expect(screen.getByText(/10ms/)).toBeDefined();
     });
   });
 

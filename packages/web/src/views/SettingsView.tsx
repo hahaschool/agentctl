@@ -396,27 +396,43 @@ function ConnectionSection(): React.JSX.Element {
 
       {h?.dependencies && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {Object.entries(h.dependencies).map(([name, dep]) => (
-            <div
-              key={name}
-              className={cn(
-                'rounded-lg border px-3.5 py-2.5 text-center',
-                dep.status === 'ok'
-                  ? 'border-green-500/20 bg-green-500/5'
-                  : 'border-red-500/20 bg-red-500/5',
-              )}
-            >
-              <div className="text-[11px] text-muted-foreground capitalize">{name}</div>
+          {Object.entries(h.dependencies).map(([name, dep]) => {
+            const latencyMs = typeof dep.latencyMs === 'number' ? dep.latencyMs : null;
+            const isOk = dep.status === 'ok';
+            const isError = !isOk;
+            const isFast = isOk && latencyMs !== null && latencyMs < 10;
+            const isSlow = isOk && !isFast;
+            const statusLabel = isError ? 'ERR' : isSlow ? 'SLOW' : 'OK';
+            const latencyLabel = latencyMs !== null ? `${latencyMs}ms` : '-';
+
+            return (
               <div
+                key={name}
                 className={cn(
-                  'text-[12px] font-medium mt-0.5',
-                  dep.status === 'ok' ? 'text-green-500' : 'text-red-600 dark:text-red-400',
+                  'rounded-lg border px-3.5 py-2.5 text-center',
+                  isError
+                    ? 'border-red-500/20 bg-red-500/5'
+                    : isFast
+                      ? 'border-green-500/20 bg-green-500/5'
+                      : 'border-yellow-500/20 bg-yellow-500/5',
                 )}
               >
-                {dep.status === 'ok' ? `${dep.latencyMs}ms` : 'Error'}
+                <div className="text-[11px] text-muted-foreground capitalize">{name}</div>
+                <div
+                  className={cn(
+                    'text-[12px] font-medium mt-0.5',
+                    isError
+                      ? 'text-red-600 dark:text-red-400'
+                      : isFast
+                        ? 'text-green-500'
+                        : 'text-yellow-600 dark:text-yellow-400',
+                  )}
+                >
+                  {isError ? 'Error' : `${latencyLabel} ${statusLabel}`}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
