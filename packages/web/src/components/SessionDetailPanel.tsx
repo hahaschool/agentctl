@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import type React from 'react';
-
 import { cn } from '@/lib/utils';
 import type { ApiAccount, Session } from '../lib/api';
-import { formatDateTime, formatDuration } from '../lib/format-utils';
+import { formatCost, formatDateTime, formatDuration } from '../lib/format-utils';
 import { MODEL_OPTIONS_WITH_DEFAULT as MODEL_OPTIONS } from '../lib/model-options';
 import { ConfirmButton } from './ConfirmButton';
 import { ConvertToAgentForm } from './ConvertToAgentForm';
 import { CopyableText } from './CopyableText';
+import type { ContextPickerDialogProps } from './context-picker';
 import { DetailRow } from './DetailRow';
 import { GitStatusBadge } from './GitStatusBadge';
 import { SessionContent } from './SessionContent';
@@ -38,8 +38,21 @@ type SessionDetailPanelProps = {
   onConvertToAgent: () => void;
   onOpenConvertDialog: () => void;
   onCloseConvertDialog: () => void;
-  onOpenForkPicker: () => void;
+  onOpenForkPicker: (defaultTab?: ContextPickerDialogProps['defaultTab']) => void;
 };
+
+function inferRuntimeLabel(session: Session): 'Claude' | 'Codex' {
+  const metadataRuntime =
+    typeof session.metadata?.runtime === 'string' ? session.metadata.runtime.toLowerCase() : '';
+  if (metadataRuntime.includes('codex')) return 'Codex';
+  if (metadataRuntime.includes('claude')) return 'Claude';
+
+  const model = (
+    session.model ?? (typeof session.metadata?.model === 'string' ? session.metadata.model : '')
+  ).toLowerCase();
+  if (model.includes('codex') || model.startsWith('gpt-')) return 'Codex';
+  return 'Claude';
+}
 
 export function SessionDetailPanel({
   session: selected,
@@ -66,6 +79,18 @@ export function SessionDetailPanel({
   onCloseConvertDialog,
   onOpenForkPicker,
 }: SessionDetailPanelProps): React.JSX.Element {
+  const agentLabel = selected.agentName ? selected.agentName : selected.agentId.slice(0, 8);
+  const runtimeLabel = inferRuntimeLabel(selected);
+  const modelLabel =
+    selected.model ??
+    (typeof selected.metadata?.model === 'string' ? selected.metadata.model : 'default');
+  const durationLabel = formatDuration(selected.startedAt, selected.endedAt);
+  const costLabel = formatCost(
+    typeof selected.metadata?.costUsd === 'number' ? selected.metadata.costUsd : 0,
+  );
+  const canResumeQuickAction =
+    selected.status === 'ended' || selected.status === 'error' || selected.status === 'paused';
+
   return (
     <>
       {/* Header */}
@@ -81,25 +106,37 @@ export function SessionDetailPanel({
             >
               {'\u2190'}
             </button>
-            <div className="flex items-center gap-2.5">
-              <CopyableText
-                value={selected.id}
-                maxDisplay={16}
-                className="font-mono text-[13px] font-semibold text-foreground/90"
-              />
-              <StatusBadge status={selected.status} />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-foreground">{agentLabel}</div>
+              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                <StatusBadge status={selected.status} />
+                <span
+                  className={cn(
+                    'inline-flex h-6 items-center rounded-md border px-2 text-[11px] font-medium',
+                    runtimeLabel === 'Codex'
+                      ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                      : 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300',
+                  )}
+                >
+                  {runtimeLabel}
+                </span>
+                <span className="inline-flex h-6 items-center rounded-md border border-border bg-muted px-2 text-[11px] font-mono text-foreground/80">
+                  {modelLabel}
+                </span>
+                <CopyableText
+                  value={selected.id}
+                  maxDisplay={16}
+                  className="font-mono text-[11px] text-muted-foreground"
+                />
+              </div>
+              <div className="mt-1.5 text-xs text-muted-foreground flex gap-2 flex-wrap items-center">
+                <span>{durationLabel}</span>
+                <span className="text-muted-foreground/40">&#x2022;</span>
+                <span>{costLabel}</span>
+                <span className="text-muted-foreground/40">&#x2022;</span>
+                <span>{selected.machineId}</span>
+              </div>
             </div>
-          </div>
-          <div className="text-xs text-muted-foreground flex gap-3 flex-wrap mt-1.5 items-center">
-            <span className="font-medium text-foreground/70">
-              {selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}
-            </span>
-            <span className="text-muted-foreground/40">|</span>
-            <span>{selected.machineId}</span>
-            <span className="text-muted-foreground/40">|</span>
-            <span className="text-purple-600/80 dark:text-purple-400/80">
-              {selected.model ?? 'default'}
-            </span>
           </div>
         </div>
         <div className="flex gap-2 items-center shrink-0 flex-wrap">
@@ -110,19 +147,37 @@ export function SessionDetailPanel({
             Open Full View
           </Link>
           {selected.claudeSessionId && (
-            <Link
-              href={`/sessions/${selected.id}`}
-              className="h-8 px-3.5 bg-blue-100/50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-300/40 dark:border-blue-800/40 rounded-md text-xs font-medium no-underline transition-all duration-200 hover:bg-blue-200/70 dark:hover:bg-blue-900/70 inline-flex items-center"
-              title="Fork this session in Full View"
+            <button
+              type="button"
+              onClick={() => onOpenForkPicker('fork')}
+              disabled={forkPickerLoading}
+              className="h-8 px-3.5 bg-blue-100/50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-300/40 dark:border-blue-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-blue-200/70 dark:hover:bg-blue-900/70 disabled:opacity-50"
+              title="Fork this session with context picker"
             >
-              Fork
-            </Link>
+              {forkPickerLoading ? 'Loading...' : 'Fork'}
+            </button>
+          )}
+          {canResumeQuickAction && (
+            <button
+              type="button"
+              onClick={onSend}
+              aria-label="Quick resume session"
+              disabled={sending || !prompt.trim()}
+              className={cn(
+                'h-8 px-3.5 rounded-md text-xs font-medium transition-all duration-200',
+                sending || !prompt.trim()
+                  ? 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'
+                  : 'bg-emerald-600 text-white border border-emerald-600 cursor-pointer hover:bg-emerald-500',
+              )}
+            >
+              {sending ? 'Resuming...' : 'Resume'}
+            </button>
           )}
           <button
             type="button"
             onClick={() => {
               if (selected.claudeSessionId && selected.machineId) {
-                onOpenForkPicker();
+                onOpenForkPicker('agent');
               } else {
                 onOpenConvertDialog();
               }
@@ -150,11 +205,7 @@ export function SessionDetailPanel({
         <div className="bg-card rounded-lg p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
           <DetailRow label="ID" value={selected.id} mono />
           <DetailRow label="Status" value={selected.status} />
-          <DetailRow
-            label="Agent"
-            value={selected.agentName ? selected.agentName : selected.agentId.slice(0, 8)}
-            mono
-          />
+          <DetailRow label="Agent" value={agentLabel} mono />
           <DetailRow label="Machine" value={selected.machineId} mono />
           <DetailRow label="Project" value={selected.projectPath ?? '-'} mono />
           <DetailRow label="Claude Session" value={selected.claudeSessionId ?? '-'} mono />
@@ -172,10 +223,7 @@ export function SessionDetailPanel({
           )}
           <DetailRow label="Started" value={formatDateTime(selected.startedAt)} />
           {selected.endedAt && <DetailRow label="Ended" value={formatDateTime(selected.endedAt)} />}
-          <DetailRow
-            label="Duration"
-            value={formatDuration(selected.startedAt, selected.endedAt)}
-          />
+          <DetailRow label="Duration" value={durationLabel} />
         </div>
 
         {/* Git status */}

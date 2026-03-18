@@ -1,6 +1,5 @@
 'use client';
 
-import { useQueryClient } from '@tanstack/react-query';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -8,8 +7,7 @@ import { cn } from '@/lib/utils';
 import { useNotificationContext } from '../contexts/notification-context';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
-import { useWebSocket, type WsIncomingMessage } from '../hooks/use-websocket';
-import type { PermissionDecision, PermissionRequest, SessionContentMessage } from '../lib/api';
+import type { SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
 import { formatTime } from '../lib/format-utils';
 import { getMessageStyle } from '../lib/message-styles';
@@ -17,7 +15,6 @@ import { MESSAGE_TRUNCATE_THRESHOLD, SESSION_CONTENT_PAGE_SIZE } from '../lib/ui
 import { AnsiSpan, AnsiText } from './AnsiText';
 import { ErrorBanner } from './ErrorBanner';
 import { MarkdownContent } from './MarkdownContent';
-import { PermissionRequestCard } from './PermissionRequestCard';
 import { ProgressIndicator } from './ProgressIndicator';
 import { SubagentBlock } from './SubagentBlock';
 import { TerminalView } from './TerminalView';
@@ -26,22 +23,27 @@ import { TodoBlock } from './TodoBlock';
 
 export const CONTENT_POLL_MS = 3_000;
 
-function parseTimestampToMs(timestamp: string | undefined, fallback: number): number {
-  if (!timestamp) return fallback;
-  const parsed = new Date(timestamp).getTime();
-  return Number.isNaN(parsed) ? fallback : parsed;
-}
-
-function upsertPermissionRequest(
-  requests: PermissionRequest[],
-  incoming: PermissionRequest,
-): PermissionRequest[] {
-  const existingIndex = requests.findIndex((request) => request.id === incoming.id);
-  if (existingIndex === -1) return [...requests, incoming];
-
-  const next = [...requests];
-  next[existingIndex] = incoming;
-  return next;
+function SessionContentSkeleton(): React.JSX.Element {
+  return (
+    <div className="p-4 space-y-3">
+      <div className="text-[11px] text-muted-foreground">
+        Loading session messages from worker...
+      </div>
+      {[1, 2, 3, 4].map((i) => (
+        <div
+          key={`msg-sk-${String(i)}`}
+          className={cn(
+            'rounded-lg border border-border/40 bg-card/40 p-3',
+            i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0',
+          )}
+        >
+          <Skeleton className="h-3 w-16 mb-2" />
+          <Skeleton className="h-3 w-full mb-1" />
+          <Skeleton className="h-3 w-3/4" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function SessionContent({
@@ -59,13 +61,11 @@ export function SessionContent({
   isActive?: boolean;
   lastSentMessage?: { text: string; ts: number } | null;
 }): React.JSX.Element {
-  const queryClient = useQueryClient();
   const { addNotification } = useNotificationContext();
   const addNotificationRef = useRef(addNotification);
   addNotificationRef.current = addNotification;
 
   const [allMessages, setAllMessages] = useState<SessionContentMessage[]>([]);
-  const [permissionRequests, setPermissionRequests] = useState<PermissionRequest[]>([]);
   const [totalMessages, setTotalMessages] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,45 +122,6 @@ export function SessionContent({
         }
       },
       [rcSessionId],
-    ),
-  });
-
-  useEffect(() => {
-    if (!sessionId && !rcSessionId) return;
-    setPermissionRequests([]);
-  }, [sessionId, rcSessionId]);
-
-  const handleResolvePermissionRequest = useCallback(
-    async (id: string, decision: PermissionDecision): Promise<void> => {
-      const resolved = await api.resolvePermissionRequest(id, decision);
-      setPermissionRequests((prev) => upsertPermissionRequest(prev, resolved));
-      await queryClient.invalidateQueries({ queryKey: ['permission-requests'] });
-    },
-    [queryClient],
-  );
-
-  useWebSocket({
-    enabled: Boolean(rcSessionId),
-    onMessage: useCallback(
-      (message: WsIncomingMessage) => {
-        if (
-          message.type !== 'permission_request_created' &&
-          message.type !== 'permission_request_resolved'
-        ) {
-          return;
-        }
-
-        const request = message.data;
-        if (request.sessionId !== rcSessionId && request.sessionId !== sessionId) {
-          return;
-        }
-
-        setPermissionRequests((prev) => upsertPermissionRequest(prev, request));
-        if (message.type === 'permission_request_resolved') {
-          void queryClient.invalidateQueries({ queryKey: ['permission-requests'] });
-        }
-      },
-      [rcSessionId, sessionId, queryClient],
     ),
   });
 
@@ -257,12 +218,8 @@ export function SessionContent({
 
   // Auto-scroll when new messages arrive at the END (not when prepending older)
   useEffect(() => {
-    if (
-      (allMessages.length > 0 || permissionRequests.length > 0) &&
-      scrollRef.current &&
-      !prependingRef.current
-    ) {
-      const newCount = allMessages.length + permissionRequests.length;
+    if (allMessages.length > 0 && scrollRef.current && !prependingRef.current) {
+      const newCount = allMessages.length;
       if (newCount > prevMsgCountRef.current && autoScroll) {
         const isInitialLoad = prevMsgCountRef.current === 0;
         // Use instant scroll on initial load so user sees the latest messages immediately
@@ -275,7 +232,7 @@ export function SessionContent({
       }
       prevMsgCountRef.current = newCount;
     }
-  }, [allMessages.length, permissionRequests.length, autoScroll]);
+  }, [allMessages.length, autoScroll]);
 
   // Clear optimistic messages when the real human message arrives (count-based)
   useEffect(() => {
@@ -422,28 +379,6 @@ export function SessionContent({
     return merged;
   }, [filteredMessages, optimisticMessages]);
 
-  const streamItems = useMemo(() => {
-    const messageItems = messages.map((message, index) => ({
-      kind: 'message' as const,
-      key: `message-${String(index)}-${message.type}`,
-      sortMs: parseTimestampToMs(message.timestamp, index),
-      message,
-    }));
-    const permissionItems = permissionRequests.map((permissionRequest, index) => ({
-      kind: 'permission' as const,
-      key: `permission-${permissionRequest.id}`,
-      sortMs: parseTimestampToMs(permissionRequest.requestedAt, messages.length + index + 1),
-      permissionRequest,
-    }));
-
-    const combined = [...messageItems, ...permissionItems];
-    combined.sort((a, b) => {
-      if (a.sortMs === b.sortMs) return a.key.localeCompare(b.key);
-      return a.sortMs - b.sortMs;
-    });
-    return combined;
-  }, [messages, permissionRequests]);
-
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Controls */}
@@ -575,30 +510,14 @@ export function SessionContent({
             onScroll={handleScroll}
             className="absolute inset-0 overflow-auto px-5 py-2"
           >
-            {loading && (
-              <div className="p-4 space-y-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div
-                    key={`msg-sk-${String(i)}`}
-                    className={cn('rounded-lg p-3', i % 2 === 0 ? 'ml-0 mr-8' : 'ml-8 mr-0')}
-                  >
-                    <Skeleton className="h-3 w-16 mb-2" />
-                    <Skeleton className="h-3 w-full mb-1" />
-                    <Skeleton className="h-3 w-3/4" />
-                  </div>
-                ))}
+            {loading && <SessionContentSkeleton />}
+            {error && <ErrorBanner message={error} onRetry={() => void fetchLatest()} />}
+            {allMessages.length > 0 && filteredMessages.length === 0 && !loading && (
+              <div className="p-5 text-center text-muted-foreground text-xs">
+                No messages match current filters
               </div>
             )}
-            {error && <ErrorBanner message={error} onRetry={() => void fetchLatest()} />}
-            {allMessages.length > 0 &&
-              filteredMessages.length === 0 &&
-              permissionRequests.length === 0 &&
-              !loading && (
-                <div className="p-5 text-center text-muted-foreground text-xs">
-                  No messages match current filters
-                </div>
-              )}
-            {allMessages.length === 0 && permissionRequests.length === 0 && !loading && !error && (
+            {allMessages.length === 0 && !loading && !error && (
               <div className="p-5 text-center text-muted-foreground text-xs">No messages yet</div>
             )}
             {/* Load older messages button */}
@@ -616,19 +535,7 @@ export function SessionContent({
                 </button>
               </div>
             )}
-            {streamItems.map((item, i) => {
-              if (item.kind === 'permission') {
-                return (
-                  <PermissionRequestCard
-                    key={item.key}
-                    permissionRequest={item.permissionRequest}
-                    onResolve={handleResolvePermissionRequest}
-                    className="mb-2"
-                  />
-                );
-              }
-
-              const msg = item.message;
+            {messages.map((msg, i) => {
               switch (msg.type) {
                 case 'thinking':
                   return (

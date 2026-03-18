@@ -17,42 +17,36 @@ const {
   mockAccountsQuery,
   mockMachinesQuery,
   mockRuntimeSessionHandoffsQuery,
-  mockRuntimeSessionManualTakeoverQuery,
   mockRuntimeSessionPreflightQuery,
   mockListMachines,
   mockCreateSession,
   mockResumeRuntimeSessionMutateAsync,
   mockForkRuntimeSessionMutateAsync,
   mockHandoffRuntimeSessionMutateAsync,
-  mockStartRuntimeSessionManualTakeoverMutateAsync,
-  mockStopRuntimeSessionManualTakeoverMutateAsync,
+  mockForkSessionMutate,
   mockSendMessage,
   mockResumeSession,
   mockDeleteSession,
   mockGetSessionContent,
   mockPathBadge,
-  mockRouterPush,
 } = vi.hoisted(() => ({
   mockSessionsQuery: vi.fn(),
   mockRuntimeSessionsQuery: vi.fn(),
   mockAccountsQuery: vi.fn(),
   mockMachinesQuery: vi.fn(),
   mockRuntimeSessionHandoffsQuery: vi.fn(),
-  mockRuntimeSessionManualTakeoverQuery: vi.fn(),
   mockRuntimeSessionPreflightQuery: vi.fn(),
   mockListMachines: vi.fn(),
   mockCreateSession: vi.fn(),
   mockResumeRuntimeSessionMutateAsync: vi.fn(),
   mockForkRuntimeSessionMutateAsync: vi.fn(),
   mockHandoffRuntimeSessionMutateAsync: vi.fn(),
-  mockStartRuntimeSessionManualTakeoverMutateAsync: vi.fn(),
-  mockStopRuntimeSessionManualTakeoverMutateAsync: vi.fn(),
+  mockForkSessionMutate: vi.fn(),
   mockSendMessage: vi.fn(),
   mockResumeSession: vi.fn(),
   mockDeleteSession: vi.fn(),
   mockGetSessionContent: vi.fn(),
   mockPathBadge: vi.fn(),
-  mockRouterPush: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -67,17 +61,6 @@ vi.mock('@/hooks/use-session-stream', () => ({
   useSessionStream: () => ({
     connected: false,
     streamOutput: [],
-  }),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockRouterPush,
-    replace: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-    prefetch: vi.fn(),
-    refresh: vi.fn(),
   }),
 }));
 
@@ -181,9 +164,21 @@ vi.mock('@/lib/queries', () => ({
   machinesQuery: () => mockMachinesQuery(),
   runtimeSessionHandoffsQuery: (id: string, limit?: number) =>
     mockRuntimeSessionHandoffsQuery(id, limit),
-  runtimeSessionManualTakeoverQuery: (id: string) => mockRuntimeSessionManualTakeoverQuery(id),
   runtimeSessionPreflightQuery: (id: string, params: Record<string, unknown>) =>
     mockRuntimeSessionPreflightQuery(id, params),
+  runtimeSessionManualTakeoverQuery: (id: string) => ({
+    queryKey: ['runtime-sessions', id, 'manual-takeover'],
+    queryFn: vi.fn().mockResolvedValue({
+      sessionId: id,
+      mode: null,
+      requestedBy: null,
+      startedAt: null,
+      expiresAt: null,
+      heartbeatAt: null,
+      metadata: null,
+    }),
+    enabled: Boolean(id),
+  }),
   useResumeRuntimeSession: () => ({
     mutateAsync: mockResumeRuntimeSessionMutateAsync,
     isPending: false,
@@ -196,12 +191,16 @@ vi.mock('@/lib/queries', () => ({
     mutateAsync: mockHandoffRuntimeSessionMutateAsync,
     isPending: false,
   }),
+  useForkSession: () => ({
+    mutate: mockForkSessionMutate,
+    isPending: false,
+  }),
   useStartRuntimeSessionManualTakeover: () => ({
-    mutateAsync: mockStartRuntimeSessionManualTakeoverMutateAsync,
+    mutateAsync: vi.fn().mockResolvedValue({ ok: true }),
     isPending: false,
   }),
   useStopRuntimeSessionManualTakeover: () => ({
-    mutateAsync: mockStopRuntimeSessionManualTakeoverMutateAsync,
+    mutateAsync: vi.fn().mockResolvedValue({ ok: true }),
     isPending: false,
   }),
   queryKeys: {
@@ -376,7 +375,6 @@ describe('SessionsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPathBadge.mockClear();
-    mockRouterPush.mockReset();
 
     // Default successful responses
     mockSessionsQuery.mockReturnValue({
@@ -429,10 +427,6 @@ describe('SessionsPage', () => {
         count: id ? 1 : 0,
       }),
     }));
-    mockRuntimeSessionManualTakeoverQuery.mockImplementation((id: string) => ({
-      queryKey: ['runtime-sessions', id, 'manual-takeover'],
-      queryFn: vi.fn().mockResolvedValue({ manualTakeover: null }),
-    }));
     mockRuntimeSessionPreflightQuery.mockImplementation(
       (id: string, params: Record<string, unknown>) => ({
         queryKey: ['runtime-sessions', id, 'preflight', params.targetRuntime],
@@ -464,6 +458,16 @@ describe('SessionsPage', () => {
       strategy: 'snapshot-handoff',
       session: createRuntimeSession({ id: 'runtime-handoff', runtime: 'claude-code' }),
     });
+    mockForkSessionMutate.mockImplementation(
+      (_vars: unknown, opts?: { onSuccess?: (data: unknown) => void }) => {
+        opts?.onSuccess?.({
+          ok: true,
+          sessionId: 'session-forked',
+          session: createSession({ id: 'session-forked' }),
+          forkedFrom: 'session-1',
+        });
+      },
+    );
 
     mockListMachines.mockResolvedValue([createMachine()]);
   });
@@ -872,28 +876,6 @@ describe('SessionsPage', () => {
     });
   });
 
-  it('navigates to full detail route on mobile when selecting an agent session', async () => {
-    const originalInnerWidth = window.innerWidth;
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 390,
-    });
-
-    renderSessions();
-    fireEvent.click(await screen.findByText('agent-1'));
-
-    await waitFor(() => {
-      expect(mockRouterPush).toHaveBeenCalledWith('/sessions/session-1');
-    });
-
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: originalInnerWidth,
-    });
-  });
-
   it('passes non-interactive PathBadge props inside session selection buttons', async () => {
     renderSessions();
 
@@ -960,11 +942,11 @@ describe('SessionsPage', () => {
   // Session Detail Panel
   // =========================================================================
 
-  it('shows session summary stats when no session is selected', () => {
+  it('shows session overview stats when no session is selected', () => {
     renderSessions();
-    expect(screen.getByText('Session summary')).toBeDefined();
+    expect(screen.getByText('Session Overview')).toBeDefined();
     expect(screen.getByText('Total Sessions')).toBeDefined();
-    expect(screen.getByText('Active Count')).toBeDefined();
+    expect(screen.getByText('Active Sessions')).toBeDefined();
     expect(screen.getByText('Total Cost')).toBeDefined();
     expect(screen.getByText('Avg Duration')).toBeDefined();
   });

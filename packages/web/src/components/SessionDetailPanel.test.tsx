@@ -21,6 +21,7 @@ vi.mock('next/link', () => ({
 vi.mock('../lib/format-utils', () => ({
   formatDateTime: (d: string) => `formatted:${d}`,
   formatDuration: (start: string, end: string | null) => (end ? `dur:${start}-${end}` : 'ongoing'),
+  formatCost: (value: number | null | undefined) => `cost:${String(value ?? 0)}`,
 }));
 
 vi.mock('../lib/model-options', () => ({
@@ -250,18 +251,25 @@ describe('SessionDetailPanel', () => {
       expect(fullViewLink).toBeDefined();
     });
 
-    it('renders "Fork" link when claudeSessionId is present', () => {
+    it('renders "Fork" quick action when claudeSessionId is present', () => {
       render(<SessionDetailPanel {...defaultProps()} />);
       expect(screen.getByText('Fork')).toBeDefined();
     });
 
-    it('does not render "Fork" link when claudeSessionId is null', () => {
+    it('does not render "Fork" quick action when claudeSessionId is null', () => {
       render(
         <SessionDetailPanel
           {...defaultProps({ session: makeSession({ claudeSessionId: null }) })}
         />,
       );
       expect(screen.queryByText('Fork')).toBeNull();
+    });
+
+    it('opens fork picker in fork mode when Fork is clicked', () => {
+      const onOpenForkPicker = vi.fn();
+      render(<SessionDetailPanel {...defaultProps({ onOpenForkPicker })} />);
+      fireEvent.click(screen.getByText('Fork'));
+      expect(onOpenForkPicker).toHaveBeenCalledWith('fork');
     });
   });
 
@@ -605,7 +613,7 @@ describe('SessionDetailPanel', () => {
 
     it('shows "Loading..." when forkPickerLoading is true', () => {
       render(<SessionDetailPanel {...defaultProps({ forkPickerLoading: true })} />);
-      expect(screen.getByText('Loading...')).toBeDefined();
+      expect(screen.getAllByText('Loading...').length).toBeGreaterThan(0);
     });
 
     it('calls onOpenForkPicker when session has claudeSessionId and machineId', () => {
@@ -627,6 +635,7 @@ describe('SessionDetailPanel', () => {
       expect(headerBtn).toBeDefined();
       if (headerBtn) fireEvent.click(headerBtn);
       expect(onOpenForkPicker).toHaveBeenCalledOnce();
+      expect(onOpenForkPicker).toHaveBeenCalledWith('agent');
     });
 
     it('calls onOpenConvertDialog when session has no claudeSessionId', () => {
@@ -645,8 +654,14 @@ describe('SessionDetailPanel', () => {
 
     it('disables create agent button when forkPickerLoading is true', () => {
       render(<SessionDetailPanel {...defaultProps({ forkPickerLoading: true })} />);
-      const btn = screen.getByText('Loading...');
-      expect(btn.closest('button')?.hasAttribute('disabled')).toBe(true);
+      const loadingButtons = screen
+        .getAllByText('Loading...')
+        .map((node) => node.closest('button'))
+        .filter((node): node is HTMLButtonElement => node instanceof HTMLButtonElement);
+      expect(loadingButtons.length).toBeGreaterThan(0);
+      for (const btn of loadingButtons) {
+        expect(btn.hasAttribute('disabled')).toBe(true);
+      }
     });
   });
 
@@ -924,6 +939,13 @@ describe('SessionDetailPanel', () => {
       );
       expect(screen.queryByLabelText('Resume model')).toBeNull();
     });
+
+    it('does not render quick resume action for active sessions', () => {
+      render(
+        <SessionDetailPanel {...defaultProps({ session: makeSession({ status: 'active' }) })} />,
+      );
+      expect(screen.queryByLabelText('Quick resume session')).toBeNull();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -980,7 +1002,18 @@ describe('SessionDetailPanel', () => {
         />,
       );
       expect(screen.getByLabelText('Resume session')).toBeDefined();
-      expect(screen.getByText('Resume')).toBeDefined();
+    });
+
+    it('renders quick resume action in the header for ended sessions', () => {
+      render(
+        <SessionDetailPanel
+          {...defaultProps({
+            session: makeSession({ status: 'ended', endedAt: '2026-03-07T11:00:00Z' }),
+            prompt: 'continue',
+          })}
+        />,
+      );
+      expect(screen.getByLabelText('Quick resume session')).toBeDefined();
     });
 
     it('renders model selector for ended sessions', () => {

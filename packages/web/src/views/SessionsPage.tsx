@@ -2,13 +2,12 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Filter, MessageSquare } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '../components/ConfirmButton';
 import { CreateSessionForm } from '../components/CreateSessionForm';
-import { ContextPickerDialog } from '../components/context-picker';
+import { ContextPickerDialog, type ForkSubmitConfig } from '../components/context-picker';
 import { EmptyState } from '../components/EmptyState';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
@@ -20,7 +19,13 @@ import { useToast } from '../components/Toast';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { AgentConfig, ApiAccount, Session, SessionContentMessage } from '../lib/api';
 import { api } from '../lib/api';
-import { downloadCsv, formatCost, formatDurationMs, shortenPath } from '../lib/format-utils';
+import {
+  downloadCsv,
+  formatCost,
+  formatDurationMs,
+  formatNumber,
+  shortenPath,
+} from '../lib/format-utils';
 import type { AgentRuntime } from '../lib/model-options';
 import {
   accountsQuery,
@@ -28,6 +33,7 @@ import {
   runtimeSessionsQuery,
   sessionsQuery,
   useCreateAgent,
+  useForkSession,
 } from '../lib/queries';
 import { RuntimeSessionPanel } from './RuntimeSessionPanel';
 import {
@@ -197,7 +203,6 @@ const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
 export function SessionsPage(): React.JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   const [offset, setOffset] = useState(0);
   const [accumulatedSessions, setAccumulatedSessions] = useState<Session[]>([]);
@@ -247,9 +252,11 @@ export function SessionsPage(): React.JSX.Element {
   const [convertName, setConvertName] = useState('');
   const [convertType, setConvertType] = useState('adhoc');
   const createAgent = useCreateAgent();
+  const forkSession = useForkSession();
 
   // ContextPickerDialog modal state
   const [showForkPicker, setShowForkPicker] = useState(false);
+  const [forkPickerDefaultTab, setForkPickerDefaultTab] = useState<'fork' | 'agent'>('agent');
   const [forkPickerMessages, setForkPickerMessages] = useState<SessionContentMessage[]>([]);
   const [forkPickerLoading, setForkPickerLoading] = useState(false);
 
@@ -375,6 +382,54 @@ export function SessionsPage(): React.JSX.Element {
     return counts;
   }, [unifiedSessionList]);
 
+  const summaryStats = useMemo(() => {
+    let activeCount = 0;
+    let totalCostUsd = 0;
+    let totalDurationMs = 0;
+    let durationSamples = 0;
+    const nowMs = Date.now();
+
+    for (const row of unifiedSessionList) {
+      if (row.status === 'active' || row.status === 'starting') {
+        activeCount += 1;
+      }
+
+      if (row.kind === 'agent') {
+        const cost = row.session.metadata?.costUsd;
+        if (typeof cost === 'number' && Number.isFinite(cost)) {
+          totalCostUsd += cost;
+        }
+      }
+
+      const startTime =
+        row.kind === 'agent'
+          ? row.session.startedAt
+          : (row.session.startedAt ?? row.activityAt ?? null);
+
+      if (!startTime) continue;
+      const startMs = new Date(startTime).getTime();
+      if (!Number.isFinite(startMs)) continue;
+
+      const endTime =
+        row.kind === 'agent'
+          ? (row.session.endedAt ?? row.session.lastHeartbeat ?? null)
+          : (row.session.endedAt ?? row.session.lastHeartbeat ?? row.activityAt ?? null);
+      const endMs = endTime ? new Date(endTime).getTime() : nowMs;
+      if (!Number.isFinite(endMs)) continue;
+
+      totalDurationMs += Math.max(0, endMs - startMs);
+      durationSamples += 1;
+    }
+
+    const averageDurationMs = durationSamples > 0 ? totalDurationMs / durationSamples : null;
+
+    return {
+      activeCount,
+      totalCostUsd,
+      averageDurationMs,
+    };
+  }, [unifiedSessionList]);
+
   const filteredSessions = useMemo(() => {
     let result = unifiedSessionList.filter(
       (row) =>
@@ -445,51 +500,6 @@ export function SessionsPage(): React.JSX.Element {
 
     return result;
   }, [hideEmpty, searchQuery, sortOrder, statusFilter, typeFilter, unifiedSessionList]);
-
-  const summaryStats = useMemo(() => {
-    const nowMs = Date.now();
-    let activeCount = 0;
-    let totalCostUsd = 0;
-    let totalDurationMs = 0;
-    let durationCount = 0;
-
-    for (const row of filteredSessions) {
-      const isActive = row.status === 'active' || row.status === 'starting';
-      if (isActive) {
-        activeCount++;
-      }
-
-      if (row.kind === 'agent') {
-        totalCostUsd += row.session.metadata?.costUsd ?? 0;
-      }
-
-      const startMs = new Date(row.session.startedAt ?? row.activityAt ?? nowMs).getTime();
-      if (!Number.isFinite(startMs)) {
-        continue;
-      }
-
-      const endMs = row.session.endedAt
-        ? new Date(row.session.endedAt).getTime()
-        : row.activityAt
-          ? new Date(row.activityAt).getTime()
-          : isActive
-            ? nowMs
-            : startMs;
-      if (!Number.isFinite(endMs)) {
-        continue;
-      }
-
-      totalDurationMs += Math.max(0, endMs - startMs);
-      durationCount++;
-    }
-
-    return {
-      totalSessions: filteredSessions.length,
-      activeCount,
-      totalCostUsd,
-      avgDurationMs: durationCount > 0 ? totalDurationMs / durationCount : null,
-    };
-  }, [filteredSessions]);
 
   const selectableRows = useMemo(
     () =>
@@ -634,28 +644,6 @@ export function SessionsPage(): React.JSX.Element {
   const selectedRow = unifiedSessionList.find((row) => row.id === selectedId) ?? null;
   const selected = selectedRow?.kind === 'agent' ? selectedRow.session : null;
 
-  const selectSession = useCallback(
-    (row: UnifiedSessionRow) => {
-      const shouldUseDetailRoute =
-        typeof window !== 'undefined' && window.innerWidth < 768 && row.kind === 'agent';
-      if (shouldUseDetailRoute) {
-        router.push(`/sessions/${row.id}`);
-        return;
-      }
-      setSelectedId(row.id);
-    },
-    [router],
-  );
-
-  const selectSessionById = useCallback(
-    (id: string) => {
-      const row = filteredSessions.find((session) => session.id === id);
-      if (!row) return;
-      selectSession(row);
-    },
-    [filteredSessions, selectSession],
-  );
-
   const handleSend = useCallback(async () => {
     if (!selected || !prompt.trim()) return;
     const messageText = prompt.trim();
@@ -720,25 +708,65 @@ export function SessionsPage(): React.JSX.Element {
     );
   }, [selected, convertName, convertType, createAgent, toast]);
 
-  const openForkPicker = useCallback(async () => {
-    if (!selected?.claudeSessionId || !selected.machineId) return;
-    setForkPickerLoading(true);
-    try {
-      const result = await api.getSessionContent(selected.claudeSessionId, {
-        machineId: selected.machineId,
-        limit: 10000,
-        projectPath: selected.projectPath ?? undefined,
-      });
-      setForkPickerMessages(result.messages);
-      setShowForkPicker(true);
-    } catch (err) {
-      toast.error(`Failed to load messages: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setForkPickerLoading(false);
-    }
-  }, [selected, toast]);
+  const openForkPicker = useCallback(
+    async (defaultTab: 'fork' | 'agent' = 'agent') => {
+      if (!selected?.claudeSessionId || !selected.machineId) return;
+      setForkPickerLoading(true);
+      try {
+        const result = await api.getSessionContent(selected.claudeSessionId, {
+          machineId: selected.machineId,
+          limit: 10000,
+          projectPath: selected.projectPath ?? undefined,
+        });
+        setForkPickerDefaultTab(defaultTab);
+        setForkPickerMessages(result.messages);
+        setShowForkPicker(true);
+      } catch (err) {
+        toast.error(`Failed to load messages: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setForkPickerLoading(false);
+      }
+    },
+    [selected, toast],
+  );
 
-  const handleForkSubmit = useCallback(
+  const handleForkSessionSubmit = useCallback(
+    (config: ForkSubmitConfig) => {
+      if (!selected) return;
+
+      forkSession.mutate(
+        {
+          id: selected.id,
+          prompt: config.prompt,
+          model: config.model,
+          strategy: config.strategy,
+          forkAtIndex: config.forkAtIndex,
+          selectedMessages: config.selectedMessages?.map((msg) => ({
+            type: msg.type,
+            content: msg.content,
+            toolName: msg.toolName,
+            timestamp: msg.timestamp,
+          })),
+        },
+        {
+          onSuccess: (data) => {
+            toast.success(`Forked session ${data.sessionId.slice(0, 12)}...`);
+            resetAndInvalidateSessions();
+            setSelectedId(data.sessionId);
+            setShowForkPicker(false);
+            setForkPickerDefaultTab('agent');
+            setForkPickerMessages([]);
+          },
+          onError: (err) => {
+            toast.error(err instanceof Error ? err.message : String(err));
+          },
+        },
+      );
+    },
+    [selected, forkSession, toast, resetAndInvalidateSessions],
+  );
+
+  const handleCreateAgentFromPicker = useCallback(
     (config: {
       name: string;
       type: string;
@@ -773,6 +801,7 @@ export function SessionsPage(): React.JSX.Element {
           onSuccess: () => {
             toast.success(`Agent "${config.name}" created from session`);
             setShowForkPicker(false);
+            setForkPickerDefaultTab('agent');
             setForkPickerMessages([]);
           },
           onError: (err) => {
@@ -805,11 +834,11 @@ export function SessionsPage(): React.JSX.Element {
         e.preventDefault();
         const focused = list[focusedIndex];
         if (focused) {
-          selectSession(focused);
+          setSelectedId(focused.id);
         }
       }
     },
-    [filteredSessions, focusedIndex, selectSession],
+    [filteredSessions, focusedIndex],
   );
 
   // Scroll the focused session item into view
@@ -1179,7 +1208,7 @@ export function SessionsPage(): React.JSX.Element {
                           isFocused={
                             focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
                           }
-                          onSelect={selectSessionById}
+                          onSelect={setSelectedId}
                           isChecked={checkedIds.has(s.id)}
                           onToggleCheck={toggleChecked}
                           onItemClick={handleItemClick}
@@ -1192,7 +1221,7 @@ export function SessionsPage(): React.JSX.Element {
                           isFocused={
                             focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
                           }
-                          onSelect={selectSessionById}
+                          onSelect={setSelectedId}
                         />
                       ),
                     )}
@@ -1207,7 +1236,7 @@ export function SessionsPage(): React.JSX.Element {
                   session={s.session}
                   isSelected={selectedId === s.id}
                   isFocused={focusedIndex === i}
-                  onSelect={selectSessionById}
+                  onSelect={setSelectedId}
                   isChecked={checkedIds.has(s.id)}
                   onToggleCheck={toggleChecked}
                   onItemClick={handleItemClick}
@@ -1218,7 +1247,7 @@ export function SessionsPage(): React.JSX.Element {
                   row={s}
                   isSelected={selectedId === s.id}
                   isFocused={focusedIndex === i}
-                  onSelect={selectSessionById}
+                  onSelect={setSelectedId}
                 />
               ),
             )
@@ -1323,80 +1352,78 @@ export function SessionsPage(): React.JSX.Element {
               setShowConvertDialog(true);
             }}
             onCloseConvertDialog={() => setShowConvertDialog(false)}
-            onOpenForkPicker={() => void openForkPicker()}
+            onOpenForkPicker={(defaultTab) => void openForkPicker(defaultTab ?? 'agent')}
           />
         ) : selectedRow?.kind === 'runtime' ? (
           <RuntimeSessionPanel
             selectedSession={selectedRow.session}
             onBack={() => setSelectedId(null)}
-            onSelectedSessionChange={(id) => {
-              if (!id) {
-                setSelectedId(null);
-                return;
-              }
-              selectSessionById(id);
-            }}
+            onSelectedSessionChange={setSelectedId}
           />
         ) : (
-          <div className="flex-1 overflow-auto p-4 md:p-6">
-            <div className="mx-auto w-full max-w-xl rounded-xl border border-border bg-card/70 p-4 md:p-5">
-              <div className="mb-4">
-                <h3 className="text-sm font-semibold text-foreground">Session summary</h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {filteredSessions.length === unifiedSessionList.length
-                    ? 'All loaded sessions'
-                    : 'Based on active filters'}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-                  <div className="text-[11px] text-muted-foreground">Total Sessions</div>
-                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
-                    {String(summaryStats.totalSessions)}
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="w-full max-w-md rounded-lg border border-border bg-card/40 p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-foreground">Session Overview</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Select a session from the list to inspect its message stream.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Total Sessions
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-foreground">
+                    {formatNumber(totalCount)}
                   </div>
                 </div>
-                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-                  <div className="text-[11px] text-muted-foreground">Active Count</div>
-                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
-                    {String(summaryStats.activeCount)}
+                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Active Sessions
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-foreground">
+                    {formatNumber(summaryStats.activeCount)}
                   </div>
                 </div>
-                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-                  <div className="text-[11px] text-muted-foreground">Total Cost</div>
-                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
+                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Total Cost
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-foreground">
                     {formatCost(summaryStats.totalCostUsd)}
                   </div>
                 </div>
-                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-                  <div className="text-[11px] text-muted-foreground">Avg Duration</div>
-                  <div className="mt-1 text-base font-semibold tabular-nums text-foreground">
-                    {formatDurationMs(summaryStats.avgDurationMs)}
+                <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Avg Duration
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-foreground">
+                    {formatDurationMs(summaryStats.averageDurationMs)}
                   </div>
                 </div>
               </div>
-              <p className="mt-4 text-xs text-muted-foreground/70">
-                Use arrow keys to navigate the list.
+              <p className="mt-4 text-[11px] text-muted-foreground/70">
+                Tip: use arrow keys to navigate sessions quickly.
               </p>
             </div>
           </div>
         )}
       </div>
 
-      {/* ContextPickerDialog — opens on Create as Agent tab by default.
-          Note: handleForkSubmit actually creates an agent from session context,
-          not a fork — the naming is a legacy artifact from the original flow. */}
+      {/* ContextPickerDialog for forking sessions or creating agents from session context. */}
       {selected && (
         <ContextPickerDialog
-          defaultTab="agent"
+          defaultTab={forkPickerDefaultTab}
           session={selected}
           messages={forkPickerMessages}
           open={showForkPicker}
           onClose={() => {
             setShowForkPicker(false);
+            setForkPickerDefaultTab('agent');
             setForkPickerMessages([]);
           }}
-          onCreateAgentSubmit={handleForkSubmit}
-          isSubmitting={createAgent.isPending}
+          onForkSubmit={handleForkSessionSubmit}
+          onCreateAgentSubmit={handleCreateAgentFromPicker}
+          isSubmitting={createAgent.isPending || forkSession.isPending}
         />
       )}
     </div>
