@@ -4,6 +4,11 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
 import { permissionRequests } from '../../db/schema-permission-requests.js';
+import type {
+  ExpoPushDispatcher,
+  ExpoPushFailure,
+} from '../../notifications/expo-push-dispatcher.js';
+import type { MobilePushDeviceStore } from '../../notifications/mobile-push-device-store.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { resolveWorkerUrlOrThrow } from '../resolve-worker-url.js';
@@ -26,6 +31,8 @@ type PermissionRequestRow = typeof permissionRequests.$inferSelect;
 export type PermissionRequestRoutesOptions = {
   db: Database;
   dbRegistry?: DbAgentRegistry | null;
+  mobilePushDeviceStore?: Pick<MobilePushDeviceStore, 'deactivateByToken' | 'listDevices'> | null;
+  expoPushDispatcher?: Pick<ExpoPushDispatcher, 'dispatchApprovalPending'> | null;
   workerPort?: number;
 };
 
@@ -33,7 +40,13 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
   app,
   opts,
 ) => {
-  const { db, dbRegistry = null, workerPort = DEFAULT_WORKER_PORT } = opts;
+  const {
+    db,
+    dbRegistry = null,
+    mobilePushDeviceStore = null,
+    expoPushDispatcher = null,
+    workerPort = DEFAULT_WORKER_PORT,
+  } = opts;
 
   app.post<{
     Body: {
@@ -130,6 +143,12 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
         .returning();
 
       broadcastPermissionEvent('permission_request_created', toPermissionRequestEvent(created));
+      await dispatchApprovalPendingPush({
+        requestId: created.requestId,
+        mobilePushDeviceStore,
+        expoPushDispatcher,
+        logger: app.log,
+      });
 
       return reply.code(201).send(created);
     },
@@ -327,6 +346,95 @@ function resolveResolvedBy(
   }
 
   return 'user';
+}
+
+async function dispatchApprovalPendingPush({
+  requestId,
+  mobilePushDeviceStore,
+  expoPushDispatcher,
+  logger,
+}: {
+  requestId: string;
+  mobilePushDeviceStore: Pick<MobilePushDeviceStore, 'deactivateByToken' | 'listDevices'> | null;
+  expoPushDispatcher: Pick<ExpoPushDispatcher, 'dispatchApprovalPending'> | null;
+  logger: { warn: (obj: Record<string, unknown>, msg: string) => void };
+}): Promise<void> {
+  if (!mobilePushDeviceStore || !expoPushDispatcher) {
+    return;
+  }
+
+  try {
+    const devices = await mobilePushDeviceStore.listDevices({
+      includeDisabled: false,
+      platform: 'ios',
+      provider: 'expo',
+    });
+
+    const result = await expoPushDispatcher.dispatchApprovalPending({
+      requestId,
+      devices,
+    });
+
+    for (const failure of result.failures) {
+      if (!failure.permanent) {
+        continue;
+      }
+
+      await deactivateInvalidPushToken({
+        failure,
+        requestId,
+        mobilePushDeviceStore,
+        logger,
+      });
+    }
+
+    if (result.failures.length > 0) {
+      logger.warn(
+        {
+          requestId,
+          failureCount: result.failures.length,
+          failures: result.failures,
+        },
+        'approval pending push dispatch failed',
+      );
+    }
+  } catch (error: unknown) {
+    logger.warn(
+      {
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'approval pending push dispatch failed',
+    );
+  }
+}
+
+async function deactivateInvalidPushToken({
+  failure,
+  requestId,
+  mobilePushDeviceStore,
+  logger,
+}: {
+  failure: ExpoPushFailure;
+  requestId: string;
+  mobilePushDeviceStore: Pick<MobilePushDeviceStore, 'deactivateByToken'>;
+  logger: { warn: (obj: Record<string, unknown>, msg: string) => void };
+}): Promise<void> {
+  try {
+    await mobilePushDeviceStore.deactivateByToken({
+      provider: 'expo',
+      pushToken: failure.token,
+    });
+  } catch (error: unknown) {
+    logger.warn(
+      {
+        requestId,
+        pushToken: failure.token,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'failed to deactivate invalid expo push token',
+    );
+  }
 }
 
 async function expirePendingPermissionRequests({

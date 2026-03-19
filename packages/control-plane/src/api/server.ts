@@ -33,6 +33,7 @@ import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MemorySearch } from '../memory/memory-search.js';
 import type { MemoryStore } from '../memory/memory-store.js';
+import { ExpoPushDispatcher } from '../notifications/expo-push-dispatcher.js';
 import { MobilePushDeviceStore } from '../notifications/mobile-push-device-store.js';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
@@ -182,6 +183,8 @@ export async function createServer({
   const runHandoffDecisionStore = db
     ? new RunHandoffDecisionStore(db, logger)
     : createFallbackRunHandoffDecisionStore();
+  let mobilePushDeviceStore: MobilePushDeviceStore | null = null;
+  let expoPushDispatcher: ExpoPushDispatcher | null = null;
 
   // --- Metrics request tracking ---
   // Registered at the root level so it captures requests to all routes.
@@ -545,7 +548,8 @@ export async function createServer({
       notificationRouterStore,
     });
 
-    const mobilePushDeviceStore = new MobilePushDeviceStore(db, logger);
+    mobilePushDeviceStore = new MobilePushDeviceStore(db, logger);
+    expoPushDispatcher = new ExpoPushDispatcher();
     await app.register(mobilePushDeviceRoutes, {
       prefix: '/api/mobile-push-devices',
       mobilePushDeviceStore,
@@ -661,6 +665,8 @@ export async function createServer({
       prefix: '/api/permission-requests',
       db,
       dbRegistry: dbRegistry ?? null,
+      mobilePushDeviceStore,
+      expoPushDispatcher,
       workerPort,
     });
 
