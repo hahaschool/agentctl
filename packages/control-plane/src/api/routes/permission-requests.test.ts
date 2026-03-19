@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import type { ExpoPushDispatcher } from '../../notifications/expo-push-dispatcher.js';
+import type { MobilePushDeviceStore } from '../../notifications/mobile-push-device-store.js';
 import { permissionRequestRoutes } from './permission-requests.js';
 import {
   createMockDbRegistry,
@@ -73,6 +74,38 @@ function createMockDrizzleDb() {
   return db;
 }
 
+function makeMobilePushDevice(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'device-1',
+    userId: 'operator-1',
+    platform: 'ios',
+    provider: 'expo',
+    pushToken: 'ExponentPushToken[abc123]',
+    appId: 'com.agentctl.mobile',
+    lastSeenAt: '2026-03-19T10:00:00.000Z',
+    disabledAt: null,
+    createdAt: '2026-03-19T10:00:00.000Z',
+    updatedAt: '2026-03-19T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function createMockMobilePushDeviceStore(): MobilePushDeviceStore {
+  return {
+    listDevices: vi.fn().mockResolvedValue([]),
+    deactivateByToken: vi.fn(),
+  } as unknown as MobilePushDeviceStore;
+}
+
+function createMockExpoPushDispatcher(): ExpoPushDispatcher {
+  return {
+    dispatchApprovalPending: vi.fn().mockResolvedValue({
+      deliveries: [],
+      failures: [],
+    }),
+  } as unknown as ExpoPushDispatcher;
+}
+
 // ── Test Suite ─────────────────────────────────────────────────────────────
 
 let originalFetch: typeof globalThis.fetch;
@@ -88,9 +121,13 @@ afterAll(() => {
 describe('permission-requests routes', () => {
   let app: FastifyInstance;
   let db: ReturnType<typeof createMockDrizzleDb>;
+  let mobilePushDeviceStore: ReturnType<typeof createMockMobilePushDeviceStore>;
+  let expoPushDispatcher: ReturnType<typeof createMockExpoPushDispatcher>;
 
   beforeEach(async () => {
     db = createMockDrizzleDb();
+    mobilePushDeviceStore = createMockMobilePushDeviceStore();
+    expoPushDispatcher = createMockExpoPushDispatcher();
     mockFetchOk({ ok: true });
 
     app = Fastify({ logger: false });
@@ -98,6 +135,8 @@ describe('permission-requests routes', () => {
       prefix: '/api/permission-requests',
       db: db as never,
       dbRegistry: createMockDbRegistry(),
+      mobilePushDeviceStore,
+      expoPushDispatcher,
       workerPort: 9000,
     });
     await app.ready();
@@ -135,6 +174,89 @@ describe('permission-requests routes', () => {
       const body = res.json();
       expect(body.status).toBe('pending');
       expect(body.toolName).toBe('Bash');
+    });
+
+    it('lists active expo ios devices and dispatches an approval.pending push after create', async () => {
+      const created = makePendingRow();
+      const devices = [
+        makeMobilePushDevice(),
+        makeMobilePushDevice({
+          id: 'device-2',
+          pushToken: 'ExponentPushToken[xyz789]',
+        }),
+      ];
+      db._returningFn.mockResolvedValueOnce([created]);
+      vi.mocked(mobilePushDeviceStore.listDevices).mockResolvedValueOnce(devices as never);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/permission-requests',
+        payload: validBody,
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(mobilePushDeviceStore.listDevices).toHaveBeenCalledWith({
+        includeDisabled: false,
+        platform: 'ios',
+        provider: 'expo',
+      });
+      expect(expoPushDispatcher.dispatchApprovalPending).toHaveBeenCalledWith({
+        requestId: REQUEST_ID,
+        devices,
+      });
+    });
+
+    it('deactivates tokens when dispatcher reports permanent invalid-token failures', async () => {
+      db._returningFn.mockResolvedValueOnce([makePendingRow()]);
+      vi.mocked(mobilePushDeviceStore.listDevices).mockResolvedValueOnce([
+        makeMobilePushDevice(),
+      ] as never);
+      vi.mocked(expoPushDispatcher.dispatchApprovalPending).mockResolvedValueOnce({
+        deliveries: [],
+        failures: [
+          {
+            token: 'ExponentPushToken[abc123]',
+            message: 'not registered',
+            details: { error: 'DeviceNotRegistered' },
+            permanent: true,
+          },
+        ],
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/permission-requests',
+        payload: validBody,
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(mobilePushDeviceStore.deactivateByToken).toHaveBeenCalledWith({
+        provider: 'expo',
+        pushToken: 'ExponentPushToken[abc123]',
+      });
+    });
+
+    it('logs push delivery failures and still returns 201', async () => {
+      const warnSpy = vi.spyOn(app.log, 'warn');
+      db._returningFn.mockResolvedValueOnce([makePendingRow()]);
+      vi.mocked(mobilePushDeviceStore.listDevices).mockRejectedValueOnce(
+        new Error('push registry unavailable'),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/permission-requests',
+        payload: validBody,
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'push registry unavailable',
+          requestId: REQUEST_ID,
+        }),
+        'approval pending push dispatch failed',
+      );
     });
 
     it('returns 400 when agentId is missing', async () => {
