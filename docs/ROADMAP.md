@@ -1327,7 +1327,7 @@ Critical gap: when agent permission mode is NOT bypass, CLI outputs `permission_
 - [x] User clicks Approve/Deny *(PRs #238-240)* → frontend sends decision via WebSocket → CP → Worker
 - [x] Worker writes approval via canUseTool hook *(PRs #238-240)* to CLI stdin (stream-json input)
 - [x] Timeout handling: auto-deny *(PRs #238-240)* after configurable timeout (default 5 min)
-- [ ] Mobile (iOS): push notification for pending approvals
+- [x] Mobile (iOS): pending approvals inbox screen + API wrapper + polling *(PR #273)*
 - [x] Fix: `bypassPermissions` now correctly uses `--dangerously-skip-permissions` *(direct commit 7c66ec2)*
 
 > Design spec: [permission-approval-system-design v2](superpowers/specs/2026-03-16-permission-approval-system-design.md)
@@ -1455,6 +1455,21 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [ ] Device token registration from mobile app
 - [ ] Control-plane push dispatch path for `approval.pending`
 - [ ] Notification tap path lands user on the approval inbox
+
+## 22. Remaining Route Tests + Frontend Integration
+
+### 22.1 CP Route Test Coverage (Final Batch) — P1
+
+- [ ] `context-bridge.ts` tests (405 lines)
+- [ ] `approvals.ts` tests (175 lines)
+- [ ] `task-runs.ts` tests (202 lines)
+- [ ] `memory-consolidation.ts` tests (337 lines)
+- [ ] `knowledge-maintenance.ts` tests (70 lines)
+
+### 22.2 Frontend API Integration — P2
+
+- [ ] Add API client methods for approvals, context-bridge, run-summary endpoints
+- [ ] Wire query hooks for new API methods
 
 ---
 
