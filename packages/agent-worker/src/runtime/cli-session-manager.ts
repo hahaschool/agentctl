@@ -809,6 +809,12 @@ export class CliSessionManager extends EventEmitter {
         // Capture Claude session ID from init message
         if (message.session_id) {
           session.claudeSessionId = message.session_id;
+          // Emit so the run record in CP can be updated with the real CLI session ID
+          this.emitSessionEvent({
+            type: 'session_started',
+            sessionId,
+            claudeSessionId: message.session_id,
+          });
         }
         break;
       }

@@ -419,21 +419,30 @@ export async function sessionRoutes(
   const reportedClaudeIds = new Set<string>();
 
   // Report when the Claude session ID becomes available (from init/system message)
-  sessionManager.on('session_output', (event: CliSessionEvent) => {
-    if (event.type !== 'session_output') return;
-
-    const session = sessionManager.getSession(event.sessionId);
+  const maybeReportClaudeSessionId = (workerSessionId: string): void => {
+    const session = sessionManager.getSession(workerSessionId);
     if (
       session?.claudeSessionId &&
-      cpSessionIdMap.has(event.sessionId) &&
-      !reportedClaudeIds.has(event.sessionId)
+      cpSessionIdMap.has(workerSessionId) &&
+      !reportedClaudeIds.has(workerSessionId)
     ) {
-      reportedClaudeIds.add(event.sessionId);
-      void reportStatusToControlPlane(event.sessionId, {
+      reportedClaudeIds.add(workerSessionId);
+      void reportStatusToControlPlane(workerSessionId, {
         claudeSessionId: session.claudeSessionId,
         pid: session.pid,
       });
     }
+  };
+
+  sessionManager.on('session_output', (event: CliSessionEvent) => {
+    if (event.type !== 'session_output') return;
+    maybeReportClaudeSessionId(event.sessionId);
+  });
+
+  // Also listen for session_started which fires when CLI sends init with session_id
+  sessionManager.on('session_started', (event: CliSessionEvent) => {
+    if (event.type !== 'session_started') return;
+    maybeReportClaudeSessionId(event.sessionId);
   });
 
   // -----------------------------------------------------------------------
