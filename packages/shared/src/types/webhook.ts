@@ -5,6 +5,7 @@ export type WebhookEventType =
   | 'agent.stopped'
   | 'agent.error'
   | 'agent.cost_alert'
+  | 'approval.pending'
   | 'deploy.success'
   | 'deploy.failure'
   | 'audit.high_severity';
@@ -14,6 +15,7 @@ export const WEBHOOK_EVENT_TYPES = [
   'agent.stopped',
   'agent.error',
   'agent.cost_alert',
+  'approval.pending',
   'deploy.success',
   'deploy.failure',
   'audit.high_severity',

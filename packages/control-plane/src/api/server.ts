@@ -33,6 +33,7 @@ import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MemorySearch } from '../memory/memory-search.js';
 import type { MemoryStore } from '../memory/memory-store.js';
+import { MobilePushDeviceStore } from '../notifications/mobile-push-device-store.js';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
 import { AgentRegistry } from '../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../registry/db-registry.js';
@@ -85,6 +86,7 @@ import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
+import { mobilePushDeviceRoutes } from './routes/mobile-push-devices.js';
 import { notificationPreferenceRoutes } from './routes/notification-preferences.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { permissionRequestRoutes } from './routes/permission-requests.js';
@@ -541,6 +543,12 @@ export async function createServer({
     await app.register(notificationPreferenceRoutes, {
       prefix: '/api/notifications/preferences',
       notificationRouterStore,
+    });
+
+    const mobilePushDeviceStore = new MobilePushDeviceStore(db, logger);
+    await app.register(mobilePushDeviceRoutes, {
+      prefix: '/api/mobile-push-devices',
+      mobilePushDeviceStore,
     });
 
     // Register deployment tier management + promotion routes.

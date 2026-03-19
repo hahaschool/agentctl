@@ -103,3 +103,27 @@ export const notificationPreferences = pgTable(
   },
   (table) => [unique('uq_notification_pref_user_priority').on(table.userId, table.priority)],
 );
+
+// ── Mobile Push Devices ─────────────────────────────────────
+
+export const mobilePushDevices = pgTable(
+  'mobile_push_devices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    platform: text('platform').$type<'ios'>().notNull(),
+    provider: text('provider').$type<'expo'>().notNull(),
+    pushToken: text('push_token').notNull(),
+    appId: text('app_id').notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    disabledAt: timestamp('disabled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('uq_mobile_push_devices_provider_token').on(table.provider, table.pushToken),
+    index('idx_mobile_push_devices_user_id').on(table.userId),
+    index('idx_mobile_push_devices_updated_at').on(table.updatedAt),
+    index('idx_mobile_push_devices_disabled_at').on(table.disabledAt),
+  ],
+);
