@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PR #295 is now on `main`, completing roadmap 21.2 with control-plane Expo push dispatch for pending approvals; as of 2026-03-20 there are no open PRs, CodeQL alerts, Dependabot alerts, or secret-scanning alerts)
+> Last updated: 2026-03-20 (PRs #297, #298, and #299 are now on `main`, closing roadmap 24.1-24.3; the remaining follow-up is a production-deploy guardrail fix after release workflow `23307749638` failed on missing Tailscale OAuth secrets)
 
 ## Current State
 
@@ -1520,23 +1520,29 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 > Plan: [plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md)
 >
-> Status note: roadmap 21.2 is now delivered, so the next high-leverage batch is tightening the two most user-visible operational surfaces that still lack targeted browser coverage and eliminating dev-tier promotion footguns that could confuse future beta-stage work.
+> Status note: roadmap 21.2 is now delivered, and PRs #299, #297, and #298 closed the original post-21.2 browser-coverage and dev/beta-promotion cleanup batch on `main`. The remaining follow-up here is guarding production deploy workflows when required secrets are not configured yet, without interrupting the beta stage.
 
 ### 24.1 Approvals Page Playwright Coverage
 
-- [ ] Add a targeted Playwright flow for `/approvals`
-- [ ] Cover thread selection, pending gate rendering, and approve/deny action feedback
+- [x] Add a targeted Playwright flow for `/approvals` *(PR #299)*
+- [x] Cover thread selection, pending gate rendering, and approve/deny action feedback *(PR #299)*
 
 ### 24.2 Deployment Page / Promote Gate Playwright Coverage
 
-- [ ] Add a targeted Playwright flow for `/deployment`
-- [ ] Cover tier-card rendering, source-tier selection, and promote preflight feedback
+- [x] Add a targeted Playwright flow for `/deployment` *(PR #297)*
+- [x] Cover tier-card rendering, source-tier selection, and promote preflight feedback *(PR #297)*
 
 ### 24.3 Dev/Beta Promotion Guardrails + Docs Consistency
 
-- [ ] Remove the unsafe/ambiguous default source-tier behavior from `promote-beta.yml`
-- [ ] Sync `docs/USER-SETUP-CD-TIERS.md` with the actual `scripts/env-promote.sh --from <tier>` CLI
-- [ ] Re-verify that beta remains GitHub-environment gated while agents work only in `dev-1` / `dev-2`
+- [x] Remove the unsafe/ambiguous default source-tier behavior from `promote-beta.yml` *(PR #298)*
+- [x] Sync `docs/USER-SETUP-CD-TIERS.md` with the actual `scripts/env-promote.sh --from <tier>` CLI *(PR #298)*
+- [x] Re-verify that beta remains GitHub-environment gated while agents work only in `dev-1` / `dev-2` *(PR #298)*
+
+### 24.4 Production Deploy Guardrails for Missing Secrets
+
+- [ ] Skip release-triggered `deploy-prod.yml` runs cleanly until the required production secrets exist
+- [ ] Fail manual `workflow_dispatch` production deploys early with actionable missing-secret output
+- [ ] Prevent automatic rollback from attempting SSH before remote deployment state has been recorded
 
 ---
 
@@ -1559,9 +1565,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
 | **P1** | ~~Approval Push Dispatch~~ | 21.2 | ✅ Delivered — Expo token bootstrap, device registry, tap routing, and control-plane dispatch are all on `main` (PRs #290, #291, #295) |
-| **P1** | Approvals Page Playwright Coverage | 24.1 | Planned — targeted browser coverage for `/approvals` is still missing |
-| **P1** | Deployment Page / Promote Gate Playwright Coverage | 24.2 | Planned — `/deployment` lacks targeted Playwright coverage for preflight/promote UX |
-| **P2** | Dev/Beta Promotion Guardrails + Docs Consistency | 24.3 | Planned — tighten `promote-beta.yml` defaults and align tier docs with the real CLI |
+| **P1** | Production Deploy Guardrails for Missing Secrets | 24.4 | In progress — follow-up after failed release workflow `23307749638`; primary fix is proposed in PR #300 |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
 | **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — all items complete: time-range, rich cards, handoff timeline, action bar, push notifications (PR #67), SSE stream + replay (PR #71) |
@@ -1761,7 +1765,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
 | [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — PRs #290, #291, and #295 shipped the full 21.2 slice on `main` | 21.2 |
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
-| [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Planned — parallel follow-through for `/approvals` + `/deployment` Playwright coverage and dev/beta promotion guardrails | 24.1-24.3 |
+| [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | In progress — PRs #299, #297, and #298 delivered workstreams A-C; remaining follow-up is 24.4 production deploy guardrails | 24.1-24.4 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
