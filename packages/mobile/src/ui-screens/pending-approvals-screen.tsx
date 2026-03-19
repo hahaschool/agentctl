@@ -1,4 +1,5 @@
 import type { PermissionRequest } from '@agentctl/shared';
+import { useIsFocused } from '@react-navigation/native';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -15,26 +16,19 @@ import { useAppContext } from '../context/app-context.js';
 import type { PendingApprovalsState } from '../screens/pending-approvals-presenter.js';
 import { PendingApprovalsPresenter } from '../screens/pending-approvals-presenter.js';
 import type { PermissionRequestDecision } from '../services/permission-request-api.js';
+import { formatRemaining, formatToolInputPreview } from './pending-approvals-preview.js';
 
-function formatRemaining(timeoutAt: string): string {
-  const remainingMs = new Date(timeoutAt).getTime() - Date.now();
-  if (remainingMs <= 0) return 'Expired';
+export type PendingApprovalsScreenProps = {
+  onPendingCountChange?: (count: number) => void;
+};
 
-  const totalSeconds = Math.floor(remainingMs / 1_000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes)}m ${String(seconds)}s`;
-}
-
-function formatToolInput(toolInput: PermissionRequest['toolInput']): string {
-  if (!toolInput || Object.keys(toolInput).length === 0) return 'No input preview';
-  const preview = JSON.stringify(toolInput);
-  return preview.length > 160 ? `${preview.slice(0, 157)}...` : preview;
-}
-
-export function PendingApprovalsScreen(): React.JSX.Element {
+export function PendingApprovalsScreen({
+  onPendingCountChange,
+}: PendingApprovalsScreenProps = {}): React.JSX.Element {
   const { apiClient } = useAppContext();
+  const isFocused = useIsFocused();
   const presenterRef = useRef<PendingApprovalsPresenter | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [state, setState] = useState<PendingApprovalsState>({
     requests: [],
     pendingCount: 0,
@@ -50,12 +44,47 @@ export function PendingApprovalsScreen(): React.JSX.Element {
       onChange: setState,
     });
     presenterRef.current = presenter;
-    presenter.start();
 
     return () => {
       presenter.stop();
+      presenterRef.current = null;
     };
   }, [apiClient]);
+
+  useEffect(() => {
+    const presenter = presenterRef.current;
+    if (!presenter) {
+      return;
+    }
+
+    if (isFocused) {
+      presenter.start();
+      return () => {
+        presenter.stop();
+      };
+    }
+
+    presenter.stop();
+    return;
+  }, [isFocused]);
+
+  useEffect(() => {
+    onPendingCountChange?.(state.pendingCount);
+  }, [onPendingCountChange, state.pendingCount]);
+
+  useEffect(() => {
+    if (!isFocused || state.requests.length === 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1_000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [isFocused, state.requests.length]);
 
   const handleRefresh = useCallback(async () => {
     await presenterRef.current?.refresh();
@@ -79,11 +108,13 @@ export function PendingApprovalsScreen(): React.JSX.Element {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.agentText}>Agent {item.agentId.slice(0, 8)}</Text>
-            <Text style={styles.timeoutText}>{formatRemaining(item.timeoutAt)}</Text>
+            <Text style={styles.timeoutText}>{formatRemaining(item.timeoutAt, nowMs)}</Text>
           </View>
           <Text style={styles.toolName}>{item.toolName}</Text>
           <Text style={styles.metaText}>Session {item.sessionId.slice(0, 8)}</Text>
-          <Text style={styles.previewText}>{formatToolInput(item.toolInput)}</Text>
+          <Text style={styles.previewText}>
+            {formatToolInputPreview(item.toolInput, item.description)}
+          </Text>
           <View style={styles.actions}>
             <TouchableOpacity
               style={[
@@ -107,7 +138,7 @@ export function PendingApprovalsScreen(): React.JSX.Element {
         </View>
       );
     },
-    [handleResolve, state.resolvingRequestId],
+    [handleResolve, nowMs, state.resolvingRequestId],
   );
 
   return (
