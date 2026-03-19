@@ -16,6 +16,47 @@ import { api, type PermissionDecision, type PermissionRequest } from '../lib/api
 import { timeAgo } from '../lib/format-utils';
 import { pendingPermissionRequestsQuery } from '../lib/queries';
 
+/** Format tool input for compact display in notification cards */
+function formatNotificationToolInput(
+  toolName: string,
+  toolInput: PermissionRequest['toolInput'],
+): string {
+  if (!toolInput) return '';
+  const input = toolInput as Record<string, unknown>;
+  if (toolName === 'Bash' && typeof input.command === 'string') {
+    const cmd = input.command;
+    const desc = input.description ? `\n# ${String(input.description)}` : '';
+    return `$ ${cmd}${desc}`;
+  }
+  if (['Read', 'Edit', 'Write', 'Glob'].includes(toolName)) {
+    const path = input.file_path ?? input.path ?? input.pattern;
+    if (typeof path === 'string') return path;
+  }
+  if (toolName === 'Grep' && typeof input.pattern === 'string') {
+    return `/${input.pattern}/${input.path ? ` in ${String(input.path)}` : ''}`;
+  }
+  if (toolName === 'AskUserQuestion') {
+    if (typeof input.question === 'string') return input.question;
+    if (Array.isArray(input.questions)) {
+      return (input.questions as Array<Record<string, unknown>>)
+        .map((q) => {
+          const header = q.header ?? q.question ?? '';
+          const opts = Array.isArray(q.options)
+            ? (q.options as Array<Record<string, unknown>>)
+                .map(
+                  (o) =>
+                    `  • ${String(o.label ?? '')}${o.description ? ` — ${String(o.description)}` : ''}`,
+                )
+                .join('\n')
+            : '';
+          return opts ? `${String(header)}\n${opts}` : String(header);
+        })
+        .join('\n\n');
+    }
+  }
+  return JSON.stringify(input, null, 2).slice(0, 500);
+}
+
 type NotificationBellProps = {
   notifications: Notification[];
   unreadCount: number;
@@ -247,9 +288,7 @@ export function NotificationBell({
                         </button>
                         {request.toolInput && (
                           <pre className="max-h-40 overflow-auto rounded border border-border/40 bg-muted/50 px-2 py-1.5 text-[10px] font-mono text-foreground/80 whitespace-pre-wrap break-all leading-relaxed">
-                            {typeof request.toolInput === 'string'
-                              ? request.toolInput
-                              : JSON.stringify(request.toolInput, null, 2).slice(0, 800)}
+                            {formatNotificationToolInput(request.toolName, request.toolInput)}
                           </pre>
                         )}
                         {request.description && (

@@ -19,10 +19,54 @@ type PermissionRequestCardProps = {
   className?: string;
 };
 
-function formatToolInput(toolInput: PermissionRequest['toolInput']): string {
+function formatToolInput(toolName: string, toolInput: PermissionRequest['toolInput']): string {
   if (toolInput == null) return '// no tool input provided';
   try {
-    const value = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput, null, 2);
+    const input = toolInput as Record<string, unknown>;
+    // For Bash: show command directly with real newlines
+    if (toolName === 'Bash' && typeof input.command === 'string') {
+      const parts: string[] = [`$ ${input.command}`];
+      if (input.description) parts.push(`# ${String(input.description)}`);
+      if (input.timeout) parts.push(`# timeout: ${String(input.timeout)}ms`);
+      return parts.join('\n');
+    }
+    // For Read/Edit/Write: show path prominently
+    if (['Read', 'Edit', 'Write', 'Glob'].includes(toolName)) {
+      const path = input.file_path ?? input.path ?? input.pattern;
+      if (typeof path === 'string') {
+        const parts = [path];
+        if (input.old_string) parts.push(`- ${String(input.old_string).slice(0, 200)}`);
+        if (input.new_string) parts.push(`+ ${String(input.new_string).slice(0, 200)}`);
+        if (input.content) parts.push(String(input.content).slice(0, 300));
+        return parts.join('\n');
+      }
+    }
+    // For Grep: show pattern + path
+    if (toolName === 'Grep' && typeof input.pattern === 'string') {
+      return `/${input.pattern}/${input.path ? ` in ${String(input.path)}` : ''}`;
+    }
+    // For AskUserQuestion: show question text and options
+    if (toolName === 'AskUserQuestion') {
+      if (typeof input.question === 'string') return input.question;
+      if (Array.isArray(input.questions)) {
+        return (input.questions as Array<Record<string, unknown>>)
+          .map((q) => {
+            const header = q.header ?? q.question ?? '';
+            const opts = Array.isArray(q.options)
+              ? (q.options as Array<Record<string, unknown>>)
+                  .map(
+                    (o) =>
+                      `  • ${String(o.label ?? o.value ?? '')}${o.description ? ` — ${String(o.description)}` : ''}`,
+                  )
+                  .join('\n')
+              : '';
+            return opts ? `${String(header)}\n${opts}` : String(header);
+          })
+          .join('\n\n');
+      }
+    }
+    // Fallback: pretty-print JSON
+    const value = JSON.stringify(input, null, 2);
     if (value.length <= 1_200) return value;
     return `${value.slice(0, 1_200)}\n...`;
   } catch {
@@ -102,8 +146,8 @@ export function PermissionRequestCard({
   const isResolved = effectiveStatus !== 'pending';
 
   const toolInputPreview = useMemo(
-    () => formatToolInput(permissionRequest.toolInput),
-    [permissionRequest.toolInput],
+    () => formatToolInput(permissionRequest.toolName, permissionRequest.toolInput),
+    [permissionRequest.toolName, permissionRequest.toolInput],
   );
 
   const handleResolve = async (
