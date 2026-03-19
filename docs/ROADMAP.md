@@ -1444,17 +1444,21 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 21.1 Mobile Approval Inbox — Delivered
 
-- [x] Mobile API wrapper for `permission-requests` list + resolve *(direct commit pending)*
-- [x] Pending approvals screen with approve/deny actions *(direct commit pending)*
-- [x] Runtime tab badge includes pending approvals *(direct commit pending)*
-- [x] Dedicated mobile `Approvals` tab for the inbox *(direct commit pending)*
-- [x] Mobile regression coverage for polling + resolve flow *(direct commit pending)*
+- [x] Mobile API wrapper for `permission-requests` list + resolve *(PR #273)*
+- [x] Pending approvals screen with approve/deny actions *(PR #273)*
+- [x] Runtime tab badge includes pending approvals *(PR #273)*
+- [x] Dedicated mobile `Approvals` tab for the inbox *(PR #273)*
+- [x] Mobile regression coverage for polling + resolve flow *(PR #273)*
 
 ### 21.2 iOS Push Notifications for Pending Approvals — Planned
 
-- [ ] Device token registration from mobile app
-- [ ] Control-plane push dispatch path for `approval.pending`
+> Design: [plans/2026-03-19-approval-push-notifications-design.md](plans/2026-03-19-approval-push-notifications-design.md)
+> Plan: [plans/2026-03-19-approval-push-notifications-impl-plan.md](plans/2026-03-19-approval-push-notifications-impl-plan.md)
+
+- [ ] Expo/iOS device token registration from mobile app
+- [ ] Control-plane device registry + Expo push dispatch path for `approval.pending`
 - [ ] Notification tap path lands user on the approval inbox
+- [ ] Initial single-operator routing model documented until durable user ownership lands
 
 ## 22. Remaining Route Tests + Frontend Integration
 
@@ -1688,6 +1692,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped, 21.2 remains planned | 17.4, 21.1-21.2 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | In progress — 21.1 shipped, 21.2 remains open | 21.1-21.2 |
+| [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Planned — dedicated 21.2 design for Expo/iOS approval pushes | 21.2 |
+| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Planned — execution plan for 21.2 push delivery + tap routing | 21.2 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
