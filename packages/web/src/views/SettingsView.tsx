@@ -4,11 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
-
+import { NotificationPreferencesPanel } from '@/components/settings/NotificationPreferencesPanel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ALL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
 import { healthQuery } from '../lib/queries';
+
 import { AccountsSection } from './AccountsSection';
 import { FailoverSection } from './FailoverSection';
 import { PreferencesSection } from './PreferencesSection';
@@ -49,6 +50,11 @@ const SETTINGS_NAV = [
     id: 'appearance-preferences',
     label: 'Appearance & Preferences',
     detail: 'Theme, polling cadence, and operator-facing control plane preferences.',
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    detail: 'Per-priority channels, quiet hours, and push notification settings.',
   },
 ] as const;
 
@@ -163,6 +169,14 @@ export function SettingsView(): React.JSX.Element {
                 <AboutSection />
               </div>
             </div>
+          </SettingsSection>
+
+          <SettingsSection
+            id="notifications"
+            title="Notifications"
+            description="Define which channels receive agent event notifications and when to suppress them using quiet hours."
+          >
+            <NotificationPreferencesPanel />
           </SettingsSection>
         </SettingsShell>
       </div>

@@ -50,6 +50,9 @@ import type {
   MemoryStats,
   NativeImportAttempt,
   NativeImportPreflightResponse,
+  NotificationChannel,
+  NotificationPreference,
+  NotificationPriority,
   ResumeManagedSessionRequest,
   RuntimeConfigSyncRequest,
   RuntimeConfigSyncResponse,
@@ -78,6 +81,9 @@ export type {
   AgentConfig,
   ContextRef,
   CrossSpaceSubscription,
+  NotificationChannel,
+  NotificationPreference,
+  NotificationPriority,
   DiscoveredMcpServer,
   DiscoveredSkill,
   EventSenderType,
@@ -884,6 +890,29 @@ export const api = {
     }),
   deleteProjectAccount: (id: string) =>
     request<{ ok: boolean }>(`/api/settings/project-accounts/${id}`, { method: 'DELETE' }),
+
+  // Notification preferences
+  getNotificationPreferences: (userId: string) =>
+    request<{ preferences: NotificationPreference[] }>(
+      `/api/notifications/preferences/${encodeURIComponent(userId)}`,
+    ),
+  setNotificationPreference: (body: {
+    userId: string;
+    priority: NotificationPriority;
+    channels: NotificationChannel[];
+    quietHoursStart?: string;
+    quietHoursEnd?: string;
+    timezone?: string;
+  }) =>
+    request<{ ok: boolean; preference: NotificationPreference }>('/api/notifications/preferences', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  deleteNotificationPreference: (id: string) =>
+    request<{ ok: boolean; deletedId: string }>(
+      `/api/notifications/preferences/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    ),
 
   // Dashboard / Metrics (Prometheus text format → parsed object)
   metrics: async (): Promise<Record<string, string | number>> => {
