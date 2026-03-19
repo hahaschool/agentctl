@@ -23,8 +23,12 @@ export default function ApprovalsPage(): React.JSX.Element {
   const pending = requests.filter((r) => r.status === 'pending');
   const resolved = requests.filter((r) => r.status !== 'pending');
 
-  const handleResolve = async (id: string, decision: PermissionDecision): Promise<void> => {
-    await api.resolvePermissionRequest(id, decision);
+  const handleResolve = async (
+    id: string,
+    decision: PermissionDecision,
+    options?: { allowForSession?: boolean },
+  ): Promise<void> => {
+    await api.resolvePermissionRequest(id, decision, options);
     queryClient.invalidateQueries({ queryKey: ['permission-requests'] });
   };
 

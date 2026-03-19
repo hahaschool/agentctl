@@ -11,7 +11,11 @@ import { cn } from '@/lib/utils';
 
 type PermissionRequestCardProps = {
   permissionRequest: PermissionRequest;
-  onResolve: (id: string, decision: PermissionDecision) => Promise<void> | void;
+  onResolve: (
+    id: string,
+    decision: PermissionDecision,
+    options?: { allowForSession?: boolean },
+  ) => Promise<void> | void;
   className?: string;
 };
 
@@ -102,12 +106,15 @@ export function PermissionRequestCard({
     [permissionRequest.toolInput],
   );
 
-  const handleResolve = async (decision: PermissionDecision): Promise<void> => {
+  const handleResolve = async (
+    decision: PermissionDecision,
+    allowForSession?: boolean,
+  ): Promise<void> => {
     if (isResolved) return;
     setResolveError(null);
     setSubmittingDecision(decision);
     try {
-      await onResolve(permissionRequest.id, decision);
+      await onResolve(permissionRequest.id, decision, { allowForSession });
       setOptimisticStatus(decision);
     } catch (error) {
       setResolveError(error instanceof Error ? error.message : 'Failed to resolve request');
@@ -154,14 +161,23 @@ export function PermissionRequestCard({
             {statusLabel(effectiveStatus)}
           </p>
         ) : (
-          <div className="flex w-full items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2">
             <Button
               size="sm"
               className="bg-emerald-600 text-white hover:bg-emerald-500"
               disabled={Boolean(submittingDecision)}
               onClick={() => void handleResolve('approved')}
             >
-              {submittingDecision === 'approved' ? 'Approving…' : 'Approve'}
+              {submittingDecision === 'approved' ? 'Approving…' : 'Allow once'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+              disabled={Boolean(submittingDecision)}
+              onClick={() => void handleResolve('approved', true)}
+            >
+              Allow for session
             </Button>
             <Button
               size="sm"

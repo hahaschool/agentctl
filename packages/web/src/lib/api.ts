@@ -840,10 +840,14 @@ export const api = {
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return request<PermissionRequest[]>(`/api/permission-requests${suffix}`);
   },
-  resolvePermissionRequest: (id: string, decision: PermissionDecision) =>
+  resolvePermissionRequest: (
+    id: string,
+    decision: PermissionDecision,
+    options?: { allowForSession?: boolean },
+  ) =>
     request<PermissionRequest>(`/api/permission-requests/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({ decision, allowForSession: options?.allowForSession }),
     }),
 
   // Approval Gates

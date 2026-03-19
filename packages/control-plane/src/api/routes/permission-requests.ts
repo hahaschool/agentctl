@@ -126,6 +126,63 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
       const now = new Date();
       const timeoutAt = new Date(now.getTime() + timeoutSeconds * 1000);
 
+      // Auto-approve if a previous request with same sessionId + toolName was approved
+      // with allowForSession flag (resolvedBy contains 'session-allow:')
+      const [sessionAllow] = await db
+        .select()
+        .from(permissionRequests)
+        .where(
+          and(
+            eq(permissionRequests.sessionId, sessionId),
+            eq(permissionRequests.toolName, toolName),
+            eq(permissionRequests.status, 'approved'),
+          ),
+        )
+        .orderBy(desc(permissionRequests.requestedAt));
+
+      if (sessionAllow?.resolvedBy?.startsWith('session-allow:')) {
+        // Auto-approve: create as already approved
+        const [autoApproved] = await db
+          .insert(permissionRequests)
+          .values({
+            agentId,
+            sessionId,
+            machineId,
+            requestId,
+            toolName,
+            toolInput: toolInput ?? null,
+            description: description ?? null,
+            status: 'approved',
+            decision: 'approved',
+            requestedAt: now,
+            timeoutAt,
+            resolvedAt: now,
+            resolvedBy: 'auto:session-allow',
+          })
+          .returning();
+
+        broadcastPermissionEvent(
+          'permission_request_created',
+          toPermissionRequestEvent(autoApproved),
+        );
+        broadcastPermissionEvent(
+          'permission_request_resolved',
+          toPermissionRequestEvent(autoApproved),
+        );
+
+        // Forward auto-approval to worker
+        await forwardDecisionToWorker(
+          {
+            agentId: autoApproved.agentId,
+            requestId: autoApproved.requestId,
+            decision: 'approved',
+          },
+          { dbRegistry, workerPort, logger: app.log },
+        );
+
+        return reply.code(201).send(autoApproved);
+      }
+
       const [created] = await db
         .insert(permissionRequests)
         .values({
@@ -208,6 +265,7 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
     Body: {
       decision?: PermissionDecisionValue;
       resolvedBy?: string;
+      allowForSession?: boolean;
     };
   }>(
     '/:id',
@@ -247,7 +305,9 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
           status: decision,
           decision,
           resolvedAt,
-          resolvedBy: resolveResolvedBy(request.body.resolvedBy, request.headers['x-user-id']),
+          resolvedBy: request.body.allowForSession
+            ? `session-allow:${resolveResolvedBy(request.body.resolvedBy, request.headers['x-user-id'])}`
+            : resolveResolvedBy(request.body.resolvedBy, request.headers['x-user-id']),
         })
         .where(
           and(

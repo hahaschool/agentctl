@@ -107,6 +107,7 @@ export function NotificationBell({
       event: React.MouseEvent<HTMLButtonElement>,
       id: string,
       decision: PermissionDecision,
+      allowForSession?: boolean,
     ) => {
       event.preventDefault();
       event.stopPropagation();
@@ -114,7 +115,7 @@ export function NotificationBell({
 
       setResolvingById((prev) => ({ ...prev, [id]: decision }));
       try {
-        await api.resolvePermissionRequest(id, decision);
+        await api.resolvePermissionRequest(id, decision, { allowForSession });
         await pendingRequestsQuery.refetch();
       } finally {
         setResolvingById((prev) => {
@@ -254,7 +255,7 @@ export function NotificationBell({
                         {request.description && (
                           <p className="text-[10px] text-muted-foreground">{request.description}</p>
                         )}
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
                             size="xs"
@@ -262,7 +263,19 @@ export function NotificationBell({
                             disabled={Boolean(resolvingDecision)}
                             onClick={(event) => void handleResolve(event, request.id, 'approved')}
                           >
-                            {resolvingDecision === 'approved' ? 'Approving…' : 'Approve'}
+                            {resolvingDecision === 'approved' ? 'Approving…' : 'Allow once'}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            className="border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+                            disabled={Boolean(resolvingDecision)}
+                            onClick={(event) =>
+                              void handleResolve(event, request.id, 'approved', true)
+                            }
+                          >
+                            Allow for session
                           </Button>
                           <Button
                             type="button"
@@ -271,7 +284,7 @@ export function NotificationBell({
                             disabled={Boolean(resolvingDecision)}
                             onClick={(event) => void handleResolve(event, request.id, 'denied')}
                           >
-                            {resolvingDecision === 'denied' ? 'Denying…' : 'Deny'}
+                            Deny
                           </Button>
                         </div>
                       </CardContent>
