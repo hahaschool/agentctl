@@ -430,9 +430,24 @@ export class PromotionRunner {
         return;
       }
 
-      // Build
-      events.emit('event', { type: 'step', step: 'build', message: 'Running pnpm build...' });
-      const buildResult = await this.spawnWithLogs('pnpm', ['build'], events, BUILD_TIMEOUT_MS);
+      // Build — skip if a recent .next/BUILD_ID exists
+      const promBuildIdPath = join(this.repoRoot, 'packages', 'web', '.next', 'BUILD_ID');
+      const buildFresh =
+        existsSync(promBuildIdPath) &&
+        Date.now() - statSync(promBuildIdPath).mtimeMs < 30 * 60 * 1000;
+
+      if (buildFresh) {
+        events.emit('event', {
+          type: 'step',
+          step: 'build',
+          message: 'Build fresh — skipping rebuild',
+        });
+      } else {
+        events.emit('event', { type: 'step', step: 'build', message: 'Running pnpm build...' });
+      }
+      const buildResult = buildFresh
+        ? { ok: true, output: 'Skipped — recent build exists' }
+        : await this.spawnWithLogs('pnpm', ['build'], events, BUILD_TIMEOUT_MS);
       if (!buildResult.ok) {
         const errorMsg = 'Build step failed';
         await this.finalize(id, 'failed', startedAt, errorMsg, preflight.checks);
