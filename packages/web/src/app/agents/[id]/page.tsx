@@ -3,7 +3,7 @@
 import type { ExecutionSummary } from '@agentctl/shared';
 import { toExecutionSummary } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Copy, Download, Settings } from 'lucide-react';
+import { Copy, Download, Play, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type React from 'react';
@@ -279,17 +279,27 @@ function AgentDetailPageContent(): React.JSX.Element {
     );
   }
 
+  // Derive a border color from the agent status for the prominent status accent
+  const statusAccentClass =
+    data.status === 'running'
+      ? 'border-l-green-500'
+      : data.status === 'error' || data.status === 'timeout'
+        ? 'border-l-red-500'
+        : data.status === 'starting' || data.status === 'stopping' || data.status === 'restarting'
+          ? 'border-l-yellow-500'
+          : 'border-l-border';
+
   return (
     <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
       <FetchingBar isFetching={(agent.isFetching || runs.isFetching) && !agent.isLoading} />
       <Breadcrumb items={[{ label: 'Agents', href: '/agents' }, { label: data.name }]} />
 
-      {/* Header */}
-      <div className="mb-6 space-y-3">
+      {/* Header — left border accent reflects live agent status */}
+      <div className={`mb-6 space-y-3 border-l-4 pl-4 ${statusAccentClass}`}>
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap min-w-0">
             <h1
-              className="text-[22px] font-semibold tracking-tight truncate min-w-0 max-w-[300px]"
+              className="text-[22px] font-semibold tracking-tight truncate min-w-0 max-w-[60vw] sm:max-w-none"
               title={data.name}
             >
               {data.name}
@@ -511,7 +521,7 @@ function AgentDetailPageContent(): React.JSX.Element {
       </Card>
 
       {/* Cost cards */}
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="p-4">
             <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
@@ -528,6 +538,27 @@ function AgentDetailPageContent(): React.JSX.Element {
             <div className="text-2xl font-semibold text-foreground">
               {formatCost(data.totalCostUsd)}
             </div>
+          </CardContent>
+        </Card>
+        <Card className="col-span-2 sm:col-span-1">
+          <CardContent className="p-4">
+            <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
+              Avg Cost / Run
+            </div>
+            {runs.isLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : (
+              <div className="text-2xl font-semibold text-foreground">
+                {runList.length > 0 && data.totalCostUsd != null
+                  ? formatCost(data.totalCostUsd / runList.length)
+                  : '$—'}
+              </div>
+            )}
+            {!runs.isLoading && runList.length > 0 && (
+              <div className="text-[10px] text-muted-foreground mt-0.5">
+                over {runList.length} run{runList.length === 1 ? '' : 's'}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -626,8 +657,19 @@ function AgentDetailPageContent(): React.JSX.Element {
               onRetry={() => void agentSessions.refetch()}
             />
           ) : (agentSessions.data?.sessions ?? []).length === 0 ? (
-            <div className="py-6 text-center text-muted-foreground text-sm">
-              No sessions found for this agent.
+            <div className="py-8 text-center space-y-3">
+              <div className="text-sm text-muted-foreground">No sessions yet for this agent.</div>
+              {data.status !== 'running' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setStartDialogOpen(true)}
+                  disabled={isStarting}
+                >
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  Start first run
+                </Button>
+              )}
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -725,6 +767,21 @@ function AgentDetailPageContent(): React.JSX.Element {
               message={`Failed to load runs: ${runs.error.message}`}
               onRetry={() => void runs.refetch()}
             />
+          ) : runList.length === 0 ? (
+            <div className="py-8 text-center space-y-3">
+              <div className="text-sm text-muted-foreground">No runs yet for this agent.</div>
+              {data.status !== 'running' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setStartDialogOpen(true)}
+                  disabled={isStarting}
+                >
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  Start first run
+                </Button>
+              )}
+            </div>
           ) : (
             <>
               {latestRunSummary && <ExecutionSummaryCard summary={latestRunSummary} />}
