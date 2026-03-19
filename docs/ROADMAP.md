@@ -1392,24 +1392,26 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 20. Coverage & Feature Depth (Batch)
 
-### 20.1 CP Route Test Coverage — P1
+> Plan: [plans/2026-03-19-coverage-feature-depth-batch-plan.md](plans/2026-03-19-coverage-feature-depth-batch-plan.md)
 
-- [ ] `spaces.ts` tests (474 lines, actively used, zero coverage)
-- [ ] `task-graphs.ts` tests (253 lines, used by Tasks page)
-- [ ] `memory-reports.ts` tests (504 lines, largest untested route)
-- [ ] `notification-preferences.ts` tests (218 lines)
-- [ ] `agent-profiles.ts` tests (237 lines)
+### 20.1 CP Route Test Coverage — Delivered
 
-### 20.2 Tasks Detail Page — P2
+- [x] `spaces.ts` tests — 76 tests covering full endpoint coverage *(PR #259)*
+- [x] `task-graphs.ts` tests — 35 tests covering all endpoints *(PR #256)*
+- [x] `memory-reports.ts` tests *(PR #261)*
+- [x] `notification-preferences.ts` tests *(PR #258)*
+- [x] `agent-profiles.ts` tests — 33 tests covering CRUD + validation *(PR #257)*
 
-- [ ] Create `/tasks/[id]` route with task graph detail view
-- [ ] Show graph nodes, dependencies, run history
-- [ ] Wire task-runs.ts API for triggering runs from UI
+### 20.2 Tasks Detail Page — Delivered
 
-### 20.3 API Documentation — P2
+- [x] Create `/tasks/[id]` route with task graph detail view *(PR #266)*
+- [x] Show graph nodes, dependencies, run history *(PR #266)*
+- [x] Wire task-runs.ts API for triggering runs from UI *(PR #266)*
 
-- [ ] Generate `docs/API.md` from CP route definitions
-- [ ] Cover all REST endpoints with request/response examples
+### 20.3 API Documentation — Delivered
+
+- [x] Generate `docs/API.md` from CP route definitions *(PR #265)*
+- [x] Cover all REST endpoints with request/response examples *(PR #265)*
 
 ### 20.4 Memory Dashboard — P2
 
