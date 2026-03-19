@@ -1,11 +1,13 @@
 import type { MobilePushDevice } from '@agentctl/shared';
 
 const DEFAULT_EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 export type ExpoPushDispatcherOptions = {
   fetch?: typeof fetch;
   endpoint?: string;
   accessToken?: string;
+  timeoutMs?: number;
 };
 
 export type ExpoPushApprovalPendingInput = {
@@ -46,11 +48,13 @@ export class ExpoPushDispatcher {
   private readonly fetchFn: typeof fetch;
   private readonly endpoint: string;
   private readonly accessToken?: string;
+  private readonly timeoutMs: number;
 
   constructor(options: ExpoPushDispatcherOptions = {}) {
     this.fetchFn = options.fetch ?? globalThis.fetch;
     this.endpoint = options.endpoint ?? DEFAULT_EXPO_PUSH_URL;
     this.accessToken = options.accessToken;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   async dispatchApprovalPending(
@@ -72,6 +76,7 @@ export class ExpoPushDispatcher {
       const response = await this.fetchFn(this.endpoint, {
         method: 'POST',
         headers,
+        signal: AbortSignal.timeout(this.timeoutMs),
         body: JSON.stringify(
           input.devices.map((device) => ({
             to: device.pushToken,

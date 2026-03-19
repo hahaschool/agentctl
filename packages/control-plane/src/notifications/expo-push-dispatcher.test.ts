@@ -74,6 +74,33 @@ describe('ExpoPushDispatcher', () => {
     ]);
   });
 
+  it('applies a bounded request timeout so approval creation is not blocked by a hung Expo call', async () => {
+    const signal = new AbortController().signal;
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(signal);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [{ status: 'ok', id: 'ticket-1' }],
+      }),
+    });
+
+    const dispatcher = new ExpoPushDispatcher({
+      fetch: fetchMock as typeof fetch,
+      timeoutMs: 4_321,
+    });
+
+    await dispatcher.dispatchApprovalPending({
+      requestId: 'req-123',
+      devices: [makeDevice()],
+    });
+
+    expect(timeoutSpy).toHaveBeenCalledWith(4_321);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(signal);
+    timeoutSpy.mockRestore();
+  });
+
   it('marks DeviceNotRegistered ticket errors as permanent invalid-token failures', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
