@@ -15,7 +15,10 @@ import { DashboardActionButton } from '../components/DashboardActionButton';
 import { DashboardActivityIcon } from '../components/DashboardActivityIcon';
 import { DashboardCostOverview } from '../components/DashboardCostOverview';
 import { DashboardEmptyPanel } from '../components/DashboardEmptyPanel';
+import { DashboardQuickActions } from '../components/DashboardQuickActions';
+import { DashboardRecentRuns } from '../components/DashboardRecentRuns';
 import { DashboardSectionHeader } from '../components/DashboardSectionHeader';
+import { DashboardSystemHealth } from '../components/DashboardSystemHealth';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
@@ -244,9 +247,7 @@ export function DashboardPage(): React.JSX.Element {
           <LastUpdated dataUpdatedAt={health.dataUpdatedAt} />
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <Button asChild size="sm">
-            <Link href="/sessions">New Session</Link>
-          </Button>
+          <DashboardQuickActions />
           <WsStatusIndicator status={wsStatus} />
           <RefreshButton onClick={refreshAll} isFetching={anyFetching} />
         </div>
@@ -329,6 +330,18 @@ export function DashboardPage(): React.JSX.Element {
         </div>
       </div>
 
+      {/* System Health Summary — compact service pill row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5 px-4 sm:px-5 py-3 bg-card border border-border/50 rounded-lg">
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+          Service Health
+        </span>
+        <DashboardSystemHealth
+          health={health.data}
+          wsStatus={wsStatus}
+          isLoading={health.isLoading}
+        />
+      </div>
+
       {/* Stats grid */}
       {machines.isLoading ||
       agents.isLoading ||
@@ -369,12 +382,14 @@ export function DashboardPage(): React.JSX.Element {
               accent={activeRuns > 0 ? 'green' : undefined}
               sublabel={`${formatNumber(totalRuns)} total`}
             />
-            <StatCard
-              label="Active Sessions"
-              value={String(activeSessionCount)}
-              accent={activeSessionCount > 0 ? 'green' : undefined}
-              sublabel={`${sessionList.length} total`}
-            />
+            <Link href="/sessions" className="no-underline block">
+              <StatCard
+                label="Active Sessions"
+                value={String(activeSessionCount)}
+                accent={activeSessionCount > 0 ? 'green' : undefined}
+                sublabel={`${sessionList.length} total · View All →`}
+              />
+            </Link>
           </div>
           <Card className="mb-6 border-border/50 bg-card/90 rounded-lg py-0 gap-0 shadow-none">
             <CardContent className="px-4 py-2.5">
@@ -620,6 +635,14 @@ export function DashboardPage(): React.JSX.Element {
                   </Link>
                 ))
               )}
+            </div>
+          </div>
+
+          {/* Recent Agent Runs */}
+          <div>
+            <DashboardSectionHeader title="Recent Agent Runs" href="/agents" />
+            <div className="border border-border/50 rounded-lg overflow-hidden">
+              <DashboardRecentRuns agents={agentList} isAgentsLoading={agents.isLoading} />
             </div>
           </div>
         </div>
