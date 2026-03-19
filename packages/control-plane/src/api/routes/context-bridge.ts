@@ -18,6 +18,10 @@ export type ContextBridgeRoutesOptions = {
   eventStore: EventStore;
 };
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions> = async (
   app,
   opts,
@@ -47,6 +51,10 @@ export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions>
       const { spaceId } = request.params;
       const { sourceSpaceId, sourceThreadId, sourceEventId, targetThreadId, mode, createdBy } =
         request.body;
+      const normalizedCreatedBy = isNonEmptyString(createdBy) ? createdBy.trim() : null;
+      const normalizedTargetThreadId = isNonEmptyString(targetThreadId)
+        ? targetThreadId.trim()
+        : null;
 
       // Validate target space exists
       const targetSpace = await spaceStore.getSpace(spaceId);
@@ -73,14 +81,14 @@ export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions>
         });
       }
 
-      if (!createdBy || typeof createdBy !== 'string') {
+      if (!normalizedCreatedBy) {
         return reply.code(400).send({
           error: 'INVALID_CREATED_BY',
           message: 'A non-empty "createdBy" string is required',
         });
       }
 
-      if (!targetThreadId || typeof targetThreadId !== 'string') {
+      if (!normalizedTargetThreadId) {
         return reply.code(400).send({
           error: 'INVALID_TARGET_THREAD_ID',
           message: 'A non-empty "targetThreadId" string is required',
@@ -92,11 +100,11 @@ export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions>
         sourceThreadId: sourceThreadId ?? null,
         sourceEventId: sourceEventId ?? null,
         targetSpaceId: spaceId,
-        targetThreadId,
+        targetThreadId: normalizedTargetThreadId,
         mode,
         snapshotPayload: request.body.snapshotPayload ?? null,
         metadata: request.body.metadata ?? {},
-        createdBy,
+        createdBy: normalizedCreatedBy,
       });
 
       return reply.code(201).send(ref);
@@ -287,6 +295,7 @@ export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions>
     async (request, reply) => {
       const { spaceId } = request.params;
       const { sourceSpaceId, filterCriteria, createdBy } = request.body;
+      const normalizedCreatedBy = isNonEmptyString(createdBy) ? createdBy.trim() : null;
 
       const targetSpace = await spaceStore.getSpace(spaceId);
       if (!targetSpace) {
@@ -304,7 +313,7 @@ export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions>
         });
       }
 
-      if (!createdBy || typeof createdBy !== 'string') {
+      if (!normalizedCreatedBy) {
         return reply.code(400).send({
           error: 'INVALID_CREATED_BY',
           message: 'A non-empty "createdBy" string is required',
@@ -315,7 +324,7 @@ export const contextBridgeRoutes: FastifyPluginAsync<ContextBridgeRoutesOptions>
         sourceSpaceId,
         targetSpaceId: spaceId,
         filterCriteria: filterCriteria ?? {},
-        createdBy,
+        createdBy: normalizedCreatedBy,
       });
 
       return reply.code(201).send(subscription);
