@@ -16,6 +16,7 @@ import {
   ScrollText,
   Server,
   Settings,
+  ShieldCheck,
   Sun,
   X,
 } from 'lucide-react';
@@ -58,6 +59,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/discover', label: 'Discover', icon: Compass, shortcut: '5' },
   { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6' },
   { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
+  { href: '/approvals', label: 'Approvals', icon: ShieldCheck },
   { href: '/memory', label: 'Memory', icon: Database, shortcut: '8' },
   { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9' },
   { href: '/tasks', label: 'Tasks', icon: ListTree },
