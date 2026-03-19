@@ -1,6 +1,8 @@
 # Mobile Approval Center Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+>
+> **Status:** Delivered for roadmap `21.1`. The `21.2` push-notification slice is now tracked separately in `2026-03-19-approval-push-notifications-design.md` and `2026-03-19-approval-push-notifications-impl-plan.md`.
 
 **Goal:** Add a mobile approval inbox so users can review and resolve pending permission requests from the app, and expose the unresolved count in navigation.
 
