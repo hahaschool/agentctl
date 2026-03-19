@@ -69,7 +69,13 @@ export function PromotionProgress({
             });
             break;
           case 'log':
-            setLogs((prev) => [...prev, data as PromotionLogLine]);
+            setLogs((prev) => [
+              ...prev,
+              {
+                timestamp: data.timestamp ?? new Date().toISOString(),
+                text: data.line ?? data.text ?? '',
+              },
+            ]);
             break;
           case 'complete':
             completedRef.current = true;
