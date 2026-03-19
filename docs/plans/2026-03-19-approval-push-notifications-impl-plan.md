@@ -1,6 +1,8 @@
 # Approval Push Notifications Implementation Plan
 
 > Goal: execute roadmap `21.2 iOS Push Notifications for Pending Approvals` without disrupting the current beta workflow.
+>
+> Status as of 2026-03-19: Tasks 1, 2, 4, and 5 are on `main` via PRs #291 and #290. The remaining implementation gap is Task 3 (actual Expo push dispatch on permission-request create), after which Task 6 can mark `21.2` delivered.
 
 ## Architecture
 
@@ -12,7 +14,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 - `21.1` inbox/operator surface remains the only landing UI.
 - No workflow or CD changes are required beyond environment secrets/config for the control plane.
 
-## Task 1: Extend shared contracts
+## Task 1: Extend shared contracts — Delivered on `main` (PR #291)
 
 **Files**
 
@@ -30,7 +32,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 - `pnpm --filter @agentctl/shared build`
 - Focused shared tests if the event/type unions already have direct coverage.
 
-## Task 2: Add control-plane device registry
+## Task 2: Add control-plane device registry — Delivered on `main` (PR #291)
 
 **Files**
 
@@ -49,7 +51,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 - Focused Fastify route/store tests
 - `pnpm --filter @agentctl/control-plane test -- ...mobile-push-devices...`
 
-## Task 3: Add Expo push dispatcher in control plane
+## Task 3: Add Expo push dispatcher in control plane — Remaining work
 
 **Files**
 
@@ -68,7 +70,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 - Focused dispatcher unit tests
 - Focused permission-request route tests proving push dispatch is invoked on create
 
-## Task 4: Add mobile token registration bootstrap
+## Task 4: Add mobile token registration bootstrap — Delivered on `main` (PR #290)
 
 **Files**
 
@@ -90,7 +92,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 - Focused mobile service tests with mocked Expo APIs
 - `pnpm --filter @agentctl/mobile build`
 
-## Task 5: Add notification tap routing into Approvals
+## Task 5: Add notification tap routing into Approvals — Delivered on `main` (PR #290)
 
 **Files**
 
@@ -108,7 +110,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 
 - Focused unit tests for notification-response parsing / route selection
 
-## Task 6: Roadmap + operational follow-through
+## Task 6: Roadmap + operational follow-through — In Progress
 
 **Files**
 
