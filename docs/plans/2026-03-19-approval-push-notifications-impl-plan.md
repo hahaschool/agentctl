@@ -2,7 +2,7 @@
 
 > Goal: execute roadmap `21.2 iOS Push Notifications for Pending Approvals` without disrupting the current beta workflow.
 >
-> Status as of 2026-03-19: Tasks 1, 2, 4, and 5 are on `main` via PRs #291 and #290. The remaining implementation gap is Task 3 (actual Expo push dispatch on permission-request create), after which Task 6 can mark `21.2` delivered.
+> Status as of 2026-03-20: Tasks 1-5 are on `main` via PRs #290, #291, and #295, so roadmap `21.2` is now delivered. Task 6 is this follow-up docs sync recording the shipped state.
 
 ## Architecture
 
@@ -51,12 +51,11 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 - Focused Fastify route/store tests
 - `pnpm --filter @agentctl/control-plane test -- ...mobile-push-devices...`
 
-## Task 3: Add Expo push dispatcher in control plane — Remaining work
+## Task 3: Add Expo push dispatcher in control plane — Delivered on `main` (PR #295)
 
 **Files**
 
 - Create: `packages/control-plane/src/notifications/expo-push-dispatcher.ts`
-- Modify: `packages/control-plane/src/intelligence/notification-router.ts`
 - Modify: `packages/control-plane/src/api/routes/permission-requests.ts`
 
 **Work**
@@ -110,7 +109,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 
 - Focused unit tests for notification-response parsing / route selection
 
-## Task 6: Roadmap + operational follow-through — In Progress
+## Task 6: Roadmap + operational follow-through — Delivered
 
 **Files**
 
@@ -125,6 +124,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
   - control-plane `approval.pending` push dispatch is live
   - tap routing reaches the `Approvals` inbox
 - Document any required control-plane env vars / credentials for Expo push delivery.
+  - Current shipped slice needs no dedicated control-plane Expo credential: the dispatcher posts directly to Expo's HTTPS endpoint and relies on the existing mobile-side Expo/EAS `projectId` setup for token registration.
 
 **Verification**
 
