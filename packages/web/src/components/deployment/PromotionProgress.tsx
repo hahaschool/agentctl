@@ -40,6 +40,7 @@ export function PromotionProgress({
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const completedRef = useRef(false);
 
   // Auto-scroll logs to bottom when new log entries arrive
   // biome-ignore lint/correctness/useExhaustiveDependencies: logs triggers scroll on new entries
@@ -53,46 +54,41 @@ export function PromotionProgress({
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
-    es.addEventListener('step', (e: MessageEvent) => {
+    // Backend sends generic `data:` events with a `type` field (not named SSE events)
+    es.onmessage = (e: MessageEvent) => {
       try {
-        const data = JSON.parse(String(e.data)) as PromotionStep;
-        setSteps((prev) => {
-          const existing = prev.findIndex((s) => s.name === data.name);
-          if (existing >= 0) {
-            return prev.map((s, i) => (i === existing ? data : s));
-          }
-          return [...prev, data];
-        });
+        const data = JSON.parse(String(e.data));
+        switch (data.type) {
+          case 'step':
+            setSteps((prev) => {
+              const existing = prev.findIndex((s) => s.name === (data as PromotionStep).name);
+              if (existing >= 0) {
+                return prev.map((s, i) => (i === existing ? (data as PromotionStep) : s));
+              }
+              return [...prev, data as PromotionStep];
+            });
+            break;
+          case 'log':
+            setLogs((prev) => [...prev, data as PromotionLogLine]);
+            break;
+          case 'complete':
+            completedRef.current = true;
+            setCompleted(true);
+            setSuccess(data.status === 'success');
+            if (data.error) setError(String(data.error));
+            es.close();
+            break;
+        }
       } catch {
         // Ignore unparseable events
       }
-    });
-
-    es.addEventListener('log', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(String(e.data)) as PromotionLogLine;
-        setLogs((prev) => [...prev, data]);
-      } catch {
-        // Ignore unparseable events
-      }
-    });
-
-    es.addEventListener('complete', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(String(e.data)) as { success: boolean; error?: string };
-        setCompleted(true);
-        setSuccess(data.success);
-        if (data.error) setError(data.error);
-      } catch {
-        setCompleted(true);
-      }
-      es.close();
-    });
+    };
 
     es.onerror = () => {
-      // If we haven't received a complete event, show an error
-      setCompleted(true);
-      setError('Lost connection to promotion stream');
+      if (!completedRef.current) {
+        setCompleted(true);
+        setError('Lost connection to promotion stream');
+      }
       es.close();
     };
 
