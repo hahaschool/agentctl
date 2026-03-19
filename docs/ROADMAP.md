@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-16 (recent follow-ups through PR #235 are now on `main`, including Discover session ID context in PR #229, deployment metrics in PR #230, execution-history polish in PR #231, the roadmap sync/consistency updates in PRs #232-#234, and deployment empty-history polish in PR #235; post-merge DAST rerun `23131047045` succeeded; there are currently no open PRs, CodeQL alerts, or Dependabot alerts)
+> Last updated: 2026-03-19 (recent follow-ups through PRs #287-#291 are now on `main`, including knowledge-maintenance path hardening, the mobile push device registry, mobile Expo token bootstrap/tap routing, and the dependency-audit dual-license fix; as of 2026-03-19 there are no open PRs, CodeQL alerts, Dependabot alerts, or secret-scanning alerts; post-merge push workflows for `a44888f` may still be in progress)
 
 ## Current State
 
@@ -1450,15 +1450,18 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Dedicated mobile `Approvals` tab for the inbox *(PR #273)*
 - [x] Mobile regression coverage for polling + resolve flow *(PR #273)*
 
-### 21.2 iOS Push Notifications for Pending Approvals — Planned
+### 21.2 iOS Push Notifications for Pending Approvals — In Progress
 
 > Design: [plans/2026-03-19-approval-push-notifications-design.md](plans/2026-03-19-approval-push-notifications-design.md)
 > Plan: [plans/2026-03-19-approval-push-notifications-impl-plan.md](plans/2026-03-19-approval-push-notifications-impl-plan.md)
+>
+> Status note: PR #291 landed the shared `approval.pending` contracts plus the control-plane mobile device registry, and PR #290 landed Expo token bootstrap plus notification tap routing into `Approvals`. The remaining execution gap is actual Expo push dispatch when a new permission request is created.
 
-- [ ] Expo/iOS device token registration from mobile app
-- [ ] Control-plane device registry + Expo push dispatch path for `approval.pending`
-- [ ] Notification tap path lands user on the approval inbox
-- [ ] Initial single-operator routing model documented until durable user ownership lands
+- [x] Expo/iOS device token registration from mobile app *(PR #290)*
+- [x] Control-plane device registry for mobile push tokens *(PR #291)*
+- [ ] Expo push dispatch path for `approval.pending`
+- [x] Notification tap path lands user on the approval inbox *(PR #290)*
+- [x] Initial single-operator routing model documented until durable user ownership lands *(PR #285 + 21.2 docs)*
 
 ## 22. Remaining Route Tests + Frontend Integration
 
@@ -1533,6 +1536,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P2** | ~~Codex Operational Parity~~ | 3.4 | ✅ Delivered — sandbox enforcement (PR #61) + verification evidence (PR #70) |
 | **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
+| **P1** | Approval Push Dispatch | 21.2 | In progress — registration, registry, and tap routing are shipped (PRs #290, #291); remaining work is control-plane Expo dispatch on create |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
 | **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — all items complete: time-range, rich cards, handoff timeline, action bar, push notifications (PR #67), SSE stream + replay (PR #71) |
@@ -1730,8 +1734,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
-| [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Planned — dedicated 21.2 design for Expo/iOS approval pushes | 21.2 |
-| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Planned — execution plan for 21.2 push delivery + tap routing | 21.2 |
+| [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — design approved; PRs #290-#291 landed the first 21.2 slices and left Expo dispatch as the remaining gap | 21.2 |
+| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | In Progress — PRs #290-#291 delivered shared contracts, device registry, mobile registration, and tap routing; Expo dispatch on create remains | 21.2 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
