@@ -19,6 +19,7 @@
 
 import { execFile as execFileCb } from 'node:child_process';
 import type { Dirent } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { access, readdir, realpath } from 'node:fs/promises';
 import { join, normalize, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
@@ -142,16 +143,41 @@ export class KnowledgeMaintenance {
     this.pool = options.pool;
     this.memoryStore = options.memoryStore;
     this.logger = options.logger;
-    const workspaceRoot = resolve(normalize(process.cwd()));
+    const workspaceRoot = realpathSync(resolve(normalize(process.cwd())));
     const requestedRoot = resolve(normalize(options.projectRoot ?? workspaceRoot));
 
-    if (isWithinRoot(requestedRoot, workspaceRoot)) {
-      this.projectRoot = requestedRoot;
-    } else {
+    if (!isWithinRoot(requestedRoot, workspaceRoot)) {
       this.projectRoot = workspaceRoot;
       this.logger.warn(
         { requestedRoot, workspaceRoot },
         'Ignoring projectRoot outside the current working tree',
+      );
+      return;
+    }
+
+    try {
+      const resolvedRoot = realpathSync(requestedRoot);
+      if (isWithinRoot(resolvedRoot, workspaceRoot)) {
+        this.projectRoot = resolvedRoot;
+        return;
+      }
+
+      this.projectRoot = workspaceRoot;
+      this.logger.warn(
+        { requestedRoot, resolvedRoot, workspaceRoot },
+        'Ignoring projectRoot that resolves outside the current working tree',
+      );
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        this.projectRoot = requestedRoot;
+        return;
+      }
+
+      this.projectRoot = workspaceRoot;
+      this.logger.warn(
+        { err: error, requestedRoot, workspaceRoot },
+        'Failed to resolve projectRoot — falling back to the current working tree',
       );
     }
   }
@@ -476,8 +502,8 @@ export class KnowledgeMaintenance {
     }
 
     try {
-      await access(joined);
-      return true;
+      const resolvedPath = await realpath(joined);
+      return isWithinRoot(resolvedPath, this.projectRoot);
     } catch {
       return false;
     }
@@ -492,22 +518,11 @@ export class KnowledgeMaintenance {
    */
   private async getDeletedFiles(): Promise<string[]> {
     try {
-      const realRoot = await realpath(this.projectRoot);
-      const workspaceRoot = await realpath(resolve(normalize(process.cwd())));
-
-      if (!isWithinRoot(realRoot, workspaceRoot)) {
-        this.logger.warn(
-          { projectRoot: realRoot, workspaceRoot },
-          'Skipping deleted-file scan for projectRoot outside the current working tree',
-        );
-        return [];
-      }
-
       try {
-        await access(join(realRoot, '.git'));
+        await access(join(this.projectRoot, '.git'));
       } catch {
         this.logger.debug(
-          { projectRoot: realRoot },
+          { projectRoot: this.projectRoot },
           'No .git directory found — skipping deleted-file scan',
         );
         return [];
@@ -517,7 +532,7 @@ export class KnowledgeMaintenance {
         'git',
         ['log', '--diff-filter=D', '--name-only', '--pretty=format:', '--since=90 days ago'],
         {
-          cwd: realRoot,
+          cwd: this.projectRoot,
           env: sanitizeGitEnv(process.env),
         },
       );
@@ -537,10 +552,28 @@ export class KnowledgeMaintenance {
   }
 
   private async listCodebaseDirectories(): Promise<string[]> {
-    const packagesRoot = join(this.projectRoot, 'packages');
-
     try {
-      const directories = await this.walkDirectories(packagesRoot, 0);
+      const packagesRoot = resolve(this.projectRoot, 'packages');
+      const resolvedPackagesRoot = await realpath(packagesRoot).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          return null;
+        }
+        throw error;
+      });
+
+      if (!resolvedPackagesRoot) {
+        return [];
+      }
+
+      if (!isWithinRoot(resolvedPackagesRoot, this.projectRoot)) {
+        this.logger.warn(
+          { projectRoot: this.projectRoot, packagesRoot: resolvedPackagesRoot },
+          'Skipping codebase directory scan for packages root outside the project root',
+        );
+        return [];
+      }
+
+      const directories = await this.walkDirectories(this.projectRoot, resolvedPackagesRoot, 0);
       return directories.sort();
     } catch (error: unknown) {
       this.logger.warn({ err: error }, 'Failed to list codebase directories');
@@ -548,7 +581,15 @@ export class KnowledgeMaintenance {
     }
   }
 
-  private async walkDirectories(directoryPath: string, depth: number): Promise<string[]> {
+  private async walkDirectories(
+    projectRoot: string,
+    directoryPath: string,
+    depth: number,
+  ): Promise<string[]> {
+    if (!isWithinRoot(directoryPath, projectRoot)) {
+      return [];
+    }
+
     let entries: Dirent[];
     try {
       entries = await readdir(directoryPath, { withFileTypes: true });
@@ -570,7 +611,13 @@ export class KnowledgeMaintenance {
       if (!entry.isDirectory() || EXCLUDED_DIRECTORY_NAMES.has(entry.name)) {
         continue;
       }
-      directories.push(...(await this.walkDirectories(join(directoryPath, entry.name), depth + 1)));
+
+      const childPath = resolve(join(directoryPath, entry.name));
+      if (!isWithinRoot(childPath, projectRoot)) {
+        continue;
+      }
+
+      directories.push(...(await this.walkDirectories(projectRoot, childPath, depth + 1)));
     }
 
     return directories;

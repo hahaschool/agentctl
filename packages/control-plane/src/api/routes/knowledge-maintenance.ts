@@ -26,7 +26,7 @@ export const knowledgeMaintenanceRoutes: FastifyPluginAsync<
   KnowledgeMaintenanceRoutesOptions
 > = async (app, opts) => {
   app.post<{
-    Body: { scope?: string; projectRoot?: string };
+    Body: { scope?: string };
   }>(
     '/',
     {
@@ -37,14 +37,12 @@ export const knowledgeMaintenanceRoutes: FastifyPluginAsync<
     },
     async (request) => {
       const scope = typeof request.body?.scope === 'string' ? request.body.scope : undefined;
-      const projectRoot =
-        typeof request.body?.projectRoot === 'string' ? request.body.projectRoot : opts.projectRoot;
 
       const maintenance = new KnowledgeMaintenance({
         pool: opts.pool,
         memoryStore: opts.memoryStore,
         logger: opts.logger,
-        projectRoot,
+        projectRoot: opts.projectRoot,
       });
 
       const result = await maintenance.run(scope);
