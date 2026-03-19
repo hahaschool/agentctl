@@ -1,6 +1,6 @@
 import { execSync, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import type {
@@ -296,11 +296,21 @@ export class PromotionRunner {
     });
     checks.push(migrationCheck);
 
-    // 4. Build
+    // 4. Build — skip full rebuild if a recent .next/BUILD_ID exists (within 30 min)
+    const BUILD_FRESHNESS_MS = 30 * 60 * 1000;
     const buildCheck = await timedCheck('build', async () => {
+      const buildIdPath = join(this.repoRoot, 'packages', 'web', '.next', 'BUILD_ID');
+      if (existsSync(buildIdPath)) {
+        const mtime = statSync(buildIdPath).mtimeMs;
+        if (Date.now() - mtime < BUILD_FRESHNESS_MS) {
+          return {
+            status: 'pass' as const,
+            message: `Build fresh (${Math.round((Date.now() - mtime) / 60000)}m ago)`,
+          };
+        }
+      }
       const result = await spawnProcess('pnpm', ['build'], this.repoRoot, BUILD_TIMEOUT_MS);
       if (!result.ok) {
-        // Truncate long output to last 500 chars
         const tail = result.output.length > 500 ? result.output.slice(-500) : result.output;
         return { status: 'fail' as const, message: `Build failed: ${tail}` };
       }
