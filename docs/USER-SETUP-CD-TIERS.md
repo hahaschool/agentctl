@@ -106,7 +106,10 @@ pm2 restart all
 1. 在目标机器上安装 GitHub Actions self-hosted runner
 2. 启用 `promote-beta.yml` workflow（手动运行时必须显式选择 `dev-1` 或 `dev-2` 作为 source tier）
 3. 在 GitHub 仓库设置里添加 `beta` environment（带审批门控，保持不变）
-4. Prod 层用同样的模式，但部署到远程机器（通过 Tailscale）
+4. 配置 production deploy 所需的仓库 secrets：`TS_OAUTH_CLIENT_ID`、`TS_OAUTH_SECRET`、`PROD_TAILSCALE_IP`、`DEPLOY_SSH_KEY`、`POSTGRES_PASSWORD`
+5. Prod 层用同样的模式，但部署到远程机器（通过 Tailscale）
+
+在 production deploy secrets 配齐之前，`deploy-prod.yml` 的 release 自动部署会记录 warning 并跳过实际部署；如果你手动从 Actions 触发 `Deploy to Production`，workflow 会在最前面明确报错缺了哪些 secrets，而不是等到 Tailscale/SSH 步骤才失败。
 
 这些步骤到时候再做，现在不需要。
 

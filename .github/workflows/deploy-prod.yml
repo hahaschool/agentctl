@@ -6,6 +6,7 @@
 # Triggers:
 #   - workflow_dispatch: manual deploy with explicit image_tag
 #   - release: automatic deploy when a GitHub Release is published
+#              (skips with a warning until production deploy secrets exist)
 #
 # NOTE: The "production" GitHub Environment MUST be configured with
 # required reviewers to gate production deployments. Go to:
@@ -51,8 +52,64 @@ permissions:
   actions: write   # Required for uploading artifacts
 
 jobs:
+  validate-config:
+    name: Validate production deploy configuration
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.validate.outputs.ready }}
+
+    steps:
+      - name: Validate production deploy configuration
+        id: validate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          PROD_TAILSCALE_IP: ${{ secrets.PROD_TAILSCALE_IP }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          [ -n "$TS_OAUTH_CLIENT_ID" ] || missing+=("TS_OAUTH_CLIENT_ID")
+          [ -n "$TS_OAUTH_SECRET" ] || missing+=("TS_OAUTH_SECRET")
+          [ -n "$PROD_TAILSCALE_IP" ] || missing+=("PROD_TAILSCALE_IP")
+          [ -n "$DEPLOY_SSH_KEY" ] || missing+=("DEPLOY_SSH_KEY")
+          [ -n "$POSTGRES_PASSWORD" ] || missing+=("POSTGRES_PASSWORD")
+
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          MISSING_LIST=$(printf '%s, ' "${missing[@]}")
+          MISSING_LIST=${MISSING_LIST%, }
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "::error title=Missing Production Deploy Configuration::Populate these repository secrets before running Deploy to Production: ${MISSING_LIST}."
+            exit 1
+          fi
+
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Skipping release-triggered production deploy because required repository secrets are missing: ${MISSING_LIST}"
+
+          {
+            echo "### Production deploy skipped"
+            echo
+            echo "The release-triggered deploy did not run because these repository secrets are missing:"
+            echo
+            for item in "${missing[@]}"; do
+              echo "- \`${item}\`"
+            done
+            echo
+            echo "Configure the missing secrets, then rerun \`Deploy to Production\` manually from the Actions tab."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: Deploy to production
+    needs: validate-config
+    if: needs.validate-config.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # NOTE: "production" environment requires manual approval via GitHub
@@ -246,7 +303,7 @@ jobs:
 
       # ── Rollback on failure ─────────────────────────────────────────
       - name: Rollback to previous deployment
-        if: failure() && steps.current.outputs.control_plane_image != 'none'
+        if: failure() && steps.current.outcome == 'success' && steps.current.outputs.control_plane_image != 'none'
         run: |
           echo "::warning::Deployment failed. Rolling back to previous images..."
           echo "Previous control-plane: ${{ steps.current.outputs.control_plane_image }}"
@@ -278,7 +335,13 @@ jobs:
       - name: Report deployment failure
         if: failure()
         run: |
-          echo "::error title=Production Deployment Failed::Deployment of tag ${{ steps.tag.outputs.image_tag }} to production (${{ secrets.PROD_TAILSCALE_IP }}) failed. Automatic rollback was attempted. Check container logs: ssh ${{ env.DEPLOY_USER }}@${{ secrets.PROD_TAILSCALE_IP }} 'cd ${{ env.DEPLOY_PATH }} && docker compose -f ${{ env.COMPOSE_FILE }} logs --tail=100'"
+          if [ "${{ steps.current.outcome }}" = "success" ]; then
+            ROLLBACK_NOTE="Automatic rollback was attempted."
+          else
+            ROLLBACK_NOTE="Automatic rollback was not attempted because the workflow failed before it could record the current remote deployment state."
+          fi
+
+          echo "::error title=Production Deployment Failed::Deployment of tag ${{ steps.tag.outputs.image_tag }} to production (${{ secrets.PROD_TAILSCALE_IP }}) failed. ${ROLLBACK_NOTE} Check container logs: ssh ${{ env.DEPLOY_USER }}@${{ secrets.PROD_TAILSCALE_IP }} 'cd ${{ env.DEPLOY_PATH }} && docker compose -f ${{ env.COMPOSE_FILE }} logs --tail=100'"
 
       # ── Cleanup SSH key ─────────────────────────────────────────────
       - name: Cleanup SSH key
