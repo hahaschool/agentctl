@@ -2,7 +2,7 @@
 
 > Scope: roadmap `21.2 iOS Push Notifications for Pending Approvals`
 >
-> Status as of 2026-03-19: partially delivered on `main` via PRs #290 and #291. Device registration, device-registry storage, and tap routing are live; server-side Expo dispatch on permission-request create remains open.
+> Status as of 2026-03-20: delivered on `main` via PRs #290, #291, and #295. Device registration, device-registry storage, server-side Expo dispatch, and approval tap routing are all live.
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-19 (recent follow-ups through PRs #287-#291 are now on `main`, including knowledge-maintenance path hardening, the mobile push device registry, mobile Expo token bootstrap/tap routing, and the dependency-audit dual-license fix; as of 2026-03-19 there are no open PRs, CodeQL alerts, Dependabot alerts, or secret-scanning alerts; post-merge push workflows for `a44888f` may still be in progress)
+> Last updated: 2026-03-20 (PR #295 is now on `main`, completing roadmap 21.2 with control-plane Expo push dispatch for pending approvals; as of 2026-03-20 there are no open PRs, CodeQL alerts, Dependabot alerts, or secret-scanning alerts)
 
 ## Current State
 
@@ -1440,7 +1440,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 > Design: [plans/2026-03-19-mobile-approval-center-design.md](plans/2026-03-19-mobile-approval-center-design.md)
 > Plan: [plans/2026-03-19-mobile-approval-center-impl-plan.md](plans/2026-03-19-mobile-approval-center-impl-plan.md)
 >
-> Status note: the control plane and web approval flow are shipped. `21.1` adds the mobile approval inbox/operator surface; the remaining infrastructure slice is true iOS push/APNs delivery in `21.2`.
+> Status note: the control plane and web approval flow are shipped. `21.1` adds the mobile approval inbox/operator surface, and `21.2` is now delivered on `main` via Expo token bootstrap, the mobile push-device registry, control-plane Expo dispatch, and approval tap routing into the inbox.
 
 ### 21.1 Mobile Approval Inbox — Delivered
 
@@ -1450,16 +1450,16 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Dedicated mobile `Approvals` tab for the inbox *(PR #273)*
 - [x] Mobile regression coverage for polling + resolve flow *(PR #273)*
 
-### 21.2 iOS Push Notifications for Pending Approvals — In Progress
+### 21.2 iOS Push Notifications for Pending Approvals — Delivered
 
 > Design: [plans/2026-03-19-approval-push-notifications-design.md](plans/2026-03-19-approval-push-notifications-design.md)
 > Plan: [plans/2026-03-19-approval-push-notifications-impl-plan.md](plans/2026-03-19-approval-push-notifications-impl-plan.md)
 >
-> Status note: PR #291 landed the shared `approval.pending` contracts plus the control-plane mobile device registry, and PR #290 landed Expo token bootstrap plus notification tap routing into `Approvals`. The remaining execution gap is actual Expo push dispatch when a new permission request is created.
+> Status note: PR #291 landed the shared `approval.pending` contracts plus the control-plane mobile device registry, PR #290 landed Expo token bootstrap plus notification tap routing into `Approvals`, and PR #295 completed the remaining control-plane Expo push dispatch on permission-request create.
 
 - [x] Expo/iOS device token registration from mobile app *(PR #290)*
 - [x] Control-plane device registry for mobile push tokens *(PR #291)*
-- [ ] Expo push dispatch path for `approval.pending`
+- [x] Expo push dispatch path for `approval.pending` *(PR #295)*
 - [x] Notification tap path lands user on the approval inbox *(PR #290)*
 - [x] Initial single-operator routing model documented until durable user ownership lands *(PR #285 + 21.2 docs)*
 
@@ -1516,6 +1516,28 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Canonicalize and validate `projectRoot` against the current working tree *(PR #287)*
 - [x] Reject symlink-based project-root escapes and ignore body `projectRoot` overrides *(PR #287)*
 
+## 24. Post-21.2 Stability Follow-through
+
+> Plan: [plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md)
+>
+> Status note: roadmap 21.2 is now delivered, so the next high-leverage batch is tightening the two most user-visible operational surfaces that still lack targeted browser coverage and eliminating dev-tier promotion footguns that could confuse future beta-stage work.
+
+### 24.1 Approvals Page Playwright Coverage
+
+- [ ] Add a targeted Playwright flow for `/approvals`
+- [ ] Cover thread selection, pending gate rendering, and approve/deny action feedback
+
+### 24.2 Deployment Page / Promote Gate Playwright Coverage
+
+- [ ] Add a targeted Playwright flow for `/deployment`
+- [ ] Cover tier-card rendering, source-tier selection, and promote preflight feedback
+
+### 24.3 Dev/Beta Promotion Guardrails + Docs Consistency
+
+- [ ] Remove the unsafe/ambiguous default source-tier behavior from `promote-beta.yml`
+- [ ] Sync `docs/USER-SETUP-CD-TIERS.md` with the actual `scripts/env-promote.sh --from <tier>` CLI
+- [ ] Re-verify that beta remains GitHub-environment gated while agents work only in `dev-1` / `dev-2`
+
 ---
 
 ## Active Priorities
@@ -1536,7 +1558,10 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P2** | ~~Codex Operational Parity~~ | 3.4 | ✅ Delivered — sandbox enforcement (PR #61) + verification evidence (PR #70) |
 | **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
-| **P1** | Approval Push Dispatch | 21.2 | In progress — registration, registry, and tap routing are shipped (PRs #290, #291); remaining work is control-plane Expo dispatch on create |
+| **P1** | ~~Approval Push Dispatch~~ | 21.2 | ✅ Delivered — Expo token bootstrap, device registry, tap routing, and control-plane dispatch are all on `main` (PRs #290, #291, #295) |
+| **P1** | Approvals Page Playwright Coverage | 24.1 | Planned — targeted browser coverage for `/approvals` is still missing |
+| **P1** | Deployment Page / Promote Gate Playwright Coverage | 24.2 | Planned — `/deployment` lacks targeted Playwright coverage for preflight/promote UX |
+| **P2** | Dev/Beta Promotion Guardrails + Docs Consistency | 24.3 | Planned — tighten `promote-beta.yml` defaults and align tier docs with the real CLI |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
 | **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — all items complete: time-range, rich cards, handoff timeline, action bar, push notifications (PR #67), SSE stream + replay (PR #71) |
@@ -1734,8 +1759,9 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
-| [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — design approved; PRs #290-#291 landed the first 21.2 slices and left Expo dispatch as the remaining gap | 21.2 |
-| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | In Progress — PRs #290-#291 delivered shared contracts, device registry, mobile registration, and tap routing; Expo dispatch on create remains | 21.2 |
+| [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — PRs #290, #291, and #295 shipped the full 21.2 slice on `main` | 21.2 |
+| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
+| [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Planned — parallel follow-through for `/approvals` + `/deployment` Playwright coverage and dev/beta promotion guardrails | 24.1-24.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
