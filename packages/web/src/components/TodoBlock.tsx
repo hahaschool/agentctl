@@ -1,6 +1,7 @@
 'use client';
 
 import { CheckCircle2, Circle, ListTodo } from 'lucide-react';
+import { memo } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -16,7 +17,10 @@ type TodoBlockProps = {
   timestamp?: string;
 };
 
-export function TodoBlock({ content, timestamp }: TodoBlockProps): React.JSX.Element {
+export const TodoBlock = memo(function TodoBlock({
+  content,
+  timestamp,
+}: TodoBlockProps): React.JSX.Element {
   let todos: TodoItem[] = [];
   try {
     todos = JSON.parse(content) as TodoItem[];
@@ -99,4 +103,4 @@ export function TodoBlock({ content, timestamp }: TodoBlockProps): React.JSX.Ele
       </div>
     </div>
   );
-}
+});

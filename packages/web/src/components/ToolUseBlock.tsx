@@ -12,7 +12,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -42,7 +42,7 @@ type ToolUseBlockProps = {
   timestamp?: string;
 };
 
-export function ToolUseBlock({
+export const ToolUseBlock = memo(function ToolUseBlock({
   toolName,
   content,
   isResult,
@@ -153,4 +153,4 @@ export function ToolUseBlock({
       )}
     </div>
   );
-}
+});

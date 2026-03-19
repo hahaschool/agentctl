@@ -1,4 +1,5 @@
 import { Loader2, Terminal, Timer } from 'lucide-react';
+import { memo } from 'react';
 
 type ProgressIndicatorProps = {
   content: string;
@@ -6,7 +7,7 @@ type ProgressIndicatorProps = {
   timestamp?: string;
 };
 
-export function ProgressIndicator({
+export const ProgressIndicator = memo(function ProgressIndicator({
   content,
   toolName,
 }: ProgressIndicatorProps): React.JSX.Element {
@@ -19,4 +20,4 @@ export function ProgressIndicator({
       {toolName && <span className="text-[9px] text-primary/60 shrink-0 ml-auto">{toolName}</span>}
     </div>
   );
-}
+});

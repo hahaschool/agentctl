@@ -1,4 +1,5 @@
 import { GitBranch } from 'lucide-react';
+import { memo } from 'react';
 
 type SubagentBlockProps = {
   content: string;
@@ -7,7 +8,7 @@ type SubagentBlockProps = {
   timestamp?: string;
 };
 
-export function SubagentBlock({
+export const SubagentBlock = memo(function SubagentBlock({
   content,
   toolName,
   subagentId,
@@ -41,4 +42,4 @@ export function SubagentBlock({
       </div>
     </div>
   );
-}
+});
