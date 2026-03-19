@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #297, #298, #299, and #301 are now on `main`, closing roadmap 24.1-24.4 after the production-deploy guardrail follow-up for failed release workflow `23307749638`)
+> Last updated: 2026-03-20 (PRs #297, #298, #299, and #301 are now on `main`, closing roadmap 24.1-24.4 after the production-deploy guardrail follow-up for failed release workflow `23307749638`; section 25 is the next active web-hardening batch for runtime sessions, the settings control center, and permission-request contract cleanup)
 
 ## Current State
 
@@ -1544,12 +1544,34 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Fail manual `workflow_dispatch` production deploys early with actionable missing-secret output *(PR #301)*
 - [x] Prevent automatic rollback from attempting SSH before remote deployment state has been recorded *(PR #301)*
 
+## 25. Web Hardening Follow-through
+
+> Plan: [plans/2026-03-20-web-hardening-follow-through-plan.md](plans/2026-03-20-web-hardening-follow-through-plan.md)
+>
+> Status note: section 24 closed on `main`. The next isolated web-hardening batch stays on the runtime-session surface, the settings control center, and the shared permission-request contract boundary. Machines / terminal e2e is intentionally deferred to a later slice because terminal/WebSocket coverage is still a higher-flake surface than the list/detail/settings work below.
+
+### 25.1 Runtime Sessions Playwright Coverage
+
+- [ ] Add a targeted Playwright flow for the runtime-session surface on `/sessions?type=runtime`
+- [ ] Cover runtime list/detail rendering and one safe control path without depending on terminal/WebSocket streaming
+
+### 25.2 Settings Control Center Playwright Coverage
+
+- [ ] Add targeted Playwright coverage for `/settings`
+- [ ] Cover the runtime control center shell, section navigation, and one representative settings interaction without broad settings-page churn
+
+### 25.3 Web/Shared Permission-Request Contract Cleanup
+
+- [ ] Remove the remaining web-local permission-request type drift in favor of the shared contract
+- [ ] Keep the cleanup scoped to web/shared API-query-card boundaries without reopening the broader approvals architecture
+
 ---
 
 ## Active Priorities
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
+| **P0** | Web Hardening Follow-through | 25.1-25.3 | Active — targeted Playwright coverage for runtime sessions and the settings control center plus web/shared permission-request contract cleanup; machines / terminal e2e is intentionally deferred because terminal/WebSocket coverage is a higher-flake surface |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
@@ -1765,6 +1787,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — PRs #290, #291, and #295 shipped the full 21.2 slice on `main` | 21.2 |
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
+| [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Active — next isolated web-hardening batch after section 24 closed; machines / terminal e2e stays deferred for now because terminal/WebSocket coverage is a higher-flake surface | 25.1-25.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
