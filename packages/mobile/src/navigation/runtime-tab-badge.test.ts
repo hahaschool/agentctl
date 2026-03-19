@@ -36,6 +36,18 @@ describe('getRuntimeTabBadgeCount', () => {
     ).toBe(2);
   });
 
+  it('adds pending approval count to the badge total', () => {
+    expect(
+      getRuntimeTabBadgeCount(
+        [
+          makeRuntimeSession({ id: 'ms-1', status: 'handing_off' }),
+          makeRuntimeSession({ id: 'ms-2', status: 'active' }),
+        ],
+        3,
+      ),
+    ).toBe(4);
+  });
+
   it('returns zero when no managed runtimes are switching', () => {
     expect(
       getRuntimeTabBadgeCount([

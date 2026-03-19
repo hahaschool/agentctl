@@ -17,8 +17,10 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Text } from 'react-native';
 import { useAppContext } from '../context/app-context.js';
+import { PermissionRequestApi } from '../services/permission-request-api.js';
 import { AgentListScreen } from '../ui-screens/agent-list-screen.js';
 import { DashboardScreen } from '../ui-screens/dashboard-screen.js';
+import { PendingApprovalsScreen } from '../ui-screens/pending-approvals-screen.js';
 import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
 import { SchedulerScreen } from '../ui-screens/scheduler-screen.js';
 import { SessionScreen } from '../ui-screens/session-screen.js';
@@ -34,6 +36,7 @@ type TabParamList = {
   Agents: undefined;
   Sessions: undefined;
   Runtimes: undefined;
+  Approvals: undefined;
   Scheduler: undefined;
   Settings: undefined;
 };
@@ -49,6 +52,7 @@ const TAB_ICONS: Record<keyof TabParamList, string> = {
   Agents: '\u2699', // Gear/cog (representing CPU/robot)
   Sessions: '\u25B6', // Play triangle (representing terminal/sessions)
   Runtimes: '\u21C4', // Left-right arrows
+  Approvals: '\u{1F514}', // Bell
   Scheduler: '\u23F0', // Alarm clock
   Settings: '\u2638', // Wheel of dharma (gear-like)
 };
@@ -84,19 +88,26 @@ const RUNTIME_BADGE_POLL_INTERVAL_MS = 30_000;
 export function TabNavigator(): React.JSX.Element {
   const { apiClient } = useAppContext();
   const [runtimeBadgeCount, setRuntimeBadgeCount] = useState(0);
+  const [approvalBadgeCount, setApprovalBadgeCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    const permissionRequestApi = new PermissionRequestApi(apiClient);
 
     async function refreshRuntimeBadge(): Promise<void> {
       try {
-        const response = await apiClient.listRuntimeSessions({ limit: 100 });
+        const [response, pendingRequests] = await Promise.all([
+          apiClient.listRuntimeSessions({ limit: 100 }),
+          permissionRequestApi.listRequests({ status: 'pending' }),
+        ]);
         if (!cancelled) {
-          setRuntimeBadgeCount(getRuntimeTabBadgeCount(response.sessions));
+          setApprovalBadgeCount(pendingRequests.length);
+          setRuntimeBadgeCount(getRuntimeTabBadgeCount(response.sessions, pendingRequests.length));
         }
       } catch {
         if (!cancelled) {
           setRuntimeBadgeCount(0);
+          setApprovalBadgeCount(0);
         }
       }
     }
@@ -118,6 +129,14 @@ export function TabNavigator(): React.JSX.Element {
       ...(runtimeBadgeCount > 0 ? { tabBarBadge: runtimeBadgeCount } : {}),
     }),
     [runtimeBadgeCount],
+  );
+
+  const approvalsTabOptions = useMemo(
+    () => ({
+      title: 'Approvals',
+      ...(approvalBadgeCount > 0 ? { tabBarBadge: approvalBadgeCount } : {}),
+    }),
+    [approvalBadgeCount],
   );
 
   return (
@@ -152,6 +171,11 @@ export function TabNavigator(): React.JSX.Element {
         <Tab.Screen name="Agents" component={AgentListScreen} options={{ title: 'Agents' }} />
         <Tab.Screen name="Sessions" component={SessionScreen} options={{ title: 'Sessions' }} />
         <Tab.Screen name="Runtimes" component={RuntimeSessionScreen} options={runtimesTabOptions} />
+        <Tab.Screen
+          name="Approvals"
+          component={PendingApprovalsScreen}
+          options={approvalsTabOptions}
+        />
         <Tab.Screen name="Scheduler" component={SchedulerScreen} options={{ title: 'Scheduler' }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Tab.Navigator>
