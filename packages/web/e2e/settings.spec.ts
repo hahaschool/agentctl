@@ -78,9 +78,9 @@ test.describe('Settings control center', () => {
     await openSettings(page);
 
     await getSectionNavLink(page, 'appearance-preferences').click();
-    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(
-      '#appearance-preferences',
-    );
+    await expect
+      .poll(() => page.evaluate(() => window.location.hash))
+      .toBe('#appearance-preferences');
 
     const appearanceSection = page.locator('section#appearance-preferences');
     const lightButton = appearanceSection.getByRole('button', { name: 'Light', exact: true });
@@ -91,14 +91,12 @@ test.describe('Settings control center', () => {
 
     await lightButton.click();
     await page.waitForFunction(() => !document.documentElement.classList.contains('dark'));
-    await expect.poll(() => page.evaluate(() => window.localStorage.getItem('theme'))).toBe(
-      'light',
-    );
+    await expect
+      .poll(() => page.evaluate(() => window.localStorage.getItem('theme')))
+      .toBe('light');
 
     await darkButton.click();
     await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
-    await expect.poll(() => page.evaluate(() => window.localStorage.getItem('theme'))).toBe(
-      'dark',
-    );
+    await expect.poll(() => page.evaluate(() => window.localStorage.getItem('theme'))).toBe('dark');
   });
 });
