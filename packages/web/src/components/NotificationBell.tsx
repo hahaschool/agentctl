@@ -246,10 +246,10 @@ export function NotificationBell({
                           </p>
                         </button>
                         {request.toolInput && (
-                          <pre className="max-h-24 overflow-auto rounded border border-border/40 bg-muted/50 px-2 py-1 text-[10px] font-mono text-foreground/80">
+                          <pre className="max-h-40 overflow-auto rounded border border-border/40 bg-muted/50 px-2 py-1.5 text-[10px] font-mono text-foreground/80 whitespace-pre-wrap break-all leading-relaxed">
                             {typeof request.toolInput === 'string'
                               ? request.toolInput
-                              : JSON.stringify(request.toolInput, null, 2).slice(0, 500)}
+                              : JSON.stringify(request.toolInput, null, 2).slice(0, 800)}
                           </pre>
                         )}
                         {request.description && (

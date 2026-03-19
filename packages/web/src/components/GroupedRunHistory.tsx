@@ -282,8 +282,8 @@ export function GroupedRunHistory({
                                   ) : (
                                     <ChevronRight className="h-3 w-3" />
                                   )}
-                                  {runGroup.retryCount} retr
-                                  {runGroup.retryCount === 1 ? 'y' : 'ies'}
+                                  {runGroup.retryCount} previous attempt
+                                  {runGroup.retryCount === 1 ? '' : 's'}
                                 </button>
                                 {retriesExpanded && (
                                   <div className="pl-3 border-l border-border/40 space-y-1.5">
@@ -792,17 +792,19 @@ function groupRunsByRetryChain(runs: RunWithRetryMeta[]): RetryRunGroup[] {
         attemptNumber: index + 1,
         attemptTotal,
       }));
-      const leadRun = attemptsWithMeta[0];
+      // Lead run = latest attempt (most relevant to user — often the successful one)
+      const leadRun = attemptsWithMeta.at(-1);
       if (!leadRun) return null;
 
-      const latestRun = attemptsWithMeta.at(-1);
+      // Previous runs = older attempts, shown collapsed
+      const previousRuns = attemptsWithMeta.slice(0, -1);
       return {
         groupId,
         leadRun,
-        previousRuns: attemptsWithMeta.slice(1),
+        previousRuns,
         allRuns: attemptsWithMeta,
         retryCount: Math.max(0, attemptTotal - 1),
-        latestActivityAtMs: toEpochMs(latestRun?.startedAt ?? leadRun.startedAt),
+        latestActivityAtMs: toEpochMs(leadRun.startedAt),
       };
     })
     .filter((group): group is NonNullable<typeof group> => group !== null)
