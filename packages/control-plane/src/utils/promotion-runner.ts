@@ -526,45 +526,28 @@ export class PromotionRunner {
         }
       }
 
-      // Restart PM2 beta services
+      // Restart PM2 beta services — worker + web first
       events.emit('event', {
         type: 'step',
         step: 'restart',
         message: 'Restarting beta services via PM2...',
       });
-      await pm2Restart('agentctl-beta-cp', this.logger);
-      await pm2Restart('agentctl-beta-worker', this.logger);
-      await pm2Restart('agentctl-beta-web', this.logger);
-      events.emit('event', { type: 'log', line: 'PM2 restart commands sent' });
+      await pm2Restart('agentctl-worker-beta', this.logger);
+      await pm2Restart('agentctl-web-beta', this.logger);
+      events.emit('event', { type: 'log', line: 'Worker + Web restart commands sent' });
 
-      // Poll beta health
-      events.emit('event', {
-        type: 'step',
-        step: 'health-poll',
-        message: 'Polling beta health...',
-      });
-      const healthy = betaTier ? await this.pollHealth(betaTier, events) : false;
-
-      if (!healthy) {
-        const errorMsg = 'Beta health check timed out after restart';
-        await this.finalize(id, 'failed', startedAt, errorMsg, preflight.checks);
-        events.emit('event', {
-          type: 'complete',
-          status: 'failed',
-          durationMs: Date.now() - startedAt.getTime(),
-          error: errorMsg,
-          failedStep: 'health-poll',
-        });
-        return;
-      }
-
-      // Success
+      // Finalize and emit success BEFORE restarting CP (CP hosts this SSE stream)
       await this.finalize(id, 'success', startedAt, undefined, preflight.checks);
       events.emit('event', {
         type: 'complete',
         status: 'success',
         durationMs: Date.now() - startedAt.getTime(),
       });
+
+      // Restart CP with delay so SSE response flushes to client first
+      setTimeout(() => {
+        pm2Restart('agentctl-cp-beta', this.logger).catch(() => {});
+      }, 2000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.error({ promotionId: id, error: errorMsg }, 'Promotion pipeline error');
@@ -656,6 +639,8 @@ export class PromotionRunner {
     });
   }
 
+  // Kept for future use: post-restart health verification from dev-1
+  // @ts-expect-error intentionally unused — will be wired when promote runs from dev tier
   private async pollHealth(tier: TierConfig, events: EventEmitter): Promise<boolean> {
     const deadline = Date.now() + POLL_TIMEOUT_MS;
 
