@@ -4,11 +4,30 @@
 // via the Settings screen and persisted through this context.
 // ---------------------------------------------------------------------------
 
+import ExpoConstants, { type Constants as ExpoConstantsValue } from 'expo-constants';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 import type React from 'react';
 import type { ReactNode } from 'react';
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Platform } from 'react-native';
 
 import { ApiClient } from '../services/api-client.js';
+import {
+  type ExpoProjectIdSource,
+  MOBILE_PUSH_DEVICE_UPSERT_PATH,
+  type NotificationPermissionStatus,
+  PushRegistrationService,
+} from '../services/push-registration.js';
+import { requestWithApiClient } from '../services/request-with-api-client.js';
 import { SseClient } from '../services/sse-client.js';
 import { WebSocketClient } from '../services/websocket-client.js';
 
@@ -44,6 +63,42 @@ type AppContextValue = {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_BASE_URL = 'http://localhost:3000';
+
+function toNotificationPermissionStatus(status: string): NotificationPermissionStatus {
+  switch (status) {
+    case 'granted':
+    case 'denied':
+      return status;
+    default:
+      return 'undetermined';
+  }
+}
+
+function createPushRegistrationService(apiClient: ApiClient): PushRegistrationService {
+  const expoConstants = ExpoConstants as unknown as ExpoConstantsValue;
+
+  return new PushRegistrationService({
+    platform: Platform.OS,
+    isDevice: Device.isDevice,
+    constants: expoConstants as unknown as ExpoProjectIdSource,
+    getPermissionsAsync: async () => {
+      const settings = await Notifications.getPermissionsAsync();
+      return { status: toNotificationPermissionStatus(settings.status) };
+    },
+    requestPermissionsAsync: async () => {
+      const settings = await Notifications.requestPermissionsAsync();
+      return { status: toNotificationPermissionStatus(settings.status) };
+    },
+    getExpoPushTokenAsync: Notifications.getExpoPushTokenAsync,
+    getApplicationId: () =>
+      expoConstants.expoConfig?.ios?.bundleIdentifier ??
+      expoConstants.expoConfig?.android?.package ??
+      null,
+    upsertDevice: async (payload) => {
+      await requestWithApiClient(apiClient, 'POST', MOBILE_PUSH_DEVICE_UPSERT_PATH, payload);
+    },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Context
@@ -136,6 +191,15 @@ export function AppProvider({
     clients.ws.disconnect();
     setConnectionStatus('disconnected');
   }, [clients.ws]);
+
+  useEffect(() => {
+    if (!baseUrl.trim() || !authToken.trim()) {
+      return;
+    }
+
+    const pushRegistrationService = createPushRegistrationService(clients.api);
+    void pushRegistrationService.bootstrap().catch(() => undefined);
+  }, [authToken, baseUrl, clients.api]);
 
   const value = useMemo<AppContextValue>(
     () => ({

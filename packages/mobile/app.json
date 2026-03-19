@@ -5,7 +5,12 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "agentctl",
-    "ios": { "bundleIdentifier": "com.agentctl.mobile" },
-    "plugins": []
+    "ios": {
+      "bundleIdentifier": "com.agentctl.mobile",
+      "infoPlist": {
+        "NSUserNotificationsUsageDescription": "AgentCTL sends push notifications when approvals need your attention."
+      }
+    },
+    "plugins": ["expo-notifications"]
   }
 }

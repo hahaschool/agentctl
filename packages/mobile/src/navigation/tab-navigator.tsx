@@ -13,9 +13,11 @@
 
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text } from 'react-native';
+import { Linking, Text } from 'react-native';
+
 import { useAppContext } from '../context/app-context.js';
 import { PermissionRequestApi } from '../services/permission-request-api.js';
 import { AgentListScreen } from '../ui-screens/agent-list-screen.js';
@@ -25,6 +27,12 @@ import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
 import { SchedulerScreen } from '../ui-screens/scheduler-screen.js';
 import { SessionScreen } from '../ui-screens/session-screen.js';
 import { SettingsScreen } from '../ui-screens/settings-screen.js';
+import {
+  APP_SCHEME,
+  APPROVALS_DEEP_LINK_PATH,
+  handleInitialApprovalNotificationResponse,
+  registerApprovalNotificationResponseListener,
+} from './approval-notification-routing.js';
 import {
   type RuntimeTabBadgeSnapshot,
   refreshRuntimeTabBadgeSnapshot,
@@ -85,6 +93,21 @@ const NAVIGATION_THEME = {
 
 const RUNTIME_BADGE_POLL_INTERVAL_MS = 30_000;
 
+const LINKING_CONFIG = {
+  prefixes: [`${APP_SCHEME}://`],
+  config: {
+    screens: {
+      Dashboard: 'dashboard',
+      Agents: 'agents',
+      Sessions: 'sessions',
+      Runtimes: 'runtimes',
+      Approvals: APPROVALS_DEEP_LINK_PATH,
+      Scheduler: 'scheduler',
+      Settings: 'settings',
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -142,6 +165,19 @@ export function TabNavigator(): React.JSX.Element {
     };
   }, [activeTab, apiClient]);
 
+  useEffect(() => {
+    void handleInitialApprovalNotificationResponse({
+      getLastNotificationResponseAsync: Notifications.getLastNotificationResponseAsync,
+      openUrl: (url) => Linking.openURL(url),
+    }).catch(() => undefined);
+
+    return registerApprovalNotificationResponseListener({
+      addNotificationResponseReceivedListener:
+        Notifications.addNotificationResponseReceivedListener,
+      openUrl: (url) => Linking.openURL(url),
+    });
+  }, []);
+
   const runtimesTabOptions = useMemo(
     () => ({
       title: 'Runtimes',
@@ -165,6 +201,7 @@ export function TabNavigator(): React.JSX.Element {
 
   return (
     <NavigationContainer
+      linking={LINKING_CONFIG}
       theme={NAVIGATION_THEME}
       onStateChange={(state: { index?: number; routes: Array<{ name: string }> } | undefined) => {
         const nextTab = state?.routes[state.index ?? 0]?.name as keyof TabParamList | undefined;
