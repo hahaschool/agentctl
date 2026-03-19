@@ -340,7 +340,8 @@ async function interceptRuntimeSessionsApi(page: Page, state: MockState): Promis
       /^\/api\/runtime-sessions\/([^/]+)\/handoff\/preflight$/,
     );
     if (method === 'GET' && preflightMatch) {
-      const targetRuntime = (url.searchParams.get('targetRuntime') ?? 'claude-code') as ManagedRuntime;
+      const targetRuntime = (url.searchParams.get('targetRuntime') ??
+        'claude-code') as ManagedRuntime;
       await fulfillJson(route, {
         nativeImportCapable: true,
         attempt: {
@@ -446,7 +447,9 @@ test.describe('Runtime sessions surface', () => {
     await expect(detailPanel.getByText('ec2-runner', { exact: true }).first()).toBeVisible();
     await expect(detailPanel.getByText('environment')).toBeVisible();
     await expect(detailPanel.getByText('prod')).toBeVisible();
-    await expect(detailPanel.getByText('Investigate the paused deployment from Codex.')).toBeVisible();
+    await expect(
+      detailPanel.getByText('Investigate the paused deployment from Codex.'),
+    ).toBeVisible();
     await expect(detailPanel.getByText('resume investigation')).toBeVisible();
   });
 
@@ -469,11 +472,13 @@ test.describe('Runtime sessions surface', () => {
     await page.locator('#create-session-prompt').fill('Validate the runtime session flow');
 
     const createRequestPromise = page.waitForRequest(
-      (request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/sessions',
+      (request) =>
+        request.method() === 'POST' && new URL(request.url()).pathname === '/api/sessions',
     );
     const createResponsePromise = page.waitForResponse(
       (response) =>
-        response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/sessions',
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/api/sessions',
     );
 
     await expect(page.getByRole('button', { name: 'Create Session' })).toBeEnabled();
