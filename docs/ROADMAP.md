@@ -1413,12 +1413,22 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Generate `docs/API.md` from CP route definitions *(PR #265)*
 - [x] Cover all REST endpoints with request/response examples *(PR #265)*
 
-### 20.4 Memory Dashboard — P2
+### 20.4 Memory Dashboard — Delivered
 
-> Follow-up item: the original dashboard UI shipped in PR #52; this section tracks wiring `/memory/dashboard` back to the real dashboard view after the memory shell foundation temporarily pointed the route at `MemoryPlaceholderView`.
+- [x] Replace `MemoryPlaceholderView` with real dashboard *(PR #267)*
+- [x] Show memory stats: fact count, entity distribution, decay health, recent activity *(PR #267)*
 
-- [ ] Replace `MemoryPlaceholderView` with real dashboard
-- [ ] Show memory stats: fact count, entity distribution, decay health, recent activity
+### 20.5 E2E Test Coverage — Delivered
+
+- [x] Playwright specs for /tasks, /spaces, /deployment pages *(PR #268)*
+
+### 20.6 React Performance — Delivered
+
+- [x] React.memo on SessionContent, InlineMessage, ToolUseBlock, ThinkingBlock, SubagentBlock, TodoBlock, ProgressIndicator *(PR #269)*
+
+### 20.7 Light Mode Semantic Tokens — Delivered
+
+- [x] Replace hardcoded dark colors in 6 components with semantic tokens *(direct commit 44c4ccc)*
 
 ---
 
