@@ -153,6 +153,13 @@
       "idx": 21,
       "version": "7",
       "when": 1711152000000,
+      "tag": "0019_add_permission_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1711238400000,
       "tag": "0020_add_mobile_push_devices",
       "breakpoints": true
     }
