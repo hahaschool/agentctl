@@ -6,6 +6,6 @@
     "orientation": "portrait",
     "scheme": "agentctl",
     "ios": { "bundleIdentifier": "com.agentctl.mobile" },
-    "plugins": []
+    "plugins": ["expo-notifications"]
   }
 }

@@ -6,9 +6,20 @@
 
 import type React from 'react';
 import type { ReactNode } from 'react';
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { ApprovalNotificationRoute } from '../navigation/approval-notification-routing.js';
 import { ApiClient } from '../services/api-client.js';
+import { createExpoPushNotificationRuntime } from '../services/expo-push-runtime.js';
+import { MobilePushDeviceApi } from '../services/mobile-push-device-api.js';
+import { PushRegistrationService } from '../services/push-registration.js';
 import { SseClient } from '../services/sse-client.js';
 import { WebSocketClient } from '../services/websocket-client.js';
 
@@ -31,12 +42,16 @@ type AppContextValue = {
   authToken: string;
   /** WebSocket connection status. */
   connectionStatus: ConnectionStatus;
+  /** Pending notification-driven navigation target. */
+  pendingNotificationRoute: ApprovalNotificationRoute | null;
   /** Update config and recreate clients. */
   updateConfig: (baseUrl: string, authToken: string) => void;
   /** Connect the WebSocket client. */
   connectWs: () => void;
   /** Disconnect the WebSocket client. */
   disconnectWs: () => void;
+  /** Clear a handled notification route. */
+  consumePendingNotificationRoute: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -81,9 +96,12 @@ export function AppProvider({
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl ?? DEFAULT_BASE_URL);
   const [authToken, setAuthToken] = useState(initialAuthToken ?? '');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [pendingNotificationRoute, setPendingNotificationRoute] =
+    useState<ApprovalNotificationRoute | null>(null);
 
   // Keep refs for cleanup on recreation
   const wsClientRef = useRef<WebSocketClient | null>(null);
+  const pushRuntimeRef = useRef(createExpoPushNotificationRuntime());
 
   const createClients = useCallback((url: string, token: string) => {
     // Clean up old WebSocket connection if any
@@ -115,6 +133,7 @@ export function AppProvider({
   }, []);
 
   const [clients, setClients] = useState(() => createClients(baseUrl, authToken));
+  const deviceApi = useMemo(() => new MobilePushDeviceApi(clients.api), [clients.api]);
 
   const updateConfig = useCallback(
     (newBaseUrl: string, newAuthToken: string) => {
@@ -137,6 +156,62 @@ export function AppProvider({
     setConnectionStatus('disconnected');
   }, [clients.ws]);
 
+  const consumePendingNotificationRoute = useCallback(() => {
+    setPendingNotificationRoute(null);
+  }, []);
+
+  useEffect(() => {
+    const pushService = new PushRegistrationService({
+      runtime: pushRuntimeRef.current,
+      upsertDevice: async (payload) => deviceApi.upsertDevice(payload),
+    });
+
+    let cancelled = false;
+    void pushService
+      .getInitialNotificationRoute()
+      .then((route) => {
+        if (!cancelled && route) {
+          setPendingNotificationRoute(route);
+        }
+      })
+      .catch(() => {
+        // Best-effort startup route hydration only.
+      });
+
+    const subscription = pushService.addNotificationResponseListener((route) => {
+      if (route) {
+        setPendingNotificationRoute(route);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, [deviceApi]);
+
+  useEffect(() => {
+    if (!baseUrl.trim() || !authToken.trim()) {
+      return;
+    }
+
+    const pushService = new PushRegistrationService({
+      runtime: pushRuntimeRef.current,
+      upsertDevice: async (payload) => deviceApi.upsertDevice(payload),
+    });
+
+    let cancelled = false;
+    void pushService.bootstrap().catch(() => {
+      if (!cancelled) {
+        // Missing endpoint support or transient registration failures should not break app startup.
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, baseUrl, deviceApi]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       apiClient: clients.api,
@@ -145,11 +220,23 @@ export function AppProvider({
       baseUrl,
       authToken,
       connectionStatus,
+      pendingNotificationRoute,
       updateConfig,
       connectWs,
       disconnectWs,
+      consumePendingNotificationRoute,
     }),
-    [clients, baseUrl, authToken, connectionStatus, updateConfig, connectWs, disconnectWs],
+    [
+      clients,
+      baseUrl,
+      authToken,
+      connectionStatus,
+      pendingNotificationRoute,
+      updateConfig,
+      connectWs,
+      disconnectWs,
+      consumePendingNotificationRoute,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
