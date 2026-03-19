@@ -1508,6 +1508,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Harden pending approvals polling *(PR #281)*
 - [x] Approval push notifications plan *(PR #285)*
 
+### 23.7 Knowledge Maintenance Path Hardening — Delivered
+
+- [x] Canonicalize and validate `projectRoot` against the current working tree *(PR #287)*
+- [x] Reject symlink-based project-root escapes and ignore body `projectRoot` overrides *(PR #287)*
+
 ---
 
 ## Active Priorities
@@ -1723,8 +1728,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
 | [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered — PRs #167-#227 are on `main`, and post-merge DAST rerun `23131047045` succeeded | 16.1-16.3 |
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
-| [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped, 21.2 remains planned | 17.4, 21.1-21.2 |
-| [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | In progress — 21.1 shipped, 21.2 remains open | 21.1-21.2 |
+| [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
+| [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
 | [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Planned — dedicated 21.2 design for Expo/iOS approval pushes | 21.2 |
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Planned — execution plan for 21.2 push delivery + tap routing | 21.2 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
