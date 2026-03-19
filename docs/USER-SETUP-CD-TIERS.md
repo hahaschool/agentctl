@@ -107,6 +107,8 @@ pm2 restart all
 2. 启用 `promote-beta.yml` workflow（手动运行时必须显式选择 `dev-1` 或 `dev-2` 作为 source tier）
 3. 在 GitHub 仓库设置里添加 `beta` environment（带审批门控，保持不变）
 4. Prod 层用同样的模式，但部署到远程机器（通过 Tailscale）
+5. 为 `deploy-prod.yml` 配齐 production secrets：`TS_OAUTH_CLIENT_ID`、`TS_OAUTH_SECRET`、`PROD_TAILSCALE_IP`、`DEPLOY_SSH_KEY`、`POSTGRES_PASSWORD`
+6. 在这些 production secrets 配齐之前，release 触发的 production deploy 会自动跳过并写出 summary；如果你手动运行 `Deploy to Production`，workflow 会在最前面直接报错，而不是等到 Tailscale / rollback 步骤才失败
 
 这些步骤到时候再做，现在不需要。
 
