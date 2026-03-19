@@ -1565,12 +1565,25 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [ ] Remove the remaining web-local permission-request type drift in favor of the shared contract
 - [ ] Keep the cleanup scoped to web/shared API-query-card boundaries without reopening the broader approvals architecture
 
+## 26. Agent Worker Container Security Remediation
+
+> Plan: [plans/2026-03-20-agent-worker-container-security-remediation-plan.md](plans/2026-03-20-agent-worker-container-security-remediation-plan.md)
+>
+> Status note: after section 24 closed and the section 25 web hardening batch opened, a fresh `main` security scan surfaced a new `agentctl-agent-worker` container backlog in GitHub code scanning. Dependabot and secret scanning remain clear; the active follow-up here is to reduce the worker image OS-package exposure without bouncing back to Alpine/musl compatibility risk.
+
+### 26.1 Agent Worker Runtime Image Refresh
+
+- [ ] Reduce the open `agentctl-agent-worker` container alert backlog on `main`, currently 100 code-scanning findings from the worker image (1 critical, 2 high, 16 medium, 80 low, 1 unknown)
+- [ ] Address the highest-signal runtime packages first (`zlib1g`, `libexpat1`, `libldap-2.5-0`, PAM/systemd/ncurses) with the smallest defensible base-image/runtime-package change
+- [ ] Keep the fix scoped to the worker container unless the validation data shows the control-plane image must move in lockstep
+
 ---
 
 ## Active Priorities
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
+| **P0** | Agent Worker Container Security Remediation | 26.1 | Active — `main` currently has 100 open Trivy-backed code-scanning alerts on `agentctl-agent-worker`; current remediation direction is a minimal worker runtime image refresh that keeps the container on a glibc-based slim image instead of reverting to Alpine/musl |
 | **P0** | Web Hardening Follow-through | 25.1-25.3 | Active — targeted Playwright coverage for runtime sessions and the settings control center plus web/shared permission-request contract cleanup; machines / terminal e2e is intentionally deferred because terminal/WebSocket coverage is a higher-flake surface |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
@@ -1788,6 +1801,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Active — next isolated web-hardening batch after section 24 closed; machines / terminal e2e stays deferred for now because terminal/WebSocket coverage is a higher-flake surface | 25.1-25.3 |
+| [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Active — targeted worker-container remediation after a fresh `main` scan surfaced 100 open agent-worker image findings while Dependabot and secret scanning remained clear | 26.1 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
