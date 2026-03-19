@@ -1332,7 +1332,7 @@ Critical gap: when agent permission mode is NOT bypass, CLI outputs `permission_
 
 > Design spec: [permission-approval-system-design v2](superpowers/specs/2026-03-16-permission-approval-system-design.md)
 > Impl plan: [permission-approval-system](superpowers/plans/2026-03-18-permission-approval-system.md)
-> Status: ✅ Core approval workflow delivered in PRs #238-240. Remaining follow-up: iOS push notifications.
+> Status: ✅ Core approval workflow delivered in PRs #238-240. Mobile approval inbox/operator surface is now tracked in §21.1; remaining follow-up is true iOS push notifications.
 
 ### 17.5 Agent Run State Machine Visibility — P1
 
@@ -1434,6 +1434,27 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 - [x] Frontend settings panel for notification-preferences API *(PR #272)*
 - [x] Channels, quiet hours, priority threshold configuration *(PR #272)*
+
+## 21. Mobile Approval Follow-up
+
+> Design: [plans/2026-03-19-mobile-approval-center-design.md](plans/2026-03-19-mobile-approval-center-design.md)
+> Plan: [plans/2026-03-19-mobile-approval-center-impl-plan.md](plans/2026-03-19-mobile-approval-center-impl-plan.md)
+>
+> Status note: the control plane and web approval flow are shipped. `21.1` adds the mobile approval inbox/operator surface; the remaining infrastructure slice is true iOS push/APNs delivery in `21.2`.
+
+### 21.1 Mobile Approval Inbox — Delivered
+
+- [x] Mobile API wrapper for `permission-requests` list + resolve *(direct commit pending)*
+- [x] Pending approvals screen with approve/deny actions *(direct commit pending)*
+- [x] Runtime tab badge includes pending approvals *(direct commit pending)*
+- [x] Dedicated mobile `Approvals` tab for the inbox *(direct commit pending)*
+- [x] Mobile regression coverage for polling + resolve flow *(direct commit pending)*
+
+### 21.2 iOS Push Notifications for Pending Approvals — Planned
+
+- [ ] Device token registration from mobile app
+- [ ] Control-plane push dispatch path for `approval.pending`
+- [ ] Notification tap path lands user on the approval inbox
 
 ---
 
@@ -1649,7 +1670,9 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
 | [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered — PRs #167-#227 are on `main`, and post-merge DAST rerun `23131047045` succeeded | 16.1-16.3 |
-| [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | In progress — §20.1-20.3 delivered on `main`; §20.4 remains open | 20.1-20.4 |
+| [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
+| [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped, 21.2 remains planned | 17.4, 21.1-21.2 |
+| [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | In progress — 21.1 shipped, 21.2 remains open | 21.1-21.2 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
