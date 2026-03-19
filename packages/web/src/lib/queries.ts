@@ -49,6 +49,8 @@ export const queryKeys = {
   workerNodes: ['worker-nodes'] as const,
   agents: ['agents'] as const,
   taskGraphs: ['task-graphs'] as const,
+  taskGraph: (id: string) => ['task-graphs', id] as const,
+  taskRuns: ['task-runs'] as const,
   agent: (id: string) => ['agents', id] as const,
   agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
   agentHealth: (agentId: string) => ['agents', agentId, 'health'] as const,
@@ -211,6 +213,25 @@ export function taskGraphsQuery() {
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
     },
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function taskGraphQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.taskGraph(id),
+    queryFn: () => api.getTaskGraph(id),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function taskRunsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.taskRuns,
+    queryFn: api.listTaskRuns,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
@@ -581,6 +602,16 @@ export function memoryTimelineQuery(sessionId: string | undefined) {
 // ---------------------------------------------------------------------------
 // Mutation hooks
 // ---------------------------------------------------------------------------
+
+export function useCreateTaskRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.createTaskRun,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskRuns });
+    },
+  });
+}
 
 export function useCreateAgent() {
   const queryClient = useQueryClient();
