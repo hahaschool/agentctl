@@ -19,8 +19,9 @@
 
 import { execFile as execFileCb } from 'node:child_process';
 import type { Dirent } from 'node:fs';
-import { access, readdir, realpath } from 'node:fs/promises';
-import { join, normalize, relative, resolve, sep } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { access, readdir } from 'node:fs/promises';
+import { join, normalize, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
@@ -128,6 +129,14 @@ function sanitizeGitEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return sanitized;
 }
 
+function tryRealpathSync(targetPath: string): string | null {
+  try {
+    return resolve(normalize(realpathSync.native(targetPath)));
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -142,15 +151,16 @@ export class KnowledgeMaintenance {
     this.pool = options.pool;
     this.memoryStore = options.memoryStore;
     this.logger = options.logger;
-    const workspaceRoot = resolve(normalize(process.cwd()));
+    const workspaceRoot = tryRealpathSync(process.cwd()) ?? resolve(normalize(process.cwd()));
     const requestedRoot = resolve(normalize(options.projectRoot ?? workspaceRoot));
+    const canonicalRequestedRoot = tryRealpathSync(requestedRoot) ?? requestedRoot;
 
-    if (isWithinRoot(requestedRoot, workspaceRoot)) {
-      this.projectRoot = requestedRoot;
+    if (isWithinRoot(canonicalRequestedRoot, workspaceRoot)) {
+      this.projectRoot = canonicalRequestedRoot;
     } else {
       this.projectRoot = workspaceRoot;
       this.logger.warn(
-        { requestedRoot, workspaceRoot },
+        { requestedRoot, canonicalRequestedRoot, workspaceRoot },
         'Ignoring projectRoot outside the current working tree',
       );
     }
@@ -466,12 +476,8 @@ export class KnowledgeMaintenance {
    * to prevent path traversal attacks (js/path-injection).
    */
   private async fileExists(relativePath: string): Promise<boolean> {
-    const joined = resolve(join(this.projectRoot, relativePath));
-    const allowedPrefix = this.projectRoot.endsWith(sep)
-      ? this.projectRoot
-      : `${this.projectRoot}${sep}`;
-
-    if (joined !== this.projectRoot && !joined.startsWith(allowedPrefix)) {
+    const joined = this.resolveProjectPath(relativePath);
+    if (!joined) {
       return false;
     }
 
@@ -492,22 +498,16 @@ export class KnowledgeMaintenance {
    */
   private async getDeletedFiles(): Promise<string[]> {
     try {
-      const realRoot = await realpath(this.projectRoot);
-      const workspaceRoot = await realpath(resolve(normalize(process.cwd())));
-
-      if (!isWithinRoot(realRoot, workspaceRoot)) {
-        this.logger.warn(
-          { projectRoot: realRoot, workspaceRoot },
-          'Skipping deleted-file scan for projectRoot outside the current working tree',
-        );
+      const gitDir = this.resolveProjectPath('.git');
+      if (!gitDir) {
         return [];
       }
 
       try {
-        await access(join(realRoot, '.git'));
+        await access(gitDir);
       } catch {
         this.logger.debug(
-          { projectRoot: realRoot },
+          { projectRoot: this.projectRoot },
           'No .git directory found — skipping deleted-file scan',
         );
         return [];
@@ -517,7 +517,7 @@ export class KnowledgeMaintenance {
         'git',
         ['log', '--diff-filter=D', '--name-only', '--pretty=format:', '--since=90 days ago'],
         {
-          cwd: realRoot,
+          cwd: this.projectRoot,
           env: sanitizeGitEnv(process.env),
         },
       );
@@ -537,10 +537,13 @@ export class KnowledgeMaintenance {
   }
 
   private async listCodebaseDirectories(): Promise<string[]> {
-    const packagesRoot = join(this.projectRoot, 'packages');
+    const packagesRoot = this.resolveProjectPath('packages');
+    if (!packagesRoot) {
+      return [];
+    }
 
     try {
-      const directories = await this.walkDirectories(packagesRoot, 0);
+      const directories = await this.walkDirectories('packages', 0);
       return directories.sort();
     } catch (error: unknown) {
       this.logger.warn({ err: error }, 'Failed to list codebase directories');
@@ -548,7 +551,12 @@ export class KnowledgeMaintenance {
     }
   }
 
-  private async walkDirectories(directoryPath: string, depth: number): Promise<string[]> {
+  private async walkDirectories(relativeDirectoryPath: string, depth: number): Promise<string[]> {
+    const directoryPath = this.resolveProjectPath(relativeDirectoryPath);
+    if (!directoryPath) {
+      return [];
+    }
+
     let entries: Dirent[];
     try {
       entries = await readdir(directoryPath, { withFileTypes: true });
@@ -559,8 +567,8 @@ export class KnowledgeMaintenance {
       throw error;
     }
 
-    const projectRelativePath = relative(this.projectRoot, directoryPath).replaceAll('\\', '/');
-    const directories = projectRelativePath.length > 0 ? [projectRelativePath] : [];
+    const directories =
+      relativeDirectoryPath.length > 0 ? [relativeDirectoryPath.replaceAll('\\', '/')] : [];
 
     if (depth >= MAX_DIRECTORY_DEPTH) {
       return directories;
@@ -570,10 +578,16 @@ export class KnowledgeMaintenance {
       if (!entry.isDirectory() || EXCLUDED_DIRECTORY_NAMES.has(entry.name)) {
         continue;
       }
-      directories.push(...(await this.walkDirectories(join(directoryPath, entry.name), depth + 1)));
+      const childRelativePath = join(relativeDirectoryPath, entry.name);
+      directories.push(...(await this.walkDirectories(childRelativePath, depth + 1)));
     }
 
     return directories;
+  }
+
+  private resolveProjectPath(relativePath: string): string | null {
+    const joined = resolve(join(this.projectRoot, relativePath));
+    return isWithinRoot(joined, this.projectRoot) ? joined : null;
   }
 
   private async countFactsByDirectory(scope?: string): Promise<Map<string, number>> {

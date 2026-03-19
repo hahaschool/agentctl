@@ -213,18 +213,30 @@ describe('knowledge-maintenance routes', () => {
       expect(body.result.staleEntries).toHaveLength(1);
     });
 
-    it('uses projectRoot from body when provided', async () => {
+    it('ignores body.projectRoot and keeps the configured projectRoot', async () => {
       const { KnowledgeMaintenance } = await import('../../memory/knowledge-maintenance.js');
 
-      await app.inject({
+      const localApp = Fastify({ logger: false });
+      await localApp.register(knowledgeMaintenanceRoutes, {
+        prefix: '/api/memory/maintenance',
+        pool: pool as never,
+        memoryStore: memoryStore as never,
+        logger: createMockLogger(),
+        projectRoot: '/default/root',
+      });
+      await localApp.ready();
+
+      await localApp.inject({
         method: 'POST',
         url: '/api/memory/maintenance',
         payload: { projectRoot: '/custom/root' },
       });
 
       expect(KnowledgeMaintenance).toHaveBeenCalledWith(
-        expect.objectContaining({ projectRoot: '/custom/root' }),
+        expect.objectContaining({ projectRoot: '/default/root' }),
       );
+
+      await localApp.close();
     });
 
     it('falls back to opts.projectRoot when body.projectRoot is absent', async () => {
