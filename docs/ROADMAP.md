@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #297, #298, and #299 are now on `main`, closing roadmap 24.1-24.3; the remaining follow-up is a production-deploy guardrail fix after release workflow `23307749638` failed on missing Tailscale OAuth secrets)
+> Last updated: 2026-03-20 (PRs #297, #298, and #299 are now on `main`, closing roadmap 24.1-24.3; the remaining follow-up is the production-deploy guardrail fix proposed in PR #301 after release workflow `23307749638` failed on missing Tailscale OAuth secrets)
 
 ## Current State
 
@@ -1565,7 +1565,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
 | **P2** | Remote Control Integration / Manual Takeover | 2.4 | Partial — relay decision + narrow manual takeover shipped; relay re-evaluation remains |
 | **P1** | ~~Approval Push Dispatch~~ | 21.2 | ✅ Delivered — Expo token bootstrap, device registry, tap routing, and control-plane dispatch are all on `main` (PRs #290, #291, #295) |
-| **P1** | Production Deploy Guardrails for Missing Secrets | 24.4 | In progress — follow-up after failed release workflow `23307749638`; primary fix is proposed in PR #300 |
+| **P1** | Production Deploy Guardrails for Missing Secrets | 24.4 | In progress — follow-up after failed release workflow `23307749638`; primary fix is proposed in PR #301 |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
 | **P3** | ~~Mobile Session Browser~~ | 5.1-5.3 | ✅ Delivered — all items complete: time-range, rich cards, handoff timeline, action bar, push notifications (PR #67), SSE stream + replay (PR #71) |
