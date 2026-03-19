@@ -1,14 +1,17 @@
 'use client';
 
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 
 type ThinkingBlockProps = {
   content: string;
   timestamp?: string;
 };
 
-export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React.JSX.Element {
+export const ThinkingBlock = memo(function ThinkingBlock({
+  content,
+  timestamp,
+}: ThinkingBlockProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
 
   // Show first line as preview
@@ -64,4 +67,4 @@ export function ThinkingBlock({ content, timestamp }: ThinkingBlockProps): React
       </div>
     </div>
   );
-}
+});

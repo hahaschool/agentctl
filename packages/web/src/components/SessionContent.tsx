@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useNotificationContext } from '../contexts/notification-context';
@@ -47,7 +47,7 @@ function SessionContentSkeleton(): React.JSX.Element {
   );
 }
 
-export function SessionContent({
+export const SessionContent = memo(function SessionContent({
   sessionId,
   rcSessionId,
   machineId,
@@ -637,9 +637,9 @@ export function SessionContent({
       )}
     </div>
   );
-}
+});
 
-export function InlineMessage({
+export const InlineMessage = memo(function InlineMessage({
   message,
   renderMarkdown,
   isOptimistic,
@@ -705,4 +705,4 @@ export function InlineMessage({
       )}
     </div>
   );
-}
+});
