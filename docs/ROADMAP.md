@@ -1475,6 +1475,39 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Add API client methods for approvals, context-bridge, run-summary endpoints *(PR #276)*
 - [x] Wire query hooks for new API methods *(PR #276)*
 
+## 23. UX & Feature Polish (Batch)
+
+### 23.1 run-reaper Test Coverage — Delivered
+
+- [x] Last untested CP route now covered *(PR #286)*
+
+### 23.2 Knowledge Graph Visualization — Delivered
+
+- [x] Replace GraphPlaceholder with SVG-based graph visualization *(PR #286)*
+
+### 23.3 Approvals Page — Delivered
+
+- [x] Dedicated /approvals page with thread-scoped gate loading *(PR #284)*
+- [x] Approve/deny actions wired to API *(PR #284)*
+- [x] Sidebar nav link added *(PR #284)*
+
+### 23.4 Dashboard Enhancement — Delivered
+
+- [x] System health summary widget *(PR #283)*
+- [x] Quick action buttons (New Session, View Logs, Discover) *(PR #283)*
+- [x] Service health cards *(PR #283)*
+
+### 23.5 Agent Detail Page Polish — Delivered
+
+- [x] Better loading skeletons *(PR #282)*
+- [x] Helpful empty states with actions *(PR #282)*
+- [x] Prominent status indicators *(PR #282)*
+
+### 23.6 Mobile Approvals Hardening — Delivered
+
+- [x] Harden pending approvals polling *(PR #281)*
+- [x] Approval push notifications plan *(PR #285)*
+
 ---
 
 ## Active Priorities
