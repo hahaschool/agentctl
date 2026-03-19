@@ -92,20 +92,39 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         );
 
       if (staleRows.length > 0) {
-        const ids = staleRows.map((r) => r.id);
-        await db
-          .update(rcSessions)
-          .set({
-            status: 'error',
-            endedAt: new Date(),
-            metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || '{"errorMessage":"Session timed out — no heartbeat from worker","errorHint":"Try resuming or forking this session to continue."}'::jsonb`,
+        // Exclude sessions that have a claudeSessionId — these may be externally
+        // managed CLI sessions whose JSONL is still being written to. The reaper
+        // should only time out sessions that the worker started and then lost.
+        const fullRows = await db
+          .select({
+            id: rcSessions.id,
+            claudeSessionId: rcSessions.claudeSessionId,
           })
-          .where(inArray(rcSessions.id, ids));
+          .from(rcSessions)
+          .where(
+            inArray(
+              rcSessions.id,
+              staleRows.map((r) => r.id),
+            ),
+          );
 
-        app.log.warn(
-          { count: ids.length, sessionIds: ids },
-          'Reaped stale sessions with no heartbeat',
-        );
+        const ids = fullRows.filter((r) => !r.claudeSessionId).map((r) => r.id);
+
+        if (ids.length > 0) {
+          await db
+            .update(rcSessions)
+            .set({
+              status: 'error',
+              endedAt: new Date(),
+              metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || '{"errorMessage":"Session timed out — no heartbeat from worker","errorHint":"Try resuming or forking this session to continue."}'::jsonb`,
+            })
+            .where(inArray(rcSessions.id, ids));
+
+          app.log.warn(
+            { count: ids.length, sessionIds: ids },
+            'Reaped stale sessions with no heartbeat',
+          );
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
