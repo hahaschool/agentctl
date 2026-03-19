@@ -35,7 +35,7 @@ function ConfigPreviewPanelInner({ agentId }: { agentId: string }): React.JSX.El
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 bg-neutral-800/50 rounded-md animate-pulse" />
+          <div key={i} className="h-24 bg-muted rounded-md animate-pulse" />
         ))}
       </div>
     );
@@ -43,7 +43,7 @@ function ConfigPreviewPanelInner({ agentId }: { agentId: string }): React.JSX.El
 
   if (previewQuery.error) {
     return (
-      <div className="text-sm text-muted-foreground p-4 border border-neutral-800 rounded-md">
+      <div className="text-sm text-muted-foreground p-4 border border-border rounded-md">
         Preview unavailable — worker offline
       </div>
     );

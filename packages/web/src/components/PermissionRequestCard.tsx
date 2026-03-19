@@ -143,7 +143,7 @@ export function PermissionRequestCard({
         <div className="text-xs text-muted-foreground">
           Tool: <span className="font-semibold text-foreground">{permissionRequest.toolName}</span>
         </div>
-        <pre className="max-h-44 overflow-auto rounded-md border border-yellow-500/25 bg-black/30 p-2 text-xs leading-relaxed text-yellow-100">
+        <pre className="max-h-44 overflow-auto rounded-md border border-border bg-muted p-2 text-xs leading-relaxed text-foreground">
           {toolInputPreview}
         </pre>
       </CardContent>
@@ -171,7 +171,7 @@ export function PermissionRequestCard({
             >
               {submittingDecision === 'denied' ? 'Denying…' : 'Deny'}
             </Button>
-            {resolveError && <span className="text-xs text-red-300">{resolveError}</span>}
+            {resolveError && <span className="text-xs text-destructive">{resolveError}</span>}
           </div>
         )}
       </CardFooter>

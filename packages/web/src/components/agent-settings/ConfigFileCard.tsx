@@ -22,7 +22,7 @@ const STATUS_STYLES = {
   },
   project: {
     label: 'Project',
-    className: 'bg-neutral-500/10 text-neutral-400 border-neutral-500/30',
+    className: 'bg-muted/50 text-muted-foreground border-border/60',
   },
 } as const;
 
@@ -47,7 +47,7 @@ export function ConfigFileCard({
 
   return (
     <CollapsibleSection title={title} open={open} onToggle={() => setOpen((v) => !v)}>
-      <pre className="text-xs bg-neutral-900 p-3 rounded-md overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap break-all">
+      <pre className="text-xs bg-card border border-border p-3 rounded-md overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap break-all">
         {status === 'merged' && overriddenFields
           ? renderWithHighlights(content, overriddenFields)
           : content}

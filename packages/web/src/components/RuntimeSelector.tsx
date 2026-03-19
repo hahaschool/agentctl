@@ -58,7 +58,7 @@ export function RuntimeSelector({
           className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${
             value === rt
               ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-              : 'border-neutral-700 text-neutral-400 hover:border-neutral-500'
+              : 'border-border text-muted-foreground hover:border-border/80'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           {RUNTIME_LABELS[rt]}

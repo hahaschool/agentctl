@@ -996,7 +996,7 @@ export function AgentFormDialog({
             {/* biome-ignore lint/a11y/noLabelWithoutControl: RuntimeSelector uses a radiogroup, not a single input */}
             <label className="text-sm font-medium">Runtime</label>
             {agent?.runtime && !isManagedRuntime(agent.runtime) ? (
-              <div className="text-sm text-neutral-500">
+              <div className="text-sm text-muted-foreground">
                 Runtime: {agent.runtime} (unmanaged -- not editable)
               </div>
             ) : (

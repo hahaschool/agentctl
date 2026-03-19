@@ -144,7 +144,7 @@ export const DiscoverSessionRow = React.memo(function DiscoverSessionRow({
             {s.runtime === 'claude-code' ? 'Claude' : 'Codex'}
           </span>
         ) : (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400 shrink-0 whitespace-nowrap">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 whitespace-nowrap">
             Unknown
           </span>
         )}
