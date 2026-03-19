@@ -502,11 +502,15 @@ export class PromotionRunner {
       });
       const betaTier = tierConfigs.find((c) => c.name === 'beta');
       if (betaTier) {
+        const betaDbUrl =
+          process.env.DATABASE_URL ??
+          `postgresql://hahaschool@localhost:5433/${betaTier.database ?? 'agentctl'}`;
         const migrateResult = await this.spawnWithLogs(
           'pnpm',
           ['--filter', '@agentctl/control-plane', 'db:migrate'],
           events,
           60_000,
+          { DATABASE_URL: betaDbUrl },
         );
         if (!migrateResult.ok) {
           const errorMsg = 'Migration step failed';
@@ -609,12 +613,14 @@ export class PromotionRunner {
     args: readonly string[],
     events: EventEmitter,
     timeoutMs: number,
+    envOverrides?: Record<string, string>,
   ): Promise<{ ok: boolean }> {
     return new Promise((resolve) => {
       const child = spawn(command, args as string[], {
         cwd: this.repoRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: true,
+        env: envOverrides ? { ...process.env, ...envOverrides } : undefined,
       });
 
       child.stdout?.on('data', (chunk: Buffer) => {
