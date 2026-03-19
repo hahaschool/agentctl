@@ -148,6 +148,13 @@
       "when": 1711065600000,
       "tag": "0018_add_agent_runs_phase",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1711152000000,
+      "tag": "0020_add_mobile_push_devices",
+      "breakpoints": true
     }
   ]
 }
