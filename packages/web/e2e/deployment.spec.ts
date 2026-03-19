@@ -122,10 +122,7 @@ test.describe('Deployment page', () => {
 
     const sourceTierSelect = page.locator('#source-tier-select');
     await expect(sourceTierSelect).toHaveValue('dev-1');
-    await expect(sourceTierSelect.locator('option')).toHaveText([
-      'Dev 1 (dev-1)',
-      'Dev 2 (dev-2)',
-    ]);
+    await expect(sourceTierSelect.locator('option')).toHaveText(['Dev 1 (dev-1)', 'Dev 2 (dev-2)']);
     await expect(sourceTierSelect.locator('option[value="beta"]')).toHaveCount(0);
 
     const promoteButton = page.getByRole('button', { name: /^promote to beta$/i });
