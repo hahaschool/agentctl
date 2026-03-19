@@ -12,7 +12,9 @@
 #   - Includes git for worktree operations
 # ─────────────────────────────────────────────────────────────────
 
-ARG NODE_IMAGE=node:22.22.1-bookworm-slim
+# Keep the worker on a glibc-based slim image, but use the newer Debian
+# suite so the shipped OS package set can pick up newer security fixes.
+ARG NODE_IMAGE=node:22.22.1-trixie-slim
 
 # ── Stage 1: Build ──────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS build
