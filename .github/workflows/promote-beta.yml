@@ -5,7 +5,7 @@
 # and automatic rollback on failure.
 #
 # Triggers:
-#   - workflow_dispatch: manual promote with optional tier selection and dry run
+#   - workflow_dispatch: manual promote with explicit dev-tier selection and dry run
 #
 # NOTE: The "beta" GitHub Environment MUST be configured with required
 # reviewers to gate beta promotions. Go to:
@@ -25,15 +25,15 @@ name: Promote to Beta
 on:
   workflow_dispatch:
     inputs:
-      tier:
-        description: "Source tier to promote from"
+      source_tier:
+        description: "Explicitly select the dev tier to promote into beta"
         required: true
         type: choice
         options:
-          - beta
+          - select-source-tier
           - dev-1
           - dev-2
-        default: beta
+        default: select-source-tier
       dry_run:
         description: "Show promotion plan without executing"
         required: false
@@ -55,12 +55,37 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Preflight — require an explicit dev tier before the beta approval gate
+  # ---------------------------------------------------------------------------
+  validate-inputs:
+    name: Validate promotion request
+    runs-on: ubuntu-latest
+
+    outputs:
+      source_tier: ${{ steps.validate.outputs.source_tier }}
+
+    steps:
+      - name: Validate source tier selection
+        id: validate
+        run: |
+          case "${{ inputs.source_tier }}" in
+            dev-1|dev-2)
+              echo "source_tier=${{ inputs.source_tier }}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Select dev-1 or dev-2 before requesting a beta promotion. The default placeholder is intentionally invalid."
+              exit 1
+              ;;
+          esac
+
+  # ---------------------------------------------------------------------------
   # Promote — build, validate schema parity, migrate, and restart beta
   # ---------------------------------------------------------------------------
   promote:
-    name: Promote ${{ inputs.tier }} to beta
+    name: Promote ${{ needs.validate-inputs.outputs.source_tier }} to beta
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: validate-inputs
     # NOTE: "beta" environment requires manual approval via GitHub
     # Environment protection rules. Configure at:
     #   Settings > Environments > beta > Required reviewers
@@ -123,12 +148,12 @@ jobs:
             DRY_RUN_FLAG="--dry-run"
           fi
 
-          echo "Promoting from tier: ${{ inputs.tier }}"
+          echo "Promoting from tier: ${{ needs.validate-inputs.outputs.source_tier }}"
           echo "Dry run: ${{ inputs.dry_run }}"
           echo ""
 
           chmod +x scripts/env-promote.sh
-          ./scripts/env-promote.sh --from "${{ inputs.tier }}" $DRY_RUN_FLAG
+          ./scripts/env-promote.sh --from "${{ needs.validate-inputs.outputs.source_tier }}" $DRY_RUN_FLAG
 
       # ── Post-promote health check ──────────────────────────────────────
       - name: Health check (beta)
@@ -169,7 +194,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Source tier | \`${{ inputs.tier }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Source tier | \`${{ needs.validate-inputs.outputs.source_tier }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Dry run | \`${{ inputs.dry_run }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Triggered by | \`${{ github.actor }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
@@ -179,7 +204,7 @@ jobs:
       - name: Report promotion failure
         if: failure()
         run: |
-          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ inputs.tier }}' to beta failed. The env-promote.sh script includes automatic rollback. Check logs for details."
+          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' to beta failed. The env-promote.sh script includes automatic rollback. Check logs for details."
 
       # ── Cleanup SSH key ────────────────────────────────────────────────
       - name: Cleanup SSH key
