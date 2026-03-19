@@ -2,7 +2,7 @@
 
 > Goal: close the newly surfaced `agentctl-agent-worker` container vulnerability backlog on `main` with the smallest defensible runtime-image change, while keeping the worker on a glibc-based slim image and avoiding a blind regression back to Alpine/musl.
 >
-> Status note: this follow-up opened after a fresh 2026-03-20 `main` scan surfaced 100 open GitHub code-scanning findings for the worker image. Dependabot and secret scanning remained at zero open alerts.
+> Status note: this follow-up opened after a fresh 2026-03-20 `main` scan surfaced 100 open GitHub code-scanning findings for the worker image. PR #307 has now merged the worker-only runtime refresh plus the `python3-setuptools` compatibility follow-up for node-gyp on Debian trixie, but the plan remains active until the post-merge `main` scan output converges and the open-alert count settles.
 
 ## Current Alert Picture
 
@@ -16,7 +16,7 @@ The current `main` backlog is concentrated in the worker container image:
   - `libldap-2.5-0` (1 high + low follow-ons)
   - PAM / systemd / ncurses packages carrying additional medium findings
 
-The control-plane image is not currently carrying the same open backlog, so the first pass should stay worker-scoped unless validation shows the base-image move should be mirrored for parity.
+The control-plane image is not currently carrying the same open backlog, so the first pass stays worker-scoped unless validation shows the base-image move should be mirrored for parity.
 
 ## Remediation Direction
 
@@ -26,7 +26,10 @@ The initial remediation direction is intentionally conservative:
 - prefer a runtime-image refresh over broader app-layer churn
 - keep the code change as close to the Docker base selection as possible unless the scan proves a package-level reduction is still required
 
-The current candidate is a worker-only base-image refresh from `22.22.1-bookworm-slim` to the official `22.22.1-trixie-slim` tag so the worker picks up a newer Debian package set without changing the Node major/minor line.
+That worker-only base-image refresh is now on `main` via PR #307:
+
+- `infra/docker/Dockerfile.agent-worker` now uses `node:22.22.1-trixie-slim`
+- the build/deps stages also install `python3-setuptools` because Debian trixie no longer bundles the `distutils` shim node-gyp still expects during `node-pty` compilation
 
 ## Verification Expectations
 
@@ -35,7 +38,7 @@ Because local Docker access may not be available in every agent environment, ver
 - `git diff --check`
 - review the worker Dockerfile diff for scope control
 - rely on PR CI to run the container build and Trivy-backed security audit
-- if GitHub exposes branch-level code-scanning results for the PR ref, compare them against the current `main` alert count before merge
+- compare the post-merge `main` code-scanning alert count against the pre-fix baseline before closing the roadmap item
 
 ## Deferred / Out of Scope
 
