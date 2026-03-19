@@ -67,6 +67,8 @@ import type {
   TaskDefinition,
   TaskEdge,
   TaskGraph,
+  TaskRun,
+  TaskRunStatus,
   Thread,
   ThreadType,
   WorkerNode,
@@ -97,6 +99,8 @@ export type {
   TaskDefinition,
   TaskEdge,
   TaskGraph,
+  TaskRun,
+  TaskRunStatus,
   Thread,
   ThreadType,
   WorkerNode,
@@ -1318,6 +1322,15 @@ export const api = {
   validateTaskGraph: (id: string) =>
     request<TaskGraphValidation>(`/api/task-graphs/${encodeURIComponent(id)}/validate`, {
       method: 'POST',
+    }),
+
+  // Task runs
+  listTaskRuns: () => request<TaskRun[]>('/api/task-runs'),
+
+  createTaskRun: (body: { definitionId: string; spaceId?: string; threadId?: string }) =>
+    request<TaskRun>('/api/task-runs', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 
   // Fleet worker nodes
