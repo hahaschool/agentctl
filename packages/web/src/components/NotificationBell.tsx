@@ -96,8 +96,10 @@ function remainingBadgeClass(ms: number): string {
 }
 
 function agentLabel(request: PermissionRequest): string {
-  const named = request.agentName?.trim();
-  if (named) return named;
+  if ('agentName' in request && typeof request.agentName === 'string') {
+    const named = request.agentName.trim();
+    if (named) return named;
+  }
   return `Agent ${request.agentId.slice(0, 8)}`;
 }
 

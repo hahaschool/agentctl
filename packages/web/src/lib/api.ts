@@ -58,6 +58,8 @@ import type {
   NotificationChannel,
   NotificationPreference,
   NotificationPriority,
+  PermissionRequest,
+  PermissionRequestStatus,
   ResumeManagedSessionRequest,
   RuntimeConfigSyncRequest,
   RuntimeConfigSyncResponse,
@@ -94,6 +96,8 @@ export type {
   NotificationChannel,
   NotificationPreference,
   NotificationPriority,
+  PermissionRequest,
+  PermissionRequestStatus,
   DiscoveredMcpServer,
   DiscoveredSkill,
   EventSenderType,
@@ -192,28 +196,7 @@ export type Session = {
   model: string | null;
 };
 
-// Local stub until backend shared types land.
-export type PermissionRequestStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
-
 export type PermissionDecision = 'approved' | 'denied';
-
-export type PermissionRequest = {
-  id: string;
-  agentId: string;
-  agentName?: string;
-  sessionId: string;
-  machineId: string;
-  requestId: string;
-  toolName: string;
-  toolInput?: Record<string, unknown>;
-  description?: string;
-  status: PermissionRequestStatus;
-  requestedAt: string;
-  timeoutAt: string;
-  resolvedAt?: string;
-  resolvedBy?: string;
-  decision?: PermissionDecision;
-};
 
 // Web extends base DiscoveredSession with machine context added by CP aggregation
 export type DiscoveredSession = BaseDiscoveredSession & {
