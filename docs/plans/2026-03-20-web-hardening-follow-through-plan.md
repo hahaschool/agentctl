@@ -2,7 +2,7 @@
 
 > Goal: turn the next web-regression backlog into three isolated follow-up slices that can run in parallel without taking on the higher-flake terminal/WebSocket surface in the same batch.
 >
-> Status note: section 24 is now delivered on `main` via PRs #299, #297, #298, and #301. This follow-through batch opens the next visible web-hardening slice for runtime sessions, the settings control center, and the shared permission-request contract boundary.
+> Status note: this follow-through batch is now delivered on `main` via PRs #305, #304, and #306. The machines / terminal e2e follow-up remains intentionally deferred because terminal/WebSocket coverage is still a higher-flake surface than the list/detail/settings and contract work completed here.
 
 ## Why This Batch
 
@@ -20,6 +20,8 @@ One adjacent candidate is intentionally deferred:
 
 ### Workstream A — runtime sessions Playwright coverage
 
+Delivered via PR #306.
+
 **Goal**
 
 Add a focused browser test for the runtime-session surface that proves the unified sessions page can render managed runtime rows, open a runtime detail view, and exercise one safe control path without depending on terminal/WebSocket streaming.
@@ -36,6 +38,8 @@ Add a focused browser test for the runtime-session surface that proves the unifi
 
 ### Workstream B — settings control center Playwright coverage
 
+Delivered via PR #304.
+
 **Goal**
 
 Add a focused browser test for `/settings` that covers the runtime control center shell, left-nav section jumps, and one representative operator interaction so the settings IA can change without losing end-to-end coverage.
@@ -51,6 +55,8 @@ Add a focused browser test for `/settings` that covers the runtime control cente
 - Targeted Playwright run for the new settings spec
 
 ### Workstream C — web/shared permission-request contract cleanup
+
+Delivered via PR #305.
 
 **Goal**
 
@@ -71,5 +77,5 @@ Remove the remaining web-local permission-request type drift so the web API laye
 ## Coordination Notes
 
 - Keep each workstream in its own worktree and coordination-board claim.
-- Current split is `codex-307` for runtime sessions, `codex-308` for settings control center, and `codex-309` for permission-request contract cleanup.
+- Completed split was `codex-307` for runtime sessions, `codex-308` for settings control center, and `codex-309` for permission-request contract cleanup.
 - Do not mix machines / terminal e2e into this batch; that follow-up should stay separate until the terminal/WebSocket surface is less flaky.
