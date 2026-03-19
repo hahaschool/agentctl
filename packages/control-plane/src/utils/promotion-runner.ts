@@ -309,7 +309,25 @@ export class PromotionRunner {
           };
         }
       }
-      const result = await spawnProcess('pnpm', ['build'], this.repoRoot, BUILD_TIMEOUT_MS);
+      // Build only shared + CP + worker + web (skip mobile which needs Expo)
+      const buildCmd = [
+        'pnpm',
+        '--filter',
+        '@agentctl/shared',
+        '--filter',
+        '@agentctl/control-plane',
+        '--filter',
+        '@agentctl/agent-worker',
+        '--filter',
+        '@agentctl/web',
+        'build',
+      ];
+      const result = await spawnProcess(
+        buildCmd[0],
+        buildCmd.slice(1),
+        this.repoRoot,
+        BUILD_TIMEOUT_MS,
+      );
       if (!result.ok) {
         const tail = result.output.length > 500 ? result.output.slice(-500) : result.output;
         return { status: 'fail' as const, message: `Build failed: ${tail}` };
@@ -447,7 +465,22 @@ export class PromotionRunner {
       }
       const buildResult = buildFresh
         ? { ok: true, output: 'Skipped — recent build exists' }
-        : await this.spawnWithLogs('pnpm', ['build'], events, BUILD_TIMEOUT_MS);
+        : await this.spawnWithLogs(
+            'pnpm',
+            [
+              '--filter',
+              '@agentctl/shared',
+              '--filter',
+              '@agentctl/control-plane',
+              '--filter',
+              '@agentctl/agent-worker',
+              '--filter',
+              '@agentctl/web',
+              'build',
+            ],
+            events,
+            BUILD_TIMEOUT_MS,
+          );
       if (!buildResult.ok) {
         const errorMsg = 'Build step failed';
         await this.finalize(id, 'failed', startedAt, errorMsg, preflight.checks);
