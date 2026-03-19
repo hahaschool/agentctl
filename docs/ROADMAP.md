@@ -1390,6 +1390,32 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Integrate into SessionContent.tsx switch statement for `tool_use`/`tool_result` message types *(direct commit c25058a)*
 - [x] Completes Task 4 of the session display plan
 
+## 20. Coverage & Feature Depth (Batch)
+
+### 20.1 CP Route Test Coverage — P1
+
+- [ ] `spaces.ts` tests (474 lines, actively used, zero coverage)
+- [ ] `task-graphs.ts` tests (253 lines, used by Tasks page)
+- [ ] `memory-reports.ts` tests (504 lines, largest untested route)
+- [ ] `notification-preferences.ts` tests (218 lines)
+- [ ] `agent-profiles.ts` tests (237 lines)
+
+### 20.2 Tasks Detail Page — P2
+
+- [ ] Create `/tasks/[id]` route with task graph detail view
+- [ ] Show graph nodes, dependencies, run history
+- [ ] Wire task-runs.ts API for triggering runs from UI
+
+### 20.3 API Documentation — P2
+
+- [ ] Generate `docs/API.md` from CP route definitions
+- [ ] Cover all REST endpoints with request/response examples
+
+### 20.4 Memory Dashboard — P2
+
+- [ ] Replace `MemoryPlaceholderView` with real dashboard
+- [ ] Show memory stats: fact count, entity distribution, decay health, recent activity
+
 ---
 
 ## Active Priorities
