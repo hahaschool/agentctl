@@ -1458,18 +1458,18 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 22. Remaining Route Tests + Frontend Integration
 
-### 22.1 CP Route Test Coverage (Final Batch) — P1
+### 22.1 CP Route Test Coverage (Final Batch) — Delivered
 
-- [ ] `context-bridge.ts` tests (405 lines)
-- [ ] `approvals.ts` tests (175 lines)
-- [ ] `task-runs.ts` tests (202 lines)
-- [ ] `memory-consolidation.ts` tests (337 lines)
-- [ ] `knowledge-maintenance.ts` tests (70 lines)
+- [x] `context-bridge.ts` tests — 52 tests *(PR #277)*
+- [x] `approvals.ts` tests *(PR #275)*
+- [x] `task-runs.ts` tests *(PR #275)*
+- [x] `memory-consolidation.ts` tests *(PR #274)*
+- [x] `knowledge-maintenance.ts` tests *(PR #274)*
 
-### 22.2 Frontend API Integration — P2
+### 22.2 Frontend API Integration — Delivered
 
-- [ ] Add API client methods for approvals, context-bridge, run-summary endpoints
-- [ ] Wire query hooks for new API methods
+- [x] Add API client methods for approvals, context-bridge, run-summary endpoints *(PR #276)*
+- [x] Wire query hooks for new API methods *(PR #276)*
 
 ---
 
