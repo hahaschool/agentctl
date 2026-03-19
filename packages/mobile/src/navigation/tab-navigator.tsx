@@ -14,7 +14,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text } from 'react-native';
 import { useAppContext } from '../context/app-context.js';
 import { PermissionRequestApi } from '../services/permission-request-api.js';
@@ -25,7 +25,11 @@ import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
 import { SchedulerScreen } from '../ui-screens/scheduler-screen.js';
 import { SessionScreen } from '../ui-screens/session-screen.js';
 import { SettingsScreen } from '../ui-screens/settings-screen.js';
-import { getRuntimeTabBadgeCount } from './runtime-tab-badge.js';
+import {
+  type RuntimeTabBadgeSnapshot,
+  refreshRuntimeTabBadgeSnapshot,
+  toRuntimeTabBadgeCount,
+} from './runtime-tab-badge.js';
 
 // ---------------------------------------------------------------------------
 // Tab param list
@@ -87,28 +91,43 @@ const RUNTIME_BADGE_POLL_INTERVAL_MS = 30_000;
 
 export function TabNavigator(): React.JSX.Element {
   const { apiClient } = useAppContext();
-  const [runtimeBadgeCount, setRuntimeBadgeCount] = useState(0);
-  const [approvalBadgeCount, setApprovalBadgeCount] = useState(0);
+  const [activeTab, setActiveTab] = useState<keyof TabParamList>('Dashboard');
+  const [badgeSnapshot, setBadgeSnapshot] = useState<RuntimeTabBadgeSnapshot>({
+    handoffCount: 0,
+    approvalCount: 0,
+  });
+  const badgeSnapshotRef = useRef(badgeSnapshot);
+  const runtimeBadgeCount = useMemo(() => toRuntimeTabBadgeCount(badgeSnapshot), [badgeSnapshot]);
+  const approvalBadgeCount = badgeSnapshot.approvalCount;
+
+  const handlePendingCountChange = useCallback((count: number) => {
+    setBadgeSnapshot((prev) => ({ ...prev, approvalCount: count }));
+  }, []);
+
+  useEffect(() => {
+    badgeSnapshotRef.current = badgeSnapshot;
+  }, [badgeSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
     const permissionRequestApi = new PermissionRequestApi(apiClient);
 
     async function refreshRuntimeBadge(): Promise<void> {
-      try {
-        const [response, pendingRequests] = await Promise.all([
-          apiClient.listRuntimeSessions({ limit: 100 }),
-          permissionRequestApi.listRequests({ status: 'pending' }),
-        ]);
-        if (!cancelled) {
-          setApprovalBadgeCount(pendingRequests.length);
-          setRuntimeBadgeCount(getRuntimeTabBadgeCount(response.sessions, pendingRequests.length));
-        }
-      } catch {
-        if (!cancelled) {
-          setRuntimeBadgeCount(0);
-          setApprovalBadgeCount(0);
-        }
+      const snapshot = await refreshRuntimeTabBadgeSnapshot({
+        previous: cancelled ? { handoffCount: 0, approvalCount: 0 } : badgeSnapshotRef.current,
+        includeApprovalCount: activeTab !== 'Approvals',
+        loadRuntimeSessions: async () => {
+          const response = await apiClient.listRuntimeSessions({ limit: 100 });
+          return response.sessions;
+        },
+        loadPendingApprovalCount: async () => {
+          const pendingRequests = await permissionRequestApi.listRequests({ status: 'pending' });
+          return pendingRequests.length;
+        },
+      });
+
+      if (!cancelled) {
+        setBadgeSnapshot(snapshot);
       }
     }
 
@@ -121,7 +140,7 @@ export function TabNavigator(): React.JSX.Element {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [apiClient]);
+  }, [activeTab, apiClient]);
 
   const runtimesTabOptions = useMemo(
     () => ({
@@ -139,8 +158,21 @@ export function TabNavigator(): React.JSX.Element {
     [approvalBadgeCount],
   );
 
+  const renderApprovalsScreen = useCallback(
+    () => <PendingApprovalsScreen onPendingCountChange={handlePendingCountChange} />,
+    [handlePendingCountChange],
+  );
+
   return (
-    <NavigationContainer theme={NAVIGATION_THEME}>
+    <NavigationContainer
+      theme={NAVIGATION_THEME}
+      onStateChange={(state: { index?: number; routes: Array<{ name: string }> } | undefined) => {
+        const nextTab = state?.routes[state.index ?? 0]?.name as keyof TabParamList | undefined;
+        if (nextTab) {
+          setActiveTab(nextTab);
+        }
+      }}
+    >
       <Tab.Navigator
         screenOptions={({ route }: { route: { name: string } }) => ({
           headerStyle: {
@@ -171,11 +203,9 @@ export function TabNavigator(): React.JSX.Element {
         <Tab.Screen name="Agents" component={AgentListScreen} options={{ title: 'Agents' }} />
         <Tab.Screen name="Sessions" component={SessionScreen} options={{ title: 'Sessions' }} />
         <Tab.Screen name="Runtimes" component={RuntimeSessionScreen} options={runtimesTabOptions} />
-        <Tab.Screen
-          name="Approvals"
-          component={PendingApprovalsScreen}
-          options={approvalsTabOptions}
-        />
+        <Tab.Screen name="Approvals" options={approvalsTabOptions}>
+          {renderApprovalsScreen}
+        </Tab.Screen>
         <Tab.Screen name="Scheduler" component={SchedulerScreen} options={{ title: 'Scheduler' }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Tab.Navigator>

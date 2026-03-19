@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { RuntimeSessionInfo } from '../services/api-client.js';
-import { getRuntimeTabBadgeCount } from './runtime-tab-badge.js';
+import {
+  getRuntimeTabBadgeCount,
+  refreshRuntimeTabBadgeSnapshot,
+  toRuntimeTabBadgeCount,
+} from './runtime-tab-badge.js';
 
 function makeRuntimeSession(overrides: Partial<RuntimeSessionInfo> = {}): RuntimeSessionInfo {
   return {
@@ -55,5 +59,56 @@ describe('getRuntimeTabBadgeCount', () => {
         makeRuntimeSession({ status: 'paused' }),
       ]),
     ).toBe(0);
+  });
+
+  it('preserves approval count when only runtime fetching succeeds', async () => {
+    await expect(
+      refreshRuntimeTabBadgeSnapshot({
+        previous: { handoffCount: 3, approvalCount: 4 },
+        loadRuntimeSessions: vi
+          .fn()
+          .mockResolvedValue([
+            makeRuntimeSession({ status: 'handing_off' }),
+            makeRuntimeSession({ status: 'active' }),
+          ]),
+        loadPendingApprovalCount: vi.fn().mockRejectedValue(new Error('approval fetch failed')),
+      }),
+    ).resolves.toEqual({
+      handoffCount: 1,
+      approvalCount: 4,
+    });
+  });
+
+  it('preserves handoff count when only approvals fetching succeeds', async () => {
+    await expect(
+      refreshRuntimeTabBadgeSnapshot({
+        previous: { handoffCount: 2, approvalCount: 1 },
+        loadRuntimeSessions: vi.fn().mockRejectedValue(new Error('runtime fetch failed')),
+        loadPendingApprovalCount: vi.fn().mockResolvedValue(5),
+      }),
+    ).resolves.toEqual({
+      handoffCount: 2,
+      approvalCount: 5,
+    });
+  });
+
+  it('keeps the previous approval count when the approvals tab owns live polling', async () => {
+    const snapshot = await refreshRuntimeTabBadgeSnapshot({
+      previous: { handoffCount: 0, approvalCount: 6 },
+      includeApprovalCount: false,
+      loadRuntimeSessions: vi
+        .fn()
+        .mockResolvedValue([
+          makeRuntimeSession({ status: 'handing_off' }),
+          makeRuntimeSession({ status: 'handing_off' }),
+        ]),
+      loadPendingApprovalCount: vi.fn().mockResolvedValue(0),
+    });
+
+    expect(snapshot).toEqual({
+      handoffCount: 2,
+      approvalCount: 6,
+    });
+    expect(toRuntimeTabBadgeCount(snapshot)).toBe(8);
   });
 });
