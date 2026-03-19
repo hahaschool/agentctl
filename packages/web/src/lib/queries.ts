@@ -6,6 +6,8 @@ import type {
   EventVisibility,
   MemoryReportTimeRange,
   MemoryReportType,
+  NotificationChannel,
+  NotificationPriority,
   SpaceEventType,
   SpaceMemberRole,
   SpaceMemberType,
@@ -128,6 +130,7 @@ export const queryKeys = {
   },
   deploymentTiers: ['deployment-tiers'] as const,
   promotionHistory: ['promotion-history'] as const,
+  notificationPreferences: (userId: string) => ['notification-preferences', userId] as const,
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -1298,6 +1301,50 @@ export function usePostEvent() {
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({
         queryKey: queryKeys.spaces.events(variables.spaceId, variables.threadId),
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Notification preferences
+// ---------------------------------------------------------------------------
+
+export function notificationPreferencesQuery(userId: string) {
+  return queryOptions({
+    queryKey: queryKeys.notificationPreferences(userId),
+    queryFn: () => api.getNotificationPreferences(userId),
+    enabled: !!userId,
+  });
+}
+
+export function useSetNotificationPreference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      userId: string;
+      priority: NotificationPriority;
+      channels: NotificationChannel[];
+      quietHoursStart?: string;
+      quietHoursEnd?: string;
+      timezone?: string;
+    }) => api.setNotificationPreference(body),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.notificationPreferences(variables.userId),
+      });
+    },
+  });
+}
+
+export function useDeleteNotificationPreference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string }) =>
+      api.deleteNotificationPreference(id).then((res) => ({ ...res, userId })),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.notificationPreferences(variables.userId),
       });
     },
   });
