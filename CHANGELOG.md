@@ -3,6 +3,43 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.3.0] — 2026-03-19
+
+§14-23: MCP discovery, permission approvals, mobile inbox, knowledge graph, API docs, full route test coverage, UX polish
+
+### Features
+- Permission approval system with WebSocket real-time notifications (§17.4)
+- Agent run state machine visibility — dispatch states in UI (§17.5)
+- Agent templates, enhanced command palette, onboarding empty states (§18.1-18.3)
+- ToolUseBlock component for structured tool display in sessions (§19.3)
+- Tasks detail page /tasks/[id] with graph nodes + run history (§20.2)
+- Real memory dashboard replacing placeholder (§20.4)
+- Notification preferences settings panel (§20.8)
+- Dedicated Approvals page with approve/deny actions (§23.3)
+- Dashboard enhancement — health summary, recent runs, quick actions (§23.4)
+- Knowledge graph SVG visualization replacing placeholder (§23.2)
+- Mobile pending approvals inbox + push notification infrastructure (§21.1)
+- Comprehensive API reference docs/API.md (§20.3)
+
+### Testing
+- Full CP route test coverage — all routes now tested (§19.1, §20.1, §22.1, §23.1)
+- Playwright E2E specs for /tasks, /spaces, /deployment (§20.5)
+- Permission-requests route tests (14 tests)
+- Spaces (76), task-graphs (35), agent-profiles (33), memory-reports, notification-preferences, approvals, task-runs, context-bridge (52), memory-consolidation, knowledge-maintenance, run-reaper
+
+### Fixes
+- Promotion flow: correct PM2 names, SSE parsing (onmessage not named events), send success before CP restart
+- Preflight build check: skip rebuild when .next/BUILD_ID is fresh, exclude mobile package
+- Migration journal: add missing 0019_add_permission_requests entry
+- Light mode: replace hardcoded dark colors with semantic tokens in 6 components
+- WebSocket permission events wired to React Query for instant notifications
+- React.memo on 7 session display components for performance
+- Agent detail page UX polish — loading states, empty states, cost summary
+
+### Performance
+- React.memo on SessionContent, InlineMessage, ToolUseBlock, ThinkingBlock, SubagentBlock, TodoBlock, ProgressIndicator
+
+
 ## [0.2.0] — 2026-03-15
 
 §14 MCP/Skill Auto-Discovery, §15 Codex Runtime Parity, §12.7 Deployment Page
