@@ -16,6 +16,11 @@
 
 Beta 层由 PM2 托管，自动重启，不受 dev 层影响。Dev 层是临时的，用完即弃。
 
+原则很简单：
+- 日常开发、调试、agent 运行只在 `dev-1` / `dev-2`
+- `beta` 只接收显式的 promote，不作为开发 tier 使用
+- 远程 `promote-beta.yml` 仍然走 `beta` environment 审批门控
+
 ---
 
 ## 你需要做的事
@@ -53,14 +58,23 @@ pm2 startup  # 设置开机自启（按提示执行输出的命令）
 - API 在 `http://localhost:8080` — 和以前一样
 
 **Agent 开发时：**
-- Agent 自动使用 dev-1 或 dev-2 — 你不需要关心
-- 如果你想看 agent 的开发版本：打开 `http://localhost:5273`（dev-1）
+- Agent 自动使用 `dev-1` 或 `dev-2` — 你不需要关心
+- 不要直接在 `beta` 上开发；`beta` 只用于已批准的 promote
+- 如果你想看 agent 的开发版本：打开 `http://localhost:5273`（`dev-1`）
 
 **代码合并后升级 beta：**
 ```bash
-./scripts/env-promote.sh main beta
+# 先看计划，不执行
+./scripts/env-promote.sh --from dev-1 --dry-run
+
+# 显式把某个 dev tier 提升到 beta
+./scripts/env-promote.sh --from dev-1
+# 或
+./scripts/env-promote.sh --from dev-2
 ```
-这个命令会：构建最新代码 → 迁移 beta 数据库 → 重启 PM2 进程 → 验证健康检查
+`env-promote.sh` 的实际 CLI 形式是 `./scripts/env-promote.sh [--from <tier>] [--dry-run]`。脚本在本地支持省略 `--from` 时从 `.env.dev-*` 自动探测，但手动 promote 时请始终显式传 `--from dev-1` 或 `--from dev-2`，避免把错误的源 tier 提升到 `beta`。
+
+这个命令会：构建最新代码 → 检查 schema parity → 迁移 beta 数据库 → 重启 PM2 进程 → 验证健康检查
 
 ---
 
@@ -90,8 +104,8 @@ pm2 restart all
 
 当我们准备部署到云端时：
 1. 在目标机器上安装 GitHub Actions self-hosted runner
-2. 启用 `promote-beta.yml` workflow
-3. 在 GitHub 仓库设置里添加 `beta` environment（带审批门控）
+2. 启用 `promote-beta.yml` workflow（手动运行时必须显式选择 `dev-1` 或 `dev-2` 作为 source tier）
+3. 在 GitHub 仓库设置里添加 `beta` environment（带审批门控，保持不变）
 4. Prod 层用同样的模式，但部署到远程机器（通过 Tailscale）
 
 这些步骤到时候再做，现在不需要。
