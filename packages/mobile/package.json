@@ -21,7 +21,10 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@agentctl/shared": "workspace:*"
+    "@agentctl/shared": "workspace:*",
+    "expo": "^55.0.8",
+    "expo-constants": "^55.0.9",
+    "expo-notifications": "^55.0.13"
   },
   "devDependencies": {
     "@react-navigation/bottom-tabs": "^7.15.3",

@@ -110,9 +110,20 @@ jobs:
               const parsed = JSON.parse(data);
               const EXCLUDED = ['pm2', '@pm2/agent', '@pm2/io', '@pm2/js-api', '@pm2/pm2-version-check'];
               const violations = [];
+              const isCopyleftLicense = (value) => {
+                const upper = value.toUpperCase();
+                return (upper.includes('GPL') || upper.includes('AGPL')) && !upper.includes('LGPL');
+              };
               for (const [license, packages] of Object.entries(parsed)) {
-                const upper = license.toUpperCase();
-                if ((upper.includes('GPL') || upper.includes('AGPL')) && !upper.includes('LGPL')) {
+                const alternatives = license
+                  .replace(/[()]/g, '')
+                  .split(/\s+OR\s+/i)
+                  .map((value) => value.trim())
+                  .filter(Boolean);
+                const onlyCopyleftOptions =
+                  alternatives.length > 0 && alternatives.every(isCopyleftLicense);
+
+                if (onlyCopyleftOptions) {
                   for (const pkg of packages) {
                     if (!EXCLUDED.includes(pkg.name)) {
                       violations.push(pkg.name + '@' + pkg.version + ' (' + license + ')');

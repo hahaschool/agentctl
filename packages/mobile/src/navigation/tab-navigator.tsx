@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { NavigationContainer } from '@react-navigation/native';
+import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text } from 'react-native';
@@ -25,6 +25,7 @@ import { RuntimeSessionScreen } from '../ui-screens/runtime-session-screen.js';
 import { SchedulerScreen } from '../ui-screens/scheduler-screen.js';
 import { SessionScreen } from '../ui-screens/session-screen.js';
 import { SettingsScreen } from '../ui-screens/settings-screen.js';
+import { approvalRouteToPath } from './approval-notification-routing.js';
 import {
   type RuntimeTabBadgeSnapshot,
   refreshRuntimeTabBadgeSnapshot,
@@ -84,19 +85,30 @@ const NAVIGATION_THEME = {
 };
 
 const RUNTIME_BADGE_POLL_INTERVAL_MS = 30_000;
+const APPROVALS_DEEP_LINK = approvalRouteToPath('approvals');
+const NAVIGATION_LINKING = {
+  prefixes: ['agentctl://'],
+  config: {
+    screens: {
+      Approvals: APPROVALS_DEEP_LINK.replace('agentctl://', ''),
+    },
+  },
+} as const;
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function TabNavigator(): React.JSX.Element {
-  const { apiClient } = useAppContext();
+  const { apiClient, pendingNotificationRoute, consumePendingNotificationRoute } = useAppContext();
   const [activeTab, setActiveTab] = useState<keyof TabParamList>('Dashboard');
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
   const [badgeSnapshot, setBadgeSnapshot] = useState<RuntimeTabBadgeSnapshot>({
     handoffCount: 0,
     approvalCount: 0,
   });
   const badgeSnapshotRef = useRef(badgeSnapshot);
+  const navigationRef = useMemo(() => createNavigationContainerRef<TabParamList>(), []);
   const runtimeBadgeCount = useMemo(() => toRuntimeTabBadgeCount(badgeSnapshot), [badgeSnapshot]);
   const approvalBadgeCount = badgeSnapshot.approvalCount;
 
@@ -142,6 +154,15 @@ export function TabNavigator(): React.JSX.Element {
     };
   }, [activeTab, apiClient]);
 
+  useEffect(() => {
+    if (!isNavigationReady || pendingNotificationRoute !== 'approvals') {
+      return;
+    }
+
+    navigationRef.navigate('Approvals');
+    consumePendingNotificationRoute();
+  }, [consumePendingNotificationRoute, isNavigationReady, navigationRef, pendingNotificationRoute]);
+
   const runtimesTabOptions = useMemo(
     () => ({
       title: 'Runtimes',
@@ -165,7 +186,12 @@ export function TabNavigator(): React.JSX.Element {
 
   return (
     <NavigationContainer
+      ref={navigationRef}
+      linking={NAVIGATION_LINKING}
       theme={NAVIGATION_THEME}
+      onReady={() => {
+        setIsNavigationReady(true);
+      }}
       onStateChange={(state: { index?: number; routes: Array<{ name: string }> } | undefined) => {
         const nextTab = state?.routes[state.index ?? 0]?.name as keyof TabParamList | undefined;
         if (nextTab) {
