@@ -2,7 +2,7 @@
 
 > Goal: turn the post-21.2 backlog into four isolated follow-up slices that can run in parallel without touching the beta stage.
 >
-> Status note: Workstreams A-C are now on `main` via PRs #299, #297, and #298. Release workflow `23307749638` then exposed one more CD hardening gap, so Workstream D now tracks the remaining production-deploy guardrail follow-up.
+> Status note: Workstreams A-D are now on `main` via PRs #299, #297, #298, and #301. Release workflow `23307749638` exposed the final CD hardening gap, and PR #301 closed it by guarding production deploys when required secrets are missing.
 
 ## Why This Batch
 
@@ -76,11 +76,13 @@ Delivered in PR #298.
 - `git diff --check`
 - Any targeted workflow/doc linting that is already cheap in-repo
 
-### Workstream D — production deploy guardrails for missing secrets
+### Workstream D — production deploy guardrails for missing secrets ✅
 
 **Goal**
 
 Keep release-triggered production deploys quiet until production secrets exist, while still making manual `workflow_dispatch` deploys fail fast with actionable setup guidance and preventing rollback from running after an early setup failure.
+
+Delivered in PR #301.
 
 **Likely files**
 
