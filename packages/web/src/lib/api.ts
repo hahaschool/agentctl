@@ -9,6 +9,11 @@ import type {
   AgentRuntime,
   AgentStatus,
   AgentType,
+  ApprovalDecision,
+  ApprovalDecisionAction,
+  ApprovalGate,
+  ApprovalGateStatus,
+  ApprovalTimeoutPolicy,
   DiscoveredSession as BaseDiscoveredSession,
   ConfigPreviewResponse,
   ConsolidationItem,
@@ -79,6 +84,11 @@ import type {
 
 export type {
   AgentConfig,
+  ApprovalDecision,
+  ApprovalDecisionAction,
+  ApprovalGate,
+  ApprovalGateStatus,
+  ApprovalTimeoutPolicy,
   ContextRef,
   CrossSpaceSubscription,
   NotificationChannel,
@@ -526,6 +536,27 @@ export type DeploymentPromotionRecord = {
   triggeredBy: string;
 };
 
+export type ApprovalGateWithDecisions = ApprovalGate & { decisions: ApprovalDecision[] };
+
+export type RunSummaryResponse = {
+  runId: string;
+  source: 'stored' | 'fallback';
+  summary: ExecutionSummary;
+};
+
+export type BudgetedContextRefsResponse = {
+  refs: ContextRef[];
+  excluded: ContextRef[];
+  budget: Record<string, unknown>;
+};
+
+export type ResolvedContextRefResponse = {
+  ref: ContextRef;
+  resolved: unknown;
+  resolvedAt: string;
+  hint?: string;
+};
+
 export class ApiError extends Error {
   public hint?: string;
   constructor(
@@ -814,6 +845,49 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ decision }),
     }),
+
+  // Approval Gates
+  listApprovals: (threadId: string) =>
+    request<ApprovalGate[]>(`/api/approvals?threadId=${encodeURIComponent(threadId)}`),
+
+  createApprovalGate: (body: {
+    taskDefinitionId: string;
+    taskRunId?: string;
+    threadId?: string;
+    requiredApprovers?: string[];
+    requiredCount?: number;
+    timeoutMs?: number;
+    timeoutPolicy?: ApprovalTimeoutPolicy;
+    contextArtifactIds?: string[];
+  }) =>
+    request<ApprovalGate>('/api/approvals', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getApprovalGate: (id: string) =>
+    request<ApprovalGateWithDecisions>(`/api/approvals/${encodeURIComponent(id)}`),
+
+  addApprovalDecision: (
+    id: string,
+    body: {
+      decidedBy: string;
+      action: ApprovalDecisionAction;
+      comment?: string;
+      viaTimeout?: boolean;
+    },
+  ) =>
+    request<ApprovalDecision>(`/api/approvals/${encodeURIComponent(id)}/decisions`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getApprovalDecisions: (id: string) =>
+    request<ApprovalDecision[]>(`/api/approvals/${encodeURIComponent(id)}/decisions`),
+
+  // Run Summary
+  getRunSummary: (runId: string) =>
+    request<RunSummaryResponse>(`/api/runs/${encodeURIComponent(runId)}/summary`),
 
   // OAuth
   initiateOAuth: (provider: string, accountName: string) =>
@@ -1339,8 +1413,76 @@ export const api = {
   getSpaceContextRefs: (spaceId: string) =>
     request<ContextRef[]>(`/api/spaces/${encodeURIComponent(spaceId)}/context-refs`),
 
+  createContextRef: (
+    spaceId: string,
+    body: {
+      sourceSpaceId: string;
+      sourceThreadId?: string;
+      sourceEventId?: string;
+      targetThreadId: string;
+      mode: string;
+      snapshotPayload?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+      createdBy: string;
+    },
+  ) =>
+    request<ContextRef>(`/api/spaces/${encodeURIComponent(spaceId)}/context-refs`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getBudgetedContextRefs: (
+    spaceId: string,
+    params?: { perSpaceLimit?: number; totalLimit?: number; overflowStrategy?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.perSpaceLimit !== undefined) qs.set('perSpaceLimit', String(params.perSpaceLimit));
+    if (params?.totalLimit !== undefined) qs.set('totalLimit', String(params.totalLimit));
+    if (params?.overflowStrategy) qs.set('overflowStrategy', params.overflowStrategy);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<BudgetedContextRefsResponse>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/context-refs/budgeted${suffix}`,
+    );
+  },
+
+  resolveContextRef: (spaceId: string, refId: string) =>
+    request<ResolvedContextRefResponse>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/context-refs/${encodeURIComponent(refId)}/resolve`,
+    ),
+
+  deleteContextRef: (spaceId: string, refId: string) =>
+    request<{ ok: boolean }>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/context-refs/${encodeURIComponent(refId)}`,
+      { method: 'DELETE' },
+    ),
+
   getSpaceSubscriptions: (spaceId: string) =>
     request<CrossSpaceSubscription[]>(`/api/spaces/${encodeURIComponent(spaceId)}/subscriptions`),
+
+  createSpaceSubscription: (
+    spaceId: string,
+    body: {
+      sourceSpaceId: string;
+      filterCriteria?: Record<string, unknown>;
+      createdBy: string;
+    },
+  ) =>
+    request<CrossSpaceSubscription>(`/api/spaces/${encodeURIComponent(spaceId)}/subscriptions`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateSpaceSubscription: (spaceId: string, subId: string, active: boolean) =>
+    request<CrossSpaceSubscription>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/subscriptions/${encodeURIComponent(subId)}`,
+      { method: 'PATCH', body: JSON.stringify({ active }) },
+    ),
+
+  deleteSpaceSubscription: (spaceId: string, subId: string) =>
+    request<{ ok: boolean }>(
+      `/api/spaces/${encodeURIComponent(spaceId)}/subscriptions/${encodeURIComponent(subId)}`,
+      { method: 'DELETE' },
+    ),
 
   // Task graphs
   listTaskGraphs: () => request<TaskGraph[]>('/api/task-graphs'),

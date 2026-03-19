@@ -56,6 +56,10 @@ export const queryKeys = {
   agent: (id: string) => ['agents', id] as const,
   agentRuns: (agentId: string) => ['agents', agentId, 'runs'] as const,
   agentHealth: (agentId: string) => ['agents', agentId, 'health'] as const,
+  approvals: (threadId: string) => ['approvals', threadId] as const,
+  approvalGate: (id: string) => ['approvals', 'gate', id] as const,
+  approvalDecisions: (id: string) => ['approvals', 'gate', id, 'decisions'] as const,
+  runSummary: (runId: string) => ['runs', runId, 'summary'] as const,
   sessions: (params?: {
     status?: string;
     machineId?: string;
@@ -1346,6 +1350,143 @@ export function useDeleteNotificationPreference() {
       void qc.invalidateQueries({
         queryKey: queryKeys.notificationPreferences(variables.userId),
       });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Approval Gates queries + mutations
+// ---------------------------------------------------------------------------
+
+export function approvalsQuery(threadId: string) {
+  return queryOptions({
+    queryKey: queryKeys.approvals(threadId),
+    queryFn: () => api.listApprovals(threadId),
+    enabled: !!threadId,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function approvalGateQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.approvalGate(id),
+    queryFn: () => api.getApprovalGate(id),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function approvalDecisionsQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.approvalDecisions(id),
+    queryFn: () => api.getApprovalDecisions(id),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useCreateApprovalGate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.createApprovalGate>[0]) =>
+      api.createApprovalGate(body),
+    onSuccess: (_data, variables) => {
+      if (variables.threadId) {
+        void qc.invalidateQueries({ queryKey: queryKeys.approvals(variables.threadId) });
+      }
+    },
+  });
+}
+
+export function useAddApprovalDecision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Parameters<typeof api.addApprovalDecision>[1]) =>
+      api.addApprovalDecision(id, body),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.approvalGate(variables.id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.approvalDecisions(variables.id) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Run Summary query
+// ---------------------------------------------------------------------------
+
+export function runSummaryQuery(runId: string) {
+  return queryOptions({
+    queryKey: queryKeys.runSummary(runId),
+    queryFn: () => api.getRunSummary(runId),
+    enabled: !!runId,
+    staleTime: 60_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Context Bridge mutations
+// ---------------------------------------------------------------------------
+
+export function useCreateContextRef() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      spaceId,
+      ...body
+    }: { spaceId: string } & Parameters<typeof api.createContextRef>[1]) =>
+      api.createContextRef(spaceId, body),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.contextRefs(variables.spaceId) });
+    },
+  });
+}
+
+export function useDeleteContextRef() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ spaceId, refId }: { spaceId: string; refId: string }) =>
+      api.deleteContextRef(spaceId, refId),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.contextRefs(variables.spaceId) });
+    },
+  });
+}
+
+export function useCreateSpaceSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      spaceId,
+      ...body
+    }: { spaceId: string } & Parameters<typeof api.createSpaceSubscription>[1]) =>
+      api.createSpaceSubscription(spaceId, body),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.subscriptions(variables.spaceId) });
+    },
+  });
+}
+
+export function useUpdateSpaceSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ spaceId, subId, active }: { spaceId: string; subId: string; active: boolean }) =>
+      api.updateSpaceSubscription(spaceId, subId, active),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.subscriptions(variables.spaceId) });
+    },
+  });
+}
+
+export function useDeleteSpaceSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ spaceId, subId }: { spaceId: string; subId: string }) =>
+      api.deleteSpaceSubscription(spaceId, subId),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.spaces.subscriptions(variables.spaceId) });
     },
   });
 }
