@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { join } from 'node:path';
 
@@ -306,6 +306,46 @@ describe('KnowledgeMaintenance', () => {
             }
           ).fileExists(relativePath),
         ).resolves.toBe(false);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('rejects symlinked project roots that resolve outside the current working tree', async () => {
+      const originalCwd = process.cwd();
+      const workspaceRoot = makeTempDir('knowledge-maintenance-workspace');
+      const externalRoot = makeTempDir('knowledge-maintenance-external');
+      const relativePath = 'packages/app/outside.ts';
+
+      mkdirSync(join(externalRoot, 'packages/app/src'), { recursive: true });
+      writeFileSync(join(externalRoot, relativePath), 'export const outside = true;\n');
+
+      process.chdir(workspaceRoot);
+
+      try {
+        const linkedProjectRoot = join(process.cwd(), 'linked-project');
+        symlinkSync(externalRoot, linkedProjectRoot);
+
+        const maintenance = new KnowledgeMaintenance({
+          pool: makePool([[{ content: 'See packages/app/src/index.ts', cnt: 1 }]]) as never,
+          memoryStore: makeMockMemoryStore() as never,
+          logger,
+          projectRoot: linkedProjectRoot,
+        });
+
+        await expect(
+          (
+            maintenance as unknown as {
+              fileExists: (path: string) => Promise<boolean>;
+            }
+          ).fileExists(relativePath),
+        ).resolves.toBe(false);
+
+        await expect(maintenance.knowledgeCoverage()).resolves.toMatchObject({
+          totalDirectories: 0,
+          covered: [],
+          gaps: [],
+        });
       } finally {
         process.chdir(originalCwd);
       }
