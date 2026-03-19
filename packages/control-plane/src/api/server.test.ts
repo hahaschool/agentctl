@@ -232,6 +232,29 @@ describe('manual takeover route registration', () => {
   });
 });
 
+describe('mobile push device route registration', () => {
+  it('registers mobile push device routes when a database is configured', async () => {
+    const app = await createServer({ logger, db: {} as never });
+    await app.ready();
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/mobile-push-devices',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: 'INVALID_USER_ID',
+        message: 'A non-empty "userId" string is required',
+      });
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 // ===========================================================================
 // Metrics self-exclusion
 // ===========================================================================

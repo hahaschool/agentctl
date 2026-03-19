@@ -259,6 +259,20 @@ export type {
 } from './memory.js';
 export { DEFAULT_INJECTION_BUDGET } from './memory.js';
 export type {
+  DeactivateMobilePushDeviceRequest,
+  ListMobilePushDevicesQuery,
+  MobilePushDevice,
+  MobilePushDevicePlatform,
+  MobilePushProvider,
+  UpsertMobilePushDeviceRequest,
+} from './mobile-push-device.js';
+export {
+  isMobilePushDevicePlatform,
+  isMobilePushProvider,
+  MOBILE_PUSH_DEVICE_PLATFORMS,
+  MOBILE_PUSH_PROVIDERS,
+} from './mobile-push-device.js';
+export type {
   PermissionDecision,
   PermissionRequest,
   PermissionRequestStatus,

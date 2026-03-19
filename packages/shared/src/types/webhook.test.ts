@@ -40,28 +40,29 @@ describe('WEBHOOK_PROVIDERS', () => {
 // ── WebhookEventType union ──────────────────────────────────────────
 
 describe('WebhookEventType', () => {
-  it('covers all seven event types', () => {
+  it('covers all eight event types', () => {
     const events: WebhookEventType[] = [
       'agent.started',
       'agent.stopped',
       'agent.error',
       'agent.cost_alert',
+      'approval.pending',
       'deploy.success',
       'deploy.failure',
       'audit.high_severity',
     ];
-    expect(events).toHaveLength(7);
+    expect(events).toHaveLength(8);
 
     const unique = new Set(events);
-    expect(unique.size).toBe(7);
+    expect(unique.size).toBe(8);
   });
 });
 
 // ── WEBHOOK_EVENT_TYPES constant ────────────────────────────────────
 
 describe('WEBHOOK_EVENT_TYPES', () => {
-  it('contains exactly 7 event types', () => {
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(7);
+  it('contains exactly 8 event types', () => {
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(8);
   });
 
   it('contains all expected values', () => {
@@ -70,6 +71,7 @@ describe('WEBHOOK_EVENT_TYPES', () => {
       'agent.stopped',
       'agent.error',
       'agent.cost_alert',
+      'approval.pending',
       'deploy.success',
       'deploy.failure',
       'audit.high_severity',

@@ -1,3 +1,4 @@
+export { MobilePushDeviceStore } from './mobile-push-device-store.js';
 export type {
   WebhookDeliveryResult,
   WebhookDispatcherOptions,

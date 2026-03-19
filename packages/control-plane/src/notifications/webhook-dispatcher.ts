@@ -166,6 +166,7 @@ export class WebhookDispatcher {
       'agent.stopped': '[STOPPED]',
       'agent.error': '[ERROR]',
       'agent.cost_alert': '[COST]',
+      'approval.pending': '[APPROVAL]',
       'deploy.success': '[DEPLOY OK]',
       'deploy.failure': '[DEPLOY FAIL]',
       'audit.high_severity': '[AUDIT]',
