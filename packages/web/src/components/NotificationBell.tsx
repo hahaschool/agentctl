@@ -244,6 +244,16 @@ export function NotificationBell({
                             {request.toolName}
                           </p>
                         </button>
+                        {request.toolInput && (
+                          <pre className="max-h-24 overflow-auto rounded border border-border/40 bg-muted/50 px-2 py-1 text-[10px] font-mono text-foreground/80">
+                            {typeof request.toolInput === 'string'
+                              ? request.toolInput
+                              : JSON.stringify(request.toolInput, null, 2).slice(0, 500)}
+                          </pre>
+                        )}
+                        {request.description && (
+                          <p className="text-[10px] text-muted-foreground">{request.description}</p>
+                        )}
                         <div className="flex items-center gap-2">
                           <Button
                             type="button"
