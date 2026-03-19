@@ -1430,6 +1430,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 - [x] Replace hardcoded dark colors in 6 components with semantic tokens *(direct commit 44c4ccc)*
 
+### 20.8 Notification Preferences UI — Delivered
+
+- [x] Frontend settings panel for notification-preferences API *(PR #272)*
+- [x] Channels, quiet hours, priority threshold configuration *(PR #272)*
+
 ---
 
 ## Active Priorities
