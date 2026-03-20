@@ -1599,6 +1599,25 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] CP accepts `stalled` as valid session status *(PR #311)*
 - [x] Web: yellow warning banner on stalled sessions *(PR #312)*
 
+## 28. UX Polish — Batch 2
+
+### 28.1 Session Metrics Card — P2
+
+- [ ] Token usage (input/output), cost, model in compact grid on session detail
+
+### 28.2 Sidebar Version Link — P2
+
+- [ ] Clickable version → GitHub releases page
+
+### 28.3 Command Palette Session Search — P2
+
+- [ ] Search sessions by prompt content in command palette
+
+### 28.4 Consistent Page Layout — P2
+
+- [ ] PageContainer component with default/wide/full width modes
+- [ ] Applied to approvals, tasks pages
+
 ### 27.3 Terminal Takeover — P1 (planned, not yet started)
 
 - [ ] Worker: attach to running CLI process stdin/stdout via PTY
