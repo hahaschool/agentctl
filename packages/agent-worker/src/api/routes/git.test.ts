@@ -468,6 +468,40 @@ describe('Git routes', () => {
       expect(body.error).toBe('GIT_UNAVAILABLE');
     });
 
+    it('returns 503 when git becomes unavailable after the repo probe succeeds', async () => {
+      mockValidDirectory();
+
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: unknown, _opts: unknown, cb?: unknown) => {
+          const argList = args as string[];
+          const callback = cb as (err: Error | null, result?: { stdout: string }) => void;
+          const key = argList.join(' ');
+
+          if (key.includes('rev-parse --git-dir')) {
+            callback(null, { stdout: '.git\n' });
+            return {} as ReturnType<typeof execFile>;
+          }
+
+          const err = Object.assign(new Error('spawn git ENOENT'), {
+            code: 'ENOENT',
+            path: 'git',
+            syscall: 'spawn git',
+          });
+          callback(err);
+          return {} as ReturnType<typeof execFile>;
+        },
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/git/status?path=/Users/testuser/project',
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = res.json();
+      expect(body.error).toBe('GIT_UNAVAILABLE');
+    });
+
     it('returns 400 when symlink resolves to denied directory', async () => {
       vi.mocked(realpathSync).mockReturnValue('/home/user/.ssh/keys');
 
@@ -482,7 +516,7 @@ describe('Git routes', () => {
       expect(body.message).toContain('denied');
     });
 
-    it('returns 500 when git commands fail after initial checks', async () => {
+    it('returns 200 when non-capability git commands fail after initial checks', async () => {
       mockValidDirectory();
 
       let _callCount = 0;

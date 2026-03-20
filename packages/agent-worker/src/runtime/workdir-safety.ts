@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -31,6 +31,16 @@ export async function checkWorkdirSafety(
 ): Promise<SafetyCheckResult> {
   const parallelTaskCount = Math.max(activeTaskCount, 0);
   const gitRepoState = await detectGitRepoState(workdir);
+
+  if (gitRepoState === 'workdir_unavailable') {
+    return {
+      tier: 'unsafe',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount,
+      blockReason: 'Working directory does not exist or is unavailable.',
+    };
+  }
 
   if (gitRepoState === 'git_unavailable') {
     if (parallelTaskCount > 1) {
@@ -128,7 +138,16 @@ export async function createSandbox(workdir: string, taskId: string): Promise<Sa
 
 async function detectGitRepoState(
   workdir: string,
-): Promise<'repo' | 'not_repo' | 'git_unavailable'> {
+): Promise<'repo' | 'not_repo' | 'git_unavailable' | 'workdir_unavailable'> {
+  try {
+    const workdirStat = await stat(workdir);
+    if (!workdirStat.isDirectory()) {
+      return 'workdir_unavailable';
+    }
+  } catch {
+    return 'workdir_unavailable';
+  }
+
   try {
     const { stdout } = await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], {
       cwd: workdir,

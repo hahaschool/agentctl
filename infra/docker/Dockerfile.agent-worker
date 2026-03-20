@@ -9,7 +9,7 @@
 #   - Runs as non-root user (uid 1001)
 #   - Use cap_drop: [ALL] in docker-compose
 #   - No secrets baked in — pass via environment variables
-#   - Final image omits git; worker degrades gracefully when git UX is unavailable
+#   - Includes git for worktree operations
 # ─────────────────────────────────────────────────────────────────
 
 # Keep the worker on a glibc-based slim image, but use the newer Debian
@@ -85,8 +85,25 @@ LABEL org.opencontainers.image.title="agentctl-agent-worker" \
       security.cap-drop="ALL"
 
 # Install runtime dependencies and remove package-manager tooling from the final image.
+#   - git: worktree operations (clone, worktree add/remove, fetch, push)
+#   - git on trixie pulls in the remaining expat/curl/zlib family alerts, so
+#     refresh that runtime library closure from Debian forky without moving the
+#     full worker image off the current slim/glibc base.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git && \
+    printf 'deb http://deb.debian.org/debian forky main\n' > /etc/apt/sources.list.d/forky.list && \
+    printf 'Package: *\nPin: release n=forky\nPin-Priority: 90\n\nPackage: libcurl3t64-gnutls libexpat1 libnghttp2-14 libnghttp3-9 libngtcp2-16 libtasn1-6 zlib1g\nPin: release n=forky\nPin-Priority: 990\n' > /etc/apt/preferences.d/git-runtime-forky && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --only-upgrade \
+      libcurl3t64-gnutls \
+      libexpat1 \
+      libnghttp2-14 \
+      libnghttp3-9 \
+      libngtcp2-16 \
+      libtasn1-6 \
+      zlib1g && \
+    rm -f /etc/apt/sources.list.d/forky.list /etc/apt/preferences.d/git-runtime-forky && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack && \
     groupadd --gid 1001 agentctl && \

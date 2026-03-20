@@ -10,12 +10,16 @@ export function isGitUnavailableError(err: unknown): boolean {
     return false;
   }
 
-  const errno = 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
-  if (errno === 'ENOENT') {
+  const nodeErr = err as NodeJS.ErrnoException;
+  const errno = nodeErr.code;
+  const syscall = typeof nodeErr.syscall === 'string' ? nodeErr.syscall : '';
+  const path = typeof nodeErr.path === 'string' ? nodeErr.path : '';
+
+  if (errno === 'ENOENT' && (path === 'git' || /^spawn git\b/i.test(syscall))) {
     return true;
   }
 
-  return /spawn git ENOENT|git: not found|enoent/i.test(err.message);
+  return /spawn git ENOENT|git: not found/i.test(err.message);
 }
 
 export async function isGitBinaryAvailable(): Promise<boolean> {

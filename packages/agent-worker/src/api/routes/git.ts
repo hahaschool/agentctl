@@ -242,6 +242,18 @@ function parseWorktreeList(output: string): GitWorktreeEntry[] {
   return entries;
 }
 
+function throwIfGitUnavailable(results: PromiseSettledResult<string>[]): void {
+  for (const result of results) {
+    if (
+      result.status === 'rejected' &&
+      result.reason instanceof WorkerError &&
+      result.reason.code === 'GIT_UNAVAILABLE'
+    ) {
+      throw result.reason;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
@@ -332,15 +344,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
 
       try {
         // Run all independent git commands in parallel
-        const [
-          branchResult,
-          toplevelResult,
-          statusResult,
-          statusBranchResult,
-          logResult,
-          worktreeResult,
-          gitCommonDirResult,
-        ] = await Promise.allSettled([
+        const results = await Promise.allSettled([
           runGit(['rev-parse', '--abbrev-ref', 'HEAD'], validatedDirPath),
           runGit(['rev-parse', '--show-toplevel'], validatedDirPath),
           runGit(['status', '--porcelain'], validatedDirPath),
@@ -349,6 +353,18 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
           runGit(['worktree', 'list', '--porcelain'], validatedDirPath),
           runGit(['rev-parse', '--git-common-dir'], validatedDirPath),
         ]);
+
+        throwIfGitUnavailable(results);
+
+        const [
+          branchResult,
+          toplevelResult,
+          statusResult,
+          statusBranchResult,
+          logResult,
+          worktreeResult,
+          gitCommonDirResult,
+        ] = results;
 
         const branch = branchResult.status === 'fulfilled' ? branchResult.value : 'HEAD';
         const worktreePath =
