@@ -80,6 +80,8 @@ export const queryKeys = {
       : (['runtime-sessions', id, 'handoffs'] as const),
   runtimeSessionManualTakeover: (id: string) =>
     ['runtime-sessions', id, 'manual-takeover'] as const,
+  runtimeSessionTerminalTakeover: (id: string) =>
+    ['runtime-sessions', id, 'terminal-takeover'] as const,
   runtimeSessionPreflight: (id: string, targetRuntime: string, targetMachineId?: string) =>
     targetMachineId
       ? (['runtime-sessions', id, 'preflight', targetRuntime, targetMachineId] as const)
@@ -341,6 +343,16 @@ export function runtimeSessionManualTakeoverQuery(id: string) {
   return queryOptions({
     queryKey: queryKeys.runtimeSessionManualTakeover(id),
     queryFn: () => api.getRuntimeSessionManualTakeover(id),
+    enabled: !!id,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function runtimeSessionTerminalTakeoverQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.runtimeSessionTerminalTakeover(id),
+    queryFn: () => api.getRuntimeSessionTerminalTakeover(id),
     enabled: !!id,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
@@ -828,6 +840,33 @@ export function useStopRuntimeSessionManualTakeover() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.runtimeSessionManualTakeover(variables.id),
+      });
+    },
+  });
+}
+
+export function useStartRuntimeSessionTerminalTakeover() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => api.startRuntimeSessionTerminalTakeover(id),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeSessionTerminalTakeover(variables.id),
+      });
+    },
+  });
+}
+
+export function useStopRuntimeSessionTerminalTakeover() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...options }: { id: string; resume?: boolean }) =>
+      api.stopRuntimeSessionTerminalTakeover(id, options),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runtimeSessions() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeSessionTerminalTakeover(variables.id),
       });
     },
   });

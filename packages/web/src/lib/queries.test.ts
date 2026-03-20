@@ -1,5 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { mockUseMutation, mockUseQueryClient, mockInvalidateQueries } = vi.hoisted(() => ({
+  mockUseMutation: vi.fn((options: unknown) => options),
+  mockUseQueryClient: vi.fn(),
+  mockInvalidateQueries: vi.fn(),
+}));
+
+vi.mock('@tanstack/react-query', async () => {
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
+
+  return {
+    ...actual,
+    useMutation: mockUseMutation,
+    useQueryClient: mockUseQueryClient,
+  };
+});
+
+import { api } from './api';
 import {
   accountDefaultsQuery,
   accountsQuery,
@@ -25,10 +43,26 @@ import {
   runtimeSessionManualTakeoverQuery,
   runtimeSessionPreflightQuery,
   runtimeSessionsQuery,
+  runtimeSessionTerminalTakeoverQuery,
   sessionContentQuery,
   sessionQuery,
   sessionsQuery,
+  useStartRuntimeSessionTerminalTakeover,
+  useStopRuntimeSessionTerminalTakeover,
 } from './queries';
+
+beforeEach(() => {
+  mockUseMutation.mockClear();
+  mockUseQueryClient.mockReset();
+  mockInvalidateQueries.mockReset();
+  mockUseQueryClient.mockReturnValue({
+    invalidateQueries: mockInvalidateQueries,
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // ---------------------------------------------------------------------------
 // queryKeys namespace
@@ -104,6 +138,14 @@ describe('queryKeys', () => {
       'runtime-sessions',
       'ms-123',
       'manual-takeover',
+    ]);
+  });
+
+  it('runtimeSessionTerminalTakeover key includes id', () => {
+    expect(queryKeys.runtimeSessionTerminalTakeover('ms-123')).toEqual([
+      'runtime-sessions',
+      'ms-123',
+      'terminal-takeover',
     ]);
   });
 
@@ -327,6 +369,23 @@ describe('runtimeSessionManualTakeoverQuery', () => {
 
   it('is disabled when no id is provided', () => {
     const options = runtimeSessionManualTakeoverQuery('');
+    expect(options.enabled).toBe(false);
+  });
+});
+
+describe('runtimeSessionTerminalTakeoverQuery', () => {
+  it('returns queryOptions with terminal takeover queryKey', () => {
+    const options = runtimeSessionTerminalTakeoverQuery('rc-123');
+    expect(options.queryKey).toEqual(queryKeys.runtimeSessionTerminalTakeover('rc-123'));
+  });
+
+  it('has refetchOnWindowFocus enabled', () => {
+    const options = runtimeSessionTerminalTakeoverQuery('rc-123');
+    expect(options.refetchOnWindowFocus).toBe(true);
+  });
+
+  it('is disabled when no id is provided', () => {
+    const options = runtimeSessionTerminalTakeoverQuery('');
     expect(options.enabled).toBe(false);
   });
 });
@@ -802,5 +861,55 @@ describe('memoryStatsQuery', () => {
 
     expect(options.queryKey).toEqual(queryKeys.memory.stats);
     expect(options.refetchInterval).toBe(60_000);
+  });
+});
+
+describe('useStartRuntimeSessionTerminalTakeover', () => {
+  it('calls the API and invalidates the runtime session caches', async () => {
+    const response = {
+      ok: true,
+      terminalId: 'term-1',
+      takeoverToken: 'token-1',
+      claudeSessionId: 'claude-1',
+      machineId: 'machine-1',
+    };
+    const apiSpy = vi.spyOn(api, 'startRuntimeSessionTerminalTakeover').mockResolvedValue(response);
+
+    const mutation = useStartRuntimeSessionTerminalTakeover();
+    const result = await mutation.mutationFn({ id: 'rc-123' });
+
+    expect(result).toEqual(response);
+    expect(apiSpy).toHaveBeenCalledWith('rc-123');
+
+    await mutation.onSuccess?.(response, { id: 'rc-123' }, undefined);
+
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(1, {
+      queryKey: queryKeys.runtimeSessions(),
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: queryKeys.runtimeSessionTerminalTakeover('rc-123'),
+    });
+  });
+});
+
+describe('useStopRuntimeSessionTerminalTakeover', () => {
+  it('passes resume through and invalidates the runtime session caches', async () => {
+    const response = { ok: true, resumed: true };
+    const apiSpy = vi.spyOn(api, 'stopRuntimeSessionTerminalTakeover').mockResolvedValue(response);
+
+    const mutation = useStopRuntimeSessionTerminalTakeover();
+    const result = await mutation.mutationFn({ id: 'rc-123', resume: true });
+
+    expect(result).toEqual(response);
+    expect(apiSpy).toHaveBeenCalledWith('rc-123', { resume: true });
+
+    await mutation.onSuccess?.(response, { id: 'rc-123', resume: true }, undefined);
+
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(1, {
+      queryKey: queryKeys.runtimeSessions(),
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: queryKeys.runtimeSessionTerminalTakeover('rc-123'),
+    });
   });
 });
