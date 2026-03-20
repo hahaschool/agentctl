@@ -1601,17 +1601,17 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 28. UX Polish — Batch 2
 
-### 28.1 Session Metrics Card — P2
+### 28.1 Session Metrics Card — Delivered
 
-- [ ] Token usage (input/output), cost, model in compact grid on session detail
+- [x] Token usage (input/output), cost, model in compact grid on session detail *(PR #320)*
 
 ### 28.2 Sidebar Version Link — Delivered
 
 - [x] Clickable version → GitHub releases page *(PR #317)*
 
-### 28.3 Command Palette Session Search — P2
+### 28.3 Command Palette Session Search — Delivered
 
-- [ ] Search sessions by prompt content in command palette
+- [x] Search sessions by prompt content in command palette *(PR #319)*
 
 ### 28.4 Consistent Page Layout — Delivered
 
