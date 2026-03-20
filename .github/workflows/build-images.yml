@@ -99,7 +99,7 @@ jobs:
       # Non-blocking: Trivy binary installation can fail on GHA runners
       - name: Run Trivy vulnerability scanner
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}:sha-${{ steps.short-sha.outputs.sha }}
           format: sarif
@@ -152,7 +152,7 @@ jobs:
       # ── Generate and upload SBOM ─────────────────────────────────
       - name: Generate SBOM with Trivy
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         if: always()
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}:sha-${{ steps.short-sha.outputs.sha }}
