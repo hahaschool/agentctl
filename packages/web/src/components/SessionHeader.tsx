@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
@@ -479,6 +480,25 @@ export function SessionHeader({
               className="px-3 py-1 bg-red-100/50 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300/50 dark:border-red-800/50 rounded-md text-xs cursor-pointer hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50"
               confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-md text-xs cursor-pointer animate-pulse"
             />
+          )}
+          {(session.status === 'active' || session.status === 'stalled') && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm('Force kill this session? The CLI process will be terminated.'))
+                  return;
+                try {
+                  await api.killSession(session.id);
+                  void queryClient.invalidateQueries({ queryKey: queryKeys.session(session.id) });
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : String(err));
+                }
+              }}
+              className="flex items-center gap-1 px-3 py-1 bg-red-700/80 dark:bg-red-800/80 text-white border border-red-600/60 rounded-md text-xs cursor-pointer hover:bg-red-700 dark:hover:bg-red-700 disabled:opacity-50"
+            >
+              <XCircle className="size-3.5" />
+              Force Kill
+            </button>
           )}
         </div>
       </div>
