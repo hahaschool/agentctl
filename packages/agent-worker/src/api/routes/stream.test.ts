@@ -55,7 +55,7 @@ describe('SSE streaming routes', () => {
         url: '/api/agents/stream-agent/start',
         payload: { prompt: 'Stream me' },
       });
-      expect(startResponse.statusCode).toBe(200);
+      expect(startResponse.statusCode).toBe(202);
 
       // Use a real HTTP request to verify the SSE endpoint.
       // fetch() resolves with the Response once headers arrive,
@@ -83,7 +83,7 @@ describe('SSE streaming routes', () => {
         url: '/api/agents/catchup-agent/start',
         payload: { prompt: 'Catch up test' },
       });
-      expect(startResponse.statusCode).toBe(200);
+      expect(startResponse.statusCode).toBe(202);
 
       const controller = new AbortController();
       // Abort after a short delay to collect catch-up events

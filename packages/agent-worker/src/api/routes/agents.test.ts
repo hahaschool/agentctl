@@ -33,6 +33,39 @@ vi.mock('../../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-001';
 
+async function waitForAgentStatus(
+  app: FastifyInstance,
+  agentId: string,
+  predicate: (status: string) => boolean,
+  {
+    attempts = 40,
+    delayMs = 25,
+  }: {
+    attempts?: number;
+    delayMs?: number;
+  } = {},
+): Promise<string> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/agents/${agentId}`,
+    });
+
+    if (response.statusCode === 200) {
+      const status = response.json().status as string;
+      if (predicate(status)) {
+        return status;
+      }
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, delayMs);
+    });
+  }
+
+  throw new Error(`Timed out waiting for agent '${agentId}' to reach expected status`);
+}
+
 describe('Agent CRUD routes', () => {
   let app: FastifyInstance;
   let pool: AgentPool;
@@ -72,7 +105,7 @@ describe('Agent CRUD routes', () => {
           payload: { prompt: 'Second start request' },
         });
 
-        expect(first.statusCode).toBe(200);
+        expect(first.statusCode).toBe(202);
         expect(second.statusCode).toBe(429);
         expect(second.json()).toEqual({
           statusCode: 429,
@@ -99,7 +132,7 @@ describe('Agent CRUD routes', () => {
             url: '/api/agents/agent-fastify-rate/start',
             payload: { prompt: `Start request ${i}` },
           });
-          expect(response.statusCode).toBe(200);
+          expect(response.statusCode).toBe(202);
         }
 
         const limited = await app.inject({
@@ -120,22 +153,21 @@ describe('Agent CRUD routes', () => {
       }
     });
 
-    it('should start a new agent and return 200 with agentId and status', async () => {
+    it('should start a new agent and return 202 with agentId and starting status', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/agents/agent-1/start',
         payload: { prompt: 'Write a hello world script' },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(202);
 
       const body = response.json();
       expect(body.ok).toBe(true);
       expect(body.agentId).toBe('agent-1');
       expect(body.status).toBeDefined();
       expect(body.sessionId).toBeDefined();
-      // After start() the stub simulation should be running
-      expect(['running', 'stopped']).toContain(body.status);
+      expect(body.status).toBe('starting');
     });
 
     it('should force-stop a running agent and re-create on duplicate start', async () => {
@@ -145,7 +177,7 @@ describe('Agent CRUD routes', () => {
         url: '/api/agents/agent-dup/start',
         payload: { prompt: 'First prompt' },
       });
-      expect(first.statusCode).toBe(200);
+      expect(first.statusCode).toBe(202);
 
       // Starting the same agent again while running should force-stop
       // the existing instance and re-create it with the new prompt.
@@ -155,7 +187,7 @@ describe('Agent CRUD routes', () => {
         payload: { prompt: 'Second prompt' },
       });
 
-      expect(second.statusCode).toBe(200);
+      expect(second.statusCode).toBe(202);
 
       const body = second.json();
       expect(body.ok).toBe(true);
@@ -210,8 +242,8 @@ describe('Agent CRUD routes', () => {
         payload: { prompt: exactPrompt },
       });
 
-      // Should not be rejected for length — 200 means agent started successfully
-      expect(response.statusCode).toBe(200);
+      // Should not be rejected for length — 202 means async start was accepted.
+      expect(response.statusCode).toBe(202);
 
       const body = response.json();
       expect(body.ok).toBe(true);
@@ -321,10 +353,11 @@ describe('Agent CRUD routes', () => {
           },
         });
 
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode).toBe(202);
         expect(response.json()).toMatchObject({
           ok: true,
           agentId: 'agent-secure-valid',
+          status: 'starting',
         });
       } finally {
         rmSync(projectPath, { recursive: true, force: true });
@@ -468,6 +501,8 @@ describe('Agent CRUD routes', () => {
         url: '/api/agents/agent-steer/start',
         payload: { prompt: 'Do something' },
       });
+
+      await waitForAgentStatus(app, 'agent-steer', (status) => status === 'running');
 
       const response = await app.inject({
         method: 'POST',
