@@ -351,9 +351,15 @@ export function RuntimeSessionPanel({
     useStartRuntimeSessionTerminalTakeover?: () => RuntimeSessionIdMutation;
     useStopRuntimeSessionTerminalTakeover?: () => RuntimeSessionIdMutation;
   };
-  const terminalTakeoverQueryFactory =
-    runtimeQueriesWithTerminalTakeover.runtimeSessionTerminalTakeoverQuery ??
-    fallbackTerminalTakeoverQuery;
+  const hasTerminalTakeoverQuery =
+    typeof runtimeQueriesWithTerminalTakeover.runtimeSessionTerminalTakeoverQuery === 'function';
+  const hasStartTerminalTakeoverMutation =
+    typeof runtimeQueriesWithTerminalTakeover.useStartRuntimeSessionTerminalTakeover === 'function';
+  const hasStopTerminalTakeoverMutation =
+    typeof runtimeQueriesWithTerminalTakeover.useStopRuntimeSessionTerminalTakeover === 'function';
+  const terminalTakeoverQueryFactory = hasTerminalTakeoverQuery
+    ? runtimeQueriesWithTerminalTakeover.runtimeSessionTerminalTakeoverQuery
+    : fallbackTerminalTakeoverQuery;
 
   const [resumePrompt, setResumePrompt] = useState('');
   const [resumeModel, setResumeModel] = useState('');
@@ -437,15 +443,16 @@ export function RuntimeSessionPanel({
   const hasLiveTerminalAttach = terminalTakeover?.active === true;
   const liveTerminalMachineId = terminalTakeover?.machineId ?? selectedSession?.machineId ?? null;
   const liveTerminalId = terminalTakeover?.terminalId ?? null;
+  const liveTerminalStartedAt = terminalTakeover?.startedAt ?? selectedSession?.startedAt ?? null;
   const canRenderLiveTerminal = Boolean(
     hasLiveTerminalAttach && liveTerminalMachineId && liveTerminalId,
   );
   const canLiveTerminalAttach = Boolean(
     selectedSession?.runtime === 'claude-code' &&
       selectedSession.nativeSessionId &&
-      runtimeQueriesWithTerminalTakeover.runtimeSessionTerminalTakeoverQuery &&
-      runtimeQueriesWithTerminalTakeover.useStartRuntimeSessionTerminalTakeover &&
-      runtimeQueriesWithTerminalTakeover.useStopRuntimeSessionTerminalTakeover,
+      hasTerminalTakeoverQuery &&
+      hasStartTerminalTakeoverMutation &&
+      hasStopTerminalTakeoverMutation,
   );
   const canHandoff = Boolean(
     selectedSession?.nativeSessionId &&
@@ -968,9 +975,9 @@ export function RuntimeSessionPanel({
                       <StatusBadge status={hasLiveTerminalAttach ? 'active' : 'idle'} />
                       <span className="text-xs text-muted-foreground">
                         {hasLiveTerminalAttach
-                          ? `Attached ${timeAgo(
-                              terminalTakeover?.startedAt ?? selectedSession.startedAt,
-                            )}`
+                          ? liveTerminalStartedAt
+                            ? `Attached ${timeAgo(liveTerminalStartedAt)}`
+                            : 'Attached'
                           : 'No active live terminal attach'}
                       </span>
                     </div>
