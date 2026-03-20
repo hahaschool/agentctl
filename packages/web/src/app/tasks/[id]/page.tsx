@@ -254,7 +254,7 @@ type StartRunPanelProps = {
   definitions: TaskDefinition[];
 };
 
-function StartRunPanel({ definitions }: StartRunPanelProps): React.JSX.Element {
+function StartRunPanel({ definitions }: StartRunPanelProps): React.JSX.Element | null {
   const [selectedDefId, setSelectedDefId] = useState<string>(definitions[0]?.id ?? '');
   const createRun = useCreateTaskRun();
 
