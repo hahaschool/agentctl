@@ -189,7 +189,7 @@ jobs:
           cache: pnpm
 
       - name: Restore node_modules
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             node_modules
@@ -232,7 +232,7 @@ jobs:
           cache: pnpm
 
       - name: Restore node_modules
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             node_modules
@@ -247,7 +247,7 @@ jobs:
       # .tsbuildinfo without dist/ causes tsc to skip compilation,
       # leaving dist/ empty and breaking downstream packages.
       - name: Restore TypeScript build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             packages/shared/.tsbuildinfo
@@ -290,7 +290,7 @@ jobs:
 
       # Upload dist/ artifacts so the test job does not need to rebuild
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dist-artifacts
           path: |
@@ -337,7 +337,7 @@ jobs:
           cache: pnpm
 
       - name: Restore node_modules
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             node_modules
@@ -352,13 +352,13 @@ jobs:
       # upload-artifact strips the longest common path prefix (packages/),
       # so we download into packages/ to restore the correct structure.
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: dist-artifacts
           path: packages
 
       - name: Restore Vitest cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             packages/${{ matrix.package }}/node_modules/.vitest
@@ -371,7 +371,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-${{ matrix.package }}
           path: packages/${{ matrix.package }}/coverage/
