@@ -28,20 +28,20 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           queries: security-extended
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL analysis
         continue-on-error: true
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: /language:javascript-typescript
 
@@ -56,7 +56,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run Semgrep
         run: semgrep scan --config p/security-audit --config p/secrets --sarif --output semgrep-results.sarif .
@@ -66,7 +66,7 @@ jobs:
       - name: Upload Semgrep SARIF
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -79,7 +79,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -87,7 +87,7 @@ jobs:
           version: 8.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -147,14 +147,64 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: "8.30.0"
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C "$RUNNER_TEMP" gitleaks
+          chmod +x "$RUNNER_TEMP/gitleaks"
+          export PATH="$RUNNER_TEMP:$PATH"
+
+          args=(
+            detect
+            --redact
+            -v
+            --exit-code=1
+            --report-format=sarif
+            --report-path=results.sarif
+            --log-level=debug
+          )
+
+          event_name="${{ github.event_name }}"
+          if [ "$event_name" = "push" ]; then
+            commit_count="$(jq '.commits | length' "$GITHUB_EVENT_PATH")"
+            if [ "$commit_count" -eq 0 ]; then
+              echo "No commits to scan"
+              exit 0
+            fi
+
+            base_ref="$(jq -r '.commits[0].id' "$GITHUB_EVENT_PATH")"
+            head_ref="$(jq -r '.commits[-1].id' "$GITHUB_EVENT_PATH")"
+            if [ -n "${BASE_REF:-}" ]; then
+              base_ref="$BASE_REF"
+              echo "Overriding baseRef for scan with $BASE_REF."
+            fi
+
+            if [ "$base_ref" = "$head_ref" ]; then
+              args+=(--log-opts=-1)
+            else
+              args+=(--log-opts="--no-merges --first-parent ${base_ref}^..${head_ref}")
+            fi
+          elif [ "$event_name" = "pull_request" ]; then
+            pr_number="$(jq -r '.number' "$GITHUB_EVENT_PATH")"
+            first_commit="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/commits" --jq '.[0].sha')"
+            last_commit="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/commits" --jq '.[-1].sha')"
+            base_ref="${BASE_REF:-$first_commit}"
+            if [ -n "${BASE_REF:-}" ]; then
+              echo "Overriding baseRef for scan with $BASE_REF."
+            fi
+            args+=(--log-opts="--no-merges --first-parent ${base_ref}^..${last_commit}")
+          fi
+
+          echo "gitleaks cmd: gitleaks ${args[*]}"
+          gitleaks "${args[@]}"
 
   # ── Container image scanning ────────────────────────────────────
   container-scan:
@@ -173,7 +223,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -203,7 +253,7 @@ jobs:
       - name: Upload Trivy SARIF to GitHub Security tab
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}

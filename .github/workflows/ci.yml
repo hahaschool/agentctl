@@ -44,7 +44,7 @@ jobs:
           || steps.filter.outputs.web == 'true'
         }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -87,13 +87,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
@@ -124,13 +124,13 @@ jobs:
     needs: install
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
@@ -167,13 +167,13 @@ jobs:
       || needs.changes.outputs.any-package == 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
@@ -272,13 +272,13 @@ jobs:
           - package: ${{ needs.changes.outputs.mobile != 'true' && github.event_name == 'pull_request' && 'mobile' || 'SKIP_NONE' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
@@ -338,13 +338,13 @@ jobs:
       || needs.changes.outputs.any-package == 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: pnpm
@@ -365,7 +365,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -373,7 +373,7 @@ jobs:
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
@@ -393,6 +393,56 @@ jobs:
 
       # Secret scanning on PRs (full history on push to main)
       - name: Gitleaks secret scan
-        uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: "8.30.0"
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C "$RUNNER_TEMP" gitleaks
+          chmod +x "$RUNNER_TEMP/gitleaks"
+          export PATH="$RUNNER_TEMP:$PATH"
+
+          args=(
+            detect
+            --redact
+            -v
+            --exit-code=1
+            --report-format=sarif
+            --report-path=results.sarif
+            --log-level=debug
+          )
+
+          event_name="${{ github.event_name }}"
+          if [ "$event_name" = "push" ]; then
+            commit_count="$(jq '.commits | length' "$GITHUB_EVENT_PATH")"
+            if [ "$commit_count" -eq 0 ]; then
+              echo "No commits to scan"
+              exit 0
+            fi
+
+            base_ref="$(jq -r '.commits[0].id' "$GITHUB_EVENT_PATH")"
+            head_ref="$(jq -r '.commits[-1].id' "$GITHUB_EVENT_PATH")"
+            if [ -n "${BASE_REF:-}" ]; then
+              base_ref="$BASE_REF"
+              echo "Overriding baseRef for scan with $BASE_REF."
+            fi
+
+            if [ "$base_ref" = "$head_ref" ]; then
+              args+=(--log-opts=-1)
+            else
+              args+=(--log-opts="--no-merges --first-parent ${base_ref}^..${head_ref}")
+            fi
+          elif [ "$event_name" = "pull_request" ]; then
+            pr_number="$(jq -r '.number' "$GITHUB_EVENT_PATH")"
+            first_commit="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/commits" --jq '.[0].sha')"
+            last_commit="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/commits" --jq '.[-1].sha')"
+            base_ref="${BASE_REF:-$first_commit}"
+            if [ -n "${BASE_REF:-}" ]; then
+              echo "Overriding baseRef for scan with $BASE_REF."
+            fi
+            args+=(--log-opts="--no-merges --first-parent ${base_ref}^..${last_commit}")
+          fi
+
+          echo "gitleaks cmd: gitleaks ${args[*]}"
+          gitleaks "${args[@]}"
