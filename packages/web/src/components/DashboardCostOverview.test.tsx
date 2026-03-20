@@ -34,11 +34,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const makeSessions = (costs: number[]) =>
+/** Returns an ISO timestamp N days ago */
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString();
+}
+
+const makeSessions = (costs: number[], startedAtOverride?: string) =>
   costs.map((cost, i) => ({
     id: `sess-${String(i)}`,
     agentName: `Agent ${String(i)}`,
     claudeSessionId: `claude-${String(i)}-abcdef01`,
+    startedAt: startedAtOverride ?? daysAgo(0),
     metadata: { costUsd: cost },
   }));
 
@@ -81,10 +89,69 @@ describe('DashboardCostOverview', () => {
       );
       expect(container.innerHTML).toBe('');
     });
+
+    it('returns null when all sessions are older than 7 days and no agent breakdown', () => {
+      const sessions = makeSessions([5.0, 3.0], daysAgo(8));
+      const { container } = render(
+        <DashboardCostOverview sessionList={sessions} agentCostBreakdown={[]} isLoading={false} />,
+      );
+      expect(container.innerHTML).toBe('');
+    });
+  });
+
+  describe('7-day filtering', () => {
+    it('only counts cost from sessions within last 7 days', () => {
+      const sessions = [
+        {
+          id: 'recent',
+          agentName: 'New',
+          claudeSessionId: null,
+          startedAt: daysAgo(1),
+          metadata: { costUsd: 3.0 },
+        },
+        {
+          id: 'old',
+          agentName: 'Old',
+          claudeSessionId: null,
+          startedAt: daysAgo(10),
+          metadata: { costUsd: 100.0 },
+        },
+      ];
+      render(
+        <DashboardCostOverview sessionList={sessions} agentCostBreakdown={[]} isLoading={false} />,
+      );
+      // $3.00 should appear (may appear multiple times in total + trend + sessions)
+      expect(screen.getAllByText('$3.00').length).toBeGreaterThan(0);
+      // $100.00 from the old session must NOT appear anywhere
+      expect(screen.queryByText('$100.00')).toBeNull();
+    });
+
+    it('shows sessions count within 7 days only', () => {
+      const sessions = [
+        {
+          id: 's1',
+          agentName: 'A',
+          claudeSessionId: null,
+          startedAt: daysAgo(0),
+          metadata: { costUsd: 2.0 },
+        },
+        {
+          id: 's2',
+          agentName: 'B',
+          claudeSessionId: null,
+          startedAt: daysAgo(8),
+          metadata: { costUsd: 5.0 },
+        },
+      ];
+      render(
+        <DashboardCostOverview sessionList={sessions} agentCostBreakdown={[]} isLoading={false} />,
+      );
+      expect(screen.getByText('across 1 sessions')).toBeDefined();
+    });
   });
 
   describe('total cost display', () => {
-    it('renders total session cost', () => {
+    it('renders total session cost label', () => {
       render(
         <DashboardCostOverview
           sessionList={makeSessions([1.5, 2.5, 0])}
@@ -92,8 +159,9 @@ describe('DashboardCostOverview', () => {
           isLoading={false}
         />,
       );
-      expect(screen.getByText('$4.00')).toBeDefined();
-      expect(screen.getByText('Total Session Cost')).toBeDefined();
+      // $4.00 may appear in multiple places (total display + trend row + top sessions)
+      expect(screen.getAllByText('$4.00').length).toBeGreaterThan(0);
+      expect(screen.getByText('Total Cost (Last 7 Days)')).toBeDefined();
     });
 
     it('shows count of sessions with cost > 0', () => {
@@ -105,6 +173,55 @@ describe('DashboardCostOverview', () => {
         />,
       );
       expect(screen.getByText('across 3 sessions')).toBeDefined();
+    });
+  });
+
+  describe('daily trend', () => {
+    it('renders the 7d Trend label', () => {
+      render(
+        <DashboardCostOverview
+          sessionList={makeSessions([5.0])}
+          agentCostBreakdown={[]}
+          isLoading={false}
+        />,
+      );
+      expect(screen.getByText('7d Trend')).toBeDefined();
+    });
+
+    it('shows Today label in the trend', () => {
+      render(
+        <DashboardCostOverview
+          sessionList={makeSessions([5.0], daysAgo(0))}
+          agentCostBreakdown={[]}
+          isLoading={false}
+        />,
+      );
+      expect(screen.getByText('Today')).toBeDefined();
+    });
+
+    it('shows Yesterday label in the trend', () => {
+      render(
+        <DashboardCostOverview
+          sessionList={makeSessions([5.0], daysAgo(0))}
+          agentCostBreakdown={[]}
+          isLoading={false}
+        />,
+      );
+      expect(screen.getByText('Yesterday')).toBeDefined();
+    });
+
+    it('shows em-dash for zero cost days in trend', () => {
+      // Only today has cost — all other days show '—'
+      render(
+        <DashboardCostOverview
+          sessionList={makeSessions([5.0], daysAgo(0))}
+          agentCostBreakdown={[]}
+          isLoading={false}
+        />,
+      );
+      const dashes = screen.getAllByText('—');
+      // 6 other days should show '—'
+      expect(dashes.length).toBe(6);
     });
   });
 
@@ -193,6 +310,7 @@ describe('DashboardCostOverview', () => {
           id: 'sess-x',
           agentName: null,
           claudeSessionId: 'abcd1234rest',
+          startedAt: daysAgo(0),
           metadata: { costUsd: 5.0 },
         },
       ];
@@ -208,6 +326,7 @@ describe('DashboardCostOverview', () => {
           id: 'xyz98765rest',
           agentName: null,
           claudeSessionId: null,
+          startedAt: daysAgo(0),
           metadata: { costUsd: 3.0 },
         },
       ];
