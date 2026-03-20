@@ -35,6 +35,7 @@
 //   dashboard tools           Tool usage analytics
 //   loop status <agentId>     Check continuous loop status
 //   loop stop <agentId>       Stop a continuous loop
+//   takeover <sessionId>      Attach local terminal to running session PTY
 //   pool-stats                Worker pool statistics
 //   deploy <subcommand>       Deployment management (init, up, down, status, logs)
 //   help                      Show this help message
@@ -1058,6 +1059,309 @@ async function cmdLoopStop(agentId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Takeover subcommand
+// ---------------------------------------------------------------------------
+
+type SessionRecord = {
+  id: string;
+  machineId?: string;
+  claudeSessionId?: string;
+  status?: string;
+};
+
+type TakeoverResponse = {
+  ok: boolean;
+  terminalId: string;
+  takeoverToken: string;
+  machineId?: string;
+};
+
+/**
+ * Read a single character from stdin with raw mode enabled.
+ * Returns the character as a string.
+ */
+async function readSingleChar(): Promise<string> {
+  return new Promise((resolve) => {
+    const onData = (chunk: Buffer) => {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      process.stdin.removeListener('data', onData);
+      resolve(chunk.toString('utf8'));
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.once('data', onData);
+  });
+}
+
+async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean): Promise<void> {
+  // 1. Fetch session
+  const session = (await request(
+    'GET',
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+  )) as SessionRecord;
+
+  // 2. Validate
+  if (!session || !session.id) {
+    throw new CliError('TAKEOVER_SESSION_NOT_FOUND', `Session not found: ${sessionId}`, {
+      sessionId,
+    });
+  }
+
+  if (!session.claudeSessionId) {
+    throw new CliError(
+      'TAKEOVER_NO_CLAUDE_SESSION',
+      'Session does not have a claudeSessionId — cannot resume interactively',
+      { sessionId },
+    );
+  }
+
+  const status = session.status ?? '';
+  const validStatuses = ['active', 'running', 'stalled', 'idle'];
+  if (!validStatuses.includes(status)) {
+    throw new CliError(
+      'TAKEOVER_INVALID_STATUS',
+      `Session status "${status}" is not eligible for takeover (must be active, running, stalled, or idle)`,
+      { sessionId, status },
+    );
+  }
+
+  // 3. Confirmation prompt (unless --yolo)
+  if (!yolo) {
+    console.log('');
+    console.log(
+      yellow('⚠  This will pause the managed agent and give you direct interactive control.'),
+    );
+    console.log(yellow('   In-progress tool executions will be interrupted.'));
+    console.log('');
+    process.stdout.write('Continue? [y/N] ');
+
+    const answer = await readSingleChar();
+    process.stdout.write('\n');
+
+    if (answer.toLowerCase() !== 'y') {
+      console.log(dim('Aborted.'));
+      return;
+    }
+  }
+
+  // 4. Initiate takeover
+  console.log(dim(`Initiating takeover for session ${cyan(sessionId)}...`));
+
+  const takeoverData = (await request(
+    'POST',
+    `/api/sessions/${encodeURIComponent(sessionId)}/takeover`,
+  )) as TakeoverResponse;
+
+  if (!takeoverData.ok) {
+    throw new CliError('TAKEOVER_FAILED', 'Takeover initiation failed', { sessionId });
+  }
+
+  const { terminalId, takeoverToken } = takeoverData;
+  const machineId = takeoverData.machineId ?? session.machineId;
+
+  if (!machineId) {
+    throw new CliError(
+      'TAKEOVER_NO_MACHINE',
+      'Could not determine machineId for session — neither takeover response nor session record contains it',
+      { sessionId },
+    );
+  }
+
+  // 5. Connect WebSocket
+  const wsBase = CONTROL_URL.replace(/^http/, 'ws');
+  const wsUrl = `${wsBase}/api/machines/${encodeURIComponent(machineId)}/terminal/${encodeURIComponent(terminalId)}/ws`;
+
+  let ws: WebSocket;
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CliError('TAKEOVER_WS_CONNECT_FAILED', `Failed to open WebSocket: ${message}`, {
+      wsUrl,
+    });
+  }
+
+  let detached = false;
+  let released = false;
+
+  const cleanup = (shouldRelease: boolean) => {
+    if (process.stdin.isTTY && process.stdin.isRaw) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.pause();
+    process.stdin.removeAllListeners('data');
+
+    if (shouldRelease && !released) {
+      released = true;
+      // Fire-and-forget release — best effort
+      request('POST', `/api/sessions/${encodeURIComponent(sessionId)}/release`).catch(() => {
+        // Ignore errors during cleanup
+      });
+    }
+  };
+
+  await new Promise<void>((resolve, reject) => {
+    ws.addEventListener('error', (event) => {
+      cleanup(false);
+      reject(
+        new CliError('TAKEOVER_WS_ERROR', 'WebSocket error', {
+          message: (event as ErrorEvent).message ?? 'unknown',
+        }),
+      );
+    });
+
+    ws.addEventListener('open', () => {
+      // Send hello frame with role and auth token
+      const role = observer ? 'observer' : 'controller';
+      ws.send(JSON.stringify({ type: 'hello', token: takeoverToken, role }));
+
+      console.log('');
+      console.log(
+        `${green('🔗')} Connected to session ${cyan(sessionId)}. ${dim('Type ~. to detach.')}`,
+      );
+
+      if (observer) {
+        console.log(dim('   Observer mode: read-only, no input forwarded.'));
+      }
+
+      console.log('');
+
+      // 7. Set raw mode for controller
+      if (!observer && process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+      }
+
+      // 9. Handle SIGWINCH (terminal resize)
+      const onSigwinch = () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: 'resize',
+              cols: process.stdout.columns ?? 80,
+              rows: process.stdout.rows ?? 24,
+            }),
+          );
+        }
+      };
+      process.on('SIGWINCH', onSigwinch);
+
+      // Send initial size
+      if (!observer) {
+        onSigwinch();
+      }
+
+      // 8. Bidirectional pipe: stdin → ws (controller only)
+      // 10. Detach sequence: track previous byte; ~. after \r or \n disconnects
+      let prevByte = '';
+      let detachPending = false;
+
+      const onStdinData = (chunk: Buffer) => {
+        const data = chunk.toString('utf8');
+
+        if (!observer) {
+          // Detect ~. detach sequence
+          for (let i = 0; i < data.length; i++) {
+            const ch = data[i];
+
+            if (detachPending) {
+              if (ch === '.') {
+                // Detach!
+                detached = true;
+                process.stdout.write('\r\n');
+                console.log(dim('Detached from session (session continues running).'));
+                ws.close();
+                process.off('SIGWINCH', onSigwinch);
+                cleanup(false);
+                resolve();
+                return;
+              }
+              // Not ~., reset
+              detachPending = false;
+            }
+
+            if (ch === '~' && (prevByte === '\r' || prevByte === '\n' || prevByte === '')) {
+              detachPending = true;
+            }
+
+            prevByte = ch;
+          }
+
+          if (!detached && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', data }));
+          }
+        }
+      };
+
+      process.stdin.on('data', onStdinData);
+
+      // Handle SIGINT / process exit for cleanup
+      const onSigint = () => {
+        process.off('SIGWINCH', onSigwinch);
+        cleanup(true);
+        resolve();
+      };
+      process.once('SIGINT', onSigint);
+    });
+
+    // 8. Bidirectional pipe: ws → stdout
+    ws.addEventListener('message', (event) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(String(event.data)) as Record<string, unknown>;
+      } catch {
+        // Non-JSON frame — write raw
+        process.stdout.write(String(event.data));
+        return;
+      }
+
+      switch (msg.type) {
+        case 'hello':
+          // Role assignment confirmation — no output needed
+          break;
+
+        case 'output':
+          process.stdout.write(String(msg.data ?? ''));
+          break;
+
+        case 'exit': {
+          const code = msg.code !== undefined ? Number(msg.code) : 0;
+          process.stdout.write('\r\n');
+          console.log(dim(`Session exited with code ${code}.`));
+          cleanup(false);
+          resolve();
+          break;
+        }
+
+        case 'error':
+          process.stdout.write('\r\n');
+          console.error(red(`Remote error: ${String(msg.message ?? 'unknown')}`));
+          break;
+
+        case 'presence':
+          // Subscriber count update — silently ignore for now
+          break;
+
+        default:
+          // Unknown frame type — ignore
+          break;
+      }
+    });
+
+    ws.addEventListener('close', () => {
+      if (!detached) {
+        process.stdout.write('\r\n');
+        console.log(dim('👋 Disconnected from session.'));
+        cleanup(true);
+        resolve();
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Pool stats subcommand
 // ---------------------------------------------------------------------------
 
@@ -1138,6 +1442,9 @@ ${bold('COMMANDS')}
   ${cyan('dashboard tools')}            Tool usage analytics
   ${cyan('loop status')} <agentId>      Check continuous loop status
   ${cyan('loop stop')} <agentId>        Stop a continuous loop
+  ${cyan('takeover')} <sessionId>        Attach local terminal to a running session PTY
+    ${dim('--yolo')}                      Skip confirmation prompt
+    ${dim('--observer')}                  Read-only mode (no input forwarded)
   ${cyan('pool-stats')}                 Worker pool statistics
   ${cyan('deploy')} <subcommand>        Deployment management (init, up, down, status, logs)
   ${cyan('help')}                       Show this help message
@@ -1208,6 +1515,15 @@ ${bold('EXAMPLES')}
 
   ${dim('# View worker pool statistics')}
   npx tsx scripts/agentctl.ts pool-stats
+
+  ${dim('# Attach to a running session interactively')}
+  npx tsx scripts/agentctl.ts takeover sess-abc123
+
+  ${dim('# Skip confirmation and attach immediately')}
+  npx tsx scripts/agentctl.ts takeover sess-abc123 --yolo
+
+  ${dim('# Observe session output without sending input')}
+  npx tsx scripts/agentctl.ts takeover sess-abc123 --observer
 
   ${dim('# Check worker on a different host')}
   WORKER_URL=http://mac-mini:9000 npx tsx scripts/agentctl.ts health-worker
@@ -1452,6 +1768,23 @@ async function main(): Promise<void> {
         console.error('Available: loop status <agentId> | loop stop <agentId>');
         process.exit(1);
       }
+      break;
+    }
+
+    case 'takeover': {
+      const sessionId = args.filter((a) => !a.startsWith('--'))[1];
+
+      if (!sessionId) {
+        console.error(
+          `${red('Error: ')}Usage: agentctl takeover <sessionId> [--yolo] [--observer]`,
+        );
+        process.exit(1);
+      }
+
+      const yolo = args.includes('--yolo');
+      const observer = args.includes('--observer');
+
+      await cmdTakeover(sessionId, yolo, observer);
       break;
     }
 
