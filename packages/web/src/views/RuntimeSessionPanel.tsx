@@ -18,8 +18,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRightLeft, Cable, GitBranch, History, Layers3 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-
 import { EmptyState } from '@/components/EmptyState';
+import { InteractiveTerminal } from '@/components/InteractiveTerminal';
 import { PathBadge } from '@/components/PathBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -31,17 +31,7 @@ import type {
   RuntimeSessionManualTakeover,
 } from '../lib/api';
 import { formatDateTime, formatDuration, timeAgo, truncate } from '../lib/format-utils';
-import {
-  machinesQuery,
-  runtimeSessionHandoffsQuery,
-  runtimeSessionManualTakeoverQuery,
-  runtimeSessionPreflightQuery,
-  useForkRuntimeSession,
-  useHandoffRuntimeSession,
-  useResumeRuntimeSession,
-  useStartRuntimeSessionManualTakeover,
-  useStopRuntimeSessionManualTakeover,
-} from '../lib/queries';
+import * as runtimeQueries from '../lib/queries';
 
 const RUNTIME_OPTIONS = [
   { value: 'all', label: 'All runtimes' },
@@ -57,6 +47,29 @@ type RuntimeSessionPreflight = {
     reason?: string | null;
     metadata?: Record<string, unknown>;
   };
+};
+
+type RuntimeSessionTerminalTakeover = {
+  active: boolean;
+  sessionId?: string;
+  machineId?: string | null;
+  terminalId?: string | null;
+  claudeSessionId?: string | null;
+  startedAt?: string | null;
+  releasedAt?: string | null;
+};
+
+type QueryConfig = {
+  queryKey: readonly unknown[];
+  queryFn: () => Promise<unknown>;
+  enabled?: boolean;
+  refetchInterval?: number | false;
+  refetchOnWindowFocus?: boolean;
+};
+
+type RuntimeSessionIdMutation = {
+  mutateAsync: (variables: { id: string }) => Promise<unknown>;
+  isPending: boolean;
 };
 
 type RuntimeSessionPanelProps = {
@@ -101,6 +114,78 @@ function extractManualTakeoverState(
   return typeof candidate === 'object' && candidate !== null
     ? (candidate as RuntimeSessionManualTakeover)
     : null;
+}
+
+function extractTerminalTakeoverCandidate(value: unknown): RuntimeSessionTerminalTakeover | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.active !== 'boolean') {
+    return null;
+  }
+
+  return {
+    active: candidate.active,
+    sessionId: typeof candidate.sessionId === 'string' ? candidate.sessionId : undefined,
+    machineId: typeof candidate.machineId === 'string' ? candidate.machineId : undefined,
+    terminalId: typeof candidate.terminalId === 'string' ? candidate.terminalId : undefined,
+    claudeSessionId:
+      typeof candidate.claudeSessionId === 'string' ? candidate.claudeSessionId : undefined,
+    startedAt: typeof candidate.startedAt === 'string' ? candidate.startedAt : undefined,
+    releasedAt: typeof candidate.releasedAt === 'string' ? candidate.releasedAt : undefined,
+  };
+}
+
+function extractTerminalTakeoverState(
+  queryData: unknown,
+  session: RuntimeSession | null,
+): RuntimeSessionTerminalTakeover | null {
+  const metadata = session?.metadata;
+  const response =
+    typeof queryData === 'object' && queryData !== null
+      ? (queryData as Record<string, unknown>)
+      : null;
+  const candidate =
+    extractTerminalTakeoverCandidate(queryData) ??
+    extractTerminalTakeoverCandidate(response?.terminalTakeover) ??
+    extractTerminalTakeoverCandidate(response?.takeoverStatus) ??
+    extractTerminalTakeoverCandidate(metadata?.takeoverStatus);
+
+  if (!candidate) {
+    return null;
+  }
+
+  return {
+    ...candidate,
+    sessionId: candidate.sessionId ?? session?.id,
+    machineId: candidate.machineId ?? session?.machineId,
+  };
+}
+
+function fallbackTerminalTakeoverQuery(id: string): QueryConfig {
+  return {
+    queryKey: ['runtime-sessions', id, 'terminal-takeover'] as const,
+    queryFn: async () => null,
+    enabled: false,
+  };
+}
+
+function useOptionalRuntimeSessionIdMutation(
+  factory: unknown,
+  unavailableMessage: string,
+): RuntimeSessionIdMutation {
+  if (typeof factory === 'function') {
+    return (factory as () => RuntimeSessionIdMutation)();
+  }
+
+  return {
+    mutateAsync: async () => {
+      throw new Error(unavailableMessage);
+    },
+    isPending: false,
+  };
 }
 
 function describeNativeImportAttempt(attempt?: {
@@ -261,6 +346,20 @@ export function RuntimeSessionPanel({
 }: RuntimeSessionPanelProps): React.JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const runtimeQueriesWithTerminalTakeover = runtimeQueries as typeof runtimeQueries & {
+    runtimeSessionTerminalTakeoverQuery?: (id: string) => QueryConfig;
+    useStartRuntimeSessionTerminalTakeover?: () => RuntimeSessionIdMutation;
+    useStopRuntimeSessionTerminalTakeover?: () => RuntimeSessionIdMutation;
+  };
+  const hasTerminalTakeoverQuery =
+    typeof runtimeQueriesWithTerminalTakeover.runtimeSessionTerminalTakeoverQuery === 'function';
+  const hasStartTerminalTakeoverMutation =
+    typeof runtimeQueriesWithTerminalTakeover.useStartRuntimeSessionTerminalTakeover === 'function';
+  const hasStopTerminalTakeoverMutation =
+    typeof runtimeQueriesWithTerminalTakeover.useStopRuntimeSessionTerminalTakeover === 'function';
+  const terminalTakeoverQueryFactory = hasTerminalTakeoverQuery
+    ? runtimeQueriesWithTerminalTakeover.runtimeSessionTerminalTakeoverQuery
+    : fallbackTerminalTakeoverQuery;
 
   const [resumePrompt, setResumePrompt] = useState('');
   const [resumeModel, setResumeModel] = useState('');
@@ -278,7 +377,7 @@ export function RuntimeSessionPanel({
     'all' | 'native-import' | 'fallback' | 'failed'
   >('all');
 
-  const machines = useQuery(machinesQuery());
+  const machines = useQuery(runtimeQueries.machinesQuery());
   const availableMachines = useMemo(
     () => sortMachinesForSelection((machines.data ?? []) as Machine[]),
     [machines.data],
@@ -287,23 +386,40 @@ export function RuntimeSessionPanel({
     () => new Map(availableMachines.map((machine) => [machine.id, machine.hostname] as const)),
     [availableMachines],
   );
-  const handoffs = useQuery(runtimeSessionHandoffsQuery(selectedSession?.id ?? '', 20));
+  const handoffs = useQuery(
+    runtimeQueries.runtimeSessionHandoffsQuery(selectedSession?.id ?? '', 20),
+  );
   const manualTakeoverQuery = useQuery(
-    runtimeSessionManualTakeoverQuery(
+    runtimeQueries.runtimeSessionManualTakeoverQuery(
       selectedSession?.runtime === 'claude-code' ? (selectedSession?.id ?? '') : '',
     ),
   );
+  const terminalTakeoverQuery = useQuery(
+    terminalTakeoverQueryFactory(
+      selectedSession?.runtime === 'claude-code' && selectedSession.nativeSessionId
+        ? (selectedSession.id ?? '')
+        : '',
+    ),
+  );
   const preflight = useQuery(
-    runtimeSessionPreflightQuery(selectedSession?.id ?? '', {
+    runtimeQueries.runtimeSessionPreflightQuery(selectedSession?.id ?? '', {
       targetRuntime: handoffTargetRuntime,
       ...(handoffMachineId ? { targetMachineId: handoffMachineId } : {}),
     }),
   );
-  const resumeMutation = useResumeRuntimeSession();
-  const forkMutation = useForkRuntimeSession();
-  const handoffMutation = useHandoffRuntimeSession();
-  const startManualTakeoverMutation = useStartRuntimeSessionManualTakeover();
-  const stopManualTakeoverMutation = useStopRuntimeSessionManualTakeover();
+  const resumeMutation = runtimeQueries.useResumeRuntimeSession();
+  const forkMutation = runtimeQueries.useForkRuntimeSession();
+  const handoffMutation = runtimeQueries.useHandoffRuntimeSession();
+  const startManualTakeoverMutation = runtimeQueries.useStartRuntimeSessionManualTakeover();
+  const stopManualTakeoverMutation = runtimeQueries.useStopRuntimeSessionManualTakeover();
+  const startTerminalTakeoverMutation = useOptionalRuntimeSessionIdMutation(
+    runtimeQueriesWithTerminalTakeover.useStartRuntimeSessionTerminalTakeover,
+    'Live terminal attach is unavailable in this build',
+  );
+  const stopTerminalTakeoverMutation = useOptionalRuntimeSessionIdMutation(
+    runtimeQueriesWithTerminalTakeover.useStopRuntimeSessionTerminalTakeover,
+    'Live terminal attach is unavailable in this build',
+  );
 
   const metadataSummary = selectedSession ? summarizeMetadata(selectedSession.metadata) : [];
   const manualTakeoverResponse = manualTakeoverQuery.data as
@@ -319,6 +435,24 @@ export function RuntimeSessionPanel({
     !(manualTakeover.status === 'error' && !manualTakeover.sessionUrl);
   const canManualTakeover = Boolean(
     selectedSession?.runtime === 'claude-code' && selectedSession.nativeSessionId,
+  );
+  const terminalTakeover = extractTerminalTakeoverState(
+    terminalTakeoverQuery.data,
+    selectedSession,
+  );
+  const hasLiveTerminalAttach = terminalTakeover?.active === true;
+  const liveTerminalMachineId = terminalTakeover?.machineId ?? selectedSession?.machineId ?? null;
+  const liveTerminalId = terminalTakeover?.terminalId ?? null;
+  const liveTerminalStartedAt = terminalTakeover?.startedAt ?? selectedSession?.startedAt ?? null;
+  const canRenderLiveTerminal = Boolean(
+    hasLiveTerminalAttach && liveTerminalMachineId && liveTerminalId,
+  );
+  const canLiveTerminalAttach = Boolean(
+    selectedSession?.runtime === 'claude-code' &&
+      selectedSession.nativeSessionId &&
+      hasTerminalTakeoverQuery &&
+      hasStartTerminalTakeoverMutation &&
+      hasStopTerminalTakeoverMutation,
   );
   const canHandoff = Boolean(
     selectedSession?.nativeSessionId &&
@@ -563,6 +697,48 @@ export function RuntimeSessionPanel({
     }
   }, [invalidateRuntimeQueries, selectedSession?.id, stopManualTakeoverMutation, toast]);
 
+  const handleStartTerminalTakeover = useCallback(async () => {
+    if (!selectedSession?.id || !canLiveTerminalAttach) {
+      toast.error('Live terminal attach requires a Claude session with a native session id');
+      return;
+    }
+
+    try {
+      await startTerminalTakeoverMutation.mutateAsync({ id: selectedSession.id });
+      toast.success('Live terminal attach is ready');
+      invalidateRuntimeQueries();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to attach live terminal');
+    }
+  }, [
+    canLiveTerminalAttach,
+    invalidateRuntimeQueries,
+    selectedSession?.id,
+    startTerminalTakeoverMutation,
+    toast,
+  ]);
+
+  const handleStopTerminalTakeover = useCallback(async () => {
+    if (!selectedSession?.id) {
+      return;
+    }
+
+    try {
+      await stopTerminalTakeoverMutation.mutateAsync({ id: selectedSession.id });
+      toast.success('Live terminal attach released');
+      invalidateRuntimeQueries();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to release live terminal');
+    }
+  }, [invalidateRuntimeQueries, selectedSession?.id, stopTerminalTakeoverMutation, toast]);
+
+  const handleLiveTerminalError = useCallback(
+    (message: string) => {
+      toast.error(message);
+    },
+    [toast],
+  );
+
   return (
     <section className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="px-4 py-3 border-b border-border">
@@ -782,6 +958,93 @@ export function RuntimeSessionPanel({
 
           {selectedSession.runtime === 'claude-code' && (
             <div className="space-y-3">
+              {canLiveTerminalAttach && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Cable className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    <div className="text-sm font-semibold text-foreground">
+                      Live Terminal Attach
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                    <div className="text-xs text-muted-foreground">
+                      Attaches directly to the worker-backed runtime terminal inline. This is a live
+                      terminal surface and is separate from Claude Remote Control sidecar takeover.
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={hasLiveTerminalAttach ? 'active' : 'idle'} />
+                      <span className="text-xs text-muted-foreground">
+                        {hasLiveTerminalAttach
+                          ? liveTerminalStartedAt
+                            ? `Attached ${timeAgo(liveTerminalStartedAt)}`
+                            : 'Attached'
+                          : 'No active live terminal attach'}
+                      </span>
+                    </div>
+                    {hasLiveTerminalAttach && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-lg border border-border bg-card/60 p-3">
+                          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            Machine
+                          </div>
+                          <div className="mt-2 text-sm text-foreground break-all">
+                            {liveTerminalMachineId ?? 'Unavailable'}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-card/60 p-3">
+                          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            Terminal
+                          </div>
+                          <div className="mt-2 text-sm text-foreground break-all">
+                            {liveTerminalId ?? 'Provisioning'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {hasLiveTerminalAttach ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleStopTerminalTakeover()}
+                          disabled={stopTerminalTakeoverMutation.isPending}
+                          className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {stopTerminalTakeoverMutation.isPending
+                            ? 'Releasing...'
+                            : 'Release Terminal'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleStartTerminalTakeover()}
+                          disabled={
+                            !canLiveTerminalAttach || startTerminalTakeoverMutation.isPending
+                          }
+                          className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {startTerminalTakeoverMutation.isPending
+                            ? 'Attaching...'
+                            : 'Attach Terminal'}
+                        </button>
+                      )}
+                    </div>
+                    {hasLiveTerminalAttach && !canRenderLiveTerminal && (
+                      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                        Live attach is active, but terminal details are still syncing.
+                      </div>
+                    )}
+                    {canRenderLiveTerminal && liveTerminalMachineId && liveTerminalId && (
+                      <InteractiveTerminal
+                        machineId={liveTerminalMachineId}
+                        terminalId={liveTerminalId}
+                        onError={handleLiveTerminalError}
+                        className="min-h-[22rem]"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="text-sm font-semibold text-foreground">Manual Takeover</div>
               <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
                 <div className="text-xs text-muted-foreground">

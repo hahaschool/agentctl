@@ -269,6 +269,15 @@ export type RuntimeSessionHandoffsPage = {
 
 export type RuntimeHandoffSummary = RuntimeHandoffSummaryResponse;
 export type RuntimeSessionManualTakeover = ManualTakeoverState;
+export type SessionTakeoverState = {
+  active: boolean;
+  sessionId: string;
+  terminalId?: string;
+  claudeSessionId?: string;
+  machineId?: string;
+  startedAt?: string;
+  releasedAt?: string;
+};
 
 export type RuntimeConfigDefaultsResponse = {
   version: number;
@@ -747,6 +756,31 @@ export const api = {
         method: 'DELETE',
       },
     ),
+  getRuntimeSessionTerminalTakeover: (id: string) =>
+    request<SessionTakeoverState>(`/api/sessions/${encodeURIComponent(id)}/takeover`),
+  startRuntimeSessionTerminalTakeover: (id: string) =>
+    request<{
+      ok: true;
+      terminalId: string;
+      takeoverToken: string;
+      claudeSessionId: string;
+      machineId?: string;
+    }>(`/api/sessions/${encodeURIComponent(id)}/takeover`, {
+      method: 'POST',
+    }),
+  stopRuntimeSessionTerminalTakeover: (id: string, options?: { resume?: boolean }) => {
+    const qs = new URLSearchParams();
+    if (options?.resume !== undefined) {
+      qs.set('resume', String(options.resume));
+    }
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<{ ok: true; resumed: boolean }>(
+      `/api/sessions/${encodeURIComponent(id)}/release${suffix}`,
+      {
+        method: 'POST',
+      },
+    );
+  },
   createSession: (body: {
     agentId: string;
     machineId: string;

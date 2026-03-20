@@ -9,12 +9,16 @@ const {
   mockMachinesQuery,
   mockRuntimeSessionHandoffsQuery,
   mockRuntimeSessionManualTakeoverQuery,
+  mockRuntimeSessionTerminalTakeoverQuery,
   mockRuntimeSessionPreflightQuery,
   mockResumeMutateAsync,
   mockForkMutateAsync,
   mockHandoffMutateAsync,
   mockStartTakeoverMutateAsync,
   mockStopTakeoverMutateAsync,
+  mockStartTerminalTakeoverMutateAsync,
+  mockStopTerminalTakeoverMutateAsync,
+  mockInteractiveTerminal,
   mockToast,
   mockQueryState,
 } = vi.hoisted(() => ({
@@ -25,18 +29,23 @@ const {
   mockMachinesQuery: vi.fn(),
   mockRuntimeSessionHandoffsQuery: vi.fn(),
   mockRuntimeSessionManualTakeoverQuery: vi.fn(),
+  mockRuntimeSessionTerminalTakeoverQuery: vi.fn(),
   mockRuntimeSessionPreflightQuery: vi.fn(),
   mockResumeMutateAsync: vi.fn(),
   mockForkMutateAsync: vi.fn(),
   mockHandoffMutateAsync: vi.fn(),
   mockStartTakeoverMutateAsync: vi.fn(),
   mockStopTakeoverMutateAsync: vi.fn(),
+  mockStartTerminalTakeoverMutateAsync: vi.fn(),
+  mockStopTerminalTakeoverMutateAsync: vi.fn(),
+  mockInteractiveTerminal: vi.fn(),
   mockToast: {
     success: vi.fn(),
     error: vi.fn(),
   },
   mockQueryState: {
     manualTakeover: null as Record<string, unknown> | null,
+    terminalTakeover: null as Record<string, unknown> | null,
   },
 }));
 
@@ -71,11 +80,23 @@ vi.mock('@/components/Toast', () => ({
   useToast: () => mockToast,
 }));
 
+vi.mock('@/components/InteractiveTerminal', () => ({
+  InteractiveTerminal: (props: Record<string, unknown>) => {
+    mockInteractiveTerminal(props);
+    return (
+      <div data-testid="interactive-terminal">
+        {String(props.machineId)}::{String(props.terminalId)}
+      </div>
+    );
+  },
+}));
+
 vi.mock('../lib/queries', () => ({
   machinesQuery: () => mockMachinesQuery(),
   runtimeSessionHandoffsQuery: (id: string, limit?: number) =>
     mockRuntimeSessionHandoffsQuery(id, limit),
   runtimeSessionManualTakeoverQuery: (id: string) => mockRuntimeSessionManualTakeoverQuery(id),
+  runtimeSessionTerminalTakeoverQuery: (id: string) => mockRuntimeSessionTerminalTakeoverQuery(id),
   runtimeSessionPreflightQuery: (id: string, params: Record<string, unknown>) =>
     mockRuntimeSessionPreflightQuery(id, params),
   useResumeRuntimeSession: () => ({
@@ -96,6 +117,14 @@ vi.mock('../lib/queries', () => ({
   }),
   useStopRuntimeSessionManualTakeover: () => ({
     mutateAsync: mockStopTakeoverMutateAsync,
+    isPending: false,
+  }),
+  useStartRuntimeSessionTerminalTakeover: () => ({
+    mutateAsync: mockStartTerminalTakeoverMutateAsync,
+    isPending: false,
+  }),
+  useStopRuntimeSessionTerminalTakeover: () => ({
+    mutateAsync: mockStopTerminalTakeoverMutateAsync,
     isPending: false,
   }),
 }));
@@ -154,6 +183,18 @@ function createManualTakeover(overrides?: Record<string, unknown>) {
   };
 }
 
+function createTerminalTakeover(overrides?: Record<string, unknown>) {
+  return {
+    active: true,
+    sessionId: 'ms-1',
+    machineId: 'machine-1',
+    terminalId: 'term-1',
+    claudeSessionId: 'claude-native-1',
+    startedAt: '2026-03-11T10:02:00.000Z',
+    ...overrides,
+  };
+}
+
 function setupUseQuery() {
   mockMachinesQuery.mockReturnValue({ queryKey: ['machines'] });
   mockRuntimeSessionHandoffsQuery.mockImplementation((id: string, limit?: number) => ({
@@ -161,6 +202,9 @@ function setupUseQuery() {
   }));
   mockRuntimeSessionManualTakeoverQuery.mockImplementation((id: string) => ({
     queryKey: ['runtime-sessions', id, 'manual-takeover'],
+  }));
+  mockRuntimeSessionTerminalTakeoverQuery.mockImplementation((id: string) => ({
+    queryKey: ['runtime-sessions', id, 'terminal-takeover'],
   }));
   mockRuntimeSessionPreflightQuery.mockImplementation(
     (id: string, params: Record<string, unknown>) => ({
@@ -207,6 +251,15 @@ function setupUseQuery() {
     ok: true,
     manualTakeover: createManualTakeover({ status: 'stopped', sessionUrl: null }),
   });
+  mockStartTerminalTakeoverMutateAsync.mockResolvedValue({
+    ok: true,
+    ...createTerminalTakeover(),
+  });
+  mockStopTerminalTakeoverMutateAsync.mockResolvedValue({
+    ok: true,
+    active: false,
+    sessionId: 'ms-1',
+  });
 
   mockUseQuery.mockImplementation((options: { queryKey: readonly unknown[] }) => {
     const key = options.queryKey;
@@ -219,6 +272,14 @@ function setupUseQuery() {
     if (key[0] === 'runtime-sessions' && key[2] === 'manual-takeover') {
       return {
         data: { ok: true, manualTakeover: mockQueryState.manualTakeover },
+        isLoading: false,
+        isFetching: false,
+        error: null,
+      };
+    }
+    if (key[0] === 'runtime-sessions' && key[2] === 'terminal-takeover') {
+      return {
+        data: mockQueryState.terminalTakeover ?? { active: false, sessionId: String(key[1] ?? '') },
         isLoading: false,
         isFetching: false,
         error: null,
@@ -247,6 +308,7 @@ function setupUseQuery() {
 describe('RuntimeSessionPanel', () => {
   beforeEach(() => {
     mockQueryState.manualTakeover = null;
+    mockQueryState.terminalTakeover = null;
     vi.clearAllMocks();
     setupUseQuery();
     Object.defineProperty(window, 'open', {
@@ -339,6 +401,78 @@ describe('RuntimeSessionPanel', () => {
     });
   });
 
+  it('shows live terminal attach only for Claude sessions with a native session id', () => {
+    const { rerender } = render(
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession()}
+        onSelectedSessionChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Live Terminal Attach')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Attach Terminal' })).toBeDefined();
+
+    rerender(
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession({ nativeSessionId: null })}
+        onSelectedSessionChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Live Terminal Attach')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Attach Terminal' })).toBeNull();
+
+    rerender(
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession({
+          runtime: 'codex',
+          nativeSessionId: 'codex-native-1',
+        })}
+        onSelectedSessionChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Live Terminal Attach')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Attach Terminal' })).toBeNull();
+  });
+
+  it('starts live terminal attach, renders the inline terminal, and releases it', async () => {
+    const view = render(
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession()}
+        onSelectedSessionChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Terminal' }));
+
+    await waitFor(() => {
+      expect(mockStartTerminalTakeoverMutateAsync).toHaveBeenCalledWith({ id: 'ms-1' });
+    });
+
+    mockQueryState.terminalTakeover = createTerminalTakeover();
+    view.rerender(
+      <RuntimeSessionPanel
+        selectedSession={createRuntimeSession()}
+        onSelectedSessionChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('interactive-terminal').textContent).toBe('machine-1::term-1');
+    expect(screen.getByRole('button', { name: 'Release Terminal' })).toBeDefined();
+    expect(mockInteractiveTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        machineId: 'machine-1',
+        terminalId: 'term-1',
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Release Terminal' }));
+    await waitFor(() => {
+      expect(mockStopTerminalTakeoverMutateAsync).toHaveBeenCalledWith({ id: 'ms-1' });
+    });
+  });
+
   it('keeps the existing handoff UI visible alongside manual takeover controls', () => {
     render(
       <RuntimeSessionPanel
@@ -347,6 +481,7 @@ describe('RuntimeSessionPanel', () => {
       />,
     );
 
+    expect(screen.getByText('Live Terminal Attach')).toBeDefined();
     expect(screen.getByText('Manual Handoff')).toBeDefined();
     expect(screen.getByLabelText('Takeover prompt')).toBeDefined();
     expect(screen.getByText('Handoff History')).toBeDefined();

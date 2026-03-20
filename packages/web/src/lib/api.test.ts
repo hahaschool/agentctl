@@ -652,6 +652,87 @@ describe('api.stopRuntimeSessionManualTakeover', () => {
   });
 });
 
+describe('api.getRuntimeSessionTerminalTakeover', () => {
+  it('calls GET /api/sessions/:id/takeover', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({ active: true, sessionId: 'rc-1', terminalId: 'term-1' }),
+    );
+
+    await api.getRuntimeSessionTerminalTakeover('rc-1');
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/sessions/rc-1/takeover');
+    expect(init?.method).toBeUndefined();
+  });
+});
+
+describe('api.startRuntimeSessionTerminalTakeover', () => {
+  it('calls POST /api/sessions/:id/takeover', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({
+        ok: true,
+        terminalId: 'term-1',
+        takeoverToken: 'token-1',
+        claudeSessionId: 'claude-1',
+        machineId: 'machine-1',
+      }),
+    );
+
+    await api.startRuntimeSessionTerminalTakeover('rc-1');
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/sessions/rc-1/takeover');
+    expect(init?.method).toBe('POST');
+  });
+
+  it('does not set Content-Type when no body is provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({
+        ok: true,
+        terminalId: 'term-1',
+        takeoverToken: 'token-1',
+        claudeSessionId: 'claude-1',
+      }),
+    );
+
+    await api.startRuntimeSessionTerminalTakeover('rc-1');
+
+    const [, init] = lastFetchCall();
+    expect((init?.headers as Record<string, string>)?.['Content-Type']).toBeUndefined();
+  });
+});
+
+describe('api.stopRuntimeSessionTerminalTakeover', () => {
+  it('calls POST /api/sessions/:id/release with no resume param by default', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, resumed: false }));
+
+    await api.stopRuntimeSessionTerminalTakeover('rc-1');
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/sessions/rc-1/release');
+    expect(init?.method).toBe('POST');
+  });
+
+  it('appends resume query param when provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, resumed: true }));
+
+    await api.stopRuntimeSessionTerminalTakeover('rc-1', { resume: true });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/sessions/rc-1/release?resume=true');
+    expect(init?.method).toBe('POST');
+  });
+
+  it('does not set Content-Type when no body is provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, resumed: false }));
+
+    await api.stopRuntimeSessionTerminalTakeover('rc-1');
+
+    const [, init] = lastFetchCall();
+    expect((init?.headers as Record<string, string>)?.['Content-Type']).toBeUndefined();
+  });
+});
+
 describe('api.getSession', () => {
   it('calls GET /api/sessions/:id', async () => {
     const session = { id: 's1', status: 'running' };
