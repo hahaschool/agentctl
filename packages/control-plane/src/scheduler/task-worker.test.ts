@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockLogger } from '../api/routes/test-helpers.js';
 import {
   createMockDbRegistry as createMockRegistry,
+  getDispatchFetchCall,
+  getMcpDiscoveryFetchCall,
   makeAgent,
   makeJob,
   makeMachine,
@@ -229,7 +231,8 @@ describe('createTaskWorker()', () => {
       expect(registry.updateRunPhase).toHaveBeenNthCalledWith(3, 'run-001', 'cli_spawning');
       expect(registry.updateRunPhase).toHaveBeenNthCalledWith(4, 'run-001', 'running');
 
-      expect(fetch).toHaveBeenCalledOnce();
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      expect(getDispatchFetchCall()).toBeDefined();
 
       // completeRun should NOT be called on success — the agent is still
       // running asynchronously on the worker. The worker reports final
@@ -254,7 +257,9 @@ describe('createTaskWorker()', () => {
 
       await processor(job);
 
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       expect(fetchCall[0]).toContain('100.64.0.42:9000');
       expect(fetchCall[0]).toContain('/api/agents/agent-abc/start');
     });
@@ -276,7 +281,9 @@ describe('createTaskWorker()', () => {
 
       await processor(job);
 
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       const requestInit = fetchCall?.[1] as { body: string };
       const requestBody = JSON.parse(requestInit.body) as Record<string, unknown>;
       const { dispatchSignature, ...signedPayload } = requestBody;
@@ -361,7 +368,9 @@ describe('createTaskWorker()', () => {
 
       await processor(job);
 
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       const requestBody = JSON.parse(fetchCall[1]?.body as string) as { prompt: string };
 
       expect(requestBody.prompt).toMatch(/## Relevant Memories/);
@@ -389,7 +398,9 @@ describe('createTaskWorker()', () => {
 
       await processor(job);
 
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       const requestBody = JSON.parse(fetchCall[1]?.body as string) as { prompt: string };
 
       expect(requestBody.prompt).toBe(originalPrompt);
@@ -564,7 +575,9 @@ describe('createTaskWorker()', () => {
 
       await processor(job);
 
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       const requestBody = JSON.parse(fetchCall[1]?.body as string) as {
         config: { mcpServers: unknown };
       };
