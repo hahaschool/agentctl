@@ -1228,6 +1228,60 @@ describe('Session routes — /api/sessions', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /api/sessions/:sessionId/kill — force kill a session
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/sessions/:sessionId/kill', () => {
+    it('marks the session ended only when the worker kill succeeds', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchOk({ ok: true, message: 'Kill signal sent' });
+
+      const updateCallsBefore = vi.mocked(mockDb.db.update as ReturnType<typeof vi.fn>).mock.calls
+        .length;
+      const setCallsBefore = vi.mocked(mockDb.db.set as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/kill',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ ok: true, message: 'Kill signal sent' });
+      expect(vi.mocked(mockDb.db.update as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(
+        updateCallsBefore + 1,
+      );
+      expect(vi.mocked(mockDb.db.set as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(
+        setCallsBefore + 1,
+      );
+    });
+
+    it('does not mark the session ended when the worker kill fails', async () => {
+      const session = makeSession({ status: 'active' });
+      mockDb.setRows([session]);
+      mockFetchError(500);
+
+      const updateCallsBefore = vi.mocked(mockDb.db.update as ReturnType<typeof vi.fn>).mock.calls
+        .length;
+      const setCallsBefore = vi.mocked(mockDb.db.set as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/sess-001/kill',
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({ error: 'WORKER_ERROR' });
+      expect(vi.mocked(mockDb.db.update as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(
+        updateCallsBefore,
+      );
+      expect(vi.mocked(mockDb.db.set as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(
+        setCallsBefore,
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /api/sessions/:sessionId/fork — fork a session
   // ---------------------------------------------------------------------------
 

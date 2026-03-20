@@ -1721,6 +1721,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         });
         const body: unknown = await resp.json();
 
+        if (!resp.ok) {
+          return reply.code(resp.status).send(body);
+        }
+
         // Update session status to ended
         await db
           .update(rcSessions)
