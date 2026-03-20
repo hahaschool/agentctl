@@ -3,6 +3,28 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.3.1] — 2026-03-20
+
+Force kill, stall detection, permission bypass fix, UX polish
+
+### Features
+- Force kill endpoint for stuck sessions (§27.1)
+- Stall detection — 15min no output marks session stalled (§27.2)
+- Session metrics card showing token usage and cost (§28.1)
+- Sidebar version links to GitHub releases (§28.2)
+- Command palette searches sessions by prompt (§28.3)
+- PageContainer consistent layout wrapper (§28.4)
+- "Allow for session" permission approval option
+
+### Fixes
+- CRITICAL: permissionMode now passed in dispatch payload — bypass agents no longer get approval popups
+- Promotion flow: correct PM2 names, SSE parsing, send success before CP restart
+- Session reaper skips sessions with claudeSessionId (prevents false timeouts)
+- Approvals page rewritten from thread-based to permission-request based
+- Tool input formatting: Bash shows command, Read shows path, AskUserQuestion shows questions
+- Retry order: latest attempt shown as lead run, older failures collapsed
+
+
 ## [0.3.0] — 2026-03-19
 
 §14-23: MCP discovery, permission approvals, mobile inbox, knowledge graph, API docs, full route test coverage, UX polish
