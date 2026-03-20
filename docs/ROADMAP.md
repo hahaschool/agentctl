@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #330, #331, #332, and #333 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing follow-through is landed, and the latest `main` `CI`, `Security Audit`, and `Build` runs are green on commit `2ffa870`; the next planned session-lifecycle follow-up remains §27.3 terminal takeover)
+> Last updated: 2026-03-20 (PRs #330, #331, #332, and #333 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing follow-through is landed, and the latest `main` `CI`, `Security Audit`, and `Build` runs are green on commit `2ffa870`; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
 
 ## Current State
 
@@ -1628,11 +1628,21 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] PageContainer component with default/wide/full width modes *(PR #318)*
 - [x] Applied to approvals, tasks pages *(PR #318)*
 
-### 27.3 Terminal Takeover — P1 (planned, not yet started)
+### 27.3 Terminal Takeover — P1 (partial groundwork shipped; live session attach pending)
 
-- [ ] Worker: attach to running CLI process stdin/stdout via PTY
-- [ ] Web: "Attach Terminal" button opens xterm.js connected to CLI process
-- [ ] User can type directly into running CLI to unblock stuck operations
+> Status note: AgentCTL already ships generic machine-level PTY terminals,
+> `InteractiveTerminal`, worker-side session output replay, and Claude Remote
+> Control manual takeover. The remaining gap is attaching the web terminal to
+> the real running managed Claude CLI process instead of a separate machine
+> shell or the current resume-based fallback in the worker session route. See
+> [plans/2026-03-20-terminal-takeover-gap-implementation-plan.md](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md).
+
+- [x] Machine-level PTY terminal APIs + xterm.js UI are on `main`
+- [x] Runtime session panel already exposes Claude Remote Control manual takeover
+- [ ] Worker: keep running Claude managed sessions attachable via live PTY
+- [ ] Control plane: proxy runtime-session terminal attach by managed session id
+- [ ] Web: "Attach Terminal" action for the runtime session panel
+- [ ] User can type directly into the running CLI to unblock interactive waits
 
 ---
 
@@ -1651,6 +1661,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
+| **P1** | Terminal Takeover | 27.3 | In planning — machine-level PTY terminals, session replay, and Claude Remote Control takeover are shipped; live attach to the running managed Claude CLI is scoped in the 2026-03-20 gap plan |
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
@@ -1861,6 +1872,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; machines / terminal e2e stays deferred for now because terminal/WebSocket coverage is a higher-flake surface | 25.1-25.3 |
 | [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Delivered — PRs #307, #314, #322, and #326 are on `main`; as of 2026-03-20 GitHub code scanning shows `0` open alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) | 26.1 |
 | [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Delivered — PR #322 landed the git-capability hardening slice on `main`; post-#326 worker scans converged to `0` open alerts without removing `git` from the standard worker image | 26.2 |
+| [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Active — generic machine terminal infra, session replay, and Claude Remote Control takeover are already shipped; live PTY attach to the running managed Claude CLI remains | 27.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
