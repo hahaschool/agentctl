@@ -79,11 +79,22 @@ type RuntimeHandoff = {
   completedAt: string | null;
 };
 
+type SessionTakeoverState = {
+  active: boolean;
+  sessionId: string;
+  terminalId?: string;
+  claudeSessionId?: string;
+  machineId?: string;
+  startedAt?: string;
+  releasedAt?: string;
+};
+
 type MockState = {
   agentSessions: AgentSession[];
   runtimeSessions: RuntimeSession[];
   machines: MachineRecord[];
   handoffsBySessionId: Record<string, RuntimeHandoff[]>;
+  terminalTakeoversBySessionId: Record<string, SessionTakeoverState>;
 };
 
 function createAgentSession(overrides: Partial<AgentSession> = {}): AgentSession {
@@ -196,6 +207,15 @@ function createRuntimeConfigDrift(machines: MachineRecord[]) {
   };
 }
 
+function createTerminalTakeoverState(
+  overrides: Partial<SessionTakeoverState> & Pick<SessionTakeoverState, 'sessionId'>,
+): SessionTakeoverState {
+  return {
+    active: false,
+    ...overrides,
+  };
+}
+
 function createMockState(): MockState {
   const machines = [
     createMachine(),
@@ -272,6 +292,9 @@ function createMockState(): MockState {
         }),
       ],
       'rt-codex-ended': [],
+    },
+    terminalTakeoversBySessionId: {
+      'rt-claude-paused': createTerminalTakeoverState({ sessionId: 'rt-claude-paused' }),
     },
   };
 }
@@ -368,6 +391,62 @@ async function interceptRuntimeSessionsApi(page: Page, state: MockState): Promis
       return;
     }
 
+    const terminalTakeoverMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/takeover$/);
+    if (terminalTakeoverMatch) {
+      const sessionId = decodeURIComponent(terminalTakeoverMatch[1] ?? '');
+      const runtimeSession = state.runtimeSessions.find((session) => session.id === sessionId);
+
+      if (method === 'GET') {
+        await fulfillJson(
+          route,
+          state.terminalTakeoversBySessionId[sessionId] ??
+            createTerminalTakeoverState({ sessionId }),
+        );
+        return;
+      }
+
+      if (method === 'POST') {
+        const terminalTakeover = createTerminalTakeoverState({
+          sessionId,
+          active: true,
+          terminalId: `term-${sessionId}`,
+          claudeSessionId: runtimeSession?.nativeSessionId ?? undefined,
+          machineId: runtimeSession?.machineId ?? 'machine-1',
+          startedAt: '2026-03-21T00:05:00.000Z',
+        });
+
+        state.terminalTakeoversBySessionId[sessionId] = terminalTakeover;
+
+        await fulfillJson(route, {
+          ok: true,
+          terminalId: terminalTakeover.terminalId,
+          takeoverToken: `takeover-${sessionId}`,
+          claudeSessionId: terminalTakeover.claudeSessionId,
+          machineId: terminalTakeover.machineId,
+        });
+        return;
+      }
+    }
+
+    const releaseMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/release$/);
+    if (method === 'POST' && releaseMatch) {
+      const sessionId = decodeURIComponent(releaseMatch[1] ?? '');
+      const existingTakeover =
+        state.terminalTakeoversBySessionId[sessionId] ?? createTerminalTakeoverState({ sessionId });
+
+      state.terminalTakeoversBySessionId[sessionId] = {
+        ...existingTakeover,
+        active: false,
+        releasedAt: '2026-03-21T00:06:00.000Z',
+      };
+
+      await fulfillJson(route, {
+        ok: true,
+        resumed: false,
+      });
+      return;
+    }
+
     if (method === 'POST' && url.pathname === '/api/sessions') {
       await fulfillJson(route, {
         ok: true,
@@ -395,6 +474,33 @@ async function interceptRuntimeSessionsApi(page: Page, state: MockState): Promis
       404,
     );
   });
+}
+
+async function mockRuntimeSessionTerminalWebSocket(
+  page: Page,
+  machineId: string,
+  terminalId: string,
+): Promise<void> {
+  await page.routeWebSocket(
+    `ws://localhost:8080/api/machines/${machineId}/terminal/${terminalId}/ws`,
+    (ws) => {
+      ws.onMessage((message) => {
+        const payload =
+          typeof message === 'string'
+            ? (JSON.parse(message) as Record<string, unknown>)
+            : (JSON.parse(message.toString('utf8')) as Record<string, unknown>);
+
+        if (payload.type === 'resize') {
+          ws.send(JSON.stringify({ type: 'output', data: '$ ready\r\n' }));
+          return;
+        }
+
+        if (payload.type === 'input') {
+          ws.send(JSON.stringify({ type: 'output', data: `> ${String(payload.data ?? '')}` }));
+        }
+      });
+    },
+  );
 }
 
 function sessionRows(page: Page) {
@@ -497,5 +603,56 @@ test.describe('Runtime sessions surface', () => {
     expect(createResponse.ok()).toBeTruthy();
 
     await expect(page.locator('#create-session-project')).toHaveCount(0);
+  });
+
+  test('attaches a live terminal for Claude runtime sessions and releases it', async ({ page }) => {
+    const state = createMockState();
+    await interceptRuntimeSessionsApi(page, state);
+    await mockRuntimeSessionTerminalWebSocket(page, 'machine-2', 'term-rt-claude-paused');
+
+    await page.goto('/sessions?type=runtime');
+
+    await expect(page.locator('#session-rt-claude-paused')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#session-rt-claude-paused button').click();
+
+    const detailPanel = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Session Detail' }) });
+
+    await expect(detailPanel.getByRole('button', { name: 'Attach Terminal' })).toBeVisible();
+
+    const attachResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/api/sessions/rt-claude-paused/takeover',
+    );
+
+    await detailPanel.getByRole('button', { name: 'Attach Terminal' }).click();
+
+    const attachResponse = await attachResponsePromise;
+    expect(attachResponse.ok()).toBeTruthy();
+
+    await expect(page.getByText('Live terminal attach is ready')).toBeVisible();
+    await expect(detailPanel.getByRole('button', { name: 'Release Terminal' })).toBeVisible();
+    await expect(detailPanel.getByText('machine-2', { exact: true }).first()).toBeVisible();
+    await expect(detailPanel.getByText('term-rt-claude-paused')).toBeVisible();
+    await expect(detailPanel.getByText('Connected')).toBeVisible();
+    await expect(detailPanel.getByRole('button', { name: 'Copy terminal output' })).toBeVisible();
+
+    const releaseResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/api/sessions/rt-claude-paused/release',
+    );
+
+    await detailPanel.getByRole('button', { name: 'Release Terminal' }).click();
+
+    const releaseResponse = await releaseResponsePromise;
+    expect(releaseResponse.ok()).toBeTruthy();
+
+    await expect(page.getByText('Live terminal attach released')).toBeVisible();
+    await expect(detailPanel.getByRole('button', { name: 'Attach Terminal' })).toBeVisible();
+    await expect(detailPanel.getByText('No active live terminal attach')).toBeVisible();
+    await expect(detailPanel.getByRole('button', { name: 'Copy terminal output' })).toHaveCount(0);
   });
 });
