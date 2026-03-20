@@ -397,7 +397,7 @@ export function Sidebar(): React.JSX.Element {
               rel="noopener noreferrer"
               className="text-[11px] font-mono text-muted-foreground hover:text-blue-500 transition-colors flex items-center gap-1 max-md:inline-flex hidden lg:flex"
             >
-              v0.3.0
+              v0.3.1
               <ExternalLink className="size-2.5" aria-hidden="true" />
             </a>
             {mounted ? (
