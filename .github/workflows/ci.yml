@@ -46,37 +46,90 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: dorny/paths-filter@v3
+      - name: Detect changed files
         id: filter
-        with:
-          filters: |
-            shared:
-              - 'packages/shared/**'
-              - 'tsconfig.base.json'
-              - 'pnpm-lock.yaml'
-            control-plane:
-              - 'packages/control-plane/**'
-              - 'packages/shared/**'
-              - 'tsconfig.base.json'
-              - 'pnpm-lock.yaml'
-            agent-worker:
-              - 'packages/agent-worker/**'
-              - 'packages/shared/**'
-              - 'tsconfig.base.json'
-              - 'pnpm-lock.yaml'
-            mobile:
-              - 'packages/mobile/**'
-              - 'packages/shared/**'
-              - 'tsconfig.base.json'
-              - 'pnpm-lock.yaml'
-            web:
-              - 'packages/web/**'
-              - 'packages/shared/**'
-              - 'tsconfig.base.json'
-              - 'pnpm-lock.yaml'
-            infra:
-              - 'infra/**'
-              - 'docker-compose*.yml'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          shared=false
+          control_plane=false
+          agent_worker=false
+          mobile=false
+          web=false
+          infra=false
+
+          match_file() {
+            local file="$1"
+
+            case "$file" in
+              packages/shared/*|tsconfig.base.json|pnpm-lock.yaml)
+                shared=true
+                control_plane=true
+                agent_worker=true
+                mobile=true
+                web=true
+                ;;
+              packages/control-plane/*)
+                control_plane=true
+                ;;
+              packages/agent-worker/*)
+                agent_worker=true
+                ;;
+              packages/mobile/*)
+                mobile=true
+                ;;
+              packages/web/*)
+                web=true
+                ;;
+              infra/*|docker-compose*.yml)
+                infra=true
+                ;;
+            esac
+          }
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            page=1
+            while :; do
+              response="$(curl -fsSL \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/files?per_page=100&page=$page")"
+
+              files="$(echo "$response" | jq -r '.[].filename')"
+              if [ -z "$files" ]; then
+                break
+              fi
+
+              while IFS= read -r file; do
+                [ -n "$file" ] || continue
+                echo "Changed: $file"
+                match_file "$file"
+              done <<< "$files"
+
+              if [ "$(echo "$response" | jq 'length')" -lt 100 ]; then
+                break
+              fi
+
+              page=$((page + 1))
+            done
+          else
+            echo "Non-PR event detected; main pushes always run the full pipeline."
+          fi
+
+          {
+            echo "shared=$shared"
+            echo "control-plane=$control_plane"
+            echo "agent-worker=$agent_worker"
+            echo "mobile=$mobile"
+            echo "web=$web"
+            echo "infra=$infra"
+          } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Install — single job that caches the full node_modules + pnpm store

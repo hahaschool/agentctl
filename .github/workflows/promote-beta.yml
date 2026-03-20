@@ -95,14 +95,14 @@ jobs:
       result: ${{ steps.promote.outcome }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Setup Node.js + pnpm ───────────────────────────────────────────
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.PRIMARY_NODE }}
           cache: pnpm
@@ -222,7 +222,7 @@ jobs:
     if: failure() && needs.promote.result == 'failure'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Connect to Tailscale mesh ──────────────────────────────────────
       - name: Connect to Tailscale
