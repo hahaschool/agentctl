@@ -7,7 +7,7 @@ import type {
   RunPhase,
 } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
-import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lte, notInArray, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
@@ -439,14 +439,28 @@ export class DbAgentRegistry {
   }
 
   async updateRunPhase(runId: string, phase: RunPhase): Promise<void> {
+    // Never overwrite a terminal phase (completed, failed, empty) with a
+    // non-terminal one. This prevents the race where the dispatch flow
+    // sets phase='running' after the completion callback already set 'completed'.
+    const terminalPhases = ['completed', 'failed', 'empty'];
     const result = await this.db
       .update(agentRuns)
       .set({ phase })
-      .where(eq(agentRuns.id, runId))
+      .where(
+        and(
+          eq(agentRuns.id, runId),
+          terminalPhases.includes(phase) ? undefined : notInArray(agentRuns.phase, terminalPhases),
+        ),
+      )
       .returning({ id: agentRuns.id });
 
     if (result.length === 0) {
-      throw new ControlPlaneError('RUN_NOT_FOUND', `Run '${runId}' does not exist`, { runId });
+      // Either run doesn't exist or phase is already terminal — both are fine
+      this.logger.debug(
+        { runId, phase },
+        'Phase update skipped (run not found or already terminal)',
+      );
+      return;
     }
 
     this.logger.debug({ runId, phase }, 'Agent run phase updated');

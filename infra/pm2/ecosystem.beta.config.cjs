@@ -33,6 +33,7 @@ module.exports = {
         DISPATCH_SIGNING_SECRET_KEY:
           process.env.DISPATCH_SIGNING_SECRET_KEY ||
           deriveStableDispatchSigningSecretKey('beta'),
+        CONTROL_PLANE_URL: 'http://127.0.0.1:8080',
         SKIP_MIGRATIONS: 'true',
         TIER_LABEL: 'beta',
         REPO_ROOT: REPO_ROOT,
