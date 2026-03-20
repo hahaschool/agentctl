@@ -31,6 +31,8 @@ export type SdkRunnerOptions = {
   resumeSessionId?: string;
   /** Called as soon as the real Claude session ID is known (from init/result message). */
   onSessionIdResolved?: (claudeSessionId: string) => void;
+  /** Called periodically when cost/token data updates during the run. */
+  onCostUpdate?: (cost: number, tokensIn: number, tokensOut: number) => void;
 };
 
 export type SdkRunResult = {
@@ -448,6 +450,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     hooks,
     resumeSessionId,
     onSessionIdResolved,
+    onCostUpdate,
   } = options;
 
   const canUseTool = createCanUseToolHandler({
@@ -568,6 +571,11 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
 
       // Map and emit the message as AgentEvent(s)
       handleSdkMessage(message, outputStream, accumulator);
+
+      // Report cost/token updates to caller for live display
+      if (message.usage || typeof message.total_cost_usd === 'number') {
+        onCostUpdate?.(accumulator.totalCost, accumulator.tokensIn, accumulator.tokensOut);
+      }
     }
   } catch (err) {
     stopReason = 'error';

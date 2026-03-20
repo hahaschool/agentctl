@@ -865,11 +865,23 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
       try {
         if (status == null && phase) {
           await dbRegistry.updateRunPhase(runId, phase);
+
+          // Also update cost/tokens/sessionId if provided (live progress updates)
+          if (costUsd != null || tokensIn != null || tokensOut != null || sessionId) {
+            await dbRegistry.updateRunProgress(runId, {
+              costUsd: costUsd != null ? String(costUsd) : undefined,
+              tokensIn: tokensIn ?? undefined,
+              tokensOut: tokensOut ?? undefined,
+              sessionId: sessionId ?? undefined,
+            });
+          }
+
           app.log.info(
             {
               agentId: request.params.id,
               runId,
               phase,
+              ...(costUsd != null ? { costUsd } : {}),
             },
             'Agent run phase update reported by worker',
           );

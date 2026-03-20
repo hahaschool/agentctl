@@ -14,6 +14,12 @@ import type { AgentRun } from '@/lib/api';
 import { formatCost, formatDurationMs } from '@/lib/format-utils';
 import { cn } from '@/lib/utils';
 
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -693,7 +699,14 @@ function RunRowDesktop({
         {formatDurationMs(run.durationMs ?? 0)}
       </td>
       <td className="py-2 pr-3 text-xs font-mono text-muted-foreground whitespace-nowrap align-top">
-        {formatCost(run.costUsd ?? null)}
+        <div>{formatCost(run.costUsd ?? null)}</div>
+        {run.tokensIn || run.tokensOut ? (
+          <div className="text-[9px] text-muted-foreground/60">
+            {run.tokensIn ? `${formatCompact(run.tokensIn)}↓` : ''}
+            {run.tokensIn && run.tokensOut ? ' ' : ''}
+            {run.tokensOut ? `${formatCompact(run.tokensOut)}↑` : ''}
+          </div>
+        ) : null}
       </td>
       <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap align-top">
         {run.finishedAt ? (

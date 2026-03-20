@@ -405,6 +405,33 @@ export class AgentInstance extends EventEmitter {
         abortSignal: this.abortController?.signal,
         hooks: this.hooks,
         resumeSessionId,
+        onCostUpdate: (cost, tokensIn, tokensOut) => {
+          this.state.costUsd = cost;
+          this.state.tokensIn = tokensIn;
+          this.state.tokensOut = tokensOut;
+          if (this.controlPlaneUrl && this.runId) {
+            const now = Date.now();
+            const last = (this as Record<string, unknown>)._lastCostReport as number | undefined;
+            if (!last || now - last > 10_000) {
+              (this as Record<string, unknown>)._lastCostReport = now;
+              fetch(
+                `${this.controlPlaneUrl}/api/agents/${encodeURIComponent(this.agentId)}/complete`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    runId: this.runId,
+                    phase: 'running',
+                    costUsd: cost,
+                    tokensIn,
+                    tokensOut,
+                  }),
+                  signal: AbortSignal.timeout(5_000),
+                },
+              ).catch(() => {});
+            }
+          }
+        },
         onSessionIdResolved: (claudeSessionId) => {
           // Update local state and report to CP immediately so the run record
           // gets a sessionId link while the run is still in progress.

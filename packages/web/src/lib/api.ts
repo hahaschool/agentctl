@@ -331,6 +331,8 @@ export type AgentRun = {
     | null;
   prompt?: string;
   costUsd?: number;
+  tokensIn?: number;
+  tokensOut?: number;
   durationMs?: number;
   startedAt: string;
   finishedAt?: string | null;

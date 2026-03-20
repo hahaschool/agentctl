@@ -466,6 +466,22 @@ export class DbAgentRegistry {
     this.logger.debug({ runId, phase }, 'Agent run phase updated');
   }
 
+  /** Update cost, tokens, and sessionId on a running run without changing status/phase. */
+  async updateRunProgress(
+    runId: string,
+    data: { costUsd?: string; tokensIn?: number; tokensOut?: number; sessionId?: string },
+  ): Promise<void> {
+    const setFields: Record<string, unknown> = {};
+    if (data.costUsd !== undefined) setFields.costUsd = data.costUsd;
+    if (data.tokensIn !== undefined) setFields.tokensIn = data.tokensIn;
+    if (data.tokensOut !== undefined) setFields.tokensOut = data.tokensOut;
+    if (data.sessionId !== undefined) setFields.sessionId = data.sessionId;
+
+    if (Object.keys(setFields).length === 0) return;
+
+    await this.db.update(agentRuns).set(setFields).where(eq(agentRuns.id, runId));
+  }
+
   async computeAgentCostFromRuns(
     agentId: string,
   ): Promise<{ lastCostUsd: number | null; totalCostUsd: number }> {

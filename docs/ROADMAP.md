@@ -1665,6 +1665,20 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Cover the terminal page shell, one stable terminal-connect/render path, and a minimal error-handling path for the existing machine terminal UI *(PR #346)*
 - [x] Keep shared attach/transport changes out of this slice; the machine terminal page shipped without additional page-level hardening *(PR #346)*
 
+## 30. Running Agent Observability
+
+### 30.1 Real-time Cost + Token Reporting — P0
+
+- [ ] SDK runner reports cost/token increments during run via CP callback
+- [ ] Run history shows live-updating cost and token counts for running agents
+- [ ] Token display (input/output) added to run history rows alongside cost
+
+### 30.2 Early Session ID Linking — Delivered
+
+- [x] SDK runner `onSessionIdResolved` callback fires immediately when session_id appears
+- [x] Agent instance reports sessionId to CP within seconds of run starting
+- [x] Running runs show "Live" indicator + Session link appears quickly
+
 ---
 
 ## Active Priorities
