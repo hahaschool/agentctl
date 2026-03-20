@@ -603,7 +603,7 @@ function RunCardMobile({
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <div className="flex items-center gap-2">
           <span className="font-mono">{formatCost(run.costUsd ?? null)}</span>
-          {run.sessionId && (
+          {run.sessionId ? (
             <Link
               href={`/sessions/${run.sessionId}`}
               className="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline"
@@ -612,7 +612,12 @@ function RunCardMobile({
               <ExternalLink className="h-2.5 w-2.5" />
               Session
             </Link>
-          )}
+          ) : run.status === 'running' ? (
+            <span className="inline-flex items-center gap-1 text-yellow-500 animate-pulse text-[10px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
+              Live
+            </span>
+          ) : null}
         </div>
         <span>
           {run.finishedAt ? (
@@ -698,7 +703,7 @@ function RunRowDesktop({
         )}
       </td>
       <td className="py-2 text-xs whitespace-nowrap align-top">
-        {run.sessionId && (
+        {run.sessionId ? (
           <Link
             href={`/sessions/${run.sessionId}`}
             className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline"
@@ -707,7 +712,12 @@ function RunRowDesktop({
             <ExternalLink className="h-3 w-3" />
             <span>Session</span>
           </Link>
-        )}
+        ) : run.status === 'running' ? (
+          <span className="inline-flex items-center gap-1 text-yellow-500 animate-pulse text-[10px]">
+            <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
+            Live
+          </span>
+        ) : null}
       </td>
     </tr>
   );

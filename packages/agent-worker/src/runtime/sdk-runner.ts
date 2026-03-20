@@ -29,6 +29,8 @@ export type SdkRunnerOptions = {
   hooks?: SdkRunnerHooks;
   /** When set, instructs the SDK to resume a previous session instead of starting a fresh one. */
   resumeSessionId?: string;
+  /** Called as soon as the real Claude session ID is known (from init/result message). */
+  onSessionIdResolved?: (claudeSessionId: string) => void;
 };
 
 export type SdkRunResult = {
@@ -445,6 +447,7 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     abortSignal,
     hooks,
     resumeSessionId,
+    onSessionIdResolved,
   } = options;
 
   const canUseTool = createCanUseToolHandler({
@@ -545,11 +548,16 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
         currentToolInput = null;
       }
 
+      // Capture session ID as early as possible (init, system, or result messages)
+      if (message.session_id && message.session_id !== finalSessionId) {
+        finalSessionId = message.session_id;
+        onSessionIdResolved?.(finalSessionId);
+      }
+
       // Handle the final result message
       if (messageType === 'result') {
         accumulator.totalCost = getNumber(message.total_cost_usd, accumulator.totalCost);
         resultText = message.result ?? '';
-        finalSessionId = message.session_id ?? finalSessionId;
 
         const usage = message.usage;
         if (usage) {
