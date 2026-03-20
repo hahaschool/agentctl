@@ -15,7 +15,7 @@ module.exports = {
         REDIS_URL: 'redis://localhost:6379/1',
         LOG_LEVEL: 'info',
         // Generate once with: node -e "console.log(require(\"tweetnacl\").sign.keyPair().secretKey.toString())"
-        DISPATCH_SIGNING_SECRET_KEY: '',
+        DISPATCH_SIGNING_SECRET_KEY: '+j4g1UXDHz8+XlY9yEMa7lhcC3WCaiuyRfftOHbQq2c=',
         SKIP_MIGRATIONS: 'true',
         TIER_LABEL: 'dev-1',
         REPO_ROOT: REPO_ROOT,

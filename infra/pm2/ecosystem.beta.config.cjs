@@ -29,6 +29,7 @@ module.exports = {
         REDIS_URL: 'redis://localhost:6379/0',
         DATABASE_URL: 'postgresql://hahaschool@127.0.0.1:5433/agentctl',
         CREDENTIAL_ENCRYPTION_KEY: process.env.CREDENTIAL_ENCRYPTION_KEY || '',
+        DISPATCH_SIGNING_SECRET_KEY: '+j4g1UXDHz8+XlY9yEMa7lhcC3WCaiuyRfftOHbQq2c=',
         SKIP_MIGRATIONS: 'true',
         TIER_LABEL: 'beta',
         REPO_ROOT: REPO_ROOT,
