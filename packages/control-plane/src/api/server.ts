@@ -100,6 +100,7 @@ import { runSummaryRoutes } from './routes/run-summary.js';
 import { type RuntimeConfigRouteStore, runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
+import { sessionTakeoverRoutes } from './routes/session-takeover.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { skillDiscoverRoutes } from './routes/skill-discover.js';
@@ -571,6 +572,13 @@ export async function createServer({
       dbRegistry,
       workerPort,
       encryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY ?? '',
+    });
+
+    await app.register(sessionTakeoverRoutes, {
+      prefix: '/api/sessions',
+      db,
+      dbRegistry,
+      workerPort,
     });
   }
 
