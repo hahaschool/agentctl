@@ -22,7 +22,7 @@ import { TerminalView } from '../components/TerminalView';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
-import { formatCost, formatDurationMs } from '../lib/format-utils';
+import { formatCost, formatDurationMs, formatNumber } from '../lib/format-utils';
 import { queryKeys, sessionContentQuery, sessionQuery } from '../lib/queries';
 import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-export';
 
@@ -226,6 +226,16 @@ export function SessionDetailView(): React.JSX.Element {
         escapeRef={escapeRef}
       />
 
+      {/* Session metrics row */}
+      {s && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pt-3 shrink-0">
+          <MetricCard label="Model" value={s.model ?? 'unknown'} />
+          <MetricCard label="Input Tokens" value={formatNumber(s.metadata?.inputTokens)} />
+          <MetricCard label="Output Tokens" value={formatNumber(s.metadata?.outputTokens)} />
+          <MetricCard label="Cost" value={formatCost(s.metadata?.costUsd)} />
+        </div>
+      )}
+
       {/* Stall warning banner */}
       {s?.status === 'stalled' && (
         <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-600 dark:text-yellow-300 flex items-center gap-2 mx-5 mt-3 shrink-0">
@@ -318,6 +328,25 @@ export function SessionDetailView(): React.JSX.Element {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Metric card
+// ---------------------------------------------------------------------------
+
+function MetricCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}): React.JSX.Element {
+  return (
+    <div className="rounded-md border border-border/40 bg-card px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-sm font-mono font-medium">{String(value)}</div>
     </div>
   );
 }
