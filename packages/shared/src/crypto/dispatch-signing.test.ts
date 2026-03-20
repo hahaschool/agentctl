@@ -104,11 +104,15 @@ describe('dispatch-signing', () => {
     });
 
     expect(
-      verifyDispatchPayloadSignature(JSON.parse(JSON.stringify(payloadWithUndefinedFields)), signature, {
-        publicKey: keyPair.publicKey,
-        agentId: 'agent-123',
-        machineId: 'machine-abc',
-      }),
+      verifyDispatchPayloadSignature(
+        JSON.parse(JSON.stringify(payloadWithUndefinedFields)),
+        signature,
+        {
+          publicKey: keyPair.publicKey,
+          agentId: 'agent-123',
+          machineId: 'machine-abc',
+        },
+      ),
     ).toBe(true);
   });
 
