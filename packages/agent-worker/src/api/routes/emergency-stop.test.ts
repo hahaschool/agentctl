@@ -160,12 +160,13 @@ describe('Emergency stop routes', () => {
         payload: { prompt: 'Long running task' },
       });
 
-      // Verify agent is running
+      // Verify agent is active. Async start now returns immediately, so the
+      // agent may still be in the transitional "starting" state here.
       const statusBefore = await app.inject({
         method: 'GET',
         url: '/api/agents/force-kill',
       });
-      expect(['running', 'stopped']).toContain(statusBefore.json().status);
+      expect(['starting', 'running', 'stopped']).toContain(statusBefore.json().status);
 
       // Emergency stop
       const response = await app.inject({

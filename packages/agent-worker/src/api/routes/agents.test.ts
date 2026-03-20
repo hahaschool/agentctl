@@ -33,6 +33,23 @@ vi.mock('../../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-001';
 
+function expectAcceptedStartResponse(
+  response: Awaited<ReturnType<FastifyInstance['inject']>>,
+  agentId: string,
+): Record<string, unknown> {
+  expect(response.statusCode).toBe(202);
+
+  const body = response.json();
+  expect(body).toMatchObject({
+    ok: true,
+    agentId,
+    status: 'starting',
+  });
+  expect(body.sessionId).toBeDefined();
+
+  return body;
+}
+
 describe('Agent CRUD routes', () => {
   let app: FastifyInstance;
   let pool: AgentPool;
@@ -72,7 +89,7 @@ describe('Agent CRUD routes', () => {
           payload: { prompt: 'Second start request' },
         });
 
-        expect(first.statusCode).toBe(200);
+        expectAcceptedStartResponse(first, 'agent-rate-1');
         expect(second.statusCode).toBe(429);
         expect(second.json()).toEqual({
           statusCode: 429,
@@ -99,7 +116,7 @@ describe('Agent CRUD routes', () => {
             url: '/api/agents/agent-fastify-rate/start',
             payload: { prompt: `Start request ${i}` },
           });
-          expect(response.statusCode).toBe(200);
+          expectAcceptedStartResponse(response, 'agent-fastify-rate');
         }
 
         const limited = await app.inject({
@@ -120,22 +137,14 @@ describe('Agent CRUD routes', () => {
       }
     });
 
-    it('should start a new agent and return 200 with agentId and status', async () => {
+    it('should start a new agent and return 202 with agentId and starting status', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/agents/agent-1/start',
         payload: { prompt: 'Write a hello world script' },
       });
 
-      expect(response.statusCode).toBe(200);
-
-      const body = response.json();
-      expect(body.ok).toBe(true);
-      expect(body.agentId).toBe('agent-1');
-      expect(body.status).toBeDefined();
-      expect(body.sessionId).toBeDefined();
-      // After start() the stub simulation should be running
-      expect(['running', 'stopped']).toContain(body.status);
+      expectAcceptedStartResponse(response, 'agent-1');
     });
 
     it('should force-stop a running agent and re-create on duplicate start', async () => {
@@ -145,7 +154,7 @@ describe('Agent CRUD routes', () => {
         url: '/api/agents/agent-dup/start',
         payload: { prompt: 'First prompt' },
       });
-      expect(first.statusCode).toBe(200);
+      expectAcceptedStartResponse(first, 'agent-dup');
 
       // Starting the same agent again while running should force-stop
       // the existing instance and re-create it with the new prompt.
@@ -155,9 +164,7 @@ describe('Agent CRUD routes', () => {
         payload: { prompt: 'Second prompt' },
       });
 
-      expect(second.statusCode).toBe(200);
-
-      const body = second.json();
+      const body = expectAcceptedStartResponse(second, 'agent-dup');
       expect(body.ok).toBe(true);
     });
 
@@ -210,12 +217,9 @@ describe('Agent CRUD routes', () => {
         payload: { prompt: exactPrompt },
       });
 
-      // Should not be rejected for length — 200 means agent started successfully
-      expect(response.statusCode).toBe(200);
-
-      const body = response.json();
+      // Should not be rejected for length — 202 means startup was accepted.
+      const body = expectAcceptedStartResponse(response, 'agent-exact');
       expect(body.ok).toBe(true);
-      expect(body.agentId).toBe('agent-exact');
     });
 
     it('should reject an unsigned dispatch once a control-plane public key is provisioned', async () => {
@@ -321,11 +325,7 @@ describe('Agent CRUD routes', () => {
           },
         });
 
-        expect(response.statusCode).toBe(200);
-        expect(response.json()).toMatchObject({
-          ok: true,
-          agentId: 'agent-secure-valid',
-        });
+        expectAcceptedStartResponse(response, 'agent-secure-valid');
       } finally {
         rmSync(projectPath, { recursive: true, force: true });
         await securedApp.close();
@@ -463,10 +463,15 @@ describe('Agent CRUD routes', () => {
 
   describe('POST /api/agents/:id/steer', () => {
     it('steers a running agent and returns accepted', async () => {
-      await app.inject({
+      const startResponse = await app.inject({
         method: 'POST',
         url: '/api/agents/agent-steer/start',
         payload: { prompt: 'Do something' },
+      });
+      expectAcceptedStartResponse(startResponse, 'agent-steer');
+
+      await vi.waitFor(() => {
+        expect(pool.getAgent('agent-steer')?.getStatus()).toBe('running');
       });
 
       const response = await app.inject({
