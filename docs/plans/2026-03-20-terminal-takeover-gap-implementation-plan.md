@@ -8,10 +8,10 @@
 
 **Tech Stack:** Fastify WebSocket routes, `node-pty`, existing worker `CliSessionManager`, control-plane worker proxy routes, React/Next.js runtime session UI, Vitest, Playwright.
 
-> Status note (2026-03-21): Tasks 1-5 are now on `main` via PRs #340, #341,
-> #342, #343, #344, and #350. PR #350 delivered the focused runtime-session
-> attach e2e coverage, and the remaining work is only this roadmap/plan sync
-> that marks the overall slice delivered.
+> Status note (2026-03-21): Tasks 1-4 are now on `main` via PRs #340, #341,
+> #342, #343, and #344, and PR #350 delivered the runtime-session attach
+> e2e portion of Task 5 on `main`. The only remaining Task 5 work is this
+> roadmap/plan sync that marks the overall slice delivered.
 
 ---
 
