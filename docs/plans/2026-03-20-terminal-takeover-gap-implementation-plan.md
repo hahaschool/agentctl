@@ -13,24 +13,24 @@
 ## Audit Summary
 
 - Already shipped:
-  - Generic PTY terminals on a machine via [terminal.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/api/routes/terminal.ts) and [InteractiveTerminal.tsx](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/src/components/InteractiveTerminal.tsx).
-  - Machine-level terminal proxying via [terminal.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/control-plane/src/api/routes/terminal.ts).
-  - Claude Remote Control manual takeover via [manual-takeover.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/control-plane/src/api/routes/manual-takeover.ts), [manual-takeover.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/api/routes/manual-takeover.ts), and [RuntimeSessionPanel.tsx](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/src/views/RuntimeSessionPanel.tsx).
-  - A placeholder session-terminal WebSocket in [sessions.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/api/routes/sessions.ts) that replays output and sends input by stopping the session and spawning `--resume`.
+  - Generic PTY terminals on a machine via `packages/agent-worker/src/api/routes/terminal.ts` and `packages/web/src/components/InteractiveTerminal.tsx`.
+  - Machine-level terminal proxying via `packages/control-plane/src/api/routes/terminal.ts`.
+  - Claude Remote Control manual takeover via `packages/control-plane/src/api/routes/manual-takeover.ts`, `packages/agent-worker/src/api/routes/manual-takeover.ts`, and `packages/web/src/views/RuntimeSessionPanel.tsx`.
+  - A placeholder session-terminal WebSocket in `packages/agent-worker/src/api/routes/sessions.ts` that replays output and sends input by stopping the session and spawning `--resume`.
 - Not yet shipped:
   - Direct PTY attachment to the still-running managed Claude CLI process.
   - A runtime-session-scoped control-plane proxy for that attach flow.
   - Runtime session UI that opens an interactive terminal for the current managed session instead of a generic machine shell or a Claude Remote Control URL.
 - Scope decision:
-  - Keep the first implementation limited to Claude managed sessions backed by [cli-session-manager.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/runtime/cli-session-manager.ts).
+  - Keep the first implementation limited to Claude managed sessions backed by `packages/agent-worker/src/runtime/cli-session-manager.ts`.
   - Do not expand this slice to Codex parity, generic machine terminals, or a broader session transport refactor unless the PTY spike proves that the current Claude `-p` path cannot support direct attach.
 
 ## Task 1: Prove and encapsulate PTY-backed Claude session transport
 
 **Files:**
-- Modify: [cli-session-manager.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/runtime/cli-session-manager.ts)
-- Modify: [cli-session-manager.test.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/runtime/cli-session-manager.test.ts)
-- Reference: [terminal-manager.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/runtime/terminal-manager.ts)
+- Modify: `packages/agent-worker/src/runtime/cli-session-manager.ts`
+- Modify: `packages/agent-worker/src/runtime/cli-session-manager.test.ts`
+- Reference: `packages/agent-worker/src/runtime/terminal-manager.ts`
 
 **Step 1: Write the failing transport tests**
 
@@ -82,9 +82,9 @@ git commit -m "feat(worker): add PTY-backed Claude session transport"
 ## Task 2: Replace resume-based session terminal attach with live PTY attach
 
 **Files:**
-- Modify: [sessions.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/api/routes/sessions.ts)
-- Modify: [sessions.test.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/api/routes/sessions.test.ts)
-- Reference: [cli-session-manager.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/agent-worker/src/runtime/cli-session-manager.ts)
+- Modify: `packages/agent-worker/src/api/routes/sessions.ts`
+- Modify: `packages/agent-worker/src/api/routes/sessions.test.ts`
+- Reference: `packages/agent-worker/src/runtime/cli-session-manager.ts`
 
 **Step 1: Write failing route tests**
 
@@ -135,10 +135,10 @@ git commit -m "feat(worker): bridge live session terminal attach"
 ## Task 3: Add control-plane runtime-session terminal proxy routes
 
 **Files:**
-- Create or modify: [runtime-sessions.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/control-plane/src/api/routes/runtime-sessions.ts)
-- Create or modify: [runtime-sessions.test.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/control-plane/src/api/routes/runtime-sessions.test.ts)
-- Reference: [manual-takeover.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/control-plane/src/api/routes/manual-takeover.ts)
-- Reference: [terminal.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/control-plane/src/api/routes/terminal.ts)
+- Create or modify: `packages/control-plane/src/api/routes/runtime-sessions.ts`
+- Create or modify: `packages/control-plane/src/api/routes/runtime-sessions.test.ts`
+- Reference: `packages/control-plane/src/api/routes/manual-takeover.ts`
+- Reference: `packages/control-plane/src/api/routes/terminal.ts`
 
 **Step 1: Write failing control-plane tests**
 
@@ -188,11 +188,11 @@ git commit -m "feat(control-plane): proxy runtime session terminal attach"
 ## Task 4: Surface Attach Terminal in the runtime session UI
 
 **Files:**
-- Modify: [RuntimeSessionPanel.tsx](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/src/views/RuntimeSessionPanel.tsx)
-- Modify: [RuntimeSessionPanel.test.tsx](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/src/views/RuntimeSessionPanel.test.tsx)
-- Modify: [api.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/src/lib/api.ts)
-- Modify: [queries.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/src/lib/queries.ts)
-- Reuse: [InteractiveTerminal.tsx](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/src/components/InteractiveTerminal.tsx)
+- Modify: `packages/web/src/views/RuntimeSessionPanel.tsx`
+- Modify: `packages/web/src/views/RuntimeSessionPanel.test.tsx`
+- Modify: `packages/web/src/lib/api.ts`
+- Modify: `packages/web/src/lib/queries.ts`
+- Reuse: `packages/web/src/components/InteractiveTerminal.tsx`
 
 **Step 1: Write failing UI tests**
 
@@ -244,9 +244,9 @@ git commit -m "feat(web): add runtime session terminal attach"
 ## Task 5: End-to-end verification and roadmap reconciliation
 
 **Files:**
-- Modify: [runtime-sessions.spec.ts](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/packages/web/e2e/runtime-sessions.spec.ts)
-- Modify: [ROADMAP.md](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/docs/ROADMAP.md)
-- Modify: [2026-03-20-terminal-takeover-gap-implementation-plan.md](/Users/hahaschool/agentctl/.trees/codex-336-terminal-takeover-audit/docs/plans/2026-03-20-terminal-takeover-gap-implementation-plan.md)
+- Modify: `packages/web/e2e/runtime-sessions.spec.ts`
+- Modify: `docs/ROADMAP.md`
+- Modify: `docs/plans/2026-03-20-terminal-takeover-gap-implementation-plan.md`
 
 **Step 1: Add a focused runtime-session terminal e2e scenario**
 
