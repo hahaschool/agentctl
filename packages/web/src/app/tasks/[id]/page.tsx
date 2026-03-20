@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { LastUpdated } from '@/components/LastUpdated';
+import { PageContainer } from '@/components/PageContainer';
 import { RefreshButton } from '@/components/RefreshButton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -262,7 +263,7 @@ function StartRunPanel({ definitions }: StartRunPanelProps): React.JSX.Element {
     createRun.mutate({ definitionId: selectedDefId });
   };
 
-  if (definitions.length === 0) return <></>;
+  if (definitions.length === 0) return null;
 
   return (
     <div className="flex items-center gap-2">
@@ -323,107 +324,108 @@ export default function TaskGraphDetailPage(): React.JSX.Element {
   };
 
   return (
-    <div className="relative p-4 md:p-6 max-w-[1000px] animate-page-enter">
+    <div className="relative animate-page-enter">
       <FetchingBar isFetching={isFetching} />
-
-      {/* Back link */}
-      <div className="mb-4">
-        <Link
-          href="/tasks"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft size={14} />
-          All Tasks
-        </Link>
-      </div>
-
-      {/* Header skeleton */}
-      {graphQuery.isLoading && (
-        <div className="space-y-3 mb-6">
-          <Skeleton className="h-7 w-56 rounded-md" />
-          <Skeleton className="h-4 w-80 rounded-md" />
+      <PageContainer className="py-4 md:py-6">
+        {/* Back link */}
+        <div className="mb-4">
+          <Link
+            href="/tasks"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={14} />
+            All Tasks
+          </Link>
         </div>
-      )}
 
-      {/* Error */}
-      {graphQuery.error && (
-        <ErrorBanner
-          message={`Failed to load task graph: ${graphQuery.error.message}`}
-          onRetry={handleRefetch}
-        />
-      )}
-
-      {/* Loaded content */}
-      {!graphQuery.isLoading && graph && (
-        <>
-          {/* Page header */}
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-[22px] font-semibold tracking-tight">{graph.name}</h1>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    'capitalize text-[11px] font-medium',
-                    GRAPH_STATUS_CLASSES[graphStatus],
-                  )}
-                >
-                  {graphStatus}
-                </Badge>
-              </div>
-              <p className="text-[12px] font-mono text-muted-foreground">{graph.id}</p>
-              <p className="text-[13px] text-muted-foreground mt-1">
-                Created {formatDate(graph.createdAt)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <LastUpdated dataUpdatedAt={graphQuery.dataUpdatedAt} />
-              <RefreshButton onClick={handleRefetch} isFetching={isFetching} />
-            </div>
+        {/* Header skeleton */}
+        {graphQuery.isLoading && (
+          <div className="space-y-3 mb-6">
+            <Skeleton className="h-7 w-56 rounded-md" />
+            <Skeleton className="h-4 w-80 rounded-md" />
           </div>
+        )}
 
-          {/* Nodes section */}
-          <section className="mb-8">
-            <h2 className="text-[15px] font-semibold mb-3">
-              Nodes
-              <span className="ml-2 text-[12px] font-mono text-muted-foreground">
-                ({definitions.length})
-              </span>
-            </h2>
-            <NodesTable definitions={definitions} edges={edges} />
-          </section>
+        {/* Error */}
+        {graphQuery.error && (
+          <ErrorBanner
+            message={`Failed to load task graph: ${graphQuery.error.message}`}
+            onRetry={handleRefetch}
+          />
+        )}
 
-          {/* Run history section */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[15px] font-semibold">
-                Run History
+        {/* Loaded content */}
+        {!graphQuery.isLoading && graph && (
+          <>
+            {/* Page header */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h1 className="text-[22px] font-semibold tracking-tight">{graph.name}</h1>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'capitalize text-[11px] font-medium',
+                      GRAPH_STATUS_CLASSES[graphStatus],
+                    )}
+                  >
+                    {graphStatus}
+                  </Badge>
+                </div>
+                <p className="text-[12px] font-mono text-muted-foreground">{graph.id}</p>
+                <p className="text-[13px] text-muted-foreground mt-1">
+                  Created {formatDate(graph.createdAt)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <LastUpdated dataUpdatedAt={graphQuery.dataUpdatedAt} />
+                <RefreshButton onClick={handleRefetch} isFetching={isFetching} />
+              </div>
+            </div>
+
+            {/* Nodes section */}
+            <section className="mb-8">
+              <h2 className="text-[15px] font-semibold mb-3">
+                Nodes
                 <span className="ml-2 text-[12px] font-mono text-muted-foreground">
-                  ({runsForGraph.length})
+                  ({definitions.length})
                 </span>
               </h2>
-              {definitions.length > 0 && <StartRunPanel definitions={definitions} />}
-            </div>
+              <NodesTable definitions={definitions} edges={edges} />
+            </section>
 
-            {runsQuery.error && (
-              <ErrorBanner
-                message={`Failed to load run history: ${runsQuery.error.message}`}
-                onRetry={() => void runsQuery.refetch()}
-              />
-            )}
-
-            {runsQuery.isLoading ? (
-              <div className="space-y-2">
-                {['run-sk-1', 'run-sk-2'].map((key) => (
-                  <Skeleton key={key} className="h-12 rounded-md" />
-                ))}
+            {/* Run history section */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-[15px] font-semibold">
+                  Run History
+                  <span className="ml-2 text-[12px] font-mono text-muted-foreground">
+                    ({runsForGraph.length})
+                  </span>
+                </h2>
+                {definitions.length > 0 && <StartRunPanel definitions={definitions} />}
               </div>
-            ) : (
-              <RunHistoryTable runs={runsForGraph} definitions={definitions} />
-            )}
-          </section>
-        </>
-      )}
+
+              {runsQuery.error && (
+                <ErrorBanner
+                  message={`Failed to load run history: ${runsQuery.error.message}`}
+                  onRetry={() => void runsQuery.refetch()}
+                />
+              )}
+
+              {runsQuery.isLoading ? (
+                <div className="space-y-2">
+                  {['run-sk-1', 'run-sk-2'].map((key) => (
+                    <Skeleton key={key} className="h-12 rounded-md" />
+                  ))}
+                </div>
+              ) : (
+                <RunHistoryTable runs={runsForGraph} definitions={definitions} />
+              )}
+            </section>
+          </>
+        )}
+      </PageContainer>
     </div>
   );
 }

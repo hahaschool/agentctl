@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Clock, Filter, ShieldCheck } from 'lucide-re
 import type React from 'react';
 import { useMemo, useState } from 'react';
 
+import { PageContainer } from '@/components/PageContainer';
 import { PermissionRequestCard } from '@/components/PermissionRequestCard';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -172,7 +173,7 @@ export default function ApprovalsPage(): React.JSX.Element {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <PageContainer className="space-y-6 py-6">
       <div className="flex items-center gap-3">
         <ShieldCheck className="size-6 text-blue-500" />
         <div>
@@ -354,6 +355,6 @@ export default function ApprovalsPage(): React.JSX.Element {
           </div>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }
