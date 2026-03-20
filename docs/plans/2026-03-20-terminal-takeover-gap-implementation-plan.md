@@ -8,6 +8,11 @@
 
 **Tech Stack:** Fastify WebSocket routes, `node-pty`, existing worker `CliSessionManager`, control-plane worker proxy routes, React/Next.js runtime session UI, Vitest, Playwright.
 
+> Status note (2026-03-21): Tasks 1-4 are now on `main` via PRs #340, #341,
+> #342, #343, and #344. The only remaining work tracked here is Task 5
+> follow-through: focused runtime-session attach e2e coverage plus
+> roadmap/plan reconciliation.
+
 ---
 
 ## Audit Summary
@@ -267,11 +272,11 @@ Expected: PASS
 
 **Step 3: Sync roadmap/docs**
 
-- Update `docs/ROADMAP.md` so 27.3 stops claiming “planned, not yet started”.
-- Mark it as partial/in progress with the correct factual split:
-  - shipped: machine terminals, InteractiveTerminal, session-output replay, Claude Remote Control manual takeover
-  - missing: live PTY attach to the running managed session
-- Keep this plan doc linked from the roadmap.
+- Update `docs/ROADMAP.md` so 27.3 stops claiming “planned” / “live attach pending”.
+- Record the correct factual split:
+  - shipped on `main`: worker/control-plane/web/CLI live attach via PRs #340-#344
+  - remaining in this plan: focused runtime-session attach e2e + docs reconciliation
+- Keep this plan doc linked from the roadmap as the follow-through tracker.
 
 **Step 4: Run final focused verification**
 

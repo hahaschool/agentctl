@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-21 (PRs #330, #331, #332, #333, #334, #335, #336, #337, and #338 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing, node24 workflow follow-through, and the stale `updateRunPhase()` control-plane test repair are landed; PR #338 moved the remaining safe cache/artifact refs in `ci.yml`, `deploy-prod.yml`, and `dast-zap.yml` onto Node24 majors; as of this update, `38a24c0` is the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green; machines / terminal Playwright coverage is now tracked as a dedicated follow-up plan distinct from §27.3 live attach)
+> Last updated: 2026-03-21 (PRs #340, #341, #342, #343, and #344 are now on `main`; section 27.3's live managed-session terminal attach feature is shipped on `main`, while the linked gap plan remains active only for focused runtime-session attach e2e/docs follow-through; section 29 remains the dedicated machine-terminal Playwright follow-up; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `1e04375` is the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green, while the post-merge workflows for `1d89c6c` are still in progress)
 
 ## Current State
 
@@ -1639,27 +1639,27 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] PageContainer component with default/wide/full width modes *(PR #318)*
 - [x] Applied to approvals, tasks pages *(PR #318)*
 
-### 27.3 Terminal Takeover — P1 (partial groundwork shipped; live session attach pending)
+### 27.3 Terminal Takeover — P1 (feature shipped on `main`; focused follow-through pending)
 
-> Status note: AgentCTL already ships generic machine-level PTY terminals,
-> `InteractiveTerminal`, worker-side session output replay, and Claude Remote
-> Control manual takeover. The remaining gap is attaching the web terminal to
-> the real running managed Claude CLI process instead of a separate machine
-> shell or the current resume-based fallback in the worker session route. See
-> [plans/2026-03-20-terminal-takeover-gap-implementation-plan.md](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md).
+> Status note: PRs #340, #341, #342, #343, and #344 now ship the full live
+> managed-session terminal attach feature on `main` across the control plane,
+> worker, CLI, and web runtime session surfaces. The linked gap plan remains
+> active only for focused runtime-session attach e2e coverage and docs
+> reconciliation, not because the core feature is still missing.
 
 - [x] Machine-level PTY terminal APIs + xterm.js UI are on `main`
 - [x] Runtime session panel already exposes Claude Remote Control manual takeover
-- [ ] Worker: keep running Claude managed sessions attachable via live PTY
-- [ ] Control plane: proxy runtime-session terminal attach by managed session id
-- [ ] Web: "Attach Terminal" action for the runtime session panel
-- [ ] User can type directly into the running CLI to unblock interactive waits
+- [x] Worker: keep running Claude managed sessions attachable via live PTY *(PR #341)*
+- [x] Control plane: proxy runtime-session terminal attach/takeover by managed session id *(PR #340)*
+- [x] Web: `Attach Terminal` surfaces on session detail and runtime session panel *(PRs #343, #344)*
+- [x] CLI: `agentctl takeover <session-id>` for managed session terminals *(PR #342)*
+- [x] User can type directly into the running CLI to unblock interactive waits *(PRs #341, #343, #344)*
 
 ## 29. Machines / Terminal E2E Follow-up — P1
 
 > Plan: [plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md)
 >
-> Status note: this follow-up is scoped to the existing machine terminal page regression surface only. It intentionally excludes §27.3 live attach to the running managed Claude CLI, which remains tracked in its own terminal-takeover gap plan.
+> Status note: this follow-up is scoped to the existing machine terminal page regression surface only. It intentionally excludes §27.3 live attach to the running managed Claude CLI, which is now on `main`; the linked terminal-takeover gap plan only remains for focused runtime-session attach e2e/docs follow-through.
 
 - [ ] Add a dedicated Playwright path for the machine terminal page without pulling live managed-session attach into the same slice
 - [ ] Cover the terminal page shell, one stable terminal-connect/render path, and a minimal error-handling path for the existing machine terminal UI
@@ -1682,8 +1682,8 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
-| **P1** | Machines / Terminal E2E Follow-up | 29 | Planned — a dedicated Playwright follow-up now tracks the existing machine terminal page separately from §27.3 live managed-session attach |
-| **P1** | Terminal Takeover | 27.3 | In planning — machine-level PTY terminals, session replay, and Claude Remote Control takeover are shipped; live attach to the running managed Claude CLI is scoped in the 2026-03-20 gap plan |
+| **P1** | Machines / Terminal E2E Follow-up | 29 | Planned — a dedicated Playwright follow-up now tracks the existing machine terminal page separately from the already-shipped §27.3 live managed-session attach |
+| **P1** | Terminal Takeover | 27.3 | Feature delivered — PRs #340-#344 shipped worker/control-plane/web/CLI live attach on `main`; the linked gap plan only remains for focused runtime-session attach e2e + docs reconciliation |
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
@@ -1892,10 +1892,10 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; the remaining machines / terminal coverage now lives in the dedicated section 29 follow-up | 25.1-25.3 |
-| [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Active — tracks the deferred machine terminal / terminal page Playwright coverage separately from §27.3 live managed-session attach | 29 |
+| [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Active — tracks the deferred machine terminal / terminal page Playwright coverage separately from the already-shipped §27.3 live managed-session attach | 29 |
 | [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Delivered — PRs #307, #314, #322, and #326 are on `main`; as of 2026-03-20 GitHub code scanning shows `0` open alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) | 26.1 |
 | [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Delivered — PR #322 landed the git-capability hardening slice on `main`; post-#326 worker scans converged to `0` open alerts without removing `git` from the standard worker image | 26.2 |
-| [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Active — generic machine terminal infra, session replay, and Claude Remote Control takeover are already shipped; live PTY attach to the running managed Claude CLI remains | 27.3 |
+| [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Active — PRs #340-#344 shipped the live managed-session terminal attach feature on `main`; the remaining follow-through is focused runtime-session attach e2e + roadmap/plan reconciliation | 27.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
