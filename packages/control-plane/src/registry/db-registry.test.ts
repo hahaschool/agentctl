@@ -558,11 +558,13 @@ describe('DbAgentRegistry', () => {
       expect(mockDb.returning).toHaveBeenCalledOnce();
     });
 
-    it('throws RUN_NOT_FOUND when phase update targets a missing run', async () => {
+    it('skips phase update when no run row is updated', async () => {
       mockDb.returning.mockResolvedValue([]);
 
-      await expect(registry.updateRunPhase('ghost-run', 'running')).rejects.toThrow(
-        ControlPlaneError,
+      await expect(registry.updateRunPhase('ghost-run', 'running')).resolves.toBeUndefined();
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'ghost-run', phase: 'running' }),
+        'Phase update skipped (run not found or already terminal)',
       );
     });
   });
