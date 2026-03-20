@@ -775,6 +775,13 @@ export const api = {
     request<{ ok: boolean }>(`/api/sessions/${id}${opts?.purge ? '?purge=true' : ''}`, {
       method: 'DELETE',
     }),
+  killSession: (sessionId: string) =>
+    request<{ ok: boolean; message: string }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/kill`,
+      {
+        method: 'POST',
+      },
+    ),
   forkSession: (
     id: string,
     body: {

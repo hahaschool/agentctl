@@ -2,6 +2,7 @@
 
 import type { ExecutionSummary } from '@agentctl/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -224,6 +225,14 @@ export function SessionDetailView(): React.JSX.Element {
         onToggleFiles={toggleFiles}
         escapeRef={escapeRef}
       />
+
+      {/* Stall warning banner */}
+      {s?.status === 'stalled' && (
+        <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-600 dark:text-yellow-300 flex items-center gap-2 mx-5 mt-3 shrink-0">
+          <AlertTriangle className="size-4 shrink-0" />
+          <span>Session stalled — no output for 15+ minutes. The CLI process may be stuck.</span>
+        </div>
+      )}
 
       {/* Primary tab bar — Session | Memory */}
       <div className="flex gap-1 px-5 pt-3 pb-0 shrink-0 border-b border-border">

@@ -682,6 +682,18 @@ export function SessionsPage(): React.JSX.Element {
     }
   }, [selected, stopping, resetAndInvalidateSessions, toast]);
 
+  const handleForceKill = useCallback(async () => {
+    if (!selected) return;
+    if (!confirm('Force kill this session? The CLI process will be terminated.')) return;
+    try {
+      await api.killSession(selected.id);
+      toast.success('Session force killed');
+      resetAndInvalidateSessions();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }, [selected, resetAndInvalidateSessions, toast]);
+
   const handleConvertToAgent = useCallback(() => {
     if (!selected) return;
     const agentName = convertName.trim() || `agent-from-${selected.id.slice(0, 8)}`;
@@ -1361,6 +1373,7 @@ export function SessionsPage(): React.JSX.Element {
             onBack={() => setSelectedId(null)}
             onSend={() => void handleSend()}
             onStop={() => void handleStop()}
+            onForceKill={() => void handleForceKill()}
             onConvertToAgent={handleConvertToAgent}
             onOpenConvertDialog={() => {
               const agentSession = selectedRow.session;

@@ -1,5 +1,6 @@
 'use client';
 
+import { XCircle } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ type SessionDetailPanelProps = {
   onBack: () => void;
   onSend: () => void;
   onStop: () => void;
+  onForceKill: () => void;
   onConvertToAgent: () => void;
   onOpenConvertDialog: () => void;
   onCloseConvertDialog: () => void;
@@ -74,6 +76,7 @@ export function SessionDetailPanel({
   onBack,
   onSend,
   onStop,
+  onForceKill,
   onConvertToAgent,
   onOpenConvertDialog,
   onCloseConvertDialog,
@@ -196,6 +199,16 @@ export function SessionDetailPanel({
               className="h-8 px-3.5 bg-red-100/60 dark:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-300/40 dark:border-red-800/40 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50"
               confirmClassName="h-8 px-3.5 bg-red-700 text-white rounded-md text-xs font-medium cursor-pointer animate-pulse"
             />
+          )}
+          {(selected.status === 'active' || selected.status === 'stalled') && (
+            <button
+              type="button"
+              onClick={onForceKill}
+              className="h-8 flex items-center gap-1 px-3.5 bg-red-700/80 dark:bg-red-800/80 text-white border border-red-600/60 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-red-700 dark:hover:bg-red-700"
+            >
+              <XCircle className="size-3.5" />
+              Force Kill
+            </button>
           )}
         </div>
       </div>
