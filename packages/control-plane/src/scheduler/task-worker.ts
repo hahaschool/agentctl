@@ -424,9 +424,61 @@ export function createTaskWorker({
         const dispatchUrl = `http://${address}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
 
         // Include MCP server config in the dispatch payload.
-        // Job-level mcpServers (if provided) take priority over the agent's
-        // stored configuration, enabling callers to override per-dispatch.
-        const mcpServers = jobMcpServers ?? agent.config?.mcpServers ?? null;
+        // Priority: job-level > agent mcpServers > fetch from worker discovery > null.
+        // The mcpOverride model (excluded/custom) is resolved by fetching the worker's
+        // MCP discovery endpoint and applying the override.
+        let mcpServers = jobMcpServers ?? agent.config?.mcpServers ?? null;
+
+        if (!mcpServers && machine) {
+          try {
+            const workerMcpUrl = `http://${machine.tailscaleIp ?? machine.hostname}:${workerPort}/api/mcp/discover?runtime=claude-code`;
+            const mcpResp = await fetch(workerMcpUrl, { signal: AbortSignal.timeout(5_000) });
+            if (mcpResp.ok) {
+              const mcpBody = (await mcpResp.json()) as {
+                discovered?: Array<{
+                  name: string;
+                  config: { command: string; args?: string[]; env?: Record<string, string> };
+                }>;
+              };
+              const discovered = mcpBody.discovered ?? [];
+              const override = agent.config?.mcpOverride;
+              const excludedSet = new Set(override?.excluded ?? []);
+              const resolved: Record<
+                string,
+                { command: string; args?: string[]; env?: Record<string, string> }
+              > = {};
+
+              // Machine defaults minus excluded
+              for (const server of discovered) {
+                if (!excludedSet.has(server.name)) {
+                  resolved[server.name] = {
+                    command: server.config.command,
+                    args: server.config.args ?? [],
+                    env: server.config.env ?? {},
+                  };
+                }
+              }
+
+              // Add custom servers from override
+              for (const custom of override?.custom ?? []) {
+                if (custom.name && custom.command) {
+                  resolved[custom.name] = {
+                    command: custom.command,
+                    args: custom.args ?? [],
+                    env: (custom.env ?? {}) as Record<string, string>,
+                  };
+                }
+              }
+
+              if (Object.keys(resolved).length > 0) {
+                mcpServers = resolved;
+              }
+            }
+          } catch {
+            // MCP discovery failed — continue without MCP servers
+            jobLogger.warn('MCP discovery from worker failed — dispatching without MCP servers');
+          }
+        }
 
         const unsignedPayload = {
           runId,
