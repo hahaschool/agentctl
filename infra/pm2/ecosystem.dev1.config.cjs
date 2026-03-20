@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { deriveStableDispatchSigningSecretKey } = require('./dispatch-signing-key.cjs');
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
 module.exports = {
@@ -14,8 +15,10 @@ module.exports = {
         DATABASE_URL: 'postgresql://hahaschool@127.0.0.1:5433/agentctl_dev1',
         REDIS_URL: 'redis://localhost:6379/1',
         LOG_LEVEL: 'info',
-        // Generate once with: node -e "console.log(require(\"tweetnacl\").sign.keyPair().secretKey.toString())"
-        DISPATCH_SIGNING_SECRET_KEY: 'eAsC/APITjeM1OvEDkTyWF1Zx5X7+bC5ZV7Fq9QUtTZrZKMeLWI89qt6JXBetqOORDjT39jpSw1HNjo3/mDM8w==',
+        // Stable non-secret tier label; helper derives the Ed25519 key material locally.
+        DISPATCH_SIGNING_SECRET_KEY:
+          process.env.DISPATCH_SIGNING_SECRET_KEY ||
+          deriveStableDispatchSigningSecretKey('dev-1'),
         SKIP_MIGRATIONS: 'true',
         TIER_LABEL: 'dev-1',
         REPO_ROOT: REPO_ROOT,
