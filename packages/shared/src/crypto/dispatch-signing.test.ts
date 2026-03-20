@@ -85,6 +85,37 @@ describe('dispatch-signing', () => {
     ).toBe(false);
   });
 
+  it('verifies against the JSON wire payload when object fields are undefined', () => {
+    const keyPair = generateDispatchSigningKeyPair();
+    const payloadWithUndefinedFields = {
+      ...basePayload,
+      config: {
+        ...basePayload.config,
+        permissionMode: undefined,
+        systemPrompt: undefined,
+      },
+    };
+    const signature = signDispatchPayload(payloadWithUndefinedFields, {
+      agentId: 'agent-123',
+      machineId: 'machine-abc',
+      secretKey: keyPair.secretKey,
+      issuedAt: '2026-03-10T10:00:00.000Z',
+      nonce: 'nonce-123',
+    });
+
+    expect(
+      verifyDispatchPayloadSignature(
+        JSON.parse(JSON.stringify(payloadWithUndefinedFields)),
+        signature,
+        {
+          publicKey: keyPair.publicKey,
+          agentId: 'agent-123',
+          machineId: 'machine-abc',
+        },
+      ),
+    ).toBe(true);
+  });
+
   it('fails verification when the signature algorithm metadata is invalid', () => {
     const keyPair = generateDispatchSigningKeyPair();
     const signature = signDispatchPayload(basePayload, {

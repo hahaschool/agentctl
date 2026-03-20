@@ -216,7 +216,8 @@ function decodeSigningPublicKey(publicKey: string): Uint8Array {
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value);
+    const json = JSON.stringify(value);
+    return json === undefined ? 'null' : json;
   }
 
   if (Array.isArray(value)) {
@@ -224,6 +225,7 @@ function stableStringify(value: unknown): string {
   }
 
   const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => JSON.stringify(entryValue) !== undefined)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringify(entryValue)}`);
 
