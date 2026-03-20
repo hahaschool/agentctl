@@ -5,6 +5,7 @@ import {
   Bot,
   Compass,
   Database,
+  ExternalLink,
   Gauge,
   ListTree,
   Menu,
@@ -390,9 +391,15 @@ export function Sidebar(): React.JSX.Element {
 
           {/* Version + theme */}
           <div className="flex items-center justify-between md:justify-center lg:justify-between">
-            <span className="text-[10px] text-muted-foreground/50 max-md:inline hidden lg:inline">
+            <a
+              href="https://github.com/hahaschool/agentctl/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-mono text-muted-foreground hover:text-blue-500 transition-colors flex items-center gap-1 max-md:inline-flex hidden lg:flex"
+            >
               v0.3.0
-            </span>
+              <ExternalLink className="size-2.5" aria-hidden="true" />
+            </a>
             {mounted ? (
               <button
                 type="button"

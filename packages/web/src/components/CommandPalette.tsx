@@ -533,7 +533,17 @@ export function CommandPalette({ open, onClose }: Props): React.JSX.Element | nu
     const sessionResults = (sessions?.sessions ?? [])
       .map((session) => {
         const summary = sessionSummary(session);
-        const score = scoreFields(q, [summary, session.id, session.projectPath, session.agentName]);
+        const initialPrompt =
+          typeof session.metadata.initialPrompt === 'string'
+            ? session.metadata.initialPrompt
+            : null;
+        const score = scoreFields(q, [
+          summary,
+          session.id,
+          session.projectPath,
+          session.agentName,
+          initialPrompt,
+        ]);
         if (score === null) return null;
         return {
           score,
