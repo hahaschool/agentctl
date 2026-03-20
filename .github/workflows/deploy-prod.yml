@@ -196,7 +196,7 @@ jobs:
           echo "backup_file=agentctl-backup-${TIMESTAMP}.dump" >> "$GITHUB_ENV"
 
       - name: Upload database backup artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: db-backup-${{ steps.tag.outputs.image_tag }}
           path: ${{ env.backup_file }}
