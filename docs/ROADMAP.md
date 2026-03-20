@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #324, #325, and #326 are now on `main`; section 26 is delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; the next planned session-lifecycle follow-up remains §27.3 terminal takeover)
+> Last updated: 2026-03-20 (PRs #330, #331, #332, and #333 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing follow-through is landed, and the latest `main` `CI`, `Security Audit`, and `Build` runs are green on commit `2ffa870`; the next planned session-lifecycle follow-up remains §27.3 terminal takeover)
 
 ## Current State
 
@@ -25,6 +25,12 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 <summary>✅ All complete — 9 workflows, full deploy chain, fleet rollout</summary>
 
 ### 1.1 CI Hardening
+
+> Status note: PR #333 modernized the core `ci.yml`, `security-audit.yml`, and
+> `build-images.yml` workflows off the old Node20-based `actions/checkout`,
+> `actions/setup-node`, and `github/codeql-action` majors, while moving the
+> repo gitleaks runs onto the official CLI path. The latest `main` `CI`,
+> `Security Audit`, and `Build` runs are green on commit `2ffa870`.
 
 - [x] `dorny/paths-filter` for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
@@ -150,9 +156,12 @@ Pre-execution safety: safe (git clean) → guarded (dirty) → risky (non-git) �
 
 > Design doc: [plans/2026-03-10-astro-agent-patterns-design.md](plans/2026-03-10-astro-agent-patterns-design.md) §11.3
 >
-> Status note: Implemented on `main` via signed control-plane dispatches, worker-side
-> verification, and verification-key bootstrap on register/heartbeat. Remaining
-> work here is roadmap hygiene rather than missing runtime wiring.
+> Status note: Delivered on `main` with follow-through fixes. PR #330 aligned the
+> shared signing payload with the JSON wire format by omitting `undefined`
+> fields from the signed object, and PR #332 replaced committed PM2
+> dispatch-signing literals with stable per-tier Ed25519 key derivation plus
+> environment overrides. Remaining work here is roadmap hygiene rather than
+> missing runtime wiring.
 
 Ed25519 signing of dispatch payloads for defense-in-depth.
 
