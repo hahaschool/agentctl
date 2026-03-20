@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-21 (PRs #340, #341, #342, #343, #344, #345, #346, and #347 are now on `main`; section 27.3's live managed-session terminal attach feature is shipped on `main`, while the linked gap plan remains active only for focused runtime-session attach e2e/docs follow-through; section 29 is now delivered via the dedicated machine-terminal Playwright coverage in PR #346; PR #347 repaired the stale agent-worker async-start route/test mismatch behind the failed `main` CI runs on `33f16fb` and `a5b7957`; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `7fdbdd9` is now the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green)
+> Last updated: 2026-03-21 (PR #350 is now on `main`, so section 27.3's live managed-session terminal attach work is fully delivered with focused runtime-session attach e2e coverage on `main`; section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346; direct `main` commits `7a2ae06` and `d1b7a77` delivered section 30.2 early session linking plus section 30.1 real-time cost/token reporting in run history; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `b5b807e` remains the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green while newer `main` workflows settle)
 
 ## Current State
 
@@ -1639,13 +1639,14 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] PageContainer component with default/wide/full width modes *(PR #318)*
 - [x] Applied to approvals, tasks pages *(PR #318)*
 
-### 27.3 Terminal Takeover — P1 (feature shipped on `main`; focused follow-through pending)
+### 27.3 Terminal Takeover — Delivered
 
-> Status note: PRs #340, #341, #342, #343, and #344 now ship the full live
-> managed-session terminal attach feature on `main` across the control plane,
-> worker, CLI, and web runtime session surfaces. The linked gap plan remains
-> active only for focused runtime-session attach e2e coverage and docs
-> reconciliation, not because the core feature is still missing.
+> Status note: PRs #340, #341, #342, #343, #344, and #350 now ship the full
+> live managed-session terminal attach feature on `main` across the control
+> plane, worker, CLI, and web runtime session surfaces, including focused
+> runtime-session attach Playwright coverage. The linked gap plan is now
+> delivered as the implementation record for this slice, not an active
+> follow-through tracker.
 
 - [x] Machine-level PTY terminal APIs + xterm.js UI are on `main`
 - [x] Runtime session panel already exposes Claude Remote Control manual takeover
@@ -1654,6 +1655,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Web: `Attach Terminal` surfaces on session detail and runtime session panel *(PRs #343, #344)*
 - [x] CLI: `agentctl takeover <session-id>` for managed session terminals *(PR #342)*
 - [x] User can type directly into the running CLI to unblock interactive waits *(PRs #341, #343, #344)*
+- [x] Focused runtime-session attach/release e2e coverage landed in `runtime-sessions.spec.ts` *(PR #350)*
 
 ## 29. Machines / Terminal E2E Follow-up — Delivered
 
@@ -1667,11 +1669,16 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 30. Running Agent Observability
 
-### 30.1 Real-time Cost + Token Reporting — P0
+### 30.1 Real-time Cost + Token Reporting — Delivered
 
-- [ ] SDK runner reports cost/token increments during run via CP callback
-- [ ] Run history shows live-updating cost and token counts for running agents
-- [ ] Token display (input/output) added to run history rows alongside cost
+> Status note: direct `main` commit `d1b7a77` completed the remaining
+> observability slice by forwarding periodic cost/token deltas through the
+> control plane and surfacing token counts alongside cost in run history while
+> runs are still active.
+
+- [x] SDK runner reports cost/token increments during run via CP callback
+- [x] Run history shows live-updating cost and token counts for running agents
+- [x] Token display (input/output) added to run history rows alongside cost
 
 ### 30.2 Early Session ID Linking — Delivered
 
@@ -1688,6 +1695,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
+| **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
@@ -1697,7 +1705,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P1** | Machines / Terminal E2E Follow-up | 29 | ✅ Delivered — PR #346 shipped dedicated Playwright coverage for the existing machine terminal page without widening into §27.3 |
-| **P1** | Terminal Takeover | 27.3 | Feature delivered — PRs #340-#344 shipped worker/control-plane/web/CLI live attach on `main`; the linked gap plan only remains for focused runtime-session attach e2e + docs reconciliation |
+| **P1** | ~~Terminal Takeover~~ | 27.3 | ✅ Delivered — PRs #340-#344 and #350 shipped worker/control-plane/web/CLI live attach plus focused runtime-session attach e2e coverage on `main` |
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
@@ -1909,7 +1917,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Delivered — PR #346 added the dedicated machine terminal Playwright coverage on `main`; no page-level hardening was required beyond the focused e2e spec | 29 |
 | [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Delivered — PRs #307, #314, #322, and #326 are on `main`; as of 2026-03-20 GitHub code scanning shows `0` open alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) | 26.1 |
 | [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Delivered — PR #322 landed the git-capability hardening slice on `main`; post-#326 worker scans converged to `0` open alerts without removing `git` from the standard worker image | 26.2 |
-| [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Active — PRs #340-#344 shipped the live managed-session terminal attach feature on `main`; the remaining follow-through is focused runtime-session attach e2e + roadmap/plan reconciliation | 27.3 |
+| [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Delivered — PRs #340-#344 and #350 shipped the live managed-session terminal attach feature plus focused runtime-session attach e2e coverage on `main`; this plan now remains only as the implementation record | 27.3 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
