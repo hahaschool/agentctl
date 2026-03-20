@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { SessionMemoryTab } from '@/components/memory/SessionMemoryTab';
 import { StatusBadge } from '@/components/StatusBadge';
+import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { FetchingBar } from '../components/FetchingBar';
@@ -18,10 +19,12 @@ import { MessageInput } from '../components/MessageInput';
 import { SessionHeader } from '../components/SessionHeader';
 import { MessageList, ViewModeToggle } from '../components/SessionMessageList';
 import { SteerInput } from '../components/SteerInput';
+import { TakeoverPanel } from '../components/TakeoverPanel';
 import { TerminalView } from '../components/TerminalView';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
+import { api } from '../lib/api';
 import { formatCost, formatDurationMs, formatNumber } from '../lib/format-utils';
 import { queryKeys, sessionContentQuery, sessionQuery } from '../lib/queries';
 import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-export';
@@ -30,17 +33,68 @@ import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-exp
 // Session detail view
 // ---------------------------------------------------------------------------
 
+type TakeoverPhase = 'idle' | 'initiating' | 'active';
+type ActiveTakeover = { terminalId: string; machineId: string };
+
 export function SessionDetailView(): React.JSX.Element {
   const params = useParams<{ id: string }>();
   const sessionId = params.id;
+  const toast = useToast();
 
   const session = useQuery(sessionQuery(sessionId));
   const s = session.data;
+  const queryClient = useQueryClient();
 
   // We need the Claude session ID (not the RC session ID) to fetch content
   const claudeSessionId = s?.claudeSessionId ?? '';
   const [contentLimit, setContentLimit] = useState(2000);
   const [autoRefresh, setAutoRefresh] = useState(true);
+
+  // ---------------------------------------------------------------------------
+  // Takeover state
+  // ---------------------------------------------------------------------------
+  const [takeoverPhase, setTakeoverPhase] = useState<TakeoverPhase>('idle');
+  const [activeTakeover, setActiveTakeover] = useState<ActiveTakeover | null>(null);
+
+  const handleTakeover = useCallback(async () => {
+    if (!s?.claudeSessionId) return;
+    const confirmed = confirm(
+      'This will pause the managed agent and give you interactive control.\n\n' +
+        'In-progress tool executions will be interrupted.\n\n' +
+        'Continue?',
+    );
+    if (!confirmed) return;
+
+    setTakeoverPhase('initiating');
+    try {
+      const result = await api.sessionTakeover(sessionId);
+      setActiveTakeover({
+        terminalId: result.terminalId,
+        machineId: result.machineId ?? s.machineId,
+      });
+      setTakeoverPhase('active');
+    } catch (err) {
+      setTakeoverPhase('idle');
+      toast.error(err instanceof Error ? err.message : 'Takeover failed');
+    }
+  }, [s, sessionId, toast]);
+
+  const handleTakeoverClose = useCallback(() => {
+    setTakeoverPhase('idle');
+    setActiveTakeover(null);
+  }, []);
+
+  const handleTakeoverReleased = useCallback(
+    ({ resumed }: { resumed: boolean }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+      if (resumed) {
+        toast.success('Session released — automation resuming');
+      } else {
+        toast.success('Session released — automation paused');
+      }
+    },
+    [queryClient, sessionId, toast],
+  );
   const content = useQuery({
     ...sessionContentQuery(claudeSessionId, {
       machineId: s?.machineId ?? '',
@@ -80,7 +134,6 @@ export function SessionDetailView(): React.JSX.Element {
   clearStreamRef.current = stream.clearStreamOutput;
 
   // Invalidate session query when SSE status changes (instead of waiting for poll interval)
-  const queryClient = useQueryClient();
   useEffect(() => {
     if (stream.latestStatus) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
@@ -224,7 +277,20 @@ export function SessionDetailView(): React.JSX.Element {
         showFiles={showFiles}
         onToggleFiles={toggleFiles}
         escapeRef={escapeRef}
+        takeoverPhase={takeoverPhase}
+        onTakeover={() => void handleTakeover()}
       />
+
+      {/* Takeover panel — full-screen modal overlay */}
+      {takeoverPhase === 'active' && activeTakeover && (
+        <TakeoverPanel
+          sessionId={sessionId}
+          machineId={activeTakeover.machineId}
+          terminalId={activeTakeover.terminalId}
+          onClose={handleTakeoverClose}
+          onReleased={handleTakeoverReleased}
+        />
+      )}
 
       {/* Session metrics row */}
       {s && (
@@ -313,8 +379,9 @@ export function SessionDetailView(): React.JSX.Element {
             )}
 
             {/* Input area — steer (agent) or message (session) */}
+            {/* Disabled during takeover — user controls session directly via the terminal */}
             {isActive && s.agentId ? (
-              <SteerInput agentId={s.agentId} isRunning={isActive} />
+              <SteerInput agentId={s.agentId} isRunning={isActive && takeoverPhase !== 'active'} />
             ) : (
               <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
             )}
