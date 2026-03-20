@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { WorkdirSafetyTier } from '@agentctl/shared';
+import { safeStatSync, sanitizePath } from '../utils/path-security.js';
+import { isGitUnavailableError } from './git-runtime.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -28,8 +30,41 @@ export async function checkWorkdirSafety(
   workdir: string,
   activeTaskCount: number,
 ): Promise<SafetyCheckResult> {
-  const isGitRepo = await detectGitRepo(workdir);
   const parallelTaskCount = Math.max(activeTaskCount, 0);
+  const gitRepoState = await detectGitRepoState(workdir);
+
+  if (gitRepoState === 'workdir_unavailable') {
+    return {
+      tier: 'unsafe',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount,
+      blockReason: 'Working directory does not exist or is unavailable.',
+    };
+  }
+
+  if (gitRepoState === 'git_unavailable') {
+    if (parallelTaskCount > 1) {
+      return {
+        tier: 'unsafe',
+        isGitRepo: false,
+        hasUncommittedChanges: false,
+        parallelTaskCount,
+        blockReason:
+          'Git is unavailable and parallel tasks require worktree isolation before execution.',
+      };
+    }
+
+    return {
+      tier: 'guarded',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount,
+      warning: 'Git is unavailable; worktree isolation and repository safety checks are disabled.',
+    };
+  }
+
+  const isGitRepo = gitRepoState === 'repo';
 
   if (!isGitRepo) {
     if (parallelTaskCount > 1) {
@@ -102,21 +137,36 @@ export async function createSandbox(workdir: string, taskId: string): Promise<Sa
   };
 }
 
-async function detectGitRepo(workdir: string): Promise<boolean> {
+async function detectGitRepoState(
+  workdir: string,
+): Promise<'repo' | 'not_repo' | 'git_unavailable' | 'workdir_unavailable'> {
+  let safeWorkdir: string;
+
+  try {
+    safeWorkdir = sanitizePath(workdir, '/');
+    const workdirStat = safeStatSync(safeWorkdir, '/');
+    if (!workdirStat.isDirectory()) {
+      return 'workdir_unavailable';
+    }
+  } catch {
+    return 'workdir_unavailable';
+  }
+
   try {
     const { stdout } = await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], {
-      cwd: workdir,
+      cwd: safeWorkdir,
     });
-    return stdout.trim() === 'true';
-  } catch {
-    return false;
+    return stdout.trim() === 'true' ? 'repo' : 'not_repo';
+  } catch (err) {
+    return isGitUnavailableError(err) ? 'git_unavailable' : 'not_repo';
   }
 }
 
 async function detectUncommittedChanges(workdir: string): Promise<boolean> {
   try {
+    const safeWorkdir = sanitizePath(workdir, '/');
     const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
-      cwd: workdir,
+      cwd: safeWorkdir,
     });
     return stdout.trim().length > 0;
   } catch {
