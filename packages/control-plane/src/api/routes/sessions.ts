@@ -29,7 +29,7 @@ const STALE_SESSION_TIMEOUT_MS = Number(process.env.STALE_SESSION_TIMEOUT_MS) ||
 /** How often the stale session reaper runs. */
 const REAPER_INTERVAL_MS = Number(process.env.REAPER_INTERVAL_MS) || 60 * 1000;
 
-const RC_SESSION_STATUSES = ['starting', 'active', 'paused', 'ended', 'error'] as const;
+const RC_SESSION_STATUSES = ['starting', 'active', 'paused', 'ended', 'error', 'stalled'] as const;
 type RcSessionStatus = (typeof RC_SESSION_STATUSES)[number];
 
 /** Get the best address for a machine, preferring tailscaleIp with hostname fallback. */
@@ -1679,6 +1679,65 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       }
 
       return { ok: true, session: updated };
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /:sessionId/kill — force kill a session on the worker
+  // ---------------------------------------------------------------------------
+
+  app.post<{ Params: { sessionId: string } }>(
+    '/:sessionId/kill',
+    { schema: { tags: ['sessions'], summary: 'Force kill a session' } },
+    async (request, reply) => {
+      const { sessionId } = request.params;
+
+      // Look up session to find machineId
+      const [session] = await db.select().from(rcSessions).where(eq(rcSessions.id, sessionId));
+      if (!session) {
+        return reply.code(404).send({ error: 'SESSION_NOT_FOUND' });
+      }
+
+      const machineId = session.machineId;
+      if (!machineId) {
+        return reply
+          .code(400)
+          .send({ error: 'NO_MACHINE', message: 'Session has no associated machine' });
+      }
+
+      const machine = await dbRegistry.getMachine(machineId);
+      if (!machine || machine.status === 'offline') {
+        return reply.code(503).send({ error: 'MACHINE_OFFLINE' });
+      }
+
+      // Find the worker session ID (may differ from CP session ID)
+      const workerSessionRef = session.claudeSessionId ?? sessionId;
+      const workerUrl = `http://${machineAddress(machine)}:${String(workerPort)}/api/sessions/${encodeURIComponent(workerSessionRef)}/kill`;
+
+      try {
+        const resp = await fetch(workerUrl, {
+          method: 'POST',
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body: unknown = await resp.json();
+
+        // Update session status to ended
+        await db
+          .update(rcSessions)
+          .set({
+            status: 'ended',
+            endedAt: new Date(),
+            metadata: sql`COALESCE(${rcSessions.metadata}, '{}'::jsonb) || '{"endReason":"force-killed"}'::jsonb`,
+          })
+          .where(eq(rcSessions.id, sessionId));
+
+        return reply.send(body);
+      } catch (err) {
+        return reply.code(502).send({
+          error: 'WORKER_UNREACHABLE',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     },
   );
 };
