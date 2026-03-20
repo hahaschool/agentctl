@@ -435,10 +435,14 @@ export function createTaskWorker({
             model,
             allowedTools,
             mcpServers,
-            permissionMode: agent.config?.permissionMode ?? undefined,
-            defaultPrompt: agent.config?.defaultPrompt ?? undefined,
-            systemPrompt: agent.config?.systemPrompt ?? undefined,
-            instructionsStrategy: agent.config?.instructionsStrategy ?? undefined,
+            ...(agent.config?.permissionMode
+              ? { permissionMode: agent.config.permissionMode }
+              : {}),
+            ...(agent.config?.defaultPrompt ? { defaultPrompt: agent.config.defaultPrompt } : {}),
+            ...(agent.config?.systemPrompt ? { systemPrompt: agent.config.systemPrompt } : {}),
+            ...(agent.config?.instructionsStrategy
+              ? { instructionsStrategy: agent.config.instructionsStrategy }
+              : {}),
           },
           resumeSession: effectiveResumeSession,
           projectPath: agent.projectPath,
