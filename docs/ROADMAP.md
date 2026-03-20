@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #330, #331, #332, #333, #334, #335, and #336 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing, node24 workflow follow-through, and the stale `updateRunPhase()` control-plane test repair are landed; as of this update, the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green remains `2ffa870`, while fresh post-#336 reruns are in flight on `976a68a`; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
+> Last updated: 2026-03-20 (PRs #330, #331, #332, #333, #334, #335, and #336 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing, node24 workflow follow-through, and the stale `updateRunPhase()` control-plane test repair are landed; as of this update, `976a68a` is the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
 
 ## Current State
 
@@ -35,9 +35,8 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > `actions/checkout` / `actions/setup-node` refs to `v5`. PR #336 then aligned
 > the stale `DbAgentRegistry.updateRunPhase()` missing-run expectation with the
 > intentional no-op/logged skip semantics introduced by `1ead1a7`. As of this
-> update, the latest `main` commit where `CI`, `Security Audit`, and `Build`
-> are all confirmed green remains `2ffa870`, while fresh post-#336 reruns are
-> in flight on `976a68a`.
+> update, `976a68a` is the latest `main` commit where `CI`, `Security Audit`,
+> and `Build` are all confirmed green.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
