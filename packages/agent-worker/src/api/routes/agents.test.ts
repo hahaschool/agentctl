@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { AgentError, generateDispatchSigningKeyPair, signDispatchPayload } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
@@ -293,37 +295,41 @@ describe('Agent CRUD routes', () => {
           publicKey: signingKeyPair.publicKey,
         }),
       });
+      const projectPath = mkdtempSync(join(tmpdir(), 'agentctl-signed-dispatch-'));
 
-      const payload = {
-        prompt: 'Start the signed agent',
-        runId: 'run-123',
-        projectPath: '/repo/project',
-        controlPlaneUrl: 'https://control.example.com',
-        resumeSession: null,
-      };
+      try {
+        const payload = {
+          prompt: 'Start the signed agent',
+          runId: 'run-123',
+          projectPath,
+          controlPlaneUrl: 'https://control.example.com',
+          resumeSession: null,
+        };
 
-      const response = await securedApp.inject({
-        method: 'POST',
-        url: '/api/agents/agent-secure-valid/start',
-        payload: {
-          ...payload,
-          dispatchSignature: signDispatchPayload(payload, {
-            agentId: 'agent-secure-valid',
-            machineId: MACHINE_ID,
-            secretKey: signingKeyPair.secretKey,
-            issuedAt: '2026-03-10T10:00:00.000Z',
-            nonce: 'nonce-123',
-          }),
-        },
-      });
+        const response = await securedApp.inject({
+          method: 'POST',
+          url: '/api/agents/agent-secure-valid/start',
+          payload: {
+            ...payload,
+            dispatchSignature: signDispatchPayload(payload, {
+              agentId: 'agent-secure-valid',
+              machineId: MACHINE_ID,
+              secretKey: signingKeyPair.secretKey,
+              issuedAt: '2026-03-10T10:00:00.000Z',
+              nonce: 'nonce-123',
+            }),
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        ok: true,
-        agentId: 'agent-secure-valid',
-      });
-
-      await securedApp.close();
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          ok: true,
+          agentId: 'agent-secure-valid',
+        });
+      } finally {
+        rmSync(projectPath, { recursive: true, force: true });
+        await securedApp.close();
+      }
     });
 
     it('logs verification failures for invalid signatures', async () => {

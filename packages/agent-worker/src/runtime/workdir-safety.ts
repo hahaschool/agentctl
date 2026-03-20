@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, rm, stat } from 'node:fs/promises';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { WorkdirSafetyTier } from '@agentctl/shared';
+import { safeStatSync, sanitizePath } from '../utils/path-security.js';
 import { isGitUnavailableError } from './git-runtime.js';
 
 const execFileAsync = promisify(execFile);
@@ -139,8 +140,11 @@ export async function createSandbox(workdir: string, taskId: string): Promise<Sa
 async function detectGitRepoState(
   workdir: string,
 ): Promise<'repo' | 'not_repo' | 'git_unavailable' | 'workdir_unavailable'> {
+  let safeWorkdir: string;
+
   try {
-    const workdirStat = await stat(workdir);
+    safeWorkdir = sanitizePath(workdir, '/');
+    const workdirStat = safeStatSync(safeWorkdir, '/');
     if (!workdirStat.isDirectory()) {
       return 'workdir_unavailable';
     }
@@ -150,7 +154,7 @@ async function detectGitRepoState(
 
   try {
     const { stdout } = await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], {
-      cwd: workdir,
+      cwd: safeWorkdir,
     });
     return stdout.trim() === 'true' ? 'repo' : 'not_repo';
   } catch (err) {
@@ -160,8 +164,9 @@ async function detectGitRepoState(
 
 async function detectUncommittedChanges(workdir: string): Promise<boolean> {
   try {
+    const safeWorkdir = sanitizePath(workdir, '/');
     const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
-      cwd: workdir,
+      cwd: safeWorkdir,
     });
     return stdout.trim().length > 0;
   } catch {
