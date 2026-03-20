@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #330, #331, #332, #333, #334, #335, and #336 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing, node24 workflow follow-through, and the stale `updateRunPhase()` control-plane test repair are landed; as of this update, `976a68a` is the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
+> Last updated: 2026-03-21 (PRs #330, #331, #332, #333, #334, #335, #336, #337, and #338 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing, node24 workflow follow-through, and the stale `updateRunPhase()` control-plane test repair are landed; PR #338 moved the remaining safe cache/artifact refs in `ci.yml`, `deploy-prod.yml`, and `dast-zap.yml` onto Node24 majors; as of this update, `38a24c0` is the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green; machines / terminal Playwright coverage is now tracked as a dedicated follow-up plan distinct from §27.3 live attach)
 
 ## Current State
 
@@ -34,9 +34,14 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > GitHub API changed-files detector and bumping the remaining deploy-adjacent
 > `actions/checkout` / `actions/setup-node` refs to `v5`. PR #336 then aligned
 > the stale `DbAgentRegistry.updateRunPhase()` missing-run expectation with the
-> intentional no-op/logged skip semantics introduced by `1ead1a7`. As of this
-> update, `976a68a` is the latest `main` commit where `CI`, `Security Audit`,
-> and `Build` are all confirmed green.
+> intentional no-op/logged skip semantics introduced by `1ead1a7`. PR #338
+> then upgraded the remaining safe `actions/cache`, `actions/upload-artifact`,
+> and `actions/download-artifact` refs in `ci.yml`, `deploy-prod.yml`, and
+> `dast-zap.yml` to the current Node24 majors while leaving
+> `build-images.yml` / `security-audit.yml` alone to avoid overlap with an
+> already-active Trivy remediation branch. As of this update, `38a24c0` is
+> the latest `main` commit where `CI`, `Security Audit`, and `Build` are all
+> confirmed green.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
@@ -1563,7 +1568,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 > Plan: [plans/2026-03-20-web-hardening-follow-through-plan.md](plans/2026-03-20-web-hardening-follow-through-plan.md)
 >
-> Status note: section 25 is now delivered on `main` via PRs #305, #304, and #306. Machines / terminal e2e remains intentionally deferred to a later slice because terminal/WebSocket coverage is still a higher-flake surface than the list/detail/settings work below.
+> Status note: section 25 is now delivered on `main` via PRs #305, #304, and #306. The remaining machines / terminal e2e work now lives in the dedicated follow-up plan at [plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) so it can stay separate from both the lower-flake web regressions in this batch and the §27.3 live terminal-attach work.
 
 ### 25.1 Runtime Sessions Playwright Coverage
 
@@ -1650,6 +1655,16 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [ ] Web: "Attach Terminal" action for the runtime session panel
 - [ ] User can type directly into the running CLI to unblock interactive waits
 
+## 29. Machines / Terminal E2E Follow-up — P1
+
+> Plan: [plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md)
+>
+> Status note: this follow-up is scoped to the existing machine terminal page regression surface only. It intentionally excludes §27.3 live attach to the running managed Claude CLI, which remains tracked in its own terminal-takeover gap plan.
+
+- [ ] Add a dedicated Playwright path for the machine terminal page without pulling live managed-session attach into the same slice
+- [ ] Cover the terminal page shell, one stable terminal-connect/render path, and a minimal error-handling path for the existing machine terminal UI
+- [ ] Only harden machine terminal page test seams when that is necessary to make the machine-terminal e2e path stable; any shared attach/transport changes stay under §27.3
+
 ---
 
 ## Active Priorities
@@ -1658,7 +1673,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 |----------|------|---------|--------|
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
-| **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal e2e remains deferred to a later slice |
+| **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
@@ -1667,6 +1682,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
+| **P1** | Machines / Terminal E2E Follow-up | 29 | Planned — a dedicated Playwright follow-up now tracks the existing machine terminal page separately from §27.3 live managed-session attach |
 | **P1** | Terminal Takeover | 27.3 | In planning — machine-level PTY terminals, session replay, and Claude Remote Control takeover are shipped; live attach to the running managed Claude CLI is scoped in the 2026-03-20 gap plan |
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
@@ -1875,7 +1891,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — PRs #290, #291, and #295 shipped the full 21.2 slice on `main` | 21.2 |
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
-| [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; machines / terminal e2e stays deferred for now because terminal/WebSocket coverage is a higher-flake surface | 25.1-25.3 |
+| [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; the remaining machines / terminal coverage now lives in the dedicated section 29 follow-up | 25.1-25.3 |
+| [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Active — tracks the deferred machine terminal / terminal page Playwright coverage separately from §27.3 live managed-session attach | 29 |
 | [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Delivered — PRs #307, #314, #322, and #326 are on `main`; as of 2026-03-20 GitHub code scanning shows `0` open alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) | 26.1 |
 | [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Delivered — PR #322 landed the git-capability hardening slice on `main`; post-#326 worker scans converged to `0` open alerts without removing `git` from the standard worker image | 26.2 |
 | [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Active — generic machine terminal infra, session replay, and Claude Remote Control takeover are already shipped; live PTY attach to the running managed Claude CLI remains | 27.3 |
