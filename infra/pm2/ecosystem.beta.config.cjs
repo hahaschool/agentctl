@@ -11,6 +11,7 @@
 // See docs/plans/2026-03-12-dev-environment-cd-strategy.md for full context.
 
 const path = require('node:path');
+const { deriveStableDispatchSigningSecretKey } = require('./dispatch-signing-key.cjs');
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
 module.exports = {
@@ -29,7 +30,9 @@ module.exports = {
         REDIS_URL: 'redis://localhost:6379/0',
         DATABASE_URL: 'postgresql://hahaschool@127.0.0.1:5433/agentctl',
         CREDENTIAL_ENCRYPTION_KEY: process.env.CREDENTIAL_ENCRYPTION_KEY || '',
-        DISPATCH_SIGNING_SECRET_KEY: 'eAsC/APITjeM1OvEDkTyWF1Zx5X7+bC5ZV7Fq9QUtTZrZKMeLWI89qt6JXBetqOORDjT39jpSw1HNjo3/mDM8w==',
+        DISPATCH_SIGNING_SECRET_KEY:
+          process.env.DISPATCH_SIGNING_SECRET_KEY ||
+          deriveStableDispatchSigningSecretKey('beta'),
         SKIP_MIGRATIONS: 'true',
         TIER_LABEL: 'beta',
         REPO_ROOT: REPO_ROOT,
