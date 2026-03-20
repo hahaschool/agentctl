@@ -72,7 +72,7 @@ describe('Agent CRUD routes', () => {
           payload: { prompt: 'Second start request' },
         });
 
-        expect(first.statusCode).toBe(200);
+        expect(first.statusCode).toBe(202);
         expect(second.statusCode).toBe(429);
         expect(second.json()).toEqual({
           statusCode: 429,
@@ -99,7 +99,7 @@ describe('Agent CRUD routes', () => {
             url: '/api/agents/agent-fastify-rate/start',
             payload: { prompt: `Start request ${i}` },
           });
-          expect(response.statusCode).toBe(200);
+          expect(response.statusCode).toBe(202);
         }
 
         const limited = await app.inject({
@@ -120,22 +120,20 @@ describe('Agent CRUD routes', () => {
       }
     });
 
-    it('should start a new agent and return 200 with agentId and status', async () => {
+    it('should start a new agent and return 202 with agentId and starting status', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/agents/agent-1/start',
         payload: { prompt: 'Write a hello world script' },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(202);
 
       const body = response.json();
       expect(body.ok).toBe(true);
       expect(body.agentId).toBe('agent-1');
-      expect(body.status).toBeDefined();
-      expect(body.sessionId).toBeDefined();
-      // After start() the stub simulation should be running
-      expect(['running', 'stopped']).toContain(body.status);
+      expect(body.status).toBe('starting');
+      expect(body.sessionId).toEqual(expect.any(String));
     });
 
     it('should force-stop a running agent and re-create on duplicate start', async () => {
@@ -145,7 +143,7 @@ describe('Agent CRUD routes', () => {
         url: '/api/agents/agent-dup/start',
         payload: { prompt: 'First prompt' },
       });
-      expect(first.statusCode).toBe(200);
+      expect(first.statusCode).toBe(202);
 
       // Starting the same agent again while running should force-stop
       // the existing instance and re-create it with the new prompt.
@@ -155,10 +153,11 @@ describe('Agent CRUD routes', () => {
         payload: { prompt: 'Second prompt' },
       });
 
-      expect(second.statusCode).toBe(200);
+      expect(second.statusCode).toBe(202);
 
       const body = second.json();
       expect(body.ok).toBe(true);
+      expect(body.status).toBe('starting');
     });
 
     it('should return 400 when prompt is missing', async () => {
@@ -210,12 +209,13 @@ describe('Agent CRUD routes', () => {
         payload: { prompt: exactPrompt },
       });
 
-      // Should not be rejected for length — 200 means agent started successfully
-      expect(response.statusCode).toBe(200);
+      // Should not be rejected for length — 202 means async agent startup was accepted.
+      expect(response.statusCode).toBe(202);
 
       const body = response.json();
       expect(body.ok).toBe(true);
       expect(body.agentId).toBe('agent-exact');
+      expect(body.status).toBe('starting');
     });
 
     it('should reject an unsigned dispatch once a control-plane public key is provisioned', async () => {
@@ -321,10 +321,11 @@ describe('Agent CRUD routes', () => {
           },
         });
 
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode).toBe(202);
         expect(response.json()).toMatchObject({
           ok: true,
           agentId: 'agent-secure-valid',
+          status: 'starting',
         });
       } finally {
         rmSync(projectPath, { recursive: true, force: true });
@@ -462,12 +463,13 @@ describe('Agent CRUD routes', () => {
   // ── POST /api/agents/:id/steer ──────────────────────────────────
 
   describe('POST /api/agents/:id/steer', () => {
-    it('steers a running agent and returns accepted', async () => {
-      await app.inject({
+    it('returns accepted=false while an async-started agent is still starting', async () => {
+      const startResponse = await app.inject({
         method: 'POST',
         url: '/api/agents/agent-steer/start',
         payload: { prompt: 'Do something' },
       });
+      expect(startResponse.statusCode).toBe(202);
 
       const response = await app.inject({
         method: 'POST',
@@ -481,7 +483,7 @@ describe('Agent CRUD routes', () => {
       expect(body.ok).toBe(false);
       expect(body.agentId).toBe('agent-steer');
       expect(body.accepted).toBe(false);
-      expect(body.reason).toBe('steering not yet implemented for this runtime');
+      expect(body.reason).toBe('Agent is not running (current status: starting)');
     });
 
     it('returns 400 when message is missing', async () => {
