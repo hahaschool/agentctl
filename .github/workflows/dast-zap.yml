@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Determine whether we scan a remote URL or build locally
       - name: Resolve target URL
@@ -126,7 +126,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Local Docker targets cannot be shared across GitHub-hosted jobs,
       # so each local-mode scan job bootstraps the stack on its own runner.
@@ -469,7 +469,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         if: needs.setup-target.outputs.is_local == 'true'
@@ -527,7 +527,7 @@ jobs:
           exit 1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 

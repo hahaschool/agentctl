@@ -97,11 +97,11 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Install Node.js and dependencies ──────────────────────────────
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '20'
 
@@ -210,7 +210,7 @@ jobs:
       total_count: ${{ steps.plan.outputs.total_count }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Parse and validate infra/machines.yml ────────────────────────
       - name: Parse fleet inventory
@@ -388,7 +388,7 @@ jobs:
         machine: ${{ fromJson(needs.validate.outputs.canary_machines) }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Connect to Tailscale mesh ────────────────────────────────────
       - name: Connect to Tailscale
@@ -584,7 +584,7 @@ jobs:
         machine: ${{ fromJson(needs.validate.outputs.remaining_machines) }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Connect to Tailscale mesh ────────────────────────────────────
       - name: Connect to Tailscale
@@ -748,7 +748,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Connect to Tailscale mesh ────────────────────────────────────
       - name: Connect to Tailscale
