@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #330, #331, #332, #333, #334, and #335 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing and node24 workflow follow-through are landed; `Security Audit` and `Build` are green on commit `a519e1d`, while `CI` on `a519e1d` is currently red on the stale `updateRunPhase()` control-plane expectation being repaired by PR #336, so the latest `main` commit where `CI`, `Security Audit`, and `Build` are all green remains `2ffa870`; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
+> Last updated: 2026-03-20 (PRs #330, #331, #332, #333, #334, #335, and #336 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing, node24 workflow follow-through, and the stale `updateRunPhase()` control-plane test repair are landed; as of this update, the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green remains `2ffa870`, while fresh post-#336 reruns are in flight on `976a68a`; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
 
 ## Current State
 
@@ -32,11 +32,12 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > repo gitleaks runs onto the official CLI path. PR #334 finished the node24
 > follow-through by replacing `ci.yml`'s `dorny/paths-filter` step with a
 > GitHub API changed-files detector and bumping the remaining deploy-adjacent
-> `actions/checkout` / `actions/setup-node` refs to `v5`. `Security Audit` and
-> `Build` are green on `a519e1d`, but `CI` on `a519e1d` is currently red on the
-> stale `updateRunPhase()` control-plane expectation now being repaired by
-> PR #336, so the latest `main` commit where `CI`, `Security Audit`, and
-> `Build` are all green remains `2ffa870`.
+> `actions/checkout` / `actions/setup-node` refs to `v5`. PR #336 then aligned
+> the stale `DbAgentRegistry.updateRunPhase()` missing-run expectation with the
+> intentional no-op/logged skip semantics introduced by `1ead1a7`. As of this
+> update, the latest `main` commit where `CI`, `Security Audit`, and `Build`
+> are all confirmed green remains `2ffa870`, while fresh post-#336 reruns are
+> in flight on `976a68a`.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
