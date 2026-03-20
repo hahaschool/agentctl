@@ -199,10 +199,11 @@ describe('registerRunReaper', () => {
 
   it('uses the 30-minute stale threshold when computing the cutoff date', async () => {
     const db = createMockDb();
+    // registerRunReaper() immediately kicks off one reap pass, so capture the
+    // baseline timestamp before registration rather than before app.ready().
+    const before = Date.now();
     app = Fastify({ logger: false });
     registerRunReaper(app, db as never);
-
-    const before = Date.now();
     await app.ready();
     await flushAsync();
 
