@@ -1569,18 +1569,22 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 > Plan: [plans/2026-03-20-agent-worker-container-security-remediation-plan.md](plans/2026-03-20-agent-worker-container-security-remediation-plan.md)
 >
-> Status note: after section 24 closed and the section 25 web hardening batch opened, a fresh `main` security scan surfaced a new `agentctl-agent-worker` container backlog in GitHub code scanning. PR #307 has now landed the worker-only runtime-image refresh plus the follow-up `python3-setuptools` node-gyp compatibility fix, but this section remains active until the post-merge `main` security scan fully converges and the open alert picture settles.
+> Status note: after section 24 closed and the section 25 web hardening batch opened, a fresh `main` security scan surfaced a new `agentctl-agent-worker` container backlog in GitHub code scanning. PR #307 landed the worker-only runtime-image refresh plus the follow-up `python3-setuptools` node-gyp compatibility fix, and PR #314 then refreshed the `git`-driven runtime library closure, but this section remains active until the post-merge `main` security scan fully converges and the open alert picture settles.
 
 ### 26.1 Agent Worker Runtime Image Refresh
 
-- [ ] Reduce the open `agentctl-agent-worker` container alert backlog on `main`, currently still reporting 100 code-scanning findings while the post-merge scan convergence is pending
+- [x] Refresh the worker image to `node:22.22.1-trixie-slim` and restore `node-gyp` compatibility with `python3-setuptools` in the build/deps stages *(PR #307)*
+- [x] Refresh the `git` runtime library closure with a temporary `forky` pin for `libcurl3t64-gnutls`, `libexpat1`, `libnghttp2-14`, `libnghttp3-9`, `libngtcp2-16`, `libtasn1-6`, and `zlib1g` *(PR #314)*
+- [x] Keep the fix scoped to the worker container unless validation data shows the control-plane image must move in lockstep *(PRs #307, #314)*
+- [ ] Re-check the post-merge `main` backlog before closing the section; GitHub still reports 100 open `agentctl-agent-worker` code-scanning findings while the new scan converges
 
 ## 27. Session Lifecycle — Force Kill + Stall Detection
 
 ### 27.1 Force Kill — Delivered
 
 - [x] Worker: `POST /api/sessions/:id/kill` — SIGTERM then SIGKILL after 5s *(PR #310)*
-- [x] CP: proxy kill route to worker, mark session as ended *(PR #311)*
+- [x] CP: proxy kill route to worker and mark the session as ended on worker success *(PR #311)*
+- [x] CP: failed worker kill attempts now preserve the existing session state instead of force-ending the run *(PR #313)*
 - [x] Web: "Force Kill" button on session detail + sessions list (active/stalled only) *(PR #312)*
 
 ### 27.2 Stall Detection — Delivered
@@ -1594,8 +1598,6 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [ ] Worker: attach to running CLI process stdin/stdout via PTY
 - [ ] Web: "Attach Terminal" button opens xterm.js connected to CLI process
 - [ ] User can type directly into running CLI to unblock stuck operations
-- [x] Address the highest-signal runtime packages first (`zlib1g`, `libexpat1`, `libldap-2.5-0`, PAM/systemd/ncurses) with the smallest defensible base-image/runtime-package change *(PR #307)*
-- [x] Keep the fix scoped to the worker container unless the validation data shows the control-plane image must move in lockstep *(PR #307)*
 
 ---
 
@@ -1603,7 +1605,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
-| **P0** | Agent Worker Container Security Remediation | 26.1 | Active — PR #307 shipped the worker-only `trixie-slim` refresh plus the `python3-setuptools` node-gyp compatibility fix, but `main` still reports 100 open agent-worker code-scanning alerts while the post-merge security scan converges |
+| **P0** | Agent Worker Container Security Remediation | 26.1 | Active — PR #307 shipped the worker-only `trixie-slim` refresh plus the `python3-setuptools` node-gyp compatibility fix, PR #314 refreshed the `git` runtime library closure, and `main` still reports 100 open agent-worker code-scanning findings while the post-merge scan converges |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal e2e remains deferred to a later slice |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
@@ -1821,7 +1823,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; machines / terminal e2e stays deferred for now because terminal/WebSocket coverage is a higher-flake surface | 25.1-25.3 |
-| [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Active — PR #307 landed the worker-only runtime refresh, but this plan stays open until the post-merge `main` alert picture converges from the still-reported 100 open agent-worker findings | 26.1 |
+| [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Active — PR #307 landed the worker-only runtime refresh, PR #314 refreshed the `git` runtime library closure, and this plan stays open until the post-merge `main` alert picture converges from the still-reported 100 open agent-worker findings | 26.1 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
