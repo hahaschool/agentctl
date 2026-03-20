@@ -9,6 +9,8 @@ import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue
 import { createTaskWorker } from '../scheduler/task-worker.js';
 import {
   createMockDbRegistry,
+  getDispatchFetchCall,
+  getMcpDiscoveryFetchCall,
   makeAgent,
   makeMachine,
   mockFetchFailure,
@@ -176,8 +178,9 @@ describe('Integration: dispatch → completion lifecycle', () => {
       );
 
       // Verify the dispatch went to the correct worker URL
-      expect(fetch).toHaveBeenCalledOnce();
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       expect(fetchCall[0]).toContain('100.64.0.1:9000');
       expect(fetchCall[0]).toContain('/api/agents/agent-abc/start');
 
@@ -528,7 +531,9 @@ describe('Integration: dispatch → completion lifecycle', () => {
       await processor(job);
 
       // Verify dispatch payload included the correct runId
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       const dispatchPayload = JSON.parse(fetchCall[1]?.body as string) as { runId: string };
       expect(dispatchPayload.runId).toBe(uniqueRunId);
 

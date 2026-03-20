@@ -8,6 +8,8 @@ import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue
 import { createTaskWorker } from '../scheduler/task-worker.js';
 import {
   createMockDbRegistry,
+  getDispatchFetchCall,
+  getMcpDiscoveryFetchCall,
   makeAgent,
   makeJob,
   makeMachine,
@@ -99,8 +101,9 @@ describe('Integration: multi-machine dispatch with circuit breaker failover', ()
       await processor(makeJob());
 
       // Verify the dispatch went to the correct tailscale IP
-      expect(fetch).toHaveBeenCalledOnce();
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       expect(fetchCall[0]).toContain('100.64.0.1:9000');
       expect(fetchCall[0]).toContain('/api/agents/agent-abc/start');
 
@@ -341,7 +344,8 @@ describe('Integration: multi-machine dispatch with circuit breaker failover', ()
       await processor(makeJob());
 
       // The dispatch should go through (fetch was called)
-      expect(fetch).toHaveBeenCalledOnce();
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      expect(getDispatchFetchCall()).toBeDefined();
 
       // Circuit should be closed after the successful probe
       expect(circuitBreaker.getState('machine-xyz')).toBe('closed');
@@ -469,8 +473,9 @@ describe('Integration: multi-machine dispatch with circuit breaker failover', ()
       await processor(makeJob({ agentId: 'agent-on-abc', machineId: 'machine-abc' }));
 
       // Dispatch should succeed to machine-abc
-      expect(fetch).toHaveBeenCalledOnce();
-      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      const fetchCall = getDispatchFetchCall();
+      expect(fetchCall).toBeDefined();
       expect(fetchCall[0]).toContain('100.64.0.2:9000');
 
       // machine-xyz should still be open
@@ -498,7 +503,8 @@ describe('Integration: multi-machine dispatch with circuit breaker failover', ()
       const processor = getProcessor();
       await processor(makeJob());
 
-      expect(fetch).toHaveBeenCalledOnce();
+      expect(getMcpDiscoveryFetchCall()).toBeDefined();
+      expect(getDispatchFetchCall()).toBeDefined();
       expect(dbRegistry.createRun).toHaveBeenCalledOnce();
       expect(dbRegistry.completeRun).not.toHaveBeenCalled();
     });

@@ -112,6 +112,22 @@ export function mockFetchConnectionError(errorMessage = 'ECONNREFUSED'): void {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error(errorMessage)));
 }
 
+type FetchMockCall = [input: string | URL | Request, init?: RequestInit];
+
+export function getFetchMockCalls(): FetchMockCall[] {
+  return vi.mocked(fetch).mock.calls as FetchMockCall[];
+}
+
+export function getMcpDiscoveryFetchCall(): FetchMockCall | undefined {
+  return getFetchMockCalls().find(([input]) =>
+    String(input).includes('/api/mcp/discover?runtime=claude-code'),
+  );
+}
+
+export function getDispatchFetchCall(): FetchMockCall | undefined {
+  return getFetchMockCalls().find(([input]) => String(input).includes('/api/agents/'));
+}
+
 // ---------------------------------------------------------------------------
 // Job factory
 // ---------------------------------------------------------------------------
