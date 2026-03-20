@@ -1261,6 +1261,183 @@ export async function sessionRoutes(
   });
 
   // -----------------------------------------------------------------------
+  // GET /:sessionId/terminal — WebSocket endpoint for interactive terminal attach
+  //
+  // Provides a bidirectional channel for "terminal takeover":
+  //   - Replays buffered output on connect so the client sees recent history.
+  //   - Streams live session output events as JSON to the WebSocket client.
+  //   - Accepts `{ type: 'input', message: string }` frames and sends the
+  //     message to the session by resuming it with `--resume` (same mechanism
+  //     as POST /:sessionId/message).
+  //
+  // Note: The CLI process is spawned with stdin: 'ignore' (intentional — the
+  // `-p` flag doesn't support interactive stdin). Terminal takeover therefore
+  // works by spawning a new `claude --resume` process rather than writing to
+  // the existing process's stdin. Clients should send one message at a time
+  // and wait for the session to complete before sending the next.
+  // -----------------------------------------------------------------------
+
+  app.get<{ Params: SessionIdParams }>(
+    '/:sessionId/terminal',
+    { websocket: true },
+    (socket, request) => {
+      const { sessionId } = request.params;
+
+      const session =
+        sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
+
+      if (!session) {
+        socket.send(
+          JSON.stringify({
+            type: 'error',
+            code: 'SESSION_NOT_FOUND',
+            message: `Session '${sessionId}' not found`,
+          }),
+        );
+        socket.close();
+        return;
+      }
+
+      logger.info({ sessionId: session.id, machineId }, 'WebSocket terminal attach connected');
+
+      // Helper: send a typed frame to the client
+      const send = (frame: Record<string, unknown>): void => {
+        if (socket.readyState === 1 /* OPEN */) {
+          socket.send(JSON.stringify(frame));
+        }
+      };
+
+      // 1. Replay buffered events so the client sees recent history
+      const buf = getOrCreateBuffer(session.id);
+      for (const event of buf.events) {
+        send({ type: 'output', event: event.event, data: event.data });
+      }
+
+      // 2. Subscribe to live output events
+      const onOutput = (event: AgentEvent): void => {
+        send({ type: 'output', event: event.event, data: event.data });
+      };
+      buf.subscribers.add(onOutput);
+
+      // 3. Handle incoming messages from the client
+      socket.on('message', (rawData: string | Buffer) => {
+        const data = typeof rawData === 'string' ? rawData : rawData.toString();
+        let parsed: { type?: string; message?: string } = {};
+        try {
+          parsed = JSON.parse(data) as { type?: string; message?: string };
+        } catch {
+          send({ type: 'error', code: 'INVALID_MESSAGE', message: 'Expected JSON frame' });
+          return;
+        }
+
+        if (
+          parsed.type !== 'input' ||
+          typeof parsed.message !== 'string' ||
+          !parsed.message.trim()
+        ) {
+          send({
+            type: 'error',
+            code: 'INVALID_INPUT',
+            message: 'Expected { type: "input", message: string }',
+          });
+          return;
+        }
+
+        const currentSession =
+          sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
+
+        if (!currentSession?.claudeSessionId) {
+          send({
+            type: 'error',
+            code: 'SESSION_NOT_RESUMABLE',
+            message: 'Session has no Claude session ID — cannot send message',
+          });
+          return;
+        }
+
+        // Auto-stop if still running (same as POST /:sessionId/message)
+        const doResume = (): void => {
+          const resumeTarget =
+            sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
+          if (!resumeTarget?.claudeSessionId) {
+            send({
+              type: 'error',
+              code: 'SESSION_NOT_RESUMABLE',
+              message: 'Session lost Claude session ID during stop',
+            });
+            return;
+          }
+
+          try {
+            const newSession = sessionManager.resumeSession(resumeTarget.claudeSessionId, {
+              agentId: resumeTarget.agentId,
+              projectPath: resumeTarget.projectPath,
+              prompt: parsed.message as string,
+              model: resumeTarget.model,
+            });
+
+            // Re-register CP session ID mapping if present
+            const cpId = cpSessionIdMap.get(resumeTarget.id);
+            if (cpId) {
+              cpSessionIdMap.set(newSession.id, cpId);
+              void reportStatusToControlPlane(newSession.id, {
+                status: 'active',
+                pid: newSession.pid ?? undefined,
+              });
+            }
+
+            // Subscribe the WebSocket to the new session's buffer too
+            const newBuf = getOrCreateBuffer(newSession.id);
+            newBuf.subscribers.add(onOutput);
+
+            send({ type: 'ack', newSessionId: newSession.id });
+            logger.info(
+              { originalSessionId: sessionId, newSessionId: newSession.id, machineId },
+              'Terminal attach sent message via session resume',
+            );
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            send({ type: 'error', code: 'RESUME_FAILED', message: msg });
+          }
+        };
+
+        if (currentSession.status === 'running') {
+          // Mark as intentional so session_ended handler doesn't report error
+          intentionalStops.add(currentSession.id);
+          const savedCpId = cpSessionIdMap.get(currentSession.id);
+          if (savedCpId) {
+            // Re-map so doResume can pick it up
+            cpSessionIdMap.set(currentSession.id, savedCpId);
+          }
+
+          sessionManager
+            .stopSession(currentSession.id, true)
+            .then(() => {
+              doResume();
+            })
+            .catch((stopErr: unknown) => {
+              intentionalStops.delete(currentSession.id);
+              const msg = stopErr instanceof Error ? stopErr.message : String(stopErr);
+              send({
+                type: 'error',
+                code: 'STOP_FAILED',
+                message: `Could not stop running session: ${msg}`,
+              });
+            });
+        } else {
+          doResume();
+        }
+      });
+
+      // 4. Cleanup on disconnect
+      socket.on('close', () => {
+        buf.subscribers.delete(onOutput);
+        logger.info({ sessionId: session.id, machineId }, 'WebSocket terminal attach disconnected');
+      });
+    },
+  );
+
+  // -----------------------------------------------------------------------
   // GET /:sessionId/stream — SSE stream of session output
   // -----------------------------------------------------------------------
 
