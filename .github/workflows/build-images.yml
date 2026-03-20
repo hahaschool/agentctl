@@ -39,7 +39,7 @@ jobs:
         package: [control-plane, agent-worker]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Docker Buildx setup ──────────────────────────────────────
       - name: Set up Docker Buildx
@@ -116,7 +116,7 @@ jobs:
       # Non-blocking: Code Scanning may not be enabled on the repo
       - name: Upload Trivy SARIF to GitHub Security
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-${{ matrix.package }}.sarif
@@ -135,7 +135,7 @@ jobs:
 
       - name: Upload Grype SARIF to GitHub Security
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: ${{ steps.grype-scan.outputs.sarif }}
