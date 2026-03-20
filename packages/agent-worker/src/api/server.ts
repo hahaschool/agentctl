@@ -14,6 +14,7 @@ import { ExecutionEnvironmentRegistry } from '../runtime/execution-environment-r
 import { HandoffController } from '../runtime/handoff-controller.js';
 import { RcSessionManager } from '../runtime/rc-session-manager.js';
 import { RuntimeRegistry } from '../runtime/runtime-registry.js';
+import { TakeoverManager } from '../runtime/takeover-manager.js';
 import { TerminalManager } from '../runtime/terminal-manager.js';
 import { HEALTH_CHECK_TIMEOUT_MS } from './constants.js';
 import { agentRoutes } from './routes/agents.js';
@@ -34,6 +35,7 @@ import { workerMetricsRoutes } from './routes/metrics.js';
 import { permissionResponseRoutes } from './routes/permission-response.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
+import { sessionTakeoverRoutes } from './routes/session-takeover.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { streamRoutes } from './routes/stream.js';
@@ -87,6 +89,9 @@ export async function createWorkerServer({
 
   // Instantiate the terminal PTY manager for remote shell access.
   const terminalManager = new TerminalManager({ logger, maxTerminals });
+
+  // Instantiate the takeover manager for interactive session handoff.
+  const takeoverManager = new TakeoverManager({ logger, terminalManager });
 
   app.addHook('onRequest', async (request) => {
     logger.debug({ method: request.method, url: request.url }, 'incoming request');
@@ -260,6 +265,17 @@ export async function createWorkerServer({
       machineId,
       logger,
       controlPlaneUrl,
+      takeoverManager,
+    });
+
+    await app.register(sessionTakeoverRoutes, {
+      prefix: '/api/sessions',
+      sessionManager,
+      terminalManager,
+      takeoverManager,
+      agentPool,
+      controlPlaneUrl,
+      logger,
     });
   }
 
@@ -336,6 +352,7 @@ export async function createWorkerServer({
 
   // --- Graceful shutdown: kill all terminals ---
   app.addHook('onClose', async () => {
+    await takeoverManager.releaseAll();
     await manualTakeoverManager.stopAll();
     terminalManager.killAll();
   });

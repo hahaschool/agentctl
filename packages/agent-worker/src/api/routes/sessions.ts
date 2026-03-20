@@ -55,6 +55,9 @@ type SessionRouteOptions = FastifyPluginOptions & {
   machineId: string;
   logger: Logger;
   controlPlaneUrl?: string;
+  /** Optional TakeoverManager — when present, the session-terminal WS rejects
+   *  connections for sessions that are under active terminal takeover. */
+  takeoverManager?: { isUnderTakeover: (sessionId: string) => boolean };
 };
 
 type CreateSessionBody = {
@@ -236,7 +239,7 @@ export async function sessionRoutes(
   app: FastifyInstance,
   options: SessionRouteOptions,
 ): Promise<void> {
-  const { sessionManager, machineId, logger, controlPlaneUrl } = options;
+  const { sessionManager, machineId, logger, controlPlaneUrl, takeoverManager } = options;
 
   // Register @fastify/rate-limit plugin so CodeQL recognises framework-level
   // rate limiting (js/missing-rate-limiting).  Per-route limits are handled by
@@ -1295,6 +1298,19 @@ export async function sessionRoutes(
           }),
         );
         socket.close();
+        return;
+      }
+
+      // Reject connection if session is under active terminal takeover
+      if (takeoverManager?.isUnderTakeover(session.id)) {
+        socket.send(
+          JSON.stringify({
+            type: 'error',
+            code: 'SESSION_UNDER_TAKEOVER',
+            message: `Session '${sessionId}' is under active terminal takeover`,
+          }),
+        );
+        socket.close(4409, 'SESSION_UNDER_TAKEOVER');
         return;
       }
 
