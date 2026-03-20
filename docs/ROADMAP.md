@@ -1567,16 +1567,22 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 26. Agent Worker Container Security Remediation
 
-> Plan: [plans/2026-03-20-agent-worker-container-security-remediation-plan.md](plans/2026-03-20-agent-worker-container-security-remediation-plan.md)
+> Plans: [plans/2026-03-20-agent-worker-container-security-remediation-plan.md](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) · [plans/2026-03-20-worker-runtime-surface-reduction-plan.md](plans/2026-03-20-worker-runtime-surface-reduction-plan.md)
 >
-> Status note: after section 24 closed and the section 25 web hardening batch opened, a fresh `main` security scan surfaced a new `agentctl-agent-worker` container backlog in GitHub code scanning. PR #307 landed the worker-only runtime-image refresh plus the follow-up `python3-setuptools` node-gyp compatibility fix, and PR #314 then refreshed the `git`-driven runtime library closure, but this section remains active until the post-merge `main` security scan fully converges and the open alert picture settles.
+> Status note: after section 24 closed and the section 25 web hardening batch opened, a fresh `main` security scan surfaced a new `agentctl-agent-worker` container backlog in GitHub code scanning. PR #307 landed the worker-only runtime-image refresh plus the follow-up `python3-setuptools` node-gyp compatibility fix, and PR #314 then refreshed the `git`-driven runtime library closure, but this section remains active because the latest `main` Trivy analysis has already landed and the worker alert backlog still has not dropped.
 
 ### 26.1 Agent Worker Runtime Image Refresh
 
 - [x] Refresh the worker image to `node:22.22.1-trixie-slim` and restore `node-gyp` compatibility with `python3-setuptools` in the build/deps stages *(PR #307)*
 - [x] Refresh the `git` runtime library closure with a temporary `forky` pin for `libcurl3t64-gnutls`, `libexpat1`, `libnghttp2-14`, `libnghttp3-9`, `libngtcp2-16`, `libtasn1-6`, and `zlib1g` *(PR #314)*
 - [x] Keep the fix scoped to the worker container unless validation data shows the control-plane image must move in lockstep *(PRs #307, #314)*
-- [ ] Re-check the post-merge `main` backlog before closing the section; GitHub still reports 100 open `agentctl-agent-worker` code-scanning findings while the new scan converges
+- [ ] Re-check the latest `main` backlog before closing the section; GitHub still reports 100 open `agentctl-agent-worker` code-scanning findings, and the latest worker Trivy upload for `main` still reports 121 results after PR #314
+
+### 26.2 Worker Runtime Surface Reduction — P0 (planned)
+
+- [ ] Inventory the worker flows that still shell out to `git` at runtime (`worktree-manager`, git-status route, workdir safety, handoff workspace inspection)
+- [ ] Harden those flows so a missing runtime `git` binary degrades honestly instead of producing accidental 500s or hidden crashes
+- [ ] Validate whether the final worker image can drop steady-state `git` and whether that actually reduces the Trivy worker backlog
 
 ## 27. Session Lifecycle — Force Kill + Stall Detection
 
@@ -1605,7 +1611,8 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
-| **P0** | Agent Worker Container Security Remediation | 26.1 | Active — PR #307 shipped the worker-only `trixie-slim` refresh plus the `python3-setuptools` node-gyp compatibility fix, PR #314 refreshed the `git` runtime library closure, and `main` still reports 100 open agent-worker code-scanning findings while the post-merge scan converges |
+| **P0** | Agent Worker Container Security Remediation | 26.1 | Active — PR #307 shipped the worker-only `trixie-slim` refresh plus the `python3-setuptools` node-gyp compatibility fix, PR #314 refreshed the `git` runtime library closure, and the latest `main` Trivy analysis still leaves 100 open agent-worker code-scanning findings / 121 worker results |
+| **P0** | Worker Runtime Surface Reduction | 26.2 | Planned — latest `main` worker Trivy analysis still shows 100 open findings / 121 results after PR #314, so the next slice is capability-aware degradation plus a controlled final-image `git` removal experiment |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal e2e remains deferred to a later slice |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
@@ -1823,7 +1830,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; machines / terminal e2e stays deferred for now because terminal/WebSocket coverage is a higher-flake surface | 25.1-25.3 |
-| [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Active — PR #307 landed the worker-only runtime refresh, PR #314 refreshed the `git` runtime library closure, and this plan stays open until the post-merge `main` alert picture converges from the still-reported 100 open agent-worker findings | 26.1 |
+| [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Active — PR #307 landed the worker-only runtime refresh, PR #314 refreshed the `git` runtime library closure, and the latest `main` Trivy analysis still leaves 100 open agent-worker findings / 121 worker results | 26.1 |
+| [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Planned — next P0 security slice after #314 / #315; harden missing-`git` behavior, then validate whether final-image `git` removal actually reduces the worker Trivy backlog | 26.2 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
