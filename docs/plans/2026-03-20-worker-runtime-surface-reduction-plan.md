@@ -8,7 +8,16 @@
 
 **Tech Stack:** TypeScript, Fastify, Node `child_process`, Vitest, Docker, GitHub Actions / Trivy
 
-> Status note: PR #322 merged the capability-hardening slice on 2026-03-20. The worker now has a shared `git`-runtime helper, `/api/git/status` preserves late `GIT_UNAVAILABLE` failures, and workdir safety blocks unavailable paths explicitly, but the standard worker image still keeps `git` installed because immediate runtime-git removal was not safe for normal repo-aware container deployments.
+> Status note: PR #322 merged the capability-hardening slice on 2026-03-20. The worker now has a shared `git`-runtime helper, `/api/git/status` preserves late `GIT_UNAVAILABLE` failures, and workdir safety blocks unavailable paths explicitly. After PR #326 aligned the `security-audit` worker Trivy policy with the `build-images` upload path, recent `main` commits `cdd63b8`, `3e38d87`, and `4c82efb` all show `0` results for both worker Trivy categories, and GitHub code scanning reports `0` open alerts on `main`. This plan therefore closes with `git` still installed in the standard worker image.
+
+## Outcome (2026-03-20)
+
+- PR #322 delivered the runtime capability-hardening slice on `main`
+- PR #326 removed the last known workflow-policy mismatch between the two worker Trivy upload paths
+- `gh api 'repos/hahaschool/agentctl/code-scanning/alerts?state=open&per_page=100' --jq 'length'` now returns `0`
+- the duplicate worker Trivy categories (`trivy-agent-worker`, `trivy-agentctl-agent-worker`) both report `0` results on recent `main` commits `cdd63b8`, `3e38d87`, and `4c82efb`
+- Task 4 stays intentionally unexecuted: the post-#326 evidence no longer justifies removing `git` from the default worker image
+- Task 6 closes roadmap sections `26.1` and `26.2` as delivered instead of leaving them active
 
 ---
 

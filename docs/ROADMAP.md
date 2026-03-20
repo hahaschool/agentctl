@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #297, #298, #299, #301, and #322 are now on `main`; section 25 is delivered, section 26 remains the active worker-security batch, and UI polish items 28.2 / 28.4 are now marked delivered after the sidebar-version and PageContainer follow-ups)
+> Last updated: 2026-03-20 (PRs #324, #325, and #326 are now on `main`; section 26 is delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; the next planned session-lifecycle follow-up remains §27.3 terminal takeover)
 
 ## Current State
 
@@ -1565,24 +1565,25 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Remove the remaining web-local permission-request type drift in favor of the shared contract *(PR #305)*
 - [x] Keep the cleanup scoped to web/shared API-query-card boundaries without reopening the broader approvals architecture *(PR #305)*
 
-## 26. Agent Worker Container Security Remediation
+## 26. Agent Worker Container Security Remediation — Delivered
 
 > Plans: [plans/2026-03-20-agent-worker-container-security-remediation-plan.md](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) · [plans/2026-03-20-worker-runtime-surface-reduction-plan.md](plans/2026-03-20-worker-runtime-surface-reduction-plan.md)
 >
-> Status note: after section 25 closed, section 26 stayed active because GitHub still reports 100 open `agentctl-agent-worker` code-scanning findings on `main`. PR #307 landed the worker-only runtime-image refresh plus the `python3-setuptools` node-gyp compatibility fix, PR #314 refreshed the `git` runtime-library closure, and PR #322 then hardened runtime `git` capability handling without removing `git` from the standard worker image. Recent `main` worker Trivy uploads still disagree: `build-images` keeps uploading `0`-result `trivy-agent-worker` analyses on `daf544a` and `3844cd0`, while `security-audit` keeps uploading `121`-result `trivy-agentctl-agent-worker` analyses on those same commits.
+> Status note: this batch is now closed on `main`. PR #307 landed the worker-only runtime-image refresh plus the `python3-setuptools` node-gyp compatibility fix, PR #314 refreshed the `git` runtime-library closure, PR #322 hardened runtime `git` capability handling without removing `git` from the standard worker image, and PR #326 aligned the `security-audit` Trivy worker policy with the `build-images` upload path. As of 2026-03-20, GitHub's open code-scanning alert feed returns `0` items, and both worker Trivy categories (`trivy-agent-worker` and `trivy-agentctl-agent-worker`) report `0` results on recent `main` commits `cdd63b8`, `3e38d87`, and `4c82efb`.
 
-### 26.1 Agent Worker Runtime Image Refresh
+### 26.1 Agent Worker Runtime Image Refresh — Delivered
 
 - [x] Refresh the worker image to `node:22.22.1-trixie-slim` and restore `node-gyp` compatibility with `python3-setuptools` in the build/deps stages *(PR #307)*
 - [x] Refresh the `git` runtime library closure with a temporary `forky` pin for `libcurl3t64-gnutls`, `libexpat1`, `libnghttp2-14`, `libnghttp3-9`, `libngtcp2-16`, `libtasn1-6`, and `zlib1g` *(PR #314)*
 - [x] Keep the fix scoped to the worker container unless validation data shows the control-plane image must move in lockstep *(PRs #307, #314)*
-- [ ] Re-check the latest `main` backlog before closing the section; GitHub still reports 100 open `agentctl-agent-worker` code-scanning findings, `build-images` is uploading `0`-result worker Trivy analyses, and the latest `security-audit` worker container-scan still reports 121 results on `main`
+- [x] Align the `security-audit` worker Trivy policy with the `build-images` worker upload semantics so the duplicate worker categories converge on the same scan outcome *(PR #326)*
+- [x] Re-check the latest `main` backlog before closing the section; as of 2026-03-20 GitHub reports `0` open code-scanning alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`)
 
-### 26.2 Worker Git Capability Hardening — P0 (active)
+### 26.2 Worker Git Capability Hardening — Delivered
 
 - [x] Inventory the worker flows that still shell out to `git` at runtime (`worktree-manager`, git-status route, workdir safety, handoff workspace inspection) *(audit + PR #322 follow-up)*
 - [x] Harden those flows so a missing runtime `git` binary degrades honestly instead of producing accidental 500s or hidden crashes, and block unavailable workdirs explicitly instead of misclassifying them as missing-`git` cases *(PR #322)*
-- [ ] Decide whether dropping steady-state `git` from the standard worker image is still warranted; keep `git` installed until the divergent `main` Trivy signals point to a safe, evidence-backed next step
+- [x] Decide whether dropping steady-state `git` from the standard worker image is still warranted; the post-#326 scans converged without requiring image-level `git` removal, so `git` stays installed unless a future worker-specific backlog reopens the question
 
 ## 27. Session Lifecycle — Force Kill + Stall Detection
 
@@ -1630,8 +1631,8 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
-| **P0** | Agent Worker Container Security Remediation | 26.1 | Active — PR #307 shipped the worker-only `trixie-slim` refresh, PR #314 refreshed the `git` runtime library closure, GitHub still reports 100 open worker findings, and recent `main` worker Trivy uploads still disagree (`build-images`: 0 results on `daf544a` / `3844cd0`; `security-audit`: 121 results on `daf544a` / `3844cd0`) |
-| **P0** | Worker Git Capability Hardening | 26.2 | Active — PR #322 is now on `main`, hardening typed `GIT_UNAVAILABLE` handling and missing-workdir blocking while deliberately keeping `git` in the standard worker image; the remaining decision is whether image-level `git` removal is still justified at all |
+| **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
+| **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal e2e remains deferred to a later slice |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
@@ -1849,8 +1850,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; machines / terminal e2e stays deferred for now because terminal/WebSocket coverage is a higher-flake surface | 25.1-25.3 |
-| [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Active — PRs #307, #314, and #322 are on `main`, GitHub still reports 100 open worker findings, and recent `main` worker Trivy uploads still disagree (`build-images`: 0 results on `daf544a` / `3844cd0`; `security-audit`: 121 results on `daf544a` / `3844cd0`) | 26.1 |
-| [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Active — PR #322 delivered the git-capability hardening slice on `main`; default-image `git` removal stays deferred until the worker security evidence points there again | 26.2 |
+| [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Delivered — PRs #307, #314, #322, and #326 are on `main`; as of 2026-03-20 GitHub code scanning shows `0` open alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) | 26.1 |
+| [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Delivered — PR #322 landed the git-capability hardening slice on `main`; post-#326 worker scans converged to `0` open alerts without removing `git` from the standard worker image | 26.2 |
 | [codex-gui-thread-prompts](plans/2026-03-10-codex-gui-thread-prompts.md) | Reference | — |
 | [roadmap-parallelization-handoff-plan](plans/2026-03-10-roadmap-parallelization-handoff-plan.md) | Reference | — |
 
