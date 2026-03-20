@@ -196,6 +196,10 @@ export type SessionHeaderProps = {
   showFiles?: boolean;
   onToggleFiles?: () => void;
   escapeRef?: React.MutableRefObject<() => void>;
+  /** Current takeover phase — controls button label and disabled state. */
+  takeoverPhase?: 'idle' | 'initiating' | 'active';
+  /** Called when the user confirms the takeover preflight. */
+  onTakeover?: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -214,6 +218,8 @@ export function SessionHeader({
   showFiles,
   onToggleFiles,
   escapeRef,
+  takeoverPhase = 'idle',
+  onTakeover,
 }: SessionHeaderProps): React.JSX.Element {
   const router = useRouter();
   const toast = useToast();
@@ -396,6 +402,13 @@ export function SessionHeader({
           </output>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {/* Taken Over badge — shown when takeover is active */}
+          {takeoverPhase === 'active' && (
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[11px] font-semibold animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Taken Over
+            </span>
+          )}
           <LastUpdated dataUpdatedAt={dataUpdatedAt} />
           <RefreshButton onClick={onRefresh} isFetching={isFetching} />
           {onToggleFiles && (
@@ -481,6 +494,21 @@ export function SessionHeader({
               confirmClassName="px-3 py-1 bg-red-700 text-white border border-red-600 rounded-md text-xs cursor-pointer animate-pulse"
             />
           )}
+          {/* Takeover button — shown when session is active/stalled and has a claudeSessionId */}
+          {(session.status === 'active' || session.status === 'stalled') &&
+            !!session.claudeSessionId &&
+            onTakeover &&
+            takeoverPhase !== 'active' && (
+              <button
+                type="button"
+                onClick={onTakeover}
+                disabled={takeoverPhase === 'initiating'}
+                className="flex items-center gap-1 px-3 py-1 bg-amber-600/80 dark:bg-amber-700/80 text-white border border-amber-500/60 rounded-md text-xs cursor-pointer hover:bg-amber-600 dark:hover:bg-amber-600 disabled:opacity-50"
+                title="Take interactive control of this session"
+              >
+                {takeoverPhase === 'initiating' ? 'Taking over…' : 'Takeover'}
+              </button>
+            )}
           {(session.status === 'active' || session.status === 'stalled') && (
             <button
               type="button"

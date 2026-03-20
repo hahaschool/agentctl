@@ -782,6 +782,25 @@ export const api = {
         method: 'POST',
       },
     ),
+  sessionTakeover: (sessionId: string) =>
+    request<{
+      ok: true;
+      terminalId: string;
+      takeoverToken: string;
+      claudeSessionId: string;
+      machineId?: string;
+    }>(`/api/sessions/${encodeURIComponent(sessionId)}/takeover`, { method: 'POST' }),
+  sessionRelease: (sessionId: string, options?: { resume?: boolean }) => {
+    const qs = options?.resume ? '?resume=true' : '';
+    return request<{ ok: true; released: true }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/release${qs}`,
+      { method: 'POST' },
+    );
+  },
+  sessionTakeoverStatus: (sessionId: string) =>
+    request<{ active: boolean; terminalId?: string; observerCount?: number }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/takeover`,
+    ),
   forkSession: (
     id: string,
     body: {

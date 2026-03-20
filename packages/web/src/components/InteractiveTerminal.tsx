@@ -31,8 +31,15 @@ type InteractiveTerminalProps = {
   onExit?: (code: number) => void;
   /** Called on connection error. */
   onError?: (message: string) => void;
+  /** Called when the WebSocket connection is established. */
+  onConnected?: () => void;
   /** CSS class for the outer wrapper. */
   className?: string;
+  /**
+   * When true, the terminal renders output but does not send input or resize
+   * frames. Use this for observer mode.
+   */
+  readOnly?: boolean;
 };
 
 export function InteractiveTerminal({
@@ -41,7 +48,9 @@ export function InteractiveTerminal({
   initialCommand,
   onExit,
   onError,
+  onConnected,
   className,
+  readOnly = false,
 }: InteractiveTerminalProps): React.JSX.Element {
   const toast = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,6 +68,8 @@ export function InteractiveTerminal({
   onExitRef.current = onExit;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const onConnectedRef = useRef(onConnected);
+  onConnectedRef.current = onConnected;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -75,8 +86,8 @@ export function InteractiveTerminal({
 
       const fitAddon = new FitAddon();
       const terminal = new Terminal({
-        cursorBlink: true,
-        disableStdin: false,
+        cursorBlink: !readOnly,
+        disableStdin: readOnly,
         convertEol: true,
         scrollback: 10_000,
         fontSize: 13,
@@ -108,13 +119,16 @@ export function InteractiveTerminal({
       ws.onopen = () => {
         if (disposed) return;
         setConnected(true);
+        onConnectedRef.current?.();
         terminal.focus();
-        // Send initial size
-        ws.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
-        const cmd = initialCommandRef.current;
-        if (cmd && !initialCommandSentRef.current && ALLOWED_INITIAL_COMMANDS.has(cmd)) {
-          initialCommandSentRef.current = true;
-          ws.send(JSON.stringify({ type: 'input', data: `${cmd}\r` }));
+        if (!readOnly) {
+          // Send initial size
+          ws.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
+          const cmd = initialCommandRef.current;
+          if (cmd && !initialCommandSentRef.current && ALLOWED_INITIAL_COMMANDS.has(cmd)) {
+            initialCommandSentRef.current = true;
+            ws.send(JSON.stringify({ type: 'input', data: `${cmd}\r` }));
+          }
         }
       };
 
@@ -154,19 +168,21 @@ export function InteractiveTerminal({
         onErrorRef.current?.('WebSocket connection failed');
       };
 
-      // Send keyboard input to WebSocket
-      terminal.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data }));
-        }
-      });
+      if (!readOnly) {
+        // Send keyboard input to WebSocket
+        terminal.onData((data) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', data }));
+          }
+        });
 
-      // Send resize events
-      terminal.onResize(({ cols, rows }) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
-        }
-      });
+        // Send resize events
+        terminal.onResize(({ cols, rows }) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+          }
+        });
+      }
     })();
 
     return () => {
@@ -177,7 +193,7 @@ export function InteractiveTerminal({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [machineId, terminalId]); // initialCommand captured via ref, not a reconnect trigger
+  }, [machineId, terminalId, readOnly]); // initialCommand captured via ref, not a reconnect trigger
 
   // Shared resize handling
   useTerminalResize(fitAddonRef, containerRef);
@@ -212,6 +228,11 @@ export function InteractiveTerminal({
         >
           {connected ? 'Connected' : 'Disconnected'}
         </span>
+        {readOnly && (
+          <span className="text-[9px] font-medium text-zinc-500 bg-zinc-800/80 border border-zinc-700/50 px-1.5 py-0.5 rounded">
+            (read-only)
+          </span>
+        )}
         <button
           type="button"
           onClick={handleCopy}
