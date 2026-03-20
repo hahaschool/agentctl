@@ -1577,17 +1577,17 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 27. Session Lifecycle — Force Kill + Stall Detection
 
-### 27.1 Force Kill — P0
+### 27.1 Force Kill — Delivered
 
-- [ ] Worker: `POST /api/sessions/:id/kill` — SIGTERM then SIGKILL after 5s
-- [ ] CP: proxy kill route to worker, mark session as ended
-- [ ] Web: "Force Kill" button on session detail + sessions list (active/stalled only)
+- [x] Worker: `POST /api/sessions/:id/kill` — SIGTERM then SIGKILL after 5s *(PR #310)*
+- [x] CP: proxy kill route to worker, mark session as ended *(PR #311)*
+- [x] Web: "Force Kill" button on session detail + sessions list (active/stalled only) *(PR #312)*
 
-### 27.2 Stall Detection — P0
+### 27.2 Stall Detection — Delivered
 
-- [ ] Worker heartbeat reports `stalled` when session has no output for 15+ minutes
-- [ ] CP accepts `stalled` as valid session status
-- [ ] Web: yellow warning banner on stalled sessions
+- [x] Worker heartbeat reports `stalled` when session has no output for 15+ minutes *(PR #310)*
+- [x] CP accepts `stalled` as valid session status *(PR #311)*
+- [x] Web: yellow warning banner on stalled sessions *(PR #312)*
 
 ### 27.3 Terminal Takeover — P1 (planned, not yet started)
 
