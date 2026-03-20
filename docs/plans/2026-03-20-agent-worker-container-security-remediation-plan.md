@@ -20,7 +20,7 @@ The control-plane image is not currently carrying the same open backlog, so the 
 
 ## Remediation Direction
 
-The initial remediation direction is intentionally conservative:
+The remediation direction stayed intentionally conservative:
 
 - keep the worker on a Debian/glibc slim image to avoid reintroducing Alpine/musl compatibility risk
 - prefer a runtime-image refresh over broader app-layer churn
@@ -43,12 +43,13 @@ Because local Docker access may not be available in every agent environment, ver
 
 - `git diff --check`
 - review the worker Dockerfile diff for scope control
-- rely on PR CI to run the container build and Trivy-backed security audit
+- rely on PR CI plus the post-merge `main` workflows to run the container build and security audit
 - confirm the PR CI/security stack passes before merge; PR #314 cleared CI, Security Audit, CodeQL, container scanning, dependency audit, secret scanning, and Semgrep before merge
 - compare the post-merge `main` code-scanning alert count against the pre-fix baseline before closing the roadmap item
 
 ## Deferred / Out of Scope
 
 - broad control-plane container refactors unless the worker-only refresh plus `git` closure update still proves insufficient
+- removing `git` from the worker image until a dedicated runtime-minimization slice proves the worktree/runtime flows still behave correctly without it
 - Alpine/musl migration without explicit compatibility evidence
 - unrelated dependency-audit, secret-scanning, or web-hardening work

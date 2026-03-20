@@ -1583,7 +1583,8 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 27.1 Force Kill — Delivered
 
 - [x] Worker: `POST /api/sessions/:id/kill` — SIGTERM then SIGKILL after 5s *(PR #310)*
-- [x] CP: proxy kill route to worker, mark session as ended *(PR #311)*
+- [x] CP: proxy kill route to worker and mark the session as ended on worker success *(PR #311)*
+- [x] CP: failed worker kill attempts now preserve the existing session state instead of force-ending the run *(PR #313)*
 - [x] Web: "Force Kill" button on session detail + sessions list (active/stalled only) *(PR #312)*
 
 ### 27.2 Stall Detection — Delivered
