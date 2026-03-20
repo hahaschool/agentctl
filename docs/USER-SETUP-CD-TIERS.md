@@ -10,11 +10,11 @@
 
 | 层 | 用途 | 端口 | 数据库 |
 |----|------|------|--------|
-| **beta** | 你日常使用 | 8080 / 9000 / 5173 | `agentctl` |
+| **beta** | 你日常使用 | 8080 / 9000 / 5173 | `agentctl_beta` |
 | **dev-1** | Agent 开发用 | 8180 / 9100 / 5273 | `agentctl_dev1` |
-| **dev-2** | Agent 开发用 | 8280 / 9200 / 5373 | `agentctl_dev2` |
+| **dev-2** | Agent 开发用 | 8250 / 9200 / 5373 | `agentctl_dev2` |
 
-Beta 层由 PM2 托管，自动重启，不受 dev 层影响。Dev 层是临时的，用完即弃。
+Beta 层由 PM2 托管，自动重启，不受 dev 层影响。端口和数据库是按 tier 隔离的，但 beta 仍然是在当前仓库里原地重新 build 后重启，不是一个完全不可变的独立制品阶段。Dev 层是临时的，用完即弃。
 
 原则很简单：
 - 日常开发、调试、agent 运行只在 `dev-1` / `dev-2`
@@ -32,9 +32,9 @@ psql -p 5433 -c "CREATE DATABASE agentctl_dev1;"
 psql -p 5433 -c "CREATE DATABASE agentctl_dev2;"
 ```
 
-### 2. 检查 `.env.beta` 文件（一次性，5分钟）
+### 2. 准备 `.env.beta` 文件（一次性，5分钟）
 
-我们会从当前的 `.env` 生成 `.env.beta`。生成后请检查一下是否所有配置项（API key、数据库连接等）都正确。
+当前工具不会从 `.env` 自动生成 `.env.beta`。请先基于 `.env.template` 创建一个已有的 `.env.beta`，再把你当前 `.env` 里在用的配置项（API key、数据库连接等）手动同步进去；`env-promote.sh` 会直接要求这个文件已经存在。
 
 ### 3. 安装 PM2（如果还没装）
 
@@ -74,7 +74,7 @@ pm2 startup  # 设置开机自启（按提示执行输出的命令）
 ```
 `env-promote.sh` 的实际 CLI 形式是 `./scripts/env-promote.sh [--from <tier>] [--dry-run]`。脚本在本地支持省略 `--from` 时从 `.env.dev-*` 自动探测，但手动 promote 时请始终显式传 `--from dev-1` 或 `--from dev-2`，避免把错误的源 tier 提升到 `beta`。
 
-这个命令会：构建最新代码 → 检查 schema parity → 迁移 beta 数据库 → 重启 PM2 进程 → 验证健康检查
+这个命令会：构建当前 checkout 的最新代码 → 检查 schema parity → 迁移 beta 数据库 → 重启 PM2 进程 → 验证健康检查。也就是说，beta 和 dev 的端口/数据库是隔离的，但 promote 不是在切换一份冻结好的 beta 制品。
 
 ---
 

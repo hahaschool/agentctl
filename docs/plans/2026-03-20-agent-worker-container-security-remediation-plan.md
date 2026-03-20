@@ -2,13 +2,15 @@
 
 > Goal: close the newly surfaced `agentctl-agent-worker` container vulnerability backlog on `main` with the smallest defensible runtime-image change, while keeping the worker on a glibc-based slim image and avoiding a blind regression back to Alpine/musl.
 >
-> Status note: this follow-up opened after a fresh 2026-03-20 `main` scan surfaced 100 open GitHub code-scanning findings for the worker image. PR #307 merged the worker-only runtime refresh plus the `python3-setuptools` compatibility follow-up for node-gyp on Debian trixie, and PR #314 then refreshed the `git` runtime library closure, but the plan remains active until the post-merge `main` scan output converges and the open-alert count settles.
+> Status note: this follow-up opened after a fresh 2026-03-20 `main` scan surfaced 100 open GitHub code-scanning findings for the worker image. PR #307 merged the worker-only runtime refresh plus the `python3-setuptools` compatibility follow-up for node-gyp on Debian trixie, PR #314 refreshed the `git` runtime library closure, and PR #322 then hardened runtime `git` capability handling while explicitly keeping `git` in the standard worker image. The plan remains active because the open-alert count is still 100 and the two worker Trivy upload paths on `main` still do not agree.
 
 ## Current Alert Picture
 
 The current `main` backlog is concentrated in the worker container image:
 
-- 100 open code-scanning findings are still reported immediately after PR #314 merged, and all 100 findings are attached to `library/agentctl-agent-worker`
+- 100 open code-scanning findings are still reported on `main`, and all 100 findings are attached to `library/agentctl-agent-worker`
+- recent `build-images` worker uploads on `main` are `0`-result `trivy-agent-worker` analyses for both `daf544a` and `3844cd0`
+- recent `security-audit` worker uploads on `main` are still `121`-result `trivy-agentctl-agent-worker` analyses for both `daf544a` and `3844cd0`
 - Current GitHub code-scanning severity buckets for that backlog are 1 `error`, 14 `warning`, and 85 `note`
 - Highest-signal package families before the PR #314 follow-up clustered around:
   - `zlib1g`
@@ -37,6 +39,12 @@ The second, package-level follow-up is now also on `main` via PR #314:
 - the follow-up upgrades `libcurl3t64-gnutls`, `libexpat1`, `libnghttp2-14`, `libnghttp3-9`, `libngtcp2-16`, `libtasn1-6`, and `zlib1g`, then removes the temporary repo metadata in the same layer
 - the rationale is repo-specific: the worker image intentionally adds `git`, and Debian package metadata showed `git` was the common root pulling the remaining expat/curl library family into the runtime image
 
+The next, runtime-level follow-up is now also on `main` via PR #322:
+
+- `packages/agent-worker/src/api/routes/git.ts` now preserves typed `GIT_UNAVAILABLE` failures even when the binary disappears after the initial repo probe
+- `packages/agent-worker/src/runtime/workdir-safety.ts` now blocks unavailable workdirs explicitly instead of misclassifying them as missing-`git` cases, and it sanitizes those path checks through the existing path-security helpers
+- the standard worker image still keeps `git` installed; the repo chose capability hardening first after independent review showed that immediate final-image `git` removal would regress normal repo-aware container behavior
+
 ## Verification Expectations
 
 Because local Docker access may not be available in every agent environment, verification should stay focused and honest:
@@ -50,6 +58,6 @@ Because local Docker access may not be available in every agent environment, ver
 ## Deferred / Out of Scope
 
 - broad control-plane container refactors unless the worker-only refresh plus `git` closure update still proves insufficient
-- removing `git` from the worker image until a dedicated runtime-minimization slice proves the worktree/runtime flows still behave correctly without it
+- removing `git` from the worker image until post-`#322` evidence proves that doing so is both safe for normal worker deployments and materially helpful for the worker backlog
 - Alpine/musl migration without explicit compatibility evidence
 - unrelated dependency-audit, secret-scanning, or web-hardening work

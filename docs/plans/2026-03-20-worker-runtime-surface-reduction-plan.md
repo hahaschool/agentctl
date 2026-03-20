@@ -1,12 +1,14 @@
-# Worker Runtime Surface Reduction Implementation Plan
+# Worker Git Capability Hardening / Runtime Surface Reduction Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Reduce the `agentctl-agent-worker` runtime OS surface after PRs #307 and #314 by proving the worker can run safely without a steady-state `git` binary in the final image, or fail honestly where `git` is still required.
+**Goal:** Harden the worker's `git`-dependent runtime surfaces after PRs #307 and #314 so missing `git` fails honestly where it is unsupported, while deferring any default-image `git` removal until post-merge evidence proves that it is both safe and worth pursuing.
 
-**Architecture:** Treat runtime `git` as an optional capability rather than an unconditional dependency. First harden the worker's existing `git`-dependent subsystems so missing `git` produces explicit, typed degradation instead of accidental 500s or hidden crashes. Then remove `git` from the final Docker stage and use focused tests plus PR CI/security evidence to decide whether the reduced image is viable.
+**Architecture:** Treat runtime `git` as an optional capability rather than an unconditional dependency. First harden the worker's existing `git`-dependent subsystems so missing `git` produces explicit, typed degradation instead of accidental 500s or hidden crashes. Keep `git` installed in the standard worker image while those hardening changes land, then revisit image-level removal only if the post-merge security evidence still points there.
 
 **Tech Stack:** TypeScript, Fastify, Node `child_process`, Vitest, Docker, GitHub Actions / Trivy
+
+> Status note: PR #322 merged the capability-hardening slice on 2026-03-20. The worker now has a shared `git`-runtime helper, `/api/git/status` preserves late `GIT_UNAVAILABLE` failures, and workdir safety blocks unavailable paths explicitly, but the standard worker image still keeps `git` installed because immediate runtime-git removal was not safe for normal repo-aware container deployments.
 
 ---
 
@@ -151,14 +153,14 @@ git add packages/agent-worker/src/index.ts packages/agent-worker/src/runtime/age
 git commit -m "refactor(worker): degrade worktree isolation without git"
 ```
 
-### Task 4: Remove steady-state `git` from the final worker image
+### Task 4: Re-evaluate steady-state `git` removal only if the evidence still points there
 
 **Files:**
 - Modify: `infra/docker/Dockerfile.agent-worker`
 
 **Step 1: Write the failing test**
 
-Use the new focused unit coverage from Tasks 1-3 as the regression net, then prepare a Docker diff that removes final-image `git` while leaving build/deps stages untouched.
+Use the new focused unit coverage from Tasks 1-3 as the regression net, then only prepare a Docker diff that removes final-image `git` if the post-merge `main` evidence still says the worker backlog is meaningfully `git`-driven.
 
 **Step 2: Run tests to establish the pre-change baseline**
 
@@ -173,7 +175,7 @@ Expected: PASS.
 
 **Step 3: Write the minimal implementation**
 
-Update the production stage so it no longer installs `git`. Keep the image comments honest about what functionality is now optional or degraded at runtime.
+Only if the evidence remains strong, update the production stage so it no longer installs `git`. Keep the image comments honest about what functionality is now optional or degraded at runtime.
 
 **Step 4: Run local verification**
 
@@ -191,7 +193,7 @@ Note: local Docker/Trivy may still be unavailable; rely on PR CI for container b
 
 ```bash
 git add infra/docker/Dockerfile.agent-worker
-git commit -m "refactor(worker): remove runtime git from final image"
+git commit -m "refactor(worker): re-evaluate runtime git removal"
 ```
 
 ### Task 5: Validate the security hypothesis and stop if the evidence is weak
@@ -216,11 +218,11 @@ Expected:
 
 - targeted worker tests pass
 - PR CI / Security Audit are green
-- the new worker Trivy analysis either shows a smaller result set than the current `121`, or it proves the hypothesis was wrong
+- the new worker evidence either shows a smaller result set than the current `121`-result `security-audit` upload, or it proves the runtime-`git` removal hypothesis was wrong
 
 **Step 2: Make the decision explicit**
 
-If the worker Trivy result count does **not** improve, stop the remediation chain there and document that runtime-`git` removal was not enough. Do **not** stack another blind apt-pin/library override on top of it without new evidence.
+If the worker Trivy signal does **not** improve, stop the remediation chain there and document that runtime-`git` removal is not the right next move. Do **not** stack another blind apt-pin/library override on top of it without new evidence.
 
 **Step 3: Commit any final documentation-only adjustments**
 
