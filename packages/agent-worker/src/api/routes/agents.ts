@@ -259,13 +259,20 @@ export async function agentRoutes(app: FastifyInstance, options: AgentRouteOptio
           });
         }
 
-        await instance.start(effectivePrompt);
+        // Fire-and-forget: SDK runs may take minutes. Return 202 immediately.
+        // Completion is reported via the callback POST /complete endpoint.
+        instance.start(effectivePrompt).catch((startErr) => {
+          logger.error(
+            { agentId: id, err: startErr instanceof Error ? startErr.message : String(startErr) },
+            'Agent start failed asynchronously',
+          );
+        });
 
-        return reply.status(200).send({
+        return reply.status(202).send({
           ok: true,
           agentId: id,
           sessionId: instance.getSessionId(),
-          status: instance.getStatus(),
+          status: 'starting',
         });
       } catch (err) {
         const statusCode = errorToStatusCode(err);
