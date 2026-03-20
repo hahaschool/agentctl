@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-20 (PRs #330, #331, #332, and #333 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing follow-through is landed, and the latest `main` `CI`, `Security Audit`, and `Build` runs are green on commit `2ffa870`; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
+> Last updated: 2026-03-20 (PRs #330, #331, #332, #333, #334, and #335 are now on `main`; section 26 stays delivered after the worker Trivy uploads converged to `0` results and GitHub code scanning returned `0` open alerts on 2026-03-20; dispatch-signing and node24 workflow follow-through are landed; `Security Audit` and `Build` are green on commit `a519e1d`, while the latest `main` commit where `CI`, `Security Audit`, and `Build` are all green remains `2ffa870` because `CI` for `a519e1d` is still in progress; §27.3 terminal takeover is now tracked as a partial follow-through with a dedicated gap plan)
 
 ## Current State
 
@@ -10,7 +10,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **Control Plane**: Fastify + PostgreSQL + BullMQ + Drizzle ORM
 - **Agent Worker**: Claude Agent SDK + node-pty + PM2
 - **Mobile**: React Native (Expo) — early stage, but already ships unified session browsing/filtering, managed runtime session controls, handoff history, and agent detail streaming
-- **CI/CD**: 9 GitHub Actions workflows (build, test, deploy, security, fleet)
+- **CI/CD**: 11 GitHub Actions workflows (build, test, deploy, promotion, cleanup, security, DAST, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
 **7,255+ unit tests** across 111 files + **143 Playwright e2e tests**. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
@@ -22,17 +22,22 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > CI/CD pipeline, deployment, fleet management, database migrations.
 
 <details>
-<summary>✅ All complete — 9 workflows, full deploy chain, fleet rollout</summary>
+<summary>✅ All complete — 11 workflows, full deploy/promotion chain, fleet rollout</summary>
 
 ### 1.1 CI Hardening
 
 > Status note: PR #333 modernized the core `ci.yml`, `security-audit.yml`, and
 > `build-images.yml` workflows off the old Node20-based `actions/checkout`,
 > `actions/setup-node`, and `github/codeql-action` majors, while moving the
-> repo gitleaks runs onto the official CLI path. The latest `main` `CI`,
-> `Security Audit`, and `Build` runs are green on commit `2ffa870`.
+> repo gitleaks runs onto the official CLI path. PR #334 finished the node24
+> follow-through by replacing `ci.yml`'s `dorny/paths-filter` step with a
+> GitHub API changed-files detector and bumping the remaining deploy-adjacent
+> `actions/checkout` / `actions/setup-node` refs to `v5`. `Security Audit` and
+> `Build` are green on `a519e1d`; the latest `main` commit where `CI`,
+> `Security Audit`, and `Build` are all green remains `2ffa870` while `CI` for
+> `a519e1d` is still in progress.
 
-- [x] `dorny/paths-filter` for monorepo-aware conditional builds
+- [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
 - [x] Security scanning: `pnpm audit`, `gitleaks`, Biome security lint
 
@@ -60,7 +65,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - [x] Vector → ClickHouse structured logging pipeline
 - [x] Prometheus-compatible `/metrics` endpoint
 
-**Workflows**: `ci.yml`, `build-images.yml`, `deploy-dev.yml`, `deploy-prod.yml`, `rollback.yml`, `deploy-fleet.yml`, `migration-check.yml`, `security-audit.yml`
+**Workflows**: `ci.yml`, `build-images.yml`, `cleanup-images.yml`, `dast-zap.yml`, `deploy-dev.yml`, `deploy-fleet.yml`, `deploy-prod.yml`, `migration-check.yml`, `promote-beta.yml`, `rollback.yml`, `security-audit.yml`
 
 </details>
 
