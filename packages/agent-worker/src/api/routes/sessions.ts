@@ -450,6 +450,7 @@ export async function sessionRoutes(
   // -----------------------------------------------------------------------
 
   const CP_HEARTBEAT_INTERVAL_MS = 30_000;
+  const STALL_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
   const cpHeartbeatTimer = controlPlaneUrl
     ? setInterval(() => {
@@ -461,6 +462,12 @@ export async function sessionRoutes(
               pid: session.pid ?? undefined,
               costUsd: session.costUsd,
             });
+
+            // Stall detection: report 'stalled' if no output for 15 minutes
+            const sinceLastActivity = Date.now() - session.lastActivity.getTime();
+            if (session.status === 'running' && sinceLastActivity > STALL_THRESHOLD_MS) {
+              void reportStatusToControlPlane(workerSessionId, { status: 'stalled' });
+            }
           }
         }
       }, CP_HEARTBEAT_INTERVAL_MS)
@@ -1220,6 +1227,36 @@ export async function sessionRoutes(
     } catch (err) {
       const statusCode = errorToStatusCode(err);
       return reply.status(statusCode).send(errorToResponse(err));
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /:sessionId/kill — force kill a CLI session process
+  // -----------------------------------------------------------------------
+
+  app.post<{ Params: SessionIdParams }>('/:sessionId/kill', async (request, reply) => {
+    const { sessionId } = request.params;
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      return reply
+        .status(404)
+        .send({ error: 'SESSION_NOT_FOUND', message: `Session '${sessionId}' not found` });
+    }
+
+    try {
+      await sessionManager.stopSession(sessionId, true); // graceful first
+      // Schedule force kill after 5s if still running
+      setTimeout(() => {
+        const s = sessionManager.getSession(sessionId);
+        if (s && s.status === 'running') {
+          sessionManager.stopSession(sessionId, false).catch(() => {}); // force
+        }
+      }, 5000);
+      return reply.send({ ok: true, message: 'Kill signal sent' });
+    } catch (err) {
+      return reply
+        .status(500)
+        .send({ error: 'KILL_FAILED', message: err instanceof Error ? err.message : String(err) });
     }
   });
 
